@@ -25,6 +25,8 @@ All under the resolved data home (`core::home`) at `<home>/data/`:
 | `cross-references.tsv` | TSK topical tier | `core::crossref` | download (no ML) |
 | `concept-vectors.vec` (+ `.meta`, `.freq`) | concept neighbours + "verses like this" | `rnd::embed` | **train once** (CPU) |
 | `morphology.jsonl` | per-token parse | `rnd::morph` | deterministic projection |
+| `bridge/*.json` (LXX, Abbott-Smith, TIPNR) | fused cross-testament witnesses | `rnd::bridge` | committed / align (no ML) |
+| `source-priors.json` | per-source trust weight | `rnd::bridge` | deterministic calibration |
 
 Every consumer degrades gracefully: a missing file means the section simply
 doesn't render. The reader runs with only the three core files.
@@ -53,17 +55,27 @@ reads `kjv.jsonl`. Run them once against a hydrated home:
   reshape of openbible.info's TSK-derived, vote-ranked references (CC
   Attribution). No ML.
 
-The etymology **bridge** (`rnd::bridge`) needs no artifact at all — it is
-derived at runtime from `strongs.json`'s own "of Hebrew origin (Hxxxx)"
-derivation strings.
+The **bridge** (`rnd::bridge`) works with no artifact at all — the etymology
+layer is derived at runtime from `strongs.json`'s own "of Hebrew origin (Hxxxx)"
+derivations — and, when the committed `bridge/*.json` witnesses and
+`source-priors.json` are present, **fuses** them: each cross-testament partner
+is tagged with the sources that assert it (etymology / lxx / abbott-smith /
+tipnr / …) and ranked by the fitted trust prior.
+
+- **`bridge/*.json`** — `python3 pipelines/lxx_bridge.py`,
+  `pipelines/abbott_smith.py`, `pipelines/stepbible_tipnr.py`. Public-domain /
+  CC-BY inputs; the artifacts carry their attributions. LXX uses IBM Model 2
+  word alignment (pure Python EM, deterministic) — statistics, not training.
+- **`source-priors.json`** — `python3 ml/calibrate_source_priors.py`. A
+  deterministic calibration of each source's precision against the Abbott-Smith
+  gold; a tiny JSON of weights.
 
 ## Deferred (still data-gated)
 
-These overlay tiers need additional hydrated inputs and are **not yet ported**:
-the multi-source bridge fusion + calibrated trust model (`bridge/*.json`,
-`source-priors.json`, `text-witness*`), and cross-testament quotation detection
-(the fused LXX/Abbott-Smith/embedding lexicon). They can be added the same way —
-port the Rust consumer, ship the precomputed file — when wanted.
+Not yet ported: cross-testament **quotation detection** (the fused
+LXX/Abbott-Smith/embedding lexicon + CL-ASA run alignment) and the
+`text-witness*` adversarial audit. Same recipe when wanted — port the Rust
+consumer, ship the precomputed file.
 
 Licensing: the concept vectors are wholly owned; TSK is CC-Attribution; OSHB is
 CC BY 4.0; the TR/WLC texts and Abbott-Smith are public domain. The Louw-Nida /

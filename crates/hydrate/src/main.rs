@@ -34,6 +34,14 @@ const RND_FILES: &[&str] = &[
     "data/concept-vectors.vec.meta",
     "data/concept-vectors.vec.freq",
     "data/morphology.jsonl",
+    // Fused bridge: committed external witnesses + fitted trust priors, plus the
+    // optional hydrated/harvested source files.
+    "bridge/abbott-smith.json",
+    "bridge/lxx-alignment.json",
+    "bridge/stepbible-tipnr.json",
+    "data/source-priors.json",
+    "data/bridge-sources.json",
+    "data/quotation-pairs.json",
 ];
 
 fn main() -> ExitCode {
@@ -148,11 +156,17 @@ fn check(home: &Path) -> ExitCode {
     // ── R&D tiers ──────────────────────────────────────────────────────────────
     println!("\nR&D tiers (Full study):");
 
-    // Etymology bridge is derived from strongs.json — no artifact needed.
+    // Fused bridge: etymology (from strongs.json) + external witnesses + priors.
     match strongs::load_strongs(data.join("strongs.json")) {
         Ok(d) => {
-            let b = bridge::Bridge::from_etymology(&d);
-            println!("  ✓ etymology bridge — {} codes linked (from strongs.json; no artifact)", b.len());
+            let ety = bridge::Bridge::from_etymology(&d).len();
+            let fused = bridge::FusedBridge::build(&d, home);
+            let ext = fused.source_link_count();
+            if ext == 0 {
+                println!("  ✓ etymology bridge — {ety} codes linked (from strongs.json; no external sources)");
+            } else {
+                println!("  ✓ fused bridge — {ety} etymology codes + {ext} external source links (bridge/*.json + priors)");
+            }
         }
         Err(_) => println!("  · etymology bridge — needs strongs.json"),
     }

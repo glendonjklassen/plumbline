@@ -69,8 +69,9 @@ struct State {
     tags: Vec<LoadedTag>,
     /// TSK topical cross-references per verse (empty when the file is absent).
     xref_ix: crossref::XRefIx,
-    /// The OT↔NT etymology bridge (Strong's-derived; a Full-study R&D tier).
-    bridge: bridge::Bridge,
+    /// The OT↔NT bridge: Strong's etymology fused with external witnesses (LXX,
+    /// Abbott-Smith, TIPNR) weighted by trust priors. A Full-study R&D tier.
+    bridge: bridge::FusedBridge,
     /// Concept embeddings (offline-trained), when the artifact is present — for
     /// "concepts near this" and the cross-testament semantic bridge.
     embedding: Option<embed::Embedding>,
@@ -295,8 +296,9 @@ fn load_state(cfg: &Config) -> Result<State, String> {
     let (tags, _tag_errs) = tag::load_tags(&home);
     // TSK cross-references (topical study tier) — optional, absent → empty.
     let xref_ix = crossref::load_cross_refs(data.join("cross-references.tsv"));
-    // The OT↔NT etymology bridge — pure, built from the Strong's dictionary.
-    let bridge = bridge::Bridge::from_etymology(&strongs);
+    // The OT↔NT bridge — etymology (from strongs.json) fused with any external
+    // witnesses + trust priors present under the home.
+    let bridge = bridge::FusedBridge::build(&strongs, &home);
     // Concept embeddings — optional offline artifact; absent → symbolic only.
     let embedding = embed::load_embedding(canon::TOKENIZATION_VERSION, data.join("concept-vectors.vec"));
     // Morphology sidecar — optional; stale stamp / missing → None.
@@ -2010,7 +2012,12 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
                     if k > 0 {
                         s.push_str(", ");
                     }
-                    s.push_str(&format!("<a href=\"occ:{p}\">{p}</a>", p = esc(p)));
+                    // Code link + which witnesses assert it (etymology/lxx/…).
+                    s.push_str(&format!(
+                        "<a href=\"occ:{c}\">{c}</a> <span foreground=\"#999\">({src})</span>",
+                        c = esc(&p.code),
+                        src = esc(&p.sources.join("+"))
+                    ));
                 }
                 s.push_str("</small>\n");
             }
