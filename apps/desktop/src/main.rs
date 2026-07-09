@@ -34,7 +34,7 @@ use pure_core::reference::{CANON_SEGMENTS, OT_NT_DIVIDE};
 use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread};
 use pure_core::weave::{self, Link, LoadedWeave, Span, WeaveKind};
-use pure_core::{canon, corpus, notes, VRef};
+use pure_core::{canon, corpus, home, notes, VRef};
 use pure_layout::{layout_chapter, DisplayList, Hit, ItemKind, LayoutConfig, Measure};
 
 const APP_ID: &str = "ca.cavallo.purestudy";
@@ -257,12 +257,23 @@ fn main() -> glib::ExitCode {
 }
 
 fn load_state(cfg: &Config) -> Result<State, String> {
-    let home = std::env::var("OVERLAY_HOME").unwrap_or_else(|_| ".".to_string());
-    let corpus = corpus::load_corpus(format!("{home}/data/kjv.jsonl")).map_err(|e| e.to_string())?;
-    let strongs =
-        strongs::load_strongs(format!("{home}/data/strongs.json")).map_err(|e| e.to_string())?;
+    // Resolve the data home without requiring OVERLAY_HOME: env override, else a
+    // working tree (CWD), else next to the executable, else the user data dir.
+    let home: String = match home::resolve_home() {
+        Some((path, kind)) => {
+            eprintln!("pure-study: data home {} ({})", path.display(), kind.label());
+            path.to_string_lossy().into_owned()
+        }
+        None => {
+            eprintln!("pure-study: no data home found; falling back to the working directory");
+            ".".to_string()
+        }
+    };
+    let data = std::path::Path::new(&home).join("data");
+    let corpus = corpus::load_corpus(data.join("kjv.jsonl")).map_err(|e| e.to_string())?;
+    let strongs = strongs::load_strongs(data.join("strongs.json")).map_err(|e| e.to_string())?;
     // Notes are optional: a missing file is not an error.
-    let notes = notes::load_notes(format!("{home}/data/kjv-notes.jsonl")).map_err(|e| e.to_string())?;
+    let notes = notes::load_notes(data.join("kjv-notes.jsonl")).map_err(|e| e.to_string())?;
     // Weaves (cross-references) load from `home/weaves` (+ suggested); bad files
     // are reported but don't fail the reader.
     let (weaves, _weave_errs) = weave::load_weaves(&home);
@@ -2333,8 +2344,14 @@ fn install_css() {
 }
 
 fn present_error(app: &adw::Application, msg: &str) {
+    let data_dir = home::data_dir()
+        .map(|d| d.display().to_string())
+        .unwrap_or_else(|| "the app data directory".to_string());
     let label = gtk::Label::new(Some(&format!(
-        "Could not load scripture data.\n\n{msg}\n\nSet OVERLAY_HOME to a hydrated overlay tree, e.g.\n  OVERLAY_HOME=../overlay cargo run -p pure-desktop"
+        "Could not load scripture data.\n\n{msg}\n\npure-study looks for a data/ folder \
+         (kjv.jsonl, strongs.json) in, in order:\n  • $PURE_STUDY_HOME or $OVERLAY_HOME\n  \
+         • the current working directory\n  • next to the executable\n  • {data_dir}\n\n\
+         Point it at a hydrated tree, e.g.\n  OVERLAY_HOME=../overlay cargo run -p pure-desktop"
     )));
     label.set_wrap(true);
     label.set_margin_top(40);
