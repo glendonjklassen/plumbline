@@ -816,6 +816,10 @@ fn navigate_pane(state: &Shared, ui: &Ui, i: usize, book: &str, chapter: u16, ve
         p.chapter = chapter.max(1);
         p.scroll_to = verse;
         p.highlight = verse;
+        // Drop the stale layout so the verse scroll can't act on the old
+        // chapter — the pending scroll waits for the new chapter's paint.
+        p.dl = None;
+        p.last_h = 0;
     }
     sync_pane(state, ui, i);
     update_title(state, ui);
@@ -827,10 +831,20 @@ fn navigate_pane(state: &Shared, ui: &Ui, i: usize, book: &str, chapter: u16, ve
         if verse.is_none() {
             vadj.set_value(vadj.lower());
         } else {
+            // Poll briefly until the new layout is painted and its scroll
+            // extent is valid, then scroll once. Fires as soon as it's ready
+            // (typically the very next frame) instead of betting on a fixed
+            // delay, and gives up after ~1s so a missing verse can't spin.
             let state = state.clone();
             let ui = ui.clone();
-            glib::timeout_add_local_once(Duration::from_millis(50), move || {
-                scroll_pane_pending(&state, &ui, i);
+            let mut tries = 0u32;
+            glib::timeout_add_local(Duration::from_millis(8), move || {
+                tries += 1;
+                if try_scroll_pane(&state, &ui, i) || tries > 120 {
+                    glib::ControlFlow::Break
+                } else {
+                    glib::ControlFlow::Continue
+                }
             });
         }
     }
@@ -847,29 +861,40 @@ fn step_pane(state: &Shared, ui: &Ui, i: usize, delta: i32) {
     navigate_pane(state, ui, i, &book, ch, None);
 }
 
-/// Scroll pane `i` so its pending target verse sits near the top.
-fn scroll_pane_pending(state: &Shared, ui: &Ui, i: usize) {
-    let y = {
-        let mut st = state.borrow_mut();
-        if i >= st.panes.len() {
-            return;
+/// Try to scroll pane `i` so its pending target verse sits near the top.
+/// Returns `true` when the work is done — either the scroll succeeded, there was
+/// nothing pending, or the pane is gone — and `false` while it must keep waiting
+/// for the new chapter's layout (and its scroll extent) to be ready.
+fn try_scroll_pane(state: &Shared, ui: &Ui, i: usize) -> bool {
+    let (y, want_h) = {
+        let st = state.borrow();
+        let Some(p) = st.panes.get(i) else { return true };
+        let Some(target) = p.scroll_to else { return true };
+        // Wait for this chapter's paint (`dl` was cleared on navigate).
+        let Some(dl) = p.dl.as_ref() else { return false };
+        match dl
+            .items
+            .iter()
+            .find(|it| matches!(it.kind, ItemKind::VerseNumber(n) if n == target))
+        {
+            Some(it) => ((MARGIN + it.y) as f64, p.last_h as f64),
+            None => return false,
         }
-        let p = &mut st.panes[i];
-        let target = match p.scroll_to.take() {
-            Some(v) => v,
-            None => return,
-        };
-        p.dl.as_ref().and_then(|dl| {
-            dl.items
-                .iter()
-                .find(|it| matches!(it.kind, ItemKind::VerseNumber(n) if n == target))
-                .map(|it| MARGIN + it.y)
-        })
     };
-    if let (Some(y), Some(pu)) = (y, ui.pane_uis.borrow().get(i)) {
-        let v = (y as f64 - 8.0).max(pu.vadj.lower());
-        pu.vadj.set_value(v.min(pu.vadj.upper() - pu.vadj.page_size()));
+    let Some(pu) = ui.pane_uis.borrow().get(i).map(|pu| pu.vadj.clone()) else {
+        return true;
+    };
+    // The scroll extent must reflect the new content height before we clamp,
+    // or the target could clamp short. Keep waiting until it has grown.
+    if pu.upper() + 0.5 < want_h && want_h > pu.page_size() {
+        return false;
     }
+    let v = (y - 8.0).max(pu.lower());
+    pu.set_value(v.min((pu.upper() - pu.page_size()).max(pu.lower())));
+    if let Some(p) = state.borrow_mut().panes.get_mut(i) {
+        p.scroll_to = None;
+    }
+    true
 }
 
 /// Insert a new pane after pane `after` (a copy of its location), made active.
