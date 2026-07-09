@@ -12,6 +12,10 @@ name = "pure-study"
 path = "src/main.rs"
 
 [dependencies]
+# libadwaita 0.9 targets gtk4 0.11 (they share the gtk4-sys `links` slot);
+# keep these paired. Version features target the crate API level (≤ our
+# system GTK 4.22 / libadwaita 1.9).
+gtk = { version = "0.11", package = "gtk4", features = ["v4_10"] }
+adw = { version = "0.9", package = "libadwaita", features = ["v1_4"] }
 pure-core = { workspace = true }
 pure-layout = { workspace = true }
-# gtk4 / libadwaita are added when the shell is wired up (see PROGRESS.md).
