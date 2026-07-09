@@ -11,8 +11,11 @@ the architecture and the locked decisions; see
   a real GTK4 reader window, now with the core's study surface wired in:
   - **Multi-pane**: 1–3 reading columns side by side, each with its own book /
     chapter nav + scroll (per-pane **+**/**✕**); the active pane (gold top accent)
-    is what search, cross-references, and the study panel act on. Read John 3 and
-    Numbers 21 side by side to see a cross-reference in context.
+    is what search, cross-references, and the study panel act on.
+  - **Ambient weave connectors**: a transparent overlay draws soft gold curves
+    between cross-referenced verses whose endpoints are both on screen (scroll-
+    aware via GTK `compute_point`) — e.g. Gen 15:6 ↔ Rom 4:3 with Gen ∥ Romans
+    open. Endpoint + gutter dots mark the linked verses.
   - John 3 on warm paper, set in the **bundled EB Garamond** shaped by **Pango**
     (registered with fontconfig at startup — no system install; cairo's toy font
     API is gone): **gold verse numbers**, **faint gold underline** on
@@ -89,9 +92,9 @@ windows x86_64-gnu + aarch64-gnullvm); **mingw-w64** is present. So:
      [`bindings/csharp`](crates/ffi/bindings/csharp). Both are already written
      and the demo runs against the Linux `.so` today as a proof.
 3. **Reader** (search / concordance / notes / cross-references / zoom / keyboard /
-   **Pango + EB Garamond** / **multi-pane** all done): remaining — richer weave UI
-   (compare card, ambient link lines between panes, approve/reject); Ctrl+click
-   gating for Strong's; hover cards; canon-overview strip; threads + tags (need a
+   **Pango + EB Garamond** / **multi-pane** / **ambient weave connectors** all
+   done): remaining — a weave compare card + approve/reject; Ctrl+click gating for
+   Strong's; hover cards; canon-overview strip; threads + tags (need a
    `core::thread` port first); a stabler verse-scroll than the 50 ms nudge.
 4. **Port remaining core**: threads, the notes loader (`kjv-notes.jsonl` — the
    FFI already threads an empty `Notes` through search, ready to fill), weave

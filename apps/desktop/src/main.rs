@@ -54,6 +54,9 @@ struct State {
     notes: Notes,
     /// Verse → its weave cross-reference partners (deduped), precomputed once.
     xrefs: HashMap<VRef, Vec<Xref>>,
+    /// Every weave link as a canonical, deduped verse pair — for the ambient
+    /// connector lines drawn between panes.
+    links: Vec<(VRef, VRef)>,
     /// Font family to render the scripture in ("EB Garamond" or a fallback).
     family: String,
     font_size: f64,
@@ -119,6 +122,21 @@ fn build_xrefs(weaves: &[LoadedWeave]) -> HashMap<VRef, Vec<Xref>> {
     map
 }
 
+/// All weave links as canonical, deduped verse pairs (core stores each link
+/// with `a <= b` in reading order already), for the ambient connector lines.
+fn build_links(weaves: &[LoadedWeave]) -> Vec<(VRef, VRef)> {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for lw in weaves {
+        for l in &lw.weave.links {
+            if seen.insert((l.a.clone(), l.b.clone())) {
+                out.push((l.a.clone(), l.b.clone()));
+            }
+        }
+    }
+    out
+}
+
 /// Register the bundled EB Garamond with fontconfig for this process only (no
 /// change to the user's installed fonts). Returns the family to render in — the
 /// bundled face if it registered, else a plain serif fallback.
@@ -154,6 +172,8 @@ struct Ui {
     study_scroll: gtk::ScrolledWindow,
     /// Horizontal container the pane columns live in; rebuilt on add/close.
     pane_row: gtk::Box,
+    /// Transparent layer over the panes where cross-reference connectors draw.
+    link_layer: gtk::DrawingArea,
     /// Per-pane widgets, kept parallel to `State::panes`.
     pane_uis: Rc<RefCell<Vec<PaneUi>>>,
     /// Guards programmatic widget updates from re-entering their handlers.
@@ -213,6 +233,7 @@ fn load_state() -> Result<State, String> {
     // are reported but don't fail the reader.
     let (weaves, _weave_errs) = weave::load_weaves(&home);
     let xrefs = build_xrefs(&weaves);
+    let links = build_links(&weaves);
     let search_ix = SearchIx::build(&corpus);
     let occ_ix = OccurrenceIx::build(&corpus);
     let family = register_bundled_fonts();
@@ -223,6 +244,7 @@ fn load_state() -> Result<State, String> {
         occ_ix,
         notes,
         xrefs,
+        links,
         family,
         font_size: 21.0,
         panes: vec![Pane::new("John", 3)],
@@ -269,14 +291,23 @@ fn build_ui(app: &adw::Application) {
     study_scroll.set_size_request(320, -1);
     study_scroll.set_visible(false); // opens on demand
 
-    // ── panes container ────────────────────────────────────────────────────────
+    // ── panes container + connector overlay ─────────────────────────────────────
     let pane_row = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     pane_row.set_hexpand(true);
     pane_row.set_vexpand(true);
     pane_row.set_homogeneous(true);
 
+    // A transparent layer over the panes for cross-reference connector lines; it
+    // never intercepts input (clicks/scroll fall through to the panes).
+    let link_layer = gtk::DrawingArea::new();
+    link_layer.set_can_target(false);
+
+    let overlay = gtk::Overlay::new();
+    overlay.set_child(Some(&pane_row));
+    overlay.add_overlay(&link_layer);
+
     let paned = gtk::Paned::new(gtk::Orientation::Horizontal);
-    paned.set_start_child(Some(&pane_row));
+    paned.set_start_child(Some(&overlay));
     paned.set_end_child(Some(&study_scroll));
     paned.set_resize_start_child(true);
     paned.set_resize_end_child(false);
@@ -288,9 +319,17 @@ fn build_ui(app: &adw::Application) {
         study: study.clone(),
         study_scroll,
         pane_row,
+        link_layer: link_layer.clone(),
         pane_uis: Rc::new(RefCell::new(Vec::new())),
         guard: Rc::new(Cell::new(false)),
     };
+
+    // ── connector lines: draw weave links whose endpoints are both on screen ────
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        link_layer.set_draw_func(move |layer, cr, w, h| draw_links(&state, &ui, layer, cr, w, h));
+    }
 
     // ── study-panel links (search hits / concordance / go-to) navigate ──────────
     {
@@ -358,6 +397,9 @@ fn rebuild_panes(state: &Shared, ui: &Ui) {
     if let Some(pu) = ui.pane_uis.borrow().get(active) {
         pu.area.grab_focus();
     }
+    // Redraw connectors once the fresh panes have painted (produced their dls).
+    let ui2 = ui.clone();
+    glib::timeout_add_local_once(Duration::from_millis(60), move || ui2.link_layer.queue_draw());
 }
 
 /// Build one pane column (nav strip + scrolled canvas) wired to pane `i`.
@@ -409,6 +451,11 @@ fn build_pane(state: &Shared, ui: &Ui, i: usize, n: usize) -> (gtk::Box, PaneUi)
     scroll.set_hexpand(true);
     scroll.set_vexpand(true);
     let vadj = scroll.vadjustment();
+    // Scrolling this pane moves its verses, so the connector lines must redraw.
+    {
+        let layer = ui.link_layer.clone();
+        vadj.connect_value_changed(move |_| layer.queue_draw());
+    }
 
     let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
     root.set_hexpand(true);
@@ -617,6 +664,7 @@ fn navigate_pane(state: &Shared, ui: &Ui, i: usize, book: &str, chapter: u16, ve
     }
     sync_pane(state, ui, i);
     update_title(state, ui);
+    ui.link_layer.queue_draw();
 
     let vadj = ui.pane_uis.borrow().get(i).map(|pu| pu.vadj.clone());
     if let Some(vadj) = vadj {
@@ -709,6 +757,7 @@ fn zoom(state: &Shared, ui: &Ui, dir: f64) {
     for pu in ui.pane_uis.borrow().iter() {
         pu.area.queue_draw();
     }
+    ui.link_layer.queue_draw();
 }
 
 fn page_adj(vadj: &gtk::Adjustment, frac: f64) {
@@ -871,6 +920,75 @@ fn draw_pane(state: &Shared, i: usize, area: &gtk::DrawingArea, cr: &cairo::Cont
         pane.last_h = content_height;
         area.set_content_height(content_height);
     }
+}
+
+/// Draw the ambient weave connectors: for every link whose both endpoints are
+/// currently visible (their chapters shown in some pane, their verses on
+/// screen), a soft gold curve from one to the other. `compute_point` maps each
+/// verse's content position — scroll and pane offset included — into this layer.
+fn draw_links(state: &Shared, ui: &Ui, layer: &gtk::DrawingArea, cr: &cairo::Context, _w: i32, h: i32) {
+    let st = state.borrow();
+    let pus = ui.pane_uis.borrow();
+    // Which shown (book, chapter) sits in which pane.
+    let mut shown: HashMap<(&str, u16), usize> = HashMap::new();
+    for (i, p) in st.panes.iter().enumerate() {
+        shown.insert((p.book.as_str(), p.chapter), i);
+    }
+
+    cr.set_line_width(1.5);
+    for (a, b) in &st.links {
+        let (Some(&pa), Some(&pb)) = (
+            shown.get(&(a.book.as_str(), a.chapter)),
+            shown.get(&(b.book.as_str(), b.chapter)),
+        ) else {
+            continue;
+        };
+        let (Some(ea), Some(eb)) = (
+            link_endpoint(&st, &pus, pa, a.verse, layer),
+            link_endpoint(&st, &pus, pb, b.verse, layer),
+        ) else {
+            continue;
+        };
+        // Both endpoints must be within the visible band (not scrolled off).
+        let vis = |y: f64| (0.0..=h as f64).contains(&y);
+        if !vis(ea.1) || !vis(eb.1) {
+            continue;
+        }
+        let dx = eb.0 - ea.0;
+        cr.set_source_rgba(0.62, 0.49, 0.22, 0.35);
+        cr.move_to(ea.0, ea.1);
+        cr.curve_to(ea.0 + dx * 0.4, ea.1, eb.0 - dx * 0.4, eb.1, eb.0, eb.1);
+        let _ = cr.stroke();
+        for (x, y) in [ea, eb] {
+            cr.set_source_rgba(0.62, 0.49, 0.22, 0.7);
+            cr.arc(x, y, 2.0, 0.0, std::f64::consts::TAU);
+            let _ = cr.fill();
+        }
+    }
+}
+
+/// The position, in `layer` coordinates, of `verse`'s line in pane `pane` — or
+/// `None` if the pane hasn't painted or lacks that verse.
+fn link_endpoint(
+    st: &State,
+    pus: &[PaneUi],
+    pane: usize,
+    verse: u16,
+    layer: &gtk::DrawingArea,
+) -> Option<(f64, f64)> {
+    let p = st.panes.get(pane)?;
+    let dl = p.dl.as_ref()?;
+    let it = dl
+        .items
+        .iter()
+        .find(|it| matches!(it.kind, ItemKind::VerseNumber(n) if n == verse))?;
+    let px = p.margin_x + it.x;
+    let py = MARGIN + it.y + it.h * 0.5;
+    let pt = pus
+        .get(pane)?
+        .area
+        .compute_point(layer, &gtk::graphene::Point::new(px, py))?;
+    Some((pt.x() as f64, pt.y() as f64))
 }
 
 /// The verse number a placed item belongs to (its own number for a marker; for
