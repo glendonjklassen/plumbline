@@ -12,6 +12,7 @@
 //! omit them entirely.
 
 pub mod canon;
+pub mod config;
 pub mod corpus;
 pub mod notes;
 pub mod reference;

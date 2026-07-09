@@ -26,6 +26,7 @@ use std::time::Duration;
 use adw::prelude::*;
 use gtk::{cairo, gdk, glib};
 
+use pure_core::config::{self, Config, StudyMode};
 use pure_core::corpus::{Corpus, FLAG_ADDED, FLAG_DIVINE, FLAG_TITLE};
 use pure_core::search::{self, Notes, SearchAnswer, SearchIx};
 use pure_core::strongs::{self, OccurrenceIx, StrongsDict};
@@ -70,6 +71,9 @@ struct State {
     /// Font family to render the scripture in ("EB Garamond" or a fallback).
     family: String,
     font_size: f64,
+    /// Simple reader vs full study — gates the study/authoring surface
+    /// (decision #4). Persisted in the platform config.
+    mode: StudyMode,
     panes: Vec<Pane>,
     /// Which pane search / cross-references / the study panel act on.
     active: usize,
@@ -252,7 +256,7 @@ fn main() -> glib::ExitCode {
     app.run()
 }
 
-fn load_state() -> Result<State, String> {
+fn load_state(cfg: &Config) -> Result<State, String> {
     let home = std::env::var("OVERLAY_HOME").unwrap_or_else(|_| ".".to_string());
     let corpus = corpus::load_corpus(format!("{home}/data/kjv.jsonl")).map_err(|e| e.to_string())?;
     let strongs =
@@ -282,14 +286,16 @@ fn load_state() -> Result<State, String> {
         tags,
         home,
         family,
-        font_size: 21.0,
+        font_size: cfg.body_size,
+        mode: cfg.mode,
         panes: vec![Pane::new("John", 3)],
         active: 0,
     })
 }
 
 fn build_ui(app: &adw::Application) {
-    let state = match load_state() {
+    let (cfg, first_run) = config::load();
+    let state = match load_state(&cfg) {
         Ok(s) => Rc::new(RefCell::new(s)),
         Err(e) => {
             present_error(app, &e);
@@ -318,10 +324,32 @@ fn build_ui(app: &adw::Application) {
     link_btn.add_css_class("flat");
     link_btn.set_tooltip_text(Some("Weave the two pinned words (click a word in each pane; click another word in the same verse to widen the span)"));
     link_btn.set_sensitive(false);
-    header.pack_start(&threads_btn);
-    header.pack_start(&tags_btn);
-    header.pack_start(&suggested_btn);
-    header.pack_start(&link_btn);
+
+    // The study tools live together so "Simple reader" mode can hide the whole
+    // group at once (decision #4), leaving a clean reader + search + lookup.
+    let study_tools = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+    study_tools.append(&threads_btn);
+    study_tools.append(&tags_btn);
+    study_tools.append(&suggested_btn);
+    study_tools.append(&link_btn);
+    header.pack_start(&study_tools);
+
+    // Mode toggle: switch between Simple reader and Full study (persisted).
+    let mode_btn = gtk::Button::new();
+    mode_btn.add_css_class("flat");
+    mode_btn.set_tooltip_text(Some("Switch between Simple reader and Full study"));
+    header.pack_end(&mode_btn);
+
+    // Apply a mode to the header chrome: show/hide the study tools + relabel.
+    let apply_mode: Rc<dyn Fn(StudyMode)> = {
+        let study_tools = study_tools.clone();
+        let mode_btn = mode_btn.clone();
+        Rc::new(move |mode: StudyMode| {
+            study_tools.set_visible(mode.is_full());
+            mode_btn.set_label(if mode.is_full() { "Full study" } else { "Simple reader" });
+        })
+    };
+    apply_mode(state.borrow().mode);
 
     // ── study side panel ─────────────────────────────────────────────────────
     let study = gtk::Label::new(Some(
@@ -457,6 +485,25 @@ fn build_ui(app: &adw::Application) {
             show_study(&ui, &m);
         });
     }
+    // ── study mode toggle (Simple ⇄ Full), persisted ────────────────────────────
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        let apply_mode = apply_mode.clone();
+        mode_btn.connect_clicked(move |_| {
+            let new = {
+                let mut st = state.borrow_mut();
+                st.mode = if st.mode.is_full() { StudyMode::Simple } else { StudyMode::Full };
+                st.mode
+            };
+            persist_config(&state);
+            apply_mode(new);
+            // Leaving Full: collapse the study panel so no authoring view lingers.
+            if !new.is_full() {
+                hide_study(&ui);
+            }
+        });
+    }
 
     // ── search box → results in the study panel ─────────────────────────────────
     {
@@ -492,6 +539,106 @@ fn build_ui(app: &adw::Application) {
     install_css();
     rebuild_panes(&state, &ui); // builds the pane columns + first paint
     window.present();
+
+    // First launch: ask Simple reader vs Full study, then remember the choice.
+    if first_run {
+        show_mode_chooser(&window, &state, apply_mode.clone());
+    }
+}
+
+/// Persist the current mode + body size to the platform config (best-effort;
+/// the reader keeps working if the config dir can't be written).
+fn persist_config(state: &Shared) {
+    let cfg = {
+        let st = state.borrow();
+        Config { mode: st.mode, body_size: st.font_size }
+    };
+    let _ = config::save(&cfg);
+}
+
+/// The guided first-run chooser: a modal offering Simple reader vs Full study,
+/// each with a one-line description. The pick is applied to the header and
+/// saved; closing without choosing keeps the default (Simple).
+fn show_mode_chooser(parent: &adw::ApplicationWindow, state: &Shared, apply_mode: Rc<dyn Fn(StudyMode)>) {
+    let win = gtk::Window::builder()
+        .title("Welcome to pure-study")
+        .modal(true)
+        .default_width(460)
+        .transient_for(parent)
+        .build();
+
+    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    vbox.set_margin_top(20);
+    vbox.set_margin_bottom(20);
+    vbox.set_margin_start(20);
+    vbox.set_margin_end(20);
+
+    let intro = gtk::Label::new(None);
+    intro.set_use_markup(true);
+    intro.set_wrap(true);
+    intro.set_xalign(0.0);
+    intro.set_markup(
+        "<b>How would you like to read?</b>\n\nYou can switch anytime from the toolbar.",
+    );
+    vbox.append(&intro);
+
+    let choose = |title: &str, blurb: &str| {
+        let b = gtk::Button::new();
+        b.add_css_class("card");
+        let inner = gtk::Box::new(gtk::Orientation::Vertical, 3);
+        inner.set_margin_top(8);
+        inner.set_margin_bottom(8);
+        inner.set_margin_start(10);
+        inner.set_margin_end(10);
+        let t = gtk::Label::new(None);
+        t.set_use_markup(true);
+        t.set_xalign(0.0);
+        t.set_markup(&format!("<b>{title}</b>"));
+        let d = gtk::Label::new(Some(blurb));
+        d.set_wrap(true);
+        d.set_xalign(0.0);
+        d.add_css_class("dim-label");
+        inner.append(&t);
+        inner.append(&d);
+        b.set_child(Some(&inner));
+        b
+    };
+
+    let simple = choose(
+        "Simple reader",
+        "Just the text: chapters, search, and a double-click for Strong's. Nothing else in the way.",
+    );
+    let full = choose(
+        "Full study",
+        "Everything: threads, tags, weave cross-references and authoring, and the review queue.",
+    );
+    vbox.append(&simple);
+    vbox.append(&full);
+    win.set_child(Some(&vbox));
+
+    let pick = {
+        let state = state.clone();
+        let win = win.clone();
+        let apply_mode = apply_mode.clone();
+        move |mode: StudyMode| {
+            {
+                state.borrow_mut().mode = mode;
+            }
+            persist_config(&state);
+            apply_mode(mode);
+            win.close();
+        }
+    };
+    {
+        let pick = pick.clone();
+        simple.connect_clicked(move |_| pick(StudyMode::Simple));
+    }
+    {
+        let pick = pick.clone();
+        full.connect_clicked(move |_| pick(StudyMode::Full));
+    }
+
+    win.present();
 }
 
 /// Tear down and recreate every pane column from `State::panes`. Called on
@@ -939,6 +1086,7 @@ fn zoom(state: &Shared, ui: &Ui, dir: f64) {
         pu.area.queue_draw();
     }
     ui.link_layer.queue_draw();
+    persist_config(state); // remember the body size across launches
 }
 
 /// Pin token `tok` of `verse` in pane `i` as a weave-link endpoint. Clicking a
@@ -1806,11 +1954,13 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
         s.push('\n');
     }
 
-    // Author actions on this verse.
+    // Author actions on this verse — only in Full study mode.
     let rk = esc(&hit.verse.ref_key());
-    s.push_str(&format!(
-        "\n<a href=\"addtag:{rk}\">＋ tag verse</a>    <a href=\"addthread:{rk}\">＋ add to thread</a>\n"
-    ));
+    if st.mode.is_full() {
+        s.push_str(&format!(
+            "\n<a href=\"addtag:{rk}\">＋ tag verse</a>    <a href=\"addthread:{rk}\">＋ add to thread</a>\n"
+        ));
+    }
 
     // Weave cross-references touching this verse, if any.
     if let Some(xs) = st.xrefs.get(&hit.verse) {
@@ -1832,17 +1982,19 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
         }
     }
 
-    // Tags that include this verse, if any.
-    let vt = TagTarget::Verse(hit.verse.clone());
-    let tagged: Vec<(usize, &LoadedTag)> =
-        st.tags.iter().enumerate().filter(|(_, lt)| lt.tag.member_of(&vt)).collect();
-    if !tagged.is_empty() {
-        s.push_str("\n<b>tags</b>\n");
-        for (i, lt) in tagged {
-            s.push_str(&format!(
-                "<a href=\"tag:{i}\">{}</a>  <a href=\"untag:{i}:{rk}\"><small>✕</small></a>\n",
-                esc(&lt.tag.name)
-            ));
+    // Tags that include this verse (Full study only).
+    if st.mode.is_full() {
+        let vt = TagTarget::Verse(hit.verse.clone());
+        let tagged: Vec<(usize, &LoadedTag)> =
+            st.tags.iter().enumerate().filter(|(_, lt)| lt.tag.member_of(&vt)).collect();
+        if !tagged.is_empty() {
+            s.push_str("\n<b>tags</b>\n");
+            for (i, lt) in tagged {
+                s.push_str(&format!(
+                    "<a href=\"tag:{i}\">{}</a>  <a href=\"untag:{i}:{rk}\"><small>✕</small></a>\n",
+                    esc(&lt.tag.name)
+                ));
+            }
         }
     }
 
@@ -2030,8 +2182,13 @@ fn weave_markup(st: &State, i: usize) -> String {
         esc(w.kind.label()),
         tag
     );
+    let edit = if st.mode.is_full() {
+        format!("  <a href=\"editweavenotes:{i}\"><small>✎ note</small></a>")
+    } else {
+        String::new()
+    };
     s.push_str(&format!(
-        "<small>{} link{}</small>  <a href=\"editweavenotes:{i}\"><small>✎ note</small></a>\n",
+        "<small>{} link{}</small>{edit}\n",
         w.links.len(),
         if w.links.len() == 1 { "" } else { "s" }
     ));
