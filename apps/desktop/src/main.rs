@@ -22,6 +22,7 @@
 //! ```
 
 use std::cell::{Cell, RefCell};
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -31,6 +32,7 @@ use gtk::{cairo, gdk, glib};
 use pure_core::corpus::{Corpus, FLAG_ADDED, FLAG_DIVINE, FLAG_TITLE};
 use pure_core::search::{self, Notes, SearchAnswer, SearchIx};
 use pure_core::strongs::{self, OccurrenceIx, StrongsDict};
+use pure_core::weave::{self, LoadedWeave};
 use pure_core::{canon, corpus, notes, VRef};
 use pure_layout::{layout_chapter, DisplayList, Hit, ItemKind, LayoutConfig, Measure};
 
@@ -41,6 +43,8 @@ const MIN_FONT: f64 = 12.0;
 const MAX_FONT: f64 = 48.0;
 /// How many concordance rows to list before trusting the reader to search.
 const OCC_SHOWN: usize = 300;
+/// How many cross-references to list for one verse before capping.
+const XREF_SHOWN: usize = 40;
 
 /// The whole reader state, shared across signal handlers.
 struct State {
@@ -49,6 +53,8 @@ struct State {
     search_ix: SearchIx,
     occ_ix: OccurrenceIx,
     notes: Notes,
+    /// Verse → its weave cross-reference partners (deduped), precomputed once.
+    xrefs: HashMap<VRef, Vec<Xref>>,
     book: String,
     chapter: u16,
     font_size: f64,
@@ -66,6 +72,35 @@ struct State {
 }
 
 type Shared = Rc<RefCell<State>>;
+
+/// One cross-reference: a verse the current verse is weave-linked to, plus the
+/// weave that asserts it.
+struct Xref {
+    partner: VRef,
+    weave: String,
+}
+
+/// Precompute, for every verse, its weave partners across all loaded weaves —
+/// both directions of each undirected link, deduped by partner. This backs both
+/// the reader's gutter marker and the study panel's cross-reference list.
+fn build_xrefs(weaves: &[LoadedWeave]) -> HashMap<VRef, Vec<Xref>> {
+    let mut map: HashMap<VRef, Vec<Xref>> = HashMap::new();
+    for lw in weaves {
+        for l in &lw.weave.links {
+            map.entry(l.a.clone())
+                .or_default()
+                .push(Xref { partner: l.b.clone(), weave: lw.weave.name.clone() });
+            map.entry(l.b.clone())
+                .or_default()
+                .push(Xref { partner: l.a.clone(), weave: lw.weave.name.clone() });
+        }
+    }
+    for xs in map.values_mut() {
+        let mut seen = HashSet::new();
+        xs.retain(|x| seen.insert(x.partner.clone()));
+    }
+    map
+}
 
 /// Register the bundled EB Garamond with fontconfig for this process only (no
 /// change to the user's installed fonts). Returns the family to render in — the
@@ -152,6 +187,10 @@ fn load_state() -> Result<State, String> {
         strongs::load_strongs(format!("{home}/data/strongs.json")).map_err(|e| e.to_string())?;
     // Notes are optional: a missing file is not an error.
     let notes = notes::load_notes(format!("{home}/data/kjv-notes.jsonl")).map_err(|e| e.to_string())?;
+    // Weaves (cross-references) load from `home/weaves` (+ suggested); bad files
+    // are reported but don't fail the reader.
+    let (weaves, _weave_errs) = weave::load_weaves(&home);
+    let xrefs = build_xrefs(&weaves);
     let search_ix = SearchIx::build(&corpus);
     let occ_ix = OccurrenceIx::build(&corpus);
     let family = register_bundled_fonts();
@@ -161,6 +200,7 @@ fn load_state() -> Result<State, String> {
         search_ix,
         occ_ix,
         notes,
+        xrefs,
         book: "John".to_string(),
         chapter: 3,
         font_size: 21.0,
@@ -575,6 +615,13 @@ fn draw_scripture(state: &Shared, area: &gtk::DrawingArea, cr: &cairo::Context, 
     let top = MARGIN;
     let highlight = st.highlight;
 
+    // Verses in this chapter carrying weave cross-references get a gutter dot.
+    let xref_here: HashSet<u16> = verses
+        .iter()
+        .map(|v| v.verse)
+        .filter(|&n| st.xrefs.contains_key(&VRef::new(&st.book, st.chapter, n)))
+        .collect();
+
     // A soft band behind the target verse (from a search hit / concordance jump).
     if let Some(hv) = highlight {
         let ys: Vec<f32> = dl
@@ -600,12 +647,18 @@ fn draw_scripture(state: &Shared, area: &gtk::DrawingArea, cr: &cairo::Context, 
         let py = top as f64 + item.y as f64; // Pango paints from the top-left
         let baseline = py + ascent as f64;
         match &item.kind {
-            ItemKind::VerseNumber(_) => {
+            ItemKind::VerseNumber(n) => {
                 layout.set_font_description(Some(&bold));
                 cr.set_source_rgb(0.62, 0.49, 0.22); // gold
                 cr.move_to(px, py);
                 layout.set_text(&item.text);
                 pangocairo::functions::show_layout(cr, &layout);
+                // A gutter dot marks a verse with weave cross-references.
+                if xref_here.contains(n) {
+                    cr.set_source_rgba(0.62, 0.49, 0.22, 0.75);
+                    cr.arc((margin_x as f64 - 9.0).max(3.0), baseline - 4.0, 2.3, 0.0, std::f64::consts::TAU);
+                    let _ = cr.fill();
+                }
             }
             ItemKind::Word { .. } => {
                 if item.flags & FLAG_ADDED != 0 {
@@ -709,6 +762,21 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
             None => s.push_str("<i>(not in the dictionary)</i>\n"),
         }
         s.push('\n');
+    }
+
+    // Weave cross-references touching this verse, if any.
+    if let Some(xs) = st.xrefs.get(&hit.verse) {
+        s.push_str(&format!("\n<b>cross-references ({})</b>\n", xs.len()));
+        for x in xs.iter().take(XREF_SHOWN) {
+            s.push_str(&format!(
+                "{}  <small><span foreground=\"#888\">{}</span></small>\n",
+                go_link(&x.partner),
+                esc(&x.weave)
+            ));
+        }
+        if xs.len() > XREF_SHOWN {
+            s.push_str(&format!("<small>… {} more</small>\n", xs.len() - XREF_SHOWN));
+        }
     }
 
     // The 1769 translators' margin notes on this verse, if any.
