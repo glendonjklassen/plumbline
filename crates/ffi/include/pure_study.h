@@ -259,6 +259,48 @@ char *pure_engine_verse_xrefs_json(const struct PureEngine *engine, const char *
 // `engine` is a valid engine pointer.
 char *pure_engine_suggested_weaves_json(const struct PureEngine *engine);
 
+// Concept neighbours of a Strong's code as JSON:
+// `{"code","near":[{code,score}],"cross":[{code,score}]}` (same-testament, then
+// cross-testament — the latter empty unless the embedding is aligned). Null
+// when no embedding is loaded or the args are invalid.
+//
+// # Safety
+// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
+char *pure_engine_concept_neighbours_json(const struct PureEngine *engine,
+                                          const char *code,
+                                          uint32_t k);
+
+// The fused OT↔NT bridge partners of a Strong's code as JSON:
+// `{"code","partners":[{code,sources,prior}]}`, ranked by trust prior. The
+// etymology layer works from the dictionary alone, so this is available even
+// for a bytes-opened engine (external witnesses need a home). Null on a null
+// engine / invalid code.
+//
+// # Safety
+// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
+char *pure_engine_bridge_partners_json(const struct PureEngine *engine, const char *code);
+
+// The morphology of one token as JSON:
+// `{"verse","tokenIndex","code","gloss"}`. Null when no morphology is loaded,
+// the reference is unparseable, or that token carries no annotation.
+//
+// # Safety
+// `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
+char *pure_engine_morph_json(const struct PureEngine *engine,
+                             const char *ref_key,
+                             uint32_t token_index);
+
+// "Verses like this one" (SIF) as JSON:
+// `{"verse","in":[{verse,display,score}],"cross":[…]}`. The SIF model is built
+// lazily on the first call (heavy) and cached. Null when no embedding is
+// loaded or the reference is unparseable.
+//
+// # Safety
+// `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
+char *pure_engine_similar_verses_json(const struct PureEngine *engine,
+                                      const char *ref_key,
+                                      uint32_t k);
+
 // Add the whole verse `ref_key` to the thread named `name` (created on first
 // use). `note` may be null; `added` is a caller-supplied UTC timestamp.
 //

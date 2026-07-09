@@ -43,6 +43,7 @@ use std::ffi::{c_char, c_void, CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::ptr;
+use std::sync::OnceLock;
 
 use pure_core::corpus::{self, Corpus};
 use pure_core::search::{self, Notes, SearchIx};
@@ -52,6 +53,7 @@ use pure_core::thread::{self, LoadedThread, ThreadEntry};
 use pure_core::weave::{self, Link, LoadedWeave, WeaveKind};
 use pure_core::{canon, notes, VRef};
 use pure_layout::{layout_chapter, DisplayList, LayoutConfig, Measure};
+use pure_rnd::{bridge, embed, morph};
 
 mod wire;
 
@@ -101,12 +103,37 @@ pub struct PureEngine {
     threads: Vec<LoadedThread>,
     tags: Vec<LoadedTag>,
     weaves: Vec<LoadedWeave>,
+    /// R&D tier (loaded once at open; artifacts don't change on authoring):
+    /// the fused OT↔NT bridge, concept embeddings, and morphology. Cheap loads;
+    /// absent artifacts leave them empty/None.
+    bridge: bridge::FusedBridge,
+    embedding: Option<embed::Embedding>,
+    morph: Option<morph::MorphData>,
+    /// SIF "verses like this" — heavy to build (~a second over the whole
+    /// corpus), so it is built lazily on the first similar-verses query and
+    /// cached. `None` inside once the embedding is absent.
+    verse_sim: OnceLock<Option<embed::VerseSim>>,
 }
 
 impl PureEngine {
     fn new(corpus: Corpus, strongs: StrongsDict, home: Option<PathBuf>) -> PureEngine {
         let search_ix = SearchIx::build(&corpus);
         let occ_ix = OccurrenceIx::build(&corpus);
+        // R&D artifacts. The bridge's etymology layer works from the in-memory
+        // dict even without a home; external witnesses + the embedding/morph
+        // sidecars need a home's files (absent → empty/None).
+        let bridge_home = home.clone().unwrap_or_else(|| PathBuf::from("."));
+        let bridge = bridge::FusedBridge::build(&strongs, &bridge_home);
+        let (embedding, morph) = match &home {
+            Some(h) => {
+                let data = h.join("data");
+                (
+                    embed::load_embedding(canon::TOKENIZATION_VERSION, data.join("concept-vectors.vec")),
+                    morph::load_morph(canon::TOKENIZATION_VERSION, data.join("morphology.jsonl")),
+                )
+            }
+            None => (None, None),
+        };
         let mut engine = PureEngine {
             corpus,
             strongs,
@@ -117,9 +144,20 @@ impl PureEngine {
             threads: Vec::new(),
             tags: Vec::new(),
             weaves: Vec::new(),
+            bridge,
+            embedding,
+            morph,
+            verse_sim: OnceLock::new(),
         };
         engine.reload_study();
         engine
+    }
+
+    /// The SIF model, built lazily on first use from the embedding + corpus.
+    fn verse_sim(&self) -> Option<&embed::VerseSim> {
+        self.verse_sim
+            .get_or_init(|| self.embedding.as_ref().map(|e| embed::VerseSim::build(e, &self.corpus)))
+            .as_ref()
     }
 
     /// (Re)load notes + threads + tags + weaves from `home` (no-op without one).
@@ -753,6 +791,127 @@ pub unsafe extern "C" fn pure_engine_suggested_weaves_json(engine: *const PureEn
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(e) => out_json(&wire::suggested_weaves_to_wire(&e.weaves)),
         None => ptr::null_mut(),
+    })
+}
+
+// ── R&D tier: read (concept embeddings, morphology, fused bridge) ────────────────
+//
+// These consume the offline artifacts loaded at open (see `data-prep`). Each
+// returns null when its artifact is absent (or the engine/ref is invalid), so a
+// shell shows the section exactly when it exists — no training happens here.
+
+/// Concept neighbours of a Strong's code as JSON:
+/// `{"code","near":[{code,score}],"cross":[{code,score}]}` (same-testament, then
+/// cross-testament — the latter empty unless the embedding is aligned). Null
+/// when no embedding is loaded or the args are invalid.
+///
+/// # Safety
+/// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_concept_neighbours_json(
+    engine: *const PureEngine,
+    code: *const c_char,
+    k: u32,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(code)) = (engine.as_ref(), opt_str(code)) else {
+            return ptr::null_mut();
+        };
+        let Some(emb) = &e.embedding else { return ptr::null_mut() };
+        let k = k as usize;
+        out_json(&wire::WireConceptNeighbours {
+            code: code.to_string(),
+            near: wire::scored_to_wire(emb.nearest_concepts(code, k)),
+            cross: wire::scored_to_wire(emb.cross_concepts(code, k)),
+        })
+    })
+}
+
+/// The fused OT↔NT bridge partners of a Strong's code as JSON:
+/// `{"code","partners":[{code,sources,prior}]}`, ranked by trust prior. The
+/// etymology layer works from the dictionary alone, so this is available even
+/// for a bytes-opened engine (external witnesses need a home). Null on a null
+/// engine / invalid code.
+///
+/// # Safety
+/// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_bridge_partners_json(
+    engine: *const PureEngine,
+    code: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(code)) = (engine.as_ref(), opt_str(code)) else {
+            return ptr::null_mut();
+        };
+        let partners = e
+            .bridge
+            .partners(code)
+            .into_iter()
+            .map(|p| wire::WireBridgePartner { code: p.code, sources: p.sources, prior: p.prior })
+            .collect();
+        out_json(&wire::WireBridgePartners { code: code.to_string(), partners })
+    })
+}
+
+/// The morphology of one token as JSON:
+/// `{"verse","tokenIndex","code","gloss"}`. Null when no morphology is loaded,
+/// the reference is unparseable, or that token carries no annotation.
+///
+/// # Safety
+/// `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_morph_json(
+    engine: *const PureEngine,
+    ref_key: *const c_char,
+    token_index: u32,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(rk)) = (engine.as_ref(), opt_str(ref_key)) else {
+            return ptr::null_mut();
+        };
+        let (Some(md), Some(vref)) = (&e.morph, VRef::parse_ref_key(rk)) else {
+            return ptr::null_mut();
+        };
+        let Some(entry) = md.entries(&vref).iter().find(|en| en.tok == token_index) else {
+            return ptr::null_mut();
+        };
+        let Some(gloss) = md.gloss(&vref, token_index) else { return ptr::null_mut() };
+        out_json(&wire::WireMorph {
+            verse: vref.ref_key(),
+            token_index,
+            code: entry.code.clone(),
+            gloss,
+        })
+    })
+}
+
+/// "Verses like this one" (SIF) as JSON:
+/// `{"verse","in":[{verse,display,score}],"cross":[…]}`. The SIF model is built
+/// lazily on the first call (heavy) and cached. Null when no embedding is
+/// loaded or the reference is unparseable.
+///
+/// # Safety
+/// `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_similar_verses_json(
+    engine: *const PureEngine,
+    ref_key: *const c_char,
+    k: u32,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(rk)) = (engine.as_ref(), opt_str(ref_key)) else {
+            return ptr::null_mut();
+        };
+        let (Some(vs), Some(vref)) = (e.verse_sim(), VRef::parse_ref_key(rk)) else {
+            return ptr::null_mut();
+        };
+        let k = k as usize;
+        out_json(&wire::WireSimilarVerses {
+            verse: vref.ref_key(),
+            within: wire::similar_to_wire(vs.similar_verses_in(&vref, k)),
+            cross: wire::similar_to_wire(vs.similar_verses_cross(&vref, k)),
+        })
     })
 }
 

@@ -448,3 +448,81 @@ fn suggested_weave_review_via_abi() {
         let _ = std::fs::remove_dir_all(&home);
     }
 }
+
+#[test]
+fn rnd_tier_via_abi() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("pure-ffi-rnd-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::create_dir_all(home.join("bridge")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+
+        // Tiny aligned embedding over the fixture's codes + one Hebrew row.
+        std::fs::write(
+            home.join("data").join("concept-vectors.vec"),
+            "4 2\nG2316 1 0\nG25 0.9 0.1\nG4100 0.2 1\nH7225 0.95 0.05\n",
+        )
+        .unwrap();
+        std::fs::write(
+            home.join("data").join("concept-vectors.vec.meta"),
+            r#"{"tokenization":"kjv1769-tok2","aligned":"procrustes"}"#,
+        )
+        .unwrap();
+        // Morphology annotating "loved" (token 3, G25) in John 3:16.
+        std::fs::write(
+            home.join("data").join("morphology.jsonl"),
+            "{\"format\":\"overlay-morphology-v1\",\"tokenization\":\"kjv1769-tok2\",\"source\":\"test\"}\n\
+             {\"b\":\"John\",\"c\":3,\"v\":16,\"e\":[[3,\"G25\",null,\"V-AAI-3S\"]]}\n",
+        )
+        .unwrap();
+        // External bridge witness + trust prior.
+        std::fs::write(
+            home.join("bridge").join("lxx.json"),
+            r#"{"format":"overlay-bridge-sources-v1","links":[{"h":"H7225","g":"G25","source":"lxx"}]}"#,
+        )
+        .unwrap();
+        std::fs::write(home.join("data").join("source-priors.json"), r#"{"priors":{"lxx":0.85,"_default":0.5}}"#).unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = pure_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null() && !e.is_null());
+        let c = |s: &str| CString::new(s).unwrap();
+
+        // Concept neighbours: same-testament near, Hebrew cross (aligned).
+        let n: Value = serde_json::from_str(&take(pure_engine_concept_neighbours_json(e, c("G25").as_ptr(), 5)).unwrap()).unwrap();
+        assert_eq!(n["code"], "G25");
+        assert!(n["near"].as_array().unwrap().iter().all(|x| x["code"].as_str().unwrap().starts_with('G')));
+        assert!(n["cross"].as_array().unwrap().iter().any(|x| x["code"] == "H7225"));
+
+        // Fused bridge partner from the external witness.
+        let b: Value = serde_json::from_str(&take(pure_engine_bridge_partners_json(e, c("G25").as_ptr())).unwrap()).unwrap();
+        let p = b["partners"].as_array().unwrap().iter().find(|x| x["code"] == "H7225").unwrap();
+        assert_eq!(p["sources"][0], "lxx");
+        assert!((p["prior"].as_f64().unwrap() - 0.85).abs() < 1e-6);
+
+        // Morphology of "loved".
+        let m: Value = serde_json::from_str(&take(pure_engine_morph_json(e, c("John 3:16").as_ptr(), 3)).unwrap()).unwrap();
+        assert_eq!(m["code"], "V-AAI-3S");
+        assert_eq!(m["gloss"], "aorist active indicative, 3rd singular");
+        // A token with no annotation → null.
+        assert!(pure_engine_morph_json(e, c("John 3:16").as_ptr(), 1).is_null());
+
+        // "Verses like this" (lazy SIF build) → the other Greek verse.
+        let s: Value = serde_json::from_str(&take(pure_engine_similar_verses_json(e, c("John 3:16").as_ptr(), 5)).unwrap()).unwrap();
+        assert_eq!(s["verse"], "John 3:16");
+        assert!(s["in"].as_array().unwrap().iter().any(|x| x["verse"] == "John 3:18"));
+
+        // A bytes-opened engine has no embedding/morph → those return null.
+        let bytes_engine = open();
+        assert!(pure_engine_concept_neighbours_json(bytes_engine, c("G25").as_ptr(), 5).is_null());
+        assert!(pure_engine_morph_json(bytes_engine, c("John 3:16").as_ptr(), 3).is_null());
+        pure_engine_free(bytes_engine);
+
+        pure_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}

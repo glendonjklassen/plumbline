@@ -107,7 +107,7 @@ the architecture and the locked decisions; see
 | `crates/layout` | reader layout + per-word hit-testing as a platform-agnostic algorithm over an injected `Measure` (GTK shell backs it with cairo) | 3 |
 | `crates/rnd` | feature-gated R&D capabilities — **off by default**. `bridge`: OT↔NT etymology (Strong's-derived) **fused** with external witnesses (LXX/Abbott-Smith/TIPNR) weighted by trust priors. `embeddings`: concept-vector loader + cosine/cross neighbours + SIF "verses like this". `morphology`: OSHM/Robinson parse-code → gloss + sidecar. All *consume* offline artifacts (see [data-prep](data-prep/README.md)); no training in-app. Quotation detection awaits more hydrated inputs. | 1 (13 w/ all features) |
 | `crates/hydrate` | `pure-hydrate` CLI: `copy` the pack into a home + `check` each artifact by loading it (verse/entry counts, TSK coverage, embedding dim/alignment, morphology coverage, fused-bridge link count) | — |
-| `crates/ffi` | **the C ABI** (opaque engine/display-list handles, callback-measured layout, JSON payloads, **study-data read + authoring writes** incl. suggested-weave approve/reject + notes editing) + generated C/C# bindings + a Kotlin/JNA wrapper | 12 |
+| `crates/ffi` | **the C ABI** (opaque engine/display-list handles, callback-measured layout, JSON payloads, **study-data read + authoring writes** incl. suggested-weave approve/reject + notes editing, **plus the R&D tier**: concept neighbours, fused bridge partners, morphology, SIF verses-like-this) + generated C/C# bindings + a Kotlin/JNA wrapper | 13 |
 | `apps/desktop` | GTK4 + libadwaita shell (gtk4 0.11 / libadwaita 0.9) | — |
 
 Dropped by decision: signed **patches** and **rules** (not ported).

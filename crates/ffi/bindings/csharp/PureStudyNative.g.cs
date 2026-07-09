@@ -270,6 +270,54 @@ namespace PureStudy.Native
         public static extern byte* pure_engine_suggested_weaves_json(PureEngine* engine);
 
         /// <summary>
+        ///  Concept neighbours of a Strong's code as JSON:
+        ///  `{"code","near":[{code,score}],"cross":[{code,score}]}` (same-testament, then
+        ///  cross-testament — the latter empty unless the embedding is aligned). Null
+        ///  when no embedding is loaded or the args are invalid.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_concept_neighbours_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_concept_neighbours_json(PureEngine* engine, byte* code, uint k);
+
+        /// <summary>
+        ///  The fused OT↔NT bridge partners of a Strong's code as JSON:
+        ///  `{"code","partners":[{code,sources,prior}]}`, ranked by trust prior. The
+        ///  etymology layer works from the dictionary alone, so this is available even
+        ///  for a bytes-opened engine (external witnesses need a home). Null on a null
+        ///  engine / invalid code.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_bridge_partners_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_bridge_partners_json(PureEngine* engine, byte* code);
+
+        /// <summary>
+        ///  The morphology of one token as JSON:
+        ///  `{"verse","tokenIndex","code","gloss"}`. Null when no morphology is loaded,
+        ///  the reference is unparseable, or that token carries no annotation.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_morph_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_morph_json(PureEngine* engine, byte* ref_key, uint token_index);
+
+        /// <summary>
+        ///  "Verses like this one" (SIF) as JSON:
+        ///  `{"verse","in":[{verse,display,score}],"cross":[…]}`. The SIF model is built
+        ///  lazily on the first call (heavy) and cached. Null when no embedding is
+        ///  loaded or the reference is unparseable.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_similar_verses_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_similar_verses_json(PureEngine* engine, byte* ref_key, uint k);
+
+        /// <summary>
         ///  Add the whole verse `ref_key` to the thread named `name` (created on first
         ///  use). `note` may be null; `added` is a caller-supplied UTC timestamp.
         ///

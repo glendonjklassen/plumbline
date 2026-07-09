@@ -484,6 +484,83 @@ pub fn suggested_weaves_to_wire(loaded: &[LoadedWeave]) -> WireSuggestedWeaves {
     WireSuggestedWeaves { suggested }
 }
 
+// ── R&D tier ──────────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireScored {
+    pub code: String,
+    pub score: f32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireConceptNeighbours {
+    pub code: String,
+    /// Same-testament distributional neighbours.
+    pub near: Vec<WireScored>,
+    /// Cross-testament neighbours (empty unless the embedding is aligned).
+    pub cross: Vec<WireScored>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireMorph {
+    pub verse: String,
+    pub token_index: u32,
+    /// The raw parsing code, e.g. `"HVqp3ms"` / `"V-AAI-3S"`.
+    pub code: String,
+    /// The rendered study-panel phrase, e.g. `"Qal perfect, 3rd masculine singular"`.
+    pub gloss: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireBridgePartner {
+    pub code: String,
+    /// The witnesses that assert this link (`etymology`, `lxx`, `abbott-smith`, …).
+    pub sources: Vec<String>,
+    /// The best trust prior across those witnesses.
+    pub prior: f32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireBridgePartners {
+    pub code: String,
+    pub partners: Vec<WireBridgePartner>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireSimilarVerse {
+    pub verse: String,
+    pub display: String,
+    pub score: f32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireSimilarVerses {
+    pub verse: String,
+    /// Same-testament thematic neighbours.
+    #[serde(rename = "in")]
+    pub within: Vec<WireSimilarVerse>,
+    /// Cross-testament neighbours (empty unless the embedding is aligned).
+    pub cross: Vec<WireSimilarVerse>,
+}
+
+pub fn scored_to_wire(items: Vec<(String, f32)>) -> Vec<WireScored> {
+    items.into_iter().map(|(code, score)| WireScored { code, score }).collect()
+}
+
+pub fn similar_to_wire(items: Vec<(VRef, f32)>) -> Vec<WireSimilarVerse> {
+    items
+        .into_iter()
+        .map(|(v, score)| WireSimilarVerse { verse: v.ref_key(), display: v.display(), score })
+        .collect()
+}
+
 pub fn search_to_wire(a: &SearchAnswer) -> WireSearch {
     match a {
         SearchAnswer::GoTo { book, chapter, verse } => {

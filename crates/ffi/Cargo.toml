@@ -16,6 +16,10 @@ crate-type = ["lib", "cdylib", "staticlib"]
 [dependencies]
 pure-core = { workspace = true }
 pure-layout = { workspace = true }
+# The R&D tier (etymology/fused bridge, concept embeddings, morphology) so the
+# native shells reach it over the one ABI. Pure Rust — no system deps — so the
+# cdylib still cross-builds for Windows/Android.
+pure-rnd = { workspace = true, features = ["bridge", "embeddings", "morphology"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
