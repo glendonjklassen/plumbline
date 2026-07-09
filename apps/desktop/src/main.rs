@@ -35,7 +35,7 @@ use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread};
 use pure_core::weave::{self, Link, LoadedWeave, Span, WeaveKind};
 use pure_core::{canon, corpus, crossref, home, notes, VRef};
-use pure_rnd::bridge;
+use pure_rnd::{bridge, embed};
 use pure_layout::{layout_chapter, DisplayList, Hit, ItemKind, LayoutConfig, Measure};
 
 const APP_ID: &str = "ca.cavallo.purestudy";
@@ -71,6 +71,9 @@ struct State {
     xref_ix: crossref::XRefIx,
     /// The OT↔NT etymology bridge (Strong's-derived; a Full-study R&D tier).
     bridge: bridge::Bridge,
+    /// Concept embeddings (offline-trained), when the artifact is present — for
+    /// "concepts near this" and the cross-testament semantic bridge.
+    embedding: Option<embed::Embedding>,
     /// The data home, kept so authoring can write + reload study data.
     home: String,
     /// Font family to render the scripture in ("EB Garamond" or a fallback).
@@ -290,6 +293,8 @@ fn load_state(cfg: &Config) -> Result<State, String> {
     let xref_ix = crossref::load_cross_refs(data.join("cross-references.tsv"));
     // The OT↔NT etymology bridge — pure, built from the Strong's dictionary.
     let bridge = bridge::Bridge::from_etymology(&strongs);
+    // Concept embeddings — optional offline artifact; absent → symbolic only.
+    let embedding = embed::load_embedding(canon::TOKENIZATION_VERSION, data.join("concept-vectors.vec"));
     let search_ix = SearchIx::build(&corpus);
     let occ_ix = OccurrenceIx::build(&corpus);
     let family = register_bundled_fonts();
@@ -306,6 +311,7 @@ fn load_state(cfg: &Config) -> Result<State, String> {
         tags,
         xref_ix,
         bridge,
+        embedding,
         home,
         family,
         font_size: cfg.body_size,
@@ -1988,6 +1994,25 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
                 }
                 s.push_str("</small>\n");
             }
+
+            // Concept neighbours from the embedding (Full study), when the
+            // artifact is present: distributional near-synonyms, and — if the
+            // space is aligned — the cross-testament semantic neighbours.
+            if let Some(emb) = &st.embedding {
+                let gloss = |c: &str| st.strongs.get(c).and_then(|e| e.lemma.clone());
+                let near = emb.nearest_concepts(code, 6);
+                if !near.is_empty() {
+                    s.push_str("<small><span foreground=\"#9e7d38\">≈ concepts near: </span>");
+                    s.push_str(&concept_links(&near, &gloss));
+                    s.push_str("</small>\n");
+                }
+                let cross = emb.cross_concepts(code, 6);
+                if !cross.is_empty() {
+                    s.push_str("<small><span foreground=\"#9e7d38\">≈ across the testaments: </span>");
+                    s.push_str(&concept_links(&cross, &gloss));
+                    s.push_str("</small>\n");
+                }
+            }
         }
         s.push('\n');
     }
@@ -2301,6 +2326,19 @@ fn go_link(v: &VRef) -> String {
         v.verse,
         esc(&v.display())
     )
+}
+
+/// Render a list of `(strongs, score)` concept neighbours as concordance links,
+/// each shown as `CODE (lemma)` when a lemma is known, comma-separated.
+fn concept_links(items: &[(String, f32)], gloss: &dyn Fn(&str) -> Option<String>) -> String {
+    items
+        .iter()
+        .map(|(code, _)| match gloss(code) {
+            Some(l) => format!("<a href=\"occ:{c}\">{c}</a> {l}", c = esc(code), l = esc(&l)),
+            None => format!("<a href=\"occ:{c}\">{c}</a>", c = esc(code)),
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Markup for a search query's answer: a go-to jump, or a list of hit links.

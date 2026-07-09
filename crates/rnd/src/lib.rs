@@ -16,6 +16,11 @@
 #[cfg(feature = "bridge")]
 pub mod bridge;
 
+/// Concept embeddings: loader + neighbour search over the offline-trained
+/// `concept-vectors.vec` artifact. Compiled in with the `embeddings` feature.
+#[cfg(feature = "embeddings")]
+pub mod embed;
+
 /// Which R&D capabilities this build was compiled with. The UI queries this to
 /// decide which panels/toggles to even show (decision #4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -47,6 +52,7 @@ pub const fn any_enabled() -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
 
     // Only meaningful in a featureless build (a plain `cargo test`); skip it
