@@ -83,10 +83,11 @@ when we port the pipeline).
 | `Weave.hs` | `core::weave` | ✅ |
 | `Thread.hs` | `core::thread` | ⏳ |
 | `Refs.hs` (display names, canon segments) | `core::reference` | ✅ (segments) |
-| `ReaderView.hs` (custom layout widget) | `layout` | 🔨 in progress |
+| `ReaderView.hs` (custom layout widget) | `layout` | ✅ (algorithm + hit-test, unit-tested) |
+| — (new: the one C ABI over core+layout) | `ffi` | ✅ (opaque handles, callback layout, JSON; C/C#/Kotlin bindings) |
 | `Concept*`, `Embed`, `Morph`, `Witness`, `Bridge`, `Burst` | `rnd` (optional) | ⏳ later |
 | `Patch.hs`, `Rule.hs` | — | ❌ dropped by decision |
-| `UI/Panels/Events/Home/Startup` (Monomer) | `apps/desktop` (GTK) etc. | 🔨 |
+| `UI/Panels/Events/Home/Startup` (Monomer) | `apps/desktop` (GTK), + WinUI/Compose over `ffi` | 🔨 |
 | `ml/*.py`, `pipelines/*.py` | `data-prep/` (kept as offline Python) | ⏳ later |
 
 ## Overnight scope (this session)

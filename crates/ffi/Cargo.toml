@@ -9,10 +9,30 @@ description = "C ABI surface for pure-study: consumed by UniFFI (Kotlin/Android)
 
 [lib]
 # A C-callable dynamic + static lib. `cdylib` for Android/.so and Windows/.dll;
-# `staticlib` if a UI wants to link it in directly.
+# `staticlib` if a UI wants to link it in directly. `lib` keeps it usable as a
+# normal Rust dependency (and lets the `pure-bindgen` bin reason over its API).
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [dependencies]
 pure-core = { workspace = true }
+pure-layout = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+# Binding generators run only for the `pure-bindgen` helper (feature-gated) so a
+# plain `cargo build` / cross-build of the cdylib never pulls host-only tools.
+[dependencies.cbindgen]
+version = "0.29"
+optional = true
+[dependencies.csbindgen]
+version = "1"
+optional = true
+
+[features]
+# `cargo run -p pure-ffi --features bindgen --bin pure-bindgen` regenerates the
+# committed C header + C# P/Invoke shim from this crate's `extern "C"` surface.
+bindgen = ["dep:cbindgen", "dep:csbindgen"]
+
+[[bin]]
+name = "pure-bindgen"
+required-features = ["bindgen"]

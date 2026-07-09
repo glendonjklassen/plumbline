@@ -17,5 +17,12 @@ path = "src/main.rs"
 # system GTK 4.22 / libadwaita 1.9).
 gtk = { version = "0.11", package = "gtk4", features = ["v4_10"] }
 adw = { version = "0.9", package = "libadwaita", features = ["v1_4"] }
+# Real text: Pango shaping rendered onto the cairo canvas (replaces cairo's toy
+# font API). `pango`/`cairo` come in via gtk4, but pango↔cairo glue is its own
+# crate. Pinned to the same gtk-rs generation as gdk4 0.11 (pango 0.22).
+pango = "0.22"
+pangocairo = "0.22"
+# Register the bundled EB Garamond with fontconfig at startup (no system install).
+fontconfig-sys = { package = "yeslogic-fontconfig-sys", version = "6" }
 pure-core = { workspace = true }
 pure-layout = { workspace = true }

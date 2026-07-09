@@ -13,6 +13,7 @@
 
 pub mod canon;
 pub mod corpus;
+pub mod notes;
 pub mod reference;
 pub mod search;
 pub mod strongs;
