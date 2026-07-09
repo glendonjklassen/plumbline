@@ -29,6 +29,7 @@ use gtk::{cairo, gdk, glib};
 use pure_core::corpus::{Corpus, FLAG_ADDED, FLAG_DIVINE, FLAG_TITLE};
 use pure_core::search::{self, Notes, SearchAnswer, SearchIx};
 use pure_core::strongs::{self, OccurrenceIx, StrongsDict};
+use pure_core::reference::{CANON_SEGMENTS, OT_NT_DIVIDE};
 use pure_core::weave::{self, LoadedWeave};
 use pure_core::{canon, corpus, notes, VRef};
 use pure_layout::{layout_chapter, DisplayList, Hit, ItemKind, LayoutConfig, Measure};
@@ -174,6 +175,8 @@ struct Ui {
     pane_row: gtk::Box,
     /// Transparent layer over the panes where cross-reference connectors draw.
     link_layer: gtk::DrawingArea,
+    /// The canon-overview strip under the panes (book map + per-pane pins).
+    canon_map: gtk::DrawingArea,
     /// Per-pane widgets, kept parallel to `State::panes`.
     pane_uis: Rc<RefCell<Vec<PaneUi>>>,
     /// Guards programmatic widget updates from re-entering their handlers.
@@ -313,6 +316,13 @@ fn build_ui(app: &adw::Application) {
     paned.set_resize_end_child(false);
     paned.set_shrink_end_child(false);
     paned.set_position(700);
+    paned.set_vexpand(true);
+
+    // ── canon-overview strip (book map, under the panes) ────────────────────────
+    let canon_map = gtk::DrawingArea::new();
+    canon_map.set_content_height(30);
+    canon_map.set_hexpand(true);
+    canon_map.set_tooltip_text(Some("Jump anywhere — click a book"));
 
     let ui = Ui {
         title,
@@ -320,6 +330,7 @@ fn build_ui(app: &adw::Application) {
         study_scroll,
         pane_row,
         link_layer: link_layer.clone(),
+        canon_map: canon_map.clone(),
         pane_uis: Rc::new(RefCell::new(Vec::new())),
         guard: Rc::new(Cell::new(false)),
     };
@@ -329,6 +340,30 @@ fn build_ui(app: &adw::Application) {
         let state = state.clone();
         let ui = ui.clone();
         link_layer.set_draw_func(move |layer, cr, w, h| draw_links(&state, &ui, layer, cr, w, h));
+    }
+
+    // ── canon strip: draw + click-to-jump the active pane ───────────────────────
+    {
+        let state = state.clone();
+        canon_map.set_draw_func(move |_a, cr, w, h| draw_canon(&state, cr, w, h));
+    }
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        let click = gtk::GestureClick::new();
+        click.connect_pressed(move |_g, _n, x, _y| {
+            let w = ui.canon_map.width();
+            if w <= 0 {
+                return;
+            }
+            let frac = (x / w as f64).clamp(0.0, 0.999);
+            let idx = (frac * canon::BOOKS.len() as f64) as usize;
+            if let Some(b) = canon::BOOKS.get(idx) {
+                let active = state.borrow().active;
+                navigate_pane(&state, &ui, active, b.id, 1, None);
+            }
+        });
+        canon_map.add_controller(click);
     }
 
     // ── study-panel links (search hits / concordance / go-to) navigate ──────────
@@ -357,9 +392,13 @@ fn build_ui(app: &adw::Application) {
     }
 
     // ── assemble window ─────────────────────────────────────────────────────────
+    let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    content.append(&paned);
+    content.append(&canon_map);
+
     let toolbar = adw::ToolbarView::new();
     toolbar.add_top_bar(&header);
-    toolbar.set_content(Some(&paned));
+    toolbar.set_content(Some(&content));
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
@@ -393,6 +432,7 @@ fn rebuild_panes(state: &Shared, ui: &Ui) {
     }
     update_active_style(state, ui);
     update_title(state, ui);
+    ui.canon_map.queue_draw();
     let active = state.borrow().active;
     if let Some(pu) = ui.pane_uis.borrow().get(active) {
         pu.area.grab_focus();
@@ -466,6 +506,32 @@ fn build_pane(state: &Shared, ui: &Ui, i: usize, n: usize) -> (gtk::Box, PaneUi)
     {
         let state = state.clone();
         area.set_draw_func(move |a, cr, w, _h| draw_pane(&state, i, a, cr, w));
+    }
+
+    // ── hover a Strong's-tagged word → quick gloss tooltip ──────────────────────
+    area.set_has_tooltip(true);
+    {
+        let state = state.clone();
+        area.connect_query_tooltip(move |_w, x, y, _kbd, tooltip| {
+            let markup = {
+                let st = state.borrow();
+                st.panes
+                    .get(i)
+                    .and_then(|p| {
+                        p.dl.as_ref()
+                            .and_then(|dl| dl.hit_test(x as f32 - p.margin_x, y as f32 - MARGIN))
+                    })
+                    .filter(|hit| !hit.strongs.is_empty())
+                    .map(|hit| hover_markup(&st, &hit))
+            };
+            match markup {
+                Some(m) => {
+                    tooltip.set_markup(Some(&m));
+                    true
+                }
+                None => false,
+            }
+        });
     }
 
     // ── click: activate the pane; double-click looks up a word ──────────────────
@@ -600,6 +666,7 @@ fn set_active(state: &Shared, ui: &Ui, i: usize) {
     }
     update_active_style(state, ui);
     update_title(state, ui);
+    ui.canon_map.queue_draw();
 }
 
 /// Give the active pane a gold top accent (only meaningful with >1 pane).
@@ -665,6 +732,7 @@ fn navigate_pane(state: &Shared, ui: &Ui, i: usize, book: &str, chapter: u16, ve
     sync_pane(state, ui, i);
     update_title(state, ui);
     ui.link_layer.queue_draw();
+    ui.canon_map.queue_draw();
 
     let vadj = ui.pane_uis.borrow().get(i).map(|pu| pu.vadj.clone());
     if let Some(vadj) = vadj {
@@ -991,6 +1059,61 @@ fn link_endpoint(
     Some((pt.x() as f64, pt.y() as f64))
 }
 
+/// Draw the canon-overview strip: the eight canon sections across the 66 books,
+/// the OT/NT divide, and a pin per pane at its current book (active in gold).
+fn draw_canon(state: &Shared, cr: &cairo::Context, w: i32, h: i32) {
+    let st = state.borrow();
+    let width = w as f64;
+    let hf = h as f64;
+    let nb = canon::BOOKS.len() as f64;
+
+    cr.set_source_rgb(0.92, 0.90, 0.86);
+    let _ = cr.rectangle(0.0, 0.0, width, hf);
+    let _ = cr.fill();
+
+    let layout = pangocairo::functions::create_layout(cr);
+    let mut fd = pango::FontDescription::new();
+    fd.set_family(&st.family);
+    fd.set_absolute_size(11.0 * pango::SCALE as f64);
+    layout.set_font_description(Some(&fd));
+
+    for (k, (lbl, lo, hi)) in CANON_SEGMENTS.iter().enumerate() {
+        let x0 = *lo as f64 / nb * width;
+        let x1 = (*hi + 1) as f64 / nb * width;
+        if k % 2 == 1 {
+            cr.set_source_rgba(0.0, 0.0, 0.0, 0.04);
+            let _ = cr.rectangle(x0, 0.0, x1 - x0, hf);
+            let _ = cr.fill();
+        }
+        layout.set_text(lbl);
+        let (tw, th) = layout.pixel_size();
+        if (tw as f64) < (x1 - x0) - 6.0 {
+            cr.set_source_rgba(0.35, 0.30, 0.22, 0.9);
+            cr.move_to((x0 + x1) / 2.0 - tw as f64 / 2.0, hf / 2.0 - th as f64 / 2.0 - 2.0);
+            pangocairo::functions::show_layout(cr, &layout);
+        }
+    }
+
+    let dx = OT_NT_DIVIDE as f64 / nb * width;
+    cr.set_source_rgba(0.4, 0.3, 0.2, 0.5);
+    cr.set_line_width(1.0);
+    cr.move_to(dx, 0.0);
+    cr.line_to(dx, hf);
+    let _ = cr.stroke();
+
+    for (i, p) in st.panes.iter().enumerate() {
+        let bi = canon::book_order(&p.book).unwrap_or(0) as f64;
+        let x = (bi + 0.5) / nb * width;
+        if i == st.active {
+            cr.set_source_rgb(0.62, 0.49, 0.22);
+        } else {
+            cr.set_source_rgba(0.3, 0.3, 0.3, 0.6);
+        }
+        cr.arc(x, hf - 4.0, 3.5, 0.0, std::f64::consts::TAU);
+        let _ = cr.fill();
+    }
+}
+
 /// The verse number a placed item belongs to (its own number for a marker; for
 /// a word, from its `VRef`). Used to band the highlighted verse.
 fn item_verse_num(it: &pure_layout::PlacedItem) -> Option<u16> {
@@ -1078,6 +1201,33 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
         s.push_str("\n<b>margin notes</b>\n");
         for n in ns {
             s.push_str(&format!("<small>{}</small>\n", esc(n)));
+        }
+    }
+    s
+}
+
+/// A compact hover gloss for a Strong's-tagged word: each code with its lemma,
+/// transliteration, and a trimmed definition.
+fn hover_markup(st: &State, hit: &Hit) -> String {
+    let mut s = String::new();
+    for (k, code) in hit.strongs.iter().enumerate() {
+        if k > 0 {
+            s.push('\n');
+        }
+        s.push_str(&format!("<b>{}</b>", esc(code)));
+        if let Some(e) = st.strongs.get(code) {
+            if let Some(l) = &e.lemma {
+                s.push_str(&format!("  {}", esc(l)));
+            }
+            if let Some(x) = &e.xlit {
+                s.push_str(&format!("  <i>{}</i>", esc(x)));
+            }
+            if let Some(g) = e.kjv.as_ref().or(e.def.as_ref()) {
+                let g = g.trim();
+                let short: String = g.chars().take(80).collect();
+                let ell = if g.chars().count() > 80 { "…" } else { "" };
+                s.push_str(&format!("\n<small>{}{}</small>", esc(&short), ell));
+            }
         }
     }
     s

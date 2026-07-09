@@ -34,6 +34,10 @@ the architecture and the locked decisions; see
     the search box is cleared.
   - **Zoom** (Ctrl +/− and Ctrl+scroll) and **keyboard** nav (PageUp/Down /
     Space to scroll, Home/End, ←/→ or `[`/`]` for prev/next chapter).
+  - **Hover** a Strong's-tagged word for a quick gloss tooltip (code + lemma +
+    short definition); the **canon-overview strip** under the panes maps the 66
+    books in 8 sections with the OT/NT divide and a pin per pane — click to jump
+    the active pane anywhere.
   - Verified visually against the real **31,102-verse** corpus. A cosmetic
     `radv … Vulkan` warning prints on start (GTK renderer fallback; ignore).
 - **`pure-ffi` is now the real C ABI** both native shells will consume — not a
@@ -92,10 +96,10 @@ windows x86_64-gnu + aarch64-gnullvm); **mingw-w64** is present. So:
      [`bindings/csharp`](crates/ffi/bindings/csharp). Both are already written
      and the demo runs against the Linux `.so` today as a proof.
 3. **Reader** (search / concordance / notes / cross-references / zoom / keyboard /
-   **Pango + EB Garamond** / **multi-pane** / **ambient weave connectors** all
-   done): remaining — a weave compare card + approve/reject; Ctrl+click gating for
-   Strong's; hover cards; canon-overview strip; threads + tags (need a
-   `core::thread` port first); a stabler verse-scroll than the 50 ms nudge.
+   **Pango + EB Garamond** / **multi-pane** / **ambient weave connectors** /
+   **hover glosses** / **canon strip** all done): remaining — a weave compare card
+   + approve/reject; threads + tags (need a `core::thread` port first); a stabler
+   verse-scroll than the 50 ms nudge.
 4. **Port remaining core**: threads, the notes loader (`kjv-notes.jsonl` — the
    FFI already threads an empty `Notes` through search, ready to fill), weave
    rendering across panes. Then expose threads/weave/notes through the ABI.
