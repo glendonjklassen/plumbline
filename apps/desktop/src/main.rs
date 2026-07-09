@@ -1,21 +1,18 @@
 //! pure-study desktop shell — GTK4 + libadwaita (the first native UI).
 //!
-//! A thin shell over `pure-core` + `pure-layout`: it measures scripture text
-//! with cairo, hands the measurements to the shared layout engine, paints the
+//! A thin shell over `pure-core` + `pure-layout`: it shapes scripture text with
+//! Pango, hands per-token widths to the shared layout engine, paints the
 //! returned display list, and forwards clicks back to the layout's hit-test.
 //! No study logic lives here — the same core will back the WinUI and Compose
 //! shells.
 //!
-//! Beyond reading it now offers the core's study surface: a **search** box
-//! (word / phrase / reference, multi-tier), a **concordance** (every verse a
-//! Strong's number tags), the 1769 **margin notes**, plus **zoom** and
-//! **keyboard** navigation. Search results and concordance entries are clickable
-//! reference links that navigate — and scroll — the reader.
-//!
-//! Measuring and painting with the *same* engine (cairo) guarantees the
-//! per-word hit regions line up exactly with the glyphs on screen. (A later
-//! refinement: swap cairo's toy font API for Pango + the bundled EB Garamond,
-//! and gate Strong's lookup behind Ctrl+click as overlay does.)
+//! The reader is **multi-pane**: one or more columns, each showing an
+//! independent book/chapter with its own nav and scroll, so passages can be read
+//! side by side (overlay's core reading model). The active pane (the last one
+//! touched) is what search results, cross-references, and the study panel act
+//! on. Beyond reading it offers the core's study surface — multi-tier **search**,
+//! a **concordance**, 1769 **margin notes**, and weave **cross-references** — set
+//! in the bundled **EB Garamond**, with zoom and keyboard navigation.
 //!
 //! ```sh
 //! OVERLAY_HOME=../overlay cargo run -p pure-desktop
@@ -41,12 +38,14 @@ const MAX_COLUMN: f32 = 720.0;
 const MARGIN: f32 = 28.0;
 const MIN_FONT: f64 = 12.0;
 const MAX_FONT: f64 = 48.0;
+/// Most reading columns at once.
+const MAX_PANES: usize = 3;
 /// How many concordance rows to list before trusting the reader to search.
 const OCC_SHOWN: usize = 300;
 /// How many cross-references to list for one verse before capping.
 const XREF_SHOWN: usize = 40;
 
-/// The whole reader state, shared across signal handlers.
+/// Shared reader state: the immutable study core plus the live panes.
 struct State {
     corpus: Corpus,
     strongs: StrongsDict,
@@ -55,20 +54,38 @@ struct State {
     notes: Notes,
     /// Verse → its weave cross-reference partners (deduped), precomputed once.
     xrefs: HashMap<VRef, Vec<Xref>>,
-    book: String,
-    chapter: u16,
-    font_size: f64,
     /// Font family to render the scripture in ("EB Garamond" or a fallback).
     family: String,
-    /// The display list from the last paint, kept so clicks can hit-test
-    /// against exactly what is on screen.
+    font_size: f64,
+    panes: Vec<Pane>,
+    /// Which pane search / cross-references / the study panel act on.
+    active: usize,
+}
+
+/// One reading column: what it shows plus its last paint (for hit-testing and
+/// scroll-to-verse).
+struct Pane {
+    book: String,
+    chapter: u16,
     dl: Option<DisplayList>,
     margin_x: f32,
-    last_content_height: i32,
-    /// A verse to scroll to (and briefly tint) after the next paint — set when
-    /// navigating from a search hit or concordance entry.
+    last_h: i32,
     scroll_to: Option<u16>,
     highlight: Option<u16>,
+}
+
+impl Pane {
+    fn new(book: &str, chapter: u16) -> Pane {
+        Pane {
+            book: book.to_string(),
+            chapter,
+            dl: None,
+            margin_x: 0.0,
+            last_h: 0,
+            scroll_to: None,
+            highlight: None,
+        }
+    }
 }
 
 type Shared = Rc<RefCell<State>>;
@@ -81,8 +98,8 @@ struct Xref {
 }
 
 /// Precompute, for every verse, its weave partners across all loaded weaves —
-/// both directions of each undirected link, deduped by partner. This backs both
-/// the reader's gutter marker and the study panel's cross-reference list.
+/// both directions of each undirected link, deduped by partner. Backs both the
+/// reader's gutter marker and the study panel's cross-reference list.
 fn build_xrefs(weaves: &[LoadedWeave]) -> HashMap<VRef, Vec<Xref>> {
     let mut map: HashMap<VRef, Vec<Xref>> = HashMap::new();
     for lw in weaves {
@@ -104,9 +121,7 @@ fn build_xrefs(weaves: &[LoadedWeave]) -> HashMap<VRef, Vec<Xref>> {
 
 /// Register the bundled EB Garamond with fontconfig for this process only (no
 /// change to the user's installed fonts). Returns the family to render in — the
-/// bundled face if it registered, else a plain serif fallback. Pango's default
-/// cairo font map reads the current fontconfig config, so the family becomes
-/// resolvable app-wide once added.
+/// bundled face if it registered, else a plain serif fallback.
 fn register_bundled_fonts() -> String {
     let base = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/fonts/");
     let mut ok = true;
@@ -129,21 +144,30 @@ fn register_bundled_fonts() -> String {
     if ok { "EB Garamond".to_string() } else { "Serif".to_string() }
 }
 
-/// The chrome widgets handlers need to read/update, bundled so closures capture
-/// one cheap clone instead of a dozen. (GTK objects are refcounted handles.)
+/// Persistent chrome plus the live per-pane widget handles. Cheap to clone
+/// (GTK objects are refcounted; the pane list is shared via `Rc`).
 #[derive(Clone)]
 struct Ui {
-    book_dd: gtk::DropDown,
-    chapter_spin: gtk::SpinButton,
     title: adw::WindowTitle,
-    area: gtk::DrawingArea,
     study: gtk::Label,
-    /// The study panel's scroller — shown only when there's something to study
-    /// (a double-clicked word, search results, a concordance), hidden otherwise.
+    /// The study panel's scroller — shown only when there's something to study.
     study_scroll: gtk::ScrolledWindow,
-    vadj: gtk::Adjustment,
+    /// Horizontal container the pane columns live in; rebuilt on add/close.
+    pane_row: gtk::Box,
+    /// Per-pane widgets, kept parallel to `State::panes`.
+    pane_uis: Rc<RefCell<Vec<PaneUi>>>,
     /// Guards programmatic widget updates from re-entering their handlers.
     guard: Rc<Cell<bool>>,
+}
+
+/// The GTK handles for one pane column.
+#[derive(Clone)]
+struct PaneUi {
+    root: gtk::Box,
+    area: gtk::DrawingArea,
+    vadj: gtk::Adjustment,
+    book_dd: gtk::DropDown,
+    chapter_spin: gtk::SpinButton,
 }
 
 /// Show the study panel with `markup`; open it if it was hidden.
@@ -152,15 +176,14 @@ fn show_study(ui: &Ui, markup: &str) {
     ui.study_scroll.set_visible(true);
 }
 
-/// Collapse the study panel (reader takes the full width).
+/// Collapse the study panel (the panes take the full width).
 fn hide_study(ui: &Ui) {
     ui.study_scroll.set_visible(false);
 }
 
 /// Pango-backed text measurement: the width comes from the very `pango::Layout`
 /// (with the body font set) that then paints the runs, so hit regions and glyphs
-/// stay in lock-step. Measuring the regular face — words later painted italic /
-/// bold differ negligibly, exactly as the old cairo path did.
+/// stay in lock-step.
 struct PangoMeasure<'a> {
     layout: &'a pango::Layout,
 }
@@ -168,8 +191,7 @@ impl Measure for PangoMeasure<'_> {
     fn text_width(&self, text: &str) -> f32 {
         self.layout.set_text(text);
         // Fractional logical width (Pango units → px): avoids the per-token
-        // rounding drift that `pixel_size` would accumulate across a line, so
-        // hit boxes stay aligned with the painted glyph advances.
+        // rounding drift `pixel_size` would accumulate across a line.
         self.layout.size().0 as f32 / pango::SCALE as f32
     }
 }
@@ -201,15 +223,10 @@ fn load_state() -> Result<State, String> {
         occ_ix,
         notes,
         xrefs,
-        book: "John".to_string(),
-        chapter: 3,
-        font_size: 21.0,
         family,
-        dl: None,
-        margin_x: 0.0,
-        last_content_height: 0,
-        scroll_to: None,
-        highlight: None,
+        font_size: 21.0,
+        panes: vec![Pane::new("John", 3)],
+        active: 0,
     })
 }
 
@@ -222,45 +239,15 @@ fn build_ui(app: &adw::Application) {
         }
     };
 
-    // ── header nav ───────────────────────────────────────────────────────────
+    // ── header: brand/title + global search (acts on the active pane) ──────────
     let header = adw::HeaderBar::new();
     let title = adw::WindowTitle::new("pure-study", "1769 KJV");
     header.set_title_widget(Some(&title));
 
-    let prev_btn = gtk::Button::from_icon_name("go-previous-symbolic");
-    prev_btn.set_tooltip_text(Some("Previous chapter"));
-    let next_btn = gtk::Button::from_icon_name("go-next-symbolic");
-    next_btn.set_tooltip_text(Some("Next chapter"));
-
-    let book_names: Vec<&str> = canon::BOOKS.iter().map(|b| b.name).collect();
-    let book_dd = gtk::DropDown::from_strings(&book_names);
-    book_dd.set_tooltip_text(Some("Book"));
-
-    let chapter_spin = gtk::SpinButton::with_range(1.0, 150.0, 1.0);
-    chapter_spin.set_tooltip_text(Some("Chapter"));
-
     let search = gtk::SearchEntry::new();
     search.set_placeholder_text(Some("search — word, phrase, or reference"));
     search.set_width_chars(28);
-
-    header.pack_start(&prev_btn);
-    header.pack_start(&book_dd);
-    header.pack_start(&chapter_spin);
-    header.pack_start(&next_btn);
     header.pack_end(&search);
-
-    // ── scripture canvas ───────────────────────────────────────────────────────
-    let area = gtk::DrawingArea::new();
-    area.set_hexpand(true);
-    area.set_vexpand(true);
-    area.set_focusable(true);
-    area.add_css_class("scripture");
-
-    let scripture_scroll = gtk::ScrolledWindow::new();
-    scripture_scroll.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
-    scripture_scroll.set_child(Some(&area));
-    scripture_scroll.set_hexpand(true);
-    scripture_scroll.set_vexpand(true);
 
     // ── study side panel ─────────────────────────────────────────────────────
     let study = gtk::Label::new(Some(
@@ -280,62 +267,30 @@ fn build_ui(app: &adw::Application) {
     study_scroll.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
     study_scroll.set_child(Some(&study));
     study_scroll.set_size_request(320, -1);
+    study_scroll.set_visible(false); // opens on demand
+
+    // ── panes container ────────────────────────────────────────────────────────
+    let pane_row = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    pane_row.set_hexpand(true);
+    pane_row.set_vexpand(true);
+    pane_row.set_homogeneous(true);
 
     let paned = gtk::Paned::new(gtk::Orientation::Horizontal);
-    paned.set_start_child(Some(&scripture_scroll));
+    paned.set_start_child(Some(&pane_row));
     paned.set_end_child(Some(&study_scroll));
     paned.set_resize_start_child(true);
     paned.set_resize_end_child(false);
     paned.set_shrink_end_child(false);
     paned.set_position(700);
 
-    // The study panel starts collapsed; it opens on demand.
-    study_scroll.set_visible(false);
-
     let ui = Ui {
-        book_dd: book_dd.clone(),
-        chapter_spin: chapter_spin.clone(),
-        title: title.clone(),
-        area: area.clone(),
+        title,
         study: study.clone(),
-        study_scroll: study_scroll.clone(),
-        vadj: scripture_scroll.vadjustment(),
+        study_scroll,
+        pane_row,
+        pane_uis: Rc::new(RefCell::new(Vec::new())),
         guard: Rc::new(Cell::new(false)),
     };
-
-    // ── paint ──────────────────────────────────────────────────────────────────
-    {
-        let state = state.clone();
-        area.set_draw_func(move |area, cr, width, _h| draw_scripture(&state, area, cr, width));
-    }
-
-    // ── double-click a word → its Strong's entry (+ verse notes + concordance) ──
-    {
-        let state = state.clone();
-        let ui = ui.clone();
-        let click = gtk::GestureClick::new();
-        click.set_button(gdk::BUTTON_PRIMARY);
-        click.connect_pressed(move |_g, n_press, x, y| {
-            ui.area.grab_focus();
-            // Strong's lookup is on the second click; a single click is left free
-            // (future: selection). The reader paints everything offset down by
-            // MARGIN, so undo that on the y before hit-testing the display list.
-            if n_press != 2 {
-                return;
-            }
-            let hit = {
-                let st = state.borrow();
-                st.dl
-                    .as_ref()
-                    .and_then(|dl| dl.hit_test(x as f32 - st.margin_x, y as f32 - MARGIN))
-            };
-            if let Some(hit) = hit {
-                let markup = word_study_markup(&state.borrow(), &hit);
-                show_study(&ui, &markup);
-            }
-        });
-        area.add_controller(click);
-    }
 
     // ── study-panel links (search hits / concordance / go-to) navigate ──────────
     {
@@ -362,23 +317,182 @@ fn build_ui(app: &adw::Application) {
         });
     }
 
-    // ── zoom: Ctrl + scroll ─────────────────────────────────────────────────────
+    // ── assemble window ─────────────────────────────────────────────────────────
+    let toolbar = adw::ToolbarView::new();
+    toolbar.add_top_bar(&header);
+    toolbar.set_content(Some(&paned));
+
+    let window = adw::ApplicationWindow::builder()
+        .application(app)
+        .default_width(1100)
+        .default_height(780)
+        .content(&toolbar)
+        .build();
+
+    install_css();
+    rebuild_panes(&state, &ui); // builds the pane columns + first paint
+    window.present();
+}
+
+/// Tear down and recreate every pane column from `State::panes`. Called on
+/// startup and whenever a pane is added or closed, so handlers always capture a
+/// valid, current index.
+fn rebuild_panes(state: &Shared, ui: &Ui) {
+    while let Some(child) = ui.pane_row.first_child() {
+        ui.pane_row.remove(&child);
+    }
+    ui.pane_uis.borrow_mut().clear();
+
+    let n = state.borrow().panes.len();
+    for i in 0..n {
+        let (root, pane_ui) = build_pane(state, ui, i, n);
+        ui.pane_row.append(&root);
+        ui.pane_uis.borrow_mut().push(pane_ui);
+    }
+    for i in 0..n {
+        sync_pane(state, ui, i);
+    }
+    update_active_style(state, ui);
+    update_title(state, ui);
+    let active = state.borrow().active;
+    if let Some(pu) = ui.pane_uis.borrow().get(active) {
+        pu.area.grab_focus();
+    }
+}
+
+/// Build one pane column (nav strip + scrolled canvas) wired to pane `i`.
+fn build_pane(state: &Shared, ui: &Ui, i: usize, n: usize) -> (gtk::Box, PaneUi) {
+    // ── nav strip ──────────────────────────────────────────────────────────────
+    let strip = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+    strip.add_css_class("panenav");
+
+    let book_names: Vec<&str> = canon::BOOKS.iter().map(|b| b.name).collect();
+    let book_dd = gtk::DropDown::from_strings(&book_names);
+    let chapter_spin = gtk::SpinButton::with_range(1.0, 150.0, 1.0);
+    let prev = gtk::Button::from_icon_name("go-previous-symbolic");
+    let next = gtk::Button::from_icon_name("go-next-symbolic");
+    let filler = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    filler.set_hexpand(true);
+    strip.append(&book_dd);
+    strip.append(&chapter_spin);
+    strip.append(&prev);
+    strip.append(&next);
+    strip.append(&filler);
+
+    if n < MAX_PANES {
+        let add = gtk::Button::from_icon_name("list-add-symbolic");
+        add.set_tooltip_text(Some("Add a pane"));
+        let state = state.clone();
+        let ui = ui.clone();
+        add.connect_clicked(move |_| add_pane(&state, &ui, i));
+        strip.append(&add);
+    }
+    if n > 1 {
+        let close = gtk::Button::from_icon_name("window-close-symbolic");
+        close.set_tooltip_text(Some("Close this pane"));
+        let state = state.clone();
+        let ui = ui.clone();
+        close.connect_clicked(move |_| close_pane(&state, &ui, i));
+        strip.append(&close);
+    }
+
+    // ── canvas ──────────────────────────────────────────────────────────────────
+    let area = gtk::DrawingArea::new();
+    area.set_hexpand(true);
+    area.set_vexpand(true);
+    area.set_focusable(true);
+    area.add_css_class("scripture");
+
+    let scroll = gtk::ScrolledWindow::new();
+    scroll.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
+    scroll.set_child(Some(&area));
+    scroll.set_hexpand(true);
+    scroll.set_vexpand(true);
+    let vadj = scroll.vadjustment();
+
+    let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    root.set_hexpand(true);
+    root.append(&strip);
+    root.append(&scroll);
+
+    // ── paint ─────────────────────────────────────────────────────────────────
+    {
+        let state = state.clone();
+        area.set_draw_func(move |a, cr, w, _h| draw_pane(&state, i, a, cr, w));
+    }
+
+    // ── click: activate the pane; double-click looks up a word ──────────────────
     {
         let state = state.clone();
         let ui = ui.clone();
-        let scroll = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::VERTICAL);
-        scroll.connect_scroll(move |ctrl, _dx, dy| {
-            if ctrl.current_event_state().contains(gdk::ModifierType::CONTROL_MASK) {
+        let area2 = area.clone();
+        let click = gtk::GestureClick::new();
+        click.set_button(gdk::BUTTON_PRIMARY);
+        click.connect_pressed(move |_g, n_press, x, y| {
+            set_active(&state, &ui, i);
+            area2.grab_focus();
+            if n_press != 2 {
+                return;
+            }
+            let hit = {
+                let st = state.borrow();
+                st.panes.get(i).and_then(|p| {
+                    p.dl.as_ref()
+                        .and_then(|dl| dl.hit_test(x as f32 - p.margin_x, y as f32 - MARGIN))
+                })
+            };
+            if let Some(hit) = hit {
+                let markup = word_study_markup(&state.borrow(), &hit);
+                show_study(&ui, &markup);
+            }
+        });
+        area.add_controller(click);
+    }
+
+    // ── Ctrl+scroll zooms every pane ─────────────────────────────────────────────
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        let sc = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::VERTICAL);
+        sc.connect_scroll(move |c, _dx, dy| {
+            if c.current_event_state().contains(gdk::ModifierType::CONTROL_MASK) {
                 zoom(&state, &ui, if dy < 0.0 { 1.0 } else { -1.0 });
                 glib::Propagation::Stop
             } else {
                 glib::Propagation::Proceed
             }
         });
-        area.add_controller(scroll);
+        area.add_controller(sc);
     }
 
-    // ── nav handlers ────────────────────────────────────────────────────────────
+    // ── keyboard: scroll this pane, step this pane, zoom, close panel ────────────
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        let vadj2 = vadj.clone();
+        let keys = gtk::EventControllerKey::new();
+        keys.connect_key_pressed(move |_c, key, _code, mods| {
+            let ctrl = mods.contains(gdk::ModifierType::CONTROL_MASK);
+            match key {
+                gdk::Key::Page_Down | gdk::Key::space => { page_adj(&vadj2, 0.9); glib::Propagation::Stop }
+                gdk::Key::Page_Up => { page_adj(&vadj2, -0.9); glib::Propagation::Stop }
+                gdk::Key::Home => { vadj2.set_value(vadj2.lower()); glib::Propagation::Stop }
+                gdk::Key::End => {
+                    vadj2.set_value(vadj2.upper() - vadj2.page_size());
+                    glib::Propagation::Stop
+                }
+                gdk::Key::Right | gdk::Key::bracketright => { step_pane(&state, &ui, i, 1); glib::Propagation::Stop }
+                gdk::Key::Left | gdk::Key::bracketleft => { step_pane(&state, &ui, i, -1); glib::Propagation::Stop }
+                gdk::Key::plus | gdk::Key::equal if ctrl => { zoom(&state, &ui, 1.0); glib::Propagation::Stop }
+                gdk::Key::minus if ctrl => { zoom(&state, &ui, -1.0); glib::Propagation::Stop }
+                gdk::Key::Escape => { hide_study(&ui); glib::Propagation::Stop }
+                _ => glib::Propagation::Proceed,
+            }
+        });
+        area.add_controller(keys);
+    }
+
+    // ── per-pane nav widgets ─────────────────────────────────────────────────────
     {
         let state = state.clone();
         let ui = ui.clone();
@@ -386,8 +500,9 @@ fn build_ui(app: &adw::Application) {
             if ui.guard.get() {
                 return;
             }
+            set_active(&state, &ui, i);
             if let Some(b) = canon::BOOKS.get(dd.selected() as usize) {
-                navigate(&state, &ui, b.id, 1, None);
+                navigate_pane(&state, &ui, i, b.id, 1, None);
             }
         });
     }
@@ -398,140 +513,192 @@ fn build_ui(app: &adw::Application) {
             if ui.guard.get() {
                 return;
             }
-            let (book, ch) = { let st = state.borrow(); (st.book.clone(), (spin.value() as u16).max(1)) };
-            navigate(&state, &ui, &book, ch, None);
+            set_active(&state, &ui, i);
+            let (book, ch) = {
+                let st = state.borrow();
+                (st.panes[i].book.clone(), (spin.value() as u16).max(1))
+            };
+            navigate_pane(&state, &ui, i, &book, ch, None);
         });
     }
     {
         let state = state.clone();
         let ui = ui.clone();
-        prev_btn.connect_clicked(move |_| step_chapter(&state, &ui, -1));
-    }
-    {
-        let state = state.clone();
-        let ui = ui.clone();
-        next_btn.connect_clicked(move |_| step_chapter(&state, &ui, 1));
-    }
-
-    // ── keyboard: page scroll + chapter step ────────────────────────────────────
-    {
-        let state = state.clone();
-        let ui = ui.clone();
-        let keys = gtk::EventControllerKey::new();
-        keys.connect_key_pressed(move |_c, key, _code, mods| {
-            let ctrl = mods.contains(gdk::ModifierType::CONTROL_MASK);
-            match key {
-                gdk::Key::Page_Down | gdk::Key::space => { page(&ui, 0.9); glib::Propagation::Stop }
-                gdk::Key::Page_Up => { page(&ui, -0.9); glib::Propagation::Stop }
-                gdk::Key::Home => { ui.vadj.set_value(ui.vadj.lower()); glib::Propagation::Stop }
-                gdk::Key::End => {
-                    ui.vadj.set_value(ui.vadj.upper() - ui.vadj.page_size());
-                    glib::Propagation::Stop
-                }
-                gdk::Key::Right | gdk::Key::bracketright => { step_chapter(&state, &ui, 1); glib::Propagation::Stop }
-                gdk::Key::Left | gdk::Key::bracketleft => { step_chapter(&state, &ui, -1); glib::Propagation::Stop }
-                gdk::Key::plus | gdk::Key::equal if ctrl => { zoom(&state, &ui, 1.0); glib::Propagation::Stop }
-                gdk::Key::minus if ctrl => { zoom(&state, &ui, -1.0); glib::Propagation::Stop }
-                gdk::Key::Escape => { hide_study(&ui); glib::Propagation::Stop }
-                _ => glib::Propagation::Proceed,
-            }
+        prev.connect_clicked(move |_| {
+            set_active(&state, &ui, i);
+            step_pane(&state, &ui, i, -1);
         });
-        area.add_controller(keys);
+    }
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        next.connect_clicked(move |_| {
+            set_active(&state, &ui, i);
+            step_pane(&state, &ui, i, 1);
+        });
     }
 
-    // ── assemble window ─────────────────────────────────────────────────────────
-    let toolbar = adw::ToolbarView::new();
-    toolbar.add_top_bar(&header);
-    toolbar.set_content(Some(&paned));
-
-    let window = adw::ApplicationWindow::builder()
-        .application(app)
-        .default_width(1000)
-        .default_height(760)
-        .content(&toolbar)
-        .build();
-
-    install_css();
-    sync_widgets(&state, &ui); // selects John 3 + first paint
-    window.present();
-    area.grab_focus();
+    let pane_ui = PaneUi { root: root.clone(), area, vadj, book_dd, chapter_spin };
+    (root, pane_ui)
 }
 
-/// Push the current `State` into the nav widgets + title without re-entering
-/// their handlers, then request a repaint.
-fn sync_widgets(state: &Shared, ui: &Ui) {
-    let (book_idx, chapter, count, subtitle) = {
+/// Mark pane `i` active (drives search / study target + title + styling).
+fn set_active(state: &Shared, ui: &Ui, i: usize) {
+    {
+        let mut st = state.borrow_mut();
+        if i >= st.panes.len() {
+            return;
+        }
+        st.active = i;
+    }
+    update_active_style(state, ui);
+    update_title(state, ui);
+}
+
+/// Give the active pane a gold top accent (only meaningful with >1 pane).
+fn update_active_style(state: &Shared, ui: &Ui) {
+    let (active, n) = {
         let st = state.borrow();
+        (st.active, st.panes.len())
+    };
+    for (j, pu) in ui.pane_uis.borrow().iter().enumerate() {
+        if n > 1 && j == active {
+            pu.root.add_css_class("pane-active");
+        } else {
+            pu.root.remove_css_class("pane-active");
+        }
+    }
+}
+
+/// Reflect the active pane's location in the window subtitle.
+fn update_title(state: &Shared, ui: &Ui) {
+    let sub = {
+        let st = state.borrow();
+        let i = st.active.min(st.panes.len().saturating_sub(1));
+        let p = &st.panes[i];
+        format!("{} {} · 1769 KJV", canon::display_name(&p.book), p.chapter)
+    };
+    ui.title.set_subtitle(&sub);
+}
+
+/// Push pane `i`'s book/chapter into its nav widgets (without re-entering their
+/// handlers) and request a repaint.
+fn sync_pane(state: &Shared, ui: &Ui, i: usize) {
+    let (book_idx, chapter, count) = {
+        let st = state.borrow();
+        let p = &st.panes[i];
         (
-            canon::book_order(&st.book).unwrap_or(0) as u32,
-            st.chapter as f64,
-            st.corpus.chapter_count(&st.book).max(1) as f64,
-            format!("{} {} · 1769 KJV", canon::display_name(&st.book), st.chapter),
+            canon::book_order(&p.book).unwrap_or(0) as u32,
+            p.chapter as f64,
+            st.corpus.chapter_count(&p.book).max(1) as f64,
         )
     };
-    ui.guard.set(true);
-    ui.book_dd.set_selected(book_idx);
-    ui.chapter_spin.set_range(1.0, count);
-    ui.chapter_spin.set_value(chapter);
-    ui.guard.set(false);
-    ui.title.set_subtitle(&subtitle);
-    ui.area.queue_draw();
+    let pus = ui.pane_uis.borrow();
+    if let Some(pu) = pus.get(i) {
+        ui.guard.set(true);
+        pu.book_dd.set_selected(book_idx);
+        pu.chapter_spin.set_range(1.0, count);
+        pu.chapter_spin.set_value(chapter);
+        ui.guard.set(false);
+        pu.area.queue_draw();
+    }
 }
 
-/// Go to `book`/`chapter`, optionally scrolling to (and tinting) `verse`.
-fn navigate(state: &Shared, ui: &Ui, book: &str, chapter: u16, verse: Option<u16>) {
+/// Point pane `i` at `book`/`chapter`, optionally scrolling to (and tinting) a
+/// verse after the next paint.
+fn navigate_pane(state: &Shared, ui: &Ui, i: usize, book: &str, chapter: u16, verse: Option<u16>) {
     {
         let mut st = state.borrow_mut();
-        st.book = book.to_string();
-        st.chapter = chapter.max(1);
-        st.scroll_to = verse;
-        st.highlight = verse;
+        let p = &mut st.panes[i];
+        p.book = book.to_string();
+        p.chapter = chapter.max(1);
+        p.scroll_to = verse;
+        p.highlight = verse;
     }
-    sync_widgets(state, ui);
-    // Reset to the top for a plain chapter change; a verse target scrolls after
-    // the next paint has produced a display list to locate it in.
-    if verse.is_none() {
-        ui.vadj.set_value(ui.vadj.lower());
-    } else {
-        let state = state.clone();
-        let ui = ui.clone();
-        glib::timeout_add_local_once(Duration::from_millis(50), move || {
-            scroll_to_pending(&state, &ui);
-        });
+    sync_pane(state, ui, i);
+    update_title(state, ui);
+
+    let vadj = ui.pane_uis.borrow().get(i).map(|pu| pu.vadj.clone());
+    if let Some(vadj) = vadj {
+        if verse.is_none() {
+            vadj.set_value(vadj.lower());
+        } else {
+            let state = state.clone();
+            let ui = ui.clone();
+            glib::timeout_add_local_once(Duration::from_millis(50), move || {
+                scroll_pane_pending(&state, &ui, i);
+            });
+        }
     }
 }
 
-/// Step the chapter within the current book, clamped to its range.
-fn step_chapter(state: &Shared, ui: &Ui, delta: i32) {
+/// Step pane `i`'s chapter within its book, clamped to range.
+fn step_pane(state: &Shared, ui: &Ui, i: usize, delta: i32) {
     let (book, ch) = {
         let st = state.borrow();
-        let count = st.corpus.chapter_count(&st.book);
-        let next = (st.chapter as i32 + delta).clamp(1, count.max(1) as i32) as u16;
-        (st.book.clone(), next)
+        let p = &st.panes[i];
+        let count = st.corpus.chapter_count(&p.book);
+        (p.book.clone(), (p.chapter as i32 + delta).clamp(1, count.max(1) as i32) as u16)
     };
-    navigate(state, ui, &book, ch, None);
+    navigate_pane(state, ui, i, &book, ch, None);
 }
 
-/// Scroll the reader so the pending target verse sits near the top, using the
-/// last painted display list to find its position.
-fn scroll_to_pending(state: &Shared, ui: &Ui) {
+/// Scroll pane `i` so its pending target verse sits near the top.
+fn scroll_pane_pending(state: &Shared, ui: &Ui, i: usize) {
     let y = {
         let mut st = state.borrow_mut();
-        let target = match st.scroll_to.take() {
+        if i >= st.panes.len() {
+            return;
+        }
+        let p = &mut st.panes[i];
+        let target = match p.scroll_to.take() {
             Some(v) => v,
             None => return,
         };
-        st.dl.as_ref().and_then(|dl| {
+        p.dl.as_ref().and_then(|dl| {
             dl.items
                 .iter()
                 .find(|it| matches!(it.kind, ItemKind::VerseNumber(n) if n == target))
                 .map(|it| MARGIN + it.y)
         })
     };
-    if let Some(y) = y {
-        let v = (y as f64 - 8.0).max(ui.vadj.lower());
-        ui.vadj.set_value(v.min(ui.vadj.upper() - ui.vadj.page_size()));
+    if let (Some(y), Some(pu)) = (y, ui.pane_uis.borrow().get(i)) {
+        let v = (y as f64 - 8.0).max(pu.vadj.lower());
+        pu.vadj.set_value(v.min(pu.vadj.upper() - pu.vadj.page_size()));
     }
+}
+
+/// Insert a new pane after pane `after` (a copy of its location), made active.
+fn add_pane(state: &Shared, ui: &Ui, after: usize) {
+    {
+        let mut st = state.borrow_mut();
+        if st.panes.len() >= MAX_PANES {
+            return;
+        }
+        let (book, chapter) = {
+            let p = &st.panes[after];
+            (p.book.clone(), p.chapter)
+        };
+        let idx = (after + 1).min(st.panes.len());
+        st.panes.insert(idx, Pane::new(&book, chapter));
+        st.active = idx;
+    }
+    rebuild_panes(state, ui);
+}
+
+/// Close pane `i` (never the last one).
+fn close_pane(state: &Shared, ui: &Ui, i: usize) {
+    {
+        let mut st = state.borrow_mut();
+        if st.panes.len() <= 1 {
+            return;
+        }
+        st.panes.remove(i);
+        if st.active >= st.panes.len() {
+            st.active = st.panes.len() - 1;
+        }
+    }
+    rebuild_panes(state, ui);
 }
 
 fn zoom(state: &Shared, ui: &Ui, dir: f64) {
@@ -539,27 +706,30 @@ fn zoom(state: &Shared, ui: &Ui, dir: f64) {
         let mut st = state.borrow_mut();
         st.font_size = (st.font_size + dir).clamp(MIN_FONT, MAX_FONT);
     }
-    ui.area.queue_draw();
+    for pu in ui.pane_uis.borrow().iter() {
+        pu.area.queue_draw();
+    }
 }
 
-fn page(ui: &Ui, frac: f64) {
-    let step = ui.vadj.page_size() * frac;
-    let v = (ui.vadj.value() + step).clamp(ui.vadj.lower(), ui.vadj.upper() - ui.vadj.page_size());
-    ui.vadj.set_value(v);
+fn page_adj(vadj: &gtk::Adjustment, frac: f64) {
+    let step = vadj.page_size() * frac;
+    let v = (vadj.value() + step).clamp(vadj.lower(), vadj.upper() - vadj.page_size());
+    vadj.set_value(v);
 }
 
-/// Parse a study-panel link and act on it: `go:Book:ch[:verse]` navigates,
+/// Parse a study-panel link: `go:Book:ch[:verse]` navigates the active pane,
 /// `occ:CODE` opens that Strong's concordance.
 fn handle_link(state: &Shared, ui: &Ui, uri: &str) {
     if let Some(rest) = uri.strip_prefix("go:") {
+        let active = state.borrow().active;
         let parts: Vec<&str> = rest.split(':').collect();
         if let [book, ch] = parts[..] {
             if let Ok(c) = ch.parse::<u16>() {
-                navigate(state, ui, book, c, None);
+                navigate_pane(state, ui, active, book, c, None);
             }
         } else if let [book, ch, v] = parts[..] {
             if let (Ok(c), Ok(v)) = (ch.parse::<u16>(), v.parse::<u16>()) {
-                navigate(state, ui, book, c, Some(v));
+                navigate_pane(state, ui, active, book, c, Some(v));
             }
         }
     } else if let Some(code) = uri.strip_prefix("occ:") {
@@ -568,21 +738,28 @@ fn handle_link(state: &Shared, ui: &Ui, uri: &str) {
     }
 }
 
-/// Lay out and paint the current chapter. Measurement and painting share the
-/// one cairo context, so the stored hit regions match the glyphs exactly.
-fn draw_scripture(state: &Shared, area: &gtk::DrawingArea, cr: &cairo::Context, width: i32) {
+/// Lay out and paint pane `i`'s chapter. Measurement and painting share one
+/// Pango layout, so the stored hit regions match the glyphs exactly.
+fn draw_pane(state: &Shared, i: usize, area: &gtk::DrawingArea, cr: &cairo::Context, width: i32) {
     // warm paper background
     cr.set_source_rgb(0.988, 0.976, 0.957);
     let _ = cr.paint();
 
     let mut st = state.borrow_mut();
+    if i >= st.panes.len() {
+        return;
+    }
+    let family = st.family.clone();
+    let font_size = st.font_size;
+    let book = st.panes[i].book.clone();
+    let chapter = st.panes[i].chapter;
+    let highlight = st.panes[i].highlight;
 
-    // One Pango layout on this cairo context, reused to measure then paint, so
-    // hit regions match glyphs exactly. Three font variants share family + size.
+    // One Pango layout, reused to measure then paint; three font variants.
     let layout = pangocairo::functions::create_layout(cr);
     let mut regular = pango::FontDescription::new();
-    regular.set_family(&st.family);
-    regular.set_absolute_size(st.font_size * pango::SCALE as f64);
+    regular.set_family(&family);
+    regular.set_absolute_size(font_size * pango::SCALE as f64);
     let mut italic = regular.clone();
     italic.set_style(pango::Style::Italic);
     let mut bold = regular.clone();
@@ -598,7 +775,6 @@ fn draw_scripture(state: &Shared, area: &gtk::DrawingArea, cr: &cairo::Context, 
 
     let col = ((width as f32) - 2.0 * MARGIN).min(MAX_COLUMN).max(60.0);
     let margin_x = ((width as f32) - col).max(2.0 * MARGIN) / 2.0;
-    st.margin_x = margin_x;
 
     let cfg = LayoutConfig {
         width: col,
@@ -609,20 +785,19 @@ fn draw_scripture(state: &Shared, area: &gtk::DrawingArea, cr: &cairo::Context, 
         para_spacing: line_height * 0.45,
     };
 
-    let verses = st.corpus.chapter_verses(&st.book, st.chapter).to_vec();
+    let verses = st.corpus.chapter_verses(&book, chapter).to_vec();
     let measure = PangoMeasure { layout: &layout };
     let dl = layout_chapter(&verses, &measure, &cfg);
     let top = MARGIN;
-    let highlight = st.highlight;
 
     // Verses in this chapter carrying weave cross-references get a gutter dot.
     let xref_here: HashSet<u16> = verses
         .iter()
         .map(|v| v.verse)
-        .filter(|&n| st.xrefs.contains_key(&VRef::new(&st.book, st.chapter, n)))
+        .filter(|&n| st.xrefs.contains_key(&VRef::new(&book, chapter, n)))
         .collect();
 
-    // A soft band behind the target verse (from a search hit / concordance jump).
+    // A soft band behind the target verse (from a search hit / cross-ref jump).
     if let Some(hv) = highlight {
         let ys: Vec<f32> = dl
             .items
@@ -653,7 +828,6 @@ fn draw_scripture(state: &Shared, area: &gtk::DrawingArea, cr: &cairo::Context, 
                 cr.move_to(px, py);
                 layout.set_text(&item.text);
                 pangocairo::functions::show_layout(cr, &layout);
-                // A gutter dot marks a verse with weave cross-references.
                 if xref_here.contains(n) {
                     cr.set_source_rgba(0.62, 0.49, 0.22, 0.75);
                     cr.arc((margin_x as f64 - 9.0).max(3.0), baseline - 4.0, 2.3, 0.0, std::f64::consts::TAU);
@@ -690,15 +864,17 @@ fn draw_scripture(state: &Shared, area: &gtk::DrawingArea, cr: &cairo::Context, 
     }
 
     let content_height = (top + dl.height + MARGIN) as i32;
-    st.dl = Some(dl);
-    if st.last_content_height != content_height {
-        st.last_content_height = content_height;
+    let pane = &mut st.panes[i];
+    pane.margin_x = margin_x;
+    pane.dl = Some(dl);
+    if pane.last_h != content_height {
+        pane.last_h = content_height;
         area.set_content_height(content_height);
     }
 }
 
 /// The verse number a placed item belongs to (its own number for a marker; for
-/// a word, parsed back from its `VRef`). Used to band the highlighted verse.
+/// a word, from its `VRef`). Used to band the highlighted verse.
 fn item_verse_num(it: &pure_layout::PlacedItem) -> Option<u16> {
     match &it.kind {
         ItemKind::VerseNumber(n) => Some(*n),
@@ -712,8 +888,8 @@ fn esc(s: &str) -> String {
     glib::markup_escape_text(s).to_string()
 }
 
-/// Markup for a clicked word: its Strong's entries, this verse's margin notes,
-/// and a link into each code's concordance.
+/// Markup for a clicked word: its Strong's entries (each with a concordance
+/// link), this verse's weave cross-references, and its 1769 margin notes.
 fn word_study_markup(st: &State, hit: &Hit) -> String {
     let word = st
         .corpus
@@ -872,7 +1048,9 @@ fn install_css() {
     let provider = gtk::CssProvider::new();
     provider.load_from_data(
         ".scripture { background: #fcf9f4; } \
-         label { font-family: \"EB Garamond\", serif; }",
+         label { font-family: \"EB Garamond\", serif; } \
+         .panenav { background: #efeae1; padding: 3px; } \
+         box.pane-active { border-top: 2px solid #9e7d38; }",
     );
     if let Some(display) = gtk::gdk::Display::default() {
         gtk::style_context_add_provider_for_display(

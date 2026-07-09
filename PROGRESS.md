@@ -9,6 +9,10 @@ the architecture and the locked decisions; see
 - **`cargo test`** → **44 tests green** across core/layout/rnd/ffi, no warnings.
 - **`OVERLAY_HOME=/home/gjklassen/code/overlay cargo run -p pure-desktop`** →
   a real GTK4 reader window, now with the core's study surface wired in:
+  - **Multi-pane**: 1–3 reading columns side by side, each with its own book /
+    chapter nav + scroll (per-pane **+**/**✕**); the active pane (gold top accent)
+    is what search, cross-references, and the study panel act on. Read John 3 and
+    Numbers 21 side by side to see a cross-reference in context.
   - John 3 on warm paper, set in the **bundled EB Garamond** shaped by **Pango**
     (registered with fontconfig at startup — no system install; cairo's toy font
     API is gone): **gold verse numbers**, **faint gold underline** on
@@ -84,10 +88,11 @@ windows x86_64-gnu + aarch64-gnullvm); **mingw-w64** is present. So:
      Windows (VM/CI) against the generated P/Invoke shim + the wrapper in
      [`bindings/csharp`](crates/ffi/bindings/csharp). Both are already written
      and the demo runs against the Linux `.so` today as a proof.
-3. **Reader polish** (search / concordance / notes / zoom / keyboard / **Pango +
-   EB Garamond** all done): remaining — Ctrl+click gating for Strong's (plain
-   click reserved, as overlay does); hover underline/cards; multi-pane; scroll
-   the target verse to a stable position (currently a 50 ms post-paint nudge).
+3. **Reader** (search / concordance / notes / cross-references / zoom / keyboard /
+   **Pango + EB Garamond** / **multi-pane** all done): remaining — richer weave UI
+   (compare card, ambient link lines between panes, approve/reject); Ctrl+click
+   gating for Strong's; hover cards; canon-overview strip; threads + tags (need a
+   `core::thread` port first); a stabler verse-scroll than the 50 ms nudge.
 4. **Port remaining core**: threads, the notes loader (`kjv-notes.jsonl` — the
    FFI already threads an empty `Notes` through search, ready to fill), weave
    rendering across panes. Then expose threads/weave/notes through the ABI.
