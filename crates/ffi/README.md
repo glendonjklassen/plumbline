@@ -51,8 +51,9 @@ directly and skips this boundary; Windows and Android cross it.
 | `pure_layout_free` | release the display list |
 | `pure_engine_strongs_json(code)` / `_strongs_occurrences_json(code)` | dictionary entry / concordance |
 | `pure_engine_search_json(query)` | multi-tier search: `goto` or `hits` |
-| `pure_engine_threads_json` / `_tags_json` / `_verse_xrefs_json(ref)` | read personal study data + a verse's weave partners |
+| `pure_engine_threads_json` / `_tags_json` / `_verse_xrefs_json(ref)` / `_suggested_weaves_json` | read personal study data, a verse's weave partners, and the suggested-weave review queue |
 | `pure_engine_thread_add` / `_tag_add` / `_tag_remove` / `_weave_add_link` | **author** study data (null on success, else an owned error string; needs an engine opened from a home dir) |
+| `pure_engine_weave_approve(index)` / `_weave_reject(index)` | **review** a suggested weave by its `suggested_weaves_json` ordinal — approve promotes it into `weaves/` (all links approved), reject deletes it |
 
 Authoring writes go through `core::store`'s cross-platform atomic write (temp
 sibling → fsync → rename); the caller supplies UTC timestamps. An engine opened

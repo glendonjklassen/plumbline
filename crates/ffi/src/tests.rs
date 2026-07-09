@@ -377,3 +377,62 @@ fn authoring_round_trip_via_abi() {
         let _ = std::fs::remove_dir_all(&home);
     }
 }
+
+#[test]
+fn suggested_weave_review_via_abi() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("pure-ffi-review-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+
+        // Seed two suggested weaves the engine will discover on open.
+        let sug = home.join("weaves").join("suggested");
+        std::fs::create_dir_all(&sug).unwrap();
+        let one = r#"{"format":"overlay-weave-v2","name":"Born again","kind":"prophecy","tokenization":"kjv1769-tok2","notes":"","created":"c","approved":false,"links":[{"a":"John 3:16","b":"John 3:18"}]}"#;
+        let two = r#"{"format":"overlay-weave-v2","name":"Only Son","kind":"quotation","tokenization":"kjv1769-tok2","notes":"","created":"c","approved":false,"links":[{"a":"John 3:16","b":"John 3:18"}]}"#;
+        std::fs::write(sug.join("born-again.json"), one).unwrap();
+        std::fs::write(sug.join("only-son.json"), two).unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = pure_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null() && !e.is_null());
+        let c = |s: &str| CString::new(s).unwrap();
+
+        // List: both show up, ordered, each with its ordinal index.
+        let listed: Value =
+            serde_json::from_str(&take(pure_engine_suggested_weaves_json(e)).unwrap()).unwrap();
+        let items = listed["suggested"].as_array().unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0]["index"], 0);
+        assert_eq!(items[0]["links"][0]["aDisplay"], "John 3:16");
+
+        // Approve index 0 → it leaves the suggested queue (one left).
+        assert!(pure_engine_weave_approve(e, 0).is_null());
+        let after: Value =
+            serde_json::from_str(&take(pure_engine_suggested_weaves_json(e)).unwrap()).unwrap();
+        assert_eq!(after["suggested"].as_array().unwrap().len(), 1);
+        // The approved weave now asserts its cross-reference from weaves/.
+        let xrefs: Value =
+            serde_json::from_str(&take(pure_engine_verse_xrefs_json(e, c("John 3:16").as_ptr())).unwrap()).unwrap();
+        assert!(xrefs["partners"].as_array().unwrap().iter().any(|p| p["verse"] == "John 3:18"));
+
+        // Reject the remaining one (now index 0) → queue empties.
+        assert!(pure_engine_weave_reject(e, 0).is_null());
+        let empty: Value =
+            serde_json::from_str(&take(pure_engine_suggested_weaves_json(e)).unwrap()).unwrap();
+        assert!(empty["suggested"].as_array().unwrap().is_empty());
+
+        // Error paths: out-of-range index, and a bytes-opened engine has no home.
+        assert!(take(pure_engine_weave_approve(e, 9)).unwrap().contains("index"));
+        let bytes_engine = open();
+        assert!(take(pure_engine_weave_reject(bytes_engine, 0)).unwrap().contains("home"));
+        pure_engine_free(bytes_engine);
+
+        pure_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}

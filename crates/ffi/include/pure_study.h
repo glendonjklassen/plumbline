@@ -250,6 +250,15 @@ char *pure_engine_tags_json(const struct PureEngine *engine);
 // `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
 char *pure_engine_verse_xrefs_json(const struct PureEngine *engine, const char *ref_key);
 
+// The suggested weaves (proposals under `home/weaves/suggested`) awaiting
+// review, as JSON: `{"suggested":[{index,name,kind,notes,links:[…]}]}`. Each
+// item's `index` is the ordinal within the suggested subset — the handle the
+// approve/reject calls take. Caller-freed; null on a null engine.
+//
+// # Safety
+// `engine` is a valid engine pointer.
+char *pure_engine_suggested_weaves_json(const struct PureEngine *engine);
+
 // Add the whole verse `ref_key` to the thread named `name` (created on first
 // use). `note` may be null; `added` is a caller-supplied UTC timestamp.
 //
@@ -294,6 +303,23 @@ char *pure_engine_weave_add_link(struct PureEngine *engine,
                                  const char *a_ref,
                                  const char *b_ref,
                                  const char *added);
+
+// **Approve** the `index`-th suggested weave: promote it into `home/weaves`
+// with all links approved (merging into a same-named weave there if present)
+// and remove the suggestion. `index` is the ordinal from
+// `pure_engine_suggested_weaves_json`. Null on success, else an owned error.
+//
+// # Safety
+// `engine` is a valid engine pointer.
+char *pure_engine_weave_approve(struct PureEngine *engine, uint32_t index);
+
+// **Reject** the `index`-th suggested weave: delete its file. `index` is the
+// ordinal from `pure_engine_suggested_weaves_json`. Null on success, else an
+// owned error.
+//
+// # Safety
+// `engine` is a valid engine pointer.
+char *pure_engine_weave_reject(struct PureEngine *engine, uint32_t index);
 
 #ifdef __cplusplus
 }  // extern "C"

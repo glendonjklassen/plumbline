@@ -258,6 +258,18 @@ namespace PureStudy.Native
         public static extern byte* pure_engine_verse_xrefs_json(PureEngine* engine, byte* ref_key);
 
         /// <summary>
+        ///  The suggested weaves (proposals under `home/weaves/suggested`) awaiting
+        ///  review, as JSON: `{"suggested":[{index,name,kind,notes,links:[…]}]}`. Each
+        ///  item's `index` is the ordinal within the suggested subset — the handle the
+        ///  approve/reject calls take. Caller-freed; null on a null engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a valid engine pointer.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_suggested_weaves_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_suggested_weaves_json(PureEngine* engine);
+
+        /// <summary>
         ///  Add the whole verse `ref_key` to the thread named `name` (created on first
         ///  use). `note` may be null; `added` is a caller-supplied UTC timestamp.
         ///
@@ -297,6 +309,29 @@ namespace PureStudy.Native
         /// </summary>
         [DllImport(__DllName, EntryPoint = "pure_engine_weave_add_link", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         public static extern byte* pure_engine_weave_add_link(PureEngine* engine, byte* name, byte* a_ref, byte* b_ref, byte* added);
+
+        /// <summary>
+        ///  **Approve** the `index`-th suggested weave: promote it into `home/weaves`
+        ///  with all links approved (merging into a same-named weave there if present)
+        ///  and remove the suggestion. `index` is the ordinal from
+        ///  `pure_engine_suggested_weaves_json`. Null on success, else an owned error.
+        ///
+        ///  # Safety
+        ///  `engine` is a valid engine pointer.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_weave_approve", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_weave_approve(PureEngine* engine, uint index);
+
+        /// <summary>
+        ///  **Reject** the `index`-th suggested weave: delete its file. `index` is the
+        ///  ordinal from `pure_engine_suggested_weaves_json`. Null on success, else an
+        ///  owned error.
+        ///
+        ///  # Safety
+        ///  `engine` is a valid engine pointer.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_weave_reject", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_weave_reject(PureEngine* engine, uint index);
 
 
     }

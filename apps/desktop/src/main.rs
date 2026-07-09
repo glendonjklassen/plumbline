@@ -298,12 +298,16 @@ fn build_ui(app: &adw::Application) {
     threads_btn.add_css_class("flat");
     let tags_btn = gtk::Button::with_label("Tags");
     tags_btn.add_css_class("flat");
+    let suggested_btn = gtk::Button::with_label("Suggested");
+    suggested_btn.add_css_class("flat");
+    suggested_btn.set_tooltip_text(Some("Review proposed weaves — approve to keep, reject to discard"));
     let link_btn = gtk::Button::with_label("＋ link");
     link_btn.add_css_class("flat");
     link_btn.set_tooltip_text(Some("Weave the two pinned verses (single-click a word in each pane to pin)"));
     link_btn.set_sensitive(false);
     header.pack_start(&threads_btn);
     header.pack_start(&tags_btn);
+    header.pack_start(&suggested_btn);
     header.pack_start(&link_btn);
 
     // ── study side panel ─────────────────────────────────────────────────────
@@ -429,6 +433,14 @@ fn build_ui(app: &adw::Application) {
         let ui = ui.clone();
         tags_btn.connect_clicked(move |_| {
             let m = tags_list_markup(&state.borrow());
+            show_study(&ui, &m);
+        });
+    }
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        suggested_btn.connect_clicked(move |_| {
+            let m = suggested_list_markup(&state.borrow());
             show_study(&ui, &m);
         });
     }
@@ -1204,6 +1216,44 @@ fn handle_link(state: &Shared, ui: &Ui, uri: &str) {
                 untag_verse(state, ui, i, &vref);
             }
         }
+    } else if let Some(idx) = uri.strip_prefix("approve:") {
+        if let Ok(i) = idx.parse::<usize>() {
+            review_weave(state, ui, i, true);
+        }
+    } else if let Some(idx) = uri.strip_prefix("reject:") {
+        if let Ok(i) = idx.parse::<usize>() {
+            review_weave(state, ui, i, false);
+        }
+    }
+}
+
+/// Approve (promote to `weaves/`, all links approved) or reject (delete) the
+/// weave at index `i` in `st.weaves`, then reload weaves and re-show the
+/// suggested list. All writes go through the cross-platform `core::store`.
+fn review_weave(state: &Shared, ui: &Ui, i: usize, approve: bool) {
+    let result = {
+        let st = state.borrow();
+        let Some(lw) = st.weaves.get(i) else { return };
+        if approve {
+            weave::approve_weave(&st.home, lw).map(|_| ())
+        } else {
+            weave::reject_weave(lw)
+        }
+    };
+    match result {
+        Ok(()) => {
+            reload_weaves(state);
+            let m = suggested_list_markup(&state.borrow());
+            show_study(ui, &m);
+        }
+        Err(e) => show_study(
+            ui,
+            &format!(
+                "<i>Could not {} weave: {}</i>",
+                if approve { "approve" } else { "reject" },
+                esc(&e.to_string())
+            ),
+        ),
     }
 }
 
@@ -1671,6 +1721,43 @@ fn tag_markup(st: &State, i: usize) -> String {
             s.push_str(&format!("  <small><span foreground=\"#888\">{}</span></small>", esc(n)));
         }
         s.push('\n');
+    }
+    s
+}
+
+/// The suggested weaves awaiting review, each with its links and
+/// approve/reject actions. Weaves are addressed by their index in `st.weaves`
+/// (the flat list of canonical + suggested), so the action links stay valid
+/// until the next reload.
+fn suggested_list_markup(st: &State) -> String {
+    let suggested: Vec<(usize, &LoadedWeave)> =
+        st.weaves.iter().enumerate().filter(|(_, lw)| weave::is_suggested(lw)).collect();
+    if suggested.is_empty() {
+        return "<b>Suggested weaves</b>\n\n<i>None waiting — proposed weaves \
+                (dropped in <tt>weaves/suggested</tt>) appear here for you to \
+                approve or reject.</i>"
+            .to_string();
+    }
+    let mut s = format!("<b>Suggested weaves ({})</b>\n\n", suggested.len());
+    for (i, lw) in suggested {
+        let w = &lw.weave;
+        s.push_str(&format!(
+            "<b>{}</b>  <small><span foreground=\"#888\">{}</span></small>\n",
+            esc(&w.name),
+            esc(w.kind.label())
+        ));
+        if !w.notes.is_empty() {
+            s.push_str(&format!("<small>{}</small>\n", esc(&w.notes)));
+        }
+        for l in w.links.iter().take(XREF_SHOWN) {
+            s.push_str(&format!("<small>{} ↔ {}</small>\n", go_link(&l.a), go_link(&l.b)));
+        }
+        if w.links.len() > XREF_SHOWN {
+            s.push_str(&format!("<small>… {} more links</small>\n", w.links.len() - XREF_SHOWN));
+        }
+        s.push_str(&format!(
+            "<a href=\"approve:{i}\">✓ approve</a>    <a href=\"reject:{i}\">✕ reject</a>\n\n"
+        ));
     }
     s
 }

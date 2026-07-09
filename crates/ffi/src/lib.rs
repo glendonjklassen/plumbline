@@ -741,6 +741,21 @@ pub unsafe extern "C" fn pure_engine_verse_xrefs_json(
     })
 }
 
+/// The suggested weaves (proposals under `home/weaves/suggested`) awaiting
+/// review, as JSON: `{"suggested":[{index,name,kind,notes,links:[…]}]}`. Each
+/// item's `index` is the ordinal within the suggested subset — the handle the
+/// approve/reject calls take. Caller-freed; null on a null engine.
+///
+/// # Safety
+/// `engine` is a valid engine pointer.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_suggested_weaves_json(engine: *const PureEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(e) => out_json(&wire::suggested_weaves_to_wire(&e.weaves)),
+        None => ptr::null_mut(),
+    })
+}
+
 // ── study data: authoring (write) ──────────────────────────────────────────────
 //
 // These mutate on-disk study data through the cross-platform `core::store`
@@ -923,6 +938,75 @@ pub unsafe extern "C" fn pure_engine_weave_add_link(
             Link::canon(av, bv),
         ) {
             Ok(_) => {
+                engine.reload_study();
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// The `index`-th suggested weave (as ordered by
+/// `pure_engine_suggested_weaves_json`) into the engine's flat weave list.
+fn nth_suggested(engine: &PureEngine, index: usize) -> Option<usize> {
+    engine
+        .weaves
+        .iter()
+        .enumerate()
+        .filter(|(_, lw)| weave::is_suggested(lw))
+        .nth(index)
+        .map(|(i, _)| i)
+}
+
+/// **Approve** the `index`-th suggested weave: promote it into `home/weaves`
+/// with all links approved (merging into a same-named weave there if present)
+/// and remove the suggestion. `index` is the ordinal from
+/// `pure_engine_suggested_weaves_json`. Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is a valid engine pointer.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_weave_approve(engine: *mut PureEngine, index: u32) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        };
+        let Some(i) = nth_suggested(engine, index as usize) else {
+            return out_string(format!("no suggested weave at index {index}"));
+        };
+        match weave::approve_weave(&home, &engine.weaves[i]) {
+            Ok(_) => {
+                engine.reload_study();
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// **Reject** the `index`-th suggested weave: delete its file. `index` is the
+/// ordinal from `pure_engine_suggested_weaves_json`. Null on success, else an
+/// owned error.
+///
+/// # Safety
+/// `engine` is a valid engine pointer.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_weave_reject(engine: *mut PureEngine, index: u32) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        if engine.home.is_none() {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        }
+        let Some(i) = nth_suggested(engine, index as usize) else {
+            return out_string(format!("no suggested weave at index {index}"));
+        };
+        match weave::reject_weave(&engine.weaves[i]) {
+            Ok(()) => {
                 engine.reload_study();
                 ptr::null_mut()
             }

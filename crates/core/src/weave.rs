@@ -565,12 +565,136 @@ pub fn add_link(
     }
 }
 
+/// Is this loaded weave a *suggestion* — i.e. it lives under
+/// `home/weaves/suggested` rather than `home/weaves`? Suggestions are proposed
+/// (often machine-generated) weaves awaiting the reader's review. Checked by
+/// the immediate parent directory name, so it is OS-path-separator agnostic.
+pub fn is_suggested(lw: &LoadedWeave) -> bool {
+    lw.file
+        .parent()
+        .and_then(|p| p.file_name())
+        .is_some_and(|n| n == "suggested")
+}
+
+/// **Approve** a weave: mark every link approved and land it in the canonical
+/// `home/weaves` directory. A suggestion is *promoted* — written into
+/// `home/weaves` and its `suggested` file removed; if a weave of the same name
+/// already lives there its edges are merged in (union) rather than clobbered.
+/// An already-canonical weave is simply rewritten in place with all links
+/// approved. Returns the canonical file written. Cross-platform: the write goes
+/// through [`crate::store`]'s atomic write and the old file (if any) is removed
+/// with `std::fs::remove_file`.
+pub fn approve_weave(home: impl AsRef<Path>, lw: &LoadedWeave) -> Result<std::path::PathBuf, Error> {
+    let dest = weave_file_in(home.as_ref().join("weaves"), &lw.weave.name);
+
+    // Start from any existing canonical weave of this name so approval merges
+    // into it instead of overwriting; otherwise from the weave being approved.
+    let mut weave = if dest != lw.file && dest.exists() {
+        match std::fs::read(&dest) {
+            Ok(bytes) => match serde_json::from_slice::<Weave>(&bytes) {
+                Ok(mut existing) => {
+                    existing.combine(&lw.weave);
+                    existing
+                }
+                Err(e) => return Err(Error::Parse(format!("{}: {e}", dest.display()))),
+            },
+            Err(e) => return Err(Error::Corpus(format!("{}: {e}", dest.display()))),
+        }
+    } else {
+        lw.weave.clone()
+    };
+    weave.set_all_approval(true);
+
+    write_weave(&dest, &weave)?;
+    if lw.file != dest && lw.file.exists() {
+        std::fs::remove_file(&lw.file).map_err(|e| Error::Corpus(format!("{}: {e}", lw.file.display())))?;
+    }
+    Ok(dest)
+}
+
+/// **Reject** a weave: delete its file. Intended for suggestions (removing a
+/// proposal the reader declined); it will delete a canonical weave too, so the
+/// caller decides what may be rejected. A missing file is treated as success.
+pub fn reject_weave(lw: &LoadedWeave) -> Result<(), Error> {
+    match std::fs::remove_file(&lw.file) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(Error::Corpus(format!("{}: {e}", lw.file.display()))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn r(book: &str, c: u16, v: u16) -> VRef {
         VRef::new(book, c, v)
+    }
+
+    #[test]
+    fn approve_promotes_suggestion_and_reject_deletes() {
+        let home = std::env::temp_dir().join(format!("pure-weave-approve-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+
+        // Seed a suggestion under weaves/suggested.
+        let sug_dir = home.join("weaves").join("suggested");
+        let mut w = Weave::empty("Ransom", WeaveKind::Prophecy, "kjv1769-tok2", "2026-01-01T00:00:00Z");
+        w.add_links([Link::canon(r("Isa", 53, 5), r("1Pet", 2, 24))]);
+        assert!(!w.approved);
+        write_weave(weave_file_in(&sug_dir, "Ransom"), &w).unwrap();
+
+        let (loaded, errs) = load_weaves(&home);
+        assert!(errs.is_empty());
+        assert_eq!(loaded.len(), 1);
+        assert!(is_suggested(&loaded[0]));
+
+        // Approve → promoted into weaves/, all links approved, suggestion gone.
+        let dest = approve_weave(&home, &loaded[0]).unwrap();
+        assert!(!loaded[0].file.exists(), "suggestion should be removed");
+        assert!(dest.exists());
+        let (loaded, _) = load_weaves(&home);
+        assert_eq!(loaded.len(), 1);
+        assert!(!is_suggested(&loaded[0]));
+        assert!(loaded[0].weave.approved);
+        assert_eq!(loaded[0].weave.approved_count(), 1);
+
+        // Reject the now-canonical weave → its file is deleted.
+        reject_weave(&loaded[0]).unwrap();
+        assert!(!loaded[0].file.exists());
+        let (loaded, _) = load_weaves(&home);
+        assert!(loaded.is_empty());
+        // Rejecting again (missing file) is a no-op success.
+        reject_weave(&LoadedWeave { file: dest, weave: w }).unwrap();
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn approve_merges_into_existing_canonical_weave() {
+        let home = std::env::temp_dir().join(format!("pure-weave-merge-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+
+        // Canonical weave with one (approved) link.
+        let mut canon = Weave::empty("Lamb", WeaveKind::Typological, "kjv1769-tok2", "c");
+        canon.add_links([Link::canon(r("Gen", 22, 8), r("John", 1, 29))]);
+        canon.set_all_approval(true);
+        write_weave(weave_file_in(home.join("weaves"), "Lamb"), &canon).unwrap();
+
+        // Same-named suggestion with a different link.
+        let mut sug = Weave::empty("Lamb", WeaveKind::Typological, "kjv1769-tok2", "s");
+        sug.add_links([Link::canon(r("Exod", 12, 3), r("Rev", 5, 6))]);
+        write_weave(weave_file_in(home.join("weaves").join("suggested"), "Lamb"), &sug).unwrap();
+
+        let (loaded, _) = load_weaves(&home);
+        let suggestion = loaded.iter().find(|lw| is_suggested(lw)).unwrap();
+        approve_weave(&home, suggestion).unwrap();
+
+        let (loaded, _) = load_weaves(&home);
+        assert_eq!(loaded.len(), 1, "the two same-named weaves merged into one canonical file");
+        assert_eq!(loaded[0].weave.links.len(), 2);
+        assert!(loaded[0].weave.approved);
+
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[test]

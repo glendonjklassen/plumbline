@@ -424,6 +424,66 @@ pub fn verse_xrefs_to_wire(loaded: &[LoadedWeave], vref: &VRef) -> WireXrefs {
     WireXrefs { verse: vref.ref_key(), partners }
 }
 
+// ── suggested weaves (review queue) ────────────────────────────────────────────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireSuggestedWeaves {
+    pub suggested: Vec<WireSuggestedWeave>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireSuggestedWeave {
+    /// Ordinal within the suggested subset — the handle the approve/reject
+    /// calls take. Stable only until the next authoring write (which reloads).
+    pub index: usize,
+    pub name: String,
+    /// Weave kind token (`retelling`/`type`/`prophecy`/`quotation`).
+    pub kind: &'static str,
+    pub notes: String,
+    pub links: Vec<WireSuggestedLink>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireSuggestedLink {
+    pub a: String,
+    pub a_display: String,
+    pub b: String,
+    pub b_display: String,
+    pub label: String,
+}
+
+/// The suggested weaves (those under `home/weaves/suggested`), in load order,
+/// each carrying its ordinal within that subset — the handle for approve/reject.
+pub fn suggested_weaves_to_wire(loaded: &[LoadedWeave]) -> WireSuggestedWeaves {
+    let suggested = loaded
+        .iter()
+        .filter(|lw| pure_core::weave::is_suggested(lw))
+        .enumerate()
+        .map(|(index, lw)| WireSuggestedWeave {
+            index,
+            name: lw.weave.name.clone(),
+            kind: lw.weave.kind.token(),
+            notes: lw.weave.notes.clone(),
+            links: lw
+                .weave
+                .links
+                .iter()
+                .map(|l| WireSuggestedLink {
+                    a: l.a.ref_key(),
+                    a_display: l.a.display(),
+                    b: l.b.ref_key(),
+                    b_display: l.b.display(),
+                    label: l.label.clone(),
+                })
+                .collect(),
+        })
+        .collect();
+    WireSuggestedWeaves { suggested }
+}
+
 pub fn search_to_wire(a: &SearchAnswer) -> WireSearch {
     match a {
         SearchAnswer::GoTo { book, chapter, verse } => {
