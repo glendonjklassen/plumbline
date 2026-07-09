@@ -1,0 +1,25 @@
+[package]
+name = "pure-rnd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Optional, feature-gated R&D layer for pure-study: embeddings, morphology, keyness, trust."
+
+[dependencies]
+pure-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+# Each R&D capability is its own feature so a simple-reader build compiles none
+# of them. `full` turns everything on. The UI reads which are enabled and hides
+# the rest (decision #4: off + guided first-run).
+default = []
+embeddings = []
+morphology = []
+keyness = []
+trust = []
+full = ["embeddings", "morphology", "keyness", "trust"]

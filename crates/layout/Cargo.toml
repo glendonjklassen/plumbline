@@ -1,0 +1,11 @@
+[package]
+name = "pure-layout"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Reader text layout + per-word hit-testing for pure-study (platform-agnostic algorithm over injected text measurement)."
+
+[dependencies]
+pure-core = { workspace = true }

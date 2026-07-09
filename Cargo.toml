@@ -1,0 +1,39 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/layout",
+    "crates/rnd",
+    "crates/ffi",
+    "apps/desktop",
+]
+
+# apps/desktop pulls in gtk4 which is heavy; keep it out of the default set so
+# `cargo test -p pure-core` stays fast. Build the app explicitly with
+# `cargo run -p pure-desktop`.
+default-members = [
+    "crates/core",
+    "crates/layout",
+    "crates/rnd",
+    "crates/ffi",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Glendon Klassen <gklassen@cavallotechnologies.ca>"]
+rust-version = "1.85"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+# Internal crates
+pure-core = { path = "crates/core" }
+pure-layout = { path = "crates/layout" }
+pure-rnd = { path = "crates/rnd" }
+
+[profile.release]
+lto = "thin"

@@ -1,0 +1,18 @@
+[package]
+name = "pure-ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "C ABI surface for pure-study: consumed by UniFFI (Kotlin/Android) and csbindgen (C#/WinUI)."
+
+[lib]
+# A C-callable dynamic + static lib. `cdylib` for Android/.so and Windows/.dll;
+# `staticlib` if a UI wants to link it in directly.
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[dependencies]
+pure-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

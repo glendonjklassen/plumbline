@@ -1,0 +1,17 @@
+[package]
+name = "pure-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "GTK4 + libadwaita desktop shell for pure-study (Linux; the first native UI)."
+
+[[bin]]
+name = "pure-study"
+path = "src/main.rs"
+
+[dependencies]
+pure-core = { workspace = true }
+pure-layout = { workspace = true }
+# gtk4 / libadwaita are added when the shell is wired up (see PROGRESS.md).
