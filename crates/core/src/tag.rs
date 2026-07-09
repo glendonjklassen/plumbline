@@ -177,6 +177,66 @@ pub fn to_json(tag: &Tag) -> Result<String, Error> {
     serde_json::to_string_pretty(tag).map(|s| s + "\n").map_err(|e| Error::Parse(e.to_string()))
 }
 
+/// The file a tag named `name` lives in, under `home/tags`.
+pub fn tag_file(home: impl AsRef<Path>, name: &str) -> PathBuf {
+    home.as_ref().join("tags").join(format!("{}.json", crate::store::slug(name, "tag")))
+}
+
+/// Atomically write a tag to `path`.
+pub fn write_tag(path: impl AsRef<Path>, tag: &Tag) -> Result<(), Error> {
+    crate::store::write_atomic(path, &to_json(tag)?)
+}
+
+/// Add `target` to the tag named `name` (case-insensitive match among
+/// `loaded`), creating its file on first use. A target already present is left
+/// as-is (no duplicate). Returns the file written. Ported from `addMember`
+/// (caller supplies the `added` timestamp).
+pub fn add_member(
+    home: impl AsRef<Path>,
+    loaded: &[LoadedTag],
+    name: &str,
+    tok_version: &str,
+    target: TagTarget,
+    note: Option<String>,
+    added: &str,
+) -> Result<PathBuf, Error> {
+    let member = TagMember { target: target.clone(), note, added: added.to_string() };
+    let wanted = name.trim().to_lowercase();
+    if let Some(lt) = loaded.iter().find(|lt| lt.tag.name.to_lowercase() == wanted) {
+        if lt.tag.member_of(&target) {
+            return Ok(lt.file.clone());
+        }
+        let mut tag = lt.tag.clone();
+        tag.members.push(member);
+        write_tag(&lt.file, &tag)?;
+        Ok(lt.file.clone())
+    } else {
+        let path = tag_file(&home, name);
+        if path.exists() {
+            return Err(Error::Corpus(format!(
+                "{} exists but could not be read — refusing to overwrite",
+                path.display()
+            )));
+        }
+        let tag = Tag {
+            name: name.trim().to_string(),
+            color: None,
+            tok_version: tok_version.to_string(),
+            created: added.to_string(),
+            members: vec![member],
+        };
+        write_tag(&path, &tag)?;
+        Ok(path)
+    }
+}
+
+/// Rewrite a tag's file without `target`.
+pub fn remove_member(lt: &LoadedTag, target: &TagTarget) -> Result<(), Error> {
+    let mut tag = lt.tag.clone();
+    tag.members.retain(|m| &m.target != target);
+    write_tag(&lt.file, &tag)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,5 +274,35 @@ mod tests {
         let t: Tag = serde_json::from_str(SAMPLE).unwrap();
         let back: Tag = serde_json::from_str(&to_json(&t).unwrap()).unwrap();
         assert_eq!(t, back);
+    }
+
+    #[test]
+    fn add_dedupes_remove_and_reload() {
+        let home = std::env::temp_dir().join(format!("pure-tag-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let isa = TagTarget::Verse(VRef::new("Isa", 53, 5));
+        let concept = TagTarget::Concept("G5547".into());
+
+        let (loaded, _) = load_tags(&home);
+        add_member(&home, &loaded, "Messianic", "kjv1769-tok2", isa.clone(), None, "2026-01-01T00:00:00Z").unwrap();
+        // Adding the same target again does not duplicate it.
+        let (loaded, _) = load_tags(&home);
+        add_member(&home, &loaded, "messianic", "kjv1769-tok2", isa.clone(), None, "2026-01-02T00:00:00Z").unwrap();
+        // A second, different target joins the same tag.
+        let (loaded, _) = load_tags(&home);
+        add_member(&home, &loaded, "Messianic", "kjv1769-tok2", concept.clone(), Some("Christ".into()), "2026-01-03T00:00:00Z").unwrap();
+
+        let (loaded, errs) = load_tags(&home);
+        assert!(errs.is_empty());
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].tag.members.len(), 2);
+
+        // Remove one member and reload.
+        remove_member(&loaded[0], &isa).unwrap();
+        let (loaded, _) = load_tags(&home);
+        assert_eq!(loaded[0].tag.members.len(), 1);
+        assert_eq!(loaded[0].tag.members[0].target, concept);
+
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

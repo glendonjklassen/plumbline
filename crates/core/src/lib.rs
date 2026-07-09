@@ -16,6 +16,7 @@ pub mod corpus;
 pub mod notes;
 pub mod reference;
 pub mod search;
+pub mod store;
 pub mod strongs;
 pub mod tag;
 pub mod thread;

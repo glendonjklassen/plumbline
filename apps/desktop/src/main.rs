@@ -63,6 +63,8 @@ struct State {
     /// Personal study data: threads (ordered passage trails) and tags.
     threads: Vec<LoadedThread>,
     tags: Vec<LoadedTag>,
+    /// The data home, kept so authoring can write + reload study data.
+    home: String,
     /// Font family to render the scripture in ("EB Garamond" or a fallback).
     family: String,
     font_size: f64,
@@ -257,6 +259,7 @@ fn load_state() -> Result<State, String> {
         links,
         threads,
         tags,
+        home,
         family,
         font_size: 21.0,
         panes: vec![Pane::new("John", 3)],
@@ -868,8 +871,177 @@ fn page_adj(vadj: &gtk::Adjustment, frac: f64) {
     vadj.set_value(v);
 }
 
+/// The toplevel window a UI lives in (for parenting modal dialogs).
+fn window_of(ui: &Ui) -> Option<gtk::Window> {
+    ui.study.root().and_downcast::<gtk::Window>()
+}
+
+/// Current UTC time as the frozen `YYYY-MM-DDTHH:MM:SSZ` stamp study data uses.
+fn now_stamp() -> String {
+    glib::DateTime::now_utc()
+        .ok()
+        .and_then(|d| d.format("%Y-%m-%dT%H:%M:%SZ").ok())
+        .map(|s| s.to_string())
+        .unwrap_or_default()
+}
+
+/// Re-read threads + tags from disk after an authoring write.
+fn reload_study_data(state: &Shared) {
+    let home = state.borrow().home.clone();
+    let (threads, _) = thread::load_threads(&home);
+    let (tags, _) = tag::load_tags(&home);
+    let mut st = state.borrow_mut();
+    st.threads = threads;
+    st.tags = tags;
+}
+
+/// A modal name prompt; `on_ok` runs with the trimmed name if non-empty.
+fn prompt_name(parent: Option<gtk::Window>, title: &str, placeholder: &str, on_ok: impl Fn(String) + 'static) {
+    let win = gtk::Window::builder().title(title).modal(true).default_width(380).build();
+    if let Some(p) = &parent {
+        win.set_transient_for(Some(p));
+    }
+
+    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    vbox.set_margin_top(16);
+    vbox.set_margin_bottom(16);
+    vbox.set_margin_start(16);
+    vbox.set_margin_end(16);
+
+    let entry = gtk::Entry::new();
+    entry.set_placeholder_text(Some(placeholder));
+
+    let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    buttons.set_halign(gtk::Align::End);
+    let cancel = gtk::Button::with_label("Cancel");
+    let ok = gtk::Button::with_label("OK");
+    ok.add_css_class("suggested-action");
+    buttons.append(&cancel);
+    buttons.append(&ok);
+
+    vbox.append(&entry);
+    vbox.append(&buttons);
+    win.set_child(Some(&vbox));
+
+    let on_ok = Rc::new(on_ok);
+    let submit = {
+        let win = win.clone();
+        let entry = entry.clone();
+        move || {
+            let text = entry.text().trim().to_string();
+            win.close();
+            if !text.is_empty() {
+                on_ok(text);
+            }
+        }
+    };
+    {
+        let submit = submit.clone();
+        ok.connect_clicked(move |_| submit());
+    }
+    {
+        let submit = submit.clone();
+        entry.connect_activate(move |_| submit());
+    }
+    {
+        let win = win.clone();
+        cancel.connect_clicked(move |_| win.close());
+    }
+
+    win.present();
+    entry.grab_focus();
+}
+
+/// Add `vref` (as a whole-verse target) to the tag named `name`, then show it.
+fn add_verse_to_tag(state: &Shared, ui: &Ui, vref: &VRef, name: &str) {
+    let res = {
+        let st = state.borrow();
+        tag::add_member(
+            &st.home,
+            &st.tags,
+            name,
+            canon::TOKENIZATION_VERSION,
+            TagTarget::Verse(vref.clone()),
+            None,
+            &now_stamp(),
+        )
+    };
+    match res {
+        Ok(_) => {
+            reload_study_data(state);
+            let m = {
+                let st = state.borrow();
+                st.tags
+                    .iter()
+                    .position(|lt| lt.tag.name.eq_ignore_ascii_case(name.trim()))
+                    .map(|i| tag_markup(&st, i))
+            };
+            if let Some(m) = m {
+                show_study(ui, &m);
+            }
+        }
+        Err(e) => show_study(ui, &format!("<i>Could not tag: {}</i>", esc(&e.to_string()))),
+    }
+}
+
+/// Add `vref` as a whole-verse entry (snapshotting its words) to the thread
+/// named `name`, then show it.
+fn add_verse_to_thread(state: &Shared, ui: &Ui, vref: &VRef, name: &str) {
+    let entry = {
+        let st = state.borrow();
+        let (span, text) = match st.corpus.verse(vref) {
+            Some(v) => {
+                let words: Vec<String> = v.tokens.iter().map(|t| t.word.clone()).collect();
+                let last = words.len().saturating_sub(1) as u16;
+                ((0u16, last), words)
+            }
+            None => ((0, 0), Vec::new()),
+        };
+        thread::ThreadEntry { vref: vref.clone(), span, text, note: None, added: now_stamp() }
+    };
+    let res = {
+        let st = state.borrow();
+        thread::add_to_thread(&st.home, &st.threads, name, canon::TOKENIZATION_VERSION, entry)
+    };
+    match res {
+        Ok(_) => {
+            reload_study_data(state);
+            let m = {
+                let st = state.borrow();
+                st.threads
+                    .iter()
+                    .position(|lt| lt.thread.name.eq_ignore_ascii_case(name.trim()))
+                    .map(|i| thread_markup(&st, i))
+            };
+            if let Some(m) = m {
+                show_study(ui, &m);
+            }
+        }
+        Err(e) => show_study(ui, &format!("<i>Could not add to thread: {}</i>", esc(&e.to_string()))),
+    }
+}
+
+/// Remove `vref` from tag `i`, then re-show that tag.
+fn untag_verse(state: &Shared, ui: &Ui, i: usize, vref: &VRef) {
+    let removed = {
+        let st = state.borrow();
+        st.tags.get(i).map(|lt| tag::remove_member(lt, &TagTarget::Verse(vref.clone())))
+    };
+    if let Some(Ok(())) = removed {
+        reload_study_data(state);
+    }
+    let m = {
+        let st = state.borrow();
+        st.tags.get(i).map(|_| tag_markup(&st, i))
+    };
+    if let Some(m) = m {
+        show_study(ui, &m);
+    }
+}
+
 /// Parse a study-panel link: `go:Book:ch[:verse]` navigates the active pane,
-/// `occ:CODE` opens that Strong's concordance.
+/// `occ:CODE` opens that Strong's concordance, `thread:`/`tag:` open a study
+/// collection, and `addthread:`/`addtag:`/`untag:` author study data.
 fn handle_link(state: &Shared, ui: &Ui, uri: &str) {
     if let Some(rest) = uri.strip_prefix("go:") {
         let active = state.borrow().active;
@@ -895,6 +1067,28 @@ fn handle_link(state: &Shared, ui: &Ui, uri: &str) {
         if let Ok(i) = idx.parse::<usize>() {
             let markup = tag_markup(&state.borrow(), i);
             show_study(ui, &markup);
+        }
+    } else if let Some(rk) = uri.strip_prefix("addtag:") {
+        if let Some(vref) = VRef::parse_ref_key(rk) {
+            let (state, ui) = (state.clone(), ui.clone());
+            let title = format!("Tag {}", vref.display());
+            prompt_name(window_of(&ui), &title, "tag name (new or existing)", move |name| {
+                add_verse_to_tag(&state, &ui, &vref, &name);
+            });
+        }
+    } else if let Some(rk) = uri.strip_prefix("addthread:") {
+        if let Some(vref) = VRef::parse_ref_key(rk) {
+            let (state, ui) = (state.clone(), ui.clone());
+            let title = format!("Add {} to thread", vref.display());
+            prompt_name(window_of(&ui), &title, "thread name (new or existing)", move |name| {
+                add_verse_to_thread(&state, &ui, &vref, &name);
+            });
+        }
+    } else if let Some(rest) = uri.strip_prefix("untag:") {
+        if let Some((idx, rk)) = rest.split_once(':') {
+            if let (Ok(i), Some(vref)) = (idx.parse::<usize>(), VRef::parse_ref_key(rk)) {
+                untag_verse(state, ui, i, &vref);
+            }
         }
     }
 }
@@ -1225,6 +1419,12 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
         s.push('\n');
     }
 
+    // Author actions on this verse.
+    let rk = esc(&hit.verse.ref_key());
+    s.push_str(&format!(
+        "\n<a href=\"addtag:{rk}\">＋ tag verse</a>    <a href=\"addthread:{rk}\">＋ add to thread</a>\n"
+    ));
+
     // Weave cross-references touching this verse, if any.
     if let Some(xs) = st.xrefs.get(&hit.verse) {
         s.push_str(&format!("\n<b>cross-references ({})</b>\n", xs.len()));
@@ -1247,7 +1447,10 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
     if !tagged.is_empty() {
         s.push_str("\n<b>tags</b>\n");
         for (i, lt) in tagged {
-            s.push_str(&format!("<a href=\"tag:{}\">{}</a>\n", i, esc(&lt.tag.name)));
+            s.push_str(&format!(
+                "<a href=\"tag:{i}\">{}</a>  <a href=\"untag:{i}:{rk}\"><small>✕</small></a>\n",
+                esc(&lt.tag.name)
+            ));
         }
     }
 

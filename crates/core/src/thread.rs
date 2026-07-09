@@ -157,11 +157,60 @@ pub fn load_threads(home: impl AsRef<Path>) -> (Vec<LoadedThread>, Vec<String>) 
 }
 
 /// Serialize a thread to pretty JSON with a trailing newline (matches overlay's
-/// on-disk form). The atomic write itself lands with the store layer.
+/// on-disk form).
 pub fn to_json(thread: &Thread) -> Result<String, Error> {
     serde_json::to_string_pretty(thread)
         .map(|s| s + "\n")
         .map_err(|e| Error::Parse(e.to_string()))
+}
+
+/// The file a thread named `name` lives in, under `home/threads`.
+pub fn thread_file(home: impl AsRef<Path>, name: &str) -> PathBuf {
+    home.as_ref().join("threads").join(format!("{}.json", crate::store::slug(name, "thread")))
+}
+
+/// Atomically write a thread to `path`.
+pub fn write_thread(path: impl AsRef<Path>, thread: &Thread) -> Result<(), Error> {
+    crate::store::write_atomic(path, &to_json(thread)?)
+}
+
+/// Append `entry` to the thread named `name` (case-insensitive match among
+/// `loaded`), creating its file on first use. Returns the file written. A file
+/// that exists but is absent from `loaded` (i.e. it failed to parse) is refused
+/// rather than clobbered. Ported from `addToThread` (caller supplies the
+/// timestamp on `entry`, keeping this deterministic and testable).
+pub fn add_to_thread(
+    home: impl AsRef<Path>,
+    loaded: &[LoadedThread],
+    name: &str,
+    tok_version: &str,
+    entry: ThreadEntry,
+) -> Result<PathBuf, Error> {
+    let wanted = name.trim().to_lowercase();
+    if let Some(lt) = loaded.iter().find(|lt| lt.thread.name.to_lowercase() == wanted) {
+        let mut thread = lt.thread.clone();
+        thread.entries.push(entry);
+        write_thread(&lt.file, &thread)?;
+        Ok(lt.file.clone())
+    } else {
+        let path = thread_file(&home, name);
+        if path.exists() {
+            return Err(Error::Corpus(format!(
+                "{} exists but could not be read — refusing to overwrite",
+                path.display()
+            )));
+        }
+        let created = entry.added.clone();
+        let thread = Thread {
+            name: name.trim().to_string(),
+            tok_version: tok_version.to_string(),
+            notes: String::new(),
+            entries: vec![entry],
+            created,
+        };
+        write_thread(&path, &thread)?;
+        Ok(path)
+    }
 }
 
 #[cfg(test)]
@@ -208,5 +257,38 @@ mod tests {
         let (threads, errs) = load_threads("/no/such/home");
         assert!(threads.is_empty());
         assert!(errs.is_empty());
+    }
+
+    #[test]
+    fn add_creates_then_appends_and_reloads() {
+        let home = std::env::temp_dir().join(format!("pure-thread-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let entry = |v, note: Option<&str>| ThreadEntry {
+            vref: v,
+            span: (0, 1),
+            text: vec!["a".into(), "b".into()],
+            note: note.map(String::from),
+            added: "2026-01-01T00:00:00Z".into(),
+        };
+
+        // First add creates the file.
+        let (loaded, _) = load_threads(&home);
+        let path = add_to_thread(&home, &loaded, "Romans Road", "kjv1769-tok2", entry(VRef::new("Rom", 3, 23), None)).unwrap();
+        assert!(path.exists());
+
+        // Second add (reloading first) appends to the same thread.
+        let (loaded, _) = load_threads(&home);
+        assert_eq!(loaded.len(), 1);
+        add_to_thread(&home, &loaded, "romans road", "kjv1769-tok2", entry(VRef::new("Rom", 6, 23), Some("n"))).unwrap();
+
+        let (loaded, errs) = load_threads(&home);
+        assert!(errs.is_empty());
+        assert_eq!(loaded.len(), 1);
+        let t = &loaded[0].thread;
+        assert_eq!(t.name, "Romans Road");
+        assert_eq!(t.entries.len(), 2);
+        assert_eq!(t.entries[1].vref, VRef::new("Rom", 6, 23));
+
+        let _ = std::fs::remove_dir_all(&home);
     }
 }
