@@ -8,8 +8,12 @@ the architecture and the locked decisions; see
 
 - **`cargo test`** → **70 tests green** across core/layout/rnd/ffi (81 with
   `-p pure-rnd --features "bridge embeddings morphology"`), no warnings.
-- **`OVERLAY_HOME=/home/gjklassen/code/overlay cargo run -p pure-desktop`** →
-  a real GTK4 reader window, now with the core's study surface wired in:
+- **`cargo run -p pure-desktop`** → a real GTK4 reader window (once the data
+  home is hydrated). Hydrate once with
+  `cargo run -p pure-hydrate -- copy --from ../overlay` (writes the full pack —
+  core + R&D — into the per-user data dir, so the app then runs **standalone,
+  no `OVERLAY_HOME`**); or point `OVERLAY_HOME=../overlay` at a checkout. The
+  window wires in the core's study surface:
   - **Multi-pane**: 1–3 reading columns side by side, each with its own book /
     chapter nav + scroll (per-pane **+**/**✕**); the active pane (gold top accent)
     is what search, cross-references, and the study panel act on.
