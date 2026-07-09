@@ -32,7 +32,7 @@ use pure_core::strongs::{self, OccurrenceIx, StrongsDict};
 use pure_core::reference::{CANON_SEGMENTS, OT_NT_DIVIDE};
 use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread};
-use pure_core::weave::{self, Link, LoadedWeave, WeaveKind};
+use pure_core::weave::{self, Link, LoadedWeave, Span, WeaveKind};
 use pure_core::{canon, corpus, notes, VRef};
 use pure_layout::{layout_chapter, DisplayList, Hit, ItemKind, LayoutConfig, Measure};
 
@@ -85,8 +85,21 @@ struct Pane {
     last_h: i32,
     scroll_to: Option<u16>,
     highlight: Option<u16>,
-    /// A verse pinned as a link endpoint (for authoring weave links).
-    pin: Option<u16>,
+    /// A word (or word span) pinned as a link endpoint, for authoring weave
+    /// links. `None` until the reader clicks a word in this pane.
+    pin: Option<PinSpan>,
+}
+
+/// A pinned link endpoint: a token span within one verse of a pane. A single
+/// click pins one word (`lo == hi == anchor`); clicking another word in the
+/// same verse grows the span from the anchor to the newly-clicked token, so
+/// the selection can be widened or narrowed without clearing it.
+#[derive(Clone, Copy)]
+struct PinSpan {
+    verse: u16,
+    anchor: u32,
+    lo: u32,
+    hi: u32,
 }
 
 impl Pane {
@@ -303,7 +316,7 @@ fn build_ui(app: &adw::Application) {
     suggested_btn.set_tooltip_text(Some("Review proposed weaves — approve to keep, reject to discard"));
     let link_btn = gtk::Button::with_label("＋ link");
     link_btn.add_css_class("flat");
-    link_btn.set_tooltip_text(Some("Weave the two pinned verses (single-click a word in each pane to pin)"));
+    link_btn.set_tooltip_text(Some("Weave the two pinned words (click a word in each pane; click another word in the same verse to widen the span)"));
     link_btn.set_sensitive(false);
     header.pack_start(&threads_btn);
     header.pack_start(&tags_btn);
@@ -629,8 +642,9 @@ fn build_pane(state: &Shared, ui: &Ui, i: usize, n: usize) -> (gtk::Box, PaneUi)
                 let markup = word_study_markup(&state.borrow(), &hit);
                 show_study(&ui, &markup);
             } else {
-                // Single-click → pin this verse as a weave-link endpoint.
-                set_pin(&state, &ui, i, hit.verse.verse);
+                // Single-click → pin this word as a weave-link endpoint (click
+                // another word in the same verse to grow the span).
+                set_pin(&state, &ui, i, hit.verse.verse, hit.token_index);
             }
         });
         area.add_controller(click);
@@ -902,13 +916,23 @@ fn zoom(state: &Shared, ui: &Ui, dir: f64) {
     ui.link_layer.queue_draw();
 }
 
-/// Pin verse `verse` in pane `i` as a weave-link endpoint; refresh its band and
-/// the link button.
-fn set_pin(state: &Shared, ui: &Ui, i: usize, verse: u16) {
+/// Pin token `tok` of `verse` in pane `i` as a weave-link endpoint. Clicking a
+/// second word in the same verse grows the span from the first click's anchor;
+/// clicking in a different verse starts a fresh one-word pin. Refreshes the
+/// band and the link button.
+fn set_pin(state: &Shared, ui: &Ui, i: usize, verse: u16, tok: u32) {
     {
         let mut st = state.borrow_mut();
         if let Some(p) = st.panes.get_mut(i) {
-            p.pin = Some(verse);
+            p.pin = Some(match p.pin {
+                Some(ps) if ps.verse == verse => PinSpan {
+                    verse,
+                    anchor: ps.anchor,
+                    lo: ps.anchor.min(tok),
+                    hi: ps.anchor.max(tok),
+                },
+                _ => PinSpan { verse, anchor: tok, lo: tok, hi: tok },
+            });
         }
     }
     if let Some(pu) = ui.pane_uis.borrow().get(i) {
@@ -956,16 +980,22 @@ fn reload_weaves(state: &Shared) {
 /// Author a weave link between the first two pinned verses: prompt for a weave
 /// name, create-or-append the link, reload, and redraw the connectors.
 fn make_link(state: &Shared, ui: &Ui) {
-    let ends: Vec<VRef> = {
+    let ends: Vec<(VRef, Span)> = {
         let st = state.borrow();
-        st.panes.iter().filter_map(|p| p.pin.map(|v| VRef::new(&p.book, p.chapter, v))).collect()
+        st.panes
+            .iter()
+            .filter_map(|p| {
+                p.pin
+                    .map(|ps| (VRef::new(&p.book, p.chapter, ps.verse), (ps.lo as u16, ps.hi as u16)))
+            })
+            .collect()
     };
     if ends.len() < 2 {
         return;
     }
     let (a, b) = (ends[0].clone(), ends[1].clone());
     let (state, ui) = (state.clone(), ui.clone());
-    let title = format!("Weave {} ↔ {}", a.display(), b.display());
+    let title = format!("Weave {} ↔ {}", a.0.display(), b.0.display());
     prompt_name(window_of(&ui), &title, "weave name (new or existing)", move |name| {
         let res = {
             let st = state.borrow();
@@ -976,7 +1006,7 @@ fn make_link(state: &Shared, ui: &Ui) {
                 WeaveKind::Quotation,
                 canon::TOKENIZATION_VERSION,
                 &now_stamp(),
-                Link::canon(a.clone(), b.clone()),
+                Link::canon_span(a.0.clone(), b.0.clone(), "", Some(a.1), Some(b.1)),
             )
         };
         match res {
@@ -1340,8 +1370,24 @@ fn draw_pane(state: &Shared, i: usize, area: &gtk::DrawingArea, cr: &cairo::Cont
     if let Some(hv) = highlight {
         band(cr, hv, 0.62, 0.49, 0.22, 0.12);
     }
-    if let Some(pv) = pin {
-        band(cr, pv, 0.25, 0.45, 0.75, 0.16);
+    // A pinned endpoint highlights its exact word span (blue), so the reader
+    // sees which words the link will point at — not just the whole verse.
+    if let Some(ps) = pin {
+        let pv = VRef::new(&book, chapter, ps.verse);
+        cr.set_source_rgba(0.25, 0.45, 0.75, 0.22);
+        for it in &dl.items {
+            if let Some((v, t)) = it.word() {
+                if *v == pv && t >= ps.lo && t <= ps.hi {
+                    let _ = cr.rectangle(
+                        (margin_x + it.x) as f64 - 1.5,
+                        top as f64 + it.y as f64,
+                        it.w as f64 + 3.0,
+                        it.h as f64,
+                    );
+                    let _ = cr.fill();
+                }
+            }
+        }
     }
 
     for item in &dl.items {
