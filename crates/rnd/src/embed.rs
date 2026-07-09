@@ -23,6 +23,9 @@ use std::path::Path;
 
 use serde::Deserialize;
 
+use pure_core::corpus::Corpus;
+use pure_core::reference::VRef;
+
 /// A loaded embedding: unit-normalised vectors (so cosine is a plain dot
 /// product) packed row-major into one flat array (row `i` is the `dim`-slice at
 /// `i*dim`) to keep neighbour scans tight.
@@ -230,6 +233,230 @@ fn sidecar(path: &Path, ext: &str) -> std::path::PathBuf {
     std::path::PathBuf::from(s)
 }
 
+// ── verse similarity (SIF) ─────────────────────────────────────────────────────
+
+/// The SIF smoothing constant `a` (Arora, Liang & Ma 2017).
+const SIF_A: f32 = 1.0e-3;
+/// Below this many verses in a testament, a fitted principal component is noise,
+/// not signal, so the PC-removal step is skipped (mean subtraction still runs).
+const SIF_PC_MIN_VERSES: usize = 50;
+
+/// Precomputed verse vectors for "verses like this one". A naive average of a
+/// verse's concept vectors is dominated by ubiquitous words, so every verse
+/// looks alike; SIF instead weights each concept by `a / (a + p(concept))` to
+/// damp the frequent ones, then removes each verse vector's per-testament mean
+/// and its projection onto that testament's dominant direction. What survives is
+/// the verse's distinctive theme. Ported from overlay `VerseSim`.
+#[derive(Debug, Clone)]
+pub struct VerseSim {
+    dim: usize,
+    refs: Vec<VRef>,
+    nt: Vec<bool>,
+    vecs: Vec<f32>,
+    ix: HashMap<VRef, usize>,
+    aligned: bool,
+}
+
+fn add_into(acc: &mut [f32], x: &[f32]) {
+    for (a, b) in acc.iter_mut().zip(x) {
+        *a += *b;
+    }
+}
+
+/// The top principal component of `xs` (assumed mean-centred) by power
+/// iteration — a genuine PCA direction, no linear-algebra dependency.
+fn top_principal_component(dim: usize, xs: &[Vec<f32>]) -> Vec<f32> {
+    let is_zero = |v: &[f32]| v.iter().all(|&x| x == 0.0);
+    let mut v = match xs.iter().find(|x| !is_zero(x)) {
+        Some(seed) => {
+            let mut s = seed.clone();
+            normalize(&mut s);
+            s
+        }
+        None => return vec![0.0; dim],
+    };
+    for _ in 0..100 {
+        let mut next = vec![0.0f32; dim];
+        for x in xs {
+            let c = dot(x, &v);
+            for (n, xi) in next.iter_mut().zip(x) {
+                *n += c * xi;
+            }
+        }
+        normalize(&mut next);
+        if is_zero(&next) || 1.0 - dot(&v, &next).abs() < 1.0e-10 {
+            return next;
+        }
+        v = next;
+    }
+    v
+}
+
+impl VerseSim {
+    /// Number of verses with a vector.
+    pub fn count(&self) -> usize {
+        self.refs.len()
+    }
+    /// Built from an aligned embedding (so cross-testament similarity is live).
+    pub fn aligned(&self) -> bool {
+        self.aligned
+    }
+
+    fn row(&self, i: usize) -> &[f32] {
+        &self.vecs[i * self.dim..(i + 1) * self.dim]
+    }
+
+    /// Build the SIF model from an embedding and the corpus. Pure but heavy (one
+    /// vector per verse); build it once at startup. The `a/(a+p)` weights use
+    /// the trainer's own frequency table when the artifact shipped one, else a
+    /// fresh count over the corpus.
+    pub fn build(emb: &Embedding, corpus: &Corpus) -> VerseSim {
+        let d = emb.dim;
+        let verses = corpus.verses();
+
+        // Frequency table + total.
+        let (counts, total): (HashMap<&str, u64>, f64) = match &emb.freq {
+            Some(fm) if !fm.is_empty() => {
+                let t = fm.values().sum::<u64>().max(1) as f64;
+                (fm.iter().map(|(k, v)| (k.as_str(), *v)).collect(), t)
+            }
+            _ => {
+                let mut c: HashMap<&str, u64> = HashMap::new();
+                for v in verses {
+                    for t in &v.tokens {
+                        for s in &t.strongs {
+                            *c.entry(s.as_str()).or_insert(0) += 1;
+                        }
+                    }
+                }
+                let t = c.values().sum::<u64>().max(1) as f64;
+                (c, t)
+            }
+        };
+        let w_of = |s: &str| SIF_A / (SIF_A + counts.get(s).copied().unwrap_or(0) as f64 as f32 / total as f32);
+
+        // SIF-weighted average of a verse's in-vocabulary concept vectors.
+        let raw_of = |strongs: &[String]| -> Option<Vec<f32>> {
+            let mut acc = vec![0.0f32; d];
+            let mut n = 0usize;
+            for s in strongs {
+                if let Some(cv) = emb.concept_vector(s) {
+                    let w = w_of(s);
+                    for (a, x) in acc.iter_mut().zip(cv) {
+                        *a += w * x;
+                    }
+                    n += 1;
+                }
+            }
+            if n == 0 {
+                return None;
+            }
+            let inv = 1.0 / n as f32;
+            for a in acc.iter_mut() {
+                *a *= inv;
+            }
+            Some(acc)
+        };
+
+        // (ref, is_greek, raw-vector) per verse that had any in-vocab concept.
+        struct Entry {
+            reference: VRef,
+            greek: bool,
+            raw: Vec<f32>,
+        }
+        let mut entries: Vec<Entry> = Vec::new();
+        for v in verses {
+            let strongs: Vec<String> =
+                v.tokens.iter().flat_map(|t| t.strongs.iter().cloned()).collect();
+            let greek = strongs.first().is_some_and(|s| s.starts_with('G'));
+            if let Some(raw) = raw_of(&strongs) {
+                entries.push(Entry { reference: v.vref(), greek, raw });
+            }
+        }
+
+        // Per-testament mean + top principal component.
+        let mean_of = |greek: bool| -> Vec<f32> {
+            let rows: Vec<&Vec<f32>> = entries.iter().filter(|e| e.greek == greek).map(|e| &e.raw).collect();
+            if rows.is_empty() {
+                return vec![0.0; d];
+            }
+            let mut acc = vec![0.0f32; d];
+            for r in &rows {
+                add_into(&mut acc, r);
+            }
+            let inv = 1.0 / rows.len() as f32;
+            for a in acc.iter_mut() {
+                *a *= inv;
+            }
+            acc
+        };
+        let (mu_h, mu_g) = (mean_of(false), mean_of(true));
+        let centered = |greek: bool, mu: &[f32]| -> Vec<Vec<f32>> {
+            entries
+                .iter()
+                .filter(|e| e.greek == greek)
+                .map(|e| e.raw.iter().zip(mu).map(|(x, m)| x - m).collect())
+                .collect()
+        };
+        let pc_of = |rows: &[Vec<f32>]| -> Vec<f32> {
+            if rows.len() >= SIF_PC_MIN_VERSES {
+                top_principal_component(d, rows)
+            } else {
+                vec![0.0; d]
+            }
+        };
+        let pc_h = pc_of(&centered(false, &mu_h));
+        let pc_g = pc_of(&centered(true, &mu_g));
+
+        // Adjust each raw vector: subtract the mean, remove the PC projection,
+        // normalise.
+        let mut refs = Vec::with_capacity(entries.len());
+        let mut nt = Vec::with_capacity(entries.len());
+        let mut vecs = Vec::with_capacity(entries.len() * d);
+        for e in &entries {
+            let (mu, pc) = if e.greek { (&mu_g, &pc_g) } else { (&mu_h, &pc_h) };
+            let mut c: Vec<f32> = e.raw.iter().zip(mu).map(|(x, m)| x - m).collect();
+            let proj = dot(&c, pc);
+            for (ci, p) in c.iter_mut().zip(pc) {
+                *ci -= proj * p;
+            }
+            normalize(&mut c);
+            refs.push(e.reference.clone());
+            nt.push(e.greek);
+            vecs.extend_from_slice(&c);
+        }
+        let ix = refs.iter().cloned().zip(0..).collect();
+        VerseSim { dim: d, refs, nt, vecs, ix, aligned: emb.aligned }
+    }
+
+    fn similar_by(&self, reference: &VRef, k: usize, keep: impl Fn(bool, bool) -> bool) -> Vec<(VRef, f32)> {
+        let Some(&i) = self.ix.get(reference) else { return Vec::new() };
+        let q = self.row(i);
+        let g = self.nt[i];
+        let mut scored: Vec<(VRef, f32)> = (0..self.count())
+            .filter(|&j| j != i && keep(g, self.nt[j]))
+            .map(|j| (self.refs[j].clone(), dot(q, self.row(j))))
+            .collect();
+        scored.sort_by(|a, b| b.1.total_cmp(&a.1));
+        scored.truncate(k);
+        scored
+    }
+
+    /// The `k` most similar verses in the same testament, strongest first.
+    pub fn similar_verses_in(&self, reference: &VRef, k: usize) -> Vec<(VRef, f32)> {
+        self.similar_by(reference, k, |g, other| g == other)
+    }
+
+    /// The `k` most similar verses in the *other* testament — meaningful only
+    /// when the embedding was aligned; empty otherwise.
+    pub fn similar_verses_cross(&self, reference: &VRef, k: usize) -> Vec<(VRef, f32)> {
+        if !self.aligned {
+            return Vec::new();
+        }
+        self.similar_by(reference, k, |g, other| g != other)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -289,5 +516,22 @@ mod tests {
     fn stale_tokenization_is_refused() {
         let stale = r#"{"tokenization":"other-tok","aligned":"x"}"#;
         assert!(parse_embedding("kjv1769-tok2", Some(stale), VEC, None).is_none());
+    }
+
+    #[test]
+    fn power_iteration_finds_the_dominant_axis() {
+        // Points strung along the x-axis (with y jitter) → top PC ≈ ±x.
+        let xs: Vec<Vec<f32>> = vec![
+            vec![3.0, 0.1],
+            vec![-2.0, -0.1],
+            vec![5.0, 0.05],
+            vec![-4.0, 0.0],
+            vec![1.0, -0.05],
+        ];
+        let pc = top_principal_component(2, &xs);
+        assert!(pc[0].abs() > 0.98, "dominant axis should be x, got {pc:?}");
+        assert!(pc[1].abs() < 0.2);
+        // Unit length.
+        assert!((pc.iter().map(|v| v * v).sum::<f32>() - 1.0).abs() < 1e-4);
     }
 }

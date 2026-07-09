@@ -76,6 +76,8 @@ struct State {
     embedding: Option<embed::Embedding>,
     /// Morphology sidecar (offline-projected), when present — per-token parse.
     morph: Option<morph::MorphData>,
+    /// SIF verse-similarity model over the embedding — "verses like this".
+    verse_sim: Option<embed::VerseSim>,
     /// The data home, kept so authoring can write + reload study data.
     home: String,
     /// Font family to render the scripture in ("EB Garamond" or a fallback).
@@ -299,6 +301,9 @@ fn load_state(cfg: &Config) -> Result<State, String> {
     let embedding = embed::load_embedding(canon::TOKENIZATION_VERSION, data.join("concept-vectors.vec"));
     // Morphology sidecar — optional; stale stamp / missing → None.
     let morph = morph::load_morph(canon::TOKENIZATION_VERSION, data.join("morphology.jsonl"));
+    // SIF verse-similarity model, built once over the embedding (heavy, but the
+    // embedding is the only prerequisite; skipped when there's no embedding).
+    let verse_sim = embedding.as_ref().map(|e| embed::VerseSim::build(e, &corpus));
     let search_ix = SearchIx::build(&corpus);
     let occ_ix = OccurrenceIx::build(&corpus);
     let family = register_bundled_fonts();
@@ -317,6 +322,7 @@ fn load_state(cfg: &Config) -> Result<State, String> {
         bridge,
         embedding,
         morph,
+        verse_sim,
         home,
         family,
         font_size: cfg.body_size,
@@ -2074,6 +2080,27 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
             }
             if rs.len() > XREF_SHOWN {
                 s.push_str(&format!("<small>… {} more</small>\n", rs.len() - XREF_SHOWN));
+            }
+        }
+    }
+
+    // "Verses like this" from the SIF embedding model (Full study): thematic
+    // neighbours by concept, distinct from the curated/weave links above.
+    if st.mode.is_full() {
+        if let Some(vs) = &st.verse_sim {
+            let sim = vs.similar_verses_in(&hit.verse, 6);
+            if !sim.is_empty() {
+                s.push_str("\n<b>verses like this</b>  <small><span foreground=\"#888\">by concept</span></small>\n");
+                for (r, _) in &sim {
+                    s.push_str(&format!("{}\n", go_link(r)));
+                }
+            }
+            let cross = vs.similar_verses_cross(&hit.verse, 4);
+            if !cross.is_empty() {
+                s.push_str("<small><span foreground=\"#9e7d38\">across the testaments: </span></small>\n");
+                for (r, _) in &cross {
+                    s.push_str(&format!("{}\n", go_link(r)));
+                }
             }
         }
     }
