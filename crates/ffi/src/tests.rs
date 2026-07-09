@@ -319,3 +319,61 @@ fn null_and_freed_handles_are_safe() {
         pure_study_string_free(ptr::null_mut());
     }
 }
+
+#[test]
+fn authoring_round_trip_via_abi() {
+    use std::ffi::CString;
+    unsafe {
+        // A temp home with the two data files pure_engine_open expects.
+        let home = std::env::temp_dir().join(format!("pure-ffi-author-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = pure_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null());
+        assert!(!e.is_null());
+
+        let c = |s: &str| CString::new(s).unwrap();
+        let stamp = c("2026-01-01T00:00:00Z");
+
+        // Author: tag a verse, add a verse to a thread, weave two verses.
+        // A null return means success.
+        assert!(pure_engine_tag_add(e, c("Messianic").as_ptr(), c("verse").as_ptr(), c("John 3:16").as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
+        assert!(pure_engine_tag_add(e, c("Messianic").as_ptr(), c("concept").as_ptr(), c("G2316").as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
+        assert!(pure_engine_thread_add(e, c("Road").as_ptr(), c("John 3:16").as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
+        assert!(pure_engine_weave_add_link(e, c("Links").as_ptr(), c("John 3:16").as_ptr(), c("John 3:18").as_ptr(), stamp.as_ptr()).is_null());
+
+        // Read back through the ABI (the engine reloaded after each write).
+        let tags: Value = serde_json::from_str(&take(pure_engine_tags_json(e)).unwrap()).unwrap();
+        assert_eq!(tags["tags"][0]["name"], "Messianic");
+        assert_eq!(tags["tags"][0]["members"].as_array().unwrap().len(), 2);
+        assert_eq!(tags["tags"][0]["members"][0]["verse"], "John 3:16");
+        assert_eq!(tags["tags"][0]["members"][1]["strongs"], "G2316");
+
+        let threads: Value = serde_json::from_str(&take(pure_engine_threads_json(e)).unwrap()).unwrap();
+        assert_eq!(threads["threads"][0]["name"], "Road");
+        assert_eq!(threads["threads"][0]["entries"][0]["verse"], "John 3:16");
+
+        let xrefs: Value =
+            serde_json::from_str(&take(pure_engine_verse_xrefs_json(e, c("John 3:16").as_ptr())).unwrap()).unwrap();
+        assert_eq!(xrefs["partners"][0]["verse"], "John 3:18");
+        assert_eq!(xrefs["partners"][0]["weave"], "Links");
+
+        // Error paths: a bad target kind, and a bytes-opened engine has no home.
+        assert!(take(pure_engine_tag_add(e, c("X").as_ptr(), c("bogus").as_ptr(), c("v").as_ptr(), ptr::null(), stamp.as_ptr()))
+            .unwrap()
+            .contains("kind"));
+        let bytes_engine = open();
+        assert!(take(pure_engine_tag_add(bytes_engine, c("X").as_ptr(), c("verse").as_ptr(), c("John 3:16").as_ptr(), ptr::null(), stamp.as_ptr()))
+            .unwrap()
+            .contains("home"));
+        pure_engine_free(bytes_engine);
+
+        pure_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}

@@ -41,12 +41,16 @@
 
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::path::PathBuf;
 use std::ptr;
 
 use pure_core::corpus::{self, Corpus};
 use pure_core::search::{self, Notes, SearchIx};
 use pure_core::strongs::{self, OccurrenceIx, StrongsDict};
-use pure_core::{canon, VRef};
+use pure_core::tag::{self, LoadedTag, TagTarget};
+use pure_core::thread::{self, LoadedThread, ThreadEntry};
+use pure_core::weave::{self, Link, LoadedWeave, WeaveKind};
+use pure_core::{canon, notes, VRef};
 use pure_layout::{layout_chapter, DisplayList, LayoutConfig, Measure};
 
 mod wire;
@@ -87,16 +91,46 @@ pub struct PureEngine {
     strongs: StrongsDict,
     search_ix: SearchIx,
     occ_ix: OccurrenceIx,
-    /// 1769 margin notes searched last. Empty until core grows a notes loader
-    /// (`kjv-notes.jsonl`); search still covers all verse text without it.
+    /// 1769 margin notes (loaded when opened from a home dir).
     notes: Notes,
+    /// The data home, if opened from one — required to author (write) study
+    /// data. `None` when opened from bytes (study data is then read-only/empty).
+    home: Option<PathBuf>,
+    /// Personal study data + the weave graph, loaded from `home` and reloaded
+    /// after any authoring write.
+    threads: Vec<LoadedThread>,
+    tags: Vec<LoadedTag>,
+    weaves: Vec<LoadedWeave>,
 }
 
 impl PureEngine {
-    fn new(corpus: Corpus, strongs: StrongsDict) -> PureEngine {
+    fn new(corpus: Corpus, strongs: StrongsDict, home: Option<PathBuf>) -> PureEngine {
         let search_ix = SearchIx::build(&corpus);
         let occ_ix = OccurrenceIx::build(&corpus);
-        PureEngine { corpus, strongs, search_ix, occ_ix, notes: Notes::new() }
+        let mut engine = PureEngine {
+            corpus,
+            strongs,
+            search_ix,
+            occ_ix,
+            notes: Notes::new(),
+            home,
+            threads: Vec::new(),
+            tags: Vec::new(),
+            weaves: Vec::new(),
+        };
+        engine.reload_study();
+        engine
+    }
+
+    /// (Re)load notes + threads + tags + weaves from `home` (no-op without one).
+    fn reload_study(&mut self) {
+        if let Some(home) = self.home.clone() {
+            self.notes =
+                notes::load_notes(home.join("data").join("kjv-notes.jsonl")).unwrap_or_default();
+            self.threads = thread::load_threads(&home).0;
+            self.tags = tag::load_tags(&home).0;
+            self.weaves = weave::load_weaves(&home).0;
+        }
     }
 }
 
@@ -180,6 +214,13 @@ impl Measure for FfiMeasure {
 /// Run `f`, turning any panic into `default` so nothing unwinds across the ABI.
 fn guard<T>(default: T, f: impl FnOnce() -> T) -> T {
     catch_unwind(AssertUnwindSafe(f)).unwrap_or(default)
+}
+
+/// Guard for the authoring calls, whose result string is null on success and an
+/// owned error message otherwise. A panic surfaces as an error (not a false
+/// success), and the error string is only allocated on the panic path.
+fn guard_err(f: impl FnOnce() -> *mut c_char) -> *mut c_char {
+    catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|_| out_string("internal error".to_string()))
 }
 
 /// Move an owned `String` out as a caller-freed C string. Returns null if the
@@ -281,7 +322,7 @@ pub unsafe extern "C" fn pure_engine_open(
                 return ptr::null_mut();
             }
         };
-        Box::into_raw(Box::new(PureEngine::new(corpus, strongs)))
+        Box::into_raw(Box::new(PureEngine::new(corpus, strongs, Some(PathBuf::from(home)))))
     })
 }
 
@@ -339,7 +380,8 @@ pub unsafe extern "C" fn pure_engine_open_from_bytes(
                 return ptr::null_mut();
             }
         };
-        Box::into_raw(Box::new(PureEngine::new(corpus, strongs)))
+        // No home when opened from bytes: study data is empty and read-only.
+        Box::into_raw(Box::new(PureEngine::new(corpus, strongs, None)))
     })
 }
 
@@ -647,6 +689,263 @@ pub unsafe extern "C" fn pure_engine_search_json(
             None => ptr::null_mut(),
         }
     })
+}
+
+// ── study data: read ─────────────────────────────────────────────────────────
+
+/// The loaded threads as JSON: `{"threads":[{name,notes,created,entries:[…]}]}`.
+/// Caller-freed; null on a null engine.
+///
+/// # Safety
+/// `engine` is a valid engine pointer.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_threads_json(engine: *const PureEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(e) => out_json(&wire::threads_to_wire(&e.threads)),
+        None => ptr::null_mut(),
+    })
+}
+
+/// The loaded tags as JSON: `{"tags":[{name,color,created,members:[…]}]}`.
+/// Caller-freed; null on a null engine.
+///
+/// # Safety
+/// `engine` is a valid engine pointer.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_tags_json(engine: *const PureEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(e) => out_json(&wire::tags_to_wire(&e.tags)),
+        None => ptr::null_mut(),
+    })
+}
+
+/// A verse's weave cross-reference partners as JSON:
+/// `{"verse","partners":[{"verse","display","weave"}]}`. Caller-freed; null on a
+/// null engine or an unparseable reference.
+///
+/// # Safety
+/// `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_verse_xrefs_json(
+    engine: *const PureEngine,
+    ref_key: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(rk)) = (engine.as_ref(), opt_str(ref_key)) else {
+            return ptr::null_mut();
+        };
+        match VRef::parse_ref_key(rk) {
+            Some(vref) => out_json(&wire::verse_xrefs_to_wire(&e.weaves, &vref)),
+            None => ptr::null_mut(),
+        }
+    })
+}
+
+// ── study data: authoring (write) ──────────────────────────────────────────────
+//
+// These mutate on-disk study data through the cross-platform `core::store`
+// atomic writer, then reload the engine's in-memory copies. Each returns **null
+// on success** and an owned error string on failure (free it with
+// `pure_study_string_free`). All require an engine opened from a home directory
+// (`pure_engine_open`); an engine opened from bytes returns an error.
+
+/// Add the whole verse `ref_key` to the thread named `name` (created on first
+/// use). `note` may be null; `added` is a caller-supplied UTC timestamp.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_thread_add(
+    engine: *mut PureEngine,
+    name: *const c_char,
+    ref_key: *const c_char,
+    note: *const c_char,
+    added: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        };
+        let (Some(name), Some(rk), Some(added)) = (opt_str(name), opt_str(ref_key), opt_str(added))
+        else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let Some(vref) = VRef::parse_ref_key(rk) else {
+            return out_string(format!("bad ref: {rk}"));
+        };
+        let (span, text) = match engine.corpus.verse(&vref) {
+            Some(v) => {
+                let words: Vec<String> = v.tokens.iter().map(|t| t.word.clone()).collect();
+                ((0u16, words.len().saturating_sub(1) as u16), words)
+            }
+            None => ((0, 0), Vec::new()),
+        };
+        let entry = ThreadEntry {
+            vref,
+            span,
+            text,
+            note: opt_str(note).map(str::to_string),
+            added: added.to_string(),
+        };
+        match thread::add_to_thread(&home, &engine.threads, name, canon::TOKENIZATION_VERSION, entry) {
+            Ok(_) => {
+                engine.reload_study();
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Add a target to the tag named `name` (created on first use). `kind` is
+/// `"verse"` (with `value` a ref key) or `"concept"` (with `value` a Strong's
+/// code). `note` may be null; `added` is a caller-supplied UTC timestamp.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_tag_add(
+    engine: *mut PureEngine,
+    name: *const c_char,
+    kind: *const c_char,
+    value: *const c_char,
+    note: *const c_char,
+    added: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        };
+        let (Some(name), Some(added)) = (opt_str(name), opt_str(added)) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let target = match parse_target(kind, value) {
+            Ok(t) => t,
+            Err(e) => return out_string(e),
+        };
+        match tag::add_member(
+            &home,
+            &engine.tags,
+            name,
+            canon::TOKENIZATION_VERSION,
+            target,
+            opt_str(note).map(str::to_string),
+            added,
+        ) {
+            Ok(_) => {
+                engine.reload_study();
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Remove a target (see [`pure_engine_tag_add`] for `kind`/`value`) from the tag
+/// named `name`. A missing target is a no-op; a missing tag is an error.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_tag_remove(
+    engine: *mut PureEngine,
+    name: *const c_char,
+    kind: *const c_char,
+    value: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(name) = opt_str(name) else {
+            return out_string("null name".to_string());
+        };
+        let target = match parse_target(kind, value) {
+            Ok(t) => t,
+            Err(e) => return out_string(e),
+        };
+        let wanted = name.trim().to_lowercase();
+        let found = engine.tags.iter().find(|lt| lt.tag.name.to_lowercase() == wanted).cloned();
+        match found {
+            Some(lt) => match tag::remove_member(&lt, &target) {
+                Ok(()) => {
+                    engine.reload_study();
+                    ptr::null_mut()
+                }
+                Err(e) => out_string(e.to_string()),
+            },
+            None => out_string(format!("no tag named {name}")),
+        }
+    })
+}
+
+/// Weave the two whole verses `a_ref` / `b_ref` into the weave named `name`
+/// (created on first use). `added` is a caller-supplied UTC timestamp.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_weave_add_link(
+    engine: *mut PureEngine,
+    name: *const c_char,
+    a_ref: *const c_char,
+    b_ref: *const c_char,
+    added: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        };
+        let (Some(name), Some(a), Some(b), Some(added)) =
+            (opt_str(name), opt_str(a_ref), opt_str(b_ref), opt_str(added))
+        else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let (Some(av), Some(bv)) = (VRef::parse_ref_key(a), VRef::parse_ref_key(b)) else {
+            return out_string("bad ref".to_string());
+        };
+        match weave::add_link(
+            &home,
+            &engine.weaves,
+            name,
+            WeaveKind::Quotation,
+            canon::TOKENIZATION_VERSION,
+            added,
+            Link::canon(av, bv),
+        ) {
+            Ok(_) => {
+                engine.reload_study();
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Parse a `(kind, value)` pair into a [`TagTarget`].
+///
+/// # Safety
+/// `kind`/`value` are null or valid NUL-terminated UTF-8 for the call.
+unsafe fn parse_target(kind: *const c_char, value: *const c_char) -> Result<TagTarget, String> {
+    let (Some(kind), Some(value)) = (opt_str(kind), opt_str(value)) else {
+        return Err("null kind or value".to_string());
+    };
+    match kind {
+        "verse" => VRef::parse_ref_key(value)
+            .map(TagTarget::Verse)
+            .ok_or_else(|| format!("bad ref: {value}")),
+        "concept" => Ok(TagTarget::Concept(value.to_string())),
+        other => Err(format!("bad target kind: {other}")),
+    }
 }
 
 #[cfg(test)]

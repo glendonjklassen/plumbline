@@ -51,6 +51,13 @@ directly and skips this boundary; Windows and Android cross it.
 | `pure_layout_free` | release the display list |
 | `pure_engine_strongs_json(code)` / `_strongs_occurrences_json(code)` | dictionary entry / concordance |
 | `pure_engine_search_json(query)` | multi-tier search: `goto` or `hits` |
+| `pure_engine_threads_json` / `_tags_json` / `_verse_xrefs_json(ref)` | read personal study data + a verse's weave partners |
+| `pure_engine_thread_add` / `_tag_add` / `_tag_remove` / `_weave_add_link` | **author** study data (null on success, else an owned error string; needs an engine opened from a home dir) |
+
+Authoring writes go through `core::store`'s cross-platform atomic write (temp
+sibling → fsync → rename); the caller supplies UTC timestamps. An engine opened
+via `pure_engine_open_from_bytes` has no home and returns an error from the
+authoring calls (study data is read-only).
 
 Token flag bits are exported as `PURE_FLAG_ADDED/DIVINE/TITLE/PARA`.
 

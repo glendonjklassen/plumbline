@@ -226,6 +226,78 @@ namespace PureStudy.Native
         [DllImport(__DllName, EntryPoint = "pure_engine_search_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         public static extern byte* pure_engine_search_json(PureEngine* engine, byte* query);
 
+        /// <summary>
+        ///  The loaded threads as JSON: `{"threads":[{name,notes,created,entries:[…]}]}`.
+        ///  Caller-freed; null on a null engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a valid engine pointer.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_threads_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_threads_json(PureEngine* engine);
+
+        /// <summary>
+        ///  The loaded tags as JSON: `{"tags":[{name,color,created,members:[…]}]}`.
+        ///  Caller-freed; null on a null engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a valid engine pointer.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_tags_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_tags_json(PureEngine* engine);
+
+        /// <summary>
+        ///  A verse's weave cross-reference partners as JSON:
+        ///  `{"verse","partners":[{"verse","display","weave"}]}`. Caller-freed; null on a
+        ///  null engine or an unparseable reference.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_verse_xrefs_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_verse_xrefs_json(PureEngine* engine, byte* ref_key);
+
+        /// <summary>
+        ///  Add the whole verse `ref_key` to the thread named `name` (created on first
+        ///  use). `note` may be null; `added` is a caller-supplied UTC timestamp.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_thread_add", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_thread_add(PureEngine* engine, byte* name, byte* ref_key, byte* note, byte* added);
+
+        /// <summary>
+        ///  Add a target to the tag named `name` (created on first use). `kind` is
+        ///  `"verse"` (with `value` a ref key) or `"concept"` (with `value` a Strong's
+        ///  code). `note` may be null; `added` is a caller-supplied UTC timestamp.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_tag_add", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_tag_add(PureEngine* engine, byte* name, byte* kind, byte* value, byte* note, byte* added);
+
+        /// <summary>
+        ///  Remove a target (see [`pure_engine_tag_add`] for `kind`/`value`) from the tag
+        ///  named `name`. A missing target is a no-op; a missing tag is an error.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_tag_remove", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_tag_remove(PureEngine* engine, byte* name, byte* kind, byte* value);
+
+        /// <summary>
+        ///  Weave the two whole verses `a_ref` / `b_ref` into the weave named `name`
+        ///  (created on first use). `added` is a caller-supplied UTC timestamp.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_weave_add_link", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_weave_add_link(PureEngine* engine, byte* name, byte* a_ref, byte* b_ref, byte* added);
+
 
     }
 

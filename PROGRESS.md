@@ -6,7 +6,7 @@ the architecture and the locked decisions; see
 
 ## Working right now
 
-- **`cargo test`** → **56 tests green** across core/layout/rnd/ffi, no warnings.
+- **`cargo test`** → **57 tests green** across core/layout/rnd/ffi, no warnings.
 - **`OVERLAY_HOME=/home/gjklassen/code/overlay cargo run -p pure-desktop`** →
   a real GTK4 reader window, now with the core's study surface wired in:
   - **Multi-pane**: 1–3 reading columns side by side, each with its own book /
@@ -53,9 +53,14 @@ the architecture and the locked decisions; see
   stub. `open → layout chapter (display list, measured via a callback) →
   hit-test → Strong's → occurrences → search → free`, with opaque handles,
   panic-safe boundaries, and stable camelCase-JSON payloads.
-  - Verified three ways against the real corpus: a Rust end-to-end test, a
-    **C** consumer ([`bindings/c/smoke.c`](crates/ffi/bindings/c/smoke.c)), and a
-    **C#/P-Invoke** consumer that runs on this box against the Linux `.so`
+  - Now also **reads + authors study data**: threads/tags/verse-xrefs read
+    plus `thread_add` / `tag_add` / `tag_remove` / `weave_add_link` writes
+    (null = success; through the cross-platform `core::store`; needs a home
+    dir), so the Windows/Android shells can author too — not just the GTK app.
+  - Verified three ways against the real corpus: a Rust end-to-end test (incl. an
+    authoring round-trip from a temp home), a **C** consumer
+    ([`bindings/c/smoke.c`](crates/ffi/bindings/c/smoke.c)), and a **C#/P-Invoke**
+    consumer that runs on this box against the Linux `.so`
     (`dotnet run --project crates/ffi/bindings/csharp/demo -- ../overlay`).
   - Bindings generated from the source: C header (cbindgen) + C# P/Invoke
     (csbindgen), plus a hand-written idiomatic C# wrapper and a Kotlin/JNA
@@ -73,7 +78,7 @@ the architecture and the locked decisions; see
 | `crates/core` | canon (66 books, frozen tok stamp), `VRef`/`refKey`, corpus (JSONL loader + canonical-order validation + chapter index), Strong's (+ occurrence index, proper-noun heuristic), search (4-tier: exact/variant/lemma/typo, + phrase, + reference, + bare-Strong's), weave graph (canonical links, BFS components, union-merge, v2 JSON), notes loader (`kjv-notes.jsonl`), **threads** + **tags** (load, membership, **authoring**: add/remove + slugged file paths), **`store`** (cross-platform atomic write: temp-sibling → fsync → rename) | 41 |
 | `crates/layout` | reader layout + per-word hit-testing as a platform-agnostic algorithm over an injected `Measure` (GTK shell backs it with cairo) | 3 |
 | `crates/rnd` | feature-gated R&D capability flags — **off by default** | 1 |
-| `crates/ffi` | **the C ABI** (opaque engine/display-list handles, callback-measured layout, JSON payloads) + generated C/C# bindings + a Kotlin/JNA wrapper | 10 |
+| `crates/ffi` | **the C ABI** (opaque engine/display-list handles, callback-measured layout, JSON payloads, **study-data read + authoring writes**) + generated C/C# bindings + a Kotlin/JNA wrapper | 11 |
 | `apps/desktop` | GTK4 + libadwaita shell (gtk4 0.11 / libadwaita 0.9) | — |
 
 Dropped by decision: signed **patches** and **rules** (not ported).
@@ -109,11 +114,11 @@ windows x86_64-gnu + aarch64-gnullvm); **mingw-w64** is present. So:
    **hover glosses** / **canon strip** all done): remaining — a weave compare card
    + approve/reject; threads + tags (need a `core::thread` port first); a stabler
    verse-scroll than the 50 ms nudge.
-4. **Study-data authoring**: threads, tags, and weaves now create/append/remove
-   with atomic cross-platform writes (`core::store`). Remaining — word-span
-   selection for links (currently whole-verse); tag a Strong's *concept*; entry
-   notes; weave approve/reject; then expose these writes through the ABI so the
-   Windows/Android shells can author too (the ABI is read-only today).
+4. **Study-data authoring**: threads, tags, and weaves create/append/remove with
+   atomic cross-platform writes (`core::store`), **in both the GTK app and the C
+   ABI** (so Windows/Android shells can author). Remaining — word-span selection
+   for links (currently whole-verse); entry notes; weave approve/reject; a
+   guided first-run + data bundling (decisions #3/#4).
 5. **R&D layer** (`pure-rnd`): concept engine, embeddings, morphology — behind
    cargo features, surfaced only in "Full study" mode (decision #4).
 6. **Data delivery**: bundle KJV + Strong's in-app (the ABI's

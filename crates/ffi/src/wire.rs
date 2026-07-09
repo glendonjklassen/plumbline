@@ -11,8 +11,12 @@
 use serde::Serialize;
 
 use pure_core::corpus::{Token, Verse};
+use pure_core::reference::VRef;
 use pure_core::search::{SearchAnswer, SearchHit};
 use pure_core::strongs::StrongsEntry;
+use pure_core::tag::{LoadedTag, TagTarget};
+use pure_core::thread::LoadedThread;
+use pure_core::weave::LoadedWeave;
 use pure_layout::{DisplayList, Hit, ItemKind};
 
 // ── table of contents ──────────────────────────────────────────────────────────
@@ -250,6 +254,174 @@ fn search_hit_to_wire(h: &SearchHit) -> WireSearchHit {
         note: h.note,
         why: h.why.clone(),
     }
+}
+
+// ── threads ────────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct WireThreads {
+    pub threads: Vec<WireThread>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireThread {
+    pub name: String,
+    pub notes: String,
+    pub created: String,
+    pub entries: Vec<WireThreadEntry>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireThreadEntry {
+    pub verse: String,
+    pub display: String,
+    pub span: [u16; 2],
+    /// Snapshot of the words this entry covered when added.
+    pub text: Vec<String>,
+    pub note: Option<String>,
+    pub added: String,
+}
+
+pub fn threads_to_wire(loaded: &[LoadedThread]) -> WireThreads {
+    WireThreads {
+        threads: loaded
+            .iter()
+            .map(|lt| {
+                let t = &lt.thread;
+                WireThread {
+                    name: t.name.clone(),
+                    notes: t.notes.clone(),
+                    created: t.created.clone(),
+                    entries: t
+                        .entries
+                        .iter()
+                        .map(|e| WireThreadEntry {
+                            verse: e.vref.ref_key(),
+                            display: e.vref.display(),
+                            span: [e.span.0, e.span.1],
+                            text: e.text.clone(),
+                            note: e.note.clone(),
+                            added: e.added.clone(),
+                        })
+                        .collect(),
+                }
+            })
+            .collect(),
+    }
+}
+
+// ── tags ────────────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct WireTags {
+    pub tags: Vec<WireTag>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireTag {
+    pub name: String,
+    pub color: Option<String>,
+    pub created: String,
+    pub members: Vec<WireTagMember>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireTagMember {
+    /// `"verse"` or `"concept"`.
+    pub kind: &'static str,
+    /// Set for a verse member (compact key); null for a concept.
+    pub verse: Option<String>,
+    /// Display form of a verse member; null for a concept.
+    pub display: Option<String>,
+    /// Set for a concept member (Strong's code); null for a verse.
+    pub strongs: Option<String>,
+    pub note: Option<String>,
+    pub added: String,
+}
+
+pub fn tags_to_wire(loaded: &[LoadedTag]) -> WireTags {
+    WireTags {
+        tags: loaded
+            .iter()
+            .map(|lt| {
+                let t = &lt.tag;
+                WireTag {
+                    name: t.name.clone(),
+                    color: t.color.clone(),
+                    created: t.created.clone(),
+                    members: t
+                        .members
+                        .iter()
+                        .map(|m| {
+                            let (kind, verse, display, strongs) = match &m.target {
+                                TagTarget::Verse(v) => {
+                                    ("verse", Some(v.ref_key()), Some(v.display()), None)
+                                }
+                                TagTarget::Concept(c) => ("concept", None, None, Some(c.clone())),
+                            };
+                            WireTagMember {
+                                kind,
+                                verse,
+                                display,
+                                strongs,
+                                note: m.note.clone(),
+                                added: m.added.clone(),
+                            }
+                        })
+                        .collect(),
+                }
+            })
+            .collect(),
+    }
+}
+
+// ── verse cross-references ────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireXrefs {
+    pub verse: String,
+    pub partners: Vec<WireXrefPartner>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireXrefPartner {
+    pub verse: String,
+    pub display: String,
+    pub weave: String,
+}
+
+/// A verse's weave partners across all loaded weaves (both link directions),
+/// deduped by partner in first-seen order.
+pub fn verse_xrefs_to_wire(loaded: &[LoadedWeave], vref: &VRef) -> WireXrefs {
+    let mut partners = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for lw in loaded {
+        for l in &lw.weave.links {
+            let other = if &l.a == vref {
+                Some(&l.b)
+            } else if &l.b == vref {
+                Some(&l.a)
+            } else {
+                None
+            };
+            if let Some(p) = other {
+                if seen.insert(p.clone()) {
+                    partners.push(WireXrefPartner {
+                        verse: p.ref_key(),
+                        display: p.display(),
+                        weave: lw.weave.name.clone(),
+                    });
+                }
+            }
+        }
+    }
+    WireXrefs { verse: vref.ref_key(), partners }
 }
 
 pub fn search_to_wire(a: &SearchAnswer) -> WireSearch {
