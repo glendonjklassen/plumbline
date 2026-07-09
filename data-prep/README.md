@@ -78,3 +78,22 @@ pack" is just placing the files under `<home>/data/`. A downloadable pack is a
 tarball of the R&D rows above, extracted there; the app picks them up on next
 launch with no code change. (The C ABI's `pure_engine_open_from_bytes` can also
 load core data from asset bytes for a bundled build.)
+
+## The `pure-hydrate` tool
+
+`crates/hydrate` is a small cross-platform CLI that places the pack into a home
+and **verifies** each artifact by loading it through the same code the app uses:
+
+```sh
+# Inspect a home — which tiers will light up?
+cargo run -p pure-hydrate -- check --home ~/.local/share/pure-study
+
+# Copy the pack from a source (e.g. an overlay checkout that already has the
+# artifacts) into a home, then verify.
+cargo run -p pure-hydrate -- copy --from ../overlay --to ~/.local/share/pure-study
+```
+
+`check` reports verse/entry counts, TSK coverage, embedding dim/alignment, and
+morphology coverage; it exits non-zero only when a **required core** file is
+missing. It does not generate the artifacts — run the offline pipeline above for
+that — it assembles and validates them.

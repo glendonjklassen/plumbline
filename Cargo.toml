@@ -5,6 +5,7 @@ members = [
     "crates/layout",
     "crates/rnd",
     "crates/ffi",
+    "crates/hydrate",
     "apps/desktop",
 ]
 
@@ -16,6 +17,7 @@ default-members = [
     "crates/layout",
     "crates/rnd",
     "crates/ffi",
+    "crates/hydrate",
 ]
 
 [workspace.package]

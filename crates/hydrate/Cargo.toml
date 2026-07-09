@@ -1,0 +1,16 @@
+[package]
+name = "pure-hydrate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Assemble + verify the pure-study data pack (core reader + R&D artifacts) into a home."
+
+[[bin]]
+name = "pure-hydrate"
+path = "src/main.rs"
+
+[dependencies]
+pure-core = { workspace = true }
+pure-rnd = { workspace = true, features = ["bridge", "embeddings", "morphology"] }

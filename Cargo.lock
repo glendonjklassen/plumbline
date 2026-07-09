@@ -766,6 +766,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "pure-hydrate"
+version = "0.1.0"
+dependencies = [
+ "pure-core",
+ "pure-rnd",
+]
+
+[[package]]
 name = "pure-layout"
 version = "0.1.0"
 dependencies = [

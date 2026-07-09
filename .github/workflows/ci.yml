@@ -19,7 +19,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Test portable crates
-        run: cargo test --locked -p pure-core -p pure-layout -p pure-rnd -p pure-ffi
+        run: cargo test --locked -p pure-core -p pure-layout -p pure-rnd -p pure-ffi -p pure-hydrate
       - name: Test the R&D features
         run: cargo test --locked -p pure-rnd --features "bridge embeddings morphology"
 

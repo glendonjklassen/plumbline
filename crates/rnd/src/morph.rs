@@ -654,6 +654,11 @@ impl MorphData {
         &self.source
     }
 
+    /// Number of verses carrying morphology annotations.
+    pub fn verse_count(&self) -> usize {
+        self.ix.len()
+    }
+
     /// The entries for a verse, in token order.
     pub fn entries(&self, vref: &VRef) -> &[MorphEntry] {
         self.ix.get(vref).map(Vec::as_slice).unwrap_or(&[])
