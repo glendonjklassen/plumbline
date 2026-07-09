@@ -213,6 +213,8 @@ struct Ui {
     study: gtk::Label,
     /// The study panel's scroller — shown only when there's something to study.
     study_scroll: gtk::ScrolledWindow,
+    /// The split between the reading panes and the study panel.
+    paned: gtk::Paned,
     /// Horizontal container the pane columns live in; rebuilt on add/close.
     pane_row: gtk::Box,
     /// Transparent layer over the panes where cross-reference connectors draw.
@@ -237,10 +239,23 @@ struct PaneUi {
     chapter_spin: gtk::SpinButton,
 }
 
-/// Show the study panel with `markup`; open it if it was hidden.
+/// The study panel's target width when open — a stable sidebar, so it never
+/// balloons to half a wide window.
+const PANEL_WIDTH: i32 = 380;
+
+/// Show the study panel with `markup`; open it if it was hidden. On the
+/// hidden→visible transition the split is placed so the panel is a fixed-width
+/// sidebar regardless of window size (the `Paned` position is absolute from the
+/// left, so on a wide window a fixed 700 would leave the panel enormous).
 fn show_study(ui: &Ui, markup: &str) {
     ui.study.set_markup(markup);
-    ui.study_scroll.set_visible(true);
+    if !ui.study_scroll.is_visible() {
+        ui.study_scroll.set_visible(true);
+        let total = ui.paned.width();
+        if total > PANEL_WIDTH + 200 {
+            ui.paned.set_position(total - PANEL_WIDTH);
+        }
+    }
 }
 
 /// Collapse the study panel (the panes take the full width).
@@ -335,6 +350,12 @@ fn load_state(cfg: &Config) -> Result<State, String> {
 }
 
 fn build_ui(app: &adw::Application) {
+    // The reader is a warm-paper light design (cream scripture, gold accents);
+    // force the light color scheme so the chrome — header nav, dropdowns, the
+    // study panel — matches it instead of following a dark system theme (which
+    // left light text on the light nav strip, illegible).
+    adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceLight);
+
     let (cfg, first_run) = config::load();
     let state = match load_state(&cfg) {
         Ok(s) => Rc::new(RefCell::new(s)),
@@ -433,8 +454,11 @@ fn build_ui(app: &adw::Application) {
     paned.set_resize_start_child(true);
     paned.set_resize_end_child(false);
     paned.set_shrink_end_child(false);
-    paned.set_position(700);
     paned.set_vexpand(true);
+    // The panel starts hidden; its width is set on first open (see show_study)
+    // relative to the actual window width, so it never balloons on a wide
+    // display. A resonable default until then.
+    paned.set_position(760);
 
     // ── canon-overview strip (book map, under the panes) ────────────────────────
     let canon_map = gtk::DrawingArea::new();
@@ -446,6 +470,7 @@ fn build_ui(app: &adw::Application) {
         title,
         study: study.clone(),
         study_scroll,
+        paned: paned.clone(),
         pane_row,
         link_layer: link_layer.clone(),
         canon_map: canon_map.clone(),
