@@ -525,12 +525,76 @@ pub fn to_json(weave: &Weave) -> Result<String, Error> {
     serde_json::to_string(weave).map(|s| s + "\n").map_err(|e| Error::Parse(e.to_string()))
 }
 
+/// Atomically write a weave to `path`.
+pub fn write_weave(path: impl AsRef<Path>, weave: &Weave) -> Result<(), Error> {
+    crate::store::write_atomic(path, &to_json(weave)?)
+}
+
+/// Add `link` to the weave named `name` (case-insensitive match among
+/// `loaded`), creating its file on first use with `kind`. Links are deduped and
+/// canonicalized by [`Weave::add_links`]. Returns the file written; a file that
+/// exists but is absent from `loaded` (failed to parse) is refused rather than
+/// clobbered. The caller supplies the creation timestamp.
+pub fn add_link(
+    home: impl AsRef<Path>,
+    loaded: &[LoadedWeave],
+    name: &str,
+    kind: WeaveKind,
+    tok_version: &str,
+    created: &str,
+    link: Link,
+) -> Result<std::path::PathBuf, Error> {
+    let wanted = name.trim().to_lowercase();
+    if let Some(lw) = loaded.iter().find(|lw| lw.weave.name.to_lowercase() == wanted) {
+        let mut weave = lw.weave.clone();
+        weave.add_links([link]);
+        write_weave(&lw.file, &weave)?;
+        Ok(lw.file.clone())
+    } else {
+        let path = weave_file_in(home.as_ref().join("weaves"), name);
+        if path.exists() {
+            return Err(Error::Corpus(format!(
+                "{} exists but could not be read — refusing to overwrite",
+                path.display()
+            )));
+        }
+        let mut weave = Weave::empty(name.trim(), kind, tok_version, created);
+        weave.add_links([link]);
+        write_weave(&path, &weave)?;
+        Ok(path)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn r(book: &str, c: u16, v: u16) -> VRef {
         VRef::new(book, c, v)
+    }
+
+    #[test]
+    fn add_link_creates_appends_and_dedupes() {
+        let home = std::env::temp_dir().join(format!("pure-weave-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+
+        let (loaded, _) = load_weaves(&home);
+        add_link(&home, &loaded, "My Links", WeaveKind::Quotation, "kjv1769-tok2", "2026-01-01T00:00:00Z", Link::canon(r("Gen", 15, 6), r("Rom", 4, 3))).unwrap();
+
+        let (loaded, _) = load_weaves(&home);
+        assert_eq!(loaded.len(), 1);
+        add_link(&home, &loaded, "my links", WeaveKind::Quotation, "kjv1769-tok2", "x", Link::canon(r("Gen", 15, 6), r("Gal", 3, 6))).unwrap();
+
+        // A duplicate of the first link must not be added twice.
+        let (loaded, _) = load_weaves(&home);
+        add_link(&home, &loaded, "My Links", WeaveKind::Quotation, "kjv1769-tok2", "x", Link::canon(r("Gen", 15, 6), r("Rom", 4, 3))).unwrap();
+
+        let (loaded, errs) = load_weaves(&home);
+        assert!(errs.is_empty());
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].weave.links.len(), 2);
+
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[test]

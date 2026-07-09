@@ -6,7 +6,7 @@ the architecture and the locked decisions; see
 
 ## Working right now
 
-- **`cargo test`** → **55 tests green** across core/layout/rnd/ffi, no warnings.
+- **`cargo test`** → **56 tests green** across core/layout/rnd/ffi, no warnings.
 - **`OVERLAY_HOME=/home/gjklassen/code/overlay cargo run -p pure-desktop`** →
   a real GTK4 reader window, now with the core's study surface wired in:
   - **Multi-pane**: 1–3 reading columns side by side, each with its own book /
@@ -43,7 +43,10 @@ the architecture and the locked decisions; see
     lists its verses/concepts; a verse's tags also show in its word study.
   - **Authoring**: a word study offers **＋ tag verse** and **＋ add to thread**
     (a modal name prompt → create-or-append → atomic write → reload), and **✕**
-    untags a verse; writes go through the cross-platform `core::store` layer.
+    untags a verse. **Weave authoring**: single-click a word in each of two panes
+    to pin endpoints (blue band), then **＋ link** in the header weaves them into
+    a named weave — the new connector line appears at once. All writes go through
+    the cross-platform `core::store` layer.
   - Verified visually against the real **31,102-verse** corpus. A cosmetic
     `radv … Vulkan` warning prints on start (GTK renderer fallback; ignore).
 - **`pure-ffi` is now the real C ABI** both native shells will consume — not a
@@ -106,11 +109,11 @@ windows x86_64-gnu + aarch64-gnullvm); **mingw-w64** is present. So:
    **hover glosses** / **canon strip** all done): remaining — a weave compare card
    + approve/reject; threads + tags (need a `core::thread` port first); a stabler
    verse-scroll than the 50 ms nudge.
-4. **Study-data authoring**: threads + tags now create/append/untag with atomic
-   cross-platform writes (`core::store`). Remaining — tag a Strong's *concept*
-   (not just a verse) + notes on entries; **weave authoring** (+link between
-   selected spans, approve/reject); then expose threads/tags/weave writes through
-   the ABI so the Windows/Android shells can author too.
+4. **Study-data authoring**: threads, tags, and weaves now create/append/remove
+   with atomic cross-platform writes (`core::store`). Remaining — word-span
+   selection for links (currently whole-verse); tag a Strong's *concept*; entry
+   notes; weave approve/reject; then expose these writes through the ABI so the
+   Windows/Android shells can author too (the ABI is read-only today).
 5. **R&D layer** (`pure-rnd`): concept engine, embeddings, morphology — behind
    cargo features, surfaced only in "Full study" mode (decision #4).
 6. **Data delivery**: bundle KJV + Strong's in-app (the ABI's

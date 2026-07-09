@@ -32,7 +32,7 @@ use pure_core::strongs::{self, OccurrenceIx, StrongsDict};
 use pure_core::reference::{CANON_SEGMENTS, OT_NT_DIVIDE};
 use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread};
-use pure_core::weave::{self, LoadedWeave};
+use pure_core::weave::{self, Link, LoadedWeave, WeaveKind};
 use pure_core::{canon, corpus, notes, VRef};
 use pure_layout::{layout_chapter, DisplayList, Hit, ItemKind, LayoutConfig, Measure};
 
@@ -57,6 +57,8 @@ struct State {
     notes: Notes,
     /// Verse → its weave cross-reference partners (deduped), precomputed once.
     xrefs: HashMap<VRef, Vec<Xref>>,
+    /// The loaded weaves, kept so link authoring can find-or-create by name.
+    weaves: Vec<LoadedWeave>,
     /// Every weave link as a canonical, deduped verse pair — for the ambient
     /// connector lines drawn between panes.
     links: Vec<(VRef, VRef)>,
@@ -83,6 +85,8 @@ struct Pane {
     last_h: i32,
     scroll_to: Option<u16>,
     highlight: Option<u16>,
+    /// A verse pinned as a link endpoint (for authoring weave links).
+    pin: Option<u16>,
 }
 
 impl Pane {
@@ -95,6 +99,7 @@ impl Pane {
             last_h: 0,
             scroll_to: None,
             highlight: None,
+            pin: None,
         }
     }
 }
@@ -184,6 +189,8 @@ struct Ui {
     link_layer: gtk::DrawingArea,
     /// The canon-overview strip under the panes (book map + per-pane pins).
     canon_map: gtk::DrawingArea,
+    /// Header "＋ link" button — sensitive once ≥2 panes have a pinned endpoint.
+    link_btn: gtk::Button,
     /// Per-pane widgets, kept parallel to `State::panes`.
     pane_uis: Rc<RefCell<Vec<PaneUi>>>,
     /// Guards programmatic widget updates from re-entering their handlers.
@@ -256,6 +263,7 @@ fn load_state() -> Result<State, String> {
         occ_ix,
         notes,
         xrefs,
+        weaves,
         links,
         threads,
         tags,
@@ -290,8 +298,13 @@ fn build_ui(app: &adw::Application) {
     threads_btn.add_css_class("flat");
     let tags_btn = gtk::Button::with_label("Tags");
     tags_btn.add_css_class("flat");
+    let link_btn = gtk::Button::with_label("＋ link");
+    link_btn.add_css_class("flat");
+    link_btn.set_tooltip_text(Some("Weave the two pinned verses (single-click a word in each pane to pin)"));
+    link_btn.set_sensitive(false);
     header.pack_start(&threads_btn);
     header.pack_start(&tags_btn);
+    header.pack_start(&link_btn);
 
     // ── study side panel ─────────────────────────────────────────────────────
     let study = gtk::Label::new(Some(
@@ -350,9 +363,16 @@ fn build_ui(app: &adw::Application) {
         pane_row,
         link_layer: link_layer.clone(),
         canon_map: canon_map.clone(),
+        link_btn: link_btn.clone(),
         pane_uis: Rc::new(RefCell::new(Vec::new())),
         guard: Rc::new(Cell::new(false)),
     };
+
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        link_btn.connect_clicked(move |_| make_link(&state, &ui));
+    }
 
     // ── connector lines: draw weave links whose endpoints are both on screen ────
     {
@@ -469,6 +489,7 @@ fn rebuild_panes(state: &Shared, ui: &Ui) {
     }
     update_active_style(state, ui);
     update_title(state, ui);
+    update_link_button(state, ui);
     ui.canon_map.queue_draw();
     let active = state.borrow().active;
     if let Some(pu) = ui.pane_uis.borrow().get(active) {
@@ -581,9 +602,8 @@ fn build_pane(state: &Shared, ui: &Ui, i: usize, n: usize) -> (gtk::Box, PaneUi)
         click.connect_pressed(move |_g, n_press, x, y| {
             set_active(&state, &ui, i);
             area2.grab_focus();
-            if n_press != 2 {
-                return;
-            }
+            // The reader paints everything offset down by MARGIN, so undo that on
+            // the y before hit-testing the display list.
             let hit = {
                 let st = state.borrow();
                 st.panes.get(i).and_then(|p| {
@@ -591,9 +611,14 @@ fn build_pane(state: &Shared, ui: &Ui, i: usize, n: usize) -> (gtk::Box, PaneUi)
                         .and_then(|dl| dl.hit_test(x as f32 - p.margin_x, y as f32 - MARGIN))
                 })
             };
-            if let Some(hit) = hit {
+            let Some(hit) = hit else { return };
+            if n_press == 2 {
+                // Double-click → Strong's study.
                 let markup = word_study_markup(&state.borrow(), &hit);
                 show_study(&ui, &markup);
+            } else {
+                // Single-click → pin this verse as a weave-link endpoint.
+                set_pin(&state, &ui, i, hit.verse.verse);
             }
         });
         area.add_controller(click);
@@ -865,6 +890,95 @@ fn zoom(state: &Shared, ui: &Ui, dir: f64) {
     ui.link_layer.queue_draw();
 }
 
+/// Pin verse `verse` in pane `i` as a weave-link endpoint; refresh its band and
+/// the link button.
+fn set_pin(state: &Shared, ui: &Ui, i: usize, verse: u16) {
+    {
+        let mut st = state.borrow_mut();
+        if let Some(p) = st.panes.get_mut(i) {
+            p.pin = Some(verse);
+        }
+    }
+    if let Some(pu) = ui.pane_uis.borrow().get(i) {
+        pu.area.queue_draw();
+    }
+    update_link_button(state, ui);
+}
+
+/// The "＋ link" button is usable once at least two panes have a pinned verse.
+fn update_link_button(state: &Shared, ui: &Ui) {
+    let count = state.borrow().panes.iter().filter(|p| p.pin.is_some()).count();
+    ui.link_btn.set_sensitive(count >= 2);
+}
+
+/// Clear every pane's pin.
+fn clear_pins(state: &Shared) {
+    let mut st = state.borrow_mut();
+    for p in &mut st.panes {
+        p.pin = None;
+    }
+}
+
+/// Repaint all panes plus the connector overlay and the canon strip.
+fn redraw_all(ui: &Ui) {
+    for pu in ui.pane_uis.borrow().iter() {
+        pu.area.queue_draw();
+    }
+    ui.link_layer.queue_draw();
+    ui.canon_map.queue_draw();
+}
+
+/// Re-read weaves from disk and rebuild the cross-reference index + connector
+/// pairs (after authoring a link).
+fn reload_weaves(state: &Shared) {
+    let home = state.borrow().home.clone();
+    let (weaves, _) = weave::load_weaves(&home);
+    let xrefs = build_xrefs(&weaves);
+    let links = build_links(&weaves);
+    let mut st = state.borrow_mut();
+    st.weaves = weaves;
+    st.xrefs = xrefs;
+    st.links = links;
+}
+
+/// Author a weave link between the first two pinned verses: prompt for a weave
+/// name, create-or-append the link, reload, and redraw the connectors.
+fn make_link(state: &Shared, ui: &Ui) {
+    let ends: Vec<VRef> = {
+        let st = state.borrow();
+        st.panes.iter().filter_map(|p| p.pin.map(|v| VRef::new(&p.book, p.chapter, v))).collect()
+    };
+    if ends.len() < 2 {
+        return;
+    }
+    let (a, b) = (ends[0].clone(), ends[1].clone());
+    let (state, ui) = (state.clone(), ui.clone());
+    let title = format!("Weave {} ↔ {}", a.display(), b.display());
+    prompt_name(window_of(&ui), &title, "weave name (new or existing)", move |name| {
+        let res = {
+            let st = state.borrow();
+            weave::add_link(
+                &st.home,
+                &st.weaves,
+                &name,
+                WeaveKind::Quotation,
+                canon::TOKENIZATION_VERSION,
+                &now_stamp(),
+                Link::canon(a.clone(), b.clone()),
+            )
+        };
+        match res {
+            Ok(_) => {
+                reload_weaves(&state);
+                clear_pins(&state);
+                redraw_all(&ui);
+                update_link_button(&state, &ui);
+            }
+            Err(e) => show_study(&ui, &format!("<i>Could not weave: {}</i>", esc(&e.to_string()))),
+        }
+    });
+}
+
 fn page_adj(vadj: &gtk::Adjustment, frac: f64) {
     let step = vadj.page_size() * frac;
     let v = (vadj.value() + step).clamp(vadj.lower(), vadj.upper() - vadj.page_size());
@@ -1109,6 +1223,7 @@ fn draw_pane(state: &Shared, i: usize, area: &gtk::DrawingArea, cr: &cairo::Cont
     let book = st.panes[i].book.clone();
     let chapter = st.panes[i].chapter;
     let highlight = st.panes[i].highlight;
+    let pin = st.panes[i].pin;
 
     // One Pango layout, reused to measure then paint; three font variants.
     let layout = pangocairo::functions::create_layout(cr);
@@ -1152,16 +1267,17 @@ fn draw_pane(state: &Shared, i: usize, area: &gtk::DrawingArea, cr: &cairo::Cont
         .filter(|&n| st.xrefs.contains_key(&VRef::new(&book, chapter, n)))
         .collect();
 
-    // A soft band behind the target verse (from a search hit / cross-ref jump).
-    if let Some(hv) = highlight {
+    // Soft band behind a verse: gold for a search/cross-ref target, blue for a
+    // pinned weave-link endpoint.
+    let band = |cr: &cairo::Context, verse: u16, r: f64, g: f64, b: f64, a: f64| {
         let ys: Vec<f32> = dl
             .items
             .iter()
-            .filter(|it| item_verse_num(it) == Some(hv))
+            .filter(|it| item_verse_num(it) == Some(verse))
             .map(|it| it.y)
             .collect();
         if let (Some(&y0), Some(&y1)) = (ys.iter().next(), ys.iter().last()) {
-            cr.set_source_rgba(0.62, 0.49, 0.22, 0.12);
+            cr.set_source_rgba(r, g, b, a);
             let _ = cr.rectangle(
                 margin_x as f64 - 6.0,
                 top as f64 + y0 as f64,
@@ -1170,6 +1286,12 @@ fn draw_pane(state: &Shared, i: usize, area: &gtk::DrawingArea, cr: &cairo::Cont
             );
             let _ = cr.fill();
         }
+    };
+    if let Some(hv) = highlight {
+        band(cr, hv, 0.62, 0.49, 0.22, 0.12);
+    }
+    if let Some(pv) = pin {
+        band(cr, pv, 0.25, 0.45, 0.75, 0.16);
     }
 
     for item in &dl.items {
