@@ -29,4 +29,4 @@ pure-layout = { workspace = true }
 # The desktop is the full study shell; it compiles the pure, ML-free R&D
 # capabilities (the OT↔NT etymology bridge) and surfaces them only in Full
 # study mode (decision #4).
-pure-rnd = { workspace = true, features = ["bridge", "embeddings"] }
+pure-rnd = { workspace = true, features = ["bridge", "embeddings", "morphology"] }

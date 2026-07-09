@@ -21,6 +21,11 @@ pub mod bridge;
 #[cfg(feature = "embeddings")]
 pub mod embed;
 
+/// Morphology: OSHM/Robinson parsing-code parsers + renderer + sidecar loader
+/// over the offline-projected `morphology.jsonl`. With the `morphology` feature.
+#[cfg(feature = "morphology")]
+pub mod morph;
+
 /// Which R&D capabilities this build was compiled with. The UI queries this to
 /// decide which panels/toggles to even show (decision #4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

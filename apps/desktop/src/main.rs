@@ -35,7 +35,7 @@ use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread};
 use pure_core::weave::{self, Link, LoadedWeave, Span, WeaveKind};
 use pure_core::{canon, corpus, crossref, home, notes, VRef};
-use pure_rnd::{bridge, embed};
+use pure_rnd::{bridge, embed, morph};
 use pure_layout::{layout_chapter, DisplayList, Hit, ItemKind, LayoutConfig, Measure};
 
 const APP_ID: &str = "ca.cavallo.purestudy";
@@ -74,6 +74,8 @@ struct State {
     /// Concept embeddings (offline-trained), when the artifact is present — for
     /// "concepts near this" and the cross-testament semantic bridge.
     embedding: Option<embed::Embedding>,
+    /// Morphology sidecar (offline-projected), when present — per-token parse.
+    morph: Option<morph::MorphData>,
     /// The data home, kept so authoring can write + reload study data.
     home: String,
     /// Font family to render the scripture in ("EB Garamond" or a fallback).
@@ -295,6 +297,8 @@ fn load_state(cfg: &Config) -> Result<State, String> {
     let bridge = bridge::Bridge::from_etymology(&strongs);
     // Concept embeddings — optional offline artifact; absent → symbolic only.
     let embedding = embed::load_embedding(canon::TOKENIZATION_VERSION, data.join("concept-vectors.vec"));
+    // Morphology sidecar — optional; stale stamp / missing → None.
+    let morph = morph::load_morph(canon::TOKENIZATION_VERSION, data.join("morphology.jsonl"));
     let search_ix = SearchIx::build(&corpus);
     let occ_ix = OccurrenceIx::build(&corpus);
     let family = register_bundled_fonts();
@@ -312,6 +316,7 @@ fn load_state(cfg: &Config) -> Result<State, String> {
         xref_ix,
         bridge,
         embedding,
+        morph,
         home,
         family,
         font_size: cfg.body_size,
@@ -1941,10 +1946,19 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
         .unwrap_or_default();
 
     let mut s = format!(
-        "<b>{}</b>\n<span size=\"xx-large\">{}</span>\n\n",
+        "<b>{}</b>\n<span size=\"xx-large\">{}</span>\n",
         esc(&hit.verse.display()),
         esc(&word)
     );
+
+    // Morphology of this exact token (Full study, when the sidecar annotates
+    // it): the original-language parse behind the English word.
+    if st.mode.is_full() {
+        if let Some(g) = st.morph.as_ref().and_then(|m| m.gloss(&hit.verse, hit.token_index)) {
+            s.push_str(&format!("<small><span foreground=\"#6a5a2a\">{}</span></small>\n", esc(&g)));
+        }
+    }
+    s.push('\n');
 
     if hit.strongs.is_empty() {
         s.push_str("<i>no Strong’s tag on this word</i>\n");
