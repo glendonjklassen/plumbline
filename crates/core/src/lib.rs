@@ -17,6 +17,8 @@ pub mod notes;
 pub mod reference;
 pub mod search;
 pub mod strongs;
+pub mod tag;
+pub mod thread;
 pub mod weave;
 
 pub use corpus::{Corpus, Token, Verse};

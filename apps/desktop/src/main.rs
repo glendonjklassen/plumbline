@@ -30,6 +30,8 @@ use pure_core::corpus::{Corpus, FLAG_ADDED, FLAG_DIVINE, FLAG_TITLE};
 use pure_core::search::{self, Notes, SearchAnswer, SearchIx};
 use pure_core::strongs::{self, OccurrenceIx, StrongsDict};
 use pure_core::reference::{CANON_SEGMENTS, OT_NT_DIVIDE};
+use pure_core::tag::{self, LoadedTag, TagTarget};
+use pure_core::thread::{self, LoadedThread};
 use pure_core::weave::{self, LoadedWeave};
 use pure_core::{canon, corpus, notes, VRef};
 use pure_layout::{layout_chapter, DisplayList, Hit, ItemKind, LayoutConfig, Measure};
@@ -58,6 +60,9 @@ struct State {
     /// Every weave link as a canonical, deduped verse pair — for the ambient
     /// connector lines drawn between panes.
     links: Vec<(VRef, VRef)>,
+    /// Personal study data: threads (ordered passage trails) and tags.
+    threads: Vec<LoadedThread>,
+    tags: Vec<LoadedTag>,
     /// Font family to render the scripture in ("EB Garamond" or a fallback).
     family: String,
     font_size: f64,
@@ -237,6 +242,8 @@ fn load_state() -> Result<State, String> {
     let (weaves, _weave_errs) = weave::load_weaves(&home);
     let xrefs = build_xrefs(&weaves);
     let links = build_links(&weaves);
+    let (threads, _thread_errs) = thread::load_threads(&home);
+    let (tags, _tag_errs) = tag::load_tags(&home);
     let search_ix = SearchIx::build(&corpus);
     let occ_ix = OccurrenceIx::build(&corpus);
     let family = register_bundled_fonts();
@@ -248,6 +255,8 @@ fn load_state() -> Result<State, String> {
         notes,
         xrefs,
         links,
+        threads,
+        tags,
         family,
         font_size: 21.0,
         panes: vec![Pane::new("John", 3)],
@@ -273,6 +282,13 @@ fn build_ui(app: &adw::Application) {
     search.set_placeholder_text(Some("search — word, phrase, or reference"));
     search.set_width_chars(28);
     header.pack_end(&search);
+
+    let threads_btn = gtk::Button::with_label("Threads");
+    threads_btn.add_css_class("flat");
+    let tags_btn = gtk::Button::with_label("Tags");
+    tags_btn.add_css_class("flat");
+    header.pack_start(&threads_btn);
+    header.pack_start(&tags_btn);
 
     // ── study side panel ─────────────────────────────────────────────────────
     let study = gtk::Label::new(Some(
@@ -373,6 +389,24 @@ fn build_ui(app: &adw::Application) {
         study.connect_activate_link(move |_label, uri| {
             handle_link(&state, &ui, uri);
             glib::Propagation::Stop
+        });
+    }
+
+    // ── Threads / Tags browse buttons ───────────────────────────────────────────
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        threads_btn.connect_clicked(move |_| {
+            let m = threads_list_markup(&state.borrow());
+            show_study(&ui, &m);
+        });
+    }
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        tags_btn.connect_clicked(move |_| {
+            let m = tags_list_markup(&state.borrow());
+            show_study(&ui, &m);
         });
     }
 
@@ -852,6 +886,16 @@ fn handle_link(state: &Shared, ui: &Ui, uri: &str) {
     } else if let Some(code) = uri.strip_prefix("occ:") {
         let markup = concordance_markup(&state.borrow(), code);
         show_study(ui, &markup);
+    } else if let Some(idx) = uri.strip_prefix("thread:") {
+        if let Ok(i) = idx.parse::<usize>() {
+            let markup = thread_markup(&state.borrow(), i);
+            show_study(ui, &markup);
+        }
+    } else if let Some(idx) = uri.strip_prefix("tag:") {
+        if let Ok(i) = idx.parse::<usize>() {
+            let markup = tag_markup(&state.borrow(), i);
+            show_study(ui, &markup);
+        }
     }
 }
 
@@ -1196,12 +1240,112 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
         }
     }
 
+    // Tags that include this verse, if any.
+    let vt = TagTarget::Verse(hit.verse.clone());
+    let tagged: Vec<(usize, &LoadedTag)> =
+        st.tags.iter().enumerate().filter(|(_, lt)| lt.tag.member_of(&vt)).collect();
+    if !tagged.is_empty() {
+        s.push_str("\n<b>tags</b>\n");
+        for (i, lt) in tagged {
+            s.push_str(&format!("<a href=\"tag:{}\">{}</a>\n", i, esc(&lt.tag.name)));
+        }
+    }
+
     // The 1769 translators' margin notes on this verse, if any.
     if let Some(ns) = st.notes.get(&hit.verse) {
         s.push_str("\n<b>margin notes</b>\n");
         for n in ns {
             s.push_str(&format!("<small>{}</small>\n", esc(n)));
         }
+    }
+    s
+}
+
+/// The list of threads, each a link that opens its passages.
+fn threads_list_markup(st: &State) -> String {
+    if st.threads.is_empty() {
+        return "<b>Threads</b>\n\n<i>None yet — a thread is an ordered trail of \
+                passages you gather (authoring is coming).</i>"
+            .to_string();
+    }
+    let mut s = format!("<b>Threads ({})</b>\n\n", st.threads.len());
+    for (i, lt) in st.threads.iter().enumerate() {
+        let n = lt.thread.entries.len();
+        s.push_str(&format!(
+            "<a href=\"thread:{}\">{}</a>  <small>{} passage{}</small>\n",
+            i,
+            esc(&lt.thread.name),
+            n,
+            if n == 1 { "" } else { "s" }
+        ));
+    }
+    s
+}
+
+/// One thread: its passages as jump links with a snapshot preview + note.
+fn thread_markup(st: &State, i: usize) -> String {
+    let Some(lt) = st.threads.get(i) else {
+        return String::new();
+    };
+    let t = &lt.thread;
+    let mut s = format!("<b>{}</b>\n", esc(&t.name));
+    if !t.notes.is_empty() {
+        s.push_str(&format!("<small>{}</small>\n", esc(&t.notes)));
+    }
+    s.push_str(&format!("<small>{} passages</small>\n\n", t.entries.len()));
+    for e in &t.entries {
+        s.push_str(&go_link(&e.vref));
+        let snippet = e.text.join(" ");
+        let short: String = snippet.chars().take(70).collect();
+        let ell = if snippet.chars().count() > 70 { "…" } else { "" };
+        s.push_str(&format!("\n<small>{}{}</small>\n", esc(&short), ell));
+        if let Some(n) = &e.note {
+            s.push_str(&format!("<small><span foreground=\"#888\">— {}</span></small>\n", esc(n)));
+        }
+        s.push('\n');
+    }
+    s
+}
+
+/// The list of tags, each a link that opens its members.
+fn tags_list_markup(st: &State) -> String {
+    if st.tags.is_empty() {
+        return "<b>Tags</b>\n\n<i>None yet — a tag groups verses and Strong's \
+                concepts under a label (authoring is coming).</i>"
+            .to_string();
+    }
+    let mut s = format!("<b>Tags ({})</b>\n\n", st.tags.len());
+    for (i, lt) in st.tags.iter().enumerate() {
+        let n = lt.tag.members.len();
+        s.push_str(&format!(
+            "<a href=\"tag:{}\">{}</a>  <small>{} member{}</small>\n",
+            i,
+            esc(&lt.tag.name),
+            n,
+            if n == 1 { "" } else { "s" }
+        ));
+    }
+    s
+}
+
+/// One tag: its members — verses as jump links, concepts as concordance links.
+fn tag_markup(st: &State, i: usize) -> String {
+    let Some(lt) = st.tags.get(i) else {
+        return String::new();
+    };
+    let t = &lt.tag;
+    let mut s = format!("<b>{}</b>\n<small>{} members</small>\n\n", esc(&t.name), t.members.len());
+    for m in &t.members {
+        match &m.target {
+            TagTarget::Verse(v) => s.push_str(&go_link(v)),
+            TagTarget::Concept(c) => {
+                s.push_str(&format!("<a href=\"occ:{}\">{}</a>", esc(c), esc(c)))
+            }
+        }
+        if let Some(n) = &m.note {
+            s.push_str(&format!("  <small><span foreground=\"#888\">{}</span></small>", esc(n)));
+        }
+        s.push('\n');
     }
     s
 }

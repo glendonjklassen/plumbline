@@ -6,7 +6,7 @@ the architecture and the locked decisions; see
 
 ## Working right now
 
-- **`cargo test`** → **44 tests green** across core/layout/rnd/ffi, no warnings.
+- **`cargo test`** → **51 tests green** across core/layout/rnd/ffi, no warnings.
 - **`OVERLAY_HOME=/home/gjklassen/code/overlay cargo run -p pure-desktop`** →
   a real GTK4 reader window, now with the core's study surface wired in:
   - **Multi-pane**: 1–3 reading columns side by side, each with its own book /
@@ -38,6 +38,10 @@ the architecture and the locked decisions; see
     short definition); the **canon-overview strip** under the panes maps the 66
     books in 8 sections with the OT/NT divide and a pin per pane — click to jump
     the active pane anywhere.
+  - **Threads** + **Tags** header buttons browse personal study collections:
+    a thread lists its passages (snapshot preview + note) as jump links; a tag
+    lists its verses/concepts; a verse's tags also show in its word study. (Read
+    side — authoring is the next step.)
   - Verified visually against the real **31,102-verse** corpus. A cosmetic
     `radv … Vulkan` warning prints on start (GTK renderer fallback; ignore).
 - **`pure-ffi` is now the real C ABI** both native shells will consume — not a
@@ -61,7 +65,7 @@ the architecture and the locked decisions; see
 
 | crate | contents | tests |
 |-------|----------|-------|
-| `crates/core` | canon (66 books, frozen tok stamp), `VRef`/`refKey`, corpus (JSONL loader + canonical-order validation + chapter index), Strong's (+ occurrence index, proper-noun heuristic), search (4-tier: exact/variant/lemma/typo, + phrase, + reference, + bare-Strong's), weave graph (canonical links, BFS components, union-merge, v2 JSON), **notes loader** (`kjv-notes.jsonl`) | 30 |
+| `crates/core` | canon (66 books, frozen tok stamp), `VRef`/`refKey`, corpus (JSONL loader + canonical-order validation + chapter index), Strong's (+ occurrence index, proper-noun heuristic), search (4-tier: exact/variant/lemma/typo, + phrase, + reference, + bare-Strong's), weave graph (canonical links, BFS components, union-merge, v2 JSON), notes loader (`kjv-notes.jsonl`), **threads** + **tags** (read side + membership queries) | 37 |
 | `crates/layout` | reader layout + per-word hit-testing as a platform-agnostic algorithm over an injected `Measure` (GTK shell backs it with cairo) | 3 |
 | `crates/rnd` | feature-gated R&D capability flags — **off by default** | 1 |
 | `crates/ffi` | **the C ABI** (opaque engine/display-list handles, callback-measured layout, JSON payloads) + generated C/C# bindings + a Kotlin/JNA wrapper | 10 |
@@ -100,9 +104,10 @@ windows x86_64-gnu + aarch64-gnullvm); **mingw-w64** is present. So:
    **hover glosses** / **canon strip** all done): remaining — a weave compare card
    + approve/reject; threads + tags (need a `core::thread` port first); a stabler
    verse-scroll than the 50 ms nudge.
-4. **Port remaining core**: threads, the notes loader (`kjv-notes.jsonl` — the
-   FFI already threads an empty `Notes` through search, ready to fill), weave
-   rendering across panes. Then expose threads/weave/notes through the ABI.
+4. **Study-data authoring**: threads + tags now load and display (read side);
+   next is creating/editing them — add-to-thread, tag/untag a verse or concept,
+   atomic JSON writes (a `core::store` layer) — plus weave authoring (+link,
+   approve/reject). Then expose threads/tags/weave through the ABI.
 5. **R&D layer** (`pure-rnd`): concept engine, embeddings, morphology — behind
    cargo features, surfaced only in "Full study" mode (decision #4).
 6. **Data delivery**: bundle KJV + Strong's in-app (the ABI's
