@@ -18,8 +18,12 @@ thiserror = { workspace = true }
 # of them. `full` turns everything on. The UI reads which are enabled and hides
 # the rest (decision #4: off + guided first-run).
 default = []
+# The OT↔NT etymology bridge: pure, derived from data already in the repo
+# (Strong's own derivation strings) — no ML, no external packs. It is the
+# primitive the concept engine follows across the testaments.
+bridge = []
 embeddings = []
 morphology = []
 keyness = []
 trust = []
-full = ["embeddings", "morphology", "keyness", "trust"]
+full = ["bridge", "embeddings", "morphology", "keyness", "trust"]

@@ -6,7 +6,8 @@ the architecture and the locked decisions; see
 
 ## Working right now
 
-- **`cargo test`** → **60 tests green** across core/layout/rnd/ffi, no warnings.
+- **`cargo test`** → **70 tests green** across core/layout/rnd/ffi (72 with
+  `-p pure-rnd --features bridge`), no warnings.
 - **`OVERLAY_HOME=/home/gjklassen/code/overlay cargo run -p pure-desktop`** →
   a real GTK4 reader window, now with the core's study surface wired in:
   - **Multi-pane**: 1–3 reading columns side by side, each with its own book /
@@ -52,6 +53,20 @@ the architecture and the locked decisions; see
     to pin endpoints (blue band), then **＋ link** in the header weaves them into
     a named weave — the new connector line appears at once. All writes go through
     the cross-platform `core::store` layer.
+  - **Guided first run + study mode** (decision #4): the first launch asks
+    **Simple reader** vs **Full study**; Simple hides the whole study/authoring
+    surface for a clean reader, Full unlocks it. A toolbar toggle switches
+    anytime; the choice + live zoom size persist in a cross-platform config
+    (`core::config`; XDG / `%APPDATA%` / macOS App Support).
+  - **Runs without `OVERLAY_HOME`**: `core::home` resolves the data dir (env →
+    CWD-if-a-tree → next to the exe → per-user data dir) and the app logs which.
+  - **Full-study extras** (Simple hides them): **word-span** weave links (pin a
+    word, widen the span; the link records spanA/spanB), a **weave compare card**
+    (linked passages side by side, span words bold), **entry-note** editing
+    (thread notes, per-entry notes, weave notes), the **TSK topical
+    cross-reference** tier (`core::crossref`; ~344k refs, vote-ranked, shown
+    labelled), and the **OT↔NT etymology bridge** (`rnd::bridge`, feature-gated;
+    Strong's-derived, no ML) surfacing cross-testament Strong's partners.
   - Verified visually against the real **31,102-verse** corpus. A cosmetic
     `radv … Vulkan` warning prints on start (GTK renderer fallback; ignore).
 - **`pure-ffi` is now the real C ABI** both native shells will consume — not a
@@ -81,10 +96,10 @@ the architecture and the locked decisions; see
 
 | crate | contents | tests |
 |-------|----------|-------|
-| `crates/core` | canon (66 books, frozen tok stamp), `VRef`/`refKey`, corpus (JSONL loader + canonical-order validation + chapter index), Strong's (+ occurrence index, proper-noun heuristic), search (4-tier: exact/variant/lemma/typo, + phrase, + reference, + bare-Strong's), weave graph (canonical links, BFS components, union-merge, v2 JSON, **suggested-weave approve/reject**), notes loader (`kjv-notes.jsonl`), **threads** + **tags** (load, membership, **authoring**: add/remove + slugged file paths), **`store`** (cross-platform atomic write: temp-sibling → fsync → rename) | 41 |
+| `crates/core` | canon (66 books, frozen tok stamp), `VRef`/`refKey`, corpus (JSONL loader + canonical-order validation + chapter index), Strong's (+ occurrence index, proper-noun heuristic), search (4-tier: exact/variant/lemma/typo, + phrase, + reference, + bare-Strong's), weave graph (canonical links, BFS components, union-merge, v2 JSON, **suggested-weave approve/reject**, notes editing), notes loader (`kjv-notes.jsonl`), **threads** + **tags** (load, membership, **authoring**: add/remove/edit notes + slugged file paths), **`crossref`** (TSK topical tier parser/index), **`config`** (study mode + body size, cross-platform), **`home`** (data-dir resolution), **`store`** (cross-platform atomic write: temp-sibling → fsync → rename) | 54 |
 | `crates/layout` | reader layout + per-word hit-testing as a platform-agnostic algorithm over an injected `Measure` (GTK shell backs it with cairo) | 3 |
-| `crates/rnd` | feature-gated R&D capability flags — **off by default** | 1 |
-| `crates/ffi` | **the C ABI** (opaque engine/display-list handles, callback-measured layout, JSON payloads, **study-data read + authoring writes** incl. suggested-weave approve/reject) + generated C/C# bindings + a Kotlin/JNA wrapper | 12 |
+| `crates/rnd` | feature-gated R&D capabilities — **off by default**. `bridge`: the pure OT↔NT etymology bridge (Strong's-derived, no ML). Embeddings / morphology / keyness / trust await the ML data-pack pipeline. | 1 (+2 w/ `bridge`) |
+| `crates/ffi` | **the C ABI** (opaque engine/display-list handles, callback-measured layout, JSON payloads, **study-data read + authoring writes** incl. suggested-weave approve/reject + notes editing) + generated C/C# bindings + a Kotlin/JNA wrapper | 12 |
 | `apps/desktop` | GTK4 + libadwaita shell (gtk4 0.11 / libadwaita 0.9) | — |
 
 Dropped by decision: signed **patches** and **rules** (not ported).
@@ -115,25 +130,33 @@ windows x86_64-gnu + aarch64-gnullvm); **mingw-w64** is present. So:
      Windows (VM/CI) against the generated P/Invoke shim + the wrapper in
      [`bindings/csharp`](crates/ffi/bindings/csharp). Both are already written
      and the demo runs against the Linux `.so` today as a proof.
-3. **Reader** (search / concordance / notes / cross-references / zoom / keyboard /
-   **Pango + EB Garamond** / **multi-pane** / **ambient weave connectors** /
-   **hover glosses** / **canon strip** / **suggested-weave approve/reject** all
-   done): remaining — a richer weave compare card (side-by-side text diff); a
-   stabler verse-scroll than the 50 ms nudge.
-4. **Study-data authoring**: threads, tags, and weaves create/append/remove with
-   atomic cross-platform writes (`core::store`), **in both the GTK app and the C
-   ABI** (so Windows/Android shells can author), plus **suggested-weave
-   approve/reject** (promote/discard proposals) in both. Remaining — word-span
-   selection for links (currently whole-verse); entry notes; a guided first-run
-   + data bundling (decisions #3/#4).
-5. **R&D layer** (`pure-rnd`): concept engine, embeddings, morphology — behind
-   cargo features, surfaced only in "Full study" mode (decision #4).
-6. **Data delivery**: bundle KJV + Strong's in-app (the ABI's
-   `pure_engine_open_from_bytes` already supports loading from asset bytes);
-   optional R&D "packs" download; guided first-run flow.
-7. Move the offline Python/SWORD pipeline into `data-prep/`.
-8. **CI**: add a step that regenerates the bindings and fails on a diff (catches
-   doc-vs-wire drift, the class the ABI review flagged).
+3. **~~Reader~~ — at parity for Linux.** Search, concordance, notes,
+   cross-references, zoom, keyboard, Pango + EB Garamond, multi-pane, ambient
+   weave connectors, hover glosses, canon strip, suggested-weave approve/reject,
+   the weave compare card, and a stabler layout-driven verse-scroll are all done.
+4. **~~Study-data authoring~~ — DONE (both GTK + C ABI).** Threads, tags, and
+   weaves create/append/remove/edit-notes with atomic cross-platform writes,
+   suggested-weave approve/reject, and **word-span** link selection (spanA/spanB).
+   The guided first-run + Simple/Full mode landed too (decision #4).
+5. **R&D layer** (`pure-rnd`): the pure **etymology bridge** is ported (feature
+   `bridge`, no ML) and surfaced in Full mode; the **TSK cross-reference** tier
+   lives in `core::crossref`. Still pending (all need the ML data-pack pipeline):
+   the concept engine, embeddings, morphology, keyness, the multi-source trust
+   model, and cross-testament quotation detection.
+6. **Data delivery**: `core::home` finds a hydrated tree without `OVERLAY_HOME`;
+   the ABI's `pure_engine_open_from_bytes` loads from asset bytes. Remaining —
+   actually shipping the corpus with the app (bundle/download) + the R&D packs.
+7. Move the offline Python/SWORD pipeline into `data-prep/` (feeds the R&D packs
+   and the TSK/quotation hydration).
+8. **~~CI~~ — DONE.** [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+   tests the portable crates (+ the `bridge` feature), regenerates the bindings
+   and fails on drift, and cross-builds the Windows `.dll`.
+9. **Native shell apps over the ABI** (gated on environment, not code):
+   - **Android (Compose):** needs the **NDK + cargo-ndk** to build the `.so`
+     into `jniLibs/`, then a Gradle/Compose app over the Kotlin/JNA wrapper.
+   - **Windows (WinUI):** the `.dll` cross-builds here; build the C# app on a
+     Windows host against the P/Invoke shim + wrapper (both already written; the
+     demo runs against the Linux `.so` today as a proof).
 
 ## Session note
 

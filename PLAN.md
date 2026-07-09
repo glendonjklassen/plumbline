@@ -86,7 +86,9 @@ when we port the pipeline).
 | `Refs.hs` (display names, canon segments) | `core::reference` | ✅ (segments) |
 | `ReaderView.hs` (custom layout widget) | `layout` | ✅ (algorithm + hit-test, unit-tested) |
 | — (new: the one C ABI over core+layout) | `ffi` | ✅ (opaque handles, callback layout, JSON; C/C#/Kotlin bindings) |
-| `Concept*`, `Embed`, `Morph`, `Witness`, `Bridge`, `Burst` | `rnd` (optional) | ⏳ later |
+| `CrossRef.hs` (TSK topical tier) | `core::crossref` | ✅ (pure parser; no ML) |
+| `Bridge.hs` (OT↔NT etymology) | `rnd::bridge` (feature) | ✅ (etymology layer; rendering/trust deferred) |
+| `Concept*`, `Embed`, `Morph`, `Witness`, `Burst`, `Quotation` | `rnd` (optional) | ⏳ later (need ML data packs) |
 | `Patch.hs`, `Rule.hs` | — | ❌ dropped by decision |
 | `UI/Panels/Events/Home/Startup` (Monomer) | `apps/desktop` (GTK), + WinUI/Compose over `ffi` | 🔨 |
 | `ml/*.py`, `pipelines/*.py` | `data-prep/` (kept as offline Python) | ⏳ later |

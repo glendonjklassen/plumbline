@@ -749,6 +749,7 @@ dependencies = [
  "pangocairo",
  "pure-core",
  "pure-layout",
+ "pure-rnd",
  "yeslogic-fontconfig-sys",
 ]
 

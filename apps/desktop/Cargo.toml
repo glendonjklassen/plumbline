@@ -26,3 +26,7 @@ pangocairo = "0.22"
 fontconfig-sys = { package = "yeslogic-fontconfig-sys", version = "6" }
 pure-core = { workspace = true }
 pure-layout = { workspace = true }
+# The desktop is the full study shell; it compiles the pure, ML-free R&D
+# capabilities (the OT↔NT etymology bridge) and surfaces them only in Full
+# study mode (decision #4).
+pure-rnd = { workspace = true, features = ["bridge"] }

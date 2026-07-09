@@ -14,6 +14,7 @@
 pub mod canon;
 pub mod config;
 pub mod corpus;
+pub mod crossref;
 pub mod home;
 pub mod notes;
 pub mod reference;

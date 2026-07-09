@@ -20,6 +20,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Test portable crates
         run: cargo test --locked -p pure-core -p pure-layout -p pure-rnd -p pure-ffi
+      - name: Test the R&D bridge feature
+        run: cargo test --locked -p pure-rnd --features bridge
 
   # Guard against the bindings drifting from the Rust source: regenerate the C
   # header and the C# P/Invoke shim, then fail if anything changed. This is the

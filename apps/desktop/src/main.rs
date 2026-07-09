@@ -34,7 +34,8 @@ use pure_core::reference::{CANON_SEGMENTS, OT_NT_DIVIDE};
 use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread};
 use pure_core::weave::{self, Link, LoadedWeave, Span, WeaveKind};
-use pure_core::{canon, corpus, home, notes, VRef};
+use pure_core::{canon, corpus, crossref, home, notes, VRef};
+use pure_rnd::bridge;
 use pure_layout::{layout_chapter, DisplayList, Hit, ItemKind, LayoutConfig, Measure};
 
 const APP_ID: &str = "ca.cavallo.purestudy";
@@ -66,6 +67,10 @@ struct State {
     /// Personal study data: threads (ordered passage trails) and tags.
     threads: Vec<LoadedThread>,
     tags: Vec<LoadedTag>,
+    /// TSK topical cross-references per verse (empty when the file is absent).
+    xref_ix: crossref::XRefIx,
+    /// The OT↔NT etymology bridge (Strong's-derived; a Full-study R&D tier).
+    bridge: bridge::Bridge,
     /// The data home, kept so authoring can write + reload study data.
     home: String,
     /// Font family to render the scripture in ("EB Garamond" or a fallback).
@@ -281,6 +286,10 @@ fn load_state(cfg: &Config) -> Result<State, String> {
     let links = build_links(&weaves);
     let (threads, _thread_errs) = thread::load_threads(&home);
     let (tags, _tag_errs) = tag::load_tags(&home);
+    // TSK cross-references (topical study tier) — optional, absent → empty.
+    let xref_ix = crossref::load_cross_refs(data.join("cross-references.tsv"));
+    // The OT↔NT etymology bridge — pure, built from the Strong's dictionary.
+    let bridge = bridge::Bridge::from_etymology(&strongs);
     let search_ix = SearchIx::build(&corpus);
     let occ_ix = OccurrenceIx::build(&corpus);
     let family = register_bundled_fonts();
@@ -295,6 +304,8 @@ fn load_state(cfg: &Config) -> Result<State, String> {
         links,
         threads,
         tags,
+        xref_ix,
+        bridge,
         home,
         family,
         font_size: cfg.body_size,
@@ -1962,6 +1973,22 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
             }
             None => s.push_str("<i>(not in the dictionary)</i>\n"),
         }
+        // Cross-testament links Strong himself recorded (Full study). Each
+        // partner opens its concordance, so a theme can be followed across the
+        // Hebrew/Greek boundary the numbering otherwise walls off.
+        if st.mode.is_full() {
+            let partners = st.bridge.partners(code);
+            if !partners.is_empty() {
+                s.push_str("<small><span foreground=\"#9e7d38\">↔ cross-testament: </span>");
+                for (k, p) in partners.iter().take(6).enumerate() {
+                    if k > 0 {
+                        s.push_str(", ");
+                    }
+                    s.push_str(&format!("<a href=\"occ:{p}\">{p}</a>", p = esc(p)));
+                }
+                s.push_str("</small>\n");
+            }
+        }
         s.push('\n');
     }
 
@@ -1990,6 +2017,25 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
         }
         if xs.len() > XREF_SHOWN {
             s.push_str(&format!("<small>… {} more</small>\n", xs.len() - XREF_SHOWN));
+        }
+    }
+
+    // TSK topical cross-references for this verse (Full study), best-voted
+    // first — a curated study tier, shown clearly labelled and never blessed
+    // into weaves.
+    if st.mode.is_full() {
+        if let Some(rs) = st.xref_ix.get(&hit.verse) {
+            s.push_str(&format!("\n<b>study cross-references ({})</b>  <small><span foreground=\"#888\">TSK</span></small>\n", rs.len()));
+            for r in rs.iter().take(XREF_SHOWN) {
+                let target = match &r.end {
+                    Some(e) => format!("{}–{}", go_link(&r.to), go_link(e)),
+                    None => go_link(&r.to),
+                };
+                s.push_str(&format!("{target}\n"));
+            }
+            if rs.len() > XREF_SHOWN {
+                s.push_str(&format!("<small>… {} more</small>\n", rs.len() - XREF_SHOWN));
+            }
         }
     }
 
