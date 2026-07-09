@@ -1015,6 +1015,100 @@ pub unsafe extern "C" fn pure_engine_weave_reject(engine: *mut PureEngine, index
     })
 }
 
+/// Replace the running notes document of the thread named `name`. Null on
+/// success, else an owned error. The thread must already exist.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_thread_set_notes(
+    engine: *mut PureEngine,
+    name: *const c_char,
+    notes: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        if engine.home.is_none() {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        }
+        let (Some(name), Some(notes)) = (opt_str(name), opt_str(notes)) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        match thread::set_thread_notes(&engine.threads, name, notes) {
+            Ok(_) => {
+                engine.reload_study();
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Set (or clear, with a null `note`) the note on entry `index` of the thread
+/// named `name`. Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_thread_entry_set_note(
+    engine: *mut PureEngine,
+    name: *const c_char,
+    index: u32,
+    note: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        if engine.home.is_none() {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        }
+        let Some(name) = opt_str(name) else {
+            return out_string("null or invalid name".to_string());
+        };
+        match thread::set_entry_note(&engine.threads, name, index as usize, opt_str(note).map(str::to_string)) {
+            Ok(_) => {
+                engine.reload_study();
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Replace the notes document of the weave named `name` (marks it hand-written).
+/// Null on success, else an owned error. The weave must already exist.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_weave_set_notes(
+    engine: *mut PureEngine,
+    name: *const c_char,
+    notes: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        if engine.home.is_none() {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        }
+        let (Some(name), Some(notes)) = (opt_str(name), opt_str(notes)) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        match weave::set_weave_notes(&engine.weaves, name, notes) {
+            Ok(_) => {
+                engine.reload_study();
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
 /// Parse a `(kind, value)` pair into a [`TagTarget`].
 ///
 /// # Safety

@@ -321,6 +321,30 @@ char *pure_engine_weave_approve(struct PureEngine *engine, uint32_t index);
 // `engine` is a valid engine pointer.
 char *pure_engine_weave_reject(struct PureEngine *engine, uint32_t index);
 
+// Replace the running notes document of the thread named `name`. Null on
+// success, else an owned error. The thread must already exist.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_thread_set_notes(struct PureEngine *engine, const char *name, const char *notes);
+
+// Set (or clear, with a null `note`) the note on entry `index` of the thread
+// named `name`. Null on success, else an owned error.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_thread_entry_set_note(struct PureEngine *engine,
+                                        const char *name,
+                                        uint32_t index,
+                                        const char *note);
+
+// Replace the notes document of the weave named `name` (marks it hand-written).
+// Null on success, else an owned error. The weave must already exist.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_weave_set_notes(struct PureEngine *engine, const char *name, const char *notes);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

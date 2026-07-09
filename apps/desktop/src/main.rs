@@ -1108,6 +1108,69 @@ fn prompt_name(parent: Option<gtk::Window>, title: &str, placeholder: &str, on_o
     entry.grab_focus();
 }
 
+/// Like [`prompt_name`] but pre-filled with `initial` and allowing an empty
+/// submission (so a note can be cleared). Used for editing free-text notes.
+fn prompt_text(
+    parent: Option<gtk::Window>,
+    title: &str,
+    placeholder: &str,
+    initial: &str,
+    on_ok: impl Fn(String) + 'static,
+) {
+    let win = gtk::Window::builder().title(title).modal(true).default_width(420).build();
+    if let Some(p) = &parent {
+        win.set_transient_for(Some(p));
+    }
+
+    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    vbox.set_margin_top(16);
+    vbox.set_margin_bottom(16);
+    vbox.set_margin_start(16);
+    vbox.set_margin_end(16);
+
+    let entry = gtk::Entry::new();
+    entry.set_placeholder_text(Some(placeholder));
+    entry.set_text(initial);
+
+    let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    buttons.set_halign(gtk::Align::End);
+    let cancel = gtk::Button::with_label("Cancel");
+    let ok = gtk::Button::with_label("Save");
+    ok.add_css_class("suggested-action");
+    buttons.append(&cancel);
+    buttons.append(&ok);
+
+    vbox.append(&entry);
+    vbox.append(&buttons);
+    win.set_child(Some(&vbox));
+
+    let on_ok = Rc::new(on_ok);
+    let submit = {
+        let win = win.clone();
+        let entry = entry.clone();
+        move || {
+            let text = entry.text().trim().to_string();
+            win.close();
+            on_ok(text); // empty is allowed — it clears the note
+        }
+    };
+    {
+        let submit = submit.clone();
+        ok.connect_clicked(move |_| submit());
+    }
+    {
+        let submit = submit.clone();
+        entry.connect_activate(move |_| submit());
+    }
+    {
+        let win = win.clone();
+        cancel.connect_clicked(move |_| win.close());
+    }
+
+    win.present();
+    entry.grab_focus();
+}
+
 /// Add `vref` (as a whole-verse target) to the tag named `name`, then show it.
 fn add_verse_to_tag(state: &Shared, ui: &Ui, vref: &VRef, name: &str) {
     let res = {
@@ -1254,6 +1317,82 @@ fn handle_link(state: &Shared, ui: &Ui, uri: &str) {
         if let Ok(i) = idx.parse::<usize>() {
             review_weave(state, ui, i, false);
         }
+    } else if let Some(idx) = uri.strip_prefix("editthreadnotes:") {
+        if let Ok(i) = idx.parse::<usize>() {
+            edit_thread_notes(state, ui, i);
+        }
+    } else if let Some(rest) = uri.strip_prefix("editentrynote:") {
+        if let Some((ti, ei)) = rest.split_once(':') {
+            if let (Ok(ti), Ok(ei)) = (ti.parse::<usize>(), ei.parse::<usize>()) {
+                edit_entry_note(state, ui, ti, ei);
+            }
+        }
+    } else if let Some(idx) = uri.strip_prefix("editweavenotes:") {
+        if let Ok(i) = idx.parse::<usize>() {
+            edit_weave_notes(state, ui, i);
+        }
+    }
+}
+
+/// Prompt for and save the running notes document of thread `i`.
+fn edit_thread_notes(state: &Shared, ui: &Ui, i: usize) {
+    let (name, current) = {
+        let st = state.borrow();
+        let Some(lt) = st.threads.get(i) else { return };
+        (lt.thread.name.clone(), lt.thread.notes.clone())
+    };
+    let (state, ui) = (state.clone(), ui.clone());
+    prompt_text(window_of(&ui), &format!("Notes — {name}"), "thread notes", &current, move |notes| {
+        let res = { thread::set_thread_notes(&state.borrow().threads, &name, &notes) };
+        finish_note_edit(&state, &ui, res, i);
+    });
+}
+
+/// Prompt for and save the note on entry `ei` of thread `ti`.
+fn edit_entry_note(state: &Shared, ui: &Ui, ti: usize, ei: usize) {
+    let (name, current) = {
+        let st = state.borrow();
+        let Some(lt) = st.threads.get(ti) else { return };
+        let cur = lt.thread.entries.get(ei).and_then(|e| e.note.clone()).unwrap_or_default();
+        (lt.thread.name.clone(), cur)
+    };
+    let (state, ui) = (state.clone(), ui.clone());
+    prompt_text(window_of(&ui), "Entry note", "note (empty clears it)", &current, move |note| {
+        let res = { thread::set_entry_note(&state.borrow().threads, &name, ei, Some(note)) };
+        finish_note_edit(&state, &ui, res, ti);
+    });
+}
+
+/// Prompt for and save the notes document of the weave at global index `i`.
+fn edit_weave_notes(state: &Shared, ui: &Ui, i: usize) {
+    let (name, current) = {
+        let st = state.borrow();
+        let Some(lw) = st.weaves.get(i) else { return };
+        (lw.weave.name.clone(), lw.weave.notes.clone())
+    };
+    let (state, ui) = (state.clone(), ui.clone());
+    prompt_text(window_of(&ui), &format!("Notes — {name}"), "weave notes", &current, move |notes| {
+        let res = { weave::set_weave_notes(&state.borrow().weaves, &name, &notes) };
+        match res {
+            Ok(_) => {
+                reload_weaves(&state);
+                let m = suggested_list_markup(&state.borrow());
+                show_study(&ui, &m);
+            }
+            Err(e) => show_study(&ui, &format!("<i>Could not save notes: {}</i>", esc(&e.to_string()))),
+        }
+    });
+}
+
+/// Shared tail for thread note edits: reload study data and re-show the thread.
+fn finish_note_edit(state: &Shared, ui: &Ui, res: Result<std::path::PathBuf, pure_core::Error>, thread_idx: usize) {
+    match res {
+        Ok(_) => {
+            reload_study_data(state);
+            let m = thread_markup(&state.borrow(), thread_idx);
+            show_study(ui, &m);
+        }
+        Err(e) => show_study(ui, &format!("<i>Could not save note: {}</i>", esc(&e.to_string()))),
     }
 }
 
@@ -1713,8 +1852,11 @@ fn thread_markup(st: &State, i: usize) -> String {
     if !t.notes.is_empty() {
         s.push_str(&format!("<small>{}</small>\n", esc(&t.notes)));
     }
-    s.push_str(&format!("<small>{} passages</small>\n\n", t.entries.len()));
-    for e in &t.entries {
+    s.push_str(&format!(
+        "<small>{} passages</small>  <a href=\"editthreadnotes:{i}\"><small>✎ notes</small></a>\n\n",
+        t.entries.len()
+    ));
+    for (j, e) in t.entries.iter().enumerate() {
         s.push_str(&go_link(&e.vref));
         let snippet = e.text.join(" ");
         let short: String = snippet.chars().take(70).collect();
@@ -1723,7 +1865,9 @@ fn thread_markup(st: &State, i: usize) -> String {
         if let Some(n) = &e.note {
             s.push_str(&format!("<small><span foreground=\"#888\">— {}</span></small>\n", esc(n)));
         }
-        s.push('\n');
+        s.push_str(&format!(
+            "<a href=\"editentrynote:{i}:{j}\"><small>✎ note</small></a>\n\n"
+        ));
     }
     s
 }
@@ -1802,7 +1946,7 @@ fn suggested_list_markup(st: &State) -> String {
             s.push_str(&format!("<small>… {} more links</small>\n", w.links.len() - XREF_SHOWN));
         }
         s.push_str(&format!(
-            "<a href=\"approve:{i}\">✓ approve</a>    <a href=\"reject:{i}\">✕ reject</a>\n\n"
+            "<a href=\"approve:{i}\">✓ approve</a>    <a href=\"reject:{i}\">✕ reject</a>    <a href=\"editweavenotes:{i}\">✎ note</a>\n\n"
         ));
     }
     s

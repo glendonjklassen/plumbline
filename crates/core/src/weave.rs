@@ -623,12 +623,46 @@ pub fn reject_weave(lw: &LoadedWeave) -> Result<(), Error> {
     }
 }
 
+/// Replace the notes document of the weave named `name` (case-insensitive among
+/// `loaded`), marking `notesSource` as hand-written since a person edited it.
+/// The weave must already exist.
+pub fn set_weave_notes(loaded: &[LoadedWeave], name: &str, notes: &str) -> Result<std::path::PathBuf, Error> {
+    let wanted = name.trim().to_lowercase();
+    let lw = loaded
+        .iter()
+        .find(|lw| lw.weave.name.to_lowercase() == wanted)
+        .ok_or_else(|| Error::Corpus(format!("no weave named {name}")))?;
+    let mut weave = lw.weave.clone();
+    weave.notes = notes.to_string();
+    weave.notes_source = NotesSource::Hand;
+    write_weave(&lw.file, &weave)?;
+    Ok(lw.file.clone())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn r(book: &str, c: u16, v: u16) -> VRef {
         VRef::new(book, c, v)
+    }
+
+    #[test]
+    fn sets_weave_notes_as_hand_written() {
+        let home = std::env::temp_dir().join(format!("pure-weave-notes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let (loaded, _) = load_weaves(&home);
+        add_link(&home, &loaded, "Lamb", WeaveKind::Typological, "kjv1769-tok2", "c", Link::canon(r("Gen", 22, 8), r("John", 1, 29))).unwrap();
+
+        let (loaded, _) = load_weaves(&home);
+        set_weave_notes(&loaded, "lamb", "God will provide himself a lamb").unwrap();
+
+        let (loaded, _) = load_weaves(&home);
+        assert_eq!(loaded[0].weave.notes, "God will provide himself a lamb");
+        assert_eq!(loaded[0].weave.notes_source, NotesSource::Hand);
+        assert!(set_weave_notes(&loaded, "nope", "x").is_err());
+
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[test]

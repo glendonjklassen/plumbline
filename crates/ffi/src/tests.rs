@@ -363,6 +363,18 @@ fn authoring_round_trip_via_abi() {
         assert_eq!(xrefs["partners"][0]["verse"], "John 3:18");
         assert_eq!(xrefs["partners"][0]["weave"], "Links");
 
+        // Edit notes: thread doc, an entry note, and the weave doc.
+        assert!(pure_engine_thread_set_notes(e, c("Road").as_ptr(), c("the gospel road").as_ptr()).is_null());
+        assert!(pure_engine_thread_entry_set_note(e, c("Road").as_ptr(), 0, c("start here").as_ptr()).is_null());
+        assert!(pure_engine_weave_set_notes(e, c("Links").as_ptr(), c("belief and judgment").as_ptr()).is_null());
+        let threads: Value = serde_json::from_str(&take(pure_engine_threads_json(e)).unwrap()).unwrap();
+        assert_eq!(threads["threads"][0]["notes"], "the gospel road");
+        assert_eq!(threads["threads"][0]["entries"][0]["note"], "start here");
+        // Clearing an entry note (null) and error paths.
+        assert!(pure_engine_thread_entry_set_note(e, c("Road").as_ptr(), 0, ptr::null()).is_null());
+        assert!(take(pure_engine_weave_set_notes(e, c("Nope").as_ptr(), c("x").as_ptr())).unwrap().contains("weave"));
+        assert!(take(pure_engine_thread_entry_set_note(e, c("Road").as_ptr(), 9, ptr::null())).unwrap().contains("entry"));
+
         // Error paths: a bad target kind, and a bytes-opened engine has no home.
         assert!(take(pure_engine_tag_add(e, c("X").as_ptr(), c("bogus").as_ptr(), c("v").as_ptr(), ptr::null(), stamp.as_ptr()))
             .unwrap()

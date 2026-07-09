@@ -333,6 +333,36 @@ namespace PureStudy.Native
         [DllImport(__DllName, EntryPoint = "pure_engine_weave_reject", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         public static extern byte* pure_engine_weave_reject(PureEngine* engine, uint index);
 
+        /// <summary>
+        ///  Replace the running notes document of the thread named `name`. Null on
+        ///  success, else an owned error. The thread must already exist.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_thread_set_notes", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_thread_set_notes(PureEngine* engine, byte* name, byte* notes);
+
+        /// <summary>
+        ///  Set (or clear, with a null `note`) the note on entry `index` of the thread
+        ///  named `name`. Null on success, else an owned error.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_thread_entry_set_note", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_thread_entry_set_note(PureEngine* engine, byte* name, uint index, byte* note);
+
+        /// <summary>
+        ///  Replace the notes document of the weave named `name` (marks it hand-written).
+        ///  Null on success, else an owned error. The weave must already exist.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_weave_set_notes", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_weave_set_notes(PureEngine* engine, byte* name, byte* notes);
+
 
     }
 

@@ -213,6 +213,47 @@ pub fn add_to_thread(
     }
 }
 
+/// Find the loaded thread named `name` (case-insensitive) or error — the shared
+/// preamble for the note editors, which edit an existing thread rather than
+/// create one.
+fn find_thread<'a>(loaded: &'a [LoadedThread], name: &str) -> Result<&'a LoadedThread, Error> {
+    let wanted = name.trim().to_lowercase();
+    loaded
+        .iter()
+        .find(|lt| lt.thread.name.to_lowercase() == wanted)
+        .ok_or_else(|| Error::Corpus(format!("no thread named {name}")))
+}
+
+/// Replace the running notes document of the thread named `name`. The thread
+/// must already exist among `loaded`.
+pub fn set_thread_notes(loaded: &[LoadedThread], name: &str, notes: &str) -> Result<PathBuf, Error> {
+    let lt = find_thread(loaded, name)?;
+    let mut thread = lt.thread.clone();
+    thread.notes = notes.to_string();
+    write_thread(&lt.file, &thread)?;
+    Ok(lt.file.clone())
+}
+
+/// Set (or clear, with `None`) the note on entry `index` of the thread named
+/// `name`. The thread must exist and `index` be in range.
+pub fn set_entry_note(
+    loaded: &[LoadedThread],
+    name: &str,
+    index: usize,
+    note: Option<String>,
+) -> Result<PathBuf, Error> {
+    let lt = find_thread(loaded, name)?;
+    let mut thread = lt.thread.clone();
+    let entry = thread
+        .entries
+        .get_mut(index)
+        .ok_or_else(|| Error::Corpus(format!("thread {name} has no entry {index}")))?;
+    // An empty note reads as "no note".
+    entry.note = note.filter(|n| !n.trim().is_empty());
+    write_thread(&lt.file, &thread)?;
+    Ok(lt.file.clone())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -288,6 +329,40 @@ mod tests {
         assert_eq!(t.name, "Romans Road");
         assert_eq!(t.entries.len(), 2);
         assert_eq!(t.entries[1].vref, VRef::new("Rom", 6, 23));
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn edits_thread_and_entry_notes() {
+        let home = std::env::temp_dir().join(format!("pure-thread-notes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let entry = ThreadEntry {
+            vref: VRef::new("Rom", 3, 23),
+            span: (0, 1),
+            text: vec!["For".into()],
+            note: None,
+            added: "2026-01-01T00:00:00Z".into(),
+        };
+        let (loaded, _) = load_threads(&home);
+        add_to_thread(&home, &loaded, "Romans Road", "kjv1769-tok2", entry).unwrap();
+
+        // Set the thread's running notes and the first entry's note.
+        let (loaded, _) = load_threads(&home);
+        set_thread_notes(&loaded, "romans road", "the gospel").unwrap();
+        let (loaded, _) = load_threads(&home);
+        set_entry_note(&loaded, "Romans Road", 0, Some("all have sinned".into())).unwrap();
+
+        let (loaded, _) = load_threads(&home);
+        assert_eq!(loaded[0].thread.notes, "the gospel");
+        assert_eq!(loaded[0].thread.entries[0].note.as_deref(), Some("all have sinned"));
+
+        // A blank note clears it; a missing thread / out-of-range index errors.
+        set_entry_note(&loaded, "Romans Road", 0, Some("  ".into())).unwrap();
+        let (loaded, _) = load_threads(&home);
+        assert_eq!(loaded[0].thread.entries[0].note, None);
+        assert!(set_entry_note(&loaded, "Nope", 0, None).is_err());
+        assert!(set_entry_note(&loaded, "Romans Road", 9, None).is_err());
 
         let _ = std::fs::remove_dir_all(&home);
     }
