@@ -1331,6 +1331,11 @@ fn handle_link(state: &Shared, ui: &Ui, uri: &str) {
         if let Ok(i) = idx.parse::<usize>() {
             edit_weave_notes(state, ui, i);
         }
+    } else if let Some(idx) = uri.strip_prefix("weave:") {
+        if let Ok(i) = idx.parse::<usize>() {
+            let m = weave_markup(&state.borrow(), i);
+            show_study(ui, &m);
+        }
     }
 }
 
@@ -1786,10 +1791,15 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
     if let Some(xs) = st.xrefs.get(&hit.verse) {
         s.push_str(&format!("\n<b>cross-references ({})</b>\n", xs.len()));
         for x in xs.iter().take(XREF_SHOWN) {
+            // Link the weave name to its compare card (first weave of that name).
+            let weave_link = match st.weaves.iter().position(|lw| lw.weave.name == x.weave) {
+                Some(wi) => format!("<a href=\"weave:{wi}\">{}</a>", esc(&x.weave)),
+                None => esc(&x.weave),
+            };
             s.push_str(&format!(
                 "{}  <small><span foreground=\"#888\">{}</span></small>\n",
                 go_link(&x.partner),
-                esc(&x.weave)
+                weave_link
             ));
         }
         if xs.len() > XREF_SHOWN {
@@ -1946,8 +1956,73 @@ fn suggested_list_markup(st: &State) -> String {
             s.push_str(&format!("<small>… {} more links</small>\n", w.links.len() - XREF_SHOWN));
         }
         s.push_str(&format!(
-            "<a href=\"approve:{i}\">✓ approve</a>    <a href=\"reject:{i}\">✕ reject</a>    <a href=\"editweavenotes:{i}\">✎ note</a>\n\n"
+            "<a href=\"weave:{i}\">⇔ compare</a>    <a href=\"approve:{i}\">✓ approve</a>    <a href=\"reject:{i}\">✕ reject</a>    <a href=\"editweavenotes:{i}\">✎ note</a>\n\n"
         ));
+    }
+    s
+}
+
+/// A verse's words as markup, with the tokens in `span` (inclusive, if any)
+/// emphasized (bold). Words the KJV translators supplied stay italic-gray, as
+/// in the reader. Falls back to the ref key if the verse is absent.
+fn verse_text_spanned(st: &State, vref: &VRef, span: Option<Span>) -> String {
+    let Some(v) = st.corpus.verse(vref) else {
+        return esc(&vref.ref_key());
+    };
+    let mut s = String::new();
+    for (k, t) in v.tokens.iter().enumerate() {
+        if k > 0 {
+            s.push(' ');
+        }
+        let in_span = span.is_some_and(|(lo, hi)| k as u16 >= lo && k as u16 <= hi);
+        let word = esc(&t.word);
+        let word = if t.flags & FLAG_ADDED != 0 {
+            format!("<span foreground=\"#6b6862\"><i>{word}</i></span>")
+        } else {
+            word
+        };
+        if in_span {
+            s.push_str(&format!("<b>{word}</b>"));
+        } else {
+            s.push_str(&word);
+        }
+    }
+    s
+}
+
+/// The weave compare card: the weave's kind + notes, then each link as its two
+/// linked passages one above the other, the linked words emphasized, with jump
+/// links and an "✎ note" editor. `i` is the global index into `st.weaves`.
+fn weave_markup(st: &State, i: usize) -> String {
+    let Some(lw) = st.weaves.get(i) else {
+        return String::new();
+    };
+    let w = &lw.weave;
+    let tag = if weave::is_suggested(lw) { "  <small><span foreground=\"#888\">(suggested)</span></small>" } else { "" };
+    let mut s = format!(
+        "<b>{}</b>  <small><span foreground=\"#888\">{}</span></small>{}\n",
+        esc(&w.name),
+        esc(w.kind.label()),
+        tag
+    );
+    s.push_str(&format!(
+        "<small>{} link{}</small>  <a href=\"editweavenotes:{i}\"><small>✎ note</small></a>\n",
+        w.links.len(),
+        if w.links.len() == 1 { "" } else { "s" }
+    ));
+    if !w.notes.is_empty() {
+        s.push_str(&format!("<small>{}</small>\n", esc(&w.notes)));
+    }
+    s.push('\n');
+    for l in w.links.iter().take(XREF_SHOWN) {
+        if !l.label.is_empty() {
+            s.push_str(&format!("<small><span foreground=\"#9e7d38\">“{}”</span></small>\n", esc(&l.label)));
+        }
+        s.push_str(&format!("{}\n<small>{}</small>\n", go_link(&l.a), verse_text_spanned(st, &l.a, l.span_a)));
+        s.push_str(&format!("{}\n<small>{}</small>\n\n", go_link(&l.b), verse_text_spanned(st, &l.b, l.span_b)));
+    }
+    if w.links.len() > XREF_SHOWN {
+        s.push_str(&format!("<small>… {} more links</small>\n", w.links.len() - XREF_SHOWN));
     }
     s
 }
