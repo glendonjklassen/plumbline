@@ -6,8 +6,8 @@ the architecture and the locked decisions; see
 
 ## Working right now
 
-- **`cargo test`** → **70 tests green** across core/layout/rnd/ffi (72 with
-  `-p pure-rnd --features bridge`), no warnings.
+- **`cargo test`** → **70 tests green** across core/layout/rnd/ffi (81 with
+  `-p pure-rnd --features "bridge embeddings morphology"`), no warnings.
 - **`OVERLAY_HOME=/home/gjklassen/code/overlay cargo run -p pure-desktop`** →
   a real GTK4 reader window, now with the core's study surface wired in:
   - **Multi-pane**: 1–3 reading columns side by side, each with its own book /
@@ -64,9 +64,12 @@ the architecture and the locked decisions; see
     word, widen the span; the link records spanA/spanB), a **weave compare card**
     (linked passages side by side, span words bold), **entry-note** editing
     (thread notes, per-entry notes, weave notes), the **TSK topical
-    cross-reference** tier (`core::crossref`; ~344k refs, vote-ranked, shown
-    labelled), and the **OT↔NT etymology bridge** (`rnd::bridge`, feature-gated;
-    Strong's-derived, no ML) surfacing cross-testament Strong's partners.
+    cross-reference** tier (`core::crossref`; ~344k refs, vote-ranked), the
+    **OT↔NT etymology bridge** (Strong's-derived), **concept embeddings**
+    (≈ concepts near + ≈ across the testaments), **SIF "verses like this"**, and
+    **morphology** (the token's Hebrew/Greek parse, e.g. Gen 1:1 "created" → "Qal
+    perfect, 3rd masculine singular"). The R&D tiers load offline artifacts and
+    absent-degrade; nothing is trained in-app (see [data-prep](data-prep/README.md)).
   - Verified visually against the real **31,102-verse** corpus. A cosmetic
     `radv … Vulkan` warning prints on start (GTK renderer fallback; ignore).
 - **`pure-ffi` is now the real C ABI** both native shells will consume — not a
@@ -98,7 +101,7 @@ the architecture and the locked decisions; see
 |-------|----------|-------|
 | `crates/core` | canon (66 books, frozen tok stamp), `VRef`/`refKey`, corpus (JSONL loader + canonical-order validation + chapter index), Strong's (+ occurrence index, proper-noun heuristic), search (4-tier: exact/variant/lemma/typo, + phrase, + reference, + bare-Strong's), weave graph (canonical links, BFS components, union-merge, v2 JSON, **suggested-weave approve/reject**, notes editing), notes loader (`kjv-notes.jsonl`), **threads** + **tags** (load, membership, **authoring**: add/remove/edit notes + slugged file paths), **`crossref`** (TSK topical tier parser/index), **`config`** (study mode + body size, cross-platform), **`home`** (data-dir resolution), **`store`** (cross-platform atomic write: temp-sibling → fsync → rename) | 54 |
 | `crates/layout` | reader layout + per-word hit-testing as a platform-agnostic algorithm over an injected `Measure` (GTK shell backs it with cairo) | 3 |
-| `crates/rnd` | feature-gated R&D capabilities — **off by default**. `bridge`: the pure OT↔NT etymology bridge (Strong's-derived, no ML). Embeddings / morphology / keyness / trust await the ML data-pack pipeline. | 1 (+2 w/ `bridge`) |
+| `crates/rnd` | feature-gated R&D capabilities — **off by default**. `bridge`: OT↔NT etymology (Strong's-derived, no ML). `embeddings`: concept-vector loader + cosine/cross neighbours + SIF "verses like this". `morphology`: OSHM/Robinson parse-code → gloss + sidecar. All *consume* offline artifacts (see [data-prep](data-prep/README.md)); no training in-app. Keyness / trust / quotation await more hydrated inputs. | 1 (11 w/ all features) |
 | `crates/ffi` | **the C ABI** (opaque engine/display-list handles, callback-measured layout, JSON payloads, **study-data read + authoring writes** incl. suggested-weave approve/reject + notes editing) + generated C/C# bindings + a Kotlin/JNA wrapper | 12 |
 | `apps/desktop` | GTK4 + libadwaita shell (gtk4 0.11 / libadwaita 0.9) | — |
 
@@ -138,16 +141,20 @@ windows x86_64-gnu + aarch64-gnullvm); **mingw-w64** is present. So:
    weaves create/append/remove/edit-notes with atomic cross-platform writes,
    suggested-weave approve/reject, and **word-span** link selection (spanA/spanB).
    The guided first-run + Simple/Full mode landed too (decision #4).
-5. **R&D layer** (`pure-rnd`): the pure **etymology bridge** is ported (feature
-   `bridge`, no ML) and surfaced in Full mode; the **TSK cross-reference** tier
-   lives in `core::crossref`. Still pending (all need the ML data-pack pipeline):
-   the concept engine, embeddings, morphology, keyness, the multi-source trust
-   model, and cross-testament quotation detection.
+5. **R&D layer** (`pure-rnd`) — the pack-free and pack-driven tiers are ported
+   and surfaced in Full mode: the **etymology bridge** (`bridge`), **concept
+   embeddings** + **SIF "verses like this"** (`embeddings`), **morphology**
+   (`morphology`), plus the **TSK cross-references** in `core::crossref`. Each
+   *consumes* an offline artifact (no training in-app). Still pending: the fused
+   multi-source bridge + calibrated trust model, and cross-testament quotation
+   detection (need more hydrated inputs — same port-consumer-and-ship pattern).
 6. **Data delivery**: `core::home` finds a hydrated tree without `OVERLAY_HOME`;
    the ABI's `pure_engine_open_from_bytes` loads from asset bytes. Remaining —
-   actually shipping the corpus with the app (bundle/download) + the R&D packs.
-7. Move the offline Python/SWORD pipeline into `data-prep/` (feeds the R&D packs
-   and the TSK/quotation hydration).
+   actually shipping the corpus + R&D pack with the app (bundle/download).
+7. **~~data-prep~~ — documented.** The R&D artifacts, their provenance, and the
+   build-once (no-GPU) reproduction path are recorded in
+   [data-prep/README.md](data-prep/README.md); the generators stay in the
+   offline Python (overlay `ml/` + `pipelines/`).
 8. **~~CI~~ — DONE.** [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
    tests the portable crates (+ the `bridge` feature), regenerates the bindings
    and fails on drift, and cross-builds the Windows `.dll`.

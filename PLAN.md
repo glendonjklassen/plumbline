@@ -88,10 +88,12 @@ when we port the pipeline).
 | — (new: the one C ABI over core+layout) | `ffi` | ✅ (opaque handles, callback layout, JSON; C/C#/Kotlin bindings) |
 | `CrossRef.hs` (TSK topical tier) | `core::crossref` | ✅ (pure parser; no ML) |
 | `Bridge.hs` (OT↔NT etymology) | `rnd::bridge` (feature) | ✅ (etymology layer; rendering/trust deferred) |
-| `Concept*`, `Embed`, `Morph`, `Witness`, `Burst`, `Quotation` | `rnd` (optional) | ⏳ later (need ML data packs) |
+| `Embed.hs` (concept vectors, SIF) | `rnd::embed` (feature) | ✅ loader + neighbours + cross + SIF "verses like this" |
+| `Morph.hs` (OSHM/Robinson parse) | `rnd::morph` (feature) | ✅ consuming side (parse + render + sidecar); offline projection stays Python |
+| `Concept*`, `Witness`, `Burst`, `Quotation` | `rnd` (optional) | ⏳ later (fused-source/quotation tiers; need more hydrated inputs) |
 | `Patch.hs`, `Rule.hs` | — | ❌ dropped by decision |
 | `UI/Panels/Events/Home/Startup` (Monomer) | `apps/desktop` (GTK), + WinUI/Compose over `ffi` | 🔨 |
-| `ml/*.py`, `pipelines/*.py` | `data-prep/` (kept as offline Python) | ⏳ later |
+| `ml/*.py`, `pipelines/*.py` | `data-prep/` (offline Python; pack documented) | ✅ documented ([data-prep/README.md](data-prep/README.md)); generators stay in the overlay checkout |
 
 ## Overnight scope (this session)
 
