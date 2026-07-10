@@ -112,37 +112,34 @@ the architecture and the locked decisions; see
 
 Dropped by decision: signed **patches** and **rules** (not ported).
 
-## Not yet ported (real overlay features, neither done nor dropped)
+## Analytics tier — now ported
 
-An honest audit of the reference modules — these belong here and are all
-pure-code doable (no new data, no blocked toolchain):
+The audit's backlog is done (all pure-code, no new data / no toolchain gate):
 
-- **Symbolic concept engine** (`Concept.hs` 1042 + `ConceptGraph.hs` 242 +
-  `ConceptMap.hs` 124): derived co-occurrence statistics, the **radial concept
-  neighbourhood graph**, and the **dispersion strip** ("where across the 66
-  books does this concept occur"). We ported the *embedding* concept layer; this
-  *symbolic/statistical* one is separate and unported.
-- **Leitwort / burst discovery** (`Burst.hs` 429): corpus-wide "bursty,
-  deliberately-repeated" concepts (theme-words). Pure statistics.
-- **Weave visualizations**: the **constellation** (`Constellation.hs` 286, the
-  weave-library overview) and the **chord/arc map** (`ChordMap.hs` 145,
-  book-to-book weave density). Cairo drawing like the canon strip.
-- **Text-as-witness** (`Witness.hs` 144): the lexicon-free alignment that can
-  disagree with the bridge sources. We ported the trust *priors* it feeds, not
-  the witness model itself.
-- **Session restore** (`Session.hs` 168): reopen the last panes / position. Today
-  the app always opens to John 3 (only mode + body size persist).
-- **Startup index cache** (`IndexCache.hs` 136): a gzip snapshot of the built
-  indices for faster launch. We rebuild each launch (fast except the ~1s SIF
-  build). A pure perf optimization.
-- **Panel breadth** (`Panels.hs`): the GTK study panel covers word study /
-  search / concordance / threads / tags / suggested / weave-compare, but not the
-  concept-graph, dispersion-strip, constellation, chord-map, or burst panels
-  above (they depend on those unported engines).
+- **Symbolic concept engine** (`Concept.hs`) → `rnd::concept`: co-occurrence
+  stats, book distribution, and the PPMI → mutual-kNN → community graph.
+  Surfaced as the word study's collocation field + distribution, and the
+  **radial concept-neighbourhood diagram + dispersion strip** popup
+  (`ConceptGraph`/`ConceptMap`, "▸ concept map").
+- **Leitwort / burst discovery** (`Burst.hs`) → `rnd::burst`: Poisson scan
+  statistic + Benjamini–Hochberg. Surfaced as the word study's "leitwort" line.
+- **Weave chord/arc map** (`ChordMap.hs`): the "Map" study tool — book-to-book
+  weave density over the canon axis.
+- **Text-as-witness** (`Witness.hs`) → `rnd::witness`: the graded, lexicon-free
+  alignment that can flag a disbelieved bridge link (silent until it passes its
+  held-out grading — as the shipped data has not).
+- **Session restore** (`Session.hs`): the open panes + active index persist in
+  `core::config` and reopen on launch.
+- **Startup index cache** (`IndexCache.hs`): `core::corpus` caches the parsed
+  corpus (gzipped bincode, mtime+tok-keyed); embedding/morphology/concept/SIF
+  now load lazily on first Full-study use, so launch is quick.
 
-Also offline-only (not runtime): the analysis harvesters (`Tasks.hs`, quotation
-detection, `audit_sources.py`) — their outputs are consumed, the harvesting is
-not a reader feature.
+Still deferred (need extra hydrated inputs, not a reader gap): the
+**constellation** (weave-library overview), and cross-testament **quotation
+detection**. Offline-only (outputs consumed, harvesting isn't a reader feature):
+`Tasks.hs`, `audit_sources.py`.
+
+Dropped by decision (unchanged): signed patches + rules.
 
 ## Toolchain status (updated 2026-07-09)
 
