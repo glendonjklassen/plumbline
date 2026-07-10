@@ -31,6 +31,11 @@ pub mod morph;
 #[cfg(feature = "concept")]
 pub mod concept;
 
+/// Leitwort / burst discovery (Poisson scan statistic over concept positions).
+/// Bundled with the `concept` feature.
+#[cfg(feature = "concept")]
+pub mod burst;
+
 /// Which R&D capabilities this build was compiled with. The UI queries this to
 /// decide which panels/toggles to even show (decision #4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

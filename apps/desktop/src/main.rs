@@ -35,7 +35,7 @@ use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread};
 use pure_core::weave::{self, Link, LoadedWeave, Span, WeaveKind};
 use pure_core::{canon, corpus, crossref, home, notes, VRef};
-use pure_rnd::{bridge, concept, embed, morph};
+use pure_rnd::{bridge, burst, concept, embed, morph};
 use pure_layout::{layout_chapter, DisplayList, Hit, ItemKind, LayoutConfig, Measure};
 
 const APP_ID: &str = "ca.cavallo.purestudy";
@@ -77,10 +77,17 @@ struct State {
     embedding: Option<embed::Embedding>,
     /// Morphology sidecar (offline-projected), when present — per-token parse.
     morph: Option<morph::MorphData>,
+    /// Heavy R&D analytics, built lazily on the first Full-study word lookup
+    /// (each is a corpus-wide sweep) and cached — so startup stays instant and
+    /// a Simple reader never pays for them. See `ensure_analytics`.
     /// SIF verse-similarity model over the embedding — "verses like this".
     verse_sim: Option<embed::VerseSim>,
     /// Symbolic concept engine: collocation communities + book distribution.
-    concept: concept::Concept,
+    concept: Option<concept::Concept>,
+    /// Discovered leitwörter (bursty concepts) keyed by Strong's code.
+    leitwort: Option<HashMap<String, burst::Burst>>,
+    /// Whether the lazy analytics above have been built this session.
+    analytics_built: bool,
     /// The data home, kept so authoring can write + reload study data.
     home: String,
     /// Font family to render the scripture in ("EB Garamond" or a fallback).
@@ -245,6 +252,35 @@ struct PaneUi {
 /// balloons to half a wide window.
 const PANEL_WIDTH: i32 = 380;
 
+/// Build the heavy Full-study analytics (SIF verse-sim, the concept graph, and
+/// leitwörter — each a corpus-wide sweep) on first use, caching them in State.
+/// A no-op in Simple mode or once built, so launch stays instant.
+fn ensure_analytics(state: &Shared) {
+    {
+        let st = state.borrow();
+        if st.analytics_built || !st.mode.is_full() {
+            return;
+        }
+    }
+    // Compute under a shared borrow (reads only), then swap in under a mut one.
+    let (verse_sim, concept_engine, leitwort) = {
+        let st = state.borrow();
+        let verse_sim = st.embedding.as_ref().map(|e| embed::VerseSim::build(e, &st.corpus));
+        let concept_engine = concept::Concept::build(&st.corpus);
+        let leitwort: HashMap<String, burst::Burst> =
+            burst::discover_leitworter(&burst::BurstParams::default(), &st.corpus)
+                .into_iter()
+                .map(|b| (b.strongs.clone(), b))
+                .collect();
+        (verse_sim, concept_engine, leitwort)
+    };
+    let mut st = state.borrow_mut();
+    st.verse_sim = verse_sim;
+    st.concept = Some(concept_engine);
+    st.leitwort = Some(leitwort);
+    st.analytics_built = true;
+}
+
 /// Show the study panel with `markup`; open it if it was hidden. On the
 /// hidden→visible transition the split is placed so the panel is a fixed-width
 /// sidebar regardless of window size (the `Paned` position is absolute from the
@@ -322,9 +358,8 @@ fn load_state(cfg: &Config) -> Result<State, String> {
     let morph = morph::load_morph(canon::TOKENIZATION_VERSION, data.join("morphology.jsonl"));
     // SIF verse-similarity model, built once over the embedding (heavy, but the
     // embedding is the only prerequisite; skipped when there's no embedding).
-    let verse_sim = embedding.as_ref().map(|e| embed::VerseSim::build(e, &corpus));
-    // Symbolic concept engine — pure corpus folds (co-occurrence communities).
-    let concept = concept::Concept::build(&corpus);
+    // The heavy analytics (verse-sim, concept graph, leitwörter) are built
+    // lazily on first Full-study lookup — not here — so launch is instant.
     let search_ix = SearchIx::build(&corpus);
     let occ_ix = OccurrenceIx::build(&corpus);
     let family = register_bundled_fonts();
@@ -343,8 +378,10 @@ fn load_state(cfg: &Config) -> Result<State, String> {
         bridge,
         embedding,
         morph,
-        verse_sim,
-        concept,
+        verse_sim: None,
+        concept: None,
+        leitwort: None,
+        analytics_built: false,
         home,
         family,
         font_size: cfg.body_size,
@@ -856,7 +893,9 @@ fn build_pane(state: &Shared, ui: &Ui, i: usize, n: usize) -> (gtk::Box, PaneUi)
             };
             let Some(hit) = hit else { return };
             if n_press == 2 {
-                // Double-click → Strong's study.
+                // Double-click → Strong's study. Build the Full-study analytics
+                // on first use (kept off the launch path).
+                ensure_analytics(&state);
                 let markup = word_study_markup(&state.borrow(), &hit);
                 show_study(&ui, &markup);
             } else {
@@ -2074,25 +2113,40 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
             // Symbolic collocation field: the concept community this code
             // co-occurs with (distinct from the distributional embedding
             // neighbours — this is "what shares its verses").
-            let field = st.concept.community(code);
-            if !field.is_empty() {
-                let members: Vec<(String, f32)> = field.into_iter().take(8).map(|c| (c, 0.0)).collect();
-                s.push_str("<small><span foreground=\"#9e7d38\">◦ collocation field: </span>");
-                s.push_str(&concept_links(&members, &gloss));
-                s.push_str("</small>\n");
+            if let Some(ce) = &st.concept {
+                let field = ce.community(code);
+                if !field.is_empty() {
+                    let members: Vec<(String, f32)> = field.into_iter().take(8).map(|c| (c, 0.0)).collect();
+                    s.push_str("<small><span foreground=\"#9e7d38\">◦ collocation field: </span>");
+                    s.push_str(&concept_links(&members, &gloss));
+                    s.push_str("</small>\n");
+                }
+
+                // Where across the canon this concept concentrates (dispersion).
+                let books = ce.top_books(code, 5);
+                if !books.is_empty() {
+                    let (ot, nt) = ce.testament_split(code);
+                    let list: Vec<String> = books
+                        .iter()
+                        .map(|(b, c)| format!("{} {}", esc(canon::display_name(b)), c))
+                        .collect();
+                    s.push_str(&format!(
+                        "<small><span foreground=\"#9e7d38\">◦ distribution: </span>{}  <span foreground=\"#999\">(OT {ot} · NT {nt})</span></small>\n",
+                        list.join(" · ")
+                    ));
+                }
             }
 
-            // Where across the canon this concept concentrates (dispersion).
-            let books = st.concept.top_books(code, 5);
-            if !books.is_empty() {
-                let (ot, nt) = st.concept.testament_split(code);
-                let list: Vec<String> = books
-                    .iter()
-                    .map(|(b, c)| format!("{} {}", esc(canon::display_name(b)), c))
-                    .collect();
+            // Leitwort: is this concept a discovered burst (deliberately packed
+            // into one stretch)? Show where and how tightly.
+            if let Some(b) = st.leitwort.as_ref().and_then(|m| m.get(code)) {
+                let label = burst::span_label(|id| canon::display_name(id).to_string(), &b.win_start, &b.win_end);
                 s.push_str(&format!(
-                    "<small><span foreground=\"#9e7d38\">◦ distribution: </span>{}  <span foreground=\"#999\">(OT {ot} · NT {nt})</span></small>\n",
-                    list.join(" · ")
+                    "<small><span foreground=\"#9e7d38\">◦ leitwort: </span>{} <span foreground=\"#999\">({} in {}, strength {:.0})</span></small>\n",
+                    esc(&label),
+                    b.win_count,
+                    b.win_span,
+                    b.score
                 ));
             }
         }
