@@ -35,7 +35,7 @@ use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread};
 use pure_core::weave::{self, Link, LoadedWeave, Span, WeaveKind};
 use pure_core::{canon, corpus, crossref, home, notes, VRef};
-use pure_rnd::{bridge, embed, morph};
+use pure_rnd::{bridge, concept, embed, morph};
 use pure_layout::{layout_chapter, DisplayList, Hit, ItemKind, LayoutConfig, Measure};
 
 const APP_ID: &str = "ca.cavallo.purestudy";
@@ -79,6 +79,8 @@ struct State {
     morph: Option<morph::MorphData>,
     /// SIF verse-similarity model over the embedding — "verses like this".
     verse_sim: Option<embed::VerseSim>,
+    /// Symbolic concept engine: collocation communities + book distribution.
+    concept: concept::Concept,
     /// The data home, kept so authoring can write + reload study data.
     home: String,
     /// Font family to render the scripture in ("EB Garamond" or a fallback).
@@ -321,6 +323,8 @@ fn load_state(cfg: &Config) -> Result<State, String> {
     // SIF verse-similarity model, built once over the embedding (heavy, but the
     // embedding is the only prerequisite; skipped when there's no embedding).
     let verse_sim = embedding.as_ref().map(|e| embed::VerseSim::build(e, &corpus));
+    // Symbolic concept engine — pure corpus folds (co-occurrence communities).
+    let concept = concept::Concept::build(&corpus);
     let search_ix = SearchIx::build(&corpus);
     let occ_ix = OccurrenceIx::build(&corpus);
     let family = register_bundled_fonts();
@@ -340,6 +344,7 @@ fn load_state(cfg: &Config) -> Result<State, String> {
         embedding,
         morph,
         verse_sim,
+        concept,
         home,
         family,
         font_size: cfg.body_size,
@@ -2030,6 +2035,7 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
         // partner opens its concordance, so a theme can be followed across the
         // Hebrew/Greek boundary the numbering otherwise walls off.
         if st.mode.is_full() {
+            let gloss = |c: &str| st.strongs.get(c).and_then(|e| e.lemma.clone());
             let partners = st.bridge.partners(code);
             if !partners.is_empty() {
                 s.push_str("<small><span foreground=\"#9e7d38\">↔ cross-testament: </span>");
@@ -2051,7 +2057,6 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
             // artifact is present: distributional near-synonyms, and — if the
             // space is aligned — the cross-testament semantic neighbours.
             if let Some(emb) = &st.embedding {
-                let gloss = |c: &str| st.strongs.get(c).and_then(|e| e.lemma.clone());
                 let near = emb.nearest_concepts(code, 6);
                 if !near.is_empty() {
                     s.push_str("<small><span foreground=\"#9e7d38\">≈ concepts near: </span>");
@@ -2064,6 +2069,31 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
                     s.push_str(&concept_links(&cross, &gloss));
                     s.push_str("</small>\n");
                 }
+            }
+
+            // Symbolic collocation field: the concept community this code
+            // co-occurs with (distinct from the distributional embedding
+            // neighbours — this is "what shares its verses").
+            let field = st.concept.community(code);
+            if !field.is_empty() {
+                let members: Vec<(String, f32)> = field.into_iter().take(8).map(|c| (c, 0.0)).collect();
+                s.push_str("<small><span foreground=\"#9e7d38\">◦ collocation field: </span>");
+                s.push_str(&concept_links(&members, &gloss));
+                s.push_str("</small>\n");
+            }
+
+            // Where across the canon this concept concentrates (dispersion).
+            let books = st.concept.top_books(code, 5);
+            if !books.is_empty() {
+                let (ot, nt) = st.concept.testament_split(code);
+                let list: Vec<String> = books
+                    .iter()
+                    .map(|(b, c)| format!("{} {}", esc(canon::display_name(b)), c))
+                    .collect();
+                s.push_str(&format!(
+                    "<small><span foreground=\"#9e7d38\">◦ distribution: </span>{}  <span foreground=\"#999\">(OT {ot} · NT {nt})</span></small>\n",
+                    list.join(" · ")
+                ));
             }
         }
         s.push('\n');
