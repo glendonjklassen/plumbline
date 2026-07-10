@@ -436,6 +436,9 @@ fn build_ui(app: &adw::Application) {
     link_btn.add_css_class("flat");
     link_btn.set_tooltip_text(Some("Weave the two pinned words (click a word in each pane; click another word in the same verse to widen the span)"));
     link_btn.set_sensitive(false);
+    let map_btn = gtk::Button::with_label("Map");
+    map_btn.add_css_class("flat");
+    map_btn.set_tooltip_text(Some("Weave map — how strongly each pair of books is woven together"));
 
     // The study tools live together so "Simple reader" mode can hide the whole
     // group at once (decision #4), leaving a clean reader + search + lookup.
@@ -443,6 +446,7 @@ fn build_ui(app: &adw::Application) {
     study_tools.append(&threads_btn);
     study_tools.append(&tags_btn);
     study_tools.append(&suggested_btn);
+    study_tools.append(&map_btn);
     study_tools.append(&link_btn);
     header.pack_start(&study_tools);
 
@@ -601,6 +605,11 @@ fn build_ui(app: &adw::Application) {
             show_study(&ui, &m);
         });
     }
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        map_btn.connect_clicked(move |_| show_weave_map(&state, &ui));
+    }
     // ── study mode toggle (Simple ⇄ Full), persisted ────────────────────────────
     {
         let state = state.clone();
@@ -670,6 +679,57 @@ fn build_ui(app: &adw::Application) {
     if first_run {
         show_mode_chooser(&window, &state, apply_mode.clone());
     }
+}
+
+/// Open the book-to-book weave chord map in a popup: click a book to jump the
+/// active pane there; Esc closes.
+fn show_weave_map(state: &Shared, ui: &Ui) {
+    let win = gtk::Window::builder().title("Weave map").default_width(1000).default_height(360).build();
+    if let Some(p) = window_of(ui) {
+        win.set_transient_for(Some(&p));
+    }
+    let area = gtk::DrawingArea::new();
+    area.set_hexpand(true);
+    area.set_vexpand(true);
+    {
+        let state = state.clone();
+        area.set_draw_func(move |_a, cr, w, h| draw_chord_map(&state, cr, w, h));
+    }
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        let win = win.clone();
+        let area2 = area.clone();
+        let click = gtk::GestureClick::new();
+        click.connect_pressed(move |_g, _n, x, _y| {
+            let w = area2.width();
+            if w <= 0 {
+                return;
+            }
+            let idx = ((x / w as f64).clamp(0.0, 0.999) * canon::BOOKS.len() as f64) as usize;
+            if let Some(b) = canon::BOOKS.get(idx) {
+                let active = state.borrow().active;
+                navigate_pane(&state, &ui, active, b.id, 1, None);
+            }
+            win.close();
+        });
+        area.add_controller(click);
+    }
+    {
+        let win2 = win.clone();
+        let key = gtk::EventControllerKey::new();
+        key.connect_key_pressed(move |_c, k, _kc, _m| {
+            if k == gdk::Key::Escape {
+                win2.close();
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
+        });
+        win.add_controller(key);
+    }
+    win.set_child(Some(&area));
+    win.present();
 }
 
 /// Persist the current mode + body size + reading session (open panes) to the
@@ -2021,6 +2081,104 @@ fn draw_canon(state: &Shared, cr: &cairo::Context, w: i32, h: i32) {
         }
         cr.arc(x, hf - 4.0, 3.5, 0.0, std::f64::consts::TAU);
         let _ = cr.fill();
+    }
+}
+
+/// Aggregate the loaded weave links into book-pair ribbons (canon-ordered book
+/// indices → link count), plus the max count for scaling. Ported from
+/// `ChordMap` aggregation.
+fn chord_arcs(st: &State) -> (Vec<(usize, usize, u32)>, u32) {
+    let mut m: HashMap<(usize, usize), u32> = HashMap::new();
+    for (a, b) in &st.links {
+        let (Some(ia), Some(ib)) = (canon::book_order(&a.book), canon::book_order(&b.book)) else {
+            continue;
+        };
+        let key = if ia <= ib { (ia, ib) } else { (ib, ia) };
+        *m.entry(key).or_insert(0) += 1;
+    }
+    let max = m.values().copied().max().unwrap_or(1);
+    (m.into_iter().map(|((a, b), c)| (a, b, c)).collect(), max)
+}
+
+/// A filled arc ribbon from foot A to foot B over `apex`, in the given colour.
+fn arc_ribbon(cr: &cairo::Context, y0: f64, fa: (f64, f64), fb: (f64, f64), apex: f64, col: (f64, f64, f64, f64)) {
+    cr.set_source_rgba(col.0, col.1, col.2, col.3);
+    cr.move_to(fa.0, y0);
+    cr.curve_to(fa.0, y0 - apex, fb.1, y0 - apex, fb.1, y0);
+    cr.line_to(fb.0, y0);
+    cr.curve_to(fb.0, y0 - apex * 0.82, fa.1, y0 - apex * 0.82, fa.1, y0);
+    cr.close_path();
+    let _ = cr.fill();
+}
+
+/// The book-to-book chord/arc map: how strongly each book pair is woven, drawn
+/// over the same canon-ordered axis as the canon strip. Ribbon colour marks
+/// OT-internal / NT-internal / cross-testament (the interesting case). Ported
+/// from `ChordMap.chordMapView`.
+fn draw_chord_map(state: &Shared, cr: &cairo::Context, w: i32, h: i32) {
+    let st = state.borrow();
+    let (arcs, max_c) = chord_arcs(&st);
+    let width = w as f64;
+    let hf = h as f64;
+    let nb = canon::BOOKS.len() as f64;
+    let y0 = hf - 26.0;
+    let axis_h = y0 - 8.0;
+    let x_at = |f: f64| f.clamp(0.0, 1.0) * width;
+    let book_x = |i: usize| x_at((i as f64 + 0.5) / nb);
+
+    // warm paper backdrop
+    cr.set_source_rgb(0.949, 0.933, 0.902);
+    let _ = cr.rectangle(0.0, 0.0, width, hf);
+    let _ = cr.fill();
+
+    // section bands + labels
+    let layout = pangocairo::functions::create_layout(cr);
+    let mut fd = pango::FontDescription::new();
+    fd.set_family(&st.family);
+    fd.set_absolute_size(10.0 * pango::SCALE as f64);
+    layout.set_font_description(Some(&fd));
+    for (k, (lbl, lo, hi)) in CANON_SEGMENTS.iter().enumerate() {
+        let x0 = *lo as f64 / nb * width;
+        let x1 = (*hi + 1) as f64 / nb * width;
+        if k % 2 == 1 {
+            cr.set_source_rgba(0.0, 0.0, 0.0, 0.04);
+            let _ = cr.rectangle(x0, 0.0, x1 - x0, y0);
+            let _ = cr.fill();
+        }
+        cr.set_source_rgba(0.35, 0.30, 0.22, 0.9);
+        cr.move_to(x0 + 3.0, y0 + 6.0);
+        layout.set_text(lbl);
+        pangocairo::functions::show_layout(cr, &layout);
+    }
+
+    // baseline + OT/NT seam
+    cr.set_source_rgba(0.62, 0.49, 0.22, 0.5);
+    let _ = cr.rectangle(0.0, y0, width, 1.5);
+    let _ = cr.fill();
+    let dx = OT_NT_DIVIDE as f64 / nb * width;
+    let _ = cr.rectangle(dx - 0.5, 0.0, 1.0, y0);
+    let _ = cr.fill();
+
+    // ribbons, heaviest first so thin ones stay visible on top
+    let mut arcs = arcs;
+    arcs.sort_by(|a, b| b.2.cmp(&a.2));
+    for (a, b, cnt) in arcs {
+        let al = 0.12 + 0.30 * (cnt as f64 / max_c as f64);
+        let col = if a < OT_NT_DIVIDE && b < OT_NT_DIVIDE {
+            (0.82, 0.70, 0.43, al) // OT gold
+        } else if a >= OT_NT_DIVIDE && b >= OT_NT_DIVIDE {
+            (0.50, 0.70, 0.90, al) // NT blue
+        } else {
+            (0.78, 0.59, 0.86, (al + 0.08).min(0.5)) // cross-testament
+        };
+        let wd = 2.0 + 8.0 * (cnt as f64 / max_c as f64);
+        let (xa, xb) = (book_x(a), book_x(b));
+        if a == b {
+            arc_ribbon(cr, y0, (xa - wd, xa), (xa, xa + wd), (wd * 1.4).max(10.0), col);
+        } else {
+            let apex = (0.42 * axis_h).min(22.0 + 0.26 * axis_h * ((xb - xa).abs() / width));
+            arc_ribbon(cr, y0, (xa - wd / 2.0, xa + wd / 2.0), (xb - wd / 2.0, xb + wd / 2.0), apex, col);
+        }
     }
 }
 
