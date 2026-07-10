@@ -757,7 +757,17 @@ fn draw_concept_radial(state: &Shared, code: &str, cr: &cairo::Context, w: i32, 
     let (cx, cy) = (width / 2.0, hf / 2.0);
     let radius = (width.min(hf) / 2.0 - 60.0).max(40.0);
     let n = nbrs.len().max(1);
-    let gloss = |c: &str| st.strongs.get(c).and_then(|e| e.lemma.clone()).unwrap_or_default();
+    // English-first node labels: the recognisable gloss on top, lemma beneath.
+    let label_of = |c: &str| {
+        let en = english_gloss(&st, c);
+        let lem = st.strongs.get(c).and_then(|e| e.lemma.clone());
+        match (en, lem) {
+            (Some(e), Some(l)) => format!("{e}\n{l}"),
+            (Some(e), None) => e,
+            (None, Some(l)) => l,
+            (None, None) => c.to_string(),
+        }
+    };
 
     // spokes
     for (k, (c, semantic)) in nbrs.iter().enumerate() {
@@ -774,7 +784,7 @@ fn draw_concept_radial(state: &Shared, code: &str, cr: &cairo::Context, w: i32, 
         cr.line_to(nx, ny);
         let _ = cr.stroke();
         // node label
-        let label = format!("{c}\n{}", gloss(c));
+        let label = label_of(c);
         layout.set_text(&label);
         let (tw, _th) = layout.pixel_size();
         cr.set_source_rgb(0.25, 0.22, 0.17);
@@ -787,7 +797,7 @@ fn draw_concept_radial(state: &Shared, code: &str, cr: &cairo::Context, w: i32, 
     // centre node
     fd.set_absolute_size(15.0 * pango::SCALE as f64);
     layout.set_font_description(Some(&fd));
-    layout.set_text(&format!("{code}  {}", gloss(code)));
+    layout.set_text(&label_of(code));
     let (tw, _) = layout.pixel_size();
     cr.set_source_rgb(0.62, 0.49, 0.22);
     cr.arc(cx, cy, 5.0, 0.0, std::f64::consts::TAU);
@@ -2424,96 +2434,120 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
         // partner opens its concordance, so a theme can be followed across the
         // Hebrew/Greek boundary the numbering otherwise walls off.
         if st.mode.is_full() {
-            let gloss = |c: &str| st.strongs.get(c).and_then(|e| e.lemma.clone());
+            // ── analytics tier ──────────────────────────────────────────────
+            // Everything below is the R&D layer for this code: cognates, near
+            // concepts, co-occurrence, dispersion. Each gets its own header so
+            // the reader can tell the tiers apart at a glance.
+
+            // The same root across the Hebrew/Greek divide (Strong's etymology,
+            // fused with any external witnesses the pack supplies).
             let partners = st.bridge.partners(code);
             if !partners.is_empty() {
-                s.push_str("<small><span foreground=\"#9e7d38\">↔ cross-testament: </span>");
-                for (k, p) in partners.iter().take(6).enumerate() {
-                    if k > 0 {
-                        s.push_str(", ");
-                    }
-                    // Code link + which witnesses assert it (etymology/lxx/…).
-                    s.push_str(&format!(
-                        "<a href=\"occ:{c}\">{c}</a> <span foreground=\"#999\">({src})</span>",
-                        c = esc(&p.code),
-                        src = esc(&p.sources.join("+"))
-                    ));
-                    // If the graded text-witness disbelieves this pair (keyed
-                    // Hebrew-first), flag it — the text's usage pushing back.
-                    let (heb, grk) = if code.starts_with('G') {
-                        (p.code.as_str(), code.as_str())
-                    } else {
-                        (code.as_str(), p.code.as_str())
-                    };
-                    if st.witness.disbelief(heb, grk).is_some() {
-                        s.push_str(" <span foreground=\"#b04a3a\">⚠</span>");
-                    }
-                }
-                s.push_str("</small>\n");
+                s.push_str(&shead("SAME ROOT ACROSS TESTAMENTS"));
+                let chips: Vec<String> = partners
+                    .iter()
+                    .take(6)
+                    .map(|p| {
+                        let label = english_gloss(st, &p.code)
+                            .or_else(|| st.strongs.get(&p.code).and_then(|e| e.lemma.clone()))
+                            .unwrap_or_else(|| p.code.clone());
+                        let srcs = p
+                            .sources
+                            .iter()
+                            .map(|k| humanize_source(k))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        // The graded text-witness can disbelieve this pair
+                        // (keyed Hebrew-first) — the text's usage pushing back.
+                        let (heb, grk) = if code.starts_with('G') {
+                            (p.code.as_str(), code.as_str())
+                        } else {
+                            (code.as_str(), p.code.as_str())
+                        };
+                        let disputed = if st.witness.disbelief(heb, grk).is_some() {
+                            " <span foreground=\"#b04a3a\" size=\"x-small\">· disputed by usage</span>"
+                        } else {
+                            ""
+                        };
+                        format!(
+                            "<a href=\"occ:{c}\">{label}</a> <span foreground=\"#999\" size=\"x-small\">{srcs}</span>{disputed}",
+                            c = esc(&p.code),
+                            label = esc(&label),
+                            srcs = esc(&srcs)
+                        )
+                    })
+                    .collect();
+                s.push_str(&chips.join("  ·  "));
+                s.push('\n');
             }
 
-            // Concept neighbours from the embedding (Full study), when the
-            // artifact is present: distributional near-synonyms, and — if the
-            // space is aligned — the cross-testament semantic neighbours.
+            // Distributional near-synonyms from the embedding, with the
+            // cross-testament neighbours folded in underneath as a marked line.
             if let Some(emb) = &st.embedding {
                 let near = emb.nearest_concepts(code, 6);
-                if !near.is_empty() {
-                    s.push_str("<small><span foreground=\"#9e7d38\">≈ concepts near: </span>");
-                    s.push_str(&concept_links(&near, &gloss));
-                    s.push_str("</small>\n");
-                }
                 let cross = emb.cross_concepts(code, 6);
-                if !cross.is_empty() {
-                    s.push_str("<small><span foreground=\"#9e7d38\">≈ across the testaments: </span>");
-                    s.push_str(&concept_links(&cross, &gloss));
-                    s.push_str("</small>\n");
+                if !near.is_empty() || !cross.is_empty() {
+                    s.push_str(&shead("SIMILAR CONCEPTS"));
+                    if !near.is_empty() {
+                        s.push_str(&concept_links(st, &near));
+                        s.push('\n');
+                    }
+                    if !cross.is_empty() {
+                        s.push_str("<span foreground=\"#999\" size=\"x-small\">across the testaments —</span> ");
+                        s.push_str(&concept_links(st, &cross));
+                        s.push('\n');
+                    }
                 }
             }
 
             // Symbolic collocation field: the concept community this code
-            // co-occurs with (distinct from the distributional embedding
-            // neighbours — this is "what shares its verses").
+            // co-occurs with — "what shares its verses", distinct from the
+            // distributional near-synonyms above.
             if let Some(ce) = &st.concept {
                 let field = ce.community(code);
                 if !field.is_empty() {
                     let members: Vec<(String, f32)> = field.into_iter().take(8).map(|c| (c, 0.0)).collect();
-                    s.push_str("<small><span foreground=\"#9e7d38\">◦ collocation field: </span>");
-                    s.push_str(&concept_links(&members, &gloss));
-                    s.push_str("</small>\n");
+                    s.push_str(&shead("APPEARS ALONGSIDE"));
+                    s.push_str(&concept_links(st, &members));
+                    s.push('\n');
                 }
 
-                // Where across the canon this concept concentrates (dispersion).
+                // Where across the canon this concept concentrates (counts, not
+                // chapter references — "Genesis ×12").
                 let books = ce.top_books(code, 5);
                 if !books.is_empty() {
                     let (ot, nt) = ce.testament_split(code);
                     let list: Vec<String> = books
                         .iter()
-                        .map(|(b, c)| format!("{} {}", esc(canon::display_name(b)), c))
+                        .map(|(b, c)| format!("{} ×{}", esc(canon::display_name(b)), c))
                         .collect();
+                    s.push_str(&shead("WHERE IT CONCENTRATES"));
                     s.push_str(&format!(
-                        "<small><span foreground=\"#9e7d38\">◦ distribution: </span>{}  <span foreground=\"#999\">(OT {ot} · NT {nt})</span></small>\n",
+                        "{}  <span foreground=\"#999\" size=\"x-small\">(OT {ot} · NT {nt})</span>\n",
                         list.join(" · ")
                     ));
                 }
             }
 
-            // Leitwort: is this concept a discovered burst (deliberately packed
-            // into one stretch)? Show where and how tightly.
+            // Leitwort: a concept the text packs into one stretch far denser
+            // than chance (a repeated motif). Show where and how much of it
+            // lands there; the score is −log₁₀ of the adjusted tail p-value.
             if let Some(b) = st.leitwort.as_ref().and_then(|m| m.get(code)) {
                 let label = burst::span_label(|id| canon::display_name(id).to_string(), &b.win_start, &b.win_end);
+                s.push_str(&shead("LEITWORT"));
                 s.push_str(&format!(
-                    "<small><span foreground=\"#9e7d38\">◦ leitwort: </span>{} <span foreground=\"#999\">({} in {}, strength {:.0})</span></small>\n",
-                    esc(&label),
-                    b.win_count,
-                    b.win_span,
-                    b.score
+                    "{count} of its {total} uses cluster in {label} <span foreground=\"#999\" size=\"x-small\">(p ≈ 10<sup>−{sig:.0}</sup>)</span>\n",
+                    count = b.win_count,
+                    total = b.n,
+                    label = esc(&label),
+                    sig = b.score
                 ));
             }
 
             // A link into the graphical concept map (radial neighbourhood +
             // dispersion strip) for this code.
             if st.concept.is_some() {
-                s.push_str(&format!("<a href=\"conceptmap:{}\"><small>▸ concept map</small></a>\n", esc(code)));
+                s.push_str(&format!("\n<a href=\"conceptmap:{}\"><small>▸ open concept map</small></a>\n", esc(code)));
             }
         }
         s.push('\n');
@@ -2853,15 +2887,123 @@ fn go_link(v: &VRef) -> String {
 
 /// Render a list of `(strongs, score)` concept neighbours as concordance links,
 /// each shown as `CODE (lemma)` when a lemma is known, comma-separated.
-fn concept_links(items: &[(String, f32)], gloss: &dyn Fn(&str) -> Option<String>) -> String {
+/// How many of a code's occurrences to sample when learning its English gloss.
+/// The dominant KJV rendering stabilises well within this; bounding it keeps the
+/// radial map cheap to redraw.
+const GLOSS_SAMPLE: usize = 80;
+
+/// Trim a KJV token down to its bare word: strip leading/trailing punctuation,
+/// keep internal apostrophes/hyphens ("loved," → "loved", "(God" → "God").
+fn normalise_word(w: &str) -> String {
+    w.trim_matches(|c: char| !c.is_alphanumeric()).to_string()
+}
+
+/// A short English gloss for a Strong's code, learned from how the KJV *actually
+/// renders it* — the most common English word carrying that code across its
+/// occurrences. This is what an English reader recognises ("world" for κόσμος),
+/// as opposed to Strong's etymological headword ("orderly arrangement"). Falls
+/// back to distilling the dictionary definition when the code is untagged in the
+/// corpus. Deterministic: ties break on the lexicographically-first surface form
+/// so the same code always glosses the same way between the panel and the map.
+fn english_gloss(st: &State, code: &str) -> Option<String> {
+    let mut tally: HashMap<String, u32> = HashMap::new();
+    for r in st.occ_ix.verses(code).iter().take(GLOSS_SAMPLE) {
+        if let Some(v) = st.corpus.verse(r) {
+            for t in &v.tokens {
+                // Skip translator-supplied words: they render nothing original.
+                if t.flags & FLAG_ADDED == 0 && t.strongs.iter().any(|c| c == code) {
+                    let w = normalise_word(&t.word);
+                    if !w.is_empty() {
+                        *tally.entry(w).or_default() += 1;
+                    }
+                }
+            }
+        }
+    }
+    if !tally.is_empty() {
+        let mut ranked: Vec<(String, u32)> = tally.into_iter().collect();
+        ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        return Some(ranked[0].0.clone());
+    }
+    // No tagged occurrence — distil the dictionary as a last resort.
+    let e = st.strongs.get(code)?;
+    e.def
+        .as_deref()
+        .and_then(distil_gloss)
+        .or_else(|| e.kjv.as_deref().and_then(distil_gloss))
+}
+
+/// Distil the first clean English fragment from a Strong's definition/KJV field:
+/// drop parenthetical asides, take the leading comma/semicolon-delimited clause,
+/// cap its length. A fallback only — the corpus mode above is preferred.
+fn distil_gloss(raw: &str) -> Option<String> {
+    let mut cleaned = String::with_capacity(raw.len());
+    let mut depth: i32 = 0;
+    for ch in raw.chars() {
+        match ch {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth = (depth - 1).max(0),
+            _ if depth == 0 => cleaned.push(ch),
+            _ => {}
+        }
+    }
+    let first = cleaned
+        .split(|c| c == ',' || c == ';')
+        .map(str::trim)
+        .find(|p| p.chars().any(|c| c.is_alphabetic()))?;
+    let capped: String = first.chars().take(30).collect();
+    // Trim edge punctuation the clause-split leaves behind (a trailing "." from
+    // "love.", a leading space from a stripped parenthetical) — keep internal
+    // spaces/hyphens ("to love", "self-Existent").
+    let g = capped.trim_matches(|c: char| !c.is_alphanumeric()).to_string();
+    if g.is_empty() {
+        None
+    } else {
+        Some(g)
+    }
+}
+
+/// A readable name for a bridge witness source key ("lxx" → "Septuagint").
+fn humanize_source(key: &str) -> String {
+    match key {
+        "etymology" => "etymology".to_string(),
+        "lxx" => "Septuagint".to_string(),
+        "quotation" => "NT quotation".to_string(),
+        other => other.to_string(),
+    }
+}
+
+/// A small-caps-feel section header for the study panel: a spaced, muted-gold
+/// label on its own line, with a blank line above it. Titles are given already
+/// upper-cased.
+fn shead(title: &str) -> String {
+    format!("\n<span foreground=\"#a0894a\" size=\"x-small\"><b>{}</b></span>\n", title)
+}
+
+/// Render concept neighbours English-first: the recognisable English gloss is
+/// the link, with the original-language lemma trailing dimmed ("love ἀγάπη").
+/// Members are separated by middots so the two-part chips stay legible.
+fn concept_links(st: &State, items: &[(String, f32)]) -> String {
     items
         .iter()
-        .map(|(code, _)| match gloss(code) {
-            Some(l) => format!("<a href=\"occ:{c}\">{c}</a> {l}", c = esc(code), l = esc(&l)),
-            None => format!("<a href=\"occ:{c}\">{c}</a>", c = esc(code)),
+        .map(|(code, _)| {
+            let english = english_gloss(st, code);
+            let lemma = st.strongs.get(code).and_then(|e| e.lemma.clone());
+            match (english, lemma) {
+                // English word links to the concordance; lemma trails, dimmed.
+                (Some(en), Some(lem)) => format!(
+                    "<a href=\"occ:{c}\">{en}</a> <span foreground=\"#8a7a52\" size=\"small\">{lem}</span>",
+                    c = esc(code),
+                    en = esc(&en),
+                    lem = esc(&lem)
+                ),
+                (Some(en), None) => format!("<a href=\"occ:{c}\">{en}</a>", c = esc(code), en = esc(&en)),
+                (None, Some(lem)) => format!("<a href=\"occ:{c}\">{lem}</a>", c = esc(code), lem = esc(&lem)),
+                (None, None) => format!("<a href=\"occ:{c}\">{c}</a>", c = esc(code)),
+            }
         })
         .collect::<Vec<_>>()
-        .join(", ")
+        .join("  ·  ")
 }
 
 /// Markup for a search query's answer: a go-to jump, or a list of hit links.
@@ -2975,4 +3117,64 @@ fn present_error(app: &adw::Application, msg: &str) {
         .content(&toolbar)
         .build();
     window.present();
+}
+
+#[cfg(test)]
+mod markup_tests {
+    use super::*;
+
+    /// GtkLabel consumes `<a href>` links itself before handing the rest to
+    /// Pango, so `pango::parse_markup` doesn't know the `<a>` tag. Strip the
+    /// link tags (keeping their text) to validate the Pango-level structure.
+    fn strip_links(m: &str) -> String {
+        let mut out = String::new();
+        let mut rest = m;
+        while let Some(i) = rest.find("<a ") {
+            out.push_str(&rest[..i]);
+            match rest[i..].find('>') {
+                Some(j) => rest = &rest[i + j + 1..],
+                None => break,
+            }
+        }
+        out.push_str(rest);
+        out.replace("</a>", "")
+    }
+
+    /// Every study-panel markup shape must parse as valid Pango markup — the
+    /// same check GtkLabel runs on the non-link parts. Guards the section
+    /// headers, the English-first concept chips, the humanised bridge chips,
+    /// and the `<sup>` exponent in the leitwort line against a syntax
+    /// regression.
+    #[test]
+    fn panel_markup_shapes_are_valid_pango() {
+        let samples = [
+            // A whole analytics run, headers and all, concatenated as the label
+            // would receive it.
+            format!(
+                "{h1}<a href=\"occ:H1254\">create</a> <span foreground=\"#999\" size=\"x-small\">etymology, Septuagint</span> <span foreground=\"#b04a3a\" size=\"x-small\">· disputed by usage</span>\n\
+                 {h2}<a href=\"occ:G25\">love</a> <span foreground=\"#8a7a52\" size=\"small\">ἀγαπάω</span>  ·  <a href=\"occ:G5368\">love</a> <span foreground=\"#8a7a52\" size=\"small\">φιλέω</span>\n\
+                 <span foreground=\"#999\" size=\"x-small\">across the testaments —</span> <a href=\"occ:H2617\">mercy</a> <span foreground=\"#8a7a52\" size=\"small\">חֶסֶד</span>\n\
+                 {h3}Genesis ×12 · Psalms ×9  <span foreground=\"#999\" size=\"x-small\">(OT 3 · NT 2)</span>\n\
+                 {h4}42 of its 55 uses cluster in Genesis 1–11 <span foreground=\"#999\" size=\"x-small\">(p ≈ 10<sup>−43</sup>)</span>\n",
+                h1 = shead("SAME ROOT ACROSS TESTAMENTS"),
+                h2 = shead("SIMILAR CONCEPTS"),
+                h3 = shead("WHERE IT CONCENTRATES"),
+                h4 = shead("LEITWORT"),
+            ),
+        ];
+        for m in &samples {
+            let stripped = strip_links(m);
+            pango::parse_markup(&stripped, '\0')
+                .unwrap_or_else(|e| panic!("invalid panel markup: {e}\n---\n{stripped}"));
+        }
+    }
+
+    #[test]
+    fn distil_gloss_takes_the_clean_leading_clause() {
+        // Parenthetical asides dropped, first clause kept.
+        assert_eq!(distil_gloss("(be-)love(-ed)."), Some("love".to_string()));
+        assert_eq!(distil_gloss("to love (in a social or moral sense)"), Some("to love".to_string()));
+        assert_eq!(distil_gloss("love, i.e. affection or benevolence"), Some("love".to_string()));
+        assert_eq!(distil_gloss("()"), None);
+    }
 }
