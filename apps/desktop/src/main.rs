@@ -692,6 +692,158 @@ fn build_ui(app: &adw::Application) {
     }
 }
 
+/// Draw a concept's dispersion strip: the 66 books on the canon axis, each
+/// shaded by how densely `code` occurs there. Ported from `ConceptMap`.
+fn draw_dispersion(state: &Shared, code: &str, cr: &cairo::Context, w: i32, h: i32) {
+    let st = state.borrow();
+    let width = w as f64;
+    let hf = h as f64;
+    let nb = canon::BOOKS.len() as f64;
+    cr.set_source_rgb(0.949, 0.933, 0.902);
+    let _ = cr.rectangle(0.0, 0.0, width, hf);
+    let _ = cr.fill();
+
+    let by_book = st.concept.as_ref().and_then(|ce| ce.stat(code)).map(|s| s.by_book.clone()).unwrap_or_default();
+    let max = by_book.values().copied().max().unwrap_or(1) as f64;
+    for (i, b) in canon::BOOKS.iter().enumerate() {
+        let cnt = by_book.get(b.id).copied().unwrap_or(0) as f64;
+        if cnt > 0.0 {
+            let x0 = i as f64 / nb * width;
+            let x1 = (i as f64 + 1.0) / nb * width;
+            cr.set_source_rgba(0.62, 0.49, 0.22, 0.15 + 0.75 * (cnt / max));
+            let _ = cr.rectangle(x0, 0.0, x1 - x0, hf);
+            let _ = cr.fill();
+        }
+    }
+    // OT/NT seam
+    let dx = OT_NT_DIVIDE as f64 / nb * width;
+    cr.set_source_rgba(0.4, 0.3, 0.2, 0.5);
+    let _ = cr.rectangle(dx - 0.5, 0.0, 1.0, hf);
+    let _ = cr.fill();
+}
+
+/// Draw a radial concept-neighbourhood: `code` at the centre, its collocation
+/// community + embedding neighbours fanned out as labelled spokes. Ported from
+/// `ConceptGraph` (static rendering; re-centre is via the word study links).
+fn draw_concept_radial(state: &Shared, code: &str, cr: &cairo::Context, w: i32, h: i32) {
+    let st = state.borrow();
+    let width = w as f64;
+    let hf = h as f64;
+    cr.set_source_rgb(0.988, 0.976, 0.957);
+    let _ = cr.rectangle(0.0, 0.0, width, hf);
+    let _ = cr.fill();
+
+    // Neighbours: embedding near (if built) then collocation community.
+    let mut nbrs: Vec<(String, bool)> = Vec::new(); // (code, is_semantic)
+    if let Some(emb) = &st.embedding {
+        for (c, _) in emb.nearest_concepts(code, 6) {
+            nbrs.push((c, true));
+        }
+    }
+    if let Some(ce) = &st.concept {
+        for c in ce.community(code).into_iter().take(6) {
+            if !nbrs.iter().any(|(x, _)| x == &c) {
+                nbrs.push((c, false));
+            }
+        }
+    }
+
+    let layout = pangocairo::functions::create_layout(cr);
+    let mut fd = pango::FontDescription::new();
+    fd.set_family(&st.family);
+    fd.set_absolute_size(12.0 * pango::SCALE as f64);
+    layout.set_font_description(Some(&fd));
+
+    let (cx, cy) = (width / 2.0, hf / 2.0);
+    let radius = (width.min(hf) / 2.0 - 60.0).max(40.0);
+    let n = nbrs.len().max(1);
+    let gloss = |c: &str| st.strongs.get(c).and_then(|e| e.lemma.clone()).unwrap_or_default();
+
+    // spokes
+    for (k, (c, semantic)) in nbrs.iter().enumerate() {
+        let ang = std::f64::consts::TAU * k as f64 / n as f64 - std::f64::consts::FRAC_PI_2;
+        let (nx, ny) = (cx + radius * ang.cos(), cy + radius * ang.sin());
+        // edge
+        if *semantic {
+            cr.set_source_rgba(0.62, 0.49, 0.22, 0.5); // gold: distributional
+        } else {
+            cr.set_source_rgba(0.42, 0.55, 0.40, 0.5); // green: collocation
+        }
+        cr.set_line_width(1.4);
+        cr.move_to(cx, cy);
+        cr.line_to(nx, ny);
+        let _ = cr.stroke();
+        // node label
+        let label = format!("{c}\n{}", gloss(c));
+        layout.set_text(&label);
+        let (tw, _th) = layout.pixel_size();
+        cr.set_source_rgb(0.25, 0.22, 0.17);
+        cr.move_to(nx - tw as f64 / 2.0, ny + 6.0);
+        pangocairo::functions::show_layout(cr, &layout);
+        cr.set_source_rgba(0.62, 0.49, 0.22, 0.9);
+        cr.arc(nx, ny, 3.0, 0.0, std::f64::consts::TAU);
+        let _ = cr.fill();
+    }
+    // centre node
+    fd.set_absolute_size(15.0 * pango::SCALE as f64);
+    layout.set_font_description(Some(&fd));
+    layout.set_text(&format!("{code}  {}", gloss(code)));
+    let (tw, _) = layout.pixel_size();
+    cr.set_source_rgb(0.62, 0.49, 0.22);
+    cr.arc(cx, cy, 5.0, 0.0, std::f64::consts::TAU);
+    let _ = cr.fill();
+    cr.set_source_rgb(0.20, 0.16, 0.10);
+    cr.move_to(cx - tw as f64 / 2.0, cy - 26.0);
+    pangocairo::functions::show_layout(cr, &layout);
+}
+
+/// Open the concept map for `code`: a radial neighbourhood over a dispersion
+/// strip. Esc closes.
+fn show_concept_map(state: &Shared, ui: &Ui, code: &str) {
+    ensure_analytics(state);
+    let win = gtk::Window::builder()
+        .title(&format!("Concept map — {code}"))
+        .default_width(720)
+        .default_height(560)
+        .build();
+    if let Some(p) = window_of(ui) {
+        win.set_transient_for(Some(&p));
+    }
+    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    let radial = gtk::DrawingArea::new();
+    radial.set_vexpand(true);
+    radial.set_hexpand(true);
+    {
+        let (state, code) = (state.clone(), code.to_string());
+        radial.set_draw_func(move |_a, cr, w, h| draw_concept_radial(&state, &code, cr, w, h));
+    }
+    let strip = gtk::DrawingArea::new();
+    strip.set_content_height(40);
+    strip.set_hexpand(true);
+    strip.set_tooltip_text(Some("Dispersion: where across the 66 books this concept occurs"));
+    {
+        let (state, code) = (state.clone(), code.to_string());
+        strip.set_draw_func(move |_a, cr, w, h| draw_dispersion(&state, &code, cr, w, h));
+    }
+    vbox.append(&radial);
+    vbox.append(&strip);
+    {
+        let win2 = win.clone();
+        let key = gtk::EventControllerKey::new();
+        key.connect_key_pressed(move |_c, k, _kc, _m| {
+            if k == gdk::Key::Escape {
+                win2.close();
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
+        });
+        win.add_controller(key);
+    }
+    win.set_child(Some(&vbox));
+    win.present();
+}
+
 /// Open the book-to-book weave chord map in a popup: click a book to jump the
 /// active pane there; Esc closes.
 fn show_weave_map(state: &Shared, ui: &Ui) {
@@ -1717,6 +1869,8 @@ fn handle_link(state: &Shared, ui: &Ui, uri: &str) {
             let m = weave_markup(&state.borrow(), i);
             show_study(ui, &m);
         }
+    } else if let Some(code) = uri.strip_prefix("conceptmap:") {
+        show_concept_map(state, ui, code);
     }
 }
 
@@ -2354,6 +2508,12 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
                     b.win_span,
                     b.score
                 ));
+            }
+
+            // A link into the graphical concept map (radial neighbourhood +
+            // dispersion strip) for this code.
+            if st.concept.is_some() {
+                s.push_str(&format!("<a href=\"conceptmap:{}\"><small>▸ concept map</small></a>\n", esc(code)));
             }
         }
         s.push('\n');
