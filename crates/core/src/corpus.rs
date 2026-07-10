@@ -177,11 +177,86 @@ impl Corpus {
 /// stream is in canonical order and that the count matches the header.
 pub fn load_corpus(path: impl AsRef<Path>) -> Result<Corpus, Error> {
     let path = path.as_ref();
+    let stamp = source_stamp(path);
+
+    // Fast path: a valid cache built from this exact source (same length,
+    // mtime, and tokenization) — skip re-parsing the ~19 MB of JSONL.
+    if let Some((len, mtime)) = stamp {
+        if let Some(c) = read_cache(&cache_path(path)) {
+            if c.src_len == len && c.src_mtime == mtime && c.tok == crate::canon::TOKENIZATION_VERSION {
+                return Ok(mk_corpus(c.tok, c.verses));
+            }
+        }
+    }
+
+    // Slow path: parse the JSONL, then write the cache (best-effort — a failed
+    // or torn cache write just means the next launch re-parses).
     let raw = std::fs::read_to_string(path).map_err(|e| Error::Io {
         path: path.display().to_string(),
         source: e,
     })?;
-    from_str(&raw)
+    let corpus = from_str(&raw)?;
+    if let Some((len, mtime)) = stamp {
+        let cache = CorpusCache {
+            src_len: len,
+            src_mtime: mtime,
+            tok: corpus.tok_version.clone(),
+            verses: corpus.verses.clone(),
+        };
+        let _ = write_cache(&cache_path(path), &cache);
+    }
+    Ok(corpus)
+}
+
+/// Read + gunzip + decode a corpus cache, or `None` if absent/corrupt/stale.
+fn read_cache(path: &Path) -> Option<CorpusCache> {
+    use std::io::Read;
+    let bytes = std::fs::read(path).ok()?;
+    let mut gz = flate2::read::GzDecoder::new(&bytes[..]);
+    let mut raw = Vec::new();
+    gz.read_to_end(&mut raw).ok()?;
+    bincode::deserialize::<CorpusCache>(&raw).ok()
+}
+
+/// Encode + gzip + atomically write a corpus cache (best-effort).
+fn write_cache(path: &Path, cache: &CorpusCache) -> Result<(), Error> {
+    use std::io::Write;
+    let raw = bincode::serialize(cache).map_err(|e| Error::Parse(e.to_string()))?;
+    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+    gz.write_all(&raw).map_err(|e| Error::Parse(e.to_string()))?;
+    let bytes = gz.finish().map_err(|e| Error::Parse(e.to_string()))?;
+    crate::store::write_atomic_bytes(path, &bytes)
+}
+
+/// The parsed-corpus cache, keyed to its source file's size + mtime + the
+/// tokenization stamp. Any mismatch (regenerated data, changed tokenization)
+/// invalidates it and the JSONL is re-parsed.
+#[derive(Serialize, Deserialize)]
+struct CorpusCache {
+    src_len: u64,
+    src_mtime: i64,
+    tok: String,
+    verses: Vec<Verse>,
+}
+
+/// `(len, mtime-seconds)` of the source file, or `None` if it can't be stat'd
+/// (then the cache is skipped and the JSONL is parsed directly).
+fn source_stamp(path: &Path) -> Option<(u64, i64)> {
+    let md = std::fs::metadata(path).ok()?;
+    let mtime = md
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs() as i64;
+    Some((md.len(), mtime))
+}
+
+/// `<source>.idxcache`, next to the data file.
+fn cache_path(path: &Path) -> std::path::PathBuf {
+    let mut s = path.as_os_str().to_os_string();
+    s.push(".idxcache");
+    std::path::PathBuf::from(s)
 }
 
 /// Parse a corpus from an in-memory JSONL string (header line + verse lines).
@@ -292,6 +367,38 @@ pub fn corpus_header(tok_version: &str, n_verses: usize) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn corpus_cache_roundtrips_and_invalidates() {
+        let dir = std::env::temp_dir().join(format!("pure-corpus-cache-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("kjv.jsonl");
+        std::fs::write(&src, SAMPLE).unwrap();
+
+        // First load parses and writes the cache.
+        let a = load_corpus(&src).unwrap();
+        assert!(cache_path(&src).exists(), "cache should be written");
+        assert_eq!(a.len(), 3);
+
+        // The cache is *used* when its stamp matches the current source: corrupt
+        // the source to un-parseable garbage but write a cache whose stamp
+        // matches that garbage and carries the good verses — a successful load
+        // then proves the cache path (not the parser) ran.
+        std::fs::write(&src, b"garbage, not jsonl").unwrap();
+        let (lg, mg) = source_stamp(&src).unwrap();
+        let good = CorpusCache { src_len: lg, src_mtime: mg, tok: a.tok_version.clone(), verses: a.verses.clone() };
+        write_cache(&cache_path(&src), &good).unwrap();
+        assert_eq!(load_corpus(&src).unwrap().len(), 3, "matching cache is used despite garbage source");
+
+        // A stale stamp (wrong length) is rejected → the garbage source is then
+        // parsed and errors.
+        let stale = CorpusCache { src_len: lg + 999, src_mtime: mg, tok: a.tok_version.clone(), verses: a.verses.clone() };
+        write_cache(&cache_path(&src), &stale).unwrap();
+        assert!(load_corpus(&src).is_err(), "stale-stamp cache rejected → garbage source errors");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     const SAMPLE: &str = concat!(
         r#"{"format":"overlay-kjv-canonical","tokenization":"kjv1769-tok2","verses":3}"#,

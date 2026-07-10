@@ -263,18 +263,25 @@ fn ensure_analytics(state: &Shared) {
         }
     }
     // Compute under a shared borrow (reads only), then swap in under a mut one.
-    let (verse_sim, concept_engine, leitwort) = {
+    // The embedding + morphology artifacts (multi-MB) are loaded here too, so a
+    // Simple reader never parses them.
+    let (embedding, morph, verse_sim, concept_engine, leitwort) = {
         let st = state.borrow();
-        let verse_sim = st.embedding.as_ref().map(|e| embed::VerseSim::build(e, &st.corpus));
+        let data = std::path::Path::new(&st.home).join("data");
+        let embedding = embed::load_embedding(canon::TOKENIZATION_VERSION, data.join("concept-vectors.vec"));
+        let morph = morph::load_morph(canon::TOKENIZATION_VERSION, data.join("morphology.jsonl"));
+        let verse_sim = embedding.as_ref().map(|e| embed::VerseSim::build(e, &st.corpus));
         let concept_engine = concept::Concept::build(&st.corpus);
         let leitwort: HashMap<String, burst::Burst> =
             burst::discover_leitworter(&burst::BurstParams::default(), &st.corpus)
                 .into_iter()
                 .map(|b| (b.strongs.clone(), b))
                 .collect();
-        (verse_sim, concept_engine, leitwort)
+        (embedding, morph, verse_sim, concept_engine, leitwort)
     };
     let mut st = state.borrow_mut();
+    st.embedding = embedding;
+    st.morph = morph;
     st.verse_sim = verse_sim;
     st.concept = Some(concept_engine);
     st.leitwort = Some(leitwort);
@@ -352,10 +359,8 @@ fn load_state(cfg: &Config) -> Result<State, String> {
     // The OT↔NT bridge — etymology (from strongs.json) fused with any external
     // witnesses + trust priors present under the home.
     let bridge = bridge::FusedBridge::build(&strongs, &home);
-    // Concept embeddings — optional offline artifact; absent → symbolic only.
-    let embedding = embed::load_embedding(canon::TOKENIZATION_VERSION, data.join("concept-vectors.vec"));
-    // Morphology sidecar — optional; stale stamp / missing → None.
-    let morph = morph::load_morph(canon::TOKENIZATION_VERSION, data.join("morphology.jsonl"));
+    // Concept embeddings + morphology are Full-study-only and multi-MB to parse,
+    // so they load lazily in `ensure_analytics` (not here) to keep launch quick.
     // SIF verse-similarity model, built once over the embedding (heavy, but the
     // embedding is the only prerequisite; skipped when there's no embedding).
     // The heavy analytics (verse-sim, concept graph, leitwörter) are built
@@ -384,8 +389,8 @@ fn load_state(cfg: &Config) -> Result<State, String> {
         tags,
         xref_ix,
         bridge,
-        embedding,
-        morph,
+        embedding: None,
+        morph: None,
         verse_sim: None,
         concept: None,
         leitwort: None,

@@ -31,6 +31,10 @@ rust-version = "1.85"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+# Compact binary codec + gzip for the startup corpus cache (skips re-parsing
+# 19 MB of JSONL when the source is unchanged, and keeps the cache file small).
+bincode = "1"
+flate2 = "1"
 
 # Internal crates
 pure-core = { path = "crates/core" }

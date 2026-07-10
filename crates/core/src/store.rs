@@ -21,6 +21,13 @@ use crate::Error;
 /// Atomically write `contents` to `path`, creating parent directories as
 /// needed. Portable across Unix and Windows.
 pub fn write_atomic(path: impl AsRef<Path>, contents: &str) -> Result<(), Error> {
+    write_atomic_bytes(path, contents.as_bytes())
+}
+
+/// Atomically write raw `bytes` to `path` (the binary sibling of
+/// [`write_atomic`], for caches and other non-text artifacts). Same portable
+/// temp-sibling → fsync → rename dance.
+pub fn write_atomic_bytes(path: impl AsRef<Path>, bytes: &[u8]) -> Result<(), Error> {
     let path = path.as_ref();
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
@@ -33,7 +40,7 @@ pub fn write_atomic(path: impl AsRef<Path>, contents: &str) -> Result<(), Error>
     // will not replace a file that still has an open handle.
     {
         let mut f = File::create(&tmp).map_err(|e| io_err(&tmp, e))?;
-        f.write_all(contents.as_bytes()).map_err(|e| io_err(&tmp, e))?;
+        f.write_all(bytes).map_err(|e| io_err(&tmp, e))?;
         f.sync_all().map_err(|e| io_err(&tmp, e))?;
     }
     fs::rename(&tmp, path).map_err(|e| {
