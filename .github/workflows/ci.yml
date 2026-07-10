@@ -59,3 +59,21 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Cross-build the Windows .dll
         run: cargo build --locked -p pure-ffi --release --target x86_64-pc-windows-gnu
+
+  # Cross-compile the C ABI for ARM64 Windows (aarch64, MSVC) — the toolchain a
+  # Surface / Snapdragon Windows box uses natively. cargo-xwin fetches the MSVC
+  # CRT + SDK so the real cdylib link is exercised, not just a typecheck. This is
+  # the same target `rustup default` selects on native ARM64 Windows, so a green
+  # job here means `cargo build -p pure-ffi` will link there too.
+  windows-arm64-dll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-xwin
+        run: cargo install cargo-xwin --locked
+      - name: Cross-build the ARM64 Windows .dll
+        run: cargo xwin build --locked -p pure-ffi --release --target aarch64-pc-windows-msvc
