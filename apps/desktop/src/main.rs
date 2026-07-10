@@ -363,6 +363,14 @@ fn load_state(cfg: &Config) -> Result<State, String> {
     let search_ix = SearchIx::build(&corpus);
     let occ_ix = OccurrenceIx::build(&corpus);
     let family = register_bundled_fonts();
+    // Restore last session's panes, or open the default passage on a fresh
+    // install; clamp the active index into range.
+    let panes: Vec<Pane> = if cfg.panes.is_empty() {
+        vec![Pane::new("John", 3)]
+    } else {
+        cfg.panes.iter().take(MAX_PANES).map(|p| Pane::new(&p.book, p.chapter)).collect()
+    };
+    let active = cfg.active.min(panes.len().saturating_sub(1));
     Ok(State {
         corpus,
         strongs,
@@ -386,8 +394,8 @@ fn load_state(cfg: &Config) -> Result<State, String> {
         family,
         font_size: cfg.body_size,
         mode: cfg.mode,
-        panes: vec![Pane::new("John", 3)],
-        active: 0,
+        panes,
+        active,
     })
 }
 
@@ -644,6 +652,16 @@ fn build_ui(app: &adw::Application) {
         .content(&toolbar)
         .build();
 
+    // Save the reading session (open panes + mode + size) on close, so the app
+    // reopens where you left it.
+    {
+        let state = state.clone();
+        window.connect_close_request(move |_| {
+            persist_config(&state);
+            glib::Propagation::Proceed
+        });
+    }
+
     install_css();
     rebuild_panes(&state, &ui); // builds the pane columns + first paint
     window.present();
@@ -654,12 +672,21 @@ fn build_ui(app: &adw::Application) {
     }
 }
 
-/// Persist the current mode + body size to the platform config (best-effort;
-/// the reader keeps working if the config dir can't be written).
+/// Persist the current mode + body size + reading session (open panes) to the
+/// platform config (best-effort; the reader keeps working if it can't write).
 fn persist_config(state: &Shared) {
     let cfg = {
         let st = state.borrow();
-        Config { mode: st.mode, body_size: st.font_size }
+        Config {
+            mode: st.mode,
+            body_size: st.font_size,
+            panes: st
+                .panes
+                .iter()
+                .map(|p| config::PaneRef { book: p.book.clone(), chapter: p.chapter })
+                .collect(),
+            active: st.active,
+        }
     };
     let _ = config::save(&cfg);
 }

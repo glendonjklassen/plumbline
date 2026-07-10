@@ -51,17 +51,29 @@ impl StudyMode {
     }
 }
 
+/// One reopened reading pane: which passage it showed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaneRef {
+    pub book: String,
+    pub chapter: u16,
+}
+
 /// The persisted settings. New fields must be additive (default on absence) so
 /// an older file keeps loading.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub mode: StudyMode,
     pub body_size: f64,
+    /// The reading panes from the last session (empty on a fresh install → the
+    /// app opens its default passage). Selections/scroll are transient.
+    pub panes: Vec<PaneRef>,
+    /// Which pane was active last session.
+    pub active: usize,
 }
 
 impl Default for Config {
     fn default() -> Config {
-        Config { mode: StudyMode::Simple, body_size: 18.0 }
+        Config { mode: StudyMode::Simple, body_size: 18.0, panes: Vec::new(), active: 0 }
     }
 }
 
@@ -74,6 +86,16 @@ struct ConfigWire {
     study_mode: String,
     #[serde(default = "default_body_size")]
     body_size: f64,
+    #[serde(default)]
+    open_panes: Vec<PaneWire>,
+    #[serde(default)]
+    active_pane: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PaneWire {
+    book: String,
+    chapter: u16,
 }
 
 fn default_mode_token() -> String {
@@ -93,11 +115,18 @@ impl Config {
             } else {
                 Config::default().body_size
             },
+            panes: w.open_panes.into_iter().map(|p| PaneRef { book: p.book, chapter: p.chapter.max(1) }).collect(),
+            active: w.active_pane,
         }
     }
 
     fn to_wire(&self) -> ConfigWire {
-        ConfigWire { study_mode: self.mode.token().to_string(), body_size: self.body_size }
+        ConfigWire {
+            study_mode: self.mode.token().to_string(),
+            body_size: self.body_size,
+            open_panes: self.panes.iter().map(|p| PaneWire { book: p.book.clone(), chapter: p.chapter }).collect(),
+            active_pane: self.active,
+        }
     }
 }
 
@@ -192,7 +221,12 @@ mod tests {
     fn roundtrips_and_reload_is_not_first_run() {
         let path = std::env::temp_dir().join(format!("pure-cfg-rt-{}.json", std::process::id()));
         let _ = std::fs::remove_file(&path);
-        let cfg = Config { mode: StudyMode::Full, body_size: 21.5 };
+        let cfg = Config {
+            mode: StudyMode::Full,
+            body_size: 21.5,
+            panes: vec![PaneRef { book: "John".into(), chapter: 3 }, PaneRef { book: "Rom".into(), chapter: 8 }],
+            active: 1,
+        };
         save_to(&path, &cfg).unwrap();
 
         let (back, first) = load_from(&path);
