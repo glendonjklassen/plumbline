@@ -26,6 +26,11 @@ pub mod embed;
 #[cfg(feature = "morphology")]
 pub mod morph;
 
+/// Symbolic concept engine: co-occurrence statistics + community graph over the
+/// corpus (no ML data). With the `concept` feature.
+#[cfg(feature = "concept")]
+pub mod concept;
+
 /// Which R&D capabilities this build was compiled with. The UI queries this to
 /// decide which panels/toggles to even show (decision #4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -35,6 +40,7 @@ pub struct Capabilities {
     pub morphology: bool,
     pub keyness: bool,
     pub trust: bool,
+    pub concept: bool,
 }
 
 /// The capabilities compiled into this build.
@@ -45,6 +51,7 @@ pub const fn capabilities() -> Capabilities {
         morphology: cfg!(feature = "morphology"),
         keyness: cfg!(feature = "keyness"),
         trust: cfg!(feature = "trust"),
+        concept: cfg!(feature = "concept"),
     }
 }
 
@@ -52,7 +59,7 @@ pub const fn capabilities() -> Capabilities {
 /// in pure-reader mode with no "Full study" affordances.
 pub const fn any_enabled() -> bool {
     let c = capabilities();
-    c.bridge || c.embeddings || c.morphology || c.keyness || c.trust
+    c.bridge || c.embeddings || c.morphology || c.keyness || c.trust || c.concept
 }
 
 #[cfg(test)]
@@ -67,7 +74,8 @@ mod tests {
         feature = "embeddings",
         feature = "morphology",
         feature = "keyness",
-        feature = "trust"
+        feature = "trust",
+        feature = "concept"
     )))]
     #[test]
     fn default_build_has_no_rnd() {

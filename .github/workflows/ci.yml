@@ -21,7 +21,7 @@ jobs:
       - name: Test portable crates
         run: cargo test --locked -p pure-core -p pure-layout -p pure-rnd -p pure-ffi -p pure-hydrate
       - name: Test the R&D features
-        run: cargo test --locked -p pure-rnd --features "bridge embeddings morphology"
+        run: cargo test --locked -p pure-rnd --features "bridge embeddings morphology concept"
 
   # Guard against the bindings drifting from the Rust source: regenerate the C
   # header and the C# P/Invoke shim, then fail if anything changed. This is the

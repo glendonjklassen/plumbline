@@ -26,4 +26,7 @@ embeddings = []
 morphology = []
 keyness = []
 trust = []
-full = ["bridge", "embeddings", "morphology", "keyness", "trust"]
+# The symbolic concept engine: co-occurrence statistics + community graph, pure
+# corpus folds (no ML data).
+concept = []
+full = ["bridge", "embeddings", "morphology", "keyness", "trust", "concept"]
