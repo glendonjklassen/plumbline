@@ -16,6 +16,11 @@
 #[cfg(feature = "bridge")]
 pub mod bridge;
 
+/// The text-as-witness loader: a graded, lexicon-free alignment that can
+/// disbelieve bridge links. Bundled with the `bridge` feature.
+#[cfg(feature = "bridge")]
+pub mod witness;
+
 /// Concept embeddings: loader + neighbour search over the offline-trained
 /// `concept-vectors.vec` artifact. Compiled in with the `embeddings` feature.
 #[cfg(feature = "embeddings")]

@@ -35,7 +35,7 @@ use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread};
 use pure_core::weave::{self, Link, LoadedWeave, Span, WeaveKind};
 use pure_core::{canon, corpus, crossref, home, notes, VRef};
-use pure_rnd::{bridge, burst, concept, embed, morph};
+use pure_rnd::{bridge, burst, concept, embed, morph, witness};
 use pure_layout::{layout_chapter, DisplayList, Hit, ItemKind, LayoutConfig, Measure};
 
 const APP_ID: &str = "ca.cavallo.purestudy";
@@ -72,6 +72,9 @@ struct State {
     /// The OT↔NT bridge: Strong's etymology fused with external witnesses (LXX,
     /// Abbott-Smith, TIPNR) weighted by trust priors. A Full-study R&D tier.
     bridge: bridge::FusedBridge,
+    /// The graded text-as-witness — can flag a bridge link it disbelieves (only
+    /// once it has passed grading; silent otherwise).
+    witness: witness::TextWitness,
     /// Concept embeddings (offline-trained), when the artifact is present — for
     /// "concepts near this" and the cross-testament semantic bridge.
     embedding: Option<embed::Embedding>,
@@ -359,6 +362,8 @@ fn load_state(cfg: &Config) -> Result<State, String> {
     // The OT↔NT bridge — etymology (from strongs.json) fused with any external
     // witnesses + trust priors present under the home.
     let bridge = bridge::FusedBridge::build(&strongs, &home);
+    // The text-as-witness (small; silent unless graded-qualified).
+    let witness = witness::TextWitness::load(data.join("text-witness.json"));
     // Concept embeddings + morphology are Full-study-only and multi-MB to parse,
     // so they load lazily in `ensure_analytics` (not here) to keep launch quick.
     // SIF verse-similarity model, built once over the embedding (heavy, but the
@@ -389,6 +394,7 @@ fn load_state(cfg: &Config) -> Result<State, String> {
         tags,
         xref_ix,
         bridge,
+        witness,
         embedding: None,
         morph: None,
         verse_sim: None,
@@ -2278,6 +2284,16 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
                         c = esc(&p.code),
                         src = esc(&p.sources.join("+"))
                     ));
+                    // If the graded text-witness disbelieves this pair (keyed
+                    // Hebrew-first), flag it — the text's usage pushing back.
+                    let (heb, grk) = if code.starts_with('G') {
+                        (p.code.as_str(), code.as_str())
+                    } else {
+                        (code.as_str(), p.code.as_str())
+                    };
+                    if st.witness.disbelief(heb, grk).is_some() {
+                        s.push_str(" <span foreground=\"#b04a3a\">⚠</span>");
+                    }
                 }
                 s.push_str("</small>\n");
             }
