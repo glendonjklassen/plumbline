@@ -16,6 +16,10 @@ target
 # .NET build output (from the C# binding demo)
 **/bin/
 **/obj/
+# …but NOT Rust's src/bin/ crate-binary sources (e.g. the pure-bindgen tool),
+# which the broad **/bin/ rule above would otherwise swallow.
+!**/src/bin/
+!**/src/bin/**
 
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
