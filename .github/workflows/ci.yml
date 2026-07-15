@@ -1,0 +1,201 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# A push to any branch and a pull_request for the same commit would otherwise
+# run everything twice. Two guards close that:
+#   1. This concurrency group cancels superseded runs on the same ref.
+#   2. Every job carries a `fork-guard` if: (see below) so pull_request events
+#      only run for forks — same-repo PRs are already covered by the push run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Build + test the portable crates (everything except the GTK desktop shell,
+  # which needs system GTK4 libraries). This is the pure domain core, layout,
+  # the R&D flags, and the C ABI.
+  test:
+    runs-on: ubuntu-latest
+    # fork-guard: run on every push; run pull_request only when the PR comes
+    # from a fork (same-repo PRs already ran via the push event).
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test portable crates
+        run: cargo test --locked -p pure-core -p pure-layout -p pure-rnd -p pure-ffi -p pure-hydrate
+      - name: Test the R&D features
+        run: cargo test --locked -p pure-rnd --features "bridge embeddings morphology concept"
+
+  # Test pure-rnd with NO features in isolation: a single -p pure-rnd
+  # invocation in its own job, so feature unification from sibling -p flags
+  # (or another crate's dev-deps) can't silently switch its features on.
+  rnd-featureless:
+    runs-on: ubuntu-latest
+    # fork-guard: see `test`.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test pure-rnd with default (no) features
+        run: cargo test --locked -p pure-rnd
+
+  # Formatting + clippy. Both steps are advisory (continue-on-error) until the
+  # tree is brought clean — see the TODOs on each step.
+  lint:
+    runs-on: ubuntu-latest
+    # fork-guard: see `test`.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      # TODO(lint): advisory for now — `cargo fmt --check` currently fails in
+      # 25 files spanning every crate (apps/desktop/src/main.rs, all of
+      # crates/core/src, crates/ffi/src, crates/hydrate/src/main.rs,
+      # crates/layout/src/lib.rs, all of crates/rnd/src). Not reformatting yet
+      # because those files are being edited in-flight; drop
+      # `continue-on-error` after a dedicated `cargo fmt` commit lands.
+      - name: rustfmt
+        run: cargo fmt --check
+        continue-on-error: true
+      # TODO(lint): advisory for now — clippy -D warnings fails in pure-core:
+      #   - clippy::manual_filter at crates/core/src/search.rs:451
+      #   - clippy::trim_split_whitespace at crates/core/src/strongs.rs:136
+      # pure-core fails to compile under -D warnings, so downstream crates
+      # (layout, rnd, ffi, hydrate) haven't been fully linted yet and may hide
+      # more. Fix those two, re-run, then drop `continue-on-error`.
+      - name: clippy
+        run: cargo clippy --locked -p pure-core -p pure-layout -p pure-rnd -p pure-ffi -p pure-hydrate -- -D warnings
+        continue-on-error: true
+
+  # The workspace declares rust-version = "1.85"; make sure the portable
+  # crates actually still compile on that toolchain, not just on stable.
+  msrv:
+    runs-on: ubuntu-latest
+    # fork-guard: see `test`.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: Swatinem/rust-cache@v2
+      - name: Check portable crates on the MSRV toolchain
+        run: cargo check --locked -p pure-core -p pure-layout -p pure-rnd -p pure-ffi -p pure-hydrate
+
+  # Guard against the bindings drifting from the Rust source: regenerate the C
+  # header and the C# P/Invoke shim, then fail if anything changed. This is the
+  # doc-vs-wire drift class the ABI review flagged — a changed #[no_mangle]
+  # surface that wasn't regenerated shows up here as a diff.
+  bindings:
+    runs-on: ubuntu-latest
+    # fork-guard: see `test`.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Regenerate FFI bindings
+        run: cargo run --locked -p pure-ffi --features bindgen --bin pure-bindgen
+      - name: Fail on binding drift
+        run: |
+          if ! git diff --quiet -- crates/ffi/include crates/ffi/bindings/csharp/PureStudyNative.g.cs; then
+            echo "::error::FFI bindings are out of date. Run:"
+            echo "  cargo run -p pure-ffi --features bindgen --bin pure-bindgen"
+            echo "and commit the regenerated crates/ffi/include + bindings/csharp files."
+            git --no-pager diff -- crates/ffi/include crates/ffi/bindings/csharp/PureStudyNative.g.cs
+            exit 1
+          fi
+
+  # Cross-compile the C ABI for Windows x86_64 (mingw) so a break in the
+  # portable-only build surface is caught, matching what we cross-build locally.
+  windows-dll:
+    runs-on: ubuntu-latest
+    # fork-guard: see `test`.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+      - name: Install mingw-w64
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+      - uses: Swatinem/rust-cache@v2
+      - name: Cross-build the Windows .dll
+        run: cargo build --locked -p pure-ffi --release --target x86_64-pc-windows-gnu
+      - name: Upload the x64 .dll
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-gnu-dll
+          path: target/x86_64-pc-windows-gnu/release/pure_ffi.dll
+          if-no-files-found: error
+
+  # Cross-compile the C ABI for ARM64 Windows (aarch64, MSVC) — the toolchain a
+  # Surface / Snapdragon Windows box uses natively. cargo-xwin fetches the MSVC
+  # CRT + SDK so the real cdylib link is exercised, not just a typecheck. This is
+  # the same target `rustup default` selects on native ARM64 Windows, so a green
+  # job here means `cargo build -p pure-ffi` will link there too.
+  windows-arm64-dll:
+    runs-on: ubuntu-latest
+    # fork-guard: see `test`.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-xwin
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-xwin
+      - name: Cross-build the ARM64 Windows .dll
+        run: cargo xwin build --locked -p pure-ffi --release --target aarch64-pc-windows-msvc
+      - name: Upload the ARM64 .dll
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-arm64-msvc-dll
+          path: target/aarch64-pc-windows-msvc/release/pure_ffi.dll
+          if-no-files-found: error
+
+  # Run the portable-crate tests natively on ARM64 Windows — the actual
+  # deployment host class — not just cross-link the cdylib for it.
+  # NOTE: the `windows-11-arm` hosted runner label is only available to PUBLIC
+  # repositories; on a private repo this job will never find a runner. No
+  # guard on purpose — if the label is wrong it surfaces on the first push.
+  windows-arm64-test:
+    runs-on: windows-11-arm
+    # fork-guard: see `test`.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test portable crates natively on ARM64 Windows
+        run: cargo test --locked -p pure-core -p pure-layout -p pure-rnd -p pure-ffi -p pure-hydrate
+
+  # Compile-coverage for the GTK desktop shell — a prerequisite for refactoring
+  # it. Ubuntu's GTK4 + libadwaita dev packages are enough for `cargo check`;
+  # no display server is needed since nothing runs.
+  desktop-gtk:
+    runs-on: ubuntu-latest
+    # fork-guard: see `test`.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GTK4 + libadwaita dev libraries
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Compile-check the desktop shell
+        run: cargo check --locked -p pure-desktop

@@ -1,0 +1,27 @@
+{
+  "format": "overlay-weave-v2",
+  "name": "The annunciation of Samson",
+  "kind": "type",
+  "tokenization": "kjv1769-tok2",
+  "notes": "The angelic birth announcement to Manoah's barren wife prefigures the annunciation of John the Baptist — down to the abstinence charge — with Hannah's Nazarite vow alongside.",
+  "notesSource": "generated",
+  "created": "2026-07-15T06:30:00Z",
+  "approved": false,
+  "links": [
+    {
+      "a": "Judg 13:3",
+      "b": "Luke 1:13",
+      "label": "the barren shall bear a son"
+    },
+    {
+      "a": "Judg 13:4",
+      "b": "Luke 1:15",
+      "label": "wine nor strong drink"
+    },
+    {
+      "a": "Judg 13:5",
+      "b": "1Sam 1:11",
+      "label": "no razor shall come on his head"
+    }
+  ]
+}

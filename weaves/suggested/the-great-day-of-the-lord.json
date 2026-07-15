@@ -1,0 +1,27 @@
+{
+  "format": "overlay-weave-v2",
+  "name": "The great day of the LORD",
+  "kind": "prophecy",
+  "tokenization": "kjv1769-tok2",
+  "notes": "Zephaniah and Joel's day of wrath, quoted at Pentecost and opened at the sixth seal.",
+  "notesSource": "generated",
+  "created": "2026-07-15T07:10:00Z",
+  "approved": false,
+  "links": [
+    {
+      "a": "Zeph 1:14",
+      "b": "Rev 6:17",
+      "label": "the great day of his wrath"
+    },
+    {
+      "a": "Joel 2:31",
+      "b": "Rev 6:12",
+      "label": "sun darkened, moon as blood"
+    },
+    {
+      "a": "Joel 2:31",
+      "b": "Acts 2:20",
+      "label": "before that great and notable day"
+    }
+  ]
+}

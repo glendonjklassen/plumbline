@@ -1,0 +1,42 @@
+{
+  "format": "overlay-weave-v2",
+  "name": "The beast from the sea",
+  "kind": "retelling",
+  "tokenization": "kjv1769-tok2",
+  "notes": "Revelation 13 composites Daniel 7's four beasts into one.",
+  "notesSource": "generated",
+  "created": "2026-07-15T07:10:00Z",
+  "approved": false,
+  "links": [
+    {
+      "a": "Dan 7:3",
+      "b": "Rev 13:1",
+      "label": "beasts out of the sea"
+    },
+    {
+      "a": "Dan 7:4",
+      "b": "Rev 13:2",
+      "label": "the lion"
+    },
+    {
+      "a": "Dan 7:5",
+      "b": "Rev 13:2",
+      "label": "the bear"
+    },
+    {
+      "a": "Dan 7:6",
+      "b": "Rev 13:2",
+      "label": "the leopard"
+    },
+    {
+      "a": "Dan 7:8",
+      "b": "Rev 13:5",
+      "label": "a mouth speaking great things"
+    },
+    {
+      "a": "Dan 7:21",
+      "b": "Rev 13:7",
+      "label": "war with the saints"
+    }
+  ]
+}
