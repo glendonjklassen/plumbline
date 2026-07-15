@@ -1,0 +1,2106 @@
+{
+ "format": "overlay-text-witness-v1",
+ "note": "Lexicon-free H<->G alignment witness: seeded only by phonetic correspondence of transliterated proper names, grown only by usage-geometry self-learning. God-tier content (the text's own usage) via a machine-tier method — research-grade; gated on held-out recovery before its disbelief counts as testimony. See ml/text_witness.py header.",
+ "witnessQualified": false,
+ "testimonyActionable": false,
+ "generated": {
+  "vectors": "data/concept-vectors.vec",
+  "aligned": "procrustes-abbott-smith",
+  "pcaDim": 80,
+  "cslsK": 10,
+  "freqMin": 25,
+  "minSim": 0.85,
+  "margin": 0.03,
+  "growRounds": 13,
+  "inducedDictionary": 1310,
+  "disbeliefTail": 0.5,
+  "nGreekConcepts": 2661
+ },
+ "seeds": [
+  {
+   "h": "H1144",
+   "g": "G958",
+   "hXlit": "Binyâmîyn",
+   "gTranslit": "Beniamín",
+   "hSkeleton": "biniamin",
+   "gSkeleton": "beniamin",
+   "sim": 0.963,
+   "weight": 1.609
+  },
+  {
+   "h": "H121",
+   "g": "G76",
+   "hXlit": "ʼÂdâm",
+   "gTranslit": "Adám",
+   "hSkeleton": "adam",
+   "gSkeleton": "adam",
+   "sim": 1.0,
+   "weight": 2.303
+  },
+  {
+   "h": "H1586",
+   "g": "G1116",
+   "hXlit": "Gômer",
+   "gTranslit": "Gómorrha",
+   "hSkeleton": "gomer",
+   "gSkeleton": "gomorha",
+   "sim": 0.9,
+   "weight": 1.792
+  },
+  {
+   "h": "H1732",
+   "g": "G1138",
+   "hXlit": "Dâvid",
+   "gTranslit": "Dabíd",
+   "hSkeleton": "dabid",
+   "gSkeleton": "dabid",
+   "sim": 1.0,
+   "weight": 4.159
+  },
+  {
+   "h": "H1746",
+   "g": "G1214",
+   "hXlit": "Dûwmâh",
+   "gTranslit": "Dēmâs",
+   "hSkeleton": "dumah",
+   "gSkeleton": "demas",
+   "sim": 0.88,
+   "weight": 1.386
+  },
+  {
+   "h": "H1834",
+   "g": "G1154",
+   "hXlit": "Dammeseq",
+   "gTranslit": "Damaskós",
+   "hSkeleton": "damesek",
+   "gSkeleton": "damaskos",
+   "sim": 0.9,
+   "weight": 2.773
+  },
+  {
+   "h": "H2039",
+   "g": "G2",
+   "hXlit": "Hârân",
+   "gTranslit": "Aarṓn",
+   "hSkeleton": "haran",
+   "gSkeleton": "aron",
+   "sim": 0.88,
+   "weight": 1.792
+  },
+  {
+   "h": "H2140",
+   "g": "G2195",
+   "hXlit": "Zakkay",
+   "gTranslit": "Zakchaîos",
+   "hSkeleton": "sakai",
+   "gSkeleton": "sakaios",
+   "sim": 1.0,
+   "weight": 1.386
+  },
+  {
+   "h": "H2216",
+   "g": "G2216",
+   "hXlit": "Zᵉrubbâbel",
+   "gTranslit": "Zorobábel",
+   "hSkeleton": "srubabel",
+   "gSkeleton": "sorobabel",
+   "sim": 0.922,
+   "weight": 1.609
+  },
+  {
+   "h": "H2518",
+   "g": "G2791",
+   "hXlit": "Chilqîyâh",
+   "gTranslit": "Kilikía",
+   "hSkeleton": "kilkiah",
+   "gSkeleton": "kilikia",
+   "sim": 0.9,
+   "weight": 2.197
+  },
+  {
+   "h": "H2584",
+   "g": "G2580",
+   "hXlit": "Channâh",
+   "gTranslit": "Kanâ",
+   "hSkeleton": "kanah",
+   "gSkeleton": "kana",
+   "sim": 0.94,
+   "weight": 1.609
+  },
+  {
+   "h": "H2660",
+   "g": "G2954",
+   "hXlit": "Chêpher",
+   "gTranslit": "Kýpros",
+   "hSkeleton": "keper",
+   "gSkeleton": "kipros",
+   "sim": 0.86,
+   "weight": 1.792
+  },
+  {
+   "h": "H2772",
+   "g": "G2956",
+   "hXlit": "Chôrônîy",
+   "gTranslit": "Kyrēnaîos",
+   "hSkeleton": "koroni",
+   "gSkeleton": "kirenaios",
+   "sim": 0.857,
+   "weight": 1.386
+  },
+  {
+   "h": "H29",
+   "g": "G7",
+   "hXlit": "ʼĂbîyâh",
+   "gTranslit": "Abiá",
+   "hSkeleton": "abiah",
+   "gSkeleton": "abia",
+   "sim": 0.94,
+   "weight": 1.386
+  },
+  {
+   "h": "H3159",
+   "g": "G2475",
+   "hXlit": "Yizrᵉʻêʼlîyth",
+   "gTranslit": "Israēlítēs",
+   "hSkeleton": "isrelit",
+   "gSkeleton": "israelites",
+   "sim": 0.95,
+   "weight": 1.792
+  },
+  {
+   "h": "H3204",
+   "g": "G2430",
+   "hXlit": "Yᵉkonyâh",
+   "gTranslit": "Ikónion",
+   "hSkeleton": "ikoniah",
+   "gSkeleton": "ikonion",
+   "sim": 0.9,
+   "weight": 1.946
+  },
+  {
+   "h": "H3383",
+   "g": "G2446",
+   "hXlit": "Yardên",
+   "gTranslit": "Iordánēs",
+   "hSkeleton": "iarden",
+   "gSkeleton": "iordanes",
+   "sim": 0.9,
+   "weight": 2.773
+  },
+  {
+   "h": "H3390",
+   "g": "G2419",
+   "hXlit": "Yᵉrûwshâlêm",
+   "gTranslit": "Hierousalḗm",
+   "hSkeleton": "irusalem",
+   "gSkeleton": "hierousalem",
+   "sim": 0.9,
+   "weight": 3.296
+  },
+  {
+   "h": "H3448",
+   "g": "G2421",
+   "hXlit": "Yishay",
+   "gTranslit": "Iessaí",
+   "hSkeleton": "isai",
+   "gSkeleton": "iesai",
+   "sim": 0.92,
+   "weight": 1.946
+  },
+  {
+   "h": "H3478",
+   "g": "G2474",
+   "hXlit": "Yisrâʼêl",
+   "gTranslit": "Israḗl",
+   "hSkeleton": "israel",
+   "gSkeleton": "israel",
+   "sim": 1.0,
+   "weight": 4.369
+  },
+  {
+   "h": "H3479",
+   "g": "G2474",
+   "hXlit": "Yisrâʼêl",
+   "gTranslit": "Israḗl",
+   "hSkeleton": "israel",
+   "gSkeleton": "israel",
+   "sim": 1.0,
+   "weight": 2.197
+  },
+  {
+   "h": "H3482",
+   "g": "G2475",
+   "hXlit": "Yisrᵉʼêlîyth",
+   "gTranslit": "Israēlítēs",
+   "hSkeleton": "isrelit",
+   "gSkeleton": "israelites",
+   "sim": 0.95,
+   "weight": 1.386
+  },
+  {
+   "h": "H3774",
+   "g": "G2914",
+   "hXlit": "Kᵉrêthîy",
+   "gTranslit": "Krḗtē",
+   "hSkeleton": "kreti",
+   "gSkeleton": "krete",
+   "sim": 0.94,
+   "weight": 1.792
+  },
+  {
+   "h": "H3866",
+   "g": "G3069",
+   "hXlit": "Lûwdîy",
+   "gTranslit": "Lýdda",
+   "hSkeleton": "ludi",
+   "gSkeleton": "lida",
+   "sim": 0.85,
+   "weight": 1.386
+  },
+  {
+   "h": "H3876",
+   "g": "G3019",
+   "hXlit": "Lôwṭ",
+   "gTranslit": "Leuḯtēs",
+   "hSkeleton": "lout",
+   "gSkeleton": "leuites",
+   "sim": 0.86,
+   "weight": 1.609
+  },
+  {
+   "h": "H3919",
+   "g": "G3018",
+   "hXlit": "Layish",
+   "gTranslit": "Leuḯs",
+   "hSkeleton": "lais",
+   "gSkeleton": "leuis",
+   "sim": 0.86,
+   "weight": 1.386
+  },
+  {
+   "h": "H4442",
+   "g": "G3198",
+   "hXlit": "Malkîy-Tsedeq",
+   "gTranslit": "Melchisedék",
+   "hSkeleton": "malkisedek",
+   "gSkeleton": "melkisedek",
+   "sim": 0.97,
+   "weight": 1.099
+  },
+  {
+   "h": "H471",
+   "g": "G1662",
+   "hXlit": "ʼElyâqîym",
+   "gTranslit": "Eliakeím",
+   "hSkeleton": "eliakim",
+   "gSkeleton": "eliakeim",
+   "sim": 0.95,
+   "weight": 1.609
+  },
+  {
+   "h": "H4719",
+   "g": "G3110",
+   "hXlit": "Maqqêdâh",
+   "gTranslit": "Makedṓn",
+   "hSkeleton": "makedah",
+   "gSkeleton": "makedon",
+   "sim": 0.9,
+   "weight": 1.792
+  },
+  {
+   "h": "H4785",
+   "g": "G3137",
+   "hXlit": "Mârâh",
+   "gTranslit": "María",
+   "hSkeleton": "marah",
+   "gSkeleton": "maria",
+   "sim": 0.88,
+   "weight": 1.792
+  },
+  {
+   "h": "H4872",
+   "g": "G3475",
+   "hXlit": "Môsheh",
+   "gTranslit": "Mōseús",
+   "hSkeleton": "moseh",
+   "gSkeleton": "moseus",
+   "sim": 0.94,
+   "weight": 4.431
+  },
+  {
+   "h": "H5417",
+   "g": "G3482",
+   "hXlit": "Nᵉthanʼêl",
+   "gTranslit": "Nathanaḗl",
+   "hSkeleton": "ntanel",
+   "gSkeleton": "natanael",
+   "sim": 0.9,
+   "weight": 1.946
+  },
+  {
+   "h": "H5744",
+   "g": "G5601",
+   "hXlit": "ʻÔwbêd",
+   "gTranslit": "Ōbḗd",
+   "hSkeleton": "oubed",
+   "gSkeleton": "obed",
+   "sim": 0.92,
+   "weight": 1.609
+  },
+  {
+   "h": "H59",
+   "g": "G6",
+   "hXlit": "ʼÂbêl",
+   "gTranslit": "Ábel",
+   "hSkeleton": "abel",
+   "gSkeleton": "abel",
+   "sim": 1.0,
+   "weight": 1.609
+  },
+  {
+   "h": "H5915",
+   "g": "G882",
+   "hXlit": "ʻAkçâh",
+   "gTranslit": "Achaḯa",
+   "hSkeleton": "akah",
+   "gSkeleton": "akaia",
+   "sim": 0.9,
+   "weight": 1.792
+  },
+  {
+   "h": "H5992",
+   "g": "G284",
+   "hXlit": "ʻAmmîynâdâb",
+   "gTranslit": "Aminadáb",
+   "hSkeleton": "aminadab",
+   "gSkeleton": "aminadab",
+   "sim": 1.0,
+   "weight": 1.609
+  },
+  {
+   "h": "H6034",
+   "g": "G452",
+   "hXlit": "ʻĂnâh",
+   "gTranslit": "Ánnas",
+   "hSkeleton": "anah",
+   "gSkeleton": "anas",
+   "sim": 0.925,
+   "weight": 1.609
+  },
+  {
+   "h": "H6222",
+   "g": "G773",
+   "hXlit": "ʻĂsâyâh",
+   "gTranslit": "Asía",
+   "hSkeleton": "asaiah",
+   "gSkeleton": "asia",
+   "sim": 0.883,
+   "weight": 2.197
+  },
+  {
+   "h": "H6396",
+   "g": "G3972",
+   "hXlit": "Pallûwʼ",
+   "gTranslit": "Paûlos",
+   "hSkeleton": "palu",
+   "gSkeleton": "paulos",
+   "sim": 0.875,
+   "weight": 1.792
+  },
+  {
+   "h": "H6522",
+   "g": "G5330",
+   "hXlit": "Pᵉrizzîy",
+   "gTranslit": "Pharisaîos",
+   "hSkeleton": "prisi",
+   "gSkeleton": "parisaios",
+   "sim": 0.886,
+   "weight": 3.178
+  },
+  {
+   "h": "H6659",
+   "g": "G4523",
+   "hXlit": "Tsâdôwq",
+   "gTranslit": "Saddoukaîos",
+   "hSkeleton": "sadouk",
+   "gSkeleton": "sadoukaios",
+   "sim": 0.9,
+   "weight": 2.944
+  },
+  {
+   "h": "H6726",
+   "g": "G4622",
+   "hXlit": "Tsîyôwn",
+   "gTranslit": "Siṓn",
+   "hSkeleton": "sioun",
+   "gSkeleton": "sion",
+   "sim": 0.92,
+   "weight": 2.079
+  },
+  {
+   "h": "H6741",
+   "g": "G4609",
+   "hXlit": "Tsillâh",
+   "gTranslit": "Sílas",
+   "hSkeleton": "silah",
+   "gSkeleton": "silas",
+   "sim": 0.94,
+   "weight": 1.386
+  },
+  {
+   "h": "H6876",
+   "g": "G4947",
+   "hXlit": "Tsôrîy",
+   "gTranslit": "Syría",
+   "hSkeleton": "sori",
+   "gSkeleton": "siria",
+   "sim": 0.925,
+   "weight": 1.792
+  },
+  {
+   "h": "H6882",
+   "g": "G4947",
+   "hXlit": "Tsorʻîy",
+   "gTranslit": "Syría",
+   "hSkeleton": "sori",
+   "gSkeleton": "siria",
+   "sim": 0.925,
+   "weight": 1.386
+  },
+  {
+   "h": "H7014",
+   "g": "G2535",
+   "hXlit": "Qayin",
+   "gTranslit": "Káïn",
+   "hSkeleton": "kain",
+   "gSkeleton": "kain",
+   "sim": 1.0,
+   "weight": 1.386
+  },
+  {
+   "h": "H7071",
+   "g": "G2580",
+   "hXlit": "Qânâh",
+   "gTranslit": "Kanâ",
+   "hSkeleton": "kanah",
+   "gSkeleton": "kana",
+   "sim": 0.94,
+   "weight": 1.386
+  },
+  {
+   "h": "H758",
+   "g": "G689",
+   "hXlit": "ʼĂrâm",
+   "gTranslit": "Arám",
+   "hSkeleton": "aram",
+   "gSkeleton": "aram",
+   "sim": 1.0,
+   "weight": 1.609
+  },
+  {
+   "h": "H7586",
+   "g": "G4569",
+   "hXlit": "Shâʼûwl",
+   "gTranslit": "Saûlos",
+   "hSkeleton": "saul",
+   "gSkeleton": "saulos",
+   "sim": 1.0,
+   "weight": 2.89
+  },
+  {
+   "h": "H7597",
+   "g": "G4528",
+   "hXlit": "Shᵉʼaltîyʼêl",
+   "gTranslit": "Salathiḗl",
+   "hSkeleton": "saltiel",
+   "gSkeleton": "salatiel",
+   "sim": 0.95,
+   "weight": 1.609
+  },
+  {
+   "h": "H7708",
+   "g": "G4670",
+   "hXlit": "Siddîym",
+   "gTranslit": "Sódoma",
+   "hSkeleton": "sidim",
+   "gSkeleton": "sodoma",
+   "sim": 0.88,
+   "weight": 1.386
+  },
+  {
+   "h": "H7888",
+   "g": "G4610",
+   "hXlit": "Shîylôwnîy",
+   "gTranslit": "Silouanós",
+   "hSkeleton": "silouni",
+   "gSkeleton": "silouanos",
+   "sim": 0.912,
+   "weight": 1.609
+  },
+  {
+   "h": "H8050",
+   "g": "G4545",
+   "hXlit": "Shᵉmûwʼêl",
+   "gTranslit": "Samouḗl",
+   "hSkeleton": "smuel",
+   "gSkeleton": "samouel",
+   "sim": 0.886,
+   "weight": 1.386
+  },
+  {
+   "h": "H8283",
+   "g": "G4564",
+   "hXlit": "Sârâh",
+   "gTranslit": "Sárrha",
+   "hSkeleton": "sarah",
+   "gSkeleton": "sarha",
+   "sim": 0.92,
+   "weight": 1.609
+  },
+  {
+   "h": "H8485",
+   "g": "G2381",
+   "hXlit": "Têymâʼ",
+   "gTranslit": "Thōmâs",
+   "hSkeleton": "teima",
+   "gSkeleton": "tomas",
+   "sim": 0.86,
+   "weight": 1.792
+  },
+  {
+   "h": "H8659",
+   "g": "G5019",
+   "hXlit": "Tarshîysh",
+   "gTranslit": "Tarsós",
+   "hSkeleton": "tarsis",
+   "gSkeleton": "tarsos",
+   "sim": 0.95,
+   "weight": 1.386
+  },
+  {
+   "h": "H87",
+   "g": "G11",
+   "hXlit": "ʼAbrâm",
+   "gTranslit": "Abraám",
+   "hSkeleton": "abram",
+   "gSkeleton": "abram",
+   "sim": 1.0,
+   "weight": 4.127
+  },
+  {
+   "h": "H894",
+   "g": "G897",
+   "hXlit": "Bâbel",
+   "gTranslit": "Babylṓn",
+   "hSkeleton": "babel",
+   "gSkeleton": "babilon",
+   "sim": 0.94,
+   "weight": 2.565
+  },
+  {
+   "h": "H895",
+   "g": "G897",
+   "hXlit": "Babel",
+   "gTranslit": "Babylṓn",
+   "hSkeleton": "babel",
+   "gSkeleton": "babilon",
+   "sim": 0.94,
+   "weight": 2.565
+  }
+ ],
+ "seedFieldDocs": {
+  "h": "Hebrew Strong's key.",
+  "g": "Greek Strong's key.",
+  "hXlit": "Strong's romanisation of the Hebrew lemma.",
+  "gTranslit": "Strong's romanisation of the Greek lemma.",
+  "hSkeleton": "Phonetically folded Hebrew form actually matched.",
+  "gSkeleton": "Phonetically folded Greek form actually matched.",
+  "sim": "Weighted-phonetic similarity in [0,1] (1 = identical skeleton).",
+  "weight": "log1p(min(hFreq,gFreq)) anchor weight used in the fit."
+ },
+ "selfLearnLog": [
+  {
+   "round": 1,
+   "induced": 932,
+   "unsupObjective": 0.0897
+  },
+  {
+   "round": 2,
+   "induced": 1087,
+   "unsupObjective": 0.1323
+  },
+  {
+   "round": 3,
+   "induced": 1170,
+   "unsupObjective": 0.1403
+  },
+  {
+   "round": 4,
+   "induced": 1203,
+   "unsupObjective": 0.1465
+  },
+  {
+   "round": 5,
+   "induced": 1249,
+   "unsupObjective": 0.1474
+  },
+  {
+   "round": 6,
+   "induced": 1274,
+   "unsupObjective": 0.1498
+  },
+  {
+   "round": 7,
+   "induced": 1285,
+   "unsupObjective": 0.1509
+  },
+  {
+   "round": 8,
+   "induced": 1296,
+   "unsupObjective": 0.1512
+  },
+  {
+   "round": 9,
+   "induced": 1306,
+   "unsupObjective": 0.1528
+  },
+  {
+   "round": 10,
+   "induced": 1302,
+   "unsupObjective": 0.1542
+  },
+  {
+   "round": 11,
+   "induced": 1309,
+   "unsupObjective": 0.1545
+  },
+  {
+   "round": 12,
+   "induced": 1315,
+   "unsupObjective": 0.1549
+  },
+  {
+   "round": 13,
+   "induced": 1310,
+   "unsupObjective": 0.1556
+  }
+ ],
+ "gwCrossCheck": {
+  "nGwSeeds": 2,
+  "abstained": true,
+  "note": "coupling stayed near-uniform — the seed-free relational start finds no confident matching at this corpus scale; evidence of weak isometry, not a second accusation"
+ },
+ "grading": {
+  "nEvalPairs": 2759,
+  "nExcludedSeedTouching": 4,
+  "note": "Shipped-map numbers on these pairs are optimistic: it trained on ~80% of them (its honest held-out figures are in the vec .meta, quoted under shippedMapHeldOutMeta). The witness never saw any of them.",
+  "shippedMapHeldOutMeta": {
+   "frequent": {
+    "n": 161,
+    "p1": 0.0559,
+    "p5": 0.118,
+    "p10": 0.1491,
+    "mrr": 0.0919,
+    "medianRank": 195.0
+   },
+   "rare": {
+    "n": 134,
+    "p1": 0.0075,
+    "p5": 0.0373,
+    "p10": 0.0522,
+    "mrr": 0.0248,
+    "medianRank": 487.5
+   }
+  },
+  "table": {
+   "lexicon-anchored (shipped; TRAINED on ~80% of these pairs)": {
+    "frequent": {
+     "n": 861,
+     "p1": 0.1521486643437863,
+     "p5": 0.22880371660859466,
+     "p10": 0.2857142857142857,
+     "mrr": 0.19973098380488027,
+     "medianRank": 65.0
+    },
+    "rare": {
+     "n": 611,
+     "p1": 0.019639934533551555,
+     "p5": 0.03927986906710311,
+     "p10": 0.057283142389525366,
+     "mrr": 0.036420308378343945,
+     "medianRank": 353.0
+    }
+   },
+   "text-witness (phonetic seeds + self-learning)": {
+    "frequent": {
+     "n": 861,
+     "p1": 0.005807200929152149,
+     "p5": 0.016260162601626018,
+     "p10": 0.029036004645760744,
+     "mrr": 0.01586768619454042,
+     "medianRank": 483.0
+    },
+    "rare": {
+     "n": 611,
+     "p1": 0.0,
+     "p5": 0.0016366612111292963,
+     "p10": 0.006546644844517185,
+     "mrr": 0.00441737952612521,
+     "medianRank": 988.0
+    }
+   }
+  },
+  "verdictCriterion": "frequent-slice median rank <= 2x shipped map's on the same pairs AND P@10 >= max(0.05, 0.5x shipped map's)",
+  "qualified": false,
+  "tier": "NOT qualified to accuse (reported for the record only)"
+ },
+ "limits": [
+  "OT/NT genre gap + small corpora strain the isometry assumption both Procrustes and GW rely on: the seed fit memorises its anchors (train median ~2) while transfer plateaus near median ~600/2970 across every method tried; even the shipped lexicon map ranks the seed name-pairs near median ~700 — proper-name usage itself barely transfers across testaments.",
+  "~dozens of seeds under-determine the rotation; the self-learning bootstrap does the heavy lifting (Artetxe 2017 precedent).",
+  "Model-selection caveat: default config (PCA dim, seed threshold) was chosen while gold diagnostics were visible; the witness fails the gate under every config tried, so the leak cannot have manufactured a qualification — but re-verify on a frozen config if it ever nears the bar.",
+  "By count only ~half the seeds are solid (hand-audit in ml/README.md): the low-weight tail holds referent mismatches (Saul the king vs Saulos of Tarsus) and phonetic coincidences (Gomer/Gomorrha). Kept deliberately — hand-pruning would re-admit an editor into a witness whose value is owing nothing to one; log-frequency weighting makes the solid anchors the majority by weight and robust IRLS downweights persistent outliers.",
+  "Rare words have noisy vectors: thinEvidence disbelief is weak evidence.",
+  "Hubness is CSLS-corrected, not eliminated.",
+  "A general non-proper-name phonetic tier was tried and REJECTED: chance false cognates dominate at any usable threshold (e.g. shoter 'officer' ~ soter 'saviour')."
+ ],
+ "fieldDocs": {
+  "h": "Hebrew Strong's key of the asserted pair.",
+  "g": "Greek Strong's key of the asserted pair.",
+  "textCslsRank": "CSLS rank (1 = best) of g among all Greek concepts for query h under the TEXT-ONLY rotation (no lexicon in its training path). Lower = the text's usage geometry believes the link.",
+  "disbeliefPct": "Fraction of Greek concepts the text-only rotation ranks above the asserted g (0 = believed, 1 = disbelieved).",
+  "textTopPartner": "Greek key the text-only rotation ranks #1 for h — what shape alone believes instead.",
+  "auditSeverity": "severity of this same pair in data/source-audit.json's most-disbelieved list for this source (null when the leave-source-out audit does not flag it).",
+  "independentlyDisbelievedTwice": "True when this pair is BOTH in the top disbelief tail of the text-only witness AND flagged by the leave-source-out audit — two judges, neither trained by the accused source, one trained by no source at all. Only actionable when the top-level witnessQualified is true.",
+  "hFreq": "Corpus occurrences of h (usage-evidence depth).",
+  "gFreq": "Corpus occurrences of g.",
+  "thinEvidence": "min(hFreq,gFreq) < freqMin: noisy vector, weak evidence."
+ },
+ "testimony": {
+  "abbott-smith": {
+   "label": "Abbott-Smith (1922)",
+   "nPairs": 2759,
+   "recovery": {
+    "medianTextRank": 933.0,
+    "p1": 0.001812250815512867,
+    "p10": 0.010511054729974628
+   },
+   "nIndependentlyDisbelievedTwice": 10,
+   "independentlyDisbelievedTwice": [
+    {
+     "h": "H3808",
+     "g": "G762",
+     "textCslsRank": 2540,
+     "disbeliefPct": 0.9545,
+     "textTopPartner": "G2919",
+     "auditSeverity": 0.9945,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 75,
+     "gFreq": 7,
+     "thinEvidence": true
+    },
+    {
+     "h": "H1644",
+     "g": "G1610",
+     "textCslsRank": 2350,
+     "disbeliefPct": 0.8831,
+     "textTopPartner": "G1544",
+     "auditSeverity": 0.9933,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 47,
+     "gFreq": 16,
+     "thinEvidence": true
+    },
+    {
+     "h": "H6735",
+     "g": "G4245",
+     "textCslsRank": 2307,
+     "disbeliefPct": 0.8669,
+     "textTopPartner": "G3983",
+     "auditSeverity": 0.9716,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 12,
+     "gFreq": 68,
+     "thinEvidence": true
+    },
+    {
+     "h": "H6485",
+     "g": "G1934",
+     "textCslsRank": 1760,
+     "disbeliefPct": 0.6613,
+     "textTopPartner": "G1453",
+     "auditSeverity": 0.9848,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 304,
+     "gFreq": 22,
+     "thinEvidence": true
+    },
+    {
+     "h": "H6924",
+     "g": "G744",
+     "textCslsRank": 1755,
+     "disbeliefPct": 0.6594,
+     "textTopPartner": "G2127",
+     "auditSeverity": 0.9923,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 86,
+     "gFreq": 24,
+     "thinEvidence": true
+    },
+    {
+     "h": "H7200",
+     "g": "G1731",
+     "textCslsRank": 1533,
+     "disbeliefPct": 0.5759,
+     "textTopPartner": "G1074",
+     "auditSeverity": 0.9658,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 1312,
+     "gFreq": 11,
+     "thinEvidence": true
+    },
+    {
+     "h": "H6186",
+     "g": "G5091",
+     "textCslsRank": 1454,
+     "disbeliefPct": 0.5462,
+     "textTopPartner": "G3780",
+     "auditSeverity": 0.9976,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 78,
+     "gFreq": 27,
+     "thinEvidence": false
+    },
+    {
+     "h": "H3627",
+     "g": "G2889",
+     "textCslsRank": 1397,
+     "disbeliefPct": 0.5248,
+     "textTopPartner": "G3303",
+     "auditSeverity": 0.9887,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 306,
+     "gFreq": 269,
+     "thinEvidence": false
+    },
+    {
+     "h": "H6633",
+     "g": "G2889",
+     "textCslsRank": 1389,
+     "disbeliefPct": 0.5218,
+     "textTopPartner": "G4622",
+     "auditSeverity": 0.9818,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 13,
+     "gFreq": 269,
+     "thinEvidence": true
+    },
+    {
+     "h": "H7540",
+     "g": "G3738",
+     "textCslsRank": 1356,
+     "disbeliefPct": 0.5094,
+     "textTopPartner": "G5507",
+     "auditSeverity": 0.9919,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 9,
+     "gFreq": 8,
+     "thinEvidence": true
+    }
+   ],
+   "mostDisbelieved": [
+    {
+     "h": "H2040",
+     "g": "G2506",
+     "textCslsRank": 2660,
+     "disbeliefPct": 0.9996,
+     "textTopPartner": "G3173",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 43,
+     "gFreq": 3,
+     "thinEvidence": true
+    },
+    {
+     "h": "H2881",
+     "g": "G911",
+     "textCslsRank": 2657,
+     "disbeliefPct": 0.9985,
+     "textTopPartner": "G2920",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 16,
+     "gFreq": 8,
+     "thinEvidence": true
+    },
+    {
+     "h": "H5080",
+     "g": "G1290",
+     "textCslsRank": 2656,
+     "disbeliefPct": 0.9981,
+     "textTopPartner": "G3775",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 52,
+     "gFreq": 3,
+     "thinEvidence": true
+    },
+    {
+     "h": "H2543",
+     "g": "G3688",
+     "textCslsRank": 2648,
+     "disbeliefPct": 0.9951,
+     "textTopPartner": "G3498",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 96,
+     "gFreq": 8,
+     "thinEvidence": true
+    },
+    {
+     "h": "H5060",
+     "g": "G2345",
+     "textCslsRank": 2646,
+     "disbeliefPct": 0.9944,
+     "textTopPartner": "G2235",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 150,
+     "gFreq": 3,
+     "thinEvidence": true
+    },
+    {
+     "h": "H1121",
+     "g": "G514",
+     "textCslsRank": 2642,
+     "disbeliefPct": 0.9929,
+     "textTopPartner": "G3936",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 4896,
+     "gFreq": 42,
+     "thinEvidence": false
+    },
+    {
+     "h": "H6883",
+     "g": "G3014",
+     "textCslsRank": 2641,
+     "disbeliefPct": 0.9925,
+     "textTopPartner": "G2647",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 35,
+     "gFreq": 4,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3615",
+     "g": "G355",
+     "textCslsRank": 2639,
+     "disbeliefPct": 0.9917,
+     "textTopPartner": "G1565",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 207,
+     "gFreq": 4,
+     "thinEvidence": true
+    },
+    {
+     "h": "H5927",
+     "g": "G5453",
+     "textCslsRank": 2639,
+     "disbeliefPct": 0.9917,
+     "textTopPartner": "G3195",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 894,
+     "gFreq": 10,
+     "thinEvidence": true
+    },
+    {
+     "h": "H7704",
+     "g": "G66",
+     "textCslsRank": 2639,
+     "disbeliefPct": 0.9917,
+     "textTopPartner": "G5204",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 333,
+     "gFreq": 3,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3391",
+     "g": "G3376",
+     "textCslsRank": 2635,
+     "disbeliefPct": 0.9902,
+     "textTopPartner": "G3439",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 13,
+     "gFreq": 18,
+     "thinEvidence": true
+    },
+    {
+     "h": "H7605",
+     "g": "G3062",
+     "textCslsRank": 2635,
+     "disbeliefPct": 0.9902,
+     "textTopPartner": "G1072",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 26,
+     "gFreq": 51,
+     "thinEvidence": false
+    },
+    {
+     "h": "H5921",
+     "g": "G5231",
+     "textCslsRank": 2631,
+     "disbeliefPct": 0.9887,
+     "textTopPartner": "G1096",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 48,
+     "gFreq": 3,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3302",
+     "g": "G5611",
+     "textCslsRank": 2628,
+     "disbeliefPct": 0.9876,
+     "textTopPartner": "G1159",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 8,
+     "gFreq": 4,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3372",
+     "g": "G5398",
+     "textCslsRank": 2628,
+     "disbeliefPct": 0.9876,
+     "textTopPartner": "G5119",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 314,
+     "gFreq": 3,
+     "thinEvidence": true
+    },
+    {
+     "h": "H983",
+     "g": "G806",
+     "textCslsRank": 2626,
+     "disbeliefPct": 0.9868,
+     "textTopPartner": "G3813",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 42,
+     "gFreq": 3,
+     "thinEvidence": true
+    },
+    {
+     "h": "H2470",
+     "g": "G732",
+     "textCslsRank": 2621,
+     "disbeliefPct": 0.985,
+     "textTopPartner": "G3179",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 75,
+     "gFreq": 6,
+     "thinEvidence": true
+    },
+    {
+     "h": "H1870",
+     "g": "G4646",
+     "textCslsRank": 2620,
+     "disbeliefPct": 0.9846,
+     "textTopPartner": "G4100",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 701,
+     "gFreq": 4,
+     "thinEvidence": true
+    },
+    {
+     "h": "H1980",
+     "g": "G424",
+     "textCslsRank": 2620,
+     "disbeliefPct": 0.9846,
+     "textTopPartner": "G3767",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 497,
+     "gFreq": 3,
+     "thinEvidence": true
+    },
+    {
+     "h": "H6040",
+     "g": "G5014",
+     "textCslsRank": 2619,
+     "disbeliefPct": 0.9842,
+     "textTopPartner": "G988",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 35,
+     "gFreq": 4,
+     "thinEvidence": true
+    },
+    {
+     "h": "H8104",
+     "g": "G5441",
+     "textCslsRank": 2617,
+     "disbeliefPct": 0.9835,
+     "textTopPartner": "G1263",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 468,
+     "gFreq": 3,
+     "thinEvidence": true
+    },
+    {
+     "h": "H6862",
+     "g": "G4731",
+     "textCslsRank": 2616,
+     "disbeliefPct": 0.9831,
+     "textTopPartner": "G1909",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 103,
+     "gFreq": 4,
+     "thinEvidence": true
+    },
+    {
+     "h": "H2015",
+     "g": "G3344",
+     "textCslsRank": 2609,
+     "disbeliefPct": 0.9805,
+     "textTopPartner": "G1161",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 94,
+     "gFreq": 4,
+     "thinEvidence": true
+    },
+    {
+     "h": "H7641",
+     "g": "G4719",
+     "textCslsRank": 2607,
+     "disbeliefPct": 0.9797,
+     "textTopPartner": "G3306",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 18,
+     "gFreq": 7,
+     "thinEvidence": true
+    },
+    {
+     "h": "H2803",
+     "g": "G2021",
+     "textCslsRank": 2604,
+     "disbeliefPct": 0.9786,
+     "textTopPartner": "G3307",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 124,
+     "gFreq": 3,
+     "thinEvidence": true
+    }
+   ]
+  },
+  "lxx": {
+   "label": "LXX (IBM-model alignment)",
+   "nPairs": 742,
+   "recovery": {
+    "medianTextRank": 695.0,
+    "p1": 0.008086253369272238,
+    "p10": 0.025606469002695417
+   },
+   "nIndependentlyDisbelievedTwice": 8,
+   "independentlyDisbelievedTwice": [
+    {
+     "h": "H2715",
+     "g": "G1784",
+     "textCslsRank": 2550,
+     "disbeliefPct": 0.9583,
+     "textTopPartner": "G4912",
+     "auditSeverity": 0.9345,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 13,
+     "gFreq": 8,
+     "thinEvidence": true
+    },
+    {
+     "h": "H1156",
+     "g": "G515",
+     "textCslsRank": 2204,
+     "disbeliefPct": 0.8282,
+     "textTopPartner": "G3961",
+     "auditSeverity": 0.7962,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 11,
+     "gFreq": 11,
+     "thinEvidence": true
+    },
+    {
+     "h": "H8659",
+     "g": "G2293",
+     "textCslsRank": 2060,
+     "disbeliefPct": 0.7741,
+     "textTopPartner": "G839",
+     "auditSeverity": 0.9753,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 28,
+     "gFreq": 29,
+     "thinEvidence": false
+    },
+    {
+     "h": "H4723",
+     "g": "G5281",
+     "textCslsRank": 2054,
+     "disbeliefPct": 0.7718,
+     "textTopPartner": "G3788",
+     "auditSeverity": 0.843,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 12,
+     "gFreq": 33,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3898",
+     "g": "G4170",
+     "textCslsRank": 1957,
+     "disbeliefPct": 0.7353,
+     "textTopPartner": "G5119",
+     "auditSeverity": 0.7837,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 177,
+     "gFreq": 8,
+     "thinEvidence": true
+    },
+    {
+     "h": "H4612",
+     "g": "G4714",
+     "textCslsRank": 1596,
+     "disbeliefPct": 0.5996,
+     "textTopPartner": "G3971",
+     "auditSeverity": 0.7736,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 5,
+     "gFreq": 9,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3675",
+     "g": "G4889",
+     "textCslsRank": 1419,
+     "disbeliefPct": 0.5331,
+     "textTopPartner": "G3961",
+     "auditSeverity": 0.8179,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 7,
+     "gFreq": 12,
+     "thinEvidence": true
+    },
+    {
+     "h": "H615",
+     "g": "G1198",
+     "textCslsRank": 1358,
+     "disbeliefPct": 0.5102,
+     "textTopPartner": "G991",
+     "auditSeverity": 0.9503,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 12,
+     "gFreq": 16,
+     "thinEvidence": true
+    }
+   ],
+   "mostDisbelieved": [
+    {
+     "h": "H2881",
+     "g": "G911",
+     "textCslsRank": 2657,
+     "disbeliefPct": 0.9985,
+     "textTopPartner": "G2920",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 16,
+     "gFreq": 8,
+     "thinEvidence": true
+    },
+    {
+     "h": "H2543",
+     "g": "G3688",
+     "textCslsRank": 2648,
+     "disbeliefPct": 0.9951,
+     "textTopPartner": "G3498",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 96,
+     "gFreq": 8,
+     "thinEvidence": true
+    },
+    {
+     "h": "H4714",
+     "g": "G124",
+     "textCslsRank": 2618,
+     "disbeliefPct": 0.9838,
+     "textTopPartner": "G2928",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 680,
+     "gFreq": 5,
+     "thinEvidence": true
+    },
+    {
+     "h": "H7641",
+     "g": "G4719",
+     "textCslsRank": 2607,
+     "disbeliefPct": 0.9797,
+     "textTopPartner": "G3306",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 18,
+     "gFreq": 7,
+     "thinEvidence": true
+    },
+    {
+     "h": "H4488",
+     "g": "G3414",
+     "textCslsRank": 2603,
+     "disbeliefPct": 0.9782,
+     "textTopPartner": "G3744",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 5,
+     "gFreq": 10,
+     "thinEvidence": true
+    },
+    {
+     "h": "H7837",
+     "g": "G3722",
+     "textCslsRank": 2575,
+     "disbeliefPct": 0.9677,
+     "textTopPartner": "G5602",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 24,
+     "gFreq": 3,
+     "thinEvidence": true
+    },
+    {
+     "h": "H6327",
+     "g": "G1289",
+     "textCslsRank": 2561,
+     "disbeliefPct": 0.9624,
+     "textTopPartner": "G2379",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 69,
+     "gFreq": 4,
+     "thinEvidence": true
+    },
+    {
+     "h": "H676",
+     "g": "G1147",
+     "textCslsRank": 2557,
+     "disbeliefPct": 0.9609,
+     "textTopPartner": "G4137",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 32,
+     "gFreq": 14,
+     "thinEvidence": true
+    },
+    {
+     "h": "H2715",
+     "g": "G1784",
+     "textCslsRank": 2550,
+     "disbeliefPct": 0.9583,
+     "textTopPartner": "G4912",
+     "auditSeverity": 0.9345,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 13,
+     "gFreq": 8,
+     "thinEvidence": true
+    },
+    {
+     "h": "H4832",
+     "g": "G2392",
+     "textCslsRank": 2531,
+     "disbeliefPct": 0.9511,
+     "textTopPartner": "G2309",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 16,
+     "gFreq": 3,
+     "thinEvidence": true
+    },
+    {
+     "h": "H6235",
+     "g": "G1176",
+     "textCslsRank": 2531,
+     "disbeliefPct": 0.9511,
+     "textTopPartner": "G819",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 173,
+     "gFreq": 28,
+     "thinEvidence": false
+    },
+    {
+     "h": "H2552",
+     "g": "G2328",
+     "textCslsRank": 2521,
+     "disbeliefPct": 0.9474,
+     "textTopPartner": "G91",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 13,
+     "gFreq": 7,
+     "thinEvidence": true
+    },
+    {
+     "h": "H1162",
+     "g": "G1016",
+     "textCslsRank": 2519,
+     "disbeliefPct": 0.9466,
+     "textTopPartner": "G3781",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 24,
+     "gFreq": 10,
+     "thinEvidence": true
+    },
+    {
+     "h": "H2572",
+     "g": "G4004",
+     "textCslsRank": 2510,
+     "disbeliefPct": 0.9432,
+     "textTopPartner": "G5547",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 161,
+     "gFreq": 7,
+     "thinEvidence": true
+    },
+    {
+     "h": "H8040",
+     "g": "G710",
+     "textCslsRank": 2510,
+     "disbeliefPct": 0.9432,
+     "textTopPartner": "G4355",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 54,
+     "gFreq": 4,
+     "thinEvidence": true
+    },
+    {
+     "h": "H7854",
+     "g": "G1228",
+     "textCslsRank": 2502,
+     "disbeliefPct": 0.9402,
+     "textTopPartner": "G5368",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 27,
+     "gFreq": 45,
+     "thinEvidence": false
+    },
+    {
+     "h": "H4531",
+     "g": "G3986",
+     "textCslsRank": 2497,
+     "disbeliefPct": 0.9383,
+     "textTopPartner": "G600",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 5,
+     "gFreq": 23,
+     "thinEvidence": true
+    },
+    {
+     "h": "H6148",
+     "g": "G3396",
+     "textCslsRank": 2490,
+     "disbeliefPct": 0.9357,
+     "textTopPartner": "G3780",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 22,
+     "gFreq": 4,
+     "thinEvidence": true
+    },
+    {
+     "h": "H4791",
+     "g": "G5311",
+     "textCslsRank": 2482,
+     "disbeliefPct": 0.9327,
+     "textTopPartner": "G2090",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 54,
+     "gFreq": 7,
+     "thinEvidence": true
+    },
+    {
+     "h": "H860",
+     "g": "G3688",
+     "textCslsRank": 2438,
+     "disbeliefPct": 0.9162,
+     "textTopPartner": "G2290",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 34,
+     "gFreq": 8,
+     "thinEvidence": true
+    },
+    {
+     "h": "H5927",
+     "g": "G381",
+     "textCslsRank": 2423,
+     "disbeliefPct": 0.9105,
+     "textTopPartner": "G3195",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 894,
+     "gFreq": 5,
+     "thinEvidence": true
+    },
+    {
+     "h": "H5060",
+     "g": "G681",
+     "textCslsRank": 2390,
+     "disbeliefPct": 0.8981,
+     "textTopPartner": "G2235",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 150,
+     "gFreq": 10,
+     "thinEvidence": true
+    },
+    {
+     "h": "H1616",
+     "g": "G4339",
+     "textCslsRank": 2373,
+     "disbeliefPct": 0.8917,
+     "textTopPartner": "G2316",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 89,
+     "gFreq": 4,
+     "thinEvidence": true
+    },
+    {
+     "h": "H8419",
+     "g": "G1294",
+     "textCslsRank": 2370,
+     "disbeliefPct": 0.8906,
+     "textTopPartner": "G5302",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 10,
+     "gFreq": 7,
+     "thinEvidence": true
+    },
+    {
+     "h": "H1881",
+     "g": "G1620",
+     "textCslsRank": 2367,
+     "disbeliefPct": 0.8895,
+     "textTopPartner": "G3109",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 22,
+     "gFreq": 5,
+     "thinEvidence": true
+    }
+   ]
+  },
+  "stepbible-tipnr": {
+   "label": "STEPBible names",
+   "nPairs": 166,
+   "recovery": {
+    "medianTextRank": 522.0,
+    "p1": 0.03614457831325301,
+    "p10": 0.08433734939759036
+   },
+   "nIndependentlyDisbelievedTwice": 14,
+   "independentlyDisbelievedTwice": [
+    {
+     "h": "H3479",
+     "g": "G2475",
+     "textCslsRank": 2621,
+     "disbeliefPct": 0.985,
+     "textTopPartner": "G3961",
+     "auditSeverity": 0.9634,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 8,
+     "gFreq": 10,
+     "thinEvidence": true
+    },
+    {
+     "h": "H7854",
+     "g": "G1228",
+     "textCslsRank": 2502,
+     "disbeliefPct": 0.9402,
+     "textTopPartner": "G5368",
+     "auditSeverity": 0.7564,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 27,
+     "gFreq": 45,
+     "thinEvidence": false
+    },
+    {
+     "h": "H3062",
+     "g": "G2455",
+     "textCslsRank": 2470,
+     "disbeliefPct": 0.9282,
+     "textTopPartner": "G3961",
+     "auditSeverity": 0.7551,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 10,
+     "gFreq": 42,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3484",
+     "g": "G2384",
+     "textCslsRank": 2315,
+     "disbeliefPct": 0.8699,
+     "textTopPartner": "G2083",
+     "auditSeverity": 0.6551,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 4,
+     "gFreq": 31,
+     "thinEvidence": true
+    },
+    {
+     "h": "H4436",
+     "g": "G938",
+     "textCslsRank": 2299,
+     "disbeliefPct": 0.8639,
+     "textTopPartner": "G1659",
+     "auditSeverity": 0.7155,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 35,
+     "gFreq": 6,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3062",
+     "g": "G2453",
+     "textCslsRank": 2162,
+     "disbeliefPct": 0.8124,
+     "textTopPartner": "G3961",
+     "auditSeverity": 0.9163,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 10,
+     "gFreq": 202,
+     "thinEvidence": true
+    },
+    {
+     "h": "H1109",
+     "g": "G903",
+     "textCslsRank": 2023,
+     "disbeliefPct": 0.7602,
+     "textTopPartner": "G1205",
+     "auditSeverity": 0.6363,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 61,
+     "gFreq": 4,
+     "thinEvidence": true
+    },
+    {
+     "h": "H1100",
+     "g": "G1228",
+     "textCslsRank": 1994,
+     "disbeliefPct": 0.7492,
+     "textTopPartner": "G3853",
+     "auditSeverity": 0.7804,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 27,
+     "gFreq": 45,
+     "thinEvidence": false
+    },
+    {
+     "h": "H7614",
+     "g": "G3558",
+     "textCslsRank": 1956,
+     "disbeliefPct": 0.735,
+     "textTopPartner": "G2363",
+     "auditSeverity": 0.9487,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 23,
+     "gFreq": 14,
+     "thinEvidence": true
+    },
+    {
+     "h": "H4805",
+     "g": "G125",
+     "textCslsRank": 1786,
+     "disbeliefPct": 0.6711,
+     "textTopPartner": "G1492",
+     "auditSeverity": 0.8447,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 23,
+     "gFreq": 24,
+     "thinEvidence": true
+    },
+    {
+     "h": "H761",
+     "g": "G4947",
+     "textCslsRank": 1722,
+     "disbeliefPct": 0.647,
+     "textTopPartner": "G2348",
+     "auditSeverity": 0.7967,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 11,
+     "gFreq": 8,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3479",
+     "g": "G2474",
+     "textCslsRank": 1449,
+     "disbeliefPct": 0.5444,
+     "textTopPartner": "G3961",
+     "auditSeverity": 0.7456,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 8,
+     "gFreq": 78,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3061",
+     "g": "G2449",
+     "textCslsRank": 1436,
+     "disbeliefPct": 0.5395,
+     "textTopPartner": "G3961",
+     "auditSeverity": 0.8503,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 7,
+     "gFreq": 43,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3479",
+     "g": "G2384",
+     "textCslsRank": 1431,
+     "disbeliefPct": 0.5376,
+     "textTopPartner": "G3961",
+     "auditSeverity": 0.6851,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 8,
+     "gFreq": 31,
+     "thinEvidence": true
+    }
+   ],
+   "mostDisbelieved": [
+    {
+     "h": "H3479",
+     "g": "G2475",
+     "textCslsRank": 2621,
+     "disbeliefPct": 0.985,
+     "textTopPartner": "G3961",
+     "auditSeverity": 0.9634,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 8,
+     "gFreq": 10,
+     "thinEvidence": true
+    },
+    {
+     "h": "H4714",
+     "g": "G124",
+     "textCslsRank": 2618,
+     "disbeliefPct": 0.9838,
+     "textTopPartner": "G2928",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 680,
+     "gFreq": 5,
+     "thinEvidence": true
+    },
+    {
+     "h": "H7854",
+     "g": "G1228",
+     "textCslsRank": 2502,
+     "disbeliefPct": 0.9402,
+     "textTopPartner": "G5368",
+     "auditSeverity": 0.7564,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 27,
+     "gFreq": 45,
+     "thinEvidence": false
+    },
+    {
+     "h": "H3062",
+     "g": "G2455",
+     "textCslsRank": 2470,
+     "disbeliefPct": 0.9282,
+     "textTopPartner": "G3961",
+     "auditSeverity": 0.7551,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 10,
+     "gFreq": 42,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3484",
+     "g": "G2384",
+     "textCslsRank": 2315,
+     "disbeliefPct": 0.8699,
+     "textTopPartner": "G2083",
+     "auditSeverity": 0.6551,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 4,
+     "gFreq": 31,
+     "thinEvidence": true
+    },
+    {
+     "h": "H4436",
+     "g": "G938",
+     "textCslsRank": 2299,
+     "disbeliefPct": 0.8639,
+     "textTopPartner": "G1659",
+     "auditSeverity": 0.7155,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 35,
+     "gFreq": 6,
+     "thinEvidence": true
+    },
+    {
+     "h": "H2526",
+     "g": "G124",
+     "textCslsRank": 2297,
+     "disbeliefPct": 0.8632,
+     "textTopPartner": "G2807",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 16,
+     "gFreq": 5,
+     "thinEvidence": true
+    },
+    {
+     "h": "H123",
+     "g": "G2269",
+     "textCslsRank": 2278,
+     "disbeliefPct": 0.856,
+     "textTopPartner": "G4254",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 100,
+     "gFreq": 3,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3484",
+     "g": "G2474",
+     "textCslsRank": 2262,
+     "disbeliefPct": 0.85,
+     "textTopPartner": "G2083",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 4,
+     "gFreq": 78,
+     "thinEvidence": true
+    },
+    {
+     "h": "H4713",
+     "g": "G124",
+     "textCslsRank": 2252,
+     "disbeliefPct": 0.8462,
+     "textTopPartner": "G268",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 27,
+     "gFreq": 5,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3062",
+     "g": "G2453",
+     "textCslsRank": 2162,
+     "disbeliefPct": 0.8124,
+     "textTopPartner": "G3961",
+     "auditSeverity": 0.9163,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 10,
+     "gFreq": 202,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3876",
+     "g": "G3091",
+     "textCslsRank": 2136,
+     "disbeliefPct": 0.8026,
+     "textTopPartner": "G2976",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 33,
+     "gFreq": 5,
+     "thinEvidence": true
+    },
+    {
+     "h": "H7293",
+     "g": "G125",
+     "textCslsRank": 2106,
+     "disbeliefPct": 0.7914,
+     "textTopPartner": "G3414",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 3,
+     "gFreq": 24,
+     "thinEvidence": true
+    },
+    {
+     "h": "H6005",
+     "g": "G2424",
+     "textCslsRank": 2057,
+     "disbeliefPct": 0.7729,
+     "textTopPartner": "G4769",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 2,
+     "gFreq": 976,
+     "thinEvidence": true
+    },
+    {
+     "h": "H3881",
+     "g": "G3019",
+     "textCslsRank": 2032,
+     "disbeliefPct": 0.7635,
+     "textTopPartner": "G2409",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 286,
+     "gFreq": 4,
+     "thinEvidence": true
+    },
+    {
+     "h": "H1109",
+     "g": "G903",
+     "textCslsRank": 2023,
+     "disbeliefPct": 0.7602,
+     "textTopPartner": "G1205",
+     "auditSeverity": 0.6363,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 61,
+     "gFreq": 4,
+     "thinEvidence": true
+    },
+    {
+     "h": "H1100",
+     "g": "G1228",
+     "textCslsRank": 1994,
+     "disbeliefPct": 0.7492,
+     "textTopPartner": "G3853",
+     "auditSeverity": 0.7804,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 27,
+     "gFreq": 45,
+     "thinEvidence": false
+    },
+    {
+     "h": "H7614",
+     "g": "G3558",
+     "textCslsRank": 1956,
+     "disbeliefPct": 0.735,
+     "textTopPartner": "G2363",
+     "auditSeverity": 0.9487,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 23,
+     "gFreq": 14,
+     "thinEvidence": true
+    },
+    {
+     "h": "H7620",
+     "g": "G4005",
+     "textCslsRank": 1896,
+     "disbeliefPct": 0.7124,
+     "textTopPartner": "G3841",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 20,
+     "gFreq": 3,
+     "thinEvidence": true
+    },
+    {
+     "h": "H4519",
+     "g": "G3128",
+     "textCslsRank": 1828,
+     "disbeliefPct": 0.6868,
+     "textTopPartner": "G2992",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 146,
+     "gFreq": 3,
+     "thinEvidence": true
+    },
+    {
+     "h": "H7585",
+     "g": "G1067",
+     "textCslsRank": 1827,
+     "disbeliefPct": 0.6865,
+     "textTopPartner": "G1492",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 65,
+     "gFreq": 13,
+     "thinEvidence": true
+    },
+    {
+     "h": "H7845",
+     "g": "G1067",
+     "textCslsRank": 1827,
+     "disbeliefPct": 0.6865,
+     "textTopPartner": "G1832",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 23,
+     "gFreq": 13,
+     "thinEvidence": true
+    },
+    {
+     "h": "H4805",
+     "g": "G125",
+     "textCslsRank": 1786,
+     "disbeliefPct": 0.6711,
+     "textTopPartner": "G1492",
+     "auditSeverity": 0.8447,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 23,
+     "gFreq": 24,
+     "thinEvidence": true
+    },
+    {
+     "h": "H1893",
+     "g": "G6",
+     "textCslsRank": 1729,
+     "disbeliefPct": 0.6496,
+     "textTopPartner": "G2981",
+     "auditSeverity": null,
+     "independentlyDisbelievedTwice": false,
+     "hFreq": 8,
+     "gFreq": 6,
+     "thinEvidence": true
+    },
+    {
+     "h": "H761",
+     "g": "G4947",
+     "textCslsRank": 1722,
+     "disbeliefPct": 0.647,
+     "textTopPartner": "G2348",
+     "auditSeverity": 0.7967,
+     "independentlyDisbelievedTwice": true,
+     "hFreq": 11,
+     "gFreq": 8,
+     "thinEvidence": true
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,37 @@
+name: Release
+
+# Tag a version (v0.2.0) and this turns the repo into a download page:
+# self-contained Windows apps for arm64 / x64 / x86, each bundling the data
+# pack, attached to a GitHub Release.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc,x86_64-pc-windows-msvc,i686-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Package all architectures
+        run: pwsh scripts/package-windows.ps1 -Arch arm64,x64,x86 -Version "${{ github.ref_name }}"
+      - name: Attach engine DLLs for developers
+        run: |
+          copy target\aarch64-pc-windows-msvc\release\pure_ffi.dll dist\pure_ffi-${{ github.ref_name }}-arm64.dll
+          copy target\x86_64-pc-windows-msvc\release\pure_ffi.dll dist\pure_ffi-${{ github.ref_name }}-x64.dll
+          copy target\i686-pc-windows-msvc\release\pure_ffi.dll dist\pure_ffi-${{ github.ref_name }}-x86.dll
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/* --title "pure study ${{ github.ref_name }}" --generate-notes

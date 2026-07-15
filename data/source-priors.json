@@ -1,0 +1,62 @@
+{
+ "format": "overlay-source-priors-v1",
+ "note": "Fitted by ml/calibrate_source_priors.py against the Abbott-Smith curated gold; see that script's header.",
+ "seed": 42,
+ "holdout": 0.2,
+ "freqMin": 25,
+ "priors": {
+  "abbott-smith": 0.93,
+  "lxx": 0.85,
+  "stepbible-tipnr": 0.42,
+  "stepbible-tbesg": 0.9,
+  "_default": 0.5
+ },
+ "cslsK": 10,
+ "precisionVsGold": {
+  "lxx": 0.847,
+  "stepbible-tipnr": 0.4167
+ },
+ "embeddingCorroborationCsls": {
+  "abbott-smith": {
+   "n": 2981,
+   "mrr": 0.0747,
+   "p1": 0.0493,
+   "p10": 0.1174,
+   "median": 384.0
+  },
+  "lxx": {
+   "n": 775,
+   "mrr": 0.2,
+   "p1": 0.1548,
+   "p10": 0.2761,
+   "median": 117.0
+  },
+  "stepbible-tipnr": {
+   "n": 165,
+   "mrr": 0.0621,
+   "p1": 0.0303,
+   "p10": 0.1091,
+   "median": 343.0
+  }
+ },
+ "retrievalPlateauOnset": {
+  "lxx": 0.7,
+  "stepbible-tipnr": 0.5
+ },
+ "heldOutRetrieval": {
+  "baseline": {
+   "n": 178,
+   "p1": 0.06179775280898876,
+   "p10": 0.17415730337078653,
+   "mrr": 0.09559859087617494,
+   "median": 146.0
+  },
+  "oldPriors": {
+   "n": 178,
+   "p1": 0.43820224719101125,
+   "p10": 0.5,
+   "mrr": 0.4579916812408534,
+   "median": 11.0
+  }
+ }
+}

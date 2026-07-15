@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WinUI 3 shell over the pure-ffi C ABI (PLAN.md decision #1). Code-only —
+       no XAML files — so a plain `dotnet build` works without VS XAML tooling.
+       Unpackaged (no MSIX) + self-contained Windows App SDK: runs as an exe. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
+    <RollForward>LatestMajor</RollForward>
+    <RuntimeIdentifiers>win-arm64;win-x64;win-x86</RuntimeIdentifiers>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-arm64</RuntimeIdentifier>
+    <PlatformTarget Condition="'$(RuntimeIdentifier)' == 'win-arm64'">arm64</PlatformTarget>
+    <PlatformTarget Condition="'$(RuntimeIdentifier)' == 'win-x64'">x64</PlatformTarget>
+    <PlatformTarget Condition="'$(RuntimeIdentifier)' == 'win-x86'">x86</PlatformTarget>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>false</SelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>PureStudyWin</RootNamespace>
+    <AssemblyName>PureStudyWin</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- We provide Program.Main ourselves (code-only app). -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.*" />
+    <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.3.*" />
+  </ItemGroup>
+
+  <!-- The binding is two source files straight from the ffi crate: the
+       csbindgen-generated P/Invoke shim + the hand-written wrapper. -->
+  <ItemGroup>
+    <Compile Include="../../../crates/ffi/bindings/csharp/PureStudyNative.g.cs" Link="Bindings/PureStudyNative.g.cs" />
+    <Compile Include="../../../crates/ffi/bindings/csharp/PureStudy.cs" Link="Bindings/PureStudy.cs" />
+  </ItemGroup>
+
+  <!-- Native engine + the bundled reader face. Build the DLL first with a
+       release cargo build of pure-ffi; on this ARM64 box the host build is
+       the arm64 DLL, and the x64/x86 ones come from explicit cargo targets
+       (the same MSVC Build Tools cross-target both). -->
+  <PropertyGroup>
+    <PureFfiDll Condition="'$(RuntimeIdentifier)' == 'win-arm64'">../../../target/release/pure_ffi.dll</PureFfiDll>
+    <PureFfiDll Condition="'$(RuntimeIdentifier)' == 'win-x64'">../../../target/x86_64-pc-windows-msvc/release/pure_ffi.dll</PureFfiDll>
+    <PureFfiDll Condition="'$(RuntimeIdentifier)' == 'win-x86'">../../../target/i686-pc-windows-msvc/release/pure_ffi.dll</PureFfiDll>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(PureFfiDll)"
+          Condition="'$(PureFfiDll)' != '' AND Exists('$(PureFfiDll)')"
+          CopyToOutputDirectory="PreserveNewest" Link="pure_ffi.dll" />
+    <None Include="../../desktop/assets/fonts/EBGaramond.ttf"
+          CopyToOutputDirectory="PreserveNewest" Link="Assets/Fonts/EBGaramond.ttf" />
+    <None Include="../../desktop/assets/fonts/EBGaramond-Italic.ttf"
+          CopyToOutputDirectory="PreserveNewest" Link="Assets/Fonts/EBGaramond-Italic.ttf" />
+  </ItemGroup>
+
+</Project>

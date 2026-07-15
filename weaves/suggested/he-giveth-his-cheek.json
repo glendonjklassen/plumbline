@@ -1,0 +1,27 @@
+{
+  "format": "overlay-weave-v2",
+  "name": "He giveth his cheek",
+  "kind": "type",
+  "tokenization": "kjv1769-tok2",
+  "notes": "Lamentations' sufferer and Isaiah's servant give the cheek to the smiter -- taught by Jesus and fulfilled at his trial.",
+  "notesSource": "generated",
+  "created": "2026-07-15T07:10:00Z",
+  "approved": false,
+  "links": [
+    {
+      "a": "Lam 3:30",
+      "b": "Isa 50:6",
+      "label": "the cheek to him that smiteth"
+    },
+    {
+      "a": "Isa 50:6",
+      "b": "Matt 26:67",
+      "label": "they smote him"
+    },
+    {
+      "a": "Lam 3:30",
+      "b": "Matt 5:39",
+      "label": "turn the other cheek"
+    }
+  ]
+}

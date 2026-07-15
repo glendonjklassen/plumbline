@@ -1,0 +1,528 @@
+// The shell window: header (study tools + search + mode), 1–3 reading panes
+// with the weave-connector overlay, the canon strip, and the study panel.
+// All study logic lives across the ABI — this file is orchestration only.
+// Behaviors mirror the GTK shell (docs/FEATURE-MANIFEST.md).
+
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using PureStudy;
+using Windows.System;
+
+namespace PureStudyWin;
+
+public sealed class MainWindow : Window
+{
+    private StudyEngine? _engine;
+    private List<TocBook> _books = new();
+    private WeaveLib? _weaves;
+
+    private readonly List<PaneView> _panes = new();
+    private int _active;
+    private bool _fullMode;
+    private float _fontSize = 18f;
+
+    private readonly Grid _paneHost = new();
+    private readonly ConnectorLayer _connectors = new();
+    private readonly CanonStrip _strip = new();
+    private readonly StudyPanel _panel = new();
+
+    private readonly TextBox _search = new()
+    {
+        PlaceholderText = "search — word, phrase, or reference", MinWidth = 280, IsEnabled = false,
+    };
+    private readonly Button _threadsBtn = new() { Content = "Threads", IsEnabled = false };
+    private readonly Button _tagsBtn = new() { Content = "Tags", IsEnabled = false };
+    private readonly Button _weavesBtn = new() { Content = "Weaves", IsEnabled = false };
+    private readonly Button _suggestedBtn = new() { Content = "Suggested", IsEnabled = false };
+    private readonly Button _mapBtn = new() { Content = "Map", IsEnabled = false };
+    private readonly Button _constBtn = new() { Content = "Constellation", IsEnabled = false };
+    private readonly Button _linkBtn = new() { Content = "＋ link", IsEnabled = false };
+    private readonly Button _modeBtn = new() { Content = "Simple reader", IsEnabled = false };
+    private readonly TextBlock _status = new()
+    {
+        VerticalAlignment = VerticalAlignment.Center,
+        Foreground = new SolidColorBrush(Palette.InkFaded),
+        Text = "loading corpus…",
+    };
+
+    public MainWindow()
+    {
+        Title = "pure study";
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(1500, 1000));
+
+        var header = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Padding = new Thickness(10, 8, 10, 8),
+        };
+        header.Children.Add(_threadsBtn);
+        header.Children.Add(_tagsBtn);
+        header.Children.Add(_weavesBtn);
+        header.Children.Add(_suggestedBtn);
+        header.Children.Add(_mapBtn);
+        header.Children.Add(_constBtn);
+        header.Children.Add(_linkBtn);
+        header.Children.Add(_search);
+        header.Children.Add(_modeBtn);
+        header.Children.Add(_status);
+
+        var centre = new Grid();
+        centre.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        centre.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetRow(_paneHost, 0);
+        Grid.SetRow(_strip, 1);
+        centre.Children.Add(_paneHost);
+        centre.Children.Add(_strip);
+
+        var main = new Grid();
+        main.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        main.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(centre, 0);
+        Grid.SetColumn(_panel, 1);
+        main.Children.Add(centre);
+        main.Children.Add(_panel);
+
+        var root = new Grid
+        {
+            RequestedTheme = ElementTheme.Light,
+            // Accelerators (Esc, brackets, Ctrl+…) must not surface key-tip
+            // tooltips that linger over the reader.
+            KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden,
+        };
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        Grid.SetRow(header, 0);
+        Grid.SetRow(main, 1);
+        root.Children.Add(header);
+        root.Children.Add(main);
+        Content = root;
+
+        WireHeader(root);
+        Closed += (_, _) =>
+        {
+            PersistConfig();
+            foreach (var p in _panes) p.Dispose();
+            _engine?.Dispose();
+        };
+        _ = LoadEngineAsync();
+    }
+
+    // ── startup / config ───────────────────────────────────────────────────
+
+    private static string? FindHome()
+    {
+        foreach (var v in new[] { "PURE_STUDY_HOME", "OVERLAY_HOME" })
+        {
+            var p = Environment.GetEnvironmentVariable(v);
+            if (!string.IsNullOrEmpty(p)) return p;
+        }
+        foreach (var start in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory })
+        {
+            var dir = new DirectoryInfo(start);
+            for (int i = 0; i < 10 && dir is not null; i++, dir = dir.Parent)
+                if (File.Exists(Path.Combine(dir.FullName, "data", "kjv.jsonl")))
+                    return dir.FullName;
+        }
+        return null;
+    }
+
+    private async Task LoadEngineAsync()
+    {
+        var cfg = Wire.Parse<ConfigState>(StudyConfig.LoadJson());
+        _fullMode = cfg.StudyMode == "full";
+        _fontSize = (float)Math.Clamp(cfg.BodySize is > 6 and < 96 ? cfg.BodySize : 18.0, 12, 48);
+
+        var home = FindHome();
+        if (home is null)
+        {
+            _status.Text = "no data home found (set PURE_STUDY_HOME)";
+            return;
+        }
+        try
+        {
+            _engine = await Task.Run(() => StudyEngine.Open(home));
+        }
+        catch (Exception e)
+        {
+            _status.Text = $"could not open corpus: {e.Message}";
+            return;
+        }
+
+        _books = Wire.Parse<Toc>(_engine.TocJson()).Books;
+        _panel.Engine = _engine;
+        _panel.IsFull = () => _fullMode;
+        _panel.Navigate = (book, ch, verse) => NavigateActive(book, ch, verse);
+        _panel.OpenConceptMap = code => Popups.ConceptMap(_engine!, code, _fullMode);
+        _panel.StudyDataChanged = RefreshStudyData;
+
+        // Restore the session's panes (≤3; default John 3).
+        var panes = (cfg.OpenPanes is { Count: > 0 } op ? op : new() { new PaneRef1("John", 3) })
+            .Take(3).ToList();
+        foreach (var p in panes) AddPaneInternal(p.Book, p.Chapter);
+        _active = Math.Clamp(cfg.ActivePane, 0, _panes.Count - 1);
+        RebuildPaneRow();
+
+        foreach (var c in new Control[]
+                 { _search, _threadsBtn, _tagsBtn, _weavesBtn, _suggestedBtn, _mapBtn, _constBtn, _modeBtn })
+            c.IsEnabled = true;
+        _status.Text = "";
+        ApplyMode(persist: false);
+        RefreshStudyData();
+        _strip.SetBooks(_books);
+        _panes[_active].Reader.Focus(FocusState.Programmatic);
+
+        if (cfg.FirstRun) await FirstRunDialogAsync();
+    }
+
+    private void PersistConfig()
+    {
+        var state = new ConfigState(
+            _fullMode ? "full" : "simple",
+            _fontSize,
+            _panes.Select(p => new PaneRef1(p.Reader.Book, (ushort)p.Reader.ChapterNumber)).ToList(),
+            _active,
+            false);
+        StudyConfig.SaveJson(System.Text.Json.JsonSerializer.Serialize(state, Wire.Options));
+    }
+
+    private async Task FirstRunDialogAsync()
+    {
+        var dialog = new ContentDialog
+        {
+            Title = "Welcome to pure-study",
+            Content = new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                Text = "Simple reader — just the text: chapters, search, and a double-click "
+                     + "for Strong's.\n\nFull study — everything: threads, tags, weave "
+                     + "cross-references and authoring, and the review queue.",
+            },
+            PrimaryButtonText = "Simple reader",
+            SecondaryButtonText = "Full study",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content.XamlRoot,
+        };
+        var result = await dialog.ShowAsync();
+        _fullMode = result == ContentDialogResult.Secondary;
+        ApplyMode(persist: true);
+    }
+
+    // ── panes ──────────────────────────────────────────────────────────────
+
+    private void AddPaneInternal(string book, uint chapter)
+    {
+        var pane = new PaneView();
+        int Idx() => _panes.IndexOf(pane);
+        pane.Touched += () => SetActive(Idx());
+        pane.AddRequested += () => AddPane(Idx());
+        pane.CloseRequested += () => ClosePane(Idx());
+        pane.Reader.WordActivated += hit => _panel.ShowWordStudy(hit);
+        pane.Reader.Scrolled += () => _connectors.Redraw();
+        pane.Reader.ChapterShown += (_, _) =>
+        {
+            if (Idx() == _active) UpdateTitle();
+            UpdateStripPins();
+            _connectors.Redraw();
+        };
+        pane.Reader.PinChanged += UpdateLinkButton;
+        pane.Reader.ZoomRequested += Zoom;
+        pane.Reader.ScrollAllRequested += px => { foreach (var p in _panes) p.Reader.ScrollBy(px); };
+        pane.Reader.FontSize = _fontSize;
+        _panes.Add(pane);
+        if (_engine is not null)
+        {
+            pane.Reader.SetEngine(_engine);
+            pane.SetBooks(_books);
+            pane.Reader.ShowChapter(book, chapter);
+        }
+    }
+
+    /// GTK add_pane: insert a copy of pane `after` right after it; make it active.
+    private void AddPane(int after)
+    {
+        if (_panes.Count >= 3 || after < 0) return;
+        var src = _panes[after];
+        AddPaneInternal(src.Reader.Book, src.Reader.ChapterNumber);
+        var pane = _panes[^1];
+        _panes.RemoveAt(_panes.Count - 1);
+        _panes.Insert(after + 1, pane);
+        _active = after + 1;
+        RebuildPaneRow();
+        RefreshStudyData();
+    }
+
+    private void ClosePane(int i)
+    {
+        if (_panes.Count <= 1 || i < 0) return;
+        _panes[i].Dispose();
+        _panes.RemoveAt(i);
+        _active = Math.Clamp(_active >= i ? _active - 1 : _active, 0, _panes.Count - 1);
+        RebuildPaneRow();
+    }
+
+    private void RebuildPaneRow()
+    {
+        _paneHost.Children.Clear();
+        _paneHost.ColumnDefinitions.Clear();
+        for (int i = 0; i < _panes.Count; i++)
+        {
+            _paneHost.ColumnDefinitions.Add(
+                new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            Grid.SetColumn(_panes[i], i);
+            _paneHost.Children.Add(_panes[i]);
+        }
+        Grid.SetColumn(_connectors, 0);
+        Grid.SetColumnSpan(_connectors, Math.Max(1, _panes.Count));
+        _paneHost.Children.Add(_connectors);
+        _connectors.Panes = _panes;
+        SetActive(Math.Clamp(_active, 0, _panes.Count - 1));
+        UpdateLinkButton();
+    }
+
+    private void SetActive(int i)
+    {
+        if (i < 0 || i >= _panes.Count) return;
+        _active = i;
+        for (int p = 0; p < _panes.Count; p++)
+            _panes[p].SetChrome(p == _active, _panes.Count);
+        UpdateTitle();
+        UpdateStripPins();
+    }
+
+    private void UpdateTitle()
+    {
+        if (_panes.Count == 0 || _books.Count == 0) return;
+        var r = _panes[_active].Reader;
+        var name = _books.FirstOrDefault(b => b.Id == r.Book)?.Name ?? r.Book;
+        Title = $"pure study — {name} {r.ChapterNumber} · 1769 KJV";
+    }
+
+    private void UpdateStripPins()
+    {
+        _strip.Pins = _panes
+            .Select((p, i) => (_books.FindIndex(b => b.Id == p.Reader.Book), i == _active))
+            .Where(t => t.Item1 >= 0)
+            .ToList();
+        _strip.Invalidate();
+    }
+
+    private void NavigateActive(string book, uint chapter, string? verse)
+    {
+        if (_panes.Count == 0) return;
+        _panes[_active].Reader.ShowChapter(book, chapter, verse, highlight: verse is not null);
+    }
+
+    // ── study data (weave library → links, xrefs, panel) ──────────────────
+
+    private void RefreshStudyData()
+    {
+        if (_engine?.WeavesJson() is not { } json) return;
+        _weaves = Wire.Parse<WeaveLib>(json);
+        _panel.Weaves = _weaves;
+
+        // GTK build_links: dedupe canonical pairs; build_xrefs: per-verse set.
+        var pairs = new HashSet<(string, string)>();
+        var xrefVerses = new HashSet<string>();
+        var links = new List<LinkPair>();
+        foreach (var w in _weaves.Weaves)
+            foreach (var l in w.Links)
+            {
+                if (!l.Resolved) continue;
+                xrefVerses.Add(l.A);
+                xrefVerses.Add(l.B);
+                var key = string.CompareOrdinal(l.A, l.B) <= 0 ? (l.A, l.B) : (l.B, l.A);
+                if (!pairs.Add(key)) continue;
+                if (ParseRef(key.Item1) is not { } ra || ParseRef(key.Item2) is not { } rb)
+                    continue;
+                links.Add(new LinkPair(key.Item1, key.Item2, ra.book, ra.ch, rb.book, rb.ch));
+            }
+        _connectors.Links = links;
+        foreach (var p in _panes)
+        {
+            p.Reader.XrefVerses = xrefVerses;
+            p.Reader.Redraw();
+        }
+        _connectors.Redraw();
+        UpdateLinkButton();
+    }
+
+    private static (string book, uint ch)? ParseRef(string refKey)
+    {
+        int sp = refKey.LastIndexOf(' ');
+        if (sp < 0) return null;
+        var cv = refKey[(sp + 1)..].Split(':');
+        return uint.TryParse(cv[0], out var ch) ? (refKey[..sp], ch) : null;
+    }
+
+    // ── header wiring ──────────────────────────────────────────────────────
+
+    private void WireHeader(Grid root)
+    {
+        _threadsBtn.Click += (_, _) => _panel.ShowThreadsList();
+        _tagsBtn.Click += (_, _) => _panel.ShowTagsList();
+        _weavesBtn.Click += (_, _) => _panel.ShowWeavesList();
+        _suggestedBtn.Click += (_, _) => _panel.ShowSuggested();
+        _mapBtn.Click += (_, _) =>
+        {
+            if (_connectors.Links.Count > 0 && _books.Count > 0)
+                Popups.ChordMap(_connectors.Links, _books, (book) => NavigateActive(book, 1, null));
+        };
+        _constBtn.Click += (_, _) =>
+        {
+            if (_weaves is not null && _engine is not null)
+                Popups.Constellation(_engine, _weaves, _books,
+                    (book, ch, verse) => NavigateActive(book, ch, verse),
+                    i => _panel.ShowCompareCard(i));
+        };
+        _linkBtn.Click += (_, _) => _ = MakeLinkAsync();
+        _modeBtn.Click += (_, _) =>
+        {
+            _fullMode = !_fullMode;
+            ApplyMode(persist: true);
+        };
+
+        _search.TextChanged += (_, _) => RunSearch(_search.Text, live: true);
+        _search.KeyDown += (_, e) =>
+        {
+            if (e.Key == VirtualKey.Enter) RunSearch(_search.Text, live: false);
+            if (e.Key == VirtualKey.Escape) { _panel.Close(); FocusActive(); }
+        };
+
+        AddAccel(root, VirtualKey.F, VirtualKeyModifiers.Control,
+            () => _search.Focus(FocusState.Programmatic));
+        AddAccel(root, VirtualKey.Escape, VirtualKeyModifiers.None, () => { _panel.Close(); FocusActive(); });
+        AddAccel(root, (VirtualKey)219 /* [ */, VirtualKeyModifiers.None, () => StepActive(-1));
+        AddAccel(root, (VirtualKey)221 /* ] */, VirtualKeyModifiers.None, () => StepActive(+1));
+        AddAccel(root, VirtualKey.Left, VirtualKeyModifiers.None, () => StepActive(-1), skipWhenTyping: true);
+        AddAccel(root, VirtualKey.Right, VirtualKeyModifiers.None, () => StepActive(+1), skipWhenTyping: true);
+        AddAccel(root, VirtualKey.Number0, VirtualKeyModifiers.Control, () => Zoom(0));
+        AddAccel(root, (VirtualKey)0xBB /* =/+ */, VirtualKeyModifiers.Control, () => Zoom(+1));
+        AddAccel(root, (VirtualKey)0xBD /* - */, VirtualKeyModifiers.Control, () => Zoom(-1));
+
+        _strip.BookPicked += book => NavigateActive(book, 1, null);
+    }
+
+    private void FocusActive()
+    {
+        if (_panes.Count > 0) _panes[_active].Reader.Focus(FocusState.Programmatic);
+    }
+
+    private void StepActive(int dir)
+    {
+        if (_panes.Count == 0 || _books.Count == 0) return;
+        var r = _panes[_active].Reader;
+        int idx = _books.FindIndex(b => b.Id == r.Book);
+        if (idx < 0) return;
+        int ch = (int)r.ChapterNumber + dir;
+        if (ch >= 1 && ch <= _books[idx].Chapters)
+            r.ShowChapter(r.Book, (uint)ch);
+    }
+
+    private void AddAccel(UIElement host, VirtualKey key, VirtualKeyModifiers mods,
+        Action action, bool skipWhenTyping = false)
+    {
+        var a = new KeyboardAccelerator { Key = key, Modifiers = mods };
+        a.Invoked += (_, e) =>
+        {
+            if (skipWhenTyping &&
+                FocusManager.GetFocusedElement(Content.XamlRoot) is TextBox or NumberBox)
+            {
+                e.Handled = false;
+                return;
+            }
+            action();
+            e.Handled = true;
+        };
+        host.KeyboardAccelerators.Add(a);
+    }
+
+    /// GTK zoom(): 0 = reset to 18, else ±1 pt clamped 12–48; persists at once.
+    private void Zoom(int dir)
+    {
+        _fontSize = dir == 0 ? 18f : Math.Clamp(_fontSize + dir, 12f, 48f);
+        foreach (var p in _panes) p.Reader.FontSize = _fontSize;
+        _connectors.Redraw();
+        PersistConfig();
+    }
+
+    private void ApplyMode(bool persist)
+    {
+        _modeBtn.Content = _fullMode ? "Full study" : "Simple reader";
+        var vis = _fullMode ? Visibility.Visible : Visibility.Collapsed;
+        _threadsBtn.Visibility = vis;
+        _tagsBtn.Visibility = vis;
+        _weavesBtn.Visibility = vis;
+        _suggestedBtn.Visibility = vis;
+        _mapBtn.Visibility = vis;
+        _constBtn.Visibility = vis;
+        _linkBtn.Visibility = vis;
+        if (!_fullMode) _panel.Close();
+        if (persist) PersistConfig();
+    }
+
+    private void UpdateLinkButton() =>
+        _linkBtn.IsEnabled = _fullMode && _panes.Count(p => p.Reader.Pin is not null) >= 2;
+
+    private async Task MakeLinkAsync()
+    {
+        if (_engine is null) return;
+        var pinned = _panes.Where(p => p.Reader.Pin is not null).Take(2).ToList();
+        if (pinned.Count < 2) return;
+        var a = pinned[0].Reader.Pin!;
+        var b = pinned[1].Reader.Pin!;
+
+        var box = new TextBox { PlaceholderText = "weave name (new or existing)", MinWidth = 300 };
+        var dialog = new ContentDialog
+        {
+            Title = $"Weave {a.Verse} ↔ {b.Verse}",
+            Content = box,
+            PrimaryButtonText = "OK",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content.XamlRoot,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        var name = box.Text.Trim();
+        if (name.Length == 0) return;
+
+        var err = _engine.WeaveAddLinkSpans(
+            name, a.Verse, b.Verse,
+            ((int)a.Lo, (int)a.Hi), ((int)b.Lo, (int)b.Hi),
+            DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"));
+        if (err is not null)
+        {
+            _status.Text = err;
+            return;
+        }
+        _status.Text = "";
+        foreach (var p in _panes) p.Reader.ClearPin();
+        RefreshStudyData();
+    }
+
+    // ── search ─────────────────────────────────────────────────────────────
+
+    private void RunSearch(string query, bool live)
+    {
+        if (_engine is null) return;
+        query = query.Trim();
+        if (query.Length == 0)
+        {
+            _panel.Close();
+            return;
+        }
+        if (_engine.SearchJson(query) is not { } json) return;
+        var r = Wire.Parse<SearchResult>(json);
+        if (!live && r.Kind == "goto" && r.Book is not null && r.Chapter is not null)
+        {
+            var refKey = r.Verse is { } v ? $"{r.Book} {r.Chapter}:{v}" : null;
+            NavigateActive(r.Book, r.Chapter.Value, refKey);
+            _panel.Close();
+            FocusActive();
+            return;
+        }
+        _panel.ShowSearch(query, r);
+    }
+}

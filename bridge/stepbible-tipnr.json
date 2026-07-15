@@ -1,0 +1,2045 @@
+{
+ "format": "overlay-bridge-sources-v1",
+ "source": "stepbible-tipnr",
+ "note": "Hebrew<->Greek proper-name equivalences from STEPBible's TIPNR dataset: every Hebrew and Greek Strong's-tagged form of the same individualised person/place/other name, cross-producted per entry. Proper nouns only (189 named entities attested in both testaments in the source data) -- not a general vocabulary bridge like abbott-smith or lxx. Extracted by pipelines/stepbible_tipnr.py from STEPBible-Data commit b86d26cdb1f51729e73b5b4eb7f7ccadc5dfba39. Two referent-grouped mega-entities (every epithet for God; every historical name for Jerusalem) are excluded -- crossing all their forms would assert non-equivalences, see FANOUT_CAP in the script. TAGOT (the tagged Greek OT this backlog item originally targeted) is not yet released by STEPBible as of this build -- see that script's docstring and pipelines/README.md.",
+ "attribution": [
+  "STEPBible-Data, TIPNR - Translators Individualised Proper Names with all References (Tyndale House Cambridge / STEPBible.org), CC BY 4.0 -- https://github.com/STEPBible/STEPBible-Data"
+ ],
+ "links": [
+  {
+   "h": "H1012",
+   "g": "G962",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1012",
+   "g": "G963",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1022",
+   "g": "G965",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1035",
+   "g": "G965",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1095",
+   "g": "G1158",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1096",
+   "g": "G1158",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1100",
+   "g": "G1228",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1100",
+   "g": "G4566",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1100",
+   "g": "G4567",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1100",
+   "g": "G954",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1100",
+   "g": "G955",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1109",
+   "g": "G903",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1111",
+   "g": "G904",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1126",
+   "g": "G958",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1144",
+   "g": "G958",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1145",
+   "g": "G958",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1160",
+   "g": "G1007",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1162",
+   "g": "G1003",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1168",
+   "g": "G896",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1187",
+   "g": "G896",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H120",
+   "g": "G76",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H121",
+   "g": "G76",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H123",
+   "g": "G2269",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1301",
+   "g": "G913",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1403",
+   "g": "G1043",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1410",
+   "g": "G1045",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1425",
+   "g": "G1045",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1439",
+   "g": "G1066",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1463",
+   "g": "G1136",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1471",
+   "g": "G1482",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1471",
+   "g": "G1484",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1537",
+   "g": "G1056",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1537",
+   "g": "G1057",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1551",
+   "g": "G1056",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1551",
+   "g": "G1057",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1732",
+   "g": "G1138",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H175",
+   "g": "G2",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1834",
+   "g": "G1153",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1834",
+   "g": "G1154",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1840",
+   "g": "G1158",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1841",
+   "g": "G1158",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1893",
+   "g": "G6",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1904",
+   "g": "G28",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1954",
+   "g": "G2424",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H1954",
+   "g": "G5617",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2074",
+   "g": "G2194",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2075",
+   "g": "G2194",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2132",
+   "g": "G1638",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2148",
+   "g": "G2197",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2216",
+   "g": "G2216",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2217",
+   "g": "G2216",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2226",
+   "g": "G2196",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2227",
+   "g": "G2196",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H223",
+   "g": "G3774",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H224",
+   "g": "G1212",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2332",
+   "g": "G2096",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2396",
+   "g": "G1478",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H250",
+   "g": "G2196",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2526",
+   "g": "G124",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2526",
+   "g": "G125",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2544",
+   "g": "G1697",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2585",
+   "g": "G1802",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2696",
+   "g": "G2074",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2697",
+   "g": "G2074",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H271",
+   "g": "G881",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2722",
+   "g": "G4614",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2771",
+   "g": "G5488",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H29",
+   "g": "G7",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H2977",
+   "g": "G2502",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3041",
+   "g": "G4672",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3054",
+   "g": "G2448",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3054",
+   "g": "G2450",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3054",
+   "g": "G2451",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3054",
+   "g": "G2452",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3054",
+   "g": "G2453",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3054",
+   "g": "G2455",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3061",
+   "g": "G2449",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3062",
+   "g": "G2448",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3062",
+   "g": "G2450",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3062",
+   "g": "G2451",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3062",
+   "g": "G2452",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3062",
+   "g": "G2453",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3062",
+   "g": "G2455",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3063",
+   "g": "G2448",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3063",
+   "g": "G2449",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3063",
+   "g": "G2450",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3063",
+   "g": "G2451",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3063",
+   "g": "G2452",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3063",
+   "g": "G2453",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3063",
+   "g": "G2455",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3064",
+   "g": "G2448",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3064",
+   "g": "G2450",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3064",
+   "g": "G2451",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3064",
+   "g": "G2452",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3064",
+   "g": "G2453",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3064",
+   "g": "G2455",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3077",
+   "g": "G914",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3078",
+   "g": "G2423",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3084",
+   "g": "G2501",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3088",
+   "g": "G2496",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3091",
+   "g": "G2424",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3092",
+   "g": "G2498",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3092",
+   "g": "G2748",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3100",
+   "g": "G2493",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3112",
+   "g": "G2423",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3120",
+   "g": "G1671",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3120",
+   "g": "G1672",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3120",
+   "g": "G1674",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3120",
+   "g": "G1675",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3124",
+   "g": "G2495",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3125",
+   "g": "G1672",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3125",
+   "g": "G1674",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3130",
+   "g": "G2501",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3141",
+   "g": "G2496",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3147",
+   "g": "G2488",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3155",
+   "g": "G2196",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3169",
+   "g": "G1478",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3195",
+   "g": "G2484",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3204",
+   "g": "G2423",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3225",
+   "g": "G958",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3227",
+   "g": "G958",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3228",
+   "g": "G958",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3290",
+   "g": "G2384",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3290",
+   "g": "G2474",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3290",
+   "g": "G2475",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3305",
+   "g": "G2445",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3316",
+   "g": "G2422",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3327",
+   "g": "G2464",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3378",
+   "g": "G1066",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3380",
+   "g": "G1066",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3382",
+   "g": "G2391",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3383",
+   "g": "G2446",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3405",
+   "g": "G2410",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3414",
+   "g": "G2408",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3433",
+   "g": "G965",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3442",
+   "g": "G2424",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3446",
+   "g": "G2464",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3448",
+   "g": "G2421",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H347",
+   "g": "G2492",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3470",
+   "g": "G2268",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3478",
+   "g": "G2384",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3478",
+   "g": "G2474",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3478",
+   "g": "G2475",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3479",
+   "g": "G2384",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3479",
+   "g": "G2474",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3479",
+   "g": "G2475",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H348",
+   "g": "G2403",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3481",
+   "g": "G2384",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3481",
+   "g": "G2474",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3481",
+   "g": "G2475",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3482",
+   "g": "G2384",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3482",
+   "g": "G2474",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3482",
+   "g": "G2475",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3484",
+   "g": "G2384",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3484",
+   "g": "G2474",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3484",
+   "g": "G2475",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3485",
+   "g": "G2466",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3552",
+   "g": "G3033",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3568",
+   "g": "G128",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3569",
+   "g": "G128",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3571",
+   "g": "G128",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3659",
+   "g": "G2423",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3667",
+   "g": "G5477",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3667",
+   "g": "G5478",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3669",
+   "g": "G5477",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3669",
+   "g": "G5478",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3672",
+   "g": "G1056",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3672",
+   "g": "G5085",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3679",
+   "g": "G5466",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3731",
+   "g": "G2912",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3731",
+   "g": "G2914",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3743",
+   "g": "G5502",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3778",
+   "g": "G5466",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3779",
+   "g": "G5466",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3794",
+   "g": "G2953",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3794",
+   "g": "G2954",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H38",
+   "g": "G7",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3820",
+   "g": "G5466",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3850",
+   "g": "G3069",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3864",
+   "g": "G3033",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3876",
+   "g": "G3091",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3878",
+   "g": "G3017",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3878",
+   "g": "G3019",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3878",
+   "g": "G3020",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3879",
+   "g": "G3017",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3879",
+   "g": "G3019",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3879",
+   "g": "G3020",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3881",
+   "g": "G3017",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3881",
+   "g": "G3019",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3881",
+   "g": "G3020",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H3929",
+   "g": "G2984",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4023",
+   "g": "G717",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4031",
+   "g": "G3098",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4074",
+   "g": "G3370",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4075",
+   "g": "G3370",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4076",
+   "g": "G3370",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4077",
+   "g": "G3370",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4080",
+   "g": "G3099",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4084",
+   "g": "G3099",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4092",
+   "g": "G3099",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4111",
+   "g": "G3121",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4317",
+   "g": "G3413",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4428",
+   "g": "G3434",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4428",
+   "g": "G4611",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4432",
+   "g": "G3434",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4436",
+   "g": "G938",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4442",
+   "g": "G3198",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4445",
+   "g": "G3434",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4519",
+   "g": "G3128",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4519",
+   "g": "G3475",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H452",
+   "g": "G2243",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4520",
+   "g": "G3128",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4693",
+   "g": "G124",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4693",
+   "g": "G125",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4708",
+   "g": "G707",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4709",
+   "g": "G707",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4713",
+   "g": "G124",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4713",
+   "g": "G125",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4714",
+   "g": "G124",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4714",
+   "g": "G125",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H473",
+   "g": "G2953",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H473",
+   "g": "G2954",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H477",
+   "g": "G1666",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4805",
+   "g": "G124",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4805",
+   "g": "G125",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4850",
+   "g": "G897",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4872",
+   "g": "G3475",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4873",
+   "g": "G3475",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H4968",
+   "g": "G3103",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5103",
+   "g": "G2166",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5104",
+   "g": "G2166",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5146",
+   "g": "G3575",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5152",
+   "g": "G3493",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5177",
+   "g": "G3476",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5210",
+   "g": "G3535",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5210",
+   "g": "G3536",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H526",
+   "g": "G300",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H526",
+   "g": "G301",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5283",
+   "g": "G3497",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5321",
+   "g": "G3508",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H54",
+   "g": "G8",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5416",
+   "g": "G3481",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5467",
+   "g": "G4670",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5488",
+   "g": "G2063",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5514",
+   "g": "G4614",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5614",
+   "g": "G4554",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5677",
+   "g": "G1443",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5680",
+   "g": "G1445",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5744",
+   "g": "G5601",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5804",
+   "g": "G1048",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5818",
+   "g": "G3604",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H583",
+   "g": "G1800",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5838",
+   "g": "G3604",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5841",
+   "g": "G1048",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5867",
+   "g": "G1639",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5899",
+   "g": "G2410",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5910",
+   "g": "G4424",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5962",
+   "g": "G1639",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H5992",
+   "g": "G284",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6005",
+   "g": "G1694",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6005",
+   "g": "G2424",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6005",
+   "g": "G5546",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6005",
+   "g": "G5547",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6017",
+   "g": "G1116",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H609",
+   "g": "G760",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6152",
+   "g": "G688",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6152",
+   "g": "G690",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6154",
+   "g": "G688",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6154",
+   "g": "G690",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6163",
+   "g": "G688",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6163",
+   "g": "G690",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6215",
+   "g": "G2269",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6316",
+   "g": "G3033",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6322",
+   "g": "G3033",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6389",
+   "g": "G5317",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6453",
+   "g": "G3957",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6489",
+   "g": "G897",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6547",
+   "g": "G5328",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6557",
+   "g": "G5329",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6558",
+   "g": "G5329",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6578",
+   "g": "G2166",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6629",
+   "g": "G4262",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H669",
+   "g": "G2187",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H672",
+   "g": "G965",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6721",
+   "g": "G4605",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6721",
+   "g": "G4606",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6722",
+   "g": "G4605",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6722",
+   "g": "G4606",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6847",
+   "g": "G2501",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6865",
+   "g": "G5183",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6865",
+   "g": "G5184",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6876",
+   "g": "G5183",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6876",
+   "g": "G5184",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6886",
+   "g": "G4558",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6939",
+   "g": "G2748",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6944",
+   "g": "G39",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H6965",
+   "g": "G5466",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H701",
+   "g": "G688",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H701",
+   "g": "G690",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7014",
+   "g": "G2535",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7018",
+   "g": "G2536",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7027",
+   "g": "G2797",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7071",
+   "g": "G2580",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7141",
+   "g": "G2879",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7145",
+   "g": "G2879",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7205",
+   "g": "G4502",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7206",
+   "g": "G4502",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7259",
+   "g": "G4479",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7293",
+   "g": "G124",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7293",
+   "g": "G125",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7327",
+   "g": "G4503",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7343",
+   "g": "G4460",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7343",
+   "g": "G4477",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7344",
+   "g": "G3535",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7344",
+   "g": "G3536",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7346",
+   "g": "G4497",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7354",
+   "g": "G4478",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7410",
+   "g": "G689",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7414",
+   "g": "G4471",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7414",
+   "g": "G707",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7421",
+   "g": "G4947",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7421",
+   "g": "G4948",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7421",
+   "g": "G4949",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7436",
+   "g": "G707",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7466",
+   "g": "G4466",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7557",
+   "g": "G5085",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H758",
+   "g": "G3318",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H758",
+   "g": "G4947",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H758",
+   "g": "G4948",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H758",
+   "g": "G4949",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7585",
+   "g": "G1067",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7585",
+   "g": "G5020",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7585",
+   "g": "G86",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7586",
+   "g": "G4549",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7597",
+   "g": "G4528",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7598",
+   "g": "G4528",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H761",
+   "g": "G4947",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H761",
+   "g": "G4948",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H761",
+   "g": "G4949",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7614",
+   "g": "G3558",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H762",
+   "g": "G1444",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H762",
+   "g": "G1446",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H762",
+   "g": "G1447",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7620",
+   "g": "G4005",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H763",
+   "g": "G3318",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7641",
+   "g": "G2166",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7676",
+   "g": "G4315",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7676",
+   "g": "G4520",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7676",
+   "g": "G4521",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H775",
+   "g": "G742",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7845",
+   "g": "G1067",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7845",
+   "g": "G5020",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7845",
+   "g": "G86",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7854",
+   "g": "G1228",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7854",
+   "g": "G4566",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7854",
+   "g": "G4567",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7854",
+   "g": "G954",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7854",
+   "g": "G955",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7927",
+   "g": "G4966",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H795",
+   "g": "G108",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H796",
+   "g": "G108",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7967",
+   "g": "G2423",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H797",
+   "g": "G108",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7974",
+   "g": "G4527",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H7975",
+   "g": "G4611",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8007",
+   "g": "G4527",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8007",
+   "g": "G4533",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8009",
+   "g": "G4527",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8009",
+   "g": "G4533",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8010",
+   "g": "G4672",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8012",
+   "g": "G4527",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8012",
+   "g": "G4533",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8035",
+   "g": "G4590",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H805",
+   "g": "G768",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8050",
+   "g": "G4545",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8095",
+   "g": "G4826",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8099",
+   "g": "G4826",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8111",
+   "g": "G4540",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8111",
+   "g": "G4541",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8111",
+   "g": "G4542",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8115",
+   "g": "G4540",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8115",
+   "g": "G4541",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8115",
+   "g": "G4542",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8118",
+   "g": "G4540",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8118",
+   "g": "G4541",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8118",
+   "g": "G4542",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8123",
+   "g": "G4546",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8283",
+   "g": "G4564",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8286",
+   "g": "G4562",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8289",
+   "g": "G4565",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8290",
+   "g": "G4565",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8297",
+   "g": "G4564",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8339",
+   "g": "G2216",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8340",
+   "g": "G2216",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8347",
+   "g": "G897",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8351",
+   "g": "G4589",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8352",
+   "g": "G4589",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H836",
+   "g": "G768",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H843",
+   "g": "G768",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H85",
+   "g": "G11",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8559",
+   "g": "G2283",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H8646",
+   "g": "G2291",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H87",
+   "g": "G11",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H894",
+   "g": "G897",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H895",
+   "g": "G897",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H896",
+   "g": "G897",
+   "source": "stepbible-tipnr"
+  },
+  {
+   "h": "H917",
+   "g": "G913",
+   "source": "stepbible-tipnr"
+  }
+ ]
+}

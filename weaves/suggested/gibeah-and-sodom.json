@@ -1,0 +1,37 @@
+{
+  "format": "overlay-weave-v2",
+  "name": "Gibeah and Sodom",
+  "kind": "retelling",
+  "tokenization": "kjv1769-tok2",
+  "notes": "Judges 19 retells Genesis 19 almost line for line — the outrage at Gibeah is framed as a second Sodom, and Hosea twice dates Israel's corruption to it.",
+  "notesSource": "generated",
+  "created": "2026-07-15T06:30:00Z",
+  "approved": false,
+  "links": [
+    {
+      "a": "Gen 19:4",
+      "b": "Judg 19:22",
+      "label": "beset the house round about"
+    },
+    {
+      "a": "Gen 19:5",
+      "b": "Judg 19:22",
+      "label": "that we may know him"
+    },
+    {
+      "a": "Gen 19:8",
+      "b": "Judg 19:24",
+      "label": "the daughters offered"
+    },
+    {
+      "a": "Judg 19:22",
+      "b": "Hos 9:9",
+      "label": "as in the days of Gibeah"
+    },
+    {
+      "a": "Judg 20:13",
+      "b": "Hos 10:9",
+      "label": "the days of Gibeah"
+    }
+  ]
+}
