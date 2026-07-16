@@ -48,6 +48,7 @@ use std::sync::OnceLock;
 use pure_core::config;
 use pure_core::corpus::{self, Corpus};
 use pure_core::crossref::{self, XRefIx};
+use pure_core::renderings::Renderings;
 use pure_core::search::{self, Notes, SearchIx};
 use pure_core::strongs::{self, OccurrenceIx, StrongsDict};
 use pure_core::tag::{self, LoadedTag, TagTarget};
@@ -102,6 +103,9 @@ pub struct PureEngine {
     strongs: StrongsDict,
     search_ix: SearchIx,
     occ_ix: OccurrenceIx,
+    /// The rendering lens: code → English renderings and surface word → codes,
+    /// both corpus-derived and immutable after open (like `occ_ix`).
+    renderings: Renderings,
     /// The data home, if opened from one — required to author (write) study
     /// data. `None` when opened from bytes (study data is then read-only/empty).
     home: Option<PathBuf>,
@@ -134,6 +138,7 @@ impl PureEngine {
     fn new(corpus: Corpus, strongs: StrongsDict, home: Option<PathBuf>) -> PureEngine {
         let search_ix = SearchIx::build(&corpus);
         let occ_ix = OccurrenceIx::build(&corpus);
+        let renderings = Renderings::build(&corpus);
         // R&D artifacts. The bridge's etymology layer works from the in-memory
         // dict even without a home; external witnesses + the embedding/morph
         // sidecars need a home's files. Without a home, no filesystem is
@@ -167,6 +172,7 @@ impl PureEngine {
             strongs,
             search_ix,
             occ_ix,
+            renderings,
             home,
             study: std::sync::RwLock::new(study),
             bridge,
@@ -779,6 +785,79 @@ pub unsafe extern "C" fn pure_engine_strongs_occurrences_json(
             capped: total > verses.len(),
             verses,
         })
+    })
+}
+
+/// The rendering lens for a Strong's code: every distinct English rendering of
+/// it, most frequent first, each with an occurrence count and its (capped)
+/// verse refs + token spans. `{"code","renderings":[{"rendering","total",
+/// "capped","refs":[{"verse","display","span":[start,end]}]}]}`. Each `refs`
+/// list is capped at [`OCCURRENCE_CAP`]; `renderings` is empty for an untagged
+/// or unknown code. Null only on a null engine. Caller-freed.
+///
+/// # Safety
+/// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_renderings_json(
+    engine: *const PureEngine,
+    code: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(engine), Some(code)) = (engine.as_ref(), opt_str(code)) else {
+            return ptr::null_mut();
+        };
+        let renderings = engine
+            .renderings
+            .renderings(code)
+            .into_iter()
+            .map(|r| {
+                let total = r.count;
+                let refs: Vec<wire::WireRenderingRef> = r
+                    .occs
+                    .iter()
+                    .take(OCCURRENCE_CAP)
+                    .map(|o| wire::WireRenderingRef {
+                        verse: o.vref.ref_key(),
+                        display: o.vref.display(),
+                        span: [o.span.0, o.span.1],
+                    })
+                    .collect();
+                wire::WireRendering {
+                    rendering: r.label.to_string(),
+                    total,
+                    capped: total > refs.len(),
+                    refs,
+                }
+            })
+            .collect();
+        out_json(&wire::WireRenderings { code: code.to_string(), renderings })
+    })
+}
+
+/// The reverse lens: the Strong's codes a surface English word translates,
+/// most frequent first. `{"word","codes":[{"code","count"}]}`. Reveals where
+/// one English word hides a Greek/Hebrew distinction ("love" ← agape and
+/// phileo); `codes` is empty for an untagged word. Null only on a null engine.
+/// Caller-freed.
+///
+/// # Safety
+/// `engine` is valid; `word` is a valid NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_word_codes_json(
+    engine: *const PureEngine,
+    word: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(engine), Some(word)) = (engine.as_ref(), opt_str(word)) else {
+            return ptr::null_mut();
+        };
+        let codes = engine
+            .renderings
+            .word_codes(word)
+            .into_iter()
+            .map(|(code, count)| wire::WireWordCode { code: code.to_string(), count })
+            .collect();
+        out_json(&wire::WireWordCodes { word: word.to_string(), codes })
     })
 }
 

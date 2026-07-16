@@ -242,6 +242,52 @@ fn strongs_entry_and_occurrences() {
 }
 
 #[test]
+fn renderings_and_word_codes() {
+    unsafe {
+        let e = open();
+
+        // Forward lens: G25 (agapao) is rendered "loved" in John 3:16, token 3.
+        let r: Value =
+            serde_json::from_str(&take(pure_engine_renderings_json(e, c"G25".as_ptr())).unwrap())
+                .unwrap();
+        assert_eq!(r["code"], "G25");
+        let rs = r["renderings"].as_array().unwrap();
+        assert_eq!(rs.len(), 1);
+        assert_eq!(rs[0]["rendering"], "loved");
+        assert_eq!(rs[0]["total"], 1);
+        assert_eq!(rs[0]["capped"], false);
+        assert_eq!(rs[0]["refs"][0]["verse"], "John 3:16");
+        assert_eq!(rs[0]["refs"][0]["span"][0], 3);
+        assert_eq!(rs[0]["refs"][0]["span"][1], 3);
+
+        // Unknown/untagged code → empty renderings, not null.
+        let empty: Value = serde_json::from_str(
+            &take(pure_engine_renderings_json(e, c"H9999".as_ptr())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(empty["renderings"].as_array().unwrap().len(), 0);
+
+        // Reverse lens: the surface word "God" (normalized) maps to G2316.
+        let w: Value =
+            serde_json::from_str(&take(pure_engine_word_codes_json(e, c"God".as_ptr())).unwrap())
+                .unwrap();
+        assert_eq!(w["word"], "God");
+        let codes = w["codes"].as_array().unwrap();
+        assert_eq!(codes.len(), 1);
+        assert_eq!(codes[0]["code"], "G2316");
+        assert_eq!(codes[0]["count"], 1);
+
+        // A translator-supplied (added) word carries no codes.
+        let the: Value =
+            serde_json::from_str(&take(pure_engine_word_codes_json(e, c"the".as_ptr())).unwrap())
+                .unwrap();
+        assert_eq!(the["codes"].as_array().unwrap().len(), 0);
+
+        pure_engine_free(e);
+    }
+}
+
+#[test]
 fn verse_and_token_lookup() {
     unsafe {
         let e = open();

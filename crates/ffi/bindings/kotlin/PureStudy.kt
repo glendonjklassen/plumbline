@@ -44,6 +44,8 @@ internal interface PureFfi : Library {
     fun pure_engine_token_json(engine: Pointer, refKey: String, tokenIndex: Int): Pointer?
     fun pure_engine_strongs_json(engine: Pointer, code: String): Pointer?
     fun pure_engine_strongs_occurrences_json(engine: Pointer, code: String): Pointer?
+    fun pure_engine_renderings_json(engine: Pointer, code: String): Pointer?
+    fun pure_engine_word_codes_json(engine: Pointer, word: String): Pointer?
     fun pure_engine_search_json(engine: Pointer, query: String): Pointer?
 
     fun pure_engine_layout_chapter(
@@ -128,6 +130,12 @@ class StudyEngine private constructor(private val handle: Pointer) : AutoCloseab
     fun strongsJson(code: String): String? = take(ffi.pure_engine_strongs_json(handle, code))
     fun strongsOccurrencesJson(code: String): String? =
         take(ffi.pure_engine_strongs_occurrences_json(handle, code))
+    /** The rendering lens for a code: renderings + counts + capped refs. */
+    fun renderingsJson(code: String): String? =
+        take(ffi.pure_engine_renderings_json(handle, code))
+    /** The reverse lens: the codes a surface English word translates. */
+    fun wordCodesJson(word: String): String? =
+        take(ffi.pure_engine_word_codes_json(handle, word))
     fun searchJson(query: String): String? = take(ffi.pure_engine_search_json(handle, query))
 
     /** Lay out a chapter, measuring text with [measure]. Returns a [Chapter] to

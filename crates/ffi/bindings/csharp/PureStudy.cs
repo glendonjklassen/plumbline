@@ -93,6 +93,23 @@ public sealed unsafe class StudyEngine : IDisposable
             return Utf8.Take(PureStudyNative.pure_engine_strongs_occurrences_json(_handle, c));
     }
 
+    /// The rendering lens for a code: every English rendering of it with counts
+    /// and (capped) verse refs + token spans. `renderings` is empty (not null)
+    /// for an untagged code.
+    public string? RenderingsJson(string code)
+    {
+        fixed (byte* c = Utf8.NulTerminated(code))
+            return Utf8.Take(PureStudyNative.pure_engine_renderings_json(_handle, c));
+    }
+
+    /// The reverse lens: the codes a surface English word translates, with
+    /// counts. `codes` is empty for an untagged word.
+    public string? WordCodesJson(string word)
+    {
+        fixed (byte* w = Utf8.NulTerminated(word))
+            return Utf8.Take(PureStudyNative.pure_engine_word_codes_json(_handle, w));
+    }
+
     public string? SearchJson(string query)
     {
         fixed (byte* q = Utf8.NulTerminated(query))

@@ -215,6 +215,33 @@ namespace PureStudy.Native
         public static extern byte* pure_engine_strongs_occurrences_json(PureEngine* engine, byte* code);
 
         /// <summary>
+        ///  The rendering lens for a Strong's code: every distinct English rendering of
+        ///  it, most frequent first, each with an occurrence count and its (capped)
+        ///  verse refs + token spans. `{"code","renderings":[{"rendering","total",
+        ///  "capped","refs":[{"verse","display","span":[start,end]}]}]}`. Each `refs`
+        ///  list is capped at [`OCCURRENCE_CAP`]; `renderings` is empty for an untagged
+        ///  or unknown code. Null only on a null engine. Caller-freed.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_renderings_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_renderings_json(PureEngine* engine, byte* code);
+
+        /// <summary>
+        ///  The reverse lens: the Strong's codes a surface English word translates,
+        ///  most frequent first. `{"word","codes":[{"code","count"}]}`. Reveals where
+        ///  one English word hides a Greek/Hebrew distinction ("love" ← agape and
+        ///  phileo); `codes` is empty for an untagged word. Null only on a null engine.
+        ///  Caller-freed.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; `word` is a valid NUL-terminated UTF-8 string.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_word_codes_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_word_codes_json(PureEngine* engine, byte* word);
+
+        /// <summary>
         ///  Run a query through the multi-tier search and return a `SearchAnswer` JSON:
         ///  either `{"kind":"goto",...}` (the query was a reference) or
         ///  `{"kind":"hits","how","total","capped","hits":[...]}`. Null when the query is

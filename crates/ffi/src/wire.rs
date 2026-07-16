@@ -214,6 +214,53 @@ pub struct Occurrences {
     pub verses: Vec<String>,
 }
 
+// ── rendering lens ────────────────────────────────────────────────────────────
+
+/// One occurrence of a rendering: the verse plus the inclusive token span of
+/// the contiguous same-code run.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireRenderingRef {
+    pub verse: String,
+    pub display: String,
+    pub span: [u16; 2],
+}
+
+/// One English rendering of a code, with its occurrence count and (capped)
+/// refs.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireRendering {
+    pub rendering: String,
+    pub total: usize,
+    pub capped: bool,
+    pub refs: Vec<WireRenderingRef>,
+}
+
+/// The forward lens payload: a code and all the ways it is rendered.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireRenderings {
+    pub code: String,
+    pub renderings: Vec<WireRendering>,
+}
+
+/// One code a surface word translates, with how many tagged tokens carry it.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireWordCode {
+    pub code: String,
+    pub count: usize,
+}
+
+/// The reverse lens payload: a surface word and the codes it translates.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireWordCodes {
+    pub word: String,
+    pub codes: Vec<WireWordCode>,
+}
+
 // ── search ────────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
