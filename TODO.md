@@ -1,5 +1,68 @@
 # pure-study — TODO
 
+## Rendering lens — seeing translation decisions
+
+*Requested 2026-07-15. **New invention — not in `../overlay`** (first feature
+with no reference implementation; design freely, but the parity contract still
+applies). Goal: give readers without Greek/Hebrew a lens on where the
+translators made choices. Select any tagged English word and see (a) the
+underlying G/H word and (b) every other English rendering of that word across
+the corpus, with counts and navigation — e.g. tap "charity" in 1 Cor 13 and
+learn G26 agape is elsewhere rendered "love", "beloved", "feast of charity";
+tap "love" in John 21 and see the agape/phileo distinction the English hides.
+No new dataset — derived entirely from the tagged text we already ship.*
+
+### Two directions, one corpus pass
+
+Both indexes fall out of a single fold over the corpus, sibling to
+`OccurrenceIx::build` in `crates/core/src/strongs.rs`:
+
+- **Renderings index** (code → renderings): Strong's ref → map of normalized
+  English rendering → occurrence list (VRef + token span). A *rendering* is
+  the contiguous run of same-code tokens within a verse, so one-to-many
+  translations ("suffereth long" ← G3114) stay one unit, exactly like the
+  multi-code/zero-code handling already in the token schema.
+- **Reverse index** (word → codes): normalized surface word → the codes it
+  translates, with counts — the "love hides both agape and phileo" direction.
+  The word-index fold in `crates/core/src/search.rs` (~line 52) already
+  lowercases every token surface; hang both indexes off one pass.
+
+### Tasks
+
+- [ ] **Core** (`crates/core`): the two indexes above + a normalization fold
+      (lowercase, letters-only). Start with exact surface forms
+      ("love"/"loved"/"loveth" stay distinct); folding inflections together
+      via the morphology data is a later refinement, likely a display-time
+      grouping rather than an index change.
+- [ ] **Wire** (`crates/ffi`): additive camelCase endpoints, e.g.
+      `pure_engine_renderings_json(code)` → `[{rendering, count, refs:[…]}]`
+      and `pure_engine_word_codes_json(word)` → `[{code, count}]`; regenerate
+      bindings; rebuild release DLL.
+- [ ] **UI — word study panel**: a **RENDERINGS** tier under each Strong's
+      code (Full mode; between the occurrence count and the bridge tier):
+      rendering chips with counts, the tapped word's own rendering
+      highlighted; clicking a chip opens the concordance filtered to that
+      code + rendering (respect OCC_SHOWN cap). When the reverse index shows
+      the tapped surface word maps to >1 code, a small "also renders …" line
+      makes the split visible without leaving the panel.
+- [ ] **Parity**: GTK + WinUI in the same change set; log the Compose delta
+      in docs/FEATURE-MANIFEST.md; add the feature's manifest section.
+- [ ] **Tests**: index unit tests in `strongs.rs` style (small inline corpus
+      covering contiguous-run grouping, multi-code tokens, case folding);
+      FFI round-trip test in `crates/ffi/src/tests.rs`.
+
+### Design notes
+
+- The 1890 dictionary's `kjv_def` field lists renderings but is static,
+  count-free, and occasionally wrong for our text — derive from the corpus,
+  use `kjv_def` at most as a sanity cross-check in tests.
+- Punctuation/casing: normalize for grouping but display the most common
+  actual surface form as the chip label.
+- FLAG_ADDED (italic) words carry no tags and never enter either index.
+- Once the Luther 1912 tagging lands, the same indexes over the German corpus
+  give cross-translation rendering comparison for free — worth keeping the
+  index API corpus-parametric rather than KJV-global.
+
 ## AI-generated Strong's tagging for Luther 1912
 
 *Direction approved 2026-07-15. Goal: produce our own word-level Strong's
