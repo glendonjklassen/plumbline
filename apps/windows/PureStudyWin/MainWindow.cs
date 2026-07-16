@@ -21,6 +21,7 @@ public sealed class MainWindow : Window
     private readonly List<PaneView> _panes = new();
     private int _active;
     private bool _fullMode;
+    private bool _versePerLine;
     private float _fontSize = 18f;
 
     private readonly Grid _paneHost = new();
@@ -40,6 +41,7 @@ public sealed class MainWindow : Window
     private readonly Button _constBtn = new() { Content = "Constellation", IsEnabled = false };
     private readonly Button _linkBtn = new() { Content = "＋ link", IsEnabled = false };
     private readonly Button _modeBtn = new() { Content = "Simple reader", IsEnabled = false };
+    private readonly Button _vplBtn = new() { Content = "Flowing text", IsEnabled = false };
     private readonly TextBlock _status = new()
     {
         VerticalAlignment = VerticalAlignment.Center,
@@ -51,6 +53,8 @@ public sealed class MainWindow : Window
     {
         Title = "pure study";
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1500, 1000));
+        var iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "pure-study.ico");
+        if (System.IO.File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
 
         var header = new StackPanel
         {
@@ -67,6 +71,7 @@ public sealed class MainWindow : Window
         header.Children.Add(_linkBtn);
         header.Children.Add(_search);
         header.Children.Add(_modeBtn);
+        header.Children.Add(_vplBtn);
         header.Children.Add(_status);
 
         var centre = new Grid();
@@ -150,6 +155,7 @@ public sealed class MainWindow : Window
         var cfg = Wire.Parse<ConfigState>(StudyConfig.LoadJson());
         _fullMode = cfg.StudyMode == "full";
         _fontSize = (float)Math.Clamp(cfg.BodySize is > 6 and < 96 ? cfg.BodySize : 18.0, 12, 48);
+        _versePerLine = cfg.VersePerLine;
 
         var home = FindHome();
         if (home is null)
@@ -182,10 +188,11 @@ public sealed class MainWindow : Window
         RebuildPaneRow();
 
         foreach (var c in new Control[]
-                 { _search, _threadsBtn, _tagsBtn, _weavesBtn, _suggestedBtn, _mapBtn, _constBtn, _modeBtn })
+                 { _search, _threadsBtn, _tagsBtn, _weavesBtn, _suggestedBtn, _mapBtn, _constBtn, _modeBtn, _vplBtn })
             c.IsEnabled = true;
         _status.Text = "";
         ApplyMode(persist: false);
+        ApplyVersePerLine(persist: false);
         RefreshStudyData();
         _strip.SetBooks(_books);
         _panes[_active].Reader.Focus(FocusState.Programmatic);
@@ -200,7 +207,8 @@ public sealed class MainWindow : Window
             _fontSize,
             _panes.Select(p => new PaneRef1(p.Reader.Book, (ushort)p.Reader.ChapterNumber)).ToList(),
             _active,
-            false);
+            false,
+            _versePerLine);
         StudyConfig.SaveJson(System.Text.Json.JsonSerializer.Serialize(state, Wire.Options));
     }
 
@@ -247,6 +255,7 @@ public sealed class MainWindow : Window
         pane.Reader.ZoomRequested += Zoom;
         pane.Reader.ScrollAllRequested += px => { foreach (var p in _panes) p.Reader.ScrollBy(px); };
         pane.Reader.FontSize = _fontSize;
+        pane.Reader.VersePerLine = _versePerLine;
         _panes.Add(pane);
         if (_engine is not null)
         {
@@ -399,6 +408,11 @@ public sealed class MainWindow : Window
             _fullMode = !_fullMode;
             ApplyMode(persist: true);
         };
+        _vplBtn.Click += (_, _) =>
+        {
+            _versePerLine = !_versePerLine;
+            ApplyVersePerLine(persist: true);
+        };
 
         _search.TextChanged += (_, _) => RunSearch(_search.Text, live: true);
         _search.KeyDown += (_, e) =>
@@ -462,6 +476,15 @@ public sealed class MainWindow : Window
         foreach (var p in _panes) p.Reader.FontSize = _fontSize;
         _connectors.Redraw();
         PersistConfig();
+    }
+
+    /// GTK vpl toggle: flow ↔ verse-per-line for every pane; persists at once.
+    private void ApplyVersePerLine(bool persist)
+    {
+        _vplBtn.Content = _versePerLine ? "Verse / line" : "Flowing text";
+        foreach (var p in _panes) p.Reader.VersePerLine = _versePerLine;
+        _connectors.Redraw();
+        if (persist) PersistConfig();
     }
 
     private void ApplyMode(bool persist)

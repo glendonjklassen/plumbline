@@ -188,6 +188,23 @@ public sealed class ReaderView : UserControl, IDisposable
         }
     }
 
+    private bool _versePerLine;
+    /// Verse-per-line reading (GTK vpl toggle): each verse starts a fresh line.
+    /// Feeds PureLayoutConfig.verse_break, which the shared core layout honors.
+    public bool VersePerLine
+    {
+        get => _versePerLine;
+        set
+        {
+            if (value == _versePerLine) return;
+            _versePerLine = value;
+            Relayout();
+            UpdateScrollExtent();
+            _canvas.Invalidate();
+            Scrolled?.Invoke();
+        }
+    }
+
     /// Navigate. `verse` (refKey) scrolls there; `highlight` paints the band
     /// (persists until this pane next navigates).
     public void ShowChapter(string book, uint chapter, string? verse = null, bool highlight = false)
@@ -290,6 +307,7 @@ public sealed class ReaderView : UserControl, IDisposable
             verse_num_gap = space * 1.4f,
             para_indent = _lineH * 0.9f,
             para_spacing = _lineH * 0.45f,
+            verse_break = (uint)(_versePerLine ? 1 : 0),
         };
 
         try

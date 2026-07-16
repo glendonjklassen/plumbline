@@ -105,7 +105,11 @@ public sealed record BookCount(string Book, string Display, uint Count);
 public sealed record Leitwort(int N, int WinCount, double Score, string Label);
 
 public sealed record ConfigState(
-    string StudyMode, double BodySize, List<PaneRef1>? OpenPanes, int ActivePane, bool FirstRun);
+    string StudyMode, double BodySize, List<PaneRef1>? OpenPanes, int ActivePane, bool FirstRun,
+    // Frozen additive field shared with GTK's config.json. Must round-trip even
+    // before the toggle UI reads it, or a WinUI save silently resets it to
+    // false and clobbers a GTK user's verse-per-line preference.
+    bool VersePerLine = false);
 public sealed record PaneRef1(string Book, ushort Chapter);
 
 // ── R&D tier ───────────────────────────────────────────────────────────────
