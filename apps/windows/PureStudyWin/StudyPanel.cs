@@ -80,6 +80,12 @@ public sealed class StudyPanel : UserControl
                 break;
             }
             case "occ": ShowConcordance(rest); break;
+            case "rend":
+            {
+                var (rcode, rword) = Split2(rest, ':');
+                ShowConcordanceFiltered(rcode, rword);
+                break;
+            }
             case "thread": if (int.TryParse(rest, out var ti)) ShowThreadDetail(ti); break;
             case "tag": if (int.TryParse(rest, out var gi)) ShowTagDetail(gi); break;
             case "weave": if (int.TryParse(rest, out var wi)) ShowCompareCard(wi); break;
@@ -342,6 +348,65 @@ public sealed class StudyPanel : UserControl
 
             if (!full) continue;
 
+            // RENDERINGS: the other English words this code is translated as,
+            // most frequent first; the tapped word's own rendering is bold.
+            if (Engine.RenderingsJson(code) is { } rj)
+            {
+                var lens = Wire.Parse<RenderingLens>(rj);
+                if (lens.Renderings.Count > 0)
+                {
+                    Add(SHead("RENDERINGS"));
+                    var tb = new TextBlock
+                    {
+                        FontSize = 13.5, TextWrapping = TextWrapping.Wrap,
+                        Foreground = new SolidColorBrush(Palette.Ink),
+                    };
+                    string wkey = RenderKey(word);
+                    bool first = true;
+                    foreach (var rnd in lens.Renderings)
+                    {
+                        if (!first) tb.Inlines.Add(new Run { Text = "  ·  " });
+                        first = false;
+                        bool tapped = wkey.Length > 0 && RenderKey(rnd.Rendering) == wkey;
+                        var link = new Hyperlink { UnderlineStyle = UnderlineStyle.None };
+                        link.Inlines.Add(R(rnd.Rendering, Palette.Gold, 13.5, bold: tapped));
+                        string codeC = code, rndC = rnd.Rendering;
+                        link.Click += (_, _) => Link($"rend:{codeC}:{rndC}");
+                        tb.Inlines.Add(link);
+                        tb.Inlines.Add(R($" ×{rnd.Total}", Palette.InkFaded, 11.5));
+                    }
+                    Add(tb);
+
+                    // Reverse lens: if the tapped word also stands for other
+                    // codes, point at them (the agape/phileo split behind "love").
+                    if (word.Length > 0 && Engine.WordCodesJson(word) is { } wj)
+                    {
+                        var others = Wire.Parse<WordCodes>(wj).Codes
+                            .Where(c => c.Code != code).ToList();
+                        if (others.Count > 0)
+                        {
+                            var also = new TextBlock
+                            {
+                                FontSize = 11.5, TextWrapping = TextWrapping.Wrap,
+                                Foreground = new SolidColorBrush(Palette.InkFaded),
+                                Margin = new Thickness(0, 2, 0, 0),
+                            };
+                            also.Inlines.Add(new Run { Text = $"“{word}” also translates " });
+                            bool f2 = true;
+                            foreach (var o in others)
+                            {
+                                if (!f2) also.Inlines.Add(new Run { Text = ", " });
+                                f2 = false;
+                                var gl = Engine?.Gloss(o.Code);
+                                also.Inlines.Add(H(gl is not null ? $"{o.Code} ({gl})" : o.Code,
+                                    $"occ:{o.Code}", size: 11.5));
+                            }
+                            Add(also);
+                        }
+                    }
+                }
+            }
+
             if (Engine.BridgePartnersJson(code) is { } bj)
             {
                 var bp = Wire.Parse<BridgePartners>(bj);
@@ -510,6 +575,40 @@ public sealed class StudyPanel : UserControl
         if (occ.Total > 300)
             Add(Para(12, Italic($"… {occ.Total - 300} more")));
     }
+
+    /// Concordance filtered to one rendering of a code — the verses where the
+    /// code is translated exactly this way (reached from a RENDERINGS chip).
+    public void ShowConcordanceFiltered(string code, string rendering)
+    {
+        if (Engine is null) return;
+        Fresh();
+        if (Engine.RenderingsJson(code) is not { } rj)
+        {
+            Add(Para(14, Italic($"no occurrences of {code}")));
+            return;
+        }
+        var lens = Wire.Parse<RenderingLens>(rj);
+        var key = RenderKey(rendering);
+        var match = lens.Renderings.FirstOrDefault(r => RenderKey(r.Rendering) == key);
+        if (match is null)
+        {
+            Add(Para(14, Italic($"no “{rendering}” rendering of {code}")));
+            return;
+        }
+        Add(Para(18, R(code, bold: true), $"  “{match.Rendering}”"));
+        Add(Para(13, R($"{match.Total} verse{(match.Total == 1 ? "" : "s")} rendered “{match.Rendering}”",
+            Palette.Gold)));
+        foreach (var rf in match.Refs.Take(300))
+            Add(Para(13.5, Go(rf.Verse, rf.Display)));
+        if (match.Total > 300)
+            Add(Para(12, Italic($"… {match.Total - 300} more")));
+    }
+
+    /// Fold a surface word to the rendering-lens key (letters only, lower) so a
+    /// tapped word matches a chip label. Mirrors core `renderings::normalize`
+    /// for the single-word case (multi-word labels never equal a single tap).
+    private static string RenderKey(string s) =>
+        new string(s.Where(char.IsLetter).ToArray()).ToLowerInvariant();
 
     // ── threads / tags ─────────────────────────────────────────────────────
 

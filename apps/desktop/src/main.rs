@@ -30,6 +30,7 @@ use pure_core::config::{self, Config, StudyMode};
 use pure_core::corpus::{Corpus, FLAG_ADDED, FLAG_DIVINE, FLAG_TITLE};
 use pure_core::search::{self, Notes, SearchAnswer, SearchIx};
 use pure_core::strongs::{self, OccurrenceIx, StrongsDict};
+use pure_core::renderings::Renderings;
 use pure_core::reference::{CANON_SEGMENTS, OT_NT_DIVIDE};
 use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread};
@@ -59,6 +60,8 @@ struct State {
     strongs: StrongsDict,
     search_ix: SearchIx,
     occ_ix: OccurrenceIx,
+    /// The rendering lens: code → English renderings and word → codes.
+    renderings: Renderings,
     notes: Notes,
     /// Verse → its weave cross-reference partners (deduped), precomputed once.
     xrefs: HashMap<VRef, Vec<Xref>>,
@@ -377,6 +380,7 @@ fn load_state(cfg: &Config) -> Result<State, String> {
     // lazily on first Full-study lookup — not here — so launch is instant.
     let search_ix = SearchIx::build(&corpus);
     let occ_ix = OccurrenceIx::build(&corpus);
+    let renderings = Renderings::build(&corpus);
     let family = register_bundled_fonts();
     // Restore last session's panes, or open the default passage on a fresh
     // install; clamp the active index into range.
@@ -391,6 +395,7 @@ fn load_state(cfg: &Config) -> Result<State, String> {
         strongs,
         search_ix,
         occ_ix,
+        renderings,
         notes,
         xrefs,
         weaves,
@@ -2538,6 +2543,14 @@ fn handle_link(state: &Shared, ui: &Ui, uri: &str) {
     } else if let Some(code) = uri.strip_prefix("occ:") {
         let markup = concordance_markup(&state.borrow(), code);
         show_study(ui, &markup);
+    } else if let Some(rest) = uri.strip_prefix("rend:") {
+        // `rend:CODE:rendering` — a distinct verb from `occ:`, which consumes
+        // its whole remainder as the code. Split only on the first colon so a
+        // multi-word rendering ("suffereth long") survives intact.
+        if let Some((code, rendering)) = rest.split_once(':') {
+            let markup = rendering_concordance_markup(&state.borrow(), code, rendering);
+            show_study(ui, &markup);
+        }
     } else if let Some(idx) = uri.strip_prefix("thread:") {
         if let Ok(i) = idx.parse::<usize>() {
             let markup = thread_markup(&state.borrow(), i);
@@ -3203,6 +3216,61 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
         // partner opens its concordance, so a theme can be followed across the
         // Hebrew/Greek boundary the numbering otherwise walls off.
         if st.mode.is_full() {
+            // ── rendering lens ──────────────────────────────────────────────
+            // The other English words this code is translated as (corpus-
+            // derived, not R&D), most frequent first; the tapped word's own
+            // rendering is bold. A chip filters the concordance to that
+            // rendering; the reverse line names other codes the tapped word
+            // also stands for (the agape/phileo split hidden behind "love").
+            let rends = st.renderings.renderings(code);
+            if !rends.is_empty() {
+                s.push_str(&shead("RENDERINGS"));
+                let wkey = pure_core::renderings::normalize(&word);
+                let chips: Vec<String> = rends
+                    .iter()
+                    .map(|r| {
+                        let tapped =
+                            !wkey.is_empty() && pure_core::renderings::normalize(r.label) == wkey;
+                        let label = if tapped {
+                            format!("<b>{}</b>", esc(r.label))
+                        } else {
+                            esc(r.label)
+                        };
+                        format!(
+                            "<a href=\"rend:{code}:{rend}\">{label}</a> <span foreground=\"#999\" size=\"x-small\">×{count}</span>",
+                            code = esc(code),
+                            rend = esc(r.label),
+                            count = r.count,
+                        )
+                    })
+                    .collect();
+                s.push_str(&chips.join("  ·  "));
+                s.push('\n');
+
+                let others: Vec<(&str, usize)> = st
+                    .renderings
+                    .word_codes(&word)
+                    .into_iter()
+                    .filter(|(c, _)| *c != code.as_str())
+                    .collect();
+                if !others.is_empty() {
+                    let links: Vec<String> = others
+                        .iter()
+                        .map(|(c, _)| {
+                            let label = english_gloss(st, c)
+                                .map(|g| format!("{c} ({g})"))
+                                .unwrap_or_else(|| c.to_string());
+                            format!("<a href=\"occ:{}\">{}</a>", esc(c), esc(&label))
+                        })
+                        .collect();
+                    s.push_str(&format!(
+                        "<small><span foreground=\"#6b6862\">“{}” also translates {}</span></small>\n",
+                        esc(&word),
+                        links.join(", ")
+                    ));
+                }
+            }
+
             // ── analytics tier ──────────────────────────────────────────────
             // Everything below is the R&D layer for this code: cognates, near
             // concepts, co-occurrence, dispersion. Each gets its own header so
@@ -3917,6 +3985,38 @@ fn concordance_markup(st: &State, code: &str) -> String {
     }
     if verses.len() > OCC_SHOWN {
         s.push_str(&format!("\n<small>… {} more</small>", verses.len() - OCC_SHOWN));
+    }
+    s
+}
+
+/// Markup for one rendering of a code's concordance: the verses where the code
+/// is translated exactly this way (reached from a RENDERINGS chip), capped at
+/// OCC_SHOWN. The passed `rendering` is normalized before lookup, so a chip's
+/// display label round-trips through the link unchanged.
+fn rendering_concordance_markup(st: &State, code: &str, rendering: &str) -> String {
+    let key = pure_core::renderings::normalize(rendering);
+    let occs = st.renderings.rendering_occs(code, rendering);
+    // Recover the display label (most-common surface) for the header.
+    let label = st
+        .renderings
+        .renderings(code)
+        .into_iter()
+        .find(|r| pure_core::renderings::normalize(r.label) == key)
+        .map(|r| r.label.to_string())
+        .unwrap_or_else(|| rendering.to_string());
+    let mut s = format!(
+        "<b>{}</b>  <span size=\"large\">“{}”</span>\n<small>{} verse{} rendered “{}”</small>\n\n",
+        esc(code),
+        esc(&label),
+        occs.len(),
+        if occs.len() == 1 { "" } else { "s" },
+        esc(&label),
+    );
+    for o in occs.iter().take(OCC_SHOWN) {
+        s.push_str(&format!("{}\n", go_link(&o.vref)));
+    }
+    if occs.len() > OCC_SHOWN {
+        s.push_str(&format!("\n<small>… {} more</small>", occs.len() - OCC_SHOWN));
     }
     s
 }

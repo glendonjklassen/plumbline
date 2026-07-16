@@ -37,6 +37,13 @@ public sealed record StrongsEntry(
 
 public sealed record Occurrences(string Code, int Total, bool Capped, List<string> Verses);
 
+// ── rendering lens ───────────────────────────────────────────────────────────
+public sealed record RenderingLens(string Code, List<Rendering1> Renderings);
+public sealed record Rendering1(string Rendering, int Total, bool Capped, List<RenderingRef> Refs);
+public sealed record RenderingRef(string Verse, string Display, ushort[] Span);
+public sealed record WordCodes(string Word, List<WordCode1> Codes);
+public sealed record WordCode1(string Code, int Count);
+
 public sealed record SearchResult(
     string Kind,                 // "goto" | "hits"
     // goto

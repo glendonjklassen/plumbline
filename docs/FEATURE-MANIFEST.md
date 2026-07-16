@@ -98,6 +98,14 @@ Sidebar 380 px, on-demand; Esc hides; clearing search hides. Content order —
    code bold + "**N occurrence(s) ▸**" → concordance; lemma x-large; xlit
    italic; pron `#888`; definition; `KJV: …` small; then (F) tiers with
    small-caps gold headers:
+   - **RENDERINGS** — the other English words this code is translated as
+     (corpus-derived, not R&D), most frequent first; the tapped word's own
+     rendering is **bold**. Each chip shows `×count` and links
+     `rend:CODE:rendering` → a concordance filtered to that rendering (cap
+     OCC_SHOWN). When the reverse lens maps the tapped surface word to >1 code,
+     a "“word” also translates …" line (`#6b6862`) links the other codes. New
+     feature — no overlay antecedent. *Data*: `pure_engine_renderings_json` +
+     `pure_engine_word_codes_json`.
    - **SAME ROOT ACROSS TESTAMENTS** — bridge partners (≤6) as gloss chips →
      concordance links; sources humanized (`lxx`→Septuagint, `quotation`→NT
      quotation); "· disputed by usage" in `#b04a3a` when the text-witness
@@ -126,7 +134,7 @@ concept/similar-verses/verse-xrefs/study-xrefs/tags/verse-notes` endpoints.
 ## Link routing (GTK `handle_link`, M:2486–2564)
 
 All panel interactivity funnels through one URI dispatcher — replicate it:
-`go:Book:ch[:v]` · `occ:CODE` · `thread:i` · `tag:i` · `addtag:refkey` ·
+`go:Book:ch[:v]` · `occ:CODE` · `rend:CODE:rendering` · `thread:i` · `tag:i` · `addtag:refkey` ·
 `addthread:refkey` · `untag:i:refkey` · `approve:i` · `reject:i` ·
 `editthreadnotes:i` · `editentrynote:ti:ei` · `editweavenotes:i` · `weave:i` ·
 `conceptmap:CODE`.
@@ -269,6 +277,13 @@ Added for shell parity (2026-07-14):
 | `pure_engine_weave_add_link_spans(name, a, b, aLo, aHi, bLo, bHi, added)` | null/error (negative span = none) | word-span links |
 | `pure_config_load_json()` / `pure_config_save_json(json)` | config wire above (+`firstRun` on load) | session/mode/zoom |
 
+Added for the rendering lens (2026-07-16):
+
+| endpoint | returns | for |
+|---|---|---|
+| `pure_engine_renderings_json(code)` | `{code, renderings:[{rendering, total, capped, refs:[{verse, display, span:[s,e]}]}]}` (refs cap 500) | RENDERINGS tier + filtered concordance |
+| `pure_engine_word_codes_json(word)` | `{word, codes:[{code, count}]}` | "also translates" reverse line |
+
 Not ported into any shell (by decision / data): signed patches + rules;
 text-witness grading (shipped data never passes, so the "disputed" marker
 stays silent); quotation detection (awaits hydrated inputs).
@@ -278,6 +293,10 @@ stays silent); quotation detection (awaits hydrated inputs).
 - The Kotlin/JNA wrapper (`crates/ffi/bindings/kotlin/PureStudy.kt`, package
   `dev.purestudy.core`) predates the parity endpoints — extend it like
   `bindings/csharp/PureStudy.cs` (which is current).
+- **Rendering lens (2026-07-16) — Compose delta:** the two endpoints
+  (`renderingsJson` / `wordCodesJson`) are already in the Kotlin binding, but
+  the RENDERINGS tier + `rend:` route are **not yet in a Compose shell**. Build
+  them from the GTK/WinUI reference when the Compose shell lands.
 - Build gate: Android NDK + `cargo-ndk` for the `.so` per ABI; the Rust and
   the JSON contract are identical.
 - Measure callback: back it with `android.graphics.Paint.measureText` (or
