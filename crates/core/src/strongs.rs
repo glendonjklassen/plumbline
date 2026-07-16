@@ -60,7 +60,14 @@ impl OccurrenceIx {
                 .collect();
             let vr = v.vref();
             for r in refs {
-                map.entry(r.to_string()).or_default().push(vr.clone());
+                // Allocate the key String only on first sight of a code (~14k
+                // distinct) rather than once per (verse, code) pair (~10^5–10^6).
+                match map.get_mut(r) {
+                    Some(postings) => postings.push(vr.clone()),
+                    None => {
+                        map.insert(r.to_string(), vec![vr.clone()]);
+                    }
+                }
             }
         }
         OccurrenceIx { map }

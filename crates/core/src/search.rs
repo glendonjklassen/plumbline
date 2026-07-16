@@ -61,10 +61,12 @@ impl SearchIx {
                     }
                 }
                 if !t.strongs.is_empty() {
-                    if !word_lem.contains_key(&w) {
-                        word_lem.insert(w.clone(), HashSet::new());
-                    }
-                    let lems = word_lem.get_mut(&w).expect("just inserted");
+                    // One probe on the common path (word already seen); the
+                    // key clone stays gated to first sight, as with `word`.
+                    let lems = match word_lem.get_mut(&w) {
+                        Some(lems) => lems,
+                        None => word_lem.entry(w.clone()).or_default(),
+                    };
                     for s in &t.strongs {
                         lemmas_here.insert(s.as_str());
                         if !lems.contains(s.as_str()) {
@@ -288,8 +290,11 @@ fn lemma_hits(ix: &SearchIx, w: &str) -> Vec<(usize, String)> {
     let mut hits: Vec<(usize, String)> = Vec::new();
     if let Some(lemmas) = ix.word_lem.get(w) {
         for lemma in lemmas {
+            // Format once per lemma, not once per posting (a common lemma has a
+            // large posting list, all sharing the same "also …" reason).
+            let why = format!("also {lemma}");
             for &i in ix.lemma_idxs(lemma) {
-                hits.push((i, format!("also {lemma}")));
+                hits.push((i, why.clone()));
             }
         }
     }
@@ -365,7 +370,14 @@ fn multi_word(corpus: &Corpus, notes: &Notes, ix: &SearchIx, qws: &[String]) -> 
 
 /// Intersect all postings (every-word-in-any-order), keeping ascending order.
 fn and_idxs(postings: &[&[usize]]) -> Vec<usize> {
-    let mut iter = postings.iter();
+    // Smallest posting first: the initial `to_vec` copies the shortest list and
+    // the accumulator stays minimal across a 3+ word query, so a query like
+    // "the beginning" is bounded by the rare word, not "the". Intersection is
+    // order-independent and `intersect_asc` always emits ascending, so both the
+    // result and its order are unchanged.
+    let mut ordered: Vec<&[usize]> = postings.to_vec();
+    ordered.sort_by_key(|p| p.len());
+    let mut iter = ordered.iter();
     let mut acc: Vec<usize> = match iter.next() {
         Some(first) => first.to_vec(),
         None => return Vec::new(),
