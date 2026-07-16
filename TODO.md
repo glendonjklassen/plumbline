@@ -63,6 +63,47 @@ Both indexes fall out of a single fold over the corpus, sibling to
   give cross-translation rendering comparison for free — worth keeping the
   index API corpus-parametric rather than KJV-global.
 
+### Follow-ups (from testing 2026-07-16)
+
+- [ ] **Reverse links must land on a Strong's study card, not a bare list.**
+      Clicking an "'love' also translates G5368" link currently opens `occ:`
+      (a verse list) for a code the reader doesn't understand. It should open
+      the actual Strong's entry (definition / lemma / gloss + its study). Build
+      ONE reusable code-study view — extract the per-code block from the
+      word-study panel (WinUI `StudyPanel.ShowWordStudy` loop; GTK
+      `word_study_markup` loop) behind a new `code:CODE` link verb — and point
+      the reverse links at it. Reuse that one view everywhere instead of ad-hoc
+      surfaces. Both shells, same change set.
+- [ ] GTK window-icon wiring still pending (WinUI is wired). Install the
+      bundled SVG in a hicolor layout named after `APP_ID` (`dev.purestudy.app`)
+      under `apps/desktop/assets/icons/` and add the theme search path in
+      `build_ui` so the window/taskbar shows the woven cross. CI-validated only.
+
+## Authority tiers — provenance marks on evidence
+
+*Requested 2026-07-15. Port overlay's three-tier trust model so every piece of
+evidence in the study panel shows where it comes from, with a distinct icon per
+tier — the reader always knows the provenance of what they're looking at.*
+
+- overlay `Overlay/Bridge.hs`: `Tier` = `TierGod` (the text itself — TR /
+  Masoretic words, and scripture-quotes-scripture, which inherits the text's
+  own authority), `TierHuman` (curated scholarship — lexicons, the 1769
+  translators' renderings, TSK), and a machine/analytical tier (embeddings and
+  the R&D layer; the default for an unrecognized source, so nothing
+  over-claims). `sourceTiers`, `sourcePriors`, `sourceLabel`.
+  `Overlay/Panels.hs` draws the provenance marks (`provIcon`).
+- What we already have: the trust **priors** are ported (`crates/rnd/src/
+  bridge.rs` `Priors`, `data/source-priors.json`). NOT ported: the `Tier`
+  classification, `sourceTiers`/`sourceLabel`, and the provenance icon marks.
+- [ ] Port `Tier` + `sourceTiers`/`sourceLabel` to core (or pure-rnd) and
+      expose each evidence item's tier(s) via an additive FFI field.
+- [ ] Render a tier mark beside evidence in both shells' study panels (bridge
+      partners, similar concepts, etc.): God-tier (a cross fits the app),
+      Human-tier, Analytical-tier. Needs an icon set — identify/relicense the
+      pack overlay used (named glyphs like `info-circle-muted`) or draw our own.
+- [ ] Parity: both shells in one change set; log the Compose delta in
+      FEATURE-MANIFEST; add a small legend so the marks are learnable.
+
 ## AI-generated Strong's tagging for Luther 1912
 
 *Direction approved 2026-07-15. Goal: produce our own word-level Strong's
