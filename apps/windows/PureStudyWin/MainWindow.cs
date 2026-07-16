@@ -131,6 +131,22 @@ public sealed class MainWindow : Window
 
     private async Task LoadEngineAsync()
     {
+        // Startup is fire-and-forget (`_ = LoadEngineAsync()`), so a faulted
+        // task is never observed — anything thrown here (e.g. a missing
+        // pure_ffi.dll on the very first native call) would otherwise vanish
+        // and leave the window stuck on "loading corpus…".
+        try
+        {
+            await LoadEngineCoreAsync();
+        }
+        catch (Exception e)
+        {
+            _status.Text = $"startup failed: {e.Message}";
+        }
+    }
+
+    private async Task LoadEngineCoreAsync()
+    {
         var cfg = Wire.Parse<ConfigState>(StudyConfig.LoadJson());
         _fullMode = cfg.StudyMode == "full";
         _fontSize = (float)Math.Clamp(cfg.BodySize is > 6 and < 96 ? cfg.BodySize : 18.0, 12, 48);
