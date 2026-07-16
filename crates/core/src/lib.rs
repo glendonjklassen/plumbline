@@ -18,6 +18,7 @@ pub mod crossref;
 pub mod home;
 pub mod notes;
 pub mod reference;
+pub mod renderings;
 pub mod search;
 pub mod store;
 pub mod strongs;
