@@ -747,6 +747,87 @@ pub fn weaves_to_wire(loaded: &[LoadedWeave], corpus: &Corpus) -> WireWeaves {
     }
 }
 
+// ── connector link pairs (the ambient cross-reference lines + chord map) ──────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireLinkPairs {
+    pub pairs: Vec<WireLinkPair>,
+}
+
+/// One deduped canonical weave pair, each endpoint spelled out (ref key +
+/// located book/chapter/verse) so a shell draws connectors and lays out the
+/// chord map without parsing ref keys or re-deriving the dedup.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireLinkPair {
+    pub a: String,
+    pub a_book: String,
+    pub a_chapter: u16,
+    pub a_verse: u16,
+    pub b: String,
+    pub b_book: String,
+    pub b_chapter: u16,
+    pub b_verse: u16,
+    /// Both endpoints resolve in the loaded corpus (drawable / navigable). The
+    /// same calc `weaves_to_wire` applies per link — an unresolved pair has an
+    /// endpoint the reader can't reach, so a shell skips it when drawing.
+    pub resolved: bool,
+}
+
+pub fn link_pairs_to_wire(loaded: &[LoadedWeave], corpus: &Corpus) -> WireLinkPairs {
+    WireLinkPairs {
+        pairs: pure_core::weave::link_pairs(loaded)
+            .into_iter()
+            .map(|(a, b)| {
+                let resolved = corpus.verse(&a).is_some() && corpus.verse(&b).is_some();
+                WireLinkPair {
+                    a: a.ref_key(),
+                    a_book: a.book,
+                    a_chapter: a.chapter,
+                    a_verse: a.verse,
+                    b: b.ref_key(),
+                    b_book: b.book,
+                    b_chapter: b.chapter,
+                    b_verse: b.verse,
+                    resolved,
+                }
+            })
+            .collect(),
+    }
+}
+
+// ── canon overview segments (the 66-book strip + OT/NT seam) ───────────────────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireCanonSegments {
+    pub segments: Vec<WireCanonSegment>,
+    /// Book index (39) at which the New Testament begins — the OT/NT seam.
+    pub ot_nt_divide: usize,
+}
+
+/// One canon section as `(label, first book index, last book index)` over the
+/// 66 books in OSIS order. The single source is `core::reference` — a shell
+/// consumes this instead of hardcoding the bands (they were drifting).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireCanonSegment {
+    pub label: &'static str,
+    pub first: usize,
+    pub last: usize,
+}
+
+pub fn canon_segments_to_wire() -> WireCanonSegments {
+    WireCanonSegments {
+        segments: pure_core::reference::CANON_SEGMENTS
+            .iter()
+            .map(|&(label, first, last)| WireCanonSegment { label, first, last })
+            .collect(),
+        ot_nt_divide: pure_core::reference::OT_NT_DIVIDE,
+    }
+}
+
 // ── the symbolic concept engine (collocations, distribution, leitwort) ────────
 
 #[derive(Serialize)]

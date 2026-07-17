@@ -81,9 +81,12 @@ header ‹› in WinUI added cross-book — GTK does not).
 ## Ambient weave connectors (M:2821–2934)
 
 Transparent overlay above the pane row, input-transparent, redrawn on scroll /
-navigate / zoom / rebuild (60 ms delay) / authoring. For each deduped
-canonical link pair (client builds from the weave library, as GTK
-`build_links` M:185): map both endpoints' `(book, chapter)` to showing panes
+navigate / zoom / rebuild (60 ms delay) / authoring. The deduped canonical
+link pairs come from the **core view-model** `pure_engine_link_pairs_json`
+(each endpoint located + a `resolved` flag) — no shell re-derives the dedup:
+GTK calls `pure_core::weave::link_pairs` directly; WinUI parses the endpoint
+(filtering `resolved`), Compose consumes the same JSON. For each pair: map both
+endpoints' `(book, chapter)` to showing panes
 (later pane wins duplicates); skip unless both shown in *different* panes.
 Endpoint y = the verse-number item's `MARGIN + y + h/2` in pane space →
 overlay coords; endpoint x = left pane's right edge − 14 / right pane's left
@@ -258,6 +261,12 @@ sections shaded black α0.04, centred 11-px labels when they fit; OT/NT divide
 line at index 39. Pin per pane at `x=(order+0.5)/66·w` (active gold, others
 gray). Click: `idx = x/w·66` → active pane to that book ch 1.
 
+The segments + divide are the **single source** `core::reference::CANON_SEGMENTS`
+/ `OT_NT_DIVIDE`, served over the wire by `pure_engine_canon_segments_json`.
+GTK reads the const directly; WinUI loads the endpoint once into a shared
+`Canon` holder that both the strip and the map popups (chord / constellation)
+read — no shell hardcodes the bands anymore (the WinUI copies had drifted).
+
 ## Search (M:660, 3739)
 
 Live per keystroke; empty query closes the panel. `goto` answer → big "go to"
@@ -362,6 +371,19 @@ deduped, ordered God→Human→Machine) and `researchGrade` (bool). Existing
 `code`/`sources`/`prior` unchanged; a consumer that ignores the new fields sees
 the pre-tier behaviour. No extern-surface change → bindings unchanged.
 
+Added for the view-model consolidation (2026-07-16, architecture-review P0.3 —
+the warm-up that moves shared derivation out of the shells into the core):
+
+| endpoint | returns | for |
+|---|---|---|
+| `pure_engine_link_pairs_json()` | `{pairs:[{a, aBook, aChapter, aVerse, b, bBook, bChapter, bVerse, resolved}]}` | ambient connectors + chord map (retires the shell dedup) |
+| `pure_engine_canon_segments_json()` | `{segments:[{label, first, last}], otNtDivide}` | canon strip + map ruler bands (retires the WinUI hardcode) |
+
+Both are thin wrappers over the one core source: `link_pairs` wraps
+`pure_core::weave::link_pairs`; `canon_segments` wraps
+`core::reference::CANON_SEGMENTS` / `OT_NT_DIVIDE`. GTK (being Rust) calls those
+directly rather than round-tripping JSON.
+
 Not ported into any shell (by decision / data): signed patches + rules;
 text-witness grading (shipped data never passes, so the "disputed" marker
 stays silent); quotation detection (awaits hydrated inputs).
@@ -390,6 +412,12 @@ stays silent); quotation detection (awaits hydrated inputs).
   colors, and the legend are **not yet in a Compose shell** — build from the
   GTK/WinUI reference (see **Authority tiers** above). The Kotlin binding must
   also gain `bridgePartnersJson` (its `PureFfi` interface omits the R&D tier).
+- **View-model consolidation (2026-07-16, P0.3) — Compose delta:** the two new
+  endpoints (`pure_engine_link_pairs_json` / `pure_engine_canon_segments_json`)
+  are **not yet in the Kotlin `PureFfi` interface** (kept minimal like the other
+  study-tier endpoints). A Compose shell adds the two JNA decls + wrappers, then
+  consumes them for its connectors and canon strip instead of re-deriving —
+  exactly what this phase removed from GTK/WinUI.
 - Build gate: Android NDK + `cargo-ndk` for the `.so` per ABI; the Rust and
   the JSON contract are identical.
 - Measure callback: back it with `android.graphics.Paint.measureText` (or

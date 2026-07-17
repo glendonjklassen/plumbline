@@ -479,6 +479,29 @@ pub struct LoadedWeave {
     pub weave: Weave,
 }
 
+/// All weave links across the library as canonical, deduped verse pairs. Each
+/// stored link is already ordered `a <= b` in reading order (see
+/// [`Link::canon_span`]), so the pair is taken as-is and a `HashSet` drops the
+/// duplicates a verse pair linked by several weaves would produce.
+///
+/// This is the one derivation behind the ambient connector lines and the chord
+/// map, shared by every shell: GTK calls it directly; the non-Rust shells
+/// receive the same pairs (with each endpoint resolved and located) through
+/// `pure_engine_link_pairs_json`. Resolvability against the corpus is a
+/// separate, drawing-time concern and is not filtered here.
+pub fn link_pairs(weaves: &[LoadedWeave]) -> Vec<(VRef, VRef)> {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for lw in weaves {
+        for l in &lw.weave.links {
+            if seen.insert((l.a.clone(), l.b.clone())) {
+                out.push((l.a.clone(), l.b.clone()));
+            }
+        }
+    }
+    out
+}
+
 /// Slug a weave name into a JSON filename under `dir`. Ported from
 /// `weaveFileIn`.
 pub fn weave_file_in(dir: impl AsRef<Path>, name: &str) -> std::path::PathBuf {
@@ -800,6 +823,37 @@ mod tests {
         w.add_links([Link::canon(r("Gen", 1, 2), r("Matt", 1, 1))]);
         assert!(!w.approved);
         assert_eq!(w.approved_count(), 1);
+    }
+
+    #[test]
+    fn link_pairs_dedupe_canonically_across_weaves() {
+        // Two weaves that share one link (Gen 1:1–John 1:1, endpoints given in
+        // opposite order) plus one unique link each.
+        let mut w1 = Weave::empty("a", WeaveKind::Retelling, "kjv1769-tok2", "now");
+        w1.add_links([
+            Link::canon(r("Gen", 1, 1), r("John", 1, 1)),
+            Link::canon(r("Gen", 2, 4), r("Matt", 19, 4)),
+        ]);
+        let mut w2 = Weave::empty("b", WeaveKind::Quotation, "kjv1769-tok2", "now");
+        w2.add_links([
+            Link::canon(r("John", 1, 1), r("Gen", 1, 1)), // same pair, reversed
+            Link::canon(r("Exod", 12, 3), r("Rev", 5, 6)),
+        ]);
+        let loaded = vec![
+            LoadedWeave { file: "a.json".into(), weave: w1 },
+            LoadedWeave { file: "b.json".into(), weave: w2 },
+        ];
+
+        let pairs = link_pairs(&loaded);
+        // The shared pair appears once → three pairs total.
+        assert_eq!(pairs.len(), 3);
+        assert!(pairs.contains(&(r("Gen", 1, 1), r("John", 1, 1))));
+        assert!(pairs.contains(&(r("Gen", 2, 4), r("Matt", 19, 4))));
+        assert!(pairs.contains(&(r("Exod", 12, 3), r("Rev", 5, 6))));
+        // Every pair is stored canonically (a <= b in reading order).
+        for (a, b) in &pairs {
+            assert!(a.reading_key() <= b.reading_key());
+        }
     }
 
     #[test]

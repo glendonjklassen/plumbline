@@ -123,6 +123,15 @@ public sealed unsafe class StudyEngine : IDisposable
     public string? SuggestedWeavesJson() => Utf8.Take(PureStudyNative.pure_engine_suggested_weaves_json(_handle));
     public string? WeavesJson() => Utf8.Take(PureStudyNative.pure_engine_weaves_json(_handle));
 
+    /// Deduped canonical weave pairs (the connector lines + chord map), each
+    /// endpoint located and flagged resolved — the shell no longer dedupes or
+    /// parses ref keys itself.
+    public string? LinkPairsJson() => Utf8.Take(PureStudyNative.pure_engine_link_pairs_json(_handle));
+
+    /// The canon overview segmentation (8 bands + OT/NT divide), frozen in
+    /// core::reference — the shell reads it instead of hardcoding the bands.
+    public string? CanonSegmentsJson() => Utf8.Take(PureStudyNative.pure_engine_canon_segments_json(_handle));
+
     public string? VerseXrefsJson(string refKey)
     {
         fixed (byte* r = Utf8.NulTerminated(refKey))

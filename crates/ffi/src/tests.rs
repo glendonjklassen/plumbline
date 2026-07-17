@@ -682,6 +682,35 @@ fn parity_endpoints_via_abi() {
         assert_eq!(pinned["links"][0]["spanA"][1], 3);
         assert!(pinned["links"][0]["spanB"].is_null());
 
+        // Link pairs: deduped canonical pairs, each endpoint located, with the
+        // resolvability flag (the Gen 1:1 endpoint is outside this corpus).
+        let lp: Value =
+            serde_json::from_str(&take(pure_engine_link_pairs_json(e)).unwrap()).unwrap();
+        let pairs = lp["pairs"].as_array().unwrap();
+        let resolved = pairs.iter().find(|p| p["resolved"] == true).unwrap();
+        assert_eq!(resolved["a"], "John 3:16");
+        assert_eq!(resolved["aBook"], "John");
+        assert_eq!(resolved["aChapter"], 3);
+        assert_eq!(resolved["aVerse"], 16);
+        assert_eq!(resolved["b"], "John 3:18");
+        let dangling = pairs.iter().find(|p| p["resolved"] == false).unwrap();
+        assert_eq!(dangling["a"], "Gen 1:1");
+        assert_eq!(dangling["aBook"], "Gen");
+        assert_eq!(dangling["b"], "John 3:16");
+
+        // Canon segments: the 8 frozen bands + the OT/NT divide, straight from
+        // core::reference (no shell hardcode).
+        let cs: Value =
+            serde_json::from_str(&take(pure_engine_canon_segments_json(e)).unwrap()).unwrap();
+        assert_eq!(cs["otNtDivide"], 39);
+        let segs = cs["segments"].as_array().unwrap();
+        assert_eq!(segs.len(), 8);
+        assert_eq!(segs[0]["label"], "Law");
+        assert_eq!(segs[0]["first"], 0);
+        assert_eq!(segs[0]["last"], 4);
+        assert_eq!(segs[4]["label"], "Gospels");
+        assert_eq!(segs[4]["first"], 39);
+
         pure_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
     }

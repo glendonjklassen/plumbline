@@ -193,6 +193,10 @@ public sealed class MainWindow : Window
         _status.Text = "";
         ApplyMode(persist: false);
         ApplyVersePerLine(persist: false);
+        // Canon bands from the core view-model — the single app-wide source for
+        // the strip and the map popups; no shell hardcode (item 5).
+        if (_engine?.CanonSegmentsJson() is { } csj)
+            Canon.Set(Wire.Parse<CanonSegments>(csj));
         RefreshStudyData();
         _strip.SetBooks(_books);
         _panes[_active].Reader.Focus(FocusState.Programmatic);
@@ -348,21 +352,19 @@ public sealed class MainWindow : Window
         _weaves = Wire.Parse<WeaveLib>(json);
         _panel.Weaves = _weaves;
 
-        // GTK build_links: dedupe canonical pairs; build_xrefs: per-verse set.
-        var pairs = new HashSet<(string, string)>();
-        var xrefVerses = new HashSet<string>();
+        // Connector pairs come from the core view-model (link_pairs): deduped,
+        // canonical, each endpoint located — no shell-side dedup or ref parsing.
+        // Only resolved pairs are drawable; their endpoints seed the reader's
+        // xref gutter set (the same set GTK's build_xrefs feeds the gutter).
         var links = new List<LinkPair>();
-        foreach (var w in _weaves.Weaves)
-            foreach (var l in w.Links)
+        var xrefVerses = new HashSet<string>();
+        if (_engine.LinkPairsJson() is { } lpj)
+            foreach (var p in Wire.Parse<LinkPairs>(lpj).Pairs)
             {
-                if (!l.Resolved) continue;
-                xrefVerses.Add(l.A);
-                xrefVerses.Add(l.B);
-                var key = string.CompareOrdinal(l.A, l.B) <= 0 ? (l.A, l.B) : (l.B, l.A);
-                if (!pairs.Add(key)) continue;
-                if (ParseRef(key.Item1) is not { } ra || ParseRef(key.Item2) is not { } rb)
-                    continue;
-                links.Add(new LinkPair(key.Item1, key.Item2, ra.book, ra.ch, rb.book, rb.ch));
+                if (!p.Resolved) continue;
+                links.Add(new LinkPair(p.A, p.B, p.ABook, p.AChapter, p.BBook, p.BChapter));
+                xrefVerses.Add(p.A);
+                xrefVerses.Add(p.B);
             }
         _connectors.Links = links;
         foreach (var p in _panes)
@@ -372,14 +374,6 @@ public sealed class MainWindow : Window
         }
         _connectors.Redraw();
         UpdateLinkButton();
-    }
-
-    private static (string book, uint ch)? ParseRef(string refKey)
-    {
-        int sp = refKey.LastIndexOf(' ');
-        if (sp < 0) return null;
-        var cv = refKey[(sp + 1)..].Split(':');
-        return uint.TryParse(cv[0], out var ch) ? (refKey[..sp], ch) : null;
     }
 
     // ── header wiring ──────────────────────────────────────────────────────

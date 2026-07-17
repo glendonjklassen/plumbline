@@ -97,6 +97,19 @@ public sealed record WeaveLink1(
     string A, string ADisplay, string B, string BDisplay, string Label,
     bool Approved, ushort[]? SpanA, ushort[]? SpanB, bool Resolved);
 
+// Deduped canonical weave pairs from the core view-model
+// (pure_engine_link_pairs_json): each endpoint located + a resolvability flag,
+// so the connector layer neither dedupes nor parses ref keys itself.
+public sealed record LinkPairs(List<WeaveLinkPair> Pairs);
+public sealed record WeaveLinkPair(
+    string A, string ABook, ushort AChapter, ushort AVerse,
+    string B, string BBook, ushort BChapter, ushort BVerse, bool Resolved);
+
+// The canon overview segmentation (pure_engine_canon_segments_json), frozen in
+// core::reference — the strip reads it instead of hardcoding the 8 bands.
+public sealed record CanonSegments(List<CanonSegment> Segments, int OtNtDivide);
+public sealed record CanonSegment(string Label, int First, int Last);
+
 public sealed record Concept1(
     string Code, uint Total, uint Ot, uint Nt, List<BookCount> TopBooks,
     Dictionary<string, uint> ByBook, List<Scored> Collocates,

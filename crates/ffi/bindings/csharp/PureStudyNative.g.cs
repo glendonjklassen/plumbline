@@ -470,6 +470,32 @@ namespace PureStudy.Native
         public static extern byte* pure_engine_weaves_json(PureEngine* engine);
 
         /// <summary>
+        ///  Every weave link as a deduped canonical verse pair, each endpoint located
+        ///  (ref key + book/chapter/verse) and flagged `resolved` when both ends are in
+        ///  the corpus. The one derivation behind the ambient connector lines and the
+        ///  chord map, so a shell neither dedupes nor parses ref keys itself. Never null
+        ///  on a live engine (empty library → empty list).
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine (or null → null).
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_link_pairs_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_link_pairs_json(PureEngine* engine);
+
+        /// <summary>
+        ///  The canon overview segmentation: the 8 sections as `(label, first, last)`
+        ///  book indices over the 66 books, plus the OT/NT divide (39). Static data
+        ///  frozen in `core::reference` — served here so a non-Rust shell consumes the
+        ///  one source instead of re-hardcoding the bands. Never null on a live engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine (or null → null); the payload does not depend on
+        ///  engine state, but the arg keeps the call shape uniform.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_canon_segments_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_canon_segments_json(PureEngine* engine);
+
+        /// <summary>
         ///  The symbolic concept engine's view of a Strong's code: occurrence total,
         ///  testament split, concentrating books, per-book dispersion counts,
         ///  collocates, co-occurrence community, and the leitwort discovery when one

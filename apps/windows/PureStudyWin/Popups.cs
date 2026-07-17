@@ -122,12 +122,12 @@ public static class Popups
             float y0 = h - 26;
 
             using var labelFmt = new CanvasTextFormat { FontSize = 10 };
-            for (int i = 0; i < CanonStrip.Segments.Length; i++)
+            for (int i = 0; i < Canon.Segments.Length; i++)
             {
-                var seg = CanonStrip.Segments[i];
+                var seg = Canon.Segments[i];
                 float x0 = seg.First / 66f * w, x1 = (seg.Last + 1) / 66f * w;
                 if (i % 2 == 1) ds.FillRectangle(x0, 0, x1 - x0, y0, Color.FromArgb(10, 0, 0, 0));
-                ds.DrawText(seg.Name, new Vector2(x0 + 3, y0 + 6),
+                ds.DrawText(seg.Label, new Vector2(x0 + 3, y0 + 6),
                     Color.FromArgb(230, 89, 77, 56), labelFmt);
             }
             // Book ticks anchor the ribbon feet.
@@ -137,12 +137,12 @@ public static class Popups
                 ds.DrawLine(tx, y0, tx, y0 - 4, Color.FromArgb(60, 89, 77, 56), 1f);
             }
             ds.DrawLine(0, y0, w, y0, Color.FromArgb(128, 158, 125, 56), 1.5f);
-            float seam = CanonStrip.OtNtDivide / 66f * w;
+            float seam = Canon.OtNtDivide / 66f * w;
             ds.DrawLine(seam, 0, seam, y0, Color.FromArgb(128, 102, 77, 51), 1f);
 
             Color ArcColor((int ia, int ib) k, float frac, bool hot)
             {
-                bool aOt = k.ia < CanonStrip.OtNtDivide, bOt = k.ib < CanonStrip.OtNtDivide;
+                bool aOt = k.ia < Canon.OtNtDivide, bOt = k.ib < Canon.OtNtDivide;
                 var (r, g, b2) = aOt && bOt ? (0.72f, 0.57f, 0.24f)
                     : !aOt && !bOt ? (0.30f, 0.53f, 0.78f)
                     : (0.58f, 0.38f, 0.70f);
@@ -319,13 +319,13 @@ public static class Popups
                 if (i % 2 == 0)
                     ds.FillRectangle(0, ConstTopPad + i * laneH, w, laneH, Color.FromArgb(8, 0, 0, 0));
 
-            foreach (var seg in CanonStrip.Segments)
+            foreach (var seg in Canon.Segments)
             {
                 float x = PlotLeft + seg.First / 66f * (w - PlotLeft);
                 ds.DrawLine(x, ConstTopPad, x, h, Color.FromArgb(26, 0, 0, 0), 1f);
-                ds.DrawText(seg.Name, new Vector2(x + 2, 2), Color.FromArgb(180, 89, 77, 56), rulerFmt);
+                ds.DrawText(seg.Label, new Vector2(x + 2, 2), Color.FromArgb(180, 89, 77, 56), rulerFmt);
             }
-            float seam = PlotLeft + CanonStrip.OtNtDivide / 66f * (w - PlotLeft);
+            float seam = PlotLeft + Canon.OtNtDivide / 66f * (w - PlotLeft);
             ds.DrawLine(seam, ConstTopPad, seam, h, Color.FromArgb(153, 158, 125, 56), 1f);
 
             for (int lane = 0; lane < shown.Count; lane++)
@@ -611,7 +611,7 @@ public static class Popups
                     }
                     bi++;
                 }
-                float seam = CanonStrip.OtNtDivide / 66f * w;
+                float seam = Canon.OtNtDivide / 66f * w;
                 ds.DrawLine(seam, y0, seam, h, Color.FromArgb(128, 102, 77, 51), 1f);
             }
         };

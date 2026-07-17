@@ -250,3 +250,35 @@ Start with the cheap `link_pairs`/`canon_segments` extraction to prove the
 pattern, then the popup view-models, then the panel content model; split
 `main.rs` along the seams that opens up; and replace the prose parity contract
 with golden view-model tests and a compile-checked block enum.
+
+---
+
+## Execution status (updated 2026-07-16)
+
+Being executed in the review's own order. Each shell-touching phase is landed,
+then handed to Glendon for manual UI testing before the next (GTK builds only
+in CI; WinUI is compile-checked here with `dotnet build`, never auto-driven).
+
+- **In-flight rendering-lens/authority-tier work** — committed `928afd1`
+  (was left uncommitted by a prior session; verified via cargo tests first).
+- ✅ **P0.3 warm-up (`link_pairs` + `canon_segments`, items 1 & 5)** — DONE.
+  - Core: `pure_core::weave::link_pairs` (the shared dedup) + unit test.
+  - FFI: `pure_engine_link_pairs_json` (deduped pairs, each endpoint located,
+    `resolved` flag) + `pure_engine_canon_segments_json` (the frozen bands +
+    OT/NT divide); wire DTOs; golden round-trip test in `parity_endpoints_via_abi`;
+    bindings regenerated (48 fns, surface check passes); release DLL rebuilt.
+  - GTK: `build_links` deleted → both call sites use `weave::link_pairs`.
+  - WinUI: `RefreshStudyData` consumes `link_pairs` (no shell dedup / `ParseRef`);
+    the `CanonStrip` hardcode is gone — a single `Canon` holder loaded once from
+    the engine now feeds both the strip **and** the chord/constellation popups
+    (which also statically read the old hardcode). `dotnet build`: 0 errors.
+  - Docs: manifest connectors + canon-strip sections, endpoints table, and
+    Compose delta updated.
+  - **Awaiting**: Glendon's manual WinUI check that connectors + the canon strip
+    + the two map popups still render correctly.
+- ⏳ **P0.2 popup view-models (chord / constellation / concept map, items 2–4)** —
+  NEXT. Note the `Canon` holder + `link_pairs` already removed two of the popups'
+  shell-side derivations, so this phase now starts from a smaller surface.
+- ⏳ **P0.1 panel content-model (items 6–8)** — the big one; de-risk per the plan.
+- ⏳ **P1.4 link-router single source**, **P1.5 split `main.rs`**,
+  **P2.6/7 cross-shell golden tests + shrink the manifest** — pending.

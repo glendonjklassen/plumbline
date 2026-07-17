@@ -185,21 +185,6 @@ fn build_xrefs(weaves: &[LoadedWeave]) -> HashMap<VRef, Vec<Xref>> {
     map
 }
 
-/// All weave links as canonical, deduped verse pairs (core stores each link
-/// with `a <= b` in reading order already), for the ambient connector lines.
-fn build_links(weaves: &[LoadedWeave]) -> Vec<(VRef, VRef)> {
-    let mut seen = HashSet::new();
-    let mut out = Vec::new();
-    for lw in weaves {
-        for l in &lw.weave.links {
-            if seen.insert((l.a.clone(), l.b.clone())) {
-                out.push((l.a.clone(), l.b.clone()));
-            }
-        }
-    }
-    out
-}
-
 /// Register the bundled EB Garamond with fontconfig for this process only (no
 /// change to the user's installed fonts). Returns the family to render in — the
 /// bundled face if it registered, else a plain serif fallback.
@@ -362,7 +347,7 @@ fn load_state(cfg: &Config) -> Result<State, String> {
     // are reported but don't fail the reader.
     let (weaves, _weave_errs) = weave::load_weaves(&home);
     let xrefs = build_xrefs(&weaves);
-    let links = build_links(&weaves);
+    let links = weave::link_pairs(&weaves);
     let (threads, _thread_errs) = thread::load_threads(&home);
     let (tags, _tag_errs) = tag::load_tags(&home);
     // TSK cross-references (topical study tier) — optional, absent → empty.
@@ -2229,7 +2214,7 @@ fn reload_weaves(state: &Shared) {
     let home = state.borrow().home.clone();
     let (weaves, _) = weave::load_weaves(&home);
     let xrefs = build_xrefs(&weaves);
-    let links = build_links(&weaves);
+    let links = weave::link_pairs(&weaves);
     let mut st = state.borrow_mut();
     st.weaves = weaves;
     st.xrefs = xrefs;
