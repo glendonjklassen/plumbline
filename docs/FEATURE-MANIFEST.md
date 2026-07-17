@@ -37,6 +37,19 @@ Palette: paper `#fcf9f4`; body `rgb(0.13,0.12,0.10)`; gold accent
 `#efeae1`; section-header gold `#a0894a`. Font: bundled EB Garamond
 (`apps/desktop/assets/fonts/`), forced light theme. Window default 1100×780.
 
+## App / window icon
+
+The woven-cross icon (`apps/desktop/assets/icons/pure-study.svg` + PNGs, shared
+by both desktop shells). Each shell wires it to the window/taskbar:
+- **GTK** — `install_app_icon` (M:4078, called after `install_css`) adds
+  `assets/icons` to the display's `IconTheme` search path and calls
+  `Window::set_default_icon_name(APP_ID)`. The icon is installed under the app
+  id as a scalable SVG: `assets/icons/hicolor/scalable/apps/
+  dev.purestudy.app.svg`. Compile-time manifest path (like the bundled fonts)
+  → CI-validated, not run on the ARM64 box.
+- **WinUI** — the multi-res `pure-study.ico` (window + taskbar).
+- **Compose** — pending (see Android notes).
+
 ## Reader core
 
 - **Layout is in the Rust core** — the shell provides a text-measure callback
@@ -87,42 +100,65 @@ Native tooltip timing; hit-test under pointer; only when the word has Strong's
 refs. Per code: bold code, lemma, italic xlit, then `kjv` (fallback `def`)
 trimmed to 80 chars. *Data*: `pure_layout_hit_test_json` + `pure_engine_strongs_json`.
 
-## Word study panel (double-click **or Ctrl+click**; M:3106–3377)
+## Word study panel (double-click **or Ctrl+click**; M:3168–3515)
 
 Sidebar 380 px, on-demand; Esc hides; clearing search hides. Content order —
-(F) = Full mode only:
+(F) = Full mode only.
+
+**Structure — one reusable code-study view.** The panel is assembled from three
+pieces so the per-code block can be reused: `word_study_markup` (M:3168) draws
+the header (1–2 below) then, per code, calls **`code_study_markup(st, code,
+word)`** (M:3209 — item 3), and finally `verse_study_extras` (M:3424 — items
+4–9). That same `code_study_markup` is what the **`code:CODE[:word]`** link verb
+opens standalone, so a reverse "also translates" link lands on a code's real
+entry, not a bare concordance. WinUI mirrors this with `CodeStudy` /
+`VerseStudyExtras` / `ShowCodeStudy` (StudyPanel.cs). `word` is the surface that
+led there (highlights its rendering, keys the reverse line); "" when none.
 
 1. Verse ref bold; the word xx-large.
 2. (F) Morphology gloss line, small, `#6a5a2a`.
 3. Per Strong's code (else "*no Strong's tag on this word*"):
    code bold + "**N occurrence(s) ▸**" → concordance; lemma x-large; xlit
    italic; pron `#888`; definition; `KJV: …` small; then (F) tiers with
-   small-caps gold headers:
-   - **RENDERINGS** — the other English words this code is translated as
+   small-caps gold headers, each carrying an authority-tier provenance mark
+   (see **Authority tiers** below):
+   - **RENDERINGS** *(Human †)* — the other English words this code is translated as
      (corpus-derived, not R&D), most frequent first; the tapped word's own
      rendering is **bold**. Each chip shows `×count` and links
      `rend:CODE:rendering` → a concordance filtered to that rendering (cap
      OCC_SHOWN). When the reverse lens maps the tapped surface word to >1 code,
-     a "“word” also translates …" line (`#6b6862`) links the other codes. New
-     feature — no overlay antecedent. *Data*: `pure_engine_renderings_json` +
-     `pure_engine_word_codes_json`.
-   - **SAME ROOT ACROSS TESTAMENTS** — bridge partners (≤6) as gloss chips →
-     concordance links; sources humanized (`lxx`→Septuagint, `quotation`→NT
-     quotation); "· disputed by usage" in `#b04a3a` when the text-witness
-     disbelieves (shipped data never grades, so silent).
-   - **SIMILAR CONCEPTS** — embedding neighbours (6); "across the testaments —"
-     cross (6).
-   - **APPEARS ALONGSIDE** — concept community (8).
-   - **WHERE IT CONCENTRATES** — top books (5) "Book ×N · …" + "(OT x · NT y)".
-   - **LEITWORT** — "{winCount} of its {n} uses cluster in {label} (p ≈ 10^−{score})".
+     a "“word” also translates …" line (`#6b6862`) links the other codes via
+     **`code:CODE:word`** → that code's study card (its entry + its own tiers),
+     **not** `occ:` — the reader arrives at a code they don't know understanding
+     it, not a verse list. New feature — no overlay antecedent. *Data*:
+     `pure_engine_renderings_json` + `pure_engine_word_codes_json`.
+   - **SAME ROOT ACROSS TESTAMENTS** *(per-chip marks)* — bridge partners (≤6)
+     as gloss chips → concordance links; sources humanized (`bridge::source_label`
+     / WinUI `Humanize`: `lxx`→Septuagint, `quotation`→NT quotation, `abbott-smith`→
+     Abbott-Smith (1922), …); then this chip's provenance marks from the union of
+     its sources' tiers (✝/†/≈, + ⚗ if any source is research-grade); "· disputed
+     by usage" in `#b04a3a` when the text-witness disbelieves (shipped data never
+     grades, so silent).
+   - **SIMILAR CONCEPTS** *(Machine ≈)* — embedding neighbours (6); "across the
+     testaments —" cross (6).
+   - **APPEARS ALONGSIDE** *(Machine ≈)* — concept community (8).
+   - **WHERE IT CONCENTRATES** *(Machine ≈)* — top books (5) "Book ×N · …" + "(OT x · NT y)".
+   - **LEITWORT** *(Machine ≈)* — "{winCount} of its {n} uses cluster in {label} (p ≈ 10^−{score})".
    - "▸ open concept map" link.
 4. (F) Author actions: `＋ tag verse`, `＋ add to thread`.
 5. **cross-references (N)** — weave partners (≤40), each + weave-name link to
    its compare card.
-6. (F) **study cross-references (N) — TSK** (≤40; ranges "a–b").
-7. (F) **verses like this** — SIF in-testament (6); cross (4).
-8. (F) **tags** — tags holding this verse; each is a link + `✕` untag.
-9. **margin notes** — the verse's 1769 notes, small.
+6. (F) **study cross-references (N) — TSK** *(Human †)* (≤40; ranges "a–b").
+7. (F) **verses like this** *(Machine ≈)* — SIF in-testament (6); cross (4).
+8. (F) **tags** — tags holding this verse; each is a link + `✕` untag (user
+   data, not evidence — no tier mark).
+9. **margin notes** *(Human †)* — the verse's 1769 notes, small.
+
+A **provenance legend** (`legend_markup` / WinUI `AddTierLegend`) closes a
+Full-study card once: "where this comes from: ✝ the text · † curated
+scholarship · ≈ machine-derived, weigh it · ⚗ research-grade". Weave
+cross-references (item 5) and tags carry no mark (mixed / user-authored, not
+trust-weighted evidence).
 
 Concept chips render english-first: "**gloss** *lemma*" joined by "  ·  ";
 the gloss is the modal KJV rendering across ≤80 occurrences (skip FLAG_ADDED
@@ -131,13 +167,49 @@ def/kjv clause ≤30 chars). *Data*: `pure_engine_gloss` computes this
 engine-side; plus `strongs/occurrences/morph/bridge/concept-neighbours/
 concept/similar-verses/verse-xrefs/study-xrefs/tags/verse-notes` endpoints.
 
-## Link routing (GTK `handle_link`, M:2486–2564)
+## Authority tiers — provenance marks on evidence
+
+Ported from overlay `Bridge.hs` `Tier` + `Panels.hs` `provIcon`/`tierMarks`.
+Every piece of study evidence shows where it comes from, so the reader always
+knows its provenance. The model is `pure_rnd::bridge` (`crates/rnd/src/bridge.rs`):
+
+- `Tier = God | Human | Machine`. **God** = the text itself (TR/Masoretic words,
+  and scripture-quotes-scripture, "the words read twice"). **Human** = curated
+  scholarship (lexicons, the 1769 renderings, TSK). **Machine** = a
+  learned/aligned artifact (the LXX alignment, embeddings, the R&D layer), and
+  the default for an unrecognized source so nothing over-claims.
+- `source_tiers(src) -> &[Tier]` — a *set* (a source can carry two): `quotation`
+  → `[God, Machine]`; `etymology`/`rendering`/`abbott-smith`/`stepbible-*`/`tsk`
+  → `[Human]`; `lxx`/`embedding`/`text-witness` → `[Machine]`; unknown →
+  `[Machine]`. `research_grade(src)` = `quotation | text-witness` (method not
+  yet held-out-graded). `tiers_of(&[src])` = deduped union, ordered God→Human→
+  Machine (additive — never one "winning" tier). `source_label` = the lay label.
+- **Marks** (glyph + color): God `✝` gold `#9e7d38`; Human `†` green `#6f8f6a`;
+  Machine `≈` gray `#999`; research-grade `⚗` red `#b04a3a`. A GtkLabel can't
+  embed images (overlay draws PNGs via Monomer), so GTK uses overlay's
+  *glyph-fallback* set styled with `<span foreground>`; WinUI uses colored
+  `Run`s. **Per-chip** on SAME ROOT partners (real per-source provenance);
+  **per-section** on the headers above; a **legend** at the foot. Human-baseline
+  blocks (the dictionary entry) and user data (weaves, tags) are unmarked.
+- **Wire**: `pure_engine_bridge_partners_json` gained additive `tiers`
+  (`["god","human","machine"]`) + `researchGrade` per partner, so non-Rust
+  shells consume the classification instead of reimplementing it. GTK, being
+  Rust, calls `bridge::tiers_of`/`research_grade` directly. Fixed-by-block
+  sections (SIMILAR CONCEPTS = Machine, TSK = Human, …) are marked shell-side.
+
+## Link routing (GTK `handle_link`, M:2531–2624)
 
 All panel interactivity funnels through one URI dispatcher — replicate it:
-`go:Book:ch[:v]` · `occ:CODE` · `rend:CODE:rendering` · `thread:i` · `tag:i` · `addtag:refkey` ·
+`go:Book:ch[:v]` · `occ:CODE` · `rend:CODE:rendering` · `code:CODE[:word]` ·
+`thread:i` · `tag:i` · `addtag:refkey` ·
 `addthread:refkey` · `untag:i:refkey` · `approve:i` · `reject:i` ·
 `editthreadnotes:i` · `editentrynote:ti:ei` · `editweavenotes:i` · `weave:i` ·
 `conceptmap:CODE`.
+
+`code:CODE[:word]` splits on the **first** colon only (`CODE` has none; `word`
+is a single surface token) and opens the reusable code-study card
+(`code_study_markup` / WinUI `ShowCodeStudy`) — distinct from `occ:CODE` (verse
+list) and `rend:CODE:rendering` (filtered verse list).
 
 ## Concordance (`occ:`; M:3783)
 
@@ -284,6 +356,12 @@ Added for the rendering lens (2026-07-16):
 | `pure_engine_renderings_json(code)` | `{code, renderings:[{rendering, total, capped, refs:[{verse, display, span:[s,e]}]}]}` (refs cap 500) | RENDERINGS tier + filtered concordance |
 | `pure_engine_word_codes_json(word)` | `{word, codes:[{code, count}]}` | "also translates" reverse line |
 
+Extended for authority tiers (2026-07-16): `pure_engine_bridge_partners_json`
+partners gained **additive** fields `tiers` (`["god"\|"human"\|"machine"]`,
+deduped, ordered God→Human→Machine) and `researchGrade` (bool). Existing
+`code`/`sources`/`prior` unchanged; a consumer that ignores the new fields sees
+the pre-tier behaviour. No extern-surface change → bindings unchanged.
+
 Not ported into any shell (by decision / data): signed patches + rules;
 text-witness grading (shipped data never passes, so the "disputed" marker
 stays silent); quotation detection (awaits hydrated inputs).
@@ -295,8 +373,23 @@ stays silent); quotation detection (awaits hydrated inputs).
   `bindings/csharp/PureStudy.cs` (which is current).
 - **Rendering lens (2026-07-16) — Compose delta:** the two endpoints
   (`renderingsJson` / `wordCodesJson`) are already in the Kotlin binding, but
-  the RENDERINGS tier + `rend:` route are **not yet in a Compose shell**. Build
-  them from the GTK/WinUI reference when the Compose shell lands.
+  the RENDERINGS tier + the `rend:` and `code:` routes are **not yet in a
+  Compose shell**. Build them from the GTK/WinUI reference when the Compose
+  shell lands, including the reusable code-study view (`code_study_markup` /
+  `CodeStudy`) that both the per-code block and the `code:` verb share.
+- **App/window icon — Compose delta:** GTK (`install_app_icon`, scalable SVG at
+  `apps/desktop/assets/icons/hicolor/scalable/apps/dev.purestudy.app.svg`) and
+  WinUI (`.ico`) both wire the woven cross; Android needs its own launcher
+  icon (adaptive-icon / mipmap) generated from `pure-study.svg` — not the
+  hicolor tree.
+- **Authority tiers (2026-07-16) — Compose delta:** the classification lives in
+  Rust (`bridge::source_tiers`/`research_grade`/`tiers_of`) and rides the wire
+  (`tiers`/`researchGrade` on bridge partners), so a Compose shell reads it for
+  the SAME ROOT marks and hardcodes the fixed-by-block tiers (SIMILAR CONCEPTS =
+  Machine, TSK = Human, …) like GTK/WinUI. The mark glyphs (✝ † ≈ ⚗), their
+  colors, and the legend are **not yet in a Compose shell** — build from the
+  GTK/WinUI reference (see **Authority tiers** above). The Kotlin binding must
+  also gain `bridgePartnersJson` (its `PureFfi` interface omits the R&D tier).
 - Build gate: Android NDK + `cargo-ndk` for the `.so` per ABI; the Rust and
   the JSON contract are identical.
 - Measure callback: back it with `android.graphics.Paint.measureText` (or

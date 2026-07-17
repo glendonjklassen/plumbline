@@ -34,6 +34,11 @@ public static class Palette
     public static readonly Color Rule = Color.FromArgb(255, 216, 203, 168);
     public static readonly Color SectionGold = Color.FromArgb(255, 160, 137, 74); // #a0894a
     public static readonly Color Disputed = Color.FromArgb(255, 176, 74, 58);     // #b04a3a
+    // Authority-tier provenance mark colors (see StudyPanel tier marks).
+    public static readonly Color TierGod = Gold;                                  // ✝ the text itself
+    public static readonly Color TierHuman = Color.FromArgb(255, 111, 143, 106);  // † curated (#6f8f6a)
+    public static readonly Color TierMachine = Color.FromArgb(255, 153, 153, 153);// ≈ machine (#999)
+    public static readonly Color TierResearch = Disputed;                         // ⚗ research-grade
 }
 
 /// A pinned word span in a pane: first click sets the anchor; another click in

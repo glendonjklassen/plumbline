@@ -525,10 +525,12 @@ fn rnd_tier_via_abi() {
              {\"b\":\"John\",\"c\":3,\"v\":16,\"e\":[[3,\"G25\",null,\"V-AAI-3S\"]]}\n",
         )
         .unwrap();
-        // External bridge witness + trust prior.
+        // External bridge witnesses + trust priors. lxx alone is machine-tier;
+        // the quotation pair adds a God-tier, research-grade partner so the
+        // authority-tier wire fields are exercised end to end.
         std::fs::write(
             home.join("bridge").join("lxx.json"),
-            r#"{"format":"overlay-bridge-sources-v1","links":[{"h":"H7225","g":"G25","source":"lxx"}]}"#,
+            r#"{"format":"overlay-bridge-sources-v1","links":[{"h":"H7225","g":"G25","source":"lxx"},{"h":"H430","g":"G25","source":"quotation"}]}"#,
         )
         .unwrap();
         std::fs::write(home.join("data").join("source-priors.json"), r#"{"priors":{"lxx":0.85,"_default":0.5}}"#).unwrap();
@@ -550,6 +552,15 @@ fn rnd_tier_via_abi() {
         let p = b["partners"].as_array().unwrap().iter().find(|x| x["code"] == "H7225").unwrap();
         assert_eq!(p["sources"][0], "lxx");
         assert!((p["prior"].as_f64().unwrap() - 0.85).abs() < 1e-6);
+        // Authority tiers (additive): lxx is machine-only, not research-grade.
+        assert_eq!(p["tiers"], serde_json::json!(["machine"]));
+        assert_eq!(p["researchGrade"], serde_json::json!(false));
+        // The quotation partner is God-tier content by a machine method, and
+        // research-grade until the harvest is audited.
+        let q = b["partners"].as_array().unwrap().iter().find(|x| x["code"] == "H430").unwrap();
+        assert_eq!(q["sources"][0], "quotation");
+        assert_eq!(q["tiers"], serde_json::json!(["god", "machine"]));
+        assert_eq!(q["researchGrade"], serde_json::json!(true));
 
         // Morphology of "loved".
         let m: Value = serde_json::from_str(&take(pure_engine_morph_json(e, c("John 3:16").as_ptr(), 3)).unwrap()).unwrap();

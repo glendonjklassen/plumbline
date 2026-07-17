@@ -86,6 +86,12 @@ public sealed class StudyPanel : UserControl
                 ShowConcordanceFiltered(rcode, rword);
                 break;
             }
+            case "code":
+            {
+                var (ccode, cword) = Split2(rest, ':');
+                ShowCodeStudy(ccode, cword);
+                break;
+            }
             case "thread": if (int.TryParse(rest, out var ti)) ShowThreadDetail(ti); break;
             case "tag": if (int.TryParse(rest, out var gi)) ShowTagDetail(gi); break;
             case "weave": if (int.TryParse(rest, out var wi)) ShowCompareCard(wi); break;
@@ -270,6 +276,71 @@ public sealed class StudyPanel : UserControl
         Margin = new Thickness(0, 8, 0, 0),
     };
 
+    // ── authority-tier provenance marks (overlay `Tier`; GTK shead_marked /
+    // tier_marks / legend_markup) ───────────────────────────────────────────
+    // Every evidence block says where it comes from: ✝ God (the text itself),
+    // † Human (curated scholarship), ≈ Machine (a learned/aligned artifact,
+    // weigh don't trust); a ⚗ flask flags a still-research-grade method.
+
+    /// A section header with a fixed tier mark — for blocks whose whole
+    /// provenance is one tier (RENDERINGS = Human, the analytics = Machine).
+    private static TextBlock SHeadMarked(string title, string glyph, Color color)
+    {
+        var tb = new TextBlock
+        {
+            FontSize = 11,
+            CharacterSpacing = 120,
+            FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+            Foreground = new SolidColorBrush(Palette.SectionGold),
+            Margin = new Thickness(0, 8, 0, 0),
+        };
+        tb.Inlines.Add(new Run { Text = title });
+        tb.Inlines.Add(new Run
+        {
+            Text = "  " + glyph,
+            Foreground = new SolidColorBrush(color),
+            FontWeight = Microsoft.UI.Text.FontWeights.Normal,
+            FontSize = 10,
+            CharacterSpacing = 0,
+        });
+        return tb;
+    }
+
+    /// Append the deduped union of tier glyphs (additive, never one "winning"
+    /// tier) plus a flask for a research-grade method to a chip's TextBlock.
+    /// Mirrors GTK tier_marks; tolerant of an older DLL with no tiers field.
+    private void AddTierMarks(TextBlock tb, IEnumerable<string>? tiers, bool research)
+    {
+        var set = (tiers ?? Enumerable.Empty<string>()).ToHashSet();
+        if (set.Contains("god")) tb.Inlines.Add(R(" ✝", Palette.TierGod, 11));
+        if (set.Contains("human")) tb.Inlines.Add(R(" †", Palette.TierHuman, 11));
+        if (set.Contains("machine")) tb.Inlines.Add(R(" ≈", Palette.TierMachine, 11));
+        if (research) tb.Inlines.Add(R(" ⚗", Palette.TierResearch, 11));
+    }
+
+    /// The provenance legend, shown once at the foot of a Full-study card so
+    /// the marks are learnable (GTK legend_markup).
+    private void AddTierLegend()
+    {
+        var tb = new TextBlock
+        {
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = new SolidColorBrush(Palette.InkFaded),
+            Margin = new Thickness(0, 10, 0, 0),
+        };
+        tb.Inlines.Add(new Run { Text = "where this comes from:  " });
+        tb.Inlines.Add(R("✝", Palette.TierGod, 11));
+        tb.Inlines.Add(new Run { Text = " the text  ·  " });
+        tb.Inlines.Add(R("†", Palette.TierHuman, 11));
+        tb.Inlines.Add(new Run { Text = " curated scholarship  ·  " });
+        tb.Inlines.Add(R("≈", Palette.TierMachine, 11));
+        tb.Inlines.Add(new Run { Text = " machine-derived, weigh it  ·  " });
+        tb.Inlines.Add(R("⚗", Palette.TierResearch, 11));
+        tb.Inlines.Add(new Run { Text = " research-grade" });
+        Add(tb);
+    }
+
     private Hyperlink Go(string refKey, string? display = null) =>
         H(display ?? refKey, GoUri(refKey));
 
@@ -330,140 +401,171 @@ public sealed class StudyPanel : UserControl
             Add(Para(14, Italic("no Strong's tag on this word")));
 
         foreach (var code in hit.Strongs)
-        {
-            if (Engine.StrongsJson(code) is not { } json) continue;
-            var e = Wire.Parse<StrongsEntry>(json);
-            Add(RuleLine());
+            CodeStudy(code, word, full);
 
-            int occTotal = Engine.StrongsOccurrencesJson(code) is { } oj
-                ? Wire.Parse<Occurrences>(oj).Total : 0;
-            Add(Para(14, R(e.Code, bold: true), "   ",
-                H($"{occTotal} occurrence{(occTotal == 1 ? "" : "s")} ▸", $"occ:{code}")));
+        VerseStudyExtras(hit, full);
+        // The provenance legend, once, at the foot of a Full-study card.
+        if (full && hit.Strongs.Count > 0) AddTierLegend();
+    }
+
+    /// The study of one Strong's code: its dictionary entry and — in Full
+    /// study — the rendering lens plus the analytics tiers. Rendered inline for
+    /// each of a tapped word's codes and standalone as the `code:CODE[:word]`
+    /// card the reverse rendering-lens links open (mirrors GTK
+    /// code_study_markup), so "'love' also translates G5368" lands on G5368's
+    /// own entry, not a bare concordance. `word` is the surface that led here.
+    private void CodeStudy(string code, string word, bool full)
+    {
+        if (Engine is null) return;
+        Add(RuleLine());
+
+        int occTotal = Engine.StrongsOccurrencesJson(code) is { } oj
+            ? Wire.Parse<Occurrences>(oj).Total : 0;
+        Add(Para(14, R(code, bold: true), "   ",
+            H($"{occTotal} occurrence{(occTotal == 1 ? "" : "s")} ▸", $"occ:{code}")));
+        if (Engine.StrongsJson(code) is { } json)
+        {
+            var e = Wire.Parse<StrongsEntry>(json);
             if (e.Lemma is not null) Add(Para(22, e.Lemma));
             if (e.Xlit is not null) Add(Para(13, R(e.Xlit, italic: true)));
             if (e.Pron is not null) Add(Para(13, R($"/{e.Pron}/", Color.FromArgb(255, 136, 136, 136))));
             if (e.Deriv is not null) Add(Para(13, Italic(e.Deriv)));
             if (e.Def is not null) Add(Para(14, e.Def));
             if (e.Kjv is not null) Add(Para(12.5, R($"KJV: {e.Kjv}", Palette.InkFaded)));
-
-            if (!full) continue;
-
-            // RENDERINGS: the other English words this code is translated as,
-            // most frequent first; the tapped word's own rendering is bold.
-            if (Engine.RenderingsJson(code) is { } rj)
-            {
-                var lens = Wire.Parse<RenderingLens>(rj);
-                if (lens.Renderings.Count > 0)
-                {
-                    Add(SHead("RENDERINGS"));
-                    var tb = new TextBlock
-                    {
-                        FontSize = 13.5, TextWrapping = TextWrapping.Wrap,
-                        Foreground = new SolidColorBrush(Palette.Ink),
-                    };
-                    string wkey = RenderKey(word);
-                    bool first = true;
-                    foreach (var rnd in lens.Renderings)
-                    {
-                        if (!first) tb.Inlines.Add(new Run { Text = "  ·  " });
-                        first = false;
-                        bool tapped = wkey.Length > 0 && RenderKey(rnd.Rendering) == wkey;
-                        var link = new Hyperlink { UnderlineStyle = UnderlineStyle.None };
-                        link.Inlines.Add(R(rnd.Rendering, Palette.Gold, 13.5, bold: tapped));
-                        string codeC = code, rndC = rnd.Rendering;
-                        link.Click += (_, _) => Link($"rend:{codeC}:{rndC}");
-                        tb.Inlines.Add(link);
-                        tb.Inlines.Add(R($" ×{rnd.Total}", Palette.InkFaded, 11.5));
-                    }
-                    Add(tb);
-
-                    // Reverse lens: if the tapped word also stands for other
-                    // codes, point at them (the agape/phileo split behind "love").
-                    if (word.Length > 0 && Engine.WordCodesJson(word) is { } wj)
-                    {
-                        var others = Wire.Parse<WordCodes>(wj).Codes
-                            .Where(c => c.Code != code).ToList();
-                        if (others.Count > 0)
-                        {
-                            var also = new TextBlock
-                            {
-                                FontSize = 11.5, TextWrapping = TextWrapping.Wrap,
-                                Foreground = new SolidColorBrush(Palette.InkFaded),
-                                Margin = new Thickness(0, 2, 0, 0),
-                            };
-                            also.Inlines.Add(new Run { Text = $"“{word}” also translates " });
-                            bool f2 = true;
-                            foreach (var o in others)
-                            {
-                                if (!f2) also.Inlines.Add(new Run { Text = ", " });
-                                f2 = false;
-                                var gl = Engine?.Gloss(o.Code);
-                                also.Inlines.Add(H(gl is not null ? $"{o.Code} ({gl})" : o.Code,
-                                    $"occ:{o.Code}", size: 11.5));
-                            }
-                            Add(also);
-                        }
-                    }
-                }
-            }
-
-            if (Engine.BridgePartnersJson(code) is { } bj)
-            {
-                var bp = Wire.Parse<BridgePartners>(bj);
-                if (bp.Partners.Count > 0)
-                {
-                    Add(SHead("SAME ROOT ACROSS TESTAMENTS"));
-                    foreach (var p in bp.Partners.Take(6))
-                    {
-                        var tb = ConceptChips(13.5, new[] { p.Code });
-                        tb.Inlines.Add(R($"   {string.Join(" + ", p.Sources.Select(Humanize))}",
-                            Palette.InkFaded, 11.5));
-                        Add(tb);
-                    }
-                }
-            }
-
-            if (Engine.ConceptNeighboursJson(code, 6) is { } nj)
-            {
-                var nb = Wire.Parse<ConceptNeighbours>(nj);
-                if (nb.Near.Count > 0)
-                {
-                    Add(SHead("SIMILAR CONCEPTS"));
-                    Add(ConceptChips(13.5, nb.Near.Select(s => s.Code)));
-                }
-                if (nb.Cross.Count > 0)
-                {
-                    Add(Para(12, Italic("across the testaments —")));
-                    Add(ConceptChips(13.5, nb.Cross.Select(s => s.Code)));
-                }
-            }
-
-            if (Engine.ConceptJson(code) is { } cj)
-            {
-                var c = Wire.Parse<Concept1>(cj);
-                if (c.Community.Count > 0)
-                {
-                    Add(SHead("APPEARS ALONGSIDE"));
-                    Add(ConceptChips(13.5, c.Community.Take(8)));
-                }
-                if (c.TopBooks.Count > 0)
-                {
-                    Add(SHead("WHERE IT CONCENTRATES"));
-                    Add(Para(13,
-                        string.Join(" · ", c.TopBooks.Select(b => $"{b.Display} ×{b.Count}")),
-                        R($"   (OT {c.Ot} · NT {c.Nt})", Palette.InkFaded, 12)));
-                }
-                if (c.Leitwort is { } lw)
-                {
-                    Add(SHead("LEITWORT"));
-                    Add(Para(13,
-                        $"{lw.WinCount} of its {lw.N} uses cluster in {lw.Label} ",
-                        R($"(p ≈ 10^−{lw.Score:0.#})", Palette.InkFaded, 12)));
-                }
-            }
-
-            Add(Para(13, H("▸ open concept map", $"conceptmap:{code}")));
         }
+        else
+        {
+            Add(Para(14, Italic("(not in the dictionary)")));
+        }
+
+        if (!full) return;
+
+        // RENDERINGS: the other English words this code is translated as,
+        // most frequent first; the tapped word's own rendering is bold.
+        if (Engine.RenderingsJson(code) is { } rj)
+        {
+            var lens = Wire.Parse<RenderingLens>(rj);
+            if (lens.Renderings.Count > 0)
+            {
+                Add(SHeadMarked("RENDERINGS", "†", Palette.TierHuman));
+                var tb = new TextBlock
+                {
+                    FontSize = 13.5, TextWrapping = TextWrapping.Wrap,
+                    Foreground = new SolidColorBrush(Palette.Ink),
+                };
+                string wkey = RenderKey(word);
+                bool first = true;
+                foreach (var rnd in lens.Renderings)
+                {
+                    if (!first) tb.Inlines.Add(new Run { Text = "  ·  " });
+                    first = false;
+                    bool tapped = wkey.Length > 0 && RenderKey(rnd.Rendering) == wkey;
+                    var link = new Hyperlink { UnderlineStyle = UnderlineStyle.None };
+                    link.Inlines.Add(R(rnd.Rendering, Palette.Gold, 13.5, bold: tapped));
+                    string codeC = code, rndC = rnd.Rendering;
+                    link.Click += (_, _) => Link($"rend:{codeC}:{rndC}");
+                    tb.Inlines.Add(link);
+                    tb.Inlines.Add(R($" ×{rnd.Total}", Palette.InkFaded, 11.5));
+                }
+                Add(tb);
+
+                // Reverse lens: if the tapped word also stands for other
+                // codes, point at them (the agape/phileo split behind "love").
+                if (word.Length > 0 && Engine.WordCodesJson(word) is { } wj)
+                {
+                    var others = Wire.Parse<WordCodes>(wj).Codes
+                        .Where(c => c.Code != code).ToList();
+                    if (others.Count > 0)
+                    {
+                        var also = new TextBlock
+                        {
+                            FontSize = 11.5, TextWrapping = TextWrapping.Wrap,
+                            Foreground = new SolidColorBrush(Palette.InkFaded),
+                            Margin = new Thickness(0, 2, 0, 0),
+                        };
+                        also.Inlines.Add(new Run { Text = $"“{word}” also translates " });
+                        bool f2 = true;
+                        foreach (var o in others)
+                        {
+                            if (!f2) also.Inlines.Add(new Run { Text = ", " });
+                            f2 = false;
+                            var gl = Engine?.Gloss(o.Code);
+                            // Open the code's own study card (not a bare
+                            // concordance), carrying the tapped word so its
+                            // rendering is highlighted there.
+                            also.Inlines.Add(H(gl is not null ? $"{o.Code} ({gl})" : o.Code,
+                                $"code:{o.Code}:{word}", size: 11.5));
+                        }
+                        Add(also);
+                    }
+                }
+            }
+        }
+
+        if (Engine.BridgePartnersJson(code) is { } bj)
+        {
+            var bp = Wire.Parse<BridgePartners>(bj);
+            if (bp.Partners.Count > 0)
+            {
+                Add(SHead("SAME ROOT ACROSS TESTAMENTS"));
+                foreach (var p in bp.Partners.Take(6))
+                {
+                    var tb = ConceptChips(13.5, new[] { p.Code });
+                    tb.Inlines.Add(R($"   {string.Join(" + ", p.Sources.Select(Humanize))}",
+                        Palette.InkFaded, 11.5));
+                    AddTierMarks(tb, p.Tiers, p.ResearchGrade);
+                    Add(tb);
+                }
+            }
+        }
+
+        if (Engine.ConceptNeighboursJson(code, 6) is { } nj)
+        {
+            var nb = Wire.Parse<ConceptNeighbours>(nj);
+            if (nb.Near.Count > 0)
+            {
+                Add(SHeadMarked("SIMILAR CONCEPTS", "≈", Palette.TierMachine));
+                Add(ConceptChips(13.5, nb.Near.Select(s => s.Code)));
+            }
+            if (nb.Cross.Count > 0)
+            {
+                Add(Para(12, Italic("across the testaments —")));
+                Add(ConceptChips(13.5, nb.Cross.Select(s => s.Code)));
+            }
+        }
+
+        if (Engine.ConceptJson(code) is { } cj)
+        {
+            var c = Wire.Parse<Concept1>(cj);
+            if (c.Community.Count > 0)
+            {
+                Add(SHeadMarked("APPEARS ALONGSIDE", "≈", Palette.TierMachine));
+                Add(ConceptChips(13.5, c.Community.Take(8)));
+            }
+            if (c.TopBooks.Count > 0)
+            {
+                Add(SHeadMarked("WHERE IT CONCENTRATES", "≈", Palette.TierMachine));
+                Add(Para(13,
+                    string.Join(" · ", c.TopBooks.Select(b => $"{b.Display} ×{b.Count}")),
+                    R($"   (OT {c.Ot} · NT {c.Nt})", Palette.InkFaded, 12)));
+            }
+            if (c.Leitwort is { } lw)
+            {
+                Add(SHeadMarked("LEITWORT", "≈", Palette.TierMachine));
+                Add(Para(13,
+                    $"{lw.WinCount} of its {lw.N} uses cluster in {lw.Label} ",
+                    R($"(p ≈ 10^−{lw.Score:0.#})", Palette.InkFaded, 12)));
+            }
+        }
+
+        Add(Para(13, H("▸ open concept map", $"conceptmap:{code}")));
+    }
+
+    /// The per-verse extras that follow a word's code blocks: author actions,
+    /// weave + TSK cross-references, "verses like this", tags, and margin notes.
+    private void VerseStudyExtras(Hit hit, bool full)
+    {
+        if (Engine is null) return;
 
         if (full && hit.Verse.Length > 0)
         {
@@ -497,7 +599,8 @@ public sealed class StudyPanel : UserControl
             if (sx.Refs.Count > 0)
             {
                 Add(Para(14.5, R($"study cross-references ({sx.Refs.Count})", bold: true),
-                    R("  TSK", Color.FromArgb(255, 136, 136, 136), 11.5)));
+                    R("  TSK", Color.FromArgb(255, 136, 136, 136), 11.5),
+                    R("  †", Palette.TierHuman, 11)));
                 foreach (var r2 in sx.Refs.Take(40))
                     Add(r2.End is null
                         ? Para(13.5, Go(r2.To, r2.ToDisplay))
@@ -512,7 +615,7 @@ public sealed class StudyPanel : UserControl
             var s = Wire.Parse<SimilarVerses>(svj);
             if (s.In.Count > 0 || s.Cross.Count > 0)
             {
-                Add(Para(14.5, R("verses like this", bold: true)));
+                Add(Para(14.5, R("verses like this", bold: true), R("  ≈", Palette.TierMachine, 11)));
                 foreach (var v in s.In.Take(6)) Add(Para(13.5, Go(v.Verse, v.Display)));
                 if (s.Cross.Count > 0)
                 {
@@ -541,16 +644,36 @@ public sealed class StudyPanel : UserControl
         if (hit.Verse.Length > 0 && Engine.VerseNotesJson(hit.Verse) is { } vnj)
         {
             var notes = Wire.Parse<VerseNotes>(vnj);
-            Add(Para(14.5, R("margin notes", bold: true)));
+            Add(Para(14.5, R("margin notes", bold: true), R("  †", Palette.TierHuman, 11)));
             foreach (var n in notes.Notes)
                 Add(Para(12.5, R(n, Palette.InkFaded)));
         }
     }
 
+    /// Standalone study card for one Strong's code (the `code:CODE[:word]`
+    /// verb). Reverse rendering-lens links open this — the code's actual
+    /// entry — instead of a bare concordance. `word` is the surface that led
+    /// here ("" if none), so its rendering is highlighted on the card.
+    public void ShowCodeStudy(string code, string word)
+    {
+        if (Engine is null) return;
+        Fresh();
+        CodeStudy(code, word, IsFull());
+        if (IsFull()) AddTierLegend();
+    }
+
+    // Mirror of Rust bridge::source_label — a lay-friendly name per witness
+    // source key. Kept in sync with the GTK shell (FEATURE-MANIFEST.md).
     private static string Humanize(string source) => source switch
     {
+        "etymology" => "etymology",
         "lxx" => "Septuagint",
         "quotation" => "NT quotation",
+        "abbott-smith" => "Abbott-Smith (1922)",
+        "stepbible-tbesg" => "STEPBible",
+        "stepbible-tipnr" => "STEPBible names",
+        "rendering" => "1769 renderings",
+        "tsk" => "Treasury of Scripture Knowledge",
         _ => source,
     };
 

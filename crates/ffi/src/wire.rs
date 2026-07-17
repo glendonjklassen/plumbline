@@ -571,6 +571,14 @@ pub struct WireBridgePartner {
     pub sources: Vec<String>,
     /// The best trust prior across those witnesses.
     pub prior: f32,
+    /// The authority tiers those witnesses attest, deduped and ordered
+    /// God→Human→Machine (`"god"`/`"human"`/`"machine"`); e.g. a scripture
+    /// quotation is `["god","machine"]`. Additive field — a consumer that
+    /// ignores it sees the pre-tier behaviour.
+    pub tiers: Vec<String>,
+    /// True when any witness's method is still research-grade (has not passed
+    /// its held-out grading) — a lead, not a result.
+    pub research_grade: bool,
 }
 
 #[derive(Serialize)]

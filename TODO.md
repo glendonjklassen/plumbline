@@ -29,27 +29,23 @@ Both indexes fall out of a single fold over the corpus, sibling to
 
 ### Tasks
 
-- [ ] **Core** (`crates/core`): the two indexes above + a normalization fold
-      (lowercase, letters-only). Start with exact surface forms
-      ("love"/"loved"/"loveth" stay distinct); folding inflections together
-      via the morphology data is a later refinement, likely a display-time
-      grouping rather than an index change.
-- [ ] **Wire** (`crates/ffi`): additive camelCase endpoints, e.g.
-      `pure_engine_renderings_json(code)` → `[{rendering, count, refs:[…]}]`
-      and `pure_engine_word_codes_json(word)` → `[{code, count}]`; regenerate
-      bindings; rebuild release DLL.
-- [ ] **UI — word study panel**: a **RENDERINGS** tier under each Strong's
-      code (Full mode; between the occurrence count and the bridge tier):
-      rendering chips with counts, the tapped word's own rendering
-      highlighted; clicking a chip opens the concordance filtered to that
-      code + rendering (respect OCC_SHOWN cap). When the reverse index shows
-      the tapped surface word maps to >1 code, a small "also renders …" line
-      makes the split visible without leaving the panel.
-- [ ] **Parity**: GTK + WinUI in the same change set; log the Compose delta
-      in docs/FEATURE-MANIFEST.md; add the feature's manifest section.
-- [ ] **Tests**: index unit tests in `strongs.rs` style (small inline corpus
-      covering contiguous-run grouping, multi-code tokens, case folding);
-      FFI round-trip test in `crates/ffi/src/tests.rs`.
+*Core, wire, UI, parity, and tests all landed 2026-07-15/16 (commits
+28aff7b → b03c378 → 9f4973c); the reverse-link follow-up below finished the
+feature.*
+
+- [x] **Core** (`crates/core`): the two indexes above + a normalization fold
+      (lowercase, letters-only). Exact surface forms are kept distinct
+      ("love"/"loved"/"loveth"); folding inflections via morphology stays a
+      later display-time refinement.
+- [x] **Wire** (`crates/ffi`): additive camelCase `pure_engine_renderings_json`
+      + `pure_engine_word_codes_json`; bindings regenerated; DLL rebuilt.
+- [x] **UI — word study panel**: the **RENDERINGS** tier (Full mode) with
+      rendering chips + counts, tapped rendering highlighted, chips → filtered
+      concordance (OCC_SHOWN cap), and the "also translates …" reverse line.
+- [x] **Parity**: GTK + WinUI shipped together; Compose delta + manifest
+      section logged in docs/FEATURE-MANIFEST.md.
+- [x] **Tests**: index unit tests (`renderings_and_word_codes`) + FFI
+      round-trip.
 
 ### Design notes
 
@@ -65,19 +61,20 @@ Both indexes fall out of a single fold over the corpus, sibling to
 
 ### Follow-ups (from testing 2026-07-16)
 
-- [ ] **Reverse links must land on a Strong's study card, not a bare list.**
-      Clicking an "'love' also translates G5368" link currently opens `occ:`
-      (a verse list) for a code the reader doesn't understand. It should open
-      the actual Strong's entry (definition / lemma / gloss + its study). Build
-      ONE reusable code-study view — extract the per-code block from the
-      word-study panel (WinUI `StudyPanel.ShowWordStudy` loop; GTK
-      `word_study_markup` loop) behind a new `code:CODE` link verb — and point
-      the reverse links at it. Reuse that one view everywhere instead of ad-hoc
-      surfaces. Both shells, same change set.
-- [ ] GTK window-icon wiring still pending (WinUI is wired). Install the
-      bundled SVG in a hicolor layout named after `APP_ID` (`dev.purestudy.app`)
-      under `apps/desktop/assets/icons/` and add the theme search path in
-      `build_ui` so the window/taskbar shows the woven cross. CI-validated only.
+- [x] **Reverse links must land on a Strong's study card, not a bare list.**
+      *Done 2026-07-16.* Extracted the per-code block into one reusable
+      code-study view — GTK `code_study_markup` + `verse_study_extras`; WinUI
+      `CodeStudy` + `VerseStudyExtras` + `ShowCodeStudy` — behind a new
+      `code:CODE[:word]` link verb. The "'love' also translates G5368" reverse
+      line now opens G5368's own entry (definition / lemma / gloss + its tiers),
+      carrying the tapped word so its rendering is highlighted there. Same view
+      renders inline per code and standalone via the verb. Both shells.
+- [x] GTK window-icon wiring. *Done 2026-07-16.* `install_app_icon` (called
+      after `install_css`) adds `assets/icons` to the display `IconTheme` search
+      path and sets `Window::set_default_icon_name(APP_ID)`; the woven cross is
+      installed under the app id as a scalable SVG
+      (`assets/icons/hicolor/scalable/apps/dev.purestudy.app.svg`).
+      CI-validated (not run on the ARM64 box).
 
 ## Authority tiers — provenance marks on evidence
 
@@ -95,14 +92,22 @@ tier — the reader always knows the provenance of what they're looking at.*
 - What we already have: the trust **priors** are ported (`crates/rnd/src/
   bridge.rs` `Priors`, `data/source-priors.json`). NOT ported: the `Tier`
   classification, `sourceTiers`/`sourceLabel`, and the provenance icon marks.
-- [ ] Port `Tier` + `sourceTiers`/`sourceLabel` to core (or pure-rnd) and
-      expose each evidence item's tier(s) via an additive FFI field.
-- [ ] Render a tier mark beside evidence in both shells' study panels (bridge
-      partners, similar concepts, etc.): God-tier (a cross fits the app),
-      Human-tier, Analytical-tier. Needs an icon set — identify/relicense the
-      pack overlay used (named glyphs like `info-circle-muted`) or draw our own.
-- [ ] Parity: both shells in one change set; log the Compose delta in
-      FEATURE-MANIFEST; add a small legend so the marks are learnable.
+- [x] Port `Tier` + `sourceTiers`/`sourceLabel` to pure-rnd and expose each
+      evidence item's tier(s) via an additive FFI field. *Done 2026-07-16.*
+      `crates/rnd/src/bridge.rs`: `Tier {God,Human,Machine}`, `source_tiers`
+      (a set — `quotation`→God+Machine, etc.), `research_grade`, `source_label`,
+      `tiers_of` (deduped union, ordered). `pure_engine_bridge_partners_json`
+      gained additive `tiers` + `researchGrade` (extern surface unchanged, so no
+      bindgen drift). Unit + FFI round-trip tests added.
+- [x] Render a tier mark beside evidence in both shells' study panels.
+      *Done 2026-07-16.* God `✝` gold, Human `†` green, Machine `≈` gray,
+      research-grade `⚗` red — per-chip on SAME ROOT partners, per-section on
+      RENDERINGS/analytics/TSK/verses-like-this/margin-notes headers. GTK uses
+      overlay's glyph-fallback set in Pango `<span>` (a GtkLabel can't embed
+      images); WinUI uses colored `Run`s. No icon pack needed.
+- [x] Parity: both shells in one change set; Compose delta logged in
+      FEATURE-MANIFEST (see "Authority tiers"); a legend closes each Full-study
+      card so the marks are learnable. *Done 2026-07-16.*
 
 ## AI-generated Strong's tagging for Luther 1912
 

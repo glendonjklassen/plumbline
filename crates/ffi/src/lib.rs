@@ -1004,7 +1004,23 @@ pub unsafe extern "C" fn pure_engine_bridge_partners_json(
             .bridge
             .partners(code)
             .into_iter()
-            .map(|p| wire::WireBridgePartner { code: p.code, sources: p.sources, prior: p.prior })
+            .map(|p| {
+                // Authority provenance, classified once here (overlay `Tier`):
+                // the additive tier set + research-grade flag travel with each
+                // partner so non-Rust shells need not reimplement the mapping.
+                let tiers = bridge::tiers_of(&p.sources)
+                    .into_iter()
+                    .map(|t| t.wire_name().to_string())
+                    .collect();
+                let research_grade = p.sources.iter().any(|s| bridge::research_grade(s));
+                wire::WireBridgePartner {
+                    code: p.code,
+                    sources: p.sources,
+                    prior: p.prior,
+                    tiers,
+                    research_grade,
+                }
+            })
             .collect();
         out_json(&wire::WireBridgePartners { code: code.to_string(), partners })
     })

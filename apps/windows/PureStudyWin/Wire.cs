@@ -117,7 +117,12 @@ public sealed record PaneRef1(string Book, ushort Chapter);
 public sealed record Scored(string Code, float Score);
 public sealed record ConceptNeighbours(string Code, List<Scored> Near, List<Scored> Cross);
 public sealed record Morph(string Verse, uint TokenIndex, string Code, string Gloss);
-public sealed record BridgePartner(string Code, List<string> Sources, float Prior);
+// Tiers/ResearchGrade are additive fields carrying overlay's authority-tier
+// classification (`["god","human","machine"]`, research-grade flag) so the
+// shell needn't reimplement source→tier mapping. Nullable-tolerant of an
+// older DLL that predates the fields.
+public sealed record BridgePartner(string Code, List<string> Sources, float Prior,
+    List<string>? Tiers = null, bool ResearchGrade = false);
 public sealed record BridgePartners(string Code, List<BridgePartner> Partners);
 public sealed record SimilarVerse(string Verse, string Display, float Score);
 public sealed record SimilarVerses(string Verse, List<SimilarVerse> In, List<SimilarVerse> Cross);
