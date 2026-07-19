@@ -34,6 +34,7 @@ use pure_core::renderings::Renderings;
 use pure_core::reference::{CANON_SEGMENTS, OT_NT_DIVIDE};
 use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread};
+use pure_core::panel::{self, PanelSource};
 use pure_core::weave::{self, Link, LoadedWeave, Span, WeaveKind};
 use pure_core::{canon, corpus, crossref, home, notes, VRef};
 use pure_rnd::{bridge, burst, concept, embed, morph, witness};
@@ -2398,11 +2399,9 @@ fn handle_link(state: &Shared, ui: &Ui, uri: &str) {
         // land here so an unfamiliar code opens its actual entry, not a bare
         // verse list. The optional word is the surface that led here.
         let (code, word) = rest.split_once(':').unwrap_or((rest, ""));
-        let st = state.borrow();
-        let mut markup = code_study_markup(&st, code, word);
-        if st.mode.is_full() {
-            markup.push_str(&legend_markup());
-        }
+        // The standalone card producer already appends the provenance legend
+        // in Full study, so the shell no longer adds it here.
+        let markup = code_study_markup(&state.borrow(), code, word);
         show_study(ui, &markup);
     } else if let Some(idx) = uri.strip_prefix("thread:") {
         if let Ok(i) = idx.parse::<usize>() {
@@ -3003,42 +3002,375 @@ fn esc(s: &str) -> String {
 
 /// Markup for a clicked word: its Strong's entries (each with a concordance
 /// link), this verse's weave cross-references, and its 1769 margin notes.
-fn word_study_markup(st: &State, hit: &Hit) -> String {
-    let word = st
-        .corpus
-        .verse(&hit.verse)
-        .and_then(|v| v.tokens.get(hit.token_index as usize))
-        .map(|t| t.word.clone())
-        .unwrap_or_default();
+// ── the study-panel content model ─────────────────────────────────────────────
+//
+// The panel derivation lives once in `pure_core::panel`; `State` implements the
+// `PanelSource` trait so the GTK shell calls that producer directly (Rust→Rust,
+// the same blocks the non-Rust shells get as JSON), and `blocks_to_markup` is
+// the whole per-block painter — one Pango markup string for the panel GtkLabel.
+// Colours come from the semantic role; link runs become <a href> (GTK styles
+// them); sizes are the block model's logical points.
 
-    let mut s = format!(
-        "<b>{}</b>\n<span size=\"xx-large\">{}</span>\n",
-        esc(&hit.verse.display()),
-        esc(&word)
-    );
-
-    // Morphology of this exact token (Full study, when the sidecar annotates
-    // it): the original-language parse behind the English word.
-    if st.mode.is_full() {
-        if let Some(g) = st.morph.as_ref().and_then(|m| m.gloss(&hit.verse, hit.token_index)) {
-            s.push_str(&format!("<small><span foreground=\"#6a5a2a\">{}</span></small>\n", esc(&g)));
+impl PanelSource for State {
+    fn token_word(&self, verse: &str, token: u32) -> Option<String> {
+        let v = VRef::parse_ref_key(verse)?;
+        self.corpus.verse(&v)?.tokens.get(token as usize).map(|t| t.word.clone())
+    }
+    fn verse_display(&self, refkey: &str) -> Option<String> {
+        VRef::parse_ref_key(refkey).map(|v| v.display())
+    }
+    fn morph_gloss(&self, verse: &str, token: u32) -> Option<String> {
+        let (md, v) = (self.morph.as_ref()?, VRef::parse_ref_key(verse)?);
+        md.gloss(&v, token)
+    }
+    fn occurrence_count(&self, code: &str) -> usize {
+        self.occ_ix.verses(code).len()
+    }
+    fn strongs(&self, code: &str) -> Option<panel::StrongsView> {
+        let e = self.strongs.get(code)?;
+        Some(panel::StrongsView {
+            lemma: e.lemma.clone(),
+            xlit: e.xlit.clone(),
+            pron: e.pron.clone(),
+            deriv: e.deriv.clone(),
+            def: e.def.clone(),
+            kjv: e.kjv.clone(),
+        })
+    }
+    fn gloss(&self, code: &str) -> Option<String> {
+        english_gloss(self, code)
+    }
+    fn chip(&self, code: &str) -> panel::ChipView {
+        panel::ChipView {
+            code: code.to_string(),
+            gloss: english_gloss(self, code),
+            lemma: self.strongs.get(code).and_then(|e| e.lemma.clone()),
         }
     }
-    s.push('\n');
+    fn renderings(&self, code: &str) -> Vec<panel::RenderingView> {
+        self.renderings
+            .renderings(code)
+            .into_iter()
+            .map(|r| panel::RenderingView { rendering: r.label.to_string(), total: r.count as u32 })
+            .collect()
+    }
+    fn rendering_refs(&self, code: &str, rendering: &str) -> Option<panel::RenderingRefsView> {
+        let key = pure_core::renderings::normalize(rendering);
+        let r = self.renderings.renderings(code).into_iter().find(|r| pure_core::renderings::normalize(r.label) == key)?;
+        Some(panel::RenderingRefsView {
+            rendering: r.label.to_string(),
+            total: r.count as u32,
+            refs: r.occs.iter().take(PANEL_OCC_CAP).map(|o| (o.vref.ref_key(), o.vref.display())).collect(),
+        })
+    }
+    fn word_codes(&self, word: &str) -> Vec<String> {
+        self.renderings.word_codes(word).into_iter().map(|(c, _)| c.to_string()).collect()
+    }
+    fn occurrences(&self, code: &str) -> panel::OccurrencesView {
+        let all = self.occ_ix.verses(code);
+        panel::OccurrencesView {
+            total: all.len() as u32,
+            verses: all.iter().take(PANEL_OCC_CAP).map(|v| (v.ref_key(), v.display())).collect(),
+        }
+    }
+    fn bridge_partners(&self, code: &str) -> Vec<panel::BridgePartnerView> {
+        self.bridge
+            .partners(code)
+            .into_iter()
+            .map(|p| panel::BridgePartnerView {
+                sources: p.sources.iter().map(|s| bridge::source_label(s).to_string()).collect(),
+                tiers: bridge::tiers_of(&p.sources).into_iter().map(|t| t.wire_name().to_string()).collect(),
+                research_grade: p.sources.iter().any(|s| bridge::research_grade(s)),
+                code: p.code,
+            })
+            .collect()
+    }
+    fn concept_near(&self, code: &str, k: usize) -> (Vec<String>, Vec<String>) {
+        match self.embedding.as_ref() {
+            Some(emb) => (
+                emb.nearest_concepts(code, k).into_iter().map(|(c, _)| c).collect(),
+                emb.cross_concepts(code, k).into_iter().map(|(c, _)| c).collect(),
+            ),
+            None => (Vec::new(), Vec::new()),
+        }
+    }
+    fn concept(&self, code: &str) -> Option<panel::ConceptView> {
+        let ce = self.concept.as_ref()?;
+        ce.stat(code)?;
+        let (ot, nt) = ce.testament_split(code);
+        let leitwort = self.leitwort.as_ref().and_then(|m| m.get(code)).map(|b| panel::LeitwortView {
+            n: b.n,
+            win_count: b.win_count,
+            score: b.score,
+            label: burst::span_label(|id| canon::display_name(id).to_string(), &b.win_start, &b.win_end),
+        });
+        Some(panel::ConceptView {
+            community: ce.community(code),
+            top_books: ce.top_books(code, 5).into_iter().map(|(b, n)| (canon::display_name(&b).to_string(), n)).collect(),
+            ot,
+            nt,
+            leitwort,
+        })
+    }
+    fn verse_xrefs(&self, verse: &str) -> Vec<panel::XrefView> {
+        let Some(v) = VRef::parse_ref_key(verse) else { return Vec::new() };
+        match self.xrefs.get(&v) {
+            Some(xs) => xs
+                .iter()
+                .map(|x| panel::XrefView {
+                    verse: x.partner.ref_key(),
+                    display: x.partner.display(),
+                    weave: x.weave.clone(),
+                    weave_index: self.weaves.iter().position(|lw| lw.weave.name == x.weave),
+                })
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+    fn study_xrefs(&self, verse: &str) -> Vec<panel::StudyXrefView> {
+        let Some(v) = VRef::parse_ref_key(verse) else { return Vec::new() };
+        match self.xref_ix.get(&v) {
+            Some(rs) => rs
+                .iter()
+                .map(|r| panel::StudyXrefView {
+                    to: r.to.ref_key(),
+                    to_display: r.to.display(),
+                    end: r.end.as_ref().map(|e| e.ref_key()),
+                    end_display: r.end.as_ref().map(|e| e.display()),
+                })
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+    fn similar_verses(&self, verse: &str, k: usize) -> (Vec<panel::SimilarView>, Vec<panel::SimilarView>) {
+        let (Some(vs), Some(v)) = (self.verse_sim.as_ref(), VRef::parse_ref_key(verse)) else {
+            return (Vec::new(), Vec::new());
+        };
+        let map = |items: Vec<(VRef, f32)>| {
+            items.into_iter().map(|(r, _)| panel::SimilarView { verse: r.ref_key(), display: r.display() }).collect()
+        };
+        (map(vs.similar_verses_in(&v, k)), map(vs.similar_verses_cross(&v, k)))
+    }
+    fn verse_tags(&self, verse: &str) -> Vec<(usize, String)> {
+        let Some(v) = VRef::parse_ref_key(verse) else { return Vec::new() };
+        let vt = TagTarget::Verse(v);
+        self.tags.iter().enumerate().filter(|(_, lt)| lt.tag.member_of(&vt)).map(|(i, lt)| (i, lt.tag.name.clone())).collect()
+    }
+    fn verse_notes(&self, verse: &str) -> Vec<String> {
+        let Some(v) = VRef::parse_ref_key(verse) else { return Vec::new() };
+        self.notes.get(&v).cloned().unwrap_or_default()
+    }
+    fn threads(&self) -> Vec<panel::ThreadView> {
+        self.threads
+            .iter()
+            .map(|lt| panel::ThreadView {
+                name: lt.thread.name.clone(),
+                notes: lt.thread.notes.clone(),
+                entries: lt
+                    .thread
+                    .entries
+                    .iter()
+                    .map(|e| panel::ThreadEntryView {
+                        verse: e.vref.ref_key(),
+                        display: e.vref.display(),
+                        text: e.text.clone(),
+                        note: e.note.clone(),
+                    })
+                    .collect(),
+            })
+            .collect()
+    }
+    fn tags(&self) -> Vec<panel::TagView> {
+        self.tags
+            .iter()
+            .map(|lt| panel::TagView {
+                name: lt.tag.name.clone(),
+                members: lt
+                    .tag
+                    .members
+                    .iter()
+                    .map(|m| match &m.target {
+                        TagTarget::Verse(v) => panel::TagMemberView {
+                            kind: "verse".into(),
+                            verse: Some(v.ref_key()),
+                            display: Some(v.display()),
+                            strongs: None,
+                            note: m.note.clone(),
+                        },
+                        TagTarget::Concept(c) => panel::TagMemberView {
+                            kind: "concept".into(),
+                            verse: None,
+                            display: None,
+                            strongs: Some(c.clone()),
+                            note: m.note.clone(),
+                        },
+                    })
+                    .collect(),
+            })
+            .collect()
+    }
+    fn weaves(&self) -> Vec<panel::WeaveView> {
+        self.weaves
+            .iter()
+            .enumerate()
+            .map(|(index, lw)| panel::WeaveView {
+                index,
+                name: lw.weave.name.clone(),
+                kind_label: lw.weave.kind.label().to_string(),
+                notes: lw.weave.notes.clone(),
+                suggested: weave::is_suggested(lw),
+                links: lw
+                    .weave
+                    .links
+                    .iter()
+                    .map(|l| panel::WeaveLinkView {
+                        a: l.a.ref_key(),
+                        a_display: l.a.display(),
+                        b: l.b.ref_key(),
+                        b_display: l.b.display(),
+                        label: l.label.clone(),
+                        span_a: l.span_a.map(|(lo, hi)| [lo, hi]),
+                        span_b: l.span_b.map(|(lo, hi)| [lo, hi]),
+                    })
+                    .collect(),
+            })
+            .collect()
+    }
+    fn suggested(&self) -> Vec<panel::SuggestedView> {
+        self.weaves
+            .iter()
+            .filter(|lw| weave::is_suggested(lw))
+            .enumerate()
+            .map(|(index, lw)| panel::SuggestedView {
+                index,
+                name: lw.weave.name.clone(),
+                kind: lw.weave.kind.token().to_string(),
+                notes: lw.weave.notes.clone(),
+                lib_index: self.weaves.iter().position(|x| weave::is_suggested(x) && x.weave.name == lw.weave.name),
+                links: lw
+                    .weave
+                    .links
+                    .iter()
+                    .map(|l| panel::SuggestedLinkView {
+                        a: l.a.ref_key(),
+                        a_display: l.a.display(),
+                        b: l.b.ref_key(),
+                        b_display: l.b.display(),
+                        label: l.label.clone(),
+                    })
+                    .collect(),
+            })
+            .collect()
+    }
+    fn verse_tokens(&self, refkey: &str) -> Option<panel::VerseTokensView> {
+        let v = VRef::parse_ref_key(refkey)?;
+        let verse = self.corpus.verse(&v)?;
+        Some(panel::VerseTokensView {
+            tokens: verse
+                .tokens
+                .iter()
+                .map(|t| panel::TokenView { render: t.render(), added: t.has_flag(corpus::FLAG_ADDED) })
+                .collect(),
+        })
+    }
+    fn verse_body(&self, refkey: &str) -> Option<String> {
+        let v = VRef::parse_ref_key(refkey)?;
+        self.corpus.verse(&v).map(|verse| verse.body())
+    }
+    fn search(&self, query: &str) -> panel::SearchView {
+        match pure_core::search::run_search(&self.corpus, &self.notes, &self.search_ix, query) {
+            Some(pure_core::search::SearchAnswer::GoTo { book, chapter, verse }) => {
+                let display = match verse {
+                    Some(v) => VRef::new(book.clone(), chapter, v).display(),
+                    None => format!("{} {}", canon::display_name(&book), chapter),
+                };
+                panel::SearchView::Goto { book, chapter: chapter as u32, verse: verse.map(u32::from), display }
+            }
+            Some(pure_core::search::SearchAnswer::Hits { how, total, hits }) => panel::SearchView::Hits {
+                capped: total > hits.len(),
+                how,
+                total,
+                hits: hits
+                    .into_iter()
+                    .map(|h| panel::SearchHitView { verse: h.vref.ref_key(), display: h.vref.display(), note: h.note, why: h.why })
+                    .collect(),
+            },
+            None => panel::SearchView::Hits { how: String::new(), total: 0, capped: false, hits: Vec::new() },
+        }
+    }
+}
 
-    if hit.strongs.is_empty() {
-        s.push_str("<i>no Strong’s tag on this word</i>\n");
+/// How many concordance verses a panel card lists before an "… N more" tail.
+const PANEL_OCC_CAP: usize = 300;
+
+/// A semantic colour role → this shell's Pango hex; `None` inherits the label's
+/// ink. Every shell maps these identically, so the panel reads the same.
+fn role_hex(c: panel::Color) -> Option<&'static str> {
+    use panel::Color::*;
+    match c {
+        Ink => None,
+        Faded => Some("#8a8276"),
+        Gold => Some("#9e7d38"),
+        Section => Some("#a0894a"),
+        TierGod => Some("#9e7d38"),
+        TierHuman => Some("#6f8f6a"),
+        TierMachine => Some("#999"),
+        TierResearch => Some("#b04a3a"),
+        Mono => Some("#888"),
+        Morph => Some("#6a5a2a"),
+        Lemma => Some("#8a7a52"),
     }
-    for code in &hit.strongs {
-        s.push_str(&code_study_markup(st, code, &word));
-        s.push('\n');
+}
+
+/// One styled run as Pango markup: size (logical points → Pango units) + bold/
+/// italic, then either an `<a href>` (theme-coloured link) or a role foreground.
+fn run_markup(r: &panel::Run) -> String {
+    let mut inner = format!("<span size=\"{}\">{}</span>", (r.size * 1024.0).round() as i32, esc(&r.text));
+    if r.bold {
+        inner = format!("<b>{inner}</b>");
     }
-    verse_study_extras(st, hit, &mut s);
-    // The provenance legend, once, at the foot of a Full-study card.
-    if st.mode.is_full() && !hit.strongs.is_empty() {
-        s.push_str(&legend_markup());
+    if r.italic {
+        inner = format!("<i>{inner}</i>");
+    }
+    match &r.uri {
+        Some(u) => format!("<a href=\"{}\">{}</a>", esc(u), inner),
+        None => match role_hex(r.color) {
+            Some(hex) => format!("<span foreground=\"{hex}\">{inner}</span>"),
+            None => inner,
+        },
+    }
+}
+
+/// Render the core's typed block list as one Pango markup string for the panel.
+fn blocks_to_markup(blocks: &[panel::Block]) -> String {
+    let mut s = String::new();
+    for b in blocks {
+        match b {
+            panel::Block::Rule => s.push_str("<span foreground=\"#d8cfb8\">──────────────</span>\n"),
+            panel::Block::Section { title, mark } => {
+                s.push_str(&format!("\n<span foreground=\"#a0894a\" size=\"x-small\"><b>{}</b></span>", esc(title)));
+                if let Some((glyph, color)) = mark {
+                    s.push_str(&format!(
+                        " <span foreground=\"{}\" size=\"x-small\">{}</span>",
+                        role_hex(*color).unwrap_or("#888"),
+                        esc(glyph)
+                    ));
+                }
+                s.push('\n');
+            }
+            panel::Block::Para { runs, .. } => {
+                for r in runs {
+                    s.push_str(&run_markup(r));
+                }
+                s.push('\n');
+            }
+        }
     }
     s
+}
+
+fn word_study_markup(st: &State, hit: &Hit) -> String {
+    blocks_to_markup(&panel::word_study(st, st.mode.is_full(), &hit.verse.ref_key(), hit.token_index, &hit.strongs))
 }
 
 /// The study of one Strong's code: its dictionary entry and — in Full study —
@@ -3049,432 +3381,34 @@ fn word_study_markup(st: &State, hit: &Hit) -> String {
 /// `word` is the English surface that led here — its rendering is highlighted
 /// and the reverse line stays keyed to it; pass "" when there is none.
 fn code_study_markup(st: &State, code: &str, word: &str) -> String {
-    let mut s = String::new();
-    s.push_str(&format!("<b>{}</b>   ", esc(code)));
-    let count = st.occ_ix.count(code);
-    s.push_str(&format!(
-        "<a href=\"occ:{}\"><span size=\"small\">{} occurrence{} ▸</span></a>\n",
-        esc(code),
-        count,
-        if count == 1 { "" } else { "s" }
-    ));
-    match st.strongs.get(code) {
-        Some(e) => {
-            if let Some(l) = &e.lemma {
-                s.push_str(&format!("<span size=\"x-large\">{}</span>  ", esc(l)));
-            }
-            if let Some(x) = &e.xlit {
-                s.push_str(&format!("<i>{}</i>", esc(x)));
-            }
-            if let Some(p) = &e.pron {
-                s.push_str(&format!("  <span foreground=\"#888\">/{}/</span>", esc(p)));
-            }
-            s.push('\n');
-            if let Some(d) = &e.def {
-                s.push_str(&format!("\n{}\n", esc(d)));
-            }
-            if let Some(k) = &e.kjv {
-                s.push_str(&format!("\n<small>KJV: {}</small>\n", esc(k)));
-            }
-        }
-        None => s.push_str("<i>(not in the dictionary)</i>\n"),
-    }
-    // Cross-testament links Strong himself recorded (Full study). Each
-    // partner opens its concordance, so a theme can be followed across the
-    // Hebrew/Greek boundary the numbering otherwise walls off.
-    if st.mode.is_full() {
-        // ── rendering lens ──────────────────────────────────────────────
-        // The other English words this code is translated as (corpus-
-        // derived, not R&D), most frequent first; the tapped word's own
-        // rendering is bold. A chip filters the concordance to that
-        // rendering; the reverse line names other codes the tapped word
-        // also stands for (the agape/phileo split hidden behind "love").
-        let rends = st.renderings.renderings(code);
-        if !rends.is_empty() {
-            s.push_str(&shead_marked("RENDERINGS", MARK_HUMAN));
-            let wkey = pure_core::renderings::normalize(word);
-            let chips: Vec<String> = rends
-                .iter()
-                .map(|r| {
-                    let tapped =
-                        !wkey.is_empty() && pure_core::renderings::normalize(r.label) == wkey;
-                    let label = if tapped {
-                        format!("<b>{}</b>", esc(r.label))
-                    } else {
-                        esc(r.label)
-                    };
-                    format!(
-                        "<a href=\"rend:{code}:{rend}\">{label}</a> <span foreground=\"#999\" size=\"x-small\">×{count}</span>",
-                        code = esc(code),
-                        rend = esc(r.label),
-                        count = r.count,
-                    )
-                })
-                .collect();
-            s.push_str(&chips.join("  ·  "));
-            s.push('\n');
-
-            let others: Vec<(&str, usize)> = st
-                .renderings
-                .word_codes(word)
-                .into_iter()
-                .filter(|(c, _)| *c != code)
-                .collect();
-            if !others.is_empty() {
-                let links: Vec<String> = others
-                    .iter()
-                    .map(|(c, _)| {
-                        let label = english_gloss(st, c)
-                            .map(|g| format!("{c} ({g})"))
-                            .unwrap_or_else(|| c.to_string());
-                        // Open the code's own study card (not a bare
-                        // concordance), carrying the tapped word so its
-                        // rendering is highlighted there.
-                        format!("<a href=\"code:{}:{}\">{}</a>", esc(c), esc(word), esc(&label))
-                    })
-                    .collect();
-                s.push_str(&format!(
-                    "<small><span foreground=\"#6b6862\">“{}” also translates {}</span></small>\n",
-                    esc(word),
-                    links.join(", ")
-                ));
-            }
-        }
-
-        // ── analytics tier ──────────────────────────────────────────────
-        // Everything below is the R&D layer for this code: cognates, near
-        // concepts, co-occurrence, dispersion. Each gets its own header so
-        // the reader can tell the tiers apart at a glance.
-
-        // The same root across the Hebrew/Greek divide (Strong's etymology,
-        // fused with any external witnesses the pack supplies).
-        let partners = st.bridge.partners(code);
-        if !partners.is_empty() {
-            s.push_str(&shead("SAME ROOT ACROSS TESTAMENTS"));
-            let chips: Vec<String> = partners
-                .iter()
-                .take(6)
-                .map(|p| {
-                    let label = english_gloss(st, &p.code)
-                        .or_else(|| st.strongs.get(&p.code).and_then(|e| e.lemma.clone()))
-                        .unwrap_or_else(|| p.code.clone());
-                    let srcs = p
-                        .sources
-                        .iter()
-                        .map(|k| humanize_source(k))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    // The graded text-witness can disbelieve this pair
-                    // (keyed Hebrew-first) — the text's usage pushing back.
-                    let (heb, grk) = if code.starts_with('G') {
-                        (p.code.as_str(), code)
-                    } else {
-                        (code, p.code.as_str())
-                    };
-                    let disputed = if st.witness.disbelief(heb, grk).is_some() {
-                        " <span foreground=\"#b04a3a\" size=\"x-small\">· disputed by usage</span>"
-                    } else {
-                        ""
-                    };
-                    format!(
-                        "<a href=\"occ:{c}\">{label}</a> <span foreground=\"#999\" size=\"x-small\">{srcs}</span>{marks}{disputed}",
-                        c = esc(&p.code),
-                        label = esc(&label),
-                        srcs = esc(&srcs),
-                        marks = tier_marks(&p.sources),
-                    )
-                })
-                .collect();
-            s.push_str(&chips.join("  ·  "));
-            s.push('\n');
-        }
-
-        // Distributional near-synonyms from the embedding, with the
-        // cross-testament neighbours folded in underneath as a marked line.
-        if let Some(emb) = &st.embedding {
-            let near = emb.nearest_concepts(code, 6);
-            let cross = emb.cross_concepts(code, 6);
-            if !near.is_empty() || !cross.is_empty() {
-                s.push_str(&shead_marked("SIMILAR CONCEPTS", MARK_MACHINE));
-                if !near.is_empty() {
-                    s.push_str(&concept_links(st, &near));
-                    s.push('\n');
-                }
-                if !cross.is_empty() {
-                    s.push_str("<span foreground=\"#999\" size=\"x-small\">across the testaments —</span> ");
-                    s.push_str(&concept_links(st, &cross));
-                    s.push('\n');
-                }
-            }
-        }
-
-        // Symbolic collocation field: the concept community this code
-        // co-occurs with — "what shares its verses", distinct from the
-        // distributional near-synonyms above.
-        if let Some(ce) = &st.concept {
-            let field = ce.community(code);
-            if !field.is_empty() {
-                let members: Vec<(String, f32)> = field.into_iter().take(8).map(|c| (c, 0.0)).collect();
-                s.push_str(&shead_marked("APPEARS ALONGSIDE", MARK_MACHINE));
-                s.push_str(&concept_links(st, &members));
-                s.push('\n');
-            }
-
-            // Where across the canon this concept concentrates (counts, not
-            // chapter references — "Genesis ×12").
-            let books = ce.top_books(code, 5);
-            if !books.is_empty() {
-                let (ot, nt) = ce.testament_split(code);
-                let list: Vec<String> = books
-                    .iter()
-                    .map(|(b, c)| format!("{} ×{}", esc(canon::display_name(b)), c))
-                    .collect();
-                s.push_str(&shead_marked("WHERE IT CONCENTRATES", MARK_MACHINE));
-                s.push_str(&format!(
-                    "{}  <span foreground=\"#999\" size=\"x-small\">(OT {ot} · NT {nt})</span>\n",
-                    list.join(" · ")
-                ));
-            }
-        }
-
-        // Leitwort: a concept the text packs into one stretch far denser
-        // than chance (a repeated motif). Show where and how much of it
-        // lands there; the score is −log₁₀ of the adjusted tail p-value.
-        if let Some(b) = st.leitwort.as_ref().and_then(|m| m.get(code)) {
-            let label = burst::span_label(|id| canon::display_name(id).to_string(), &b.win_start, &b.win_end);
-            s.push_str(&shead_marked("LEITWORT", MARK_MACHINE));
-            s.push_str(&format!(
-                "{count} of its {total} uses cluster in {label} <span foreground=\"#999\" size=\"x-small\">(p ≈ 10<sup>−{sig:.0}</sup>)</span>\n",
-                count = b.win_count,
-                total = b.n,
-                label = esc(&label),
-                sig = b.score
-            ));
-        }
-
-        // A link into the graphical concept map (radial neighbourhood +
-        // dispersion strip) for this code.
-        if st.concept.is_some() {
-            s.push_str(&format!("\n<a href=\"conceptmap:{}\"><small>▸ open concept map</small></a>\n", esc(code)));
-        }
-    }
-    s
+    blocks_to_markup(&panel::code_study_card(st, st.mode.is_full(), code, word))
 }
 
-/// The per-verse extras that follow a word's code blocks: author actions,
-/// weave + TSK cross-references, "verses like this", tags, and margin notes.
-/// Appended to `s`, so it shares the word study's markup buffer.
-fn verse_study_extras(st: &State, hit: &Hit, s: &mut String) {
-    // Author actions on this verse — only in Full study mode.
-    let rk = esc(&hit.verse.ref_key());
-    if st.mode.is_full() {
-        s.push_str(&format!(
-            "\n<a href=\"addtag:{rk}\">＋ tag verse</a>    <a href=\"addthread:{rk}\">＋ add to thread</a>\n"
-        ));
-    }
-
-    // Weave cross-references touching this verse, if any.
-    if let Some(xs) = st.xrefs.get(&hit.verse) {
-        s.push_str(&format!("\n<b>cross-references ({})</b>\n", xs.len()));
-        for x in xs.iter().take(XREF_SHOWN) {
-            // Link the weave name to its compare card (first weave of that name).
-            let weave_link = match st.weaves.iter().position(|lw| lw.weave.name == x.weave) {
-                Some(wi) => format!("<a href=\"weave:{wi}\">{}</a>", esc(&x.weave)),
-                None => esc(&x.weave),
-            };
-            s.push_str(&format!(
-                "{}  <small><span foreground=\"#888\">{}</span></small>\n",
-                go_link(&x.partner),
-                weave_link
-            ));
-        }
-        if xs.len() > XREF_SHOWN {
-            s.push_str(&format!("<small>… {} more</small>\n", xs.len() - XREF_SHOWN));
-        }
-    }
-
-    // TSK topical cross-references for this verse (Full study), best-voted
-    // first — a curated study tier, shown clearly labelled and never blessed
-    // into weaves.
-    if st.mode.is_full() {
-        if let Some(rs) = st.xref_ix.get(&hit.verse) {
-            s.push_str(&format!("\n<b>study cross-references ({})</b>  <small><span foreground=\"#888\">TSK</span></small>{}\n", rs.len(), MARK_HUMAN));
-            for r in rs.iter().take(XREF_SHOWN) {
-                let target = match &r.end {
-                    Some(e) => format!("{}–{}", go_link(&r.to), go_link(e)),
-                    None => go_link(&r.to),
-                };
-                s.push_str(&format!("{target}\n"));
-            }
-            if rs.len() > XREF_SHOWN {
-                s.push_str(&format!("<small>… {} more</small>\n", rs.len() - XREF_SHOWN));
-            }
-        }
-    }
-
-    // "Verses like this" from the SIF embedding model (Full study): thematic
-    // neighbours by concept, distinct from the curated/weave links above.
-    if st.mode.is_full() {
-        if let Some(vs) = &st.verse_sim {
-            let sim = vs.similar_verses_in(&hit.verse, 6);
-            if !sim.is_empty() {
-                s.push_str(&format!("\n<b>verses like this</b>  <small><span foreground=\"#888\">by concept</span></small>{}\n", MARK_MACHINE));
-                for (r, _) in &sim {
-                    s.push_str(&format!("{}\n", go_link(r)));
-                }
-            }
-            let cross = vs.similar_verses_cross(&hit.verse, 4);
-            if !cross.is_empty() {
-                s.push_str("<small><span foreground=\"#9e7d38\">across the testaments: </span></small>\n");
-                for (r, _) in &cross {
-                    s.push_str(&format!("{}\n", go_link(r)));
-                }
-            }
-        }
-    }
-
-    // Tags that include this verse (Full study only).
-    if st.mode.is_full() {
-        let vt = TagTarget::Verse(hit.verse.clone());
-        let tagged: Vec<(usize, &LoadedTag)> =
-            st.tags.iter().enumerate().filter(|(_, lt)| lt.tag.member_of(&vt)).collect();
-        if !tagged.is_empty() {
-            s.push_str("\n<b>tags</b>\n");
-            for (i, lt) in tagged {
-                s.push_str(&format!(
-                    "<a href=\"tag:{i}\">{}</a>  <a href=\"untag:{i}:{rk}\"><small>✕</small></a>\n",
-                    esc(&lt.tag.name)
-                ));
-            }
-        }
-    }
-
-    // The 1769 translators' margin notes on this verse, if any.
-    if let Some(ns) = st.notes.get(&hit.verse) {
-        s.push_str(&format!("\n<b>margin notes</b>{}\n", MARK_HUMAN));
-        for n in ns {
-            s.push_str(&format!("<small>{}</small>\n", esc(n)));
-        }
-    }
-}
 
 /// The list of threads, each a link that opens its passages.
 /// The whole weave library, flat: name -> compare card (the constellation is
 /// the graphical view of the same list).
 fn weaves_list_markup(st: &State) -> String {
-    if st.weaves.is_empty() {
-        return "<b>Weaves</b>\n\n<i>None loaded.</i>".to_string();
-    }
-    let mut order: Vec<usize> = (0..st.weaves.len()).collect();
-    order.sort_by_key(|&i| std::cmp::Reverse(st.weaves[i].weave.links.len()));
-    let mut s = format!("<b>Weaves ({})</b>\n\n", st.weaves.len());
-    for i in order {
-        let lw = &st.weaves[i];
-        let n = lw.weave.links.len();
-        s.push_str(&format!(
-            "<a href=\"weave:{}\">{}</a>  <small>{} \u{b7} {} link{}{}</small>\n",
-            i,
-            esc(&lw.weave.name),
-            esc(lw.weave.kind.label()),
-            n,
-            if n == 1 { "" } else { "s" },
-            if weave::is_suggested(lw) { " \u{b7} suggested" } else { "" }
-        ));
-    }
-    s
+    blocks_to_markup(&panel::weaves_list(st))
 }
 
 fn threads_list_markup(st: &State) -> String {
-    if st.threads.is_empty() {
-        return "<b>Threads</b>\n\n<i>None yet — a thread is an ordered trail of \
-                passages you gather (authoring is coming).</i>"
-            .to_string();
-    }
-    let mut s = format!("<b>Threads ({})</b>\n\n", st.threads.len());
-    for (i, lt) in st.threads.iter().enumerate() {
-        let n = lt.thread.entries.len();
-        s.push_str(&format!(
-            "<a href=\"thread:{}\">{}</a>  <small>{} passage{}</small>\n",
-            i,
-            esc(&lt.thread.name),
-            n,
-            if n == 1 { "" } else { "s" }
-        ));
-    }
-    s
+    blocks_to_markup(&panel::threads_list(st))
 }
 
 /// One thread: its passages as jump links with a snapshot preview + note.
 fn thread_markup(st: &State, i: usize) -> String {
-    let Some(lt) = st.threads.get(i) else {
-        return String::new();
-    };
-    let t = &lt.thread;
-    let mut s = format!("<b>{}</b>\n", esc(&t.name));
-    if !t.notes.is_empty() {
-        s.push_str(&format!("<small>{}</small>\n", esc(&t.notes)));
-    }
-    s.push_str(&format!(
-        "<small>{} passages</small>  <a href=\"editthreadnotes:{i}\"><small>✎ notes</small></a>\n\n",
-        t.entries.len()
-    ));
-    for (j, e) in t.entries.iter().enumerate() {
-        s.push_str(&go_link(&e.vref));
-        let snippet = e.text.join(" ");
-        let short: String = snippet.chars().take(70).collect();
-        let ell = if snippet.chars().count() > 70 { "…" } else { "" };
-        s.push_str(&format!("\n<small>{}{}</small>\n", esc(&short), ell));
-        if let Some(n) = &e.note {
-            s.push_str(&format!("<small><span foreground=\"#888\">— {}</span></small>\n", esc(n)));
-        }
-        s.push_str(&format!(
-            "<a href=\"editentrynote:{i}:{j}\"><small>✎ note</small></a>\n\n"
-        ));
-    }
-    s
+    blocks_to_markup(&panel::thread_detail(st, i))
 }
 
 /// The list of tags, each a link that opens its members.
 fn tags_list_markup(st: &State) -> String {
-    if st.tags.is_empty() {
-        return "<b>Tags</b>\n\n<i>None yet — a tag groups verses and Strong's \
-                concepts under a label (authoring is coming).</i>"
-            .to_string();
-    }
-    let mut s = format!("<b>Tags ({})</b>\n\n", st.tags.len());
-    for (i, lt) in st.tags.iter().enumerate() {
-        let n = lt.tag.members.len();
-        s.push_str(&format!(
-            "<a href=\"tag:{}\">{}</a>  <small>{} member{}</small>\n",
-            i,
-            esc(&lt.tag.name),
-            n,
-            if n == 1 { "" } else { "s" }
-        ));
-    }
-    s
+    blocks_to_markup(&panel::tags_list(st))
 }
 
 /// One tag: its members — verses as jump links, concepts as concordance links.
 fn tag_markup(st: &State, i: usize) -> String {
-    let Some(lt) = st.tags.get(i) else {
-        return String::new();
-    };
-    let t = &lt.tag;
-    let mut s = format!("<b>{}</b>\n<small>{} members</small>\n\n", esc(&t.name), t.members.len());
-    for m in &t.members {
-        match &m.target {
-            TagTarget::Verse(v) => s.push_str(&go_link(v)),
-            TagTarget::Concept(c) => {
-                s.push_str(&format!("<a href=\"occ:{}\">{}</a>", esc(c), esc(c)))
-            }
-        }
-        if let Some(n) = &m.note {
-            s.push_str(&format!("  <small><span foreground=\"#888\">{}</span></small>", esc(n)));
-        }
-        s.push('\n');
-    }
-    s
+    blocks_to_markup(&panel::tag_detail(st, i))
 }
 
 /// The suggested weaves awaiting review, each with its links and
@@ -3482,106 +3416,15 @@ fn tag_markup(st: &State, i: usize) -> String {
 /// (the flat list of canonical + suggested), so the action links stay valid
 /// until the next reload.
 fn suggested_list_markup(st: &State) -> String {
-    let suggested: Vec<(usize, &LoadedWeave)> =
-        st.weaves.iter().enumerate().filter(|(_, lw)| weave::is_suggested(lw)).collect();
-    if suggested.is_empty() {
-        return "<b>Suggested weaves</b>\n\n<i>None waiting — proposed weaves \
-                (dropped in <tt>weaves/suggested</tt>) appear here for you to \
-                approve or reject.</i>"
-            .to_string();
-    }
-    let mut s = format!("<b>Suggested weaves ({})</b>\n\n", suggested.len());
-    for (i, lw) in suggested {
-        let w = &lw.weave;
-        s.push_str(&format!(
-            "<b>{}</b>  <small><span foreground=\"#888\">{}</span></small>\n",
-            esc(&w.name),
-            esc(w.kind.label())
-        ));
-        if !w.notes.is_empty() {
-            s.push_str(&format!("<small>{}</small>\n", esc(&w.notes)));
-        }
-        for l in w.links.iter().take(XREF_SHOWN) {
-            s.push_str(&format!("<small>{} ↔ {}</small>\n", go_link(&l.a), go_link(&l.b)));
-        }
-        if w.links.len() > XREF_SHOWN {
-            s.push_str(&format!("<small>… {} more links</small>\n", w.links.len() - XREF_SHOWN));
-        }
-        s.push_str(&format!(
-            "<a href=\"weave:{i}\">⇔ compare</a>    <a href=\"approve:{i}\">✓ approve</a>    <a href=\"reject:{i}\">✕ reject</a>    <a href=\"editweavenotes:{i}\">✎ note</a>\n\n"
-        ));
-    }
-    s
+    blocks_to_markup(&panel::suggested(st))
 }
 
-/// A verse's words as markup, with the tokens in `span` (inclusive, if any)
-/// emphasized (bold). Words the KJV translators supplied stay italic-gray, as
-/// in the reader. Falls back to the ref key if the verse is absent.
-fn verse_text_spanned(st: &State, vref: &VRef, span: Option<Span>) -> String {
-    let Some(v) = st.corpus.verse(vref) else {
-        return esc(&vref.ref_key());
-    };
-    let mut s = String::new();
-    for (k, t) in v.tokens.iter().enumerate() {
-        if k > 0 {
-            s.push(' ');
-        }
-        let in_span = span.is_some_and(|(lo, hi)| k as u16 >= lo && k as u16 <= hi);
-        let word = esc(&t.word);
-        let word = if t.flags & FLAG_ADDED != 0 {
-            format!("<span foreground=\"#6b6862\"><i>{word}</i></span>")
-        } else {
-            word
-        };
-        if in_span {
-            s.push_str(&format!("<b>{word}</b>"));
-        } else {
-            s.push_str(&word);
-        }
-    }
-    s
-}
 
 /// The weave compare card: the weave's kind + notes, then each link as its two
 /// linked passages one above the other, the linked words emphasized, with jump
 /// links and an "✎ note" editor. `i` is the global index into `st.weaves`.
 fn weave_markup(st: &State, i: usize) -> String {
-    let Some(lw) = st.weaves.get(i) else {
-        return String::new();
-    };
-    let w = &lw.weave;
-    let tag = if weave::is_suggested(lw) { "  <small><span foreground=\"#888\">(suggested)</span></small>" } else { "" };
-    let mut s = format!(
-        "<b>{}</b>  <small><span foreground=\"#888\">{}</span></small>{}\n",
-        esc(&w.name),
-        esc(w.kind.label()),
-        tag
-    );
-    let edit = if st.mode.is_full() {
-        format!("  <a href=\"editweavenotes:{i}\"><small>✎ note</small></a>")
-    } else {
-        String::new()
-    };
-    s.push_str(&format!(
-        "<small>{} link{}</small>{edit}\n",
-        w.links.len(),
-        if w.links.len() == 1 { "" } else { "s" }
-    ));
-    if !w.notes.is_empty() {
-        s.push_str(&format!("<small>{}</small>\n", esc(&w.notes)));
-    }
-    s.push('\n');
-    for l in w.links.iter().take(XREF_SHOWN) {
-        if !l.label.is_empty() {
-            s.push_str(&format!("<small><span foreground=\"#9e7d38\">“{}”</span></small>\n", esc(&l.label)));
-        }
-        s.push_str(&format!("{}\n<small>{}</small>\n", go_link(&l.a), verse_text_spanned(st, &l.a, l.span_a)));
-        s.push_str(&format!("{}\n<small>{}</small>\n\n", go_link(&l.b), verse_text_spanned(st, &l.b, l.span_b)));
-    }
-    if w.links.len() > XREF_SHOWN {
-        s.push_str(&format!("<small>… {} more links</small>\n", w.links.len() - XREF_SHOWN));
-    }
-    s
+    blocks_to_markup(&panel::compare_card(st, st.mode.is_full(), i))
 }
 
 /// A compact hover gloss for a Strong's-tagged word: each code with its lemma,
@@ -3611,15 +3454,6 @@ fn hover_markup(st: &State, hit: &Hit) -> String {
     s
 }
 
-fn go_link(v: &VRef) -> String {
-    format!(
-        "<a href=\"go:{}:{}:{}\">{}</a>",
-        esc(&v.book),
-        v.chapter,
-        v.verse,
-        esc(&v.display())
-    )
-}
 
 /// Render a list of `(strongs, score)` concept neighbours as concordance links,
 /// each shown as `CODE (lemma)` when a lemma is known, comma-separated.
@@ -3705,213 +3539,14 @@ fn humanize_source(key: &str) -> String {
     bridge::source_label(key).to_string()
 }
 
-// ── authority-tier provenance marks (overlay `Tier` / `provIcon`) ───────────
-// Every piece of evidence carries a small glyph saying where it comes from, so
-// the reader always knows the provenance. A single GtkLabel's Pango markup
-// can't embed images (as overlay's Monomer panels do), so we use overlay's
-// glyph-fallback set, colored per tier: God = the text itself, Human = curated
-// scholarship, Machine = a learned/aligned artifact (weigh, don't trust); a
-// flask flags a method that is still research-grade (a lead, not a result).
-const MARK_GOD: &str = " <span foreground=\"#9e7d38\" size=\"x-small\">✝</span>";
-const MARK_HUMAN: &str = " <span foreground=\"#6f8f6a\" size=\"x-small\">†</span>";
-const MARK_MACHINE: &str = " <span foreground=\"#999\" size=\"x-small\">≈</span>";
-const MARK_RESEARCH: &str = " <span foreground=\"#b04a3a\" size=\"x-small\">⚗</span>";
-
-/// The provenance marks for one evidence item: the deduped union of its witness
-/// sources' tiers (additive — a multi-source item shows every tier it attests,
-/// never one "winning" tier) plus a flask when any source's method is still
-/// research-grade. A Human-only chip still gets the dagger; a scripture
-/// quotation shows ✝ ≈ ⚗ together.
-fn tier_marks(sources: &[String]) -> String {
-    let mut s = String::new();
-    for t in bridge::tiers_of(sources) {
-        s.push_str(match t {
-            bridge::Tier::God => MARK_GOD,
-            bridge::Tier::Human => MARK_HUMAN,
-            bridge::Tier::Machine => MARK_MACHINE,
-        });
-    }
-    if sources.iter().any(|k| bridge::research_grade(k)) {
-        s.push_str(MARK_RESEARCH);
-    }
-    s
-}
-
-/// A small-caps-feel section header for the study panel: a spaced, muted-gold
-/// label on its own line, with a blank line above it, and an optional trailing
-/// tier mark for blocks whose whole provenance is one tier (RENDERINGS = Human,
-/// the analytics = Machine). Titles are given already upper-cased.
-fn shead_marked(title: &str, mark: &str) -> String {
-    format!(
-        "\n<span foreground=\"#a0894a\" size=\"x-small\"><b>{}</b></span>{}\n",
-        title, mark
-    )
-}
-
-/// The common case: a section header with no tier mark.
-fn shead(title: &str) -> String {
-    shead_marked(title, "")
-}
-
-/// The provenance legend, shown once at the foot of a Full-study card so the
-/// marks are learnable. Overlay conveys each mark's meaning through a hover
-/// tooltip; a single GtkLabel can't, so we spell the key out.
-fn legend_markup() -> String {
-    concat!(
-        "\n<span size=\"x-small\" foreground=\"#999\">where this comes from:  ",
-        "<span foreground=\"#9e7d38\">✝</span> the text  ·  ",
-        "<span foreground=\"#6f8f6a\">†</span> curated scholarship  ·  ",
-        "<span foreground=\"#999\">≈</span> machine-derived, weigh it  ·  ",
-        "<span foreground=\"#b04a3a\">⚗</span> research-grade</span>\n"
-    )
-    .to_string()
-}
-
-/// Render concept neighbours English-first: the recognisable English gloss is
-/// the link, with the original-language lemma trailing dimmed ("love ἀγάπη").
-/// Members are separated by middots so the two-part chips stay legible.
-fn concept_links(st: &State, items: &[(String, f32)]) -> String {
-    items
-        .iter()
-        .map(|(code, _)| {
-            let english = english_gloss(st, code);
-            let lemma = st.strongs.get(code).and_then(|e| e.lemma.clone());
-            match (english, lemma) {
-                // English word links to the concordance; lemma trails, dimmed.
-                (Some(en), Some(lem)) => format!(
-                    "<a href=\"occ:{c}\">{en}</a> <span foreground=\"#8a7a52\" size=\"small\">{lem}</span>",
-                    c = esc(code),
-                    en = esc(&en),
-                    lem = esc(&lem)
-                ),
-                (Some(en), None) => format!("<a href=\"occ:{c}\">{en}</a>", c = esc(code), en = esc(&en)),
-                (None, Some(lem)) => format!("<a href=\"occ:{c}\">{lem}</a>", c = esc(code), lem = esc(&lem)),
-                (None, None) => format!("<a href=\"occ:{c}\">{c}</a>", c = esc(code)),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("  ·  ")
-}
-
-/// Markup for a search query's answer: a go-to jump, or a list of hit links.
-/// One dim context line under a search hit: the verse text windowed around
-/// the first (ASCII-case-insensitive) match of the query\u{2019}s first word, the
-/// match bolded. Char-boundary safe; empty when the verse text is empty.
-fn search_snippet_markup(body: &str, query: &str) -> String {
-    if body.is_empty() {
-        return String::new();
-    }
-    fn snap(s: &str, mut i: usize) -> usize {
-        while i < s.len() && !s.is_char_boundary(i) {
-            i += 1;
-        }
-        i.min(s.len())
-    }
-    fn find_ascii_ci(hay: &str, needle: &str) -> Option<usize> {
-        let (h, n) = (hay.as_bytes(), needle.as_bytes());
-        if n.is_empty() || n.len() > h.len() {
-            return None;
-        }
-        (0..=h.len() - n.len())
-            .filter(|&i| hay.is_char_boundary(i))
-            .find(|&i| (0..n.len()).all(|j| h[i + j].eq_ignore_ascii_case(&n[j])))
-    }
-    let needle = query.split_whitespace().next().unwrap_or("");
-    let hit = find_ascii_ci(body, needle);
-    const WINDOW: usize = 46;
-    let (start, end) = match hit {
-        Some(at) => (
-            snap(body, at.saturating_sub(WINDOW)),
-            snap(body, (at + needle.len() + WINDOW).min(body.len())),
-        ),
-        None => (0, snap(body, (2 * WINDOW).min(body.len()))),
-    };
-    // Snap outward to word boundaries.
-    let start = if start > 0 { body[..start].rfind(' ').map_or(start, |i| i + 1) } else { 0 };
-    let end = body[end..].find(' ').map_or(body.len(), |i| end + i);
-    let pre = if start > 0 { "\u{2026}" } else { "" };
-    let post = if end < body.len() { "\u{2026}" } else { "" };
-    let mid = match hit {
-        Some(at) if at >= start && at + needle.len() <= end => format!(
-            "{}<b>{}</b>{}",
-            esc(&body[start..at]),
-            esc(&body[at..at + needle.len()]),
-            esc(&body[at + needle.len()..end])
-        ),
-        _ => esc(&body[start..end]),
-    };
-    format!("<small><span foreground=\"#8a8378\">{pre}{mid}{post}</span></small>\n")
-}
 
 fn search_markup(st: &State, query: &str) -> String {
-    match search::run_search(&st.corpus, &st.notes, &st.search_ix, query) {
-        None => "<i>Type a word, phrase, or reference (e.g. “love”, “God so loved”, “John 3”).</i>"
-            .to_string(),
-        Some(SearchAnswer::GoTo { book, chapter, verse }) => {
-            let disp = match verse {
-                Some(v) => VRef::new(book.clone(), chapter, v).display(),
-                None => format!("{} {}", canon::display_name(&book), chapter),
-            };
-            let href = match verse {
-                Some(v) => format!("go:{book}:{chapter}:{v}"),
-                None => format!("go:{book}:{chapter}"),
-            };
-            format!(
-                "<b>go to</b>\n\n<a href=\"{}\"><span size=\"large\">{}</span></a>",
-                esc(&href),
-                esc(&disp)
-            )
-        }
-        Some(SearchAnswer::Hits { how, total, hits }) => {
-            let mut s = format!(
-                "<b>{} result{}</b>  <small>{}</small>\n\n",
-                total,
-                if total == 1 { "" } else { "s" },
-                esc(&how)
-            );
-            for h in &hits {
-                let why = if h.why.is_empty() {
-                    String::new()
-                } else {
-                    format!("  <small><span foreground=\"#888\">{}</span></small>", esc(&h.why))
-                };
-                let note = if h.note { "  <small>※ note</small>" } else { "" };
-                s.push_str(&format!("{}{}{}\n", go_link(&h.vref), why, note));
-                if let Some(v) = st.corpus.verse(&h.vref) {
-                    s.push_str(&search_snippet_markup(&v.body(), query));
-                }
-            }
-            if total > hits.len() {
-                s.push_str(&format!("\n<small>… {} more</small>", total - hits.len()));
-            }
-            s
-        }
-    }
+    blocks_to_markup(&panel::search(st, query))
 }
 
 /// Markup for a Strong's code's concordance: every verse it tags, as jump links.
 fn concordance_markup(st: &State, code: &str) -> String {
-    let verses = st.occ_ix.verses(code);
-    let lemma = st
-        .strongs
-        .get(code)
-        .and_then(|e| e.lemma.clone())
-        .map(|l| format!("  <span size=\"large\">{}</span>", esc(&l)))
-        .unwrap_or_default();
-    let mut s = format!(
-        "<b>{}</b>{}\n<small>{} occurrence{}</small>\n\n",
-        esc(code),
-        lemma,
-        verses.len(),
-        if verses.len() == 1 { "" } else { "s" }
-    );
-    for v in verses.iter().take(OCC_SHOWN) {
-        s.push_str(&format!("{}\n", go_link(v)));
-    }
-    if verses.len() > OCC_SHOWN {
-        s.push_str(&format!("\n<small>… {} more</small>", verses.len() - OCC_SHOWN));
-    }
-    s
+    blocks_to_markup(&panel::concordance(st, code))
 }
 
 /// Markup for one rendering of a code's concordance: the verses where the code
@@ -3919,31 +3554,7 @@ fn concordance_markup(st: &State, code: &str) -> String {
 /// OCC_SHOWN. The passed `rendering` is normalized before lookup, so a chip's
 /// display label round-trips through the link unchanged.
 fn rendering_concordance_markup(st: &State, code: &str, rendering: &str) -> String {
-    let key = pure_core::renderings::normalize(rendering);
-    let occs = st.renderings.rendering_occs(code, rendering);
-    // Recover the display label (most-common surface) for the header.
-    let label = st
-        .renderings
-        .renderings(code)
-        .into_iter()
-        .find(|r| pure_core::renderings::normalize(r.label) == key)
-        .map(|r| r.label.to_string())
-        .unwrap_or_else(|| rendering.to_string());
-    let mut s = format!(
-        "<b>{}</b>  <span size=\"large\">“{}”</span>\n<small>{} verse{} rendered “{}”</small>\n\n",
-        esc(code),
-        esc(&label),
-        occs.len(),
-        if occs.len() == 1 { "" } else { "s" },
-        esc(&label),
-    );
-    for o in occs.iter().take(OCC_SHOWN) {
-        s.push_str(&format!("{}\n", go_link(&o.vref)));
-    }
-    if occs.len() > OCC_SHOWN {
-        s.push_str(&format!("\n<small>… {} more</small>", occs.len() - OCC_SHOWN));
-    }
-    s
+    blocks_to_markup(&panel::rendering_concordance(st, code, rendering))
 }
 
 fn install_css() {
@@ -4025,42 +3636,36 @@ mod markup_tests {
         out.replace("</a>", "")
     }
 
-    /// Every study-panel markup shape must parse as valid Pango markup — the
-    /// same check GtkLabel runs on the non-link parts. Guards the section
-    /// headers, the English-first concept chips, the humanised bridge chips,
-    /// the `<sup>` exponent in the leitwort line, and the authority-tier
-    /// provenance marks (per-chip + on headers) plus the legend against a
-    /// syntax regression.
+    /// The block→Pango renderer's output must parse as valid Pango markup — the
+    /// same check GtkLabel runs on the non-link parts. Exercises section headers
+    /// (with a tier mark), links, per-run roles/sizes, a rule, an indented para,
+    /// and XML-escaping of `&`/`<`/`>` in run text and link URIs.
     #[test]
-    fn panel_markup_shapes_are_valid_pango() {
-        let samples = [
-            // A whole analytics run, headers and all, concatenated as the label
-            // would receive it — with tier marks on headers, per-chip
-            // provenance marks on the bridge partner, and the legend at the end.
-            format!(
-                "{h1}<a href=\"occ:H1254\">create</a> <span foreground=\"#999\" size=\"x-small\">etymology, Septuagint</span>{marks} <span foreground=\"#b04a3a\" size=\"x-small\">· disputed by usage</span>\n\
-                 {h2}<a href=\"occ:G25\">love</a> <span foreground=\"#8a7a52\" size=\"small\">ἀγαπάω</span>  ·  <a href=\"occ:G5368\">love</a> <span foreground=\"#8a7a52\" size=\"small\">φιλέω</span>\n\
-                 <span foreground=\"#999\" size=\"x-small\">across the testaments —</span> <a href=\"occ:H2617\">mercy</a> <span foreground=\"#8a7a52\" size=\"small\">חֶסֶד</span>\n\
-                 {h3}Genesis ×12 · Psalms ×9  <span foreground=\"#999\" size=\"x-small\">(OT 3 · NT 2)</span>\n\
-                 {h4}42 of its 55 uses cluster in Genesis 1–11 <span foreground=\"#999\" size=\"x-small\">(p ≈ 10<sup>−43</sup>)</span>\n\
-                 {legend}",
-                h1 = shead("SAME ROOT ACROSS TESTAMENTS"),
-                h2 = shead_marked("SIMILAR CONCEPTS", MARK_MACHINE),
-                h3 = shead_marked("WHERE IT CONCENTRATES", MARK_MACHINE),
-                h4 = shead_marked("LEITWORT", MARK_MACHINE),
-                // quotation (God+Machine, research-grade) fused with etymology
-                // (Human) → all four glyphs ✝ † ≈ ⚗.
-                marks = tier_marks(&["quotation".to_string(), "etymology".to_string()]),
-                legend = legend_markup(),
-            ),
-            // The RENDERINGS header carries the Human mark.
-            shead_marked("RENDERINGS", MARK_HUMAN),
+    fn blocks_to_markup_is_valid_pango() {
+        use pure_core::panel::{Block, Color, Run};
+        let blocks = vec![
+            Block::Section { title: "SAME ROOT ACROSS TESTAMENTS".into(), mark: None },
+            Block::Section { title: "SIMILAR CONCEPTS".into(), mark: Some(("≈".into(), Color::TierMachine)) },
+            Block::Para {
+                runs: vec![
+                    Run::new("create", 13.5, Color::Gold).link("occ:H1254"),
+                    Run::new("  etymology + Septuagint", 11.5, Color::Faded),
+                    Run::new(" ✝", 11.0, Color::TierGod),
+                    Run::new(" a & b <x>", 12.0, Color::Ink),
+                ],
+                indent: false,
+                top_gap: false,
+            },
+            Block::Rule,
+            Block::Para { runs: vec![Run::new("indented", 12.5, Color::Ink)], indent: true, top_gap: true },
         ];
-        for m in &samples {
-            let stripped = strip_links(m);
-            pango::parse_markup(&stripped, '\0')
-                .unwrap_or_else(|e| panic!("invalid panel markup: {e}\n---\n{stripped}"));
-        }
+        let markup = blocks_to_markup(&blocks);
+        let stripped = strip_links(&markup);
+        pango::parse_markup(&stripped, '\0')
+            .unwrap_or_else(|e| panic!("invalid panel markup: {e}\n---\n{stripped}"));
+        // XML-escaping (not raw &/<>), and the link URI is carried verbatim.
+        assert!(markup.contains("&amp;") && markup.contains("&lt;x&gt;"));
+        assert!(markup.contains("href=\"occ:H1254\""));
     }
 
     #[test]
