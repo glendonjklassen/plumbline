@@ -116,6 +116,20 @@ public sealed record CanonSegment(string Label, int First, int Last);
 public sealed record ChordMapData(List<ChordPair> Pairs, uint Max, int OtNtDivide, int BookCount);
 public sealed record ChordPair(int A, int B, uint Count);
 
+// One laid-out page of the constellation (pure_engine_constellation_json). All
+// positions are fractions (X a canon fraction, LaneFrac 0..1 within a lane,
+// Size a 0..1 witness degree); the shell holds the transient Page + pin set,
+// maps fractions to pixels, and paints. It derives nothing (review item 3).
+public sealed record ConstellationData(
+    List<ConstellationLaneData> Lanes, int NPins, int FreeTotal, int Page, int MaxPage,
+    string Caption, int LaneCapacity);
+public sealed record ConstellationLaneData(
+    int WeaveIndex, string Name, bool Pinned,
+    List<ConstellationNodeData> Nodes, List<ConstellationEdgeData> Edges);
+public sealed record ConstellationNodeData(
+    float X, float LaneFrac, float Size, string RefKey, string Book, ushort Chapter, string Display);
+public sealed record ConstellationEdgeData(float AX, float ALaneFrac, float BX, float BLaneFrac);
+
 public sealed record Concept1(
     string Code, uint Total, uint Ot, uint Nt, List<BookCount> TopBooks,
     Dictionary<string, uint> ByBook, List<Scored> Collocates,

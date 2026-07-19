@@ -509,6 +509,23 @@ namespace PureStudy.Native
         public static extern byte* pure_engine_chord_map_json(PureEngine* engine);
 
         /// <summary>
+        ///  One laid-out page of the constellation (the weave-library overview popup):
+        ///  lanes with nodes + edges as **fractions**, plus the pin/paging state already
+        ///  resolved into a caption. The shell holds the transient `page` and `pins`
+        ///  (weave indices, the same handles the lanes carry) and passes them in;
+        ///  everything derived — usable filter, largest-first order, per-verse degree,
+        ///  jitter, lane assignment, paging — lives here. `pins_json` is a JSON array of
+        ///  weave indices (e.g. `"[3,7]"`); null / empty / malformed means no pins.
+        ///  Never null on a live engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine (or null → null); `pins_json` is null or valid
+        ///  NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_constellation_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_constellation_json(PureEngine* engine, uint page, byte* pins_json);
+
+        /// <summary>
         ///  The symbolic concept engine's view of a Strong's code: occurrence total,
         ///  testament split, concentrating books, per-book dispersion counts,
         ///  collocates, co-occurrence community, and the leitwort discovery when one

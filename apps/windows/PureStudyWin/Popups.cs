@@ -48,16 +48,6 @@ public static class Popups
         return win;
     }
 
-    private static (string book, uint ch, uint v)? ParseFull(string refKey)
-    {
-        int sp = refKey.LastIndexOf(' ');
-        if (sp < 0) return null;
-        var cv = refKey[(sp + 1)..].Split(':');
-        if (cv.Length < 2 || !uint.TryParse(cv[0], out var ch) || !uint.TryParse(cv[1], out var v))
-            return null;
-        return (refKey[..sp], ch, v);
-    }
-
     // ── chord / arc map ────────────────────────────────────────────────────
 
     public static void ChordMap(ChordMapData map, List<TocBook> books, Action<string> pick)
@@ -213,8 +203,9 @@ public static class Popups
     }
 
     // ── constellation ──────────────────────────────────────────────────────
-
-    private const int Lanes = 18;
+    // Lane count (18) lives in the core view-model (lane_capacity); these are
+    // the shell's paint-only geometry: the pin gutter width, the plot's left
+    // margin, and the top pad.
     private const float ConstGutter = 150f, PlotLeft = 162f, ConstTopPad = 18f;
 
     private static readonly (float r, float g, float b)[] LaneColors =
@@ -223,7 +214,7 @@ public static class Popups
         (184, 156, 214), (150, 194, 190), (214, 170, 128),
     };
 
-    public static void Constellation(StudyEngine engine, WeaveLib lib, List<TocBook> books,
+    public static void Constellation(StudyEngine engine,
         Action<string, uint, string?> navigate, Action<int> compare)
     {
         Window? win = null;
@@ -236,80 +227,42 @@ public static class Popups
         };
         int page = 0;
         var pins = new HashSet<int>();          // weave library indices
-        (int lane, int link, bool aEnd)? hoverNode = null;
-        (int lane, int link)? hoverEdge = null;
         Windows.Foundation.Point pointer = default;
 
-        int Order(string book) => books.FindIndex(b => b.Id == book);
-        int ChapterCount(string book) => books.FirstOrDefault(b => b.Id == book)?.Chapters ?? 1;
+        // The whole layout — usable filter, largest-first order, per-verse
+        // degree, jitter, lane assignment, paging, pins — comes from the core
+        // view-model (pure_engine_constellation_json). The shell holds only the
+        // transient page + pin set and paints the returned fractions (item 3).
+        var model = Wire.Parse<ConstellationData>(engine.ConstellationJson((uint)page, pins)!);
 
-        var usable = lib.Weaves
-            .Select(w => (weave: w, links: w.Links.Where(l => l.Resolved).ToList()))
-            .Where(t => t.links.Count > 0)
-            .OrderByDescending(t => t.links.Count)
-            .ToList();
-
-        // Degree of every verse across the whole library (node sizing).
-        var degrees = new Dictionary<string, int>();
-        foreach (var (_, ls) in usable)
-            foreach (var l in ls)
-            {
-                degrees[l.A] = degrees.GetValueOrDefault(l.A) + 1;
-                degrees[l.B] = degrees.GetValueOrDefault(l.B) + 1;
-            }
-        int maxDeg = degrees.Count > 0 ? degrees.Values.Max() : 1;
-
-        List<(Weave1 weave, List<WeaveLink1> links, bool pinned)> Visible()
+        void Refresh()
         {
-            var pinned = usable.Where(t => pins.Contains(t.weave.Index)).ToList();
-            var free = usable.Where(t => !pins.Contains(t.weave.Index)).ToList();
-            int freeLanes = Math.Max(0, Lanes - pinned.Count);
-            int maxPage = freeLanes > 0 ? Math.Max(0, (free.Count - 1) / freeLanes) : 0;
-            page = Math.Clamp(page, 0, maxPage);
-            var shown = pinned.Select(t => (t.weave, t.links, true)).ToList();
-            if (freeLanes > 0)
-                shown.AddRange(free.Skip(page * freeLanes).Take(freeLanes)
-                    .Select(t => (t.weave, t.links, false)));
-
-            int lo = freeLanes > 0 ? page * freeLanes + 1 : 0;
-            int hi = Math.Min(free.Count, (page + 1) * freeLanes);
-            caption.Text =
-                (pinned.Count > 0 ? $"{pinned.Count} pinned · " : "") +
-                (freeLanes == 0 ? "all lanes pinned — unpin one to page"
-                    : free.Count == 0 ? "no free weaves"
-                    : $"weaves {lo}–{hi} of {free.Count} · largest first · click the ▪ to pin a lane");
-            return shown;
+            model = Wire.Parse<ConstellationData>(engine.ConstellationJson((uint)page, pins)!);
+            page = model.Page;                  // the core clamps it into range
+            caption.Text = model.Caption;
+            canvas.Invalidate();
         }
 
-        // Reserve a little bottom margin so the 18th lane never clips at the
-        // canvas edge.
-        float LaneH(float h) => (h - ConstTopPad - 10) / Lanes;
-
-        (float x, float y)? NodePos(string refKey, int lane, float w, float h)
+        // The only geometry left in the shell: the lane band height (fixed
+        // capacity, small bottom margin so the last lane never clips) and the
+        // fraction→pixel map for a node/edge endpoint on lane `lane`.
+        float LaneH(float h) => (h - ConstTopPad - 10) / Math.Max(1, model.LaneCapacity);
+        (float x, float y) NodeXY(float xFrac, float laneFrac, int lane, float w, float h)
         {
-            if (ParseFull(refKey) is not { } r) return null;
-            int order = Order(r.book);
-            if (order < 0) return null;
-            float frac = (order + (r.ch - 1f) / Math.Max(1, ChapterCount(r.book))) / 66f;
             float laneH = LaneH(h);
-            float laneTop = ConstTopPad + lane * laneH;
-            float cy = laneTop + laneH / 2;
-            float jitter = ((r.ch * 3 + r.v) % 7 - 3) * laneH * 0.12f;
-            float y = Math.Clamp(cy + jitter, laneTop + 5, laneTop + laneH - 5);
-            return (PlotLeft + frac * (w - PlotLeft), y);
+            return (PlotLeft + xFrac * (w - PlotLeft), ConstTopPad + (lane + laneFrac) * laneH);
         }
 
         canvas.Draw += (s, args) =>
         {
             var ds = args.DrawingSession;
             float w = (float)s.ActualWidth, h = (float)s.ActualHeight;
-            var shown = Visible();
             float laneH = LaneH(h);
 
             using var nameFmt = new CanvasTextFormat { FontSize = 10.5f };
             using var rulerFmt = new CanvasTextFormat { FontSize = 10f };
 
-            for (int i = 0; i < Lanes; i++)
+            for (int i = 0; i < model.LaneCapacity; i++)
                 if (i % 2 == 0)
                     ds.FillRectangle(0, ConstTopPad + i * laneH, w, laneH, Color.FromArgb(8, 0, 0, 0));
 
@@ -322,9 +275,9 @@ public static class Popups
             float seam = PlotLeft + Canon.OtNtDivide / 66f * (w - PlotLeft);
             ds.DrawLine(seam, ConstTopPad, seam, h, Color.FromArgb(153, 158, 125, 56), 1f);
 
-            for (int lane = 0; lane < shown.Count; lane++)
+            for (int lane = 0; lane < model.Lanes.Count; lane++)
             {
-                var (weave, links, pinned) = shown[lane];
+                var laneData = model.Lanes[lane];
                 var lc = LaneColors[lane % LaneColors.Length];
                 var edge = Color.FromArgb(128,
                     (byte)(lc.r * 0.72f), (byte)(lc.g * 0.72f), (byte)(lc.b * 0.72f));
@@ -332,46 +285,41 @@ public static class Popups
                     (byte)(lc.r * 0.72f), (byte)(lc.g * 0.72f), (byte)(lc.b * 0.72f));
 
                 float cy = ConstTopPad + lane * laneH + laneH / 2;
-                if (pinned) ds.FillRectangle(6, cy - 4, 8, 8, Palette.Gold);
+                if (laneData.Pinned) ds.FillRectangle(6, cy - 4, 8, 8, Palette.Gold);
                 else ds.DrawRectangle(6.5f, cy - 3.5f, 7, 7, Color.FromArgb(153, 100, 100, 100), 1f);
-                var name = weave.Name.Length > 22 ? weave.Name[..22] : weave.Name;
+                var name = laneData.Name.Length > 22 ? laneData.Name[..22] : laneData.Name;
                 ds.DrawText(name, new Vector2(18, cy - 7),
-                    pinned ? Color.FromArgb(255, 140, 107, 38) : Color.FromArgb(255, 89, 84, 77),
+                    laneData.Pinned ? Color.FromArgb(255, 140, 107, 38) : Color.FromArgb(255, 89, 84, 77),
                     nameFmt);
 
-                foreach (var l in links)
+                foreach (var ed in laneData.Edges)
                 {
-                    var pa = NodePos(l.A, lane, w, h);
-                    var pb = NodePos(l.B, lane, w, h);
-                    if (pa is null || pb is null) continue;
-                    float dx = pb.Value.x - pa.Value.x;
+                    var (ax, ay) = NodeXY(ed.AX, ed.ALaneFrac, lane, w, h);
+                    var (bx, by) = NodeXY(ed.BX, ed.BLaneFrac, lane, w, h);
+                    float dx = bx - ax;
                     using var path = new CanvasPathBuilder(s);
-                    path.BeginFigure(pa.Value.x, pa.Value.y);
+                    path.BeginFigure(ax, ay);
                     path.AddCubicBezier(
-                        new Vector2(pa.Value.x + dx * 0.4f, pa.Value.y),
-                        new Vector2(pb.Value.x - dx * 0.4f, pb.Value.y),
-                        new Vector2(pb.Value.x, pb.Value.y));
+                        new Vector2(ax + dx * 0.4f, ay),
+                        new Vector2(bx - dx * 0.4f, by),
+                        new Vector2(bx, by));
                     path.EndFigure(CanvasFigureLoop.Open);
                     using var geo = CanvasGeometry.CreatePath(path);
                     ds.DrawGeometry(geo, edge, 1f);
                 }
-                foreach (var l in links)
-                    foreach (var (refKey, _) in new[] { (l.A, 0), (l.B, 1) })
-                    {
-                        var p = NodePos(refKey, lane, w, h);
-                        if (p is null) continue;
-                        float half = 1.4f + 2.4f * degrees.GetValueOrDefault(refKey) / (float)maxDeg;
-                        ds.FillRectangle(p.Value.x - half, p.Value.y - half, half * 2, half * 2, node);
-                    }
+                foreach (var n in laneData.Nodes)
+                {
+                    var (px, py) = NodeXY(n.X, n.LaneFrac, lane, w, h);
+                    float half = 1.4f + 2.4f * n.Size;
+                    ds.FillRectangle(px - half, py - half, half * 2, half * 2, node);
+                }
             }
 
             // Hover tooltip: "verse · weave" in a dark box.
-            if (HitNode(shown, w, h) is { } hn)
+            if (HitNode(w, h) is { } hn)
             {
-                var l = shown[hn.lane].links[hn.link];
-                var refKey = hn.aEnd ? l.A : l.B;
-                var disp = hn.aEnd ? l.ADisplay : l.BDisplay;
-                var text = $"{disp} · {shown[hn.lane].weave.Name}";
+                var n = model.Lanes[hn.lane].Nodes[hn.node];
+                var text = $"{n.Display} · {model.Lanes[hn.lane].Name}";
                 using var fmt = new CanvasTextFormat { FontSize = 11 };
                 using var tl = new CanvasTextLayout(s, text, fmt, 1e6f, 1e6f);
                 float tw = (float)tl.LayoutBounds.Width + 12, th = (float)tl.LayoutBounds.Height + 8;
@@ -382,49 +330,50 @@ public static class Popups
             }
         };
 
-        (int lane, int link, bool aEnd)? HitNode(
-            List<(Weave1 weave, List<WeaveLink1> links, bool pinned)> shown, float w, float h)
+        (int lane, int node)? HitNode(float w, float h)
         {
-            (int, int, bool)? best = null;
+            (int, int)? best = null;
             float bestD = float.MaxValue;
-            for (int lane = 0; lane < shown.Count; lane++)
-                for (int li = 0; li < shown[lane].links.Count; li++)
+            for (int lane = 0; lane < model.Lanes.Count; lane++)
+            {
+                var nodes = model.Lanes[lane].Nodes;
+                for (int ni = 0; ni < nodes.Count; ni++)
                 {
-                    var l = shown[lane].links[li];
-                    foreach (var (refKey, isA) in new[] { (l.A, true), (l.B, false) })
-                    {
-                        if (NodePos(refKey, lane, w, h) is not { } p) continue;
-                        float half = 1.4f + 2.4f * degrees.GetValueOrDefault(refKey) / (float)maxDeg;
-                        float d = Vector2.Distance(new Vector2(p.x, p.y),
-                            new Vector2((float)pointer.X, (float)pointer.Y));
-                        if (d <= half + 4 && d < bestD) { bestD = d; best = (lane, li, isA); }
-                    }
+                    var n = nodes[ni];
+                    var (px, py) = NodeXY(n.X, n.LaneFrac, lane, w, h);
+                    float half = 1.4f + 2.4f * n.Size;
+                    float d = Vector2.Distance(new Vector2(px, py),
+                        new Vector2((float)pointer.X, (float)pointer.Y));
+                    if (d <= half + 4 && d < bestD) { bestD = d; best = (lane, ni); }
                 }
+            }
             return best;
         }
 
-        (int lane, int link)? HitEdge(
-            List<(Weave1 weave, List<WeaveLink1> links, bool pinned)> shown, float w, float h)
+        (int lane, int edge)? HitEdge(float w, float h)
         {
             var pt = new Vector2((float)pointer.X, (float)pointer.Y);
-            for (int lane = 0; lane < shown.Count; lane++)
-                for (int li = 0; li < shown[lane].links.Count; li++)
+            for (int lane = 0; lane < model.Lanes.Count; lane++)
+            {
+                var edges = model.Lanes[lane].Edges;
+                for (int ei = 0; ei < edges.Count; ei++)
                 {
-                    var l = shown[lane].links[li];
-                    if (NodePos(l.A, lane, w, h) is not { } pa ||
-                        NodePos(l.B, lane, w, h) is not { } pb) continue;
-                    float dx = pb.x - pa.x;
-                    var p0 = new Vector2(pa.x, pa.y);
-                    var p1 = new Vector2(pa.x + dx * 0.4f, pa.y);
-                    var p2 = new Vector2(pb.x - dx * 0.4f, pb.y);
-                    var p3 = new Vector2(pb.x, pb.y);
+                    var ed = edges[ei];
+                    var (ax, ay) = NodeXY(ed.AX, ed.ALaneFrac, lane, w, h);
+                    var (bx, by) = NodeXY(ed.BX, ed.BLaneFrac, lane, w, h);
+                    float dx = bx - ax;
+                    var p0 = new Vector2(ax, ay);
+                    var p1 = new Vector2(ax + dx * 0.4f, ay);
+                    var p2 = new Vector2(bx - dx * 0.4f, by);
+                    var p3 = new Vector2(bx, by);
                     for (int i = 0; i <= 18; i++)
                     {
                         float t = i / 18f, u = 1 - t;
                         var q = u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
-                        if (Vector2.Distance(q, pt) <= 5f) return (lane, li);
+                        if (Vector2.Distance(q, pt) <= 5f) return (lane, ei);
                     }
                 }
+            }
             return null;
         }
 
@@ -437,37 +386,35 @@ public static class Popups
         {
             pointer = e.GetCurrentPoint(canvas).Position;
             float w = (float)canvas.ActualWidth, h = (float)canvas.ActualHeight;
-            var shown = Visible();
             // Priority: node > edge > pin gutter.
-            if (HitNode(shown, w, h) is { } hn)
+            if (HitNode(w, h) is { } hn)
             {
-                var l = shown[hn.lane].links[hn.link];
-                var refKey = hn.aEnd ? l.A : l.B;
-                if (ParseFull(refKey) is { } r) navigate(r.book, r.ch, refKey);
+                var n = model.Lanes[hn.lane].Nodes[hn.node];
+                navigate(n.Book, n.Chapter, n.RefKey);
                 return;
             }
-            if (HitEdge(shown, w, h) is { } he)
+            if (HitEdge(w, h) is { } he)
             {
-                compare(shown[he.lane].weave.Index);
+                compare(model.Lanes[he.lane].WeaveIndex);
                 win?.Close();
                 return;
             }
             if (pointer.X < ConstGutter)
             {
                 int lane = (int)((pointer.Y - ConstTopPad) / LaneH(h));
-                if (lane >= 0 && lane < shown.Count)
+                if (lane >= 0 && lane < model.Lanes.Count)
                 {
-                    int idx = shown[lane].weave.Index;
+                    int idx = model.Lanes[lane].WeaveIndex;
                     if (!pins.Remove(idx)) pins.Add(idx);
-                    canvas.Invalidate();
+                    Refresh();
                 }
             }
         };
 
         var prev = new Button { Content = "‹ prev" };
         var next = new Button { Content = "next ›" };
-        prev.Click += (_, _) => { page--; canvas.Invalidate(); };
-        next.Click += (_, _) => { page++; canvas.Invalidate(); };
+        prev.Click += (_, _) => { page--; Refresh(); };
+        next.Click += (_, _) => { page++; Refresh(); };
 
         var bar = new StackPanel
         {
@@ -476,6 +423,7 @@ public static class Popups
         };
         bar.Children.Add(prev);
         bar.Children.Add(next);
+        caption.Text = model.Caption;
         bar.Children.Add(caption);
 
         var root = new Grid();
@@ -488,9 +436,9 @@ public static class Popups
 
         win = Shell("Constellation — the weave library", 1200, 640, root);
         var left = new KeyboardAccelerator { Key = Windows.System.VirtualKey.Left };
-        left.Invoked += (_, e) => { page--; canvas.Invalidate(); e.Handled = true; };
+        left.Invoked += (_, e) => { page--; Refresh(); e.Handled = true; };
         var right = new KeyboardAccelerator { Key = Windows.System.VirtualKey.Right };
-        right.Invoked += (_, e) => { page++; canvas.Invalidate(); e.Handled = true; };
+        right.Invoked += (_, e) => { page++; Refresh(); e.Handled = true; };
         ((Grid)win.Content).KeyboardAccelerators.Add(left);
         ((Grid)win.Content).KeyboardAccelerators.Add(right);
     }

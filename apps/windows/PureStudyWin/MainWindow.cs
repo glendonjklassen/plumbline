@@ -394,8 +394,10 @@ public sealed class MainWindow : Window
         };
         _constBtn.Click += (_, _) =>
         {
-            if (_weaves is not null && _engine is not null)
-                Popups.Constellation(_engine, _weaves, _books,
+            // The layout comes from the core view-model (pure_engine_constellation_json);
+            // the popup holds only the page + pin set and paints it.
+            if (_engine is not null)
+                Popups.Constellation(_engine,
                     (book, ch, verse) => NavigateActive(book, ch, verse),
                     i => _panel.ShowCompareCard(i));
         };

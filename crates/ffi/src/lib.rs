@@ -1565,6 +1565,37 @@ pub unsafe extern "C" fn pure_engine_chord_map_json(engine: *const PureEngine) -
     })
 }
 
+/// One laid-out page of the constellation (the weave-library overview popup):
+/// lanes with nodes + edges as **fractions**, plus the pin/paging state already
+/// resolved into a caption. The shell holds the transient `page` and `pins`
+/// (weave indices, the same handles the lanes carry) and passes them in;
+/// everything derived — usable filter, largest-first order, per-verse degree,
+/// jitter, lane assignment, paging — lives here. `pins_json` is a JSON array of
+/// weave indices (e.g. `"[3,7]"`); null / empty / malformed means no pins.
+/// Never null on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine (or null → null); `pins_json` is null or valid
+/// NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_constellation_json(
+    engine: *const PureEngine,
+    page: u32,
+    pins_json: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let Some(e) = engine.as_ref() else { return ptr::null_mut() };
+        let pins: Vec<usize> =
+            opt_str(pins_json).and_then(|s| serde_json::from_str(s).ok()).unwrap_or_default();
+        out_json(&wire::constellation_to_wire(
+            &e.study_read().weaves,
+            &e.corpus,
+            page as usize,
+            &pins,
+        ))
+    })
+}
+
 /// The symbolic concept engine's view of a Strong's code: occurrence total,
 /// testament split, concentrating books, per-book dispersion counts,
 /// collocates, co-occurrence community, and the leitwort discovery when one

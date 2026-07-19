@@ -866,6 +866,115 @@ pub fn chord_map_to_wire(loaded: &[LoadedWeave]) -> WireChordMap {
     }
 }
 
+// ── constellation (the weave-library overview) ────────────────────────────────
+
+/// A laid-out page of the constellation (review item 3). Positions are
+/// **fractions / logical units** — `x` a canon fraction 0..1, `laneFrac` a
+/// 0..1 within a lane's band, `size` a 0..1 witness degree. The shell holds the
+/// transient `page`/`pins` (the endpoint's inputs), maps fractions to pixels,
+/// picks colours, and paints; it derives nothing.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireConstellation {
+    pub lanes: Vec<WireConstellationLane>,
+    pub n_pins: usize,
+    pub free_total: usize,
+    /// The page actually shown (the requested page clamped into range).
+    pub page: usize,
+    pub max_page: usize,
+    /// The fully-composed paging caption.
+    pub caption: String,
+    /// The fixed lane capacity — the shell's lane-height denominator, so it
+    /// can't drift from the paging arithmetic.
+    pub lane_capacity: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireConstellationLane {
+    /// The weave's library index — the compare-card handle and the pin key.
+    pub weave_index: usize,
+    pub name: String,
+    pub pinned: bool,
+    pub nodes: Vec<WireConstellationNode>,
+    pub edges: Vec<WireConstellationEdge>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireConstellationNode {
+    /// Canon fraction 0..1 (plot x); within-lane fraction 0..1 (lane y).
+    pub x: f32,
+    pub lane_frac: f32,
+    /// Witness degree ÷ the library max (0..1) — the shell picks the radius.
+    pub size: f32,
+    pub ref_key: String,
+    pub book: String,
+    pub chapter: u16,
+    pub verse: u16,
+    pub display: String,
+}
+
+/// A link's two endpoints (same lane) as `(x, laneFrac)` — the drawn curve.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireConstellationEdge {
+    pub a_x: f32,
+    pub a_lane_frac: f32,
+    pub b_x: f32,
+    pub b_lane_frac: f32,
+}
+
+pub fn constellation_to_wire(
+    loaded: &[LoadedWeave],
+    corpus: &Corpus,
+    page: usize,
+    pins: &[usize],
+) -> WireConstellation {
+    let c = pure_core::weave::constellation(loaded, corpus, page, pins);
+    WireConstellation {
+        lanes: c
+            .lanes
+            .into_iter()
+            .map(|l| WireConstellationLane {
+                weave_index: l.weave_index,
+                name: l.name,
+                pinned: l.pinned,
+                nodes: l
+                    .nodes
+                    .into_iter()
+                    .map(|n| WireConstellationNode {
+                        x: n.x,
+                        lane_frac: n.lane_frac,
+                        size: n.size,
+                        ref_key: n.ref_key,
+                        book: n.book,
+                        chapter: n.chapter,
+                        verse: n.verse,
+                        display: n.display,
+                    })
+                    .collect(),
+                edges: l
+                    .edges
+                    .into_iter()
+                    .map(|e| WireConstellationEdge {
+                        a_x: e.a_x,
+                        a_lane_frac: e.a_lane_frac,
+                        b_x: e.b_x,
+                        b_lane_frac: e.b_lane_frac,
+                    })
+                    .collect(),
+            })
+            .collect(),
+        n_pins: c.n_pins,
+        free_total: c.free_total,
+        page: c.page,
+        max_page: c.max_page,
+        caption: c.caption,
+        lane_capacity: c.lane_capacity,
+    }
+}
+
 // ── the symbolic concept engine (collocations, distribution, leitwort) ────────
 
 #[derive(Serialize)]

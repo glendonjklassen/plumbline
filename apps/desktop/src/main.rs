@@ -966,7 +966,8 @@ fn show_weave_map(state: &Shared, ui: &Ui) {
 // paging cycles the free lanes past them; click a node to jump, an edge to open
 // the weave, the gutter marker to pin.
 
-const CONST_LANES: usize = 18;
+// The lane count (18) lives in the shared view-model (`CONSTELLATION_LANES`,
+// echoed as `lane_capacity`); these are the shell's paint-only geometry.
 const CONST_TOP_PAD: f64 = 18.0;
 const CONST_GUTTER: f64 = 150.0;
 /// Left edge of the plot: past the gutter plus a margin so a frac-0 node
@@ -974,116 +975,82 @@ const CONST_GUTTER: f64 = 150.0;
 /// click.
 const CONST_PLOT_LEFT: f64 = CONST_GUTTER + 12.0;
 
-/// Transient view state: the page of free lanes, the pinned weave files, and
-/// the hovered node. Dropped when the window closes (overlay kept these
-/// transient too — `amConstPage`/`amConstPins`).
+/// Transient view state: the current page, the pinned weave **indices**, and
+/// the hovered `(lane, node)` on the current page. Dropped when the window
+/// closes (overlay kept these transient too — `amConstPage`/`amConstPins`). The
+/// layout itself now lives in `weave::constellation`, shared with the non-Rust
+/// shells via `pure_engine_constellation_json`; this struct holds only the
+/// interaction state fed into it.
 struct ConstState {
     page: usize,
-    pins: Vec<std::path::PathBuf>,
-    hover: Option<(usize, VRef)>,
-}
-
-/// One lane on the current page: the weave's global index (for the compare
-/// card), display name, file identity (for pinning), pin state, and its
-/// resolvable links.
-struct ConstLane {
-    weave_ix: usize,
-    name: String,
-    file: std::path::PathBuf,
-    pinned: bool,
-    links: Vec<(VRef, VRef)>,
-}
-
-/// Everything the constellation renderer/hit-tester derives from state: the
-/// lanes shown on this page (pinned first), plus the paging arithmetic for the
-/// caption. Recomputed per event — the weave library is small.
-struct ConstPage {
-    lanes: Vec<ConstLane>,
-    n_pins: usize,
-    free_total: usize,
-    page: usize,
-}
-
-fn const_page(st: &State, cs: &ConstState) -> ConstPage {
-    // Usable weaves: at least one link with both ends in this corpus.
-    let mut usable: Vec<(usize, Vec<(VRef, VRef)>)> = st
-        .weaves
-        .iter()
-        .enumerate()
-        .map(|(i, lw)| {
-            let links: Vec<(VRef, VRef)> = lw
-                .weave
-                .links
-                .iter()
-                .filter(|l| st.corpus.verse(&l.a).is_some() && st.corpus.verse(&l.b).is_some())
-                .map(|l| (l.a.clone(), l.b.clone()))
-                .collect();
-            (i, links)
-        })
-        .filter(|(_, ls)| !ls.is_empty())
-        .collect();
-    // Largest first (stable, so ties keep load order).
-    usable.sort_by_key(|(_, ls)| std::cmp::Reverse(ls.len()));
-
-    let pinned_ix: Vec<bool> =
-        usable.iter().map(|(i, _)| cs.pins.contains(&st.weaves[*i].file)).collect();
-    let n_pins = pinned_ix.iter().filter(|p| **p).count();
-    let free_total = usable.len() - n_pins;
-    let free_lanes = CONST_LANES.saturating_sub(n_pins);
-    let max_page = if free_lanes == 0 || free_total == 0 {
-        0
-    } else {
-        (free_total - 1) / free_lanes
-    };
-    let page = cs.page.min(max_page);
-
-    // Pinned lanes first, then this page's slice of the free ones.
-    let mut lanes: Vec<ConstLane> = Vec::new();
-    let mk = |(i, links): &(usize, Vec<(VRef, VRef)>), pinned: bool| ConstLane {
-        weave_ix: *i,
-        name: st.weaves[*i].weave.name.clone(),
-        file: st.weaves[*i].file.clone(),
-        pinned,
-        links: links.clone(),
-    };
-    for (u, p) in usable.iter().zip(&pinned_ix) {
-        if *p {
-            lanes.push(mk(u, true));
-        }
-    }
-    if free_lanes > 0 {
-        for (u, _) in usable
-            .iter()
-            .zip(&pinned_ix)
-            .filter(|(_, p)| !**p)
-            .skip(page * free_lanes)
-            .take(free_lanes)
-        {
-            lanes.push(mk(u, false));
-        }
-    }
-    ConstPage { lanes, n_pins, free_total, page }
-}
-
-/// A verse's canon fraction 0..1: book position plus chapter progress within
-/// the book, over the 66 — the same backbone the canon strip uses, so the
-/// section labels line up.
-fn book_frac(st: &State, r: &VRef) -> f64 {
-    let bi = canon::book_order(&r.book).unwrap_or(0) as f64;
-    let nc = st.corpus.chapter_count(&r.book).max(1) as f64;
-    (bi + (r.chapter.saturating_sub(1)) as f64 / nc) / canon::BOOKS.len() as f64
+    pins: Vec<usize>,
+    hover: Option<(usize, usize)>,
 }
 
 fn const_x(w: f64, frac: f64) -> f64 {
     CONST_PLOT_LEFT + frac.clamp(0.0, 1.0) * (w - CONST_PLOT_LEFT)
 }
 
-/// A node's y: its lane's centre plus a small deterministic jitter from the
-/// verse identity, so co-lane nodes don't fuse into one flat line.
-fn const_node_y(h: f64, n_lanes: usize, lane: usize, r: &VRef) -> f64 {
-    let lane_h = (h - CONST_TOP_PAD) / n_lanes.max(1) as f64;
-    let hj = ((r.chapter as i64 * 3 + r.verse as i64) % 7 - 3) as f64;
-    CONST_TOP_PAD + (lane as f64 + 0.5) * lane_h + hj * lane_h * 0.12
+/// The lane band height: a fixed capacity with a small bottom margin so the
+/// last lane never clips — the same mapping the non-Rust shells use, so a node
+/// lands at the same spot in every shell.
+fn const_lane_h(h: f64, lane_capacity: usize) -> f64 {
+    (h - CONST_TOP_PAD - 10.0) / lane_capacity.max(1) as f64
+}
+
+/// A node/edge endpoint's pixel position from its fractions: `x_frac` across the
+/// plot, `lane_frac` within lane `lane`'s band.
+fn const_node_xy(
+    w: f64,
+    h: f64,
+    lane: usize,
+    x_frac: f32,
+    lane_frac: f32,
+    lane_capacity: usize,
+) -> (f64, f64) {
+    let y = CONST_TOP_PAD + (lane as f64 + lane_frac as f64) * const_lane_h(h, lane_capacity);
+    (const_x(w, x_frac as f64), y)
+}
+
+/// The node nearest `p` within its radius + 4px slop, as `(lane, node)`,
+/// tie-broken by distance — over the shared view-model.
+fn const_hit_node(
+    model: &weave::Constellation,
+    w: f64,
+    h: f64,
+    p: (f64, f64),
+) -> Option<(usize, usize)> {
+    let cap = model.lane_capacity;
+    let mut best: Option<(usize, usize)> = None;
+    let mut best_d = f64::INFINITY;
+    for (lane, l) in model.lanes.iter().enumerate() {
+        for (ni, n) in l.nodes.iter().enumerate() {
+            let (x, y) = const_node_xy(w, h, lane, n.x, n.lane_frac, cap);
+            let half = 1.4 + 2.4 * n.size as f64;
+            let d = ((p.0 - x).powi(2) + (p.1 - y).powi(2)).sqrt();
+            if d <= half + 4.0 && d < best_d {
+                best_d = d;
+                best = Some((lane, ni));
+            }
+        }
+    }
+    best
+}
+
+/// The weave index of the lane whose drawn edge passes within 5px of `p` (an
+/// edge click opens that weave's card).
+fn const_hit_edge(model: &weave::Constellation, w: f64, h: f64, p: (f64, f64)) -> Option<usize> {
+    let cap = model.lane_capacity;
+    for (lane, l) in model.lanes.iter().enumerate() {
+        for e in &l.edges {
+            let pa = const_node_xy(w, h, lane, e.a_x, e.a_lane_frac, cap);
+            let pb = const_node_xy(w, h, lane, e.b_x, e.b_lane_frac, cap);
+            if curve_dist(p, pa, pb) <= 5.0 {
+                return Some(l.weave_index);
+            }
+        }
+    }
+    None
 }
 
 /// Distinct lane colours (cycled), darkened from the overlay's palette to keep
@@ -1099,39 +1066,6 @@ fn const_rgb(lane: usize) -> (f64, f64, f64) {
         _ => (214, 170, 128),
     };
     (r as f64 / 255.0 * 0.72, g as f64 / 255.0 * 0.72, b as f64 / 255.0 * 0.72)
-}
-
-/// Per-lane deduped nodes with their witness degree (how many weave links touch
-/// the verse across the whole library — node sizing).
-fn const_nodes(pg: &ConstPage, deg: &HashMap<VRef, usize>) -> Vec<(usize, VRef, usize)> {
-    let mut out = Vec::new();
-    for (lane, l) in pg.lanes.iter().enumerate() {
-        let mut seen: HashSet<VRef> = HashSet::new();
-        for (a, b) in &l.links {
-            for r in [a, b] {
-                if seen.insert(r.clone()) {
-                    out.push((lane, r.clone(), deg.get(r).copied().unwrap_or(0)));
-                }
-            }
-        }
-    }
-    out
-}
-
-/// Witness degree over the whole library: how many weave links touch each verse.
-fn const_degrees(st: &State) -> HashMap<VRef, usize> {
-    let mut deg: HashMap<VRef, usize> = HashMap::new();
-    for lw in &st.weaves {
-        for l in &lw.weave.links {
-            *deg.entry(l.a.clone()).or_default() += 1;
-            *deg.entry(l.b.clone()).or_default() += 1;
-        }
-    }
-    deg
-}
-
-fn const_node_radius(deg: usize, max_deg: usize) -> f64 {
-    1.4 + 2.4 * (deg as f64 / max_deg.max(1) as f64)
 }
 
 /// Sampled points of the connector cubic (18 segments, like overlay
@@ -1171,30 +1105,6 @@ fn curve_dist(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
         .fold(f64::INFINITY, f64::min)
 }
 
-/// The node nearest `p` within its radius + 4px slop, tie-broken by distance.
-fn const_nearest_node(
-    st: &State,
-    pg: &ConstPage,
-    deg: &HashMap<VRef, usize>,
-    w: f64,
-    h: f64,
-    p: (f64, f64),
-) -> Option<(usize, VRef)> {
-    let nodes = const_nodes(pg, deg);
-    let max_deg = nodes.iter().map(|(_, _, d)| *d).max().unwrap_or(1);
-    let n_lanes = pg.lanes.len().max(1);
-    nodes
-        .into_iter()
-        .filter_map(|(lane, r, d)| {
-            let x = const_x(w, book_frac(st, &r));
-            let y = const_node_y(h, n_lanes, lane, &r);
-            let dist = ((p.0 - x).powi(2) + (p.1 - y).powi(2)).sqrt();
-            (dist <= const_node_radius(d, max_deg) + 4.0).then_some((lane, r, dist))
-        })
-        .min_by(|a, b| a.2.total_cmp(&b.2))
-        .map(|(lane, r, _)| (lane, r))
-}
-
 fn draw_constellation(
     state: &Shared,
     cs: &Rc<RefCell<ConstState>>,
@@ -1205,12 +1115,12 @@ fn draw_constellation(
     let st = state.borrow();
     let cs = cs.borrow();
     let (wf, hf) = (w as f64, h as f64);
-    let pg = const_page(&st, &cs);
-    let deg = const_degrees(&st);
-    let nodes = const_nodes(&pg, &deg);
-    let max_deg = nodes.iter().map(|(_, _, d)| *d).max().unwrap_or(1);
-    let n_lanes = pg.lanes.len().max(1);
-    let lane_h = (hf - CONST_TOP_PAD) / n_lanes as f64;
+    // The whole layout — usable filter, largest-first order, per-verse degree,
+    // jitter, lane assignment, paging, pins — is the shared core view-model
+    // (`weave::constellation`), the same one the non-Rust shells get as JSON.
+    let model = weave::constellation(&st.weaves, &st.corpus, cs.page, &cs.pins);
+    let cap = model.lane_capacity;
+    let lane_h = const_lane_h(hf, cap);
 
     // warm-paper backdrop, like the reader
     cr.set_source_rgb(0.988, 0.976, 0.957);
@@ -1221,15 +1131,18 @@ fn draw_constellation(
     let mut fd = pango::FontDescription::new();
     fd.set_family(&st.family);
 
-    // per lane: alternating band, pin marker, weave name
-    for (lane, l) in pg.lanes.iter().enumerate() {
-        let top = CONST_TOP_PAD + lane as f64 * lane_h;
-        let mid = top + lane_h / 2.0;
-        if lane % 2 == 0 {
+    // alternating lane bands over the full capacity
+    for i in 0..cap {
+        if i % 2 == 0 {
             cr.set_source_rgba(0.0, 0.0, 0.0, 0.03);
-            let _ = cr.rectangle(0.0, top, wf, lane_h);
+            let _ = cr.rectangle(0.0, CONST_TOP_PAD + i as f64 * lane_h, wf, lane_h);
             let _ = cr.fill();
         }
+    }
+
+    // per lane: pin marker + weave name
+    for (lane, l) in model.lanes.iter().enumerate() {
+        let mid = CONST_TOP_PAD + lane as f64 * lane_h + lane_h / 2.0;
         // pin marker: filled gold when pinned, hollow otherwise
         if l.pinned {
             cr.set_source_rgb(0.62, 0.49, 0.22);
@@ -1275,14 +1188,13 @@ fn draw_constellation(
     let _ = cr.fill();
 
     // edges (faint, per-lane colour) under the nodes
-    for (lane, l) in pg.lanes.iter().enumerate() {
+    for (lane, l) in model.lanes.iter().enumerate() {
         let (r, g, b) = const_rgb(lane);
         cr.set_source_rgba(r, g, b, 0.5);
         cr.set_line_width(1.0);
-        for (a, bb) in &l.links {
-            let (x1, y1) = (const_x(wf, book_frac(&st, a)), const_node_y(hf, n_lanes, lane, a));
-            let (x2, y2) =
-                (const_x(wf, book_frac(&st, bb)), const_node_y(hf, n_lanes, lane, bb));
+        for e in &l.edges {
+            let (x1, y1) = const_node_xy(wf, hf, lane, e.a_x, e.a_lane_frac, cap);
+            let (x2, y2) = const_node_xy(wf, hf, lane, e.b_x, e.b_lane_frac, cap);
             let ddx = x2 - x1;
             cr.move_to(x1, y1);
             cr.curve_to(x1 + ddx * 0.4, y1, x2 - ddx * 0.4, y2, x2, y2);
@@ -1291,22 +1203,23 @@ fn draw_constellation(
     }
 
     // nodes, sized by witness degree
-    for (lane, r, d) in &nodes {
-        let (cr_, cg, cb) = const_rgb(*lane);
-        let x = const_x(wf, book_frac(&st, r));
-        let y = const_node_y(hf, n_lanes, *lane, r);
-        let rr = const_node_radius(*d, max_deg);
+    for (lane, l) in model.lanes.iter().enumerate() {
+        let (cr_, cg, cb) = const_rgb(lane);
         cr.set_source_rgb(cr_, cg, cb);
-        let _ = cr.rectangle(x - rr, y - rr, 2.0 * rr, 2.0 * rr);
-        let _ = cr.fill();
+        for n in &l.nodes {
+            let (x, y) = const_node_xy(wf, hf, lane, n.x, n.lane_frac, cap);
+            let rr = 1.4 + 2.4 * n.size as f64;
+            let _ = cr.rectangle(x - rr, y - rr, 2.0 * rr, 2.0 * rr);
+            let _ = cr.fill();
+        }
     }
 
     // hover tooltip: verse · weave
-    if let Some((lane, r)) = &cs.hover {
-        if let Some(l) = pg.lanes.get(*lane) {
-            let x = const_x(wf, book_frac(&st, r));
-            let y = const_node_y(hf, n_lanes, *lane, r);
-            let txt = format!("{} · {}", r.display(), l.name);
+    if let Some((lane, node)) = cs.hover {
+        if let Some(n) = model.lanes.get(lane).and_then(|l| l.nodes.get(node)) {
+            let l = &model.lanes[lane];
+            let (x, y) = const_node_xy(wf, hf, lane, n.x, n.lane_frac, cap);
+            let txt = format!("{} · {}", n.display, l.name);
             fd.set_absolute_size(11.0 * pango::SCALE as f64);
             layout.set_font_description(Some(&fd));
             layout.set_text(&txt);
@@ -1322,25 +1235,6 @@ fn draw_constellation(
             pangocairo::functions::show_layout(cr, &layout);
         }
     }
-}
-
-/// The paging caption: pins, the honest free-weave range, and the pin hint.
-fn const_caption(pg: &ConstPage) -> String {
-    let free_lanes = CONST_LANES.saturating_sub(pg.n_pins);
-    let range = if pg.free_total == 0 {
-        "no free weaves".to_string()
-    } else if free_lanes == 0 {
-        "all lanes pinned — unpin one to page".to_string()
-    } else {
-        format!(
-            "weaves {}–{} of {}",
-            pg.page * free_lanes + 1,
-            (pg.free_total).min((pg.page + 1) * free_lanes),
-            pg.free_total
-        )
-    };
-    let pins = if pg.n_pins > 0 { format!("{} pinned · ", pg.n_pins) } else { String::new() };
-    format!("{pins}{range} · largest first · click the ▪ to pin a lane")
 }
 
 /// Open the constellation: one page of weaves as labelled lanes over the canon
@@ -1379,13 +1273,18 @@ fn show_constellation(state: &Shared, ui: &Ui) {
     vbox.append(&controls);
     vbox.append(&area);
 
-    // One refresher shared by every handler: clamp the page, redraw, recaption.
+    // One refresher shared by every handler: clamp the page, redraw, recaption —
+    // all off the shared view-model.
     let refresh: Rc<dyn Fn()> = {
         let (state, cs, area, caption) = (state.clone(), cs.clone(), area.clone(), caption.clone());
         Rc::new(move || {
-            let pg = const_page(&state.borrow(), &cs.borrow());
-            cs.borrow_mut().page = pg.page;
-            caption.set_text(&const_caption(&pg));
+            let model = {
+                let st = state.borrow();
+                let c = cs.borrow();
+                weave::constellation(&st.weaves, &st.corpus, c.page, &c.pins)
+            };
+            cs.borrow_mut().page = model.page;
+            caption.set_text(&model.caption);
             area.queue_draw();
         })
     };
@@ -1402,19 +1301,14 @@ fn show_constellation(state: &Shared, ui: &Ui) {
         let (cs_leave, area_leave) = (cs.clone(), area.clone());
         let motion = gtk::EventControllerMotion::new();
         motion.connect_motion(move |_c, x, y| {
-            let st = state.borrow();
-            let pg = const_page(&st, &cs.borrow());
-            let deg = const_degrees(&st);
-            let hover = const_nearest_node(
-                &st,
-                &pg,
-                &deg,
-                area2.width() as f64,
-                area2.height() as f64,
-                (x, y),
-            );
-            drop(st);
-            if cs.borrow().hover.as_ref() != hover.as_ref() {
+            let model = {
+                let st = state.borrow();
+                let c = cs.borrow();
+                weave::constellation(&st.weaves, &st.corpus, c.page, &c.pins)
+            };
+            let hover =
+                const_hit_node(&model, area2.width() as f64, area2.height() as f64, (x, y));
+            if cs.borrow().hover != hover {
                 cs.borrow_mut().hover = hover;
                 area2.queue_draw();
             }
@@ -1435,74 +1329,39 @@ fn show_constellation(state: &Shared, ui: &Ui) {
         let click = gtk::GestureClick::new();
         click.connect_pressed(move |_g, _n, x, y| {
             let (wf, hf) = (area2.width() as f64, area2.height() as f64);
-            let action = {
+            // `weave::constellation` returns owned data, so the state borrow is
+            // released here — no conflict with the mutating actions below.
+            let model = {
                 let st = state.borrow();
-                let pg = const_page(&st, &cs.borrow());
-                let deg = const_degrees(&st);
-                let n_lanes = pg.lanes.len().max(1);
-                // a node/edge always wins over the pin gutter, so a Genesis
-                // node on the plot edge navigates rather than pinning
-                if let Some((_, r)) = const_nearest_node(&st, &pg, &deg, wf, hf, (x, y)) {
-                    Some(('n', r.book.clone(), r.chapter, r.verse, 0))
-                } else {
-                    let edge = pg.lanes.iter().enumerate().find_map(|(lane, l)| {
-                        l.links.iter().find_map(|(a, b)| {
-                            let pa = (
-                                const_x(wf, book_frac(&st, a)),
-                                const_node_y(hf, n_lanes, lane, a),
-                            );
-                            let pb = (
-                                const_x(wf, book_frac(&st, b)),
-                                const_node_y(hf, n_lanes, lane, b),
-                            );
-                            (curve_dist((x, y), pa, pb) <= 5.0).then_some(l.weave_ix)
-                        })
-                    });
-                    match edge {
-                        Some(wi) => Some(('e', String::new(), 0, 0, wi)),
-                        None => {
-                            // pin gutter: left of the plot, on a lane
-                            let lane_h = (hf - CONST_TOP_PAD) / n_lanes as f64;
-                            let lane = ((y - CONST_TOP_PAD) / lane_h).floor();
-                            if x < CONST_GUTTER && lane >= 0.0 && (lane as usize) < pg.lanes.len()
-                            {
-                                Some(('p', String::new(), 0, 0, lane as usize))
-                            } else {
-                                None
-                            }
-                        }
-                    }
-                }
+                let c = cs.borrow();
+                weave::constellation(&st.weaves, &st.corpus, c.page, &c.pins)
             };
-            match action {
-                Some(('n', book, ch, v, _)) => {
-                    let active = state.borrow().active;
-                    navigate_pane(&state, &ui, active, &book, ch, Some(v));
-                }
-                Some(('e', _, _, _, wi)) => {
-                    let m = weave_markup(&state.borrow(), wi);
-                    show_study(&ui, &m);
-                    win2.close();
-                }
-                Some(('p', _, _, _, lane)) => {
-                    let file = {
-                        let st = state.borrow();
-                        let pg = const_page(&st, &cs.borrow());
-                        pg.lanes.get(lane).map(|l| l.file.clone())
-                    };
-                    if let Some(f) = file {
-                        let mut c = cs.borrow_mut();
-                        match c.pins.iter().position(|p| *p == f) {
-                            Some(i) => {
-                                c.pins.remove(i);
-                            }
-                            None => c.pins.push(f),
+            // A node/edge always wins over the pin gutter, so a Genesis node on
+            // the plot edge navigates rather than pinning.
+            if let Some((lane, node)) = const_hit_node(&model, wf, hf, (x, y)) {
+                let n = &model.lanes[lane].nodes[node];
+                let active = state.borrow().active;
+                navigate_pane(&state, &ui, active, &n.book, n.chapter, Some(n.verse));
+            } else if let Some(wi) = const_hit_edge(&model, wf, hf, (x, y)) {
+                let m = weave_markup(&state.borrow(), wi);
+                show_study(&ui, &m);
+                win2.close();
+            } else if x < CONST_GUTTER {
+                // pin gutter: left of the plot, on a lane
+                let lane_h = const_lane_h(hf, model.lane_capacity);
+                let lane = ((y - CONST_TOP_PAD) / lane_h).floor();
+                if lane >= 0.0 && (lane as usize) < model.lanes.len() {
+                    let wi = model.lanes[lane as usize].weave_index;
+                    let mut c = cs.borrow_mut();
+                    match c.pins.iter().position(|p| *p == wi) {
+                        Some(i) => {
+                            c.pins.remove(i);
                         }
-                        drop(c);
-                        refresh();
+                        None => c.pins.push(wi),
                     }
+                    drop(c);
+                    refresh();
                 }
-                _ => {}
             }
         });
         area.add_controller(click);

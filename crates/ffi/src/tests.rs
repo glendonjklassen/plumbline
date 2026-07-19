@@ -759,6 +759,41 @@ fn parity_endpoints_via_abi() {
         // spokes (if any) are all green.
         assert!(cmap["spokes"].as_array().unwrap().iter().all(|s| s["semantic"] == false));
 
+        // Constellation: the "Spanned" weave has one resolvable link (John
+        // 3:16↔John 3:18); its Gen 1:1↔John 3:16 link is unresolved, so it never
+        // becomes a lane. The "Pinned" weave (authored above) also resolves.
+        let con: Value = serde_json::from_str(
+            &take(pure_engine_constellation_json(e, 0, ptr::null())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(con["nPins"], 0);
+        assert_eq!(con["laneCapacity"], 18);
+        let lanes = con["lanes"].as_array().unwrap();
+        assert!(!lanes.is_empty());
+        let spanned = lanes.iter().find(|l| l["name"] == "Spanned").expect("Spanned lane");
+        // One resolvable link → one edge, two nodes (John 3:16 and John 3:18).
+        assert_eq!(spanned["edges"].as_array().unwrap().len(), 1);
+        let nodes = spanned["nodes"].as_array().unwrap();
+        assert_eq!(nodes.len(), 2);
+        for n in nodes {
+            let x = n["x"].as_f64().unwrap();
+            let lf = n["laneFrac"].as_f64().unwrap();
+            assert!((0.0..=1.0).contains(&x));
+            assert!(lf > 0.13 && lf < 0.87);
+            assert_eq!(n["book"], "John");
+        }
+        // Pin the "Spanned" lane by its weave index → it becomes lane 0, pinned.
+        let sidx = spanned["weaveIndex"].as_u64().unwrap();
+        let pins = CString::new(format!("[{sidx}]")).unwrap();
+        let con2: Value = serde_json::from_str(
+            &take(pure_engine_constellation_json(e, 0, pins.as_ptr())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(con2["nPins"], 1);
+        assert_eq!(con2["lanes"][0]["weaveIndex"], sidx);
+        assert_eq!(con2["lanes"][0]["pinned"], true);
+        assert!(con2["caption"].as_str().unwrap().starts_with("1 pinned · "));
+
         pure_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
     }

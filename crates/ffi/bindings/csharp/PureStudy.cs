@@ -137,6 +137,17 @@ public sealed unsafe class StudyEngine : IDisposable
     /// ribbons without folding pairs or deriving the max.
     public string? ChordMapJson() => Utf8.Take(PureStudyNative.pure_engine_chord_map_json(_handle));
 
+    /// One laid-out page of the constellation (the weave-library overview): lanes
+    /// with nodes + edges as fractions, plus the pin/paging state resolved into a
+    /// caption. `pins` are weave indices (the lanes' handles); the shell holds the
+    /// transient page + pin set and passes them in — it derives nothing.
+    public string? ConstellationJson(uint page, IReadOnlyCollection<int> pins)
+    {
+        var pinsJson = "[" + string.Join(",", pins) + "]";
+        fixed (byte* p = Utf8.NulTerminated(pinsJson))
+            return Utf8.Take(PureStudyNative.pure_engine_constellation_json(_handle, page, p));
+    }
+
     public string? VerseXrefsJson(string refKey)
     {
         fixed (byte* r = Utf8.NulTerminated(refKey))
