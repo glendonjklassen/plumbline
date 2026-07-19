@@ -711,6 +711,34 @@ fn parity_endpoints_via_abi() {
         assert_eq!(segs[4]["label"], "Gospels");
         assert_eq!(segs[4]["first"], 39);
 
+        // Chord map: book-pair density folded over the deduped pairs. This
+        // corpus's two pairs are (Gen 1:1↔John 3:16) and (John 3:16↔John 3:18)
+        // — one cross-testament Gen↔John and one John↔John self-pair, each once.
+        // Unresolved endpoints (Gen 1:1 is outside the corpus) still count, so
+        // the map reflects authored density, not drawability.
+        let cm: Value =
+            serde_json::from_str(&take(pure_engine_chord_map_json(e)).unwrap()).unwrap();
+        assert_eq!(cm["otNtDivide"], 39);
+        assert_eq!(cm["bookCount"], 66);
+        assert_eq!(cm["max"], 1);
+        let cpairs = cm["pairs"].as_array().unwrap();
+        assert_eq!(cpairs.len(), 2);
+        // Gen↔John: Gen is book 0, John is in the NT (index ≥ 39); a <= b holds.
+        let cross = cpairs
+            .iter()
+            .find(|p| p["a"].as_u64() != p["b"].as_u64())
+            .expect("a cross-book pair");
+        assert_eq!(cross["a"], 0);
+        assert!(cross["b"].as_u64().unwrap() >= 39);
+        assert_eq!(cross["count"], 1);
+        // John↔John self-pair.
+        let selfp = cpairs
+            .iter()
+            .find(|p| p["a"].as_u64() == p["b"].as_u64())
+            .expect("a self-pair");
+        assert!(selfp["a"].as_u64().unwrap() >= 39);
+        assert_eq!(selfp["count"], 1);
+
         pure_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
     }

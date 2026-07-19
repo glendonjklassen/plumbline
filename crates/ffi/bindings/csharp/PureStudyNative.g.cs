@@ -496,6 +496,19 @@ namespace PureStudy.Native
         public static extern byte* pure_engine_canon_segments_json(PureEngine* engine);
 
         /// <summary>
+        ///  The book-to-book weave chord map: canon-ordered book-pair counts over the
+        ///  deduped link pairs (`{pairs:[{a,b,count}], max, otNtDivide, bookCount}`),
+        ///  where `a`/`b` are book indices (`a &lt;= b`). The one fold behind the "Weave
+        ///  map" popup, so a shell lays out ribbons without folding pairs or deriving the
+        ///  max. Never null on a live engine (empty library → empty pairs, max 1).
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine (or null → null).
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_chord_map_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_chord_map_json(PureEngine* engine);
+
+        /// <summary>
         ///  The symbolic concept engine's view of a Strong's code: occurrence total,
         ///  testament split, concentrating books, per-book dispersion counts,
         ///  collocates, co-occurrence community, and the leitwort discovery when one

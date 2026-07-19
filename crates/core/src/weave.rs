@@ -502,6 +502,36 @@ pub fn link_pairs(weaves: &[LoadedWeave]) -> Vec<(VRef, VRef)> {
     out
 }
 
+/// Book-to-book weave density: how strongly each canon-ordered book pair is
+/// woven together, over the deduped [`link_pairs`]. Each entry is
+/// `(book_a_index, book_b_index, count)` with `a <= b` (canon order, so the pair
+/// is orientation-free), plus the maximum count for normalising ribbon
+/// weight/alpha. A pair whose endpoint book isn't in the canon (unknown id) is
+/// skipped, matching the drawing code that has nowhere to place it.
+///
+/// The one derivation behind the chord/arc "Weave map": GTK calls it directly;
+/// the non-Rust shells receive the same folded counts through
+/// `pure_engine_chord_map_json`, so no shell re-folds the pairs or re-derives
+/// the max.
+pub fn chord_pairs(weaves: &[LoadedWeave]) -> (Vec<(usize, usize, u32)>, u32) {
+    let mut counts: HashMap<(usize, usize), u32> = HashMap::new();
+    for (a, b) in link_pairs(weaves) {
+        let (Some(ia), Some(ib)) = (crate::canon::book_order(&a.book), crate::canon::book_order(&b.book))
+        else {
+            continue;
+        };
+        let key = if ia <= ib { (ia, ib) } else { (ib, ia) };
+        *counts.entry(key).or_insert(0) += 1;
+    }
+    let max = counts.values().copied().max().unwrap_or(1);
+    let mut pairs: Vec<(usize, usize, u32)> =
+        counts.into_iter().map(|((a, b), c)| (a, b, c)).collect();
+    // Deterministic order (HashMap iteration is not): by book pair. The shells
+    // re-sort by weight for painting, so this only fixes the wire/test output.
+    pairs.sort_unstable();
+    (pairs, max)
+}
+
 /// Slug a weave name into a JSON filename under `dir`. Ported from
 /// `weaveFileIn`.
 pub fn weave_file_in(dir: impl AsRef<Path>, name: &str) -> std::path::PathBuf {
@@ -854,6 +884,37 @@ mod tests {
         for (a, b) in &pairs {
             assert!(a.reading_key() <= b.reading_key());
         }
+    }
+
+    #[test]
+    fn chord_pairs_fold_book_density_over_deduped_links() {
+        // Two Gen↔John verse links (distinct verses) fold to one book pair with
+        // count 2; a Gen↔Gen link is a self-pair; a shared link counts once.
+        let mut w1 = Weave::empty("a", WeaveKind::Retelling, "kjv1769-tok2", "now");
+        w1.add_links([
+            Link::canon(r("Gen", 1, 1), r("John", 1, 1)),
+            Link::canon(r("Gen", 2, 4), r("John", 3, 16)),
+            Link::canon(r("Gen", 1, 1), r("Gen", 5, 1)), // OT self-pair
+        ]);
+        let mut w2 = Weave::empty("b", WeaveKind::Quotation, "kjv1769-tok2", "now");
+        w2.add_links([Link::canon(r("John", 1, 1), r("Gen", 1, 1))]); // dup of w1's first
+        let loaded = vec![
+            LoadedWeave { file: "a.json".into(), weave: w1 },
+            LoadedWeave { file: "b.json".into(), weave: w2 },
+        ];
+
+        let (pairs, max) = chord_pairs(&loaded);
+        let gen = crate::canon::book_order("Gen").unwrap();
+        let john = crate::canon::book_order("John").unwrap();
+        // Gen↔John woven by two distinct (deduped) verse links.
+        assert_eq!(pairs.iter().find(|(a, b, _)| *a == gen && *b == john).unwrap().2, 2);
+        // Gen↔Gen self-pair, count 1.
+        assert_eq!(pairs.iter().find(|(a, b, _)| *a == gen && *b == gen).unwrap().2, 1);
+        assert_eq!(max, 2);
+        // Deterministic (sorted) output.
+        let mut sorted = pairs.clone();
+        sorted.sort_unstable();
+        assert_eq!(pairs, sorted);
     }
 
     #[test]

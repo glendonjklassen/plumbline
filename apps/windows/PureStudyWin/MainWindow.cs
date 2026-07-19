@@ -386,8 +386,11 @@ public sealed class MainWindow : Window
         _suggestedBtn.Click += (_, _) => _panel.ShowSuggested();
         _mapBtn.Click += (_, _) =>
         {
-            if (_connectors.Links.Count > 0 && _books.Count > 0)
-                Popups.ChordMap(_connectors.Links, _books, (book) => NavigateActive(book, 1, null));
+            // Book-pair density folded once in the core (pure_engine_chord_map_json);
+            // the popup only lays out ribbons over it.
+            if (_books.Count > 0 && _engine?.ChordMapJson() is { } cmj
+                && Wire.Parse<ChordMapData>(cmj) is { Pairs.Count: > 0 } map)
+                Popups.ChordMap(map, _books, (book) => NavigateActive(book, 1, null));
         };
         _constBtn.Click += (_, _) =>
         {

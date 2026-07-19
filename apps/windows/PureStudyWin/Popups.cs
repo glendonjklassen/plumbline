@@ -60,25 +60,19 @@ public static class Popups
 
     // ── chord / arc map ────────────────────────────────────────────────────
 
-    public static void ChordMap(List<LinkPair> links, List<TocBook> books, Action<string> pick)
+    public static void ChordMap(ChordMapData map, List<TocBook> books, Action<string> pick)
     {
         var canvas = new CanvasControl { ClearColor = PopupPaper };
         Window? win = null;
         Windows.Foundation.Point pointer = default;
         (int ia, int ib)? hovered = null;
 
-        int Order(string book) => books.FindIndex(b => b.Id == book);
-
-        // Canon-ordered book-pair counts over the deduped pairs.
+        // Canon-ordered book-pair counts + max come folded from the core
+        // view-model (pure_engine_chord_map_json) — the shell no longer folds
+        // link pairs or re-derives the max (weave::chord_pairs owns it).
         var counts = new Dictionary<(int, int), uint>();
-        foreach (var l in links)
-        {
-            int ia = Order(l.BookA), ib = Order(l.BookB);
-            if (ia < 0 || ib < 0) continue;
-            var key = ia <= ib ? (ia, ib) : (ib, ia);
-            counts[key] = counts.GetValueOrDefault(key) + 1;
-        }
-        uint max = counts.Count > 0 ? counts.Values.Max() : 1;
+        foreach (var p in map.Pairs) counts[(p.A, p.B)] = p.Count;
+        uint max = Math.Max(1u, map.Max);
 
         (float x1, float x2, float apex, float y0) Arc((int ia, int ib) k, float w, float h)
         {

@@ -132,6 +132,11 @@ public sealed unsafe class StudyEngine : IDisposable
     /// core::reference — the shell reads it instead of hardcoding the bands.
     public string? CanonSegmentsJson() => Utf8.Take(PureStudyNative.pure_engine_canon_segments_json(_handle));
 
+    /// The book-to-book weave chord map: canon-ordered book-pair counts + max
+    /// (the "Weave map" popup), folded once in the core — the shell lays out
+    /// ribbons without folding pairs or deriving the max.
+    public string? ChordMapJson() => Utf8.Take(PureStudyNative.pure_engine_chord_map_json(_handle));
+
     public string? VerseXrefsJson(string refKey)
     {
         fixed (byte* r = Utf8.NulTerminated(refKey))

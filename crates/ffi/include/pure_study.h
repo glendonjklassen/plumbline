@@ -459,6 +459,16 @@ char *pure_engine_link_pairs_json(const struct PureEngine *engine);
 // engine state, but the arg keeps the call shape uniform.
 char *pure_engine_canon_segments_json(const struct PureEngine *engine);
 
+// The book-to-book weave chord map: canon-ordered book-pair counts over the
+// deduped link pairs (`{pairs:[{a,b,count}], max, otNtDivide, bookCount}`),
+// where `a`/`b` are book indices (`a <= b`). The one fold behind the "Weave
+// map" popup, so a shell lays out ribbons without folding pairs or deriving the
+// max. Never null on a live engine (empty library → empty pairs, max 1).
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_chord_map_json(const struct PureEngine *engine);
+
 // The symbolic concept engine's view of a Strong's code: occurrence total,
 // testament split, concentrating books, per-book dispersion counts,
 // collocates, co-occurrence community, and the leitwort discovery when one

@@ -1549,6 +1549,22 @@ pub unsafe extern "C" fn pure_engine_canon_segments_json(engine: *const PureEngi
     })
 }
 
+/// The book-to-book weave chord map: canon-ordered book-pair counts over the
+/// deduped link pairs (`{pairs:[{a,b,count}], max, otNtDivide, bookCount}`),
+/// where `a`/`b` are book indices (`a <= b`). The one fold behind the "Weave
+/// map" popup, so a shell lays out ribbons without folding pairs or deriving the
+/// max. Never null on a live engine (empty library → empty pairs, max 1).
+///
+/// # Safety
+/// `engine` is a live engine (or null → null).
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_chord_map_json(engine: *const PureEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(e) => out_json(&wire::chord_map_to_wire(&e.study_read().weaves)),
+        None => ptr::null_mut(),
+    })
+}
+
 /// The symbolic concept engine's view of a Strong's code: occurrence total,
 /// testament split, concentrating books, per-book dispersion counts,
 /// collocates, co-occurrence community, and the leitwort discovery when one

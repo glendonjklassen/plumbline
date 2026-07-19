@@ -110,6 +110,12 @@ public sealed record WeaveLinkPair(
 public sealed record CanonSegments(List<CanonSegment> Segments, int OtNtDivide);
 public sealed record CanonSegment(string Label, int First, int Last);
 
+// The book-to-book chord map (pure_engine_chord_map_json): canon-ordered
+// book-pair counts + max, folded once in the core. The popup lays out ribbons
+// off this instead of folding link pairs and deriving the max itself.
+public sealed record ChordMapData(List<ChordPair> Pairs, uint Max, int OtNtDivide, int BookCount);
+public sealed record ChordPair(int A, int B, uint Count);
+
 public sealed record Concept1(
     string Code, uint Total, uint Ot, uint Nt, List<BookCount> TopBooks,
     Dictionary<string, uint> ByBook, List<Scored> Collocates,

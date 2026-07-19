@@ -828,6 +828,44 @@ pub fn canon_segments_to_wire() -> WireCanonSegments {
     }
 }
 
+// ── chord / arc map (book-to-book weave density) ──────────────────────────────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireChordMap {
+    /// Canon-ordered book-pair counts over the deduped link pairs.
+    pub pairs: Vec<WireChordPair>,
+    /// The heaviest pair count, for normalising ribbon weight/alpha.
+    pub max: u32,
+    /// Book index (39) at which the New Testament begins — ribbon colour marks
+    /// OT-internal / NT-internal / cross-testament off this seam.
+    pub ot_nt_divide: usize,
+    /// Book count (66) — the axis the shell lays the ribbon feet over.
+    pub book_count: usize,
+}
+
+/// One book-pair ribbon: two **canon book indices** (`a <= b`, so `a == b` is a
+/// self-pair) and how many deduped verse links weave those books together. The
+/// shell maps an index to a foot position and a name off its own book list —
+/// it neither folds the pairs nor re-derives the max.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireChordPair {
+    pub a: usize,
+    pub b: usize,
+    pub count: u32,
+}
+
+pub fn chord_map_to_wire(loaded: &[LoadedWeave]) -> WireChordMap {
+    let (pairs, max) = pure_core::weave::chord_pairs(loaded);
+    WireChordMap {
+        pairs: pairs.into_iter().map(|(a, b, count)| WireChordPair { a, b, count }).collect(),
+        max,
+        ot_nt_divide: pure_core::reference::OT_NT_DIVIDE,
+        book_count: pure_core::canon::BOOKS.len(),
+    }
+}
+
 // ── the symbolic concept engine (collocations, distribution, leitwort) ────────
 
 #[derive(Serialize)]

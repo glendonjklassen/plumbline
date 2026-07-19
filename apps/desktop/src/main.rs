@@ -3043,16 +3043,10 @@ fn draw_canon(state: &Shared, cr: &cairo::Context, w: i32, h: i32) {
 /// indices → link count), plus the max count for scaling. Ported from
 /// `ChordMap` aggregation.
 fn chord_arcs(st: &State) -> (Vec<(usize, usize, u32)>, u32) {
-    let mut m: HashMap<(usize, usize), u32> = HashMap::new();
-    for (a, b) in &st.links {
-        let (Some(ia), Some(ib)) = (canon::book_order(&a.book), canon::book_order(&b.book)) else {
-            continue;
-        };
-        let key = if ia <= ib { (ia, ib) } else { (ib, ia) };
-        *m.entry(key).or_insert(0) += 1;
-    }
-    let max = m.values().copied().max().unwrap_or(1);
-    (m.into_iter().map(|((a, b), c)| (a, b, c)).collect(), max)
+    // The book-pair fold lives once in the core (`weave::chord_pairs`), shared
+    // with the non-Rust shells via `pure_engine_chord_map_json`. GTK calls it
+    // directly; the drawing below is the only shell-side part.
+    weave::chord_pairs(&st.weaves)
 }
 
 /// A filled arc ribbon from foot A to foot B over `apex`, in the given colour.
