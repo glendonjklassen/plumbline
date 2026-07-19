@@ -193,6 +193,55 @@ public sealed unsafe class StudyEngine : IDisposable
             return Utf8.Take(PureStudyNative.pure_engine_gloss(_handle, c));
     }
 
+    // ── study-panel content model (typed block lists; one producer in Rust) ──
+
+    /// Word study for a tapped token as a block list; `full` gates the R&D tiers.
+    public string? WordStudyBlocksJson(string refKey, uint tokenIndex, bool full)
+    {
+        fixed (byte* r = Utf8.NulTerminated(refKey))
+            return Utf8.Take(PureStudyNative.pure_engine_word_study_blocks_json(_handle, r, tokenIndex, full));
+    }
+
+    /// The standalone `code:CODE[:word]` study card as blocks (`word` may be null).
+    public string? CodeStudyBlocksJson(string code, string? word, bool full)
+    {
+        fixed (byte* c = Utf8.NulTerminated(code))
+        fixed (byte* w = Utf8.NulTerminatedOrNull(word))
+            return Utf8.Take(PureStudyNative.pure_engine_code_study_blocks_json(_handle, c, w, full));
+    }
+
+    public string? ConcordanceBlocksJson(string code)
+    {
+        fixed (byte* c = Utf8.NulTerminated(code))
+            return Utf8.Take(PureStudyNative.pure_engine_concordance_blocks_json(_handle, c));
+    }
+
+    public string? RenderingConcordanceBlocksJson(string code, string rendering)
+    {
+        fixed (byte* c = Utf8.NulTerminated(code))
+        fixed (byte* r = Utf8.NulTerminated(rendering))
+            return Utf8.Take(PureStudyNative.pure_engine_rendering_concordance_blocks_json(_handle, c, r));
+    }
+
+    public string? ThreadsBlocksJson() => Utf8.Take(PureStudyNative.pure_engine_threads_blocks_json(_handle));
+    public string? ThreadBlocksJson(uint index) => Utf8.Take(PureStudyNative.pure_engine_thread_blocks_json(_handle, index));
+    public string? TagsBlocksJson() => Utf8.Take(PureStudyNative.pure_engine_tags_blocks_json(_handle));
+    public string? TagBlocksJson(uint index) => Utf8.Take(PureStudyNative.pure_engine_tag_blocks_json(_handle, index));
+    public string? WeavesBlocksJson() => Utf8.Take(PureStudyNative.pure_engine_weaves_blocks_json(_handle));
+    public string? SuggestedBlocksJson() => Utf8.Take(PureStudyNative.pure_engine_suggested_blocks_json(_handle));
+
+    /// A weave compare card as blocks; `full` adds the edit-notes action.
+    public string? CompareBlocksJson(uint index, bool full) =>
+        Utf8.Take(PureStudyNative.pure_engine_compare_blocks_json(_handle, index, full));
+
+    /// Search results as blocks (goto link or ranked hits + snippets); null on a
+    /// blank query.
+    public string? SearchBlocksJson(string query)
+    {
+        fixed (byte* q = Utf8.NulTerminated(query))
+            return Utf8.Take(PureStudyNative.pure_engine_search_blocks_json(_handle, q));
+    }
+
     // ── study data (author; null = success, else an error message) ────────
 
     public string? ThreadAdd(string name, string refKey, string? note, string addedUtc)

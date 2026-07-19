@@ -154,6 +154,20 @@ public sealed record ConfigState(
     bool VersePerLine = false);
 public sealed record PaneRef1(string Book, ushort Chapter);
 
+// The study-panel content model (pure_engine_*_blocks_json): a typed block
+// list the panel renders wholesale — no shell-side derivation. A run's Color is
+// a semantic role (mapped to the palette), Size a logical point size, Uri makes
+// it a link the panel dispatcher routes.
+public sealed record PanelData(List<PanelBlock> Blocks);
+public sealed record PanelBlock(
+    string Kind,
+    // section
+    string? Title, string? MarkGlyph, string? MarkColor,
+    // para
+    List<PanelRun>? Runs, bool Indent, bool TopGap);
+public sealed record PanelRun(
+    string Text, float Size, string Color, bool Bold, bool Italic, string? Uri);
+
 // ── R&D tier ───────────────────────────────────────────────────────────────
 
 public sealed record Scored(string Code, float Score);

@@ -564,6 +564,122 @@ namespace PureStudy.Native
         public static extern byte* pure_engine_gloss(PureEngine* engine, byte* code);
 
         /// <summary>
+        ///  A panel view as the typed block list (`{blocks:[…]}`). Word study: the clicked
+        ///  word's dictionary + Full-study tiers + this verse's cross-references/notes.
+        ///  `full` gates the R&amp;D tiers + author actions. Never null on a live engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_word_study_blocks_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_word_study_blocks_json(PureEngine* engine, byte* ref_key, uint token_index, [MarshalAs(UnmanagedType.U1)] bool full);
+
+        /// <summary>
+        ///  The standalone `code:CODE[:word]` study card (the reverse rendering-lens
+        ///  target). `word` may be null. Never null on a live engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_code_study_blocks_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_code_study_blocks_json(PureEngine* engine, byte* code, byte* word, [MarshalAs(UnmanagedType.U1)] bool full);
+
+        /// <summary>
+        ///  The full concordance for a code as blocks. Never null on a live engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_concordance_blocks_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_concordance_blocks_json(PureEngine* engine, byte* code);
+
+        /// <summary>
+        ///  The concordance filtered to one rendering of a code, as blocks. Never null
+        ///  on a live engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_rendering_concordance_blocks_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_rendering_concordance_blocks_json(PureEngine* engine, byte* code, byte* rendering);
+
+        /// <summary>
+        ///  The threads list as blocks. Never null on a live engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine (or null → null).
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_threads_blocks_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_threads_blocks_json(PureEngine* engine);
+
+        /// <summary>
+        ///  One thread's detail as blocks (out-of-range index → the threads list). Never
+        ///  null on a live engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine (or null → null).
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_thread_blocks_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_thread_blocks_json(PureEngine* engine, uint index);
+
+        /// <summary>
+        ///  The tags list as blocks. Never null on a live engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine (or null → null).
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_tags_blocks_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_tags_blocks_json(PureEngine* engine);
+
+        /// <summary>
+        ///  One tag's detail as blocks (out-of-range index → the tags list). Never null
+        ///  on a live engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine (or null → null).
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_tag_blocks_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_tag_blocks_json(PureEngine* engine, uint index);
+
+        /// <summary>
+        ///  The weaves list as blocks. Never null on a live engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine (or null → null).
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_weaves_blocks_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_weaves_blocks_json(PureEngine* engine);
+
+        /// <summary>
+        ///  The suggested-weave review queue as blocks. Never null on a live engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine (or null → null).
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_suggested_blocks_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_suggested_blocks_json(PureEngine* engine);
+
+        /// <summary>
+        ///  A weave compare card as blocks (out-of-range index → empty). `full` adds the
+        ///  edit-notes action. Never null on a live engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine (or null → null).
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_compare_blocks_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_compare_blocks_json(PureEngine* engine, uint index, [MarshalAs(UnmanagedType.U1)] bool full);
+
+        /// <summary>
+        ///  Search results as blocks (goto link or ranked hits with snippets). Null when
+        ///  the query is blank or the engine is null.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; `query` is null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_search_blocks_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_search_blocks_json(PureEngine* engine, byte* query);
+
+        /// <summary>
         ///  Author a weave link carrying word spans — the Full-study "pin a word in
         ///  each pane, widen, ＋ link" flow. Span bounds are token indices; pass a
         ///  negative bound for a span-less side. Null on success, else an owned error.

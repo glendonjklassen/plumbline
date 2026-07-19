@@ -11,6 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 use pure_core::config::{Config, PaneRef, StudyMode};
+use pure_core::panel::{Block, Color, Run};
 use pure_core::corpus::{Corpus, Token, Verse};
 use pure_core::crossref::CrossRef;
 use pure_core::reference::VRef;
@@ -1048,6 +1049,83 @@ pub struct WireConceptSpoke {
     pub code: String,
     pub label: String,
     pub semantic: bool,
+}
+
+// ── study-panel content model (the typed block list) ──────────────────────────
+
+/// A panel view as a list of typed blocks (see `pure_core::panel`). The shell
+/// walks these with a small per-block renderer; it derives nothing.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WirePanel {
+    pub blocks: Vec<WireBlock>,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum WireBlock {
+    /// A section header, with an optional tier mark (glyph + colour role).
+    Section { title: String, mark_glyph: Option<String>, mark_color: Option<&'static str> },
+    /// A flowing paragraph of styled runs.
+    Para { runs: Vec<WireRun>, indent: bool, top_gap: bool },
+    /// A horizontal rule.
+    Rule,
+}
+
+/// One styled span: text + a **semantic** colour role + a logical point size +
+/// bold/italic, and an optional `uri` that makes it a link.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireRun {
+    pub text: String,
+    pub size: f32,
+    pub color: &'static str,
+    pub bold: bool,
+    pub italic: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+}
+
+/// The camelCase token for a colour role (the shell maps it to its palette).
+fn color_token(c: Color) -> &'static str {
+    match c {
+        Color::Ink => "ink",
+        Color::Faded => "faded",
+        Color::Gold => "gold",
+        Color::Section => "section",
+        Color::TierGod => "tierGod",
+        Color::TierHuman => "tierHuman",
+        Color::TierMachine => "tierMachine",
+        Color::TierResearch => "tierResearch",
+        Color::Mono => "mono",
+        Color::Morph => "morph",
+        Color::Lemma => "lemma",
+    }
+}
+
+fn run_to_wire(r: Run) -> WireRun {
+    WireRun { text: r.text, size: r.size, color: color_token(r.color), bold: r.bold, italic: r.italic, uri: r.uri }
+}
+
+pub fn blocks_to_wire(blocks: Vec<Block>) -> WirePanel {
+    WirePanel {
+        blocks: blocks
+            .into_iter()
+            .map(|b| match b {
+                Block::Section { title, mark } => WireBlock::Section {
+                    title,
+                    mark_glyph: mark.as_ref().map(|(g, _)| g.clone()),
+                    mark_color: mark.map(|(_, c)| color_token(c)),
+                },
+                Block::Para { runs, indent, top_gap } => WireBlock::Para {
+                    runs: runs.into_iter().map(run_to_wire).collect(),
+                    indent,
+                    top_gap,
+                },
+                Block::Rule => WireBlock::Rule,
+            })
+            .collect(),
+    }
 }
 
 // ── config / session (shared with the GTK shell via core::config) ─────────────

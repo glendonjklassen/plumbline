@@ -514,6 +514,94 @@ char *pure_engine_concept_map_json(const struct PureEngine *engine, const char *
 // `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
 char *pure_engine_gloss(const struct PureEngine *engine, const char *code);
 
+// A panel view as the typed block list (`{blocks:[…]}`). Word study: the clicked
+// word's dictionary + Full-study tiers + this verse's cross-references/notes.
+// `full` gates the R&D tiers + author actions. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
+char *pure_engine_word_study_blocks_json(const struct PureEngine *engine,
+                                         const char *ref_key,
+                                         uint32_t token_index,
+                                         bool full);
+
+// The standalone `code:CODE[:word]` study card (the reverse rendering-lens
+// target). `word` may be null. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_code_study_blocks_json(const struct PureEngine *engine,
+                                         const char *code,
+                                         const char *word,
+                                         bool full);
+
+// The full concordance for a code as blocks. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
+char *pure_engine_concordance_blocks_json(const struct PureEngine *engine, const char *code);
+
+// The concordance filtered to one rendering of a code, as blocks. Never null
+// on a live engine.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_rendering_concordance_blocks_json(const struct PureEngine *engine,
+                                                    const char *code,
+                                                    const char *rendering);
+
+// The threads list as blocks. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_threads_blocks_json(const struct PureEngine *engine);
+
+// One thread's detail as blocks (out-of-range index → the threads list). Never
+// null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_thread_blocks_json(const struct PureEngine *engine, uint32_t index);
+
+// The tags list as blocks. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_tags_blocks_json(const struct PureEngine *engine);
+
+// One tag's detail as blocks (out-of-range index → the tags list). Never null
+// on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_tag_blocks_json(const struct PureEngine *engine, uint32_t index);
+
+// The weaves list as blocks. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_weaves_blocks_json(const struct PureEngine *engine);
+
+// The suggested-weave review queue as blocks. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_suggested_blocks_json(const struct PureEngine *engine);
+
+// A weave compare card as blocks (out-of-range index → empty). `full` adds the
+// edit-notes action. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_compare_blocks_json(const struct PureEngine *engine, uint32_t index, bool full);
+
+// Search results as blocks (goto link or ranked hits with snippets). Null when
+// the query is blank or the engine is null.
+//
+// # Safety
+// `engine` is a live engine; `query` is null or valid NUL-terminated UTF-8.
+char *pure_engine_search_blocks_json(const struct PureEngine *engine, const char *query);
+
 // Author a weave link carrying word spans — the Full-study "pin a word in
 // each pane, widen, ＋ link" flow. Span bounds are token indices; pass a
 // negative bound for a span-less side. Null on success, else an owned error.

@@ -561,6 +561,8 @@ public sealed class MainWindow : Window
             FocusActive();
             return;
         }
-        _panel.ShowSearch(query, r);
+        // The panel builds its own result blocks from the core (snippets +
+        // ranking included); the goto short-circuit above stays shell-side.
+        _panel.ShowSearchBlocks(query);
     }
 }

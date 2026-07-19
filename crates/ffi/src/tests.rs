@@ -870,3 +870,62 @@ fn config_round_trip_via_abi() {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+/// The study-panel block endpoints (the P0.1 content model) over the ABI: the
+/// producer's blocks reach a shell as camelCase JSON with the pre-baked link
+/// URIs a shell routes back through the dispatcher.
+#[test]
+fn panel_blocks_via_abi() {
+    unsafe {
+        let e = open(); // bytes-opened KJV/STRONGS (John 3:16 tags G2316, G25)
+        let c = |s: &str| CString::new(s).unwrap();
+
+        // Every run `uri` across a blocks payload.
+        fn uris(v: &Value) -> Vec<String> {
+            v["blocks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|b| b["runs"].as_array())
+                .flatten()
+                .filter_map(|r| r["uri"].as_str().map(str::to_string))
+                .collect()
+        }
+
+        // Word study on "God" (John 3:16 token 1 → G2316), Full study.
+        let ws: Value = serde_json::from_str(
+            &take(pure_engine_word_study_blocks_json(e, c("John 3:16").as_ptr(), 1, true)).unwrap(),
+        )
+        .unwrap();
+        // Opens with the verse display, then the big word.
+        assert_eq!(ws["blocks"][0]["kind"], "para");
+        assert_eq!(ws["blocks"][0]["runs"][0]["text"], "John 3:16");
+        assert_eq!(ws["blocks"][1]["runs"][0]["text"], "God");
+        // The code's occurrence link is baked in.
+        assert!(uris(&ws).contains(&"occ:G2316".to_string()));
+        // A tier section header carries its provenance mark.
+        assert!(ws["blocks"].as_array().unwrap().iter().any(|b| b["kind"] == "section"));
+
+        // Simple mode drops the R&D sections.
+        let simple: Value = serde_json::from_str(
+            &take(pure_engine_word_study_blocks_json(e, c("John 3:16").as_ptr(), 1, false)).unwrap(),
+        )
+        .unwrap();
+        assert!(!simple["blocks"].as_array().unwrap().iter().any(|b| b["kind"] == "section"));
+
+        // Concordance: the go: link for the one occurrence verse.
+        let cc: Value =
+            serde_json::from_str(&take(pure_engine_concordance_blocks_json(e, c("G2316").as_ptr())).unwrap()).unwrap();
+        assert!(uris(&cc).contains(&"go:John:3:16".to_string()));
+
+        // A word search → ranked hits, each a go: link (John 3:16 has "God").
+        let sr: Value =
+            serde_json::from_str(&take(pure_engine_search_blocks_json(e, c("God").as_ptr())).unwrap()).unwrap();
+        assert!(uris(&sr).contains(&"go:John:3:16".to_string()));
+
+        // A blank query is null (not an empty payload).
+        assert!(pure_engine_search_blocks_json(e, c("   ").as_ptr()).is_null());
+
+        pure_engine_free(e);
+    }
+}

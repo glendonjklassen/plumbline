@@ -1,8 +1,10 @@
 // The on-demand study sidebar: word study, concordance, threads/tags
 // browsers, the suggested-weave review queue, weave compare cards, and
-// search results. All interactivity funnels through one URI dispatcher that
-// mirrors the GTK shell's handle_link scheme exactly (FEATURE-MANIFEST.md),
-// so behavior parity is auditable link by link.
+// search results. Every view is now a **typed block list** built by one Rust
+// producer (pure_core::panel) and served over the pure_engine_*_blocks_json
+// endpoints; this shell only walks the blocks and paints (RenderBlocks). All
+// interactivity funnels through one URI dispatcher that mirrors the GTK shell's
+// handle_link scheme exactly (FEATURE-MANIFEST.md).
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -26,7 +28,7 @@ public sealed class StudyPanel : UserControl
     /// Study data changed on disk (weaves/threads/tags) — shell refreshes
     /// its link/xref indexes and repaints connectors.
     public Action StudyDataChanged = () => { };
-    /// Current weave library (shell keeps it fresh; compare cards index it).
+    /// Current weave library (shell keeps it fresh; the router's edit verbs index it).
     public WeaveLib? Weaves;
 
     public StudyPanel()
@@ -208,54 +210,32 @@ public sealed class StudyPanel : UserControl
     private int FindTag(string name) =>
         LoadTags().FindIndex(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
 
-    // ── content builders: primitives ───────────────────────────────────────
+    // ── the block renderer (one small per-block painter) ───────────────────
 
     private void Add(UIElement e) => _body.Children.Add(e);
 
-    private void ShowError(string message)
-    {
-        _body.Children.Insert(0, Para(13, Italic(message)));
-    }
-
-    private static Run R(string text, Color? color = null, double? size = null,
-        bool bold = false, bool italic = false)
-    {
-        var r = new Run { Text = text };
-        if (color is { } c) r.Foreground = new SolidColorBrush(c);
-        if (size is { } s) r.FontSize = s;
-        if (bold) r.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
-        if (italic) r.FontStyle = Windows.UI.Text.FontStyle.Italic;
-        return r;
-    }
-
-    private static Run Italic(string text) => R(text, Palette.InkFaded, italic: true);
-
-    private Hyperlink H(string label, string uri, Color? color = null, double? size = null)
-    {
-        var link = new Hyperlink { UnderlineStyle = UnderlineStyle.None };
-        link.Inlines.Add(R(label, color ?? Palette.Gold, size));
-        link.Click += (_, _) => Link(uri);
-        return link;
-    }
-
-    /// A flowing paragraph from strings, Runs and Hyperlinks.
-    private static TextBlock Para(double size, params object[] parts)
-    {
-        var tb = new TextBlock
+    private void ShowError(string message) =>
+        _body.Children.Insert(0, new TextBlock
         {
-            FontSize = size,
+            FontSize = 13,
             TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(Palette.Ink),
-            IsTextSelectionEnabled = true,
-        };
-        foreach (var p in parts)
-            tb.Inlines.Add(p switch
+            Foreground = new SolidColorBrush(Palette.InkFaded),
+            FontStyle = Windows.UI.Text.FontStyle.Italic,
+            Text = message,
+        });
+
+    /// Walk the core's typed block list and paint each block. This is the whole
+    /// shell-side rendering surface — no derivation, tier order, caps, humanize,
+    /// or gloss/lemma formatting live here anymore (they moved to pure_core::panel).
+    private void RenderBlocks(string json)
+    {
+        foreach (var b in Wire.Parse<PanelData>(json).Blocks)
+            switch (b.Kind)
             {
-                string s => new Run { Text = s },
-                Inline i => i,
-                _ => new Run { Text = p.ToString() },
-            });
-        return tb;
+                case "rule": Add(RuleLine()); break;
+                case "section": Add(SectionBlock(b)); break;
+                case "para": Add(ParaBlock(b)); break;
+            }
     }
 
     private static Border RuleLine() => new()
@@ -265,26 +245,8 @@ public sealed class StudyPanel : UserControl
         Margin = new Thickness(0, 4, 0, 0),
     };
 
-    /// The GTK shead(): a spaced, muted-gold, small-caps-feel section header.
-    private static TextBlock SHead(string title) => new()
-    {
-        Text = title,
-        FontSize = 11,
-        CharacterSpacing = 120,
-        FontWeight = Microsoft.UI.Text.FontWeights.Bold,
-        Foreground = new SolidColorBrush(Palette.SectionGold),
-        Margin = new Thickness(0, 8, 0, 0),
-    };
-
-    // ── authority-tier provenance marks (overlay `Tier`; GTK shead_marked /
-    // tier_marks / legend_markup) ───────────────────────────────────────────
-    // Every evidence block says where it comes from: ✝ God (the text itself),
-    // † Human (curated scholarship), ≈ Machine (a learned/aligned artifact,
-    // weigh don't trust); a ⚗ flask flags a still-research-grade method.
-
-    /// A section header with a fixed tier mark — for blocks whose whole
-    /// provenance is one tier (RENDERINGS = Human, the analytics = Machine).
-    private static TextBlock SHeadMarked(string title, string glyph, Color color)
+    /// A spaced, muted-gold section header + an optional tier mark glyph.
+    private static TextBlock SectionBlock(PanelBlock b)
     {
         var tb = new TextBlock
         {
@@ -294,682 +256,150 @@ public sealed class StudyPanel : UserControl
             Foreground = new SolidColorBrush(Palette.SectionGold),
             Margin = new Thickness(0, 8, 0, 0),
         };
-        tb.Inlines.Add(new Run { Text = title });
-        tb.Inlines.Add(new Run
-        {
-            Text = "  " + glyph,
-            Foreground = new SolidColorBrush(color),
-            FontWeight = Microsoft.UI.Text.FontWeights.Normal,
-            FontSize = 10,
-            CharacterSpacing = 0,
-        });
+        tb.Inlines.Add(new Run { Text = b.Title ?? "" });
+        if (b.MarkGlyph is { } glyph)
+            tb.Inlines.Add(new Run
+            {
+                Text = "  " + glyph,
+                Foreground = new SolidColorBrush(ColorOf(b.MarkColor)),
+                FontWeight = Microsoft.UI.Text.FontWeights.Normal,
+                FontSize = 10,
+                CharacterSpacing = 0,
+            });
         return tb;
     }
 
-    /// Append the deduped union of tier glyphs (additive, never one "winning"
-    /// tier) plus a flask for a research-grade method to a chip's TextBlock.
-    /// Mirrors GTK tier_marks; tolerant of an older DLL with no tiers field.
-    private void AddTierMarks(TextBlock tb, IEnumerable<string>? tiers, bool research)
+    /// A flowing paragraph of styled runs; link runs route back through Link().
+    private TextBlock ParaBlock(PanelBlock b)
     {
-        var set = (tiers ?? Enumerable.Empty<string>()).ToHashSet();
-        if (set.Contains("god")) tb.Inlines.Add(R(" ✝", Palette.TierGod, 11));
-        if (set.Contains("human")) tb.Inlines.Add(R(" †", Palette.TierHuman, 11));
-        if (set.Contains("machine")) tb.Inlines.Add(R(" ≈", Palette.TierMachine, 11));
-        if (research) tb.Inlines.Add(R(" ⚗", Palette.TierResearch, 11));
-    }
-
-    /// The provenance legend, shown once at the foot of a Full-study card so
-    /// the marks are learnable (GTK legend_markup).
-    private void AddTierLegend()
-    {
+        var runs = b.Runs ?? new();
         var tb = new TextBlock
         {
-            FontSize = 11,
             TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(Palette.InkFaded),
-            Margin = new Thickness(0, 10, 0, 0),
-        };
-        tb.Inlines.Add(new Run { Text = "where this comes from:  " });
-        tb.Inlines.Add(R("✝", Palette.TierGod, 11));
-        tb.Inlines.Add(new Run { Text = " the text  ·  " });
-        tb.Inlines.Add(R("†", Palette.TierHuman, 11));
-        tb.Inlines.Add(new Run { Text = " curated scholarship  ·  " });
-        tb.Inlines.Add(R("≈", Palette.TierMachine, 11));
-        tb.Inlines.Add(new Run { Text = " machine-derived, weigh it  ·  " });
-        tb.Inlines.Add(R("⚗", Palette.TierResearch, 11));
-        tb.Inlines.Add(new Run { Text = " research-grade" });
-        Add(tb);
-    }
-
-    private Hyperlink Go(string refKey, string? display = null) =>
-        H(display ?? refKey, GoUri(refKey));
-
-    /// "Gen 1:7" → "go:Gen:1:7".
-    private static string GoUri(string refKey)
-    {
-        int sp = refKey.LastIndexOf(' ');
-        return sp < 0 ? $"go:{refKey}" : $"go:{refKey[..sp]}:{refKey[(sp + 1)..]}";
-    }
-
-    /// "gloss lemma" concept chips joined by middots, each linking occ:CODE.
-    private TextBlock ConceptChips(double size, IEnumerable<string> codes)
-    {
-        var tb = new TextBlock
-        {
-            FontSize = size, TextWrapping = TextWrapping.Wrap,
+            IsTextSelectionEnabled = true,
             Foreground = new SolidColorBrush(Palette.Ink),
+            FontSize = runs.Count > 0 ? runs[0].Size : 14,
+            Margin = new Thickness(b.Indent ? 12 : 0, b.TopGap ? 6 : 0, 0, 0),
         };
-        bool first = true;
-        foreach (var code in codes)
+        foreach (var run in runs)
         {
-            if (!first) tb.Inlines.Add(new Run { Text = "  ·  " });
-            first = false;
-            var gloss = Engine?.Gloss(code);
-            string? lemma = Engine?.StrongsJson(code) is { } sj
-                ? Wire.Parse<StrongsEntry>(sj).Lemma : null;
-            tb.Inlines.Add(H(gloss ?? lemma ?? code, $"occ:{code}"));
-            if (gloss is not null && lemma is not null)
-                tb.Inlines.Add(R($" {lemma}", Color.FromArgb(255, 138, 122, 82), size - 1));
+            if (run.Uri is { } uri)
+            {
+                var link = new Hyperlink { UnderlineStyle = UnderlineStyle.None };
+                link.Inlines.Add(RunOf(run));
+                link.Click += (_, _) => Link(uri);
+                tb.Inlines.Add(link);
+            }
+            else
+            {
+                tb.Inlines.Add(RunOf(run));
+            }
         }
         return tb;
     }
 
-    // ── word study ─────────────────────────────────────────────────────────
+    private static Run RunOf(PanelRun r)
+    {
+        var run = new Run
+        {
+            Text = r.Text,
+            FontSize = r.Size,
+            Foreground = new SolidColorBrush(ColorOf(r.Color)),
+        };
+        if (r.Bold) run.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
+        if (r.Italic) run.FontStyle = Windows.UI.Text.FontStyle.Italic;
+        return run;
+    }
+
+    /// A semantic colour role → this shell's palette. Every shell maps these
+    /// identically, so the panel reads the same on each platform.
+    private static Color ColorOf(string? role) => role switch
+    {
+        "ink" => Palette.Ink,
+        "faded" => Palette.InkFaded,
+        "gold" => Palette.Gold,
+        "section" => Palette.SectionGold,
+        "tierGod" => Palette.TierGod,
+        "tierHuman" => Palette.TierHuman,
+        "tierMachine" => Palette.TierMachine,
+        "tierResearch" => Palette.TierResearch,
+        "mono" => Color.FromArgb(255, 136, 136, 136),
+        "morph" => Color.FromArgb(255, 106, 90, 42),
+        "lemma" => Color.FromArgb(255, 138, 122, 82),
+        _ => Palette.Ink,
+    };
+
+    // ── the views: fetch the block list, paint it ─────────────────────────
 
     public void ShowWordStudy(Hit hit)
     {
-        if (Engine is null) return;
-        Fresh();
-        bool full = IsFull();
-
-        string word = "";
-        if (hit.Verse.Length > 0 &&
-            Engine.TokenJson(hit.Verse, hit.TokenIndex) is { } tj)
-            word = Wire.Parse<TokenData>(tj).Word;
-
-        Add(Para(14, R(hit.Display, bold: true)));
-        if (word.Length > 0) Add(Para(26, word));
-
-        if (full && hit.Verse.Length > 0 &&
-            Engine.MorphJson(hit.Verse, hit.TokenIndex) is { } mj)
+        if (Engine?.WordStudyBlocksJson(hit.Verse, hit.TokenIndex, IsFull()) is { } j)
         {
-            var m = Wire.Parse<Morph>(mj);
-            Add(Para(12.5, R(m.Gloss, Color.FromArgb(255, 106, 90, 42), italic: true)));
-        }
-
-        if (hit.Strongs.Count == 0)
-            Add(Para(14, Italic("no Strong's tag on this word")));
-
-        foreach (var code in hit.Strongs)
-            CodeStudy(code, word, full);
-
-        VerseStudyExtras(hit, full);
-        // The provenance legend, once, at the foot of a Full-study card.
-        if (full && hit.Strongs.Count > 0) AddTierLegend();
-    }
-
-    /// The study of one Strong's code: its dictionary entry and — in Full
-    /// study — the rendering lens plus the analytics tiers. Rendered inline for
-    /// each of a tapped word's codes and standalone as the `code:CODE[:word]`
-    /// card the reverse rendering-lens links open (mirrors GTK
-    /// code_study_markup), so "'love' also translates G5368" lands on G5368's
-    /// own entry, not a bare concordance. `word` is the surface that led here.
-    private void CodeStudy(string code, string word, bool full)
-    {
-        if (Engine is null) return;
-        Add(RuleLine());
-
-        int occTotal = Engine.StrongsOccurrencesJson(code) is { } oj
-            ? Wire.Parse<Occurrences>(oj).Total : 0;
-        Add(Para(14, R(code, bold: true), "   ",
-            H($"{occTotal} occurrence{(occTotal == 1 ? "" : "s")} ▸", $"occ:{code}")));
-        if (Engine.StrongsJson(code) is { } json)
-        {
-            var e = Wire.Parse<StrongsEntry>(json);
-            if (e.Lemma is not null) Add(Para(22, e.Lemma));
-            if (e.Xlit is not null) Add(Para(13, R(e.Xlit, italic: true)));
-            if (e.Pron is not null) Add(Para(13, R($"/{e.Pron}/", Color.FromArgb(255, 136, 136, 136))));
-            if (e.Deriv is not null) Add(Para(13, Italic(e.Deriv)));
-            if (e.Def is not null) Add(Para(14, e.Def));
-            if (e.Kjv is not null) Add(Para(12.5, R($"KJV: {e.Kjv}", Palette.InkFaded)));
-        }
-        else
-        {
-            Add(Para(14, Italic("(not in the dictionary)")));
-        }
-
-        if (!full) return;
-
-        // RENDERINGS: the other English words this code is translated as,
-        // most frequent first; the tapped word's own rendering is bold.
-        if (Engine.RenderingsJson(code) is { } rj)
-        {
-            var lens = Wire.Parse<RenderingLens>(rj);
-            if (lens.Renderings.Count > 0)
-            {
-                Add(SHeadMarked("RENDERINGS", "†", Palette.TierHuman));
-                var tb = new TextBlock
-                {
-                    FontSize = 13.5, TextWrapping = TextWrapping.Wrap,
-                    Foreground = new SolidColorBrush(Palette.Ink),
-                };
-                string wkey = RenderKey(word);
-                bool first = true;
-                foreach (var rnd in lens.Renderings)
-                {
-                    if (!first) tb.Inlines.Add(new Run { Text = "  ·  " });
-                    first = false;
-                    bool tapped = wkey.Length > 0 && RenderKey(rnd.Rendering) == wkey;
-                    var link = new Hyperlink { UnderlineStyle = UnderlineStyle.None };
-                    link.Inlines.Add(R(rnd.Rendering, Palette.Gold, 13.5, bold: tapped));
-                    string codeC = code, rndC = rnd.Rendering;
-                    link.Click += (_, _) => Link($"rend:{codeC}:{rndC}");
-                    tb.Inlines.Add(link);
-                    tb.Inlines.Add(R($" ×{rnd.Total}", Palette.InkFaded, 11.5));
-                }
-                Add(tb);
-
-                // Reverse lens: if the tapped word also stands for other
-                // codes, point at them (the agape/phileo split behind "love").
-                if (word.Length > 0 && Engine.WordCodesJson(word) is { } wj)
-                {
-                    var others = Wire.Parse<WordCodes>(wj).Codes
-                        .Where(c => c.Code != code).ToList();
-                    if (others.Count > 0)
-                    {
-                        var also = new TextBlock
-                        {
-                            FontSize = 11.5, TextWrapping = TextWrapping.Wrap,
-                            Foreground = new SolidColorBrush(Palette.InkFaded),
-                            Margin = new Thickness(0, 2, 0, 0),
-                        };
-                        also.Inlines.Add(new Run { Text = $"“{word}” also translates " });
-                        bool f2 = true;
-                        foreach (var o in others)
-                        {
-                            if (!f2) also.Inlines.Add(new Run { Text = ", " });
-                            f2 = false;
-                            var gl = Engine?.Gloss(o.Code);
-                            // Open the code's own study card (not a bare
-                            // concordance), carrying the tapped word so its
-                            // rendering is highlighted there.
-                            also.Inlines.Add(H(gl is not null ? $"{o.Code} ({gl})" : o.Code,
-                                $"code:{o.Code}:{word}", size: 11.5));
-                        }
-                        Add(also);
-                    }
-                }
-            }
-        }
-
-        if (Engine.BridgePartnersJson(code) is { } bj)
-        {
-            var bp = Wire.Parse<BridgePartners>(bj);
-            if (bp.Partners.Count > 0)
-            {
-                Add(SHead("SAME ROOT ACROSS TESTAMENTS"));
-                foreach (var p in bp.Partners.Take(6))
-                {
-                    var tb = ConceptChips(13.5, new[] { p.Code });
-                    tb.Inlines.Add(R($"   {string.Join(" + ", p.Sources.Select(Humanize))}",
-                        Palette.InkFaded, 11.5));
-                    AddTierMarks(tb, p.Tiers, p.ResearchGrade);
-                    Add(tb);
-                }
-            }
-        }
-
-        if (Engine.ConceptNeighboursJson(code, 6) is { } nj)
-        {
-            var nb = Wire.Parse<ConceptNeighbours>(nj);
-            if (nb.Near.Count > 0)
-            {
-                Add(SHeadMarked("SIMILAR CONCEPTS", "≈", Palette.TierMachine));
-                Add(ConceptChips(13.5, nb.Near.Select(s => s.Code)));
-            }
-            if (nb.Cross.Count > 0)
-            {
-                Add(Para(12, Italic("across the testaments —")));
-                Add(ConceptChips(13.5, nb.Cross.Select(s => s.Code)));
-            }
-        }
-
-        if (Engine.ConceptJson(code) is { } cj)
-        {
-            var c = Wire.Parse<Concept1>(cj);
-            if (c.Community.Count > 0)
-            {
-                Add(SHeadMarked("APPEARS ALONGSIDE", "≈", Palette.TierMachine));
-                Add(ConceptChips(13.5, c.Community.Take(8)));
-            }
-            if (c.TopBooks.Count > 0)
-            {
-                Add(SHeadMarked("WHERE IT CONCENTRATES", "≈", Palette.TierMachine));
-                Add(Para(13,
-                    string.Join(" · ", c.TopBooks.Select(b => $"{b.Display} ×{b.Count}")),
-                    R($"   (OT {c.Ot} · NT {c.Nt})", Palette.InkFaded, 12)));
-            }
-            if (c.Leitwort is { } lw)
-            {
-                Add(SHeadMarked("LEITWORT", "≈", Palette.TierMachine));
-                Add(Para(13,
-                    $"{lw.WinCount} of its {lw.N} uses cluster in {lw.Label} ",
-                    R($"(p ≈ 10^−{lw.Score:0.#})", Palette.InkFaded, 12)));
-            }
-        }
-
-        Add(Para(13, H("▸ open concept map", $"conceptmap:{code}")));
-    }
-
-    /// The per-verse extras that follow a word's code blocks: author actions,
-    /// weave + TSK cross-references, "verses like this", tags, and margin notes.
-    private void VerseStudyExtras(Hit hit, bool full)
-    {
-        if (Engine is null) return;
-
-        if (full && hit.Verse.Length > 0)
-        {
-            var actions = Para(13.5,
-                H("＋ tag verse", $"addtag:{hit.Verse}"), "     ",
-                H("＋ add to thread", $"addthread:{hit.Verse}"));
-            actions.Margin = new Thickness(0, 6, 0, 0);
-            Add(actions);
-        }
-
-        if (hit.Verse.Length > 0 && Engine.VerseXrefsJson(hit.Verse) is { } xj)
-        {
-            var x = Wire.Parse<Xrefs>(xj);
-            if (x.Partners.Count > 0)
-            {
-                Add(Para(14.5, R($"cross-references ({x.Partners.Count})", bold: true)));
-                foreach (var p in x.Partners.Take(40))
-                {
-                    int wIdx = Weaves?.Weaves.FindIndex(w => w.Name == p.Weave) ?? -1;
-                    Add(Para(13.5, Go(p.Verse, p.Display), "   ",
-                        wIdx >= 0
-                            ? H(p.Weave, $"weave:{wIdx}", Palette.InkFaded, 12)
-                            : R(p.Weave, Palette.InkFaded, 12)));
-                }
-            }
-        }
-
-        if (full && hit.Verse.Length > 0 && Engine.StudyXrefsJson(hit.Verse) is { } sxj)
-        {
-            var sx = Wire.Parse<StudyXrefs>(sxj);
-            if (sx.Refs.Count > 0)
-            {
-                Add(Para(14.5, R($"study cross-references ({sx.Refs.Count})", bold: true),
-                    R("  TSK", Color.FromArgb(255, 136, 136, 136), 11.5),
-                    R("  †", Palette.TierHuman, 11)));
-                foreach (var r2 in sx.Refs.Take(40))
-                    Add(r2.End is null
-                        ? Para(13.5, Go(r2.To, r2.ToDisplay))
-                        : Para(13.5, Go(r2.To, r2.ToDisplay), "–", Go(r2.End, r2.EndDisplay!)));
-                if (sx.Refs.Count > 40)
-                    Add(Para(12, Italic($"… {sx.Refs.Count - 40} more")));
-            }
-        }
-
-        if (full && hit.Verse.Length > 0 && Engine.SimilarVersesJson(hit.Verse, 6) is { } svj)
-        {
-            var s = Wire.Parse<SimilarVerses>(svj);
-            if (s.In.Count > 0 || s.Cross.Count > 0)
-            {
-                Add(Para(14.5, R("verses like this", bold: true), R("  ≈", Palette.TierMachine, 11)));
-                foreach (var v in s.In.Take(6)) Add(Para(13.5, Go(v.Verse, v.Display)));
-                if (s.Cross.Count > 0)
-                {
-                    Add(Para(12, Italic("across the testaments:")));
-                    foreach (var v in s.Cross.Take(4)) Add(Para(13.5, Go(v.Verse, v.Display)));
-                }
-            }
-        }
-
-        if (full && hit.Verse.Length > 0)
-        {
-            var tags = LoadTags();
-            var holding = new List<(int i, Tag1 t)>();
-            for (int i = 0; i < tags.Count; i++)
-                if (tags[i].Members.Any(m => m.Kind == "verse" && m.Verse == hit.Verse))
-                    holding.Add((i, tags[i]));
-            if (holding.Count > 0)
-            {
-                Add(Para(14.5, R("tags", bold: true)));
-                foreach (var (i, t) in holding)
-                    Add(Para(13.5, H(t.Name, $"tag:{i}"), "  ",
-                        H("✕", $"untag:{i}:{hit.Verse}", Palette.InkFaded)));
-            }
-        }
-
-        if (hit.Verse.Length > 0 && Engine.VerseNotesJson(hit.Verse) is { } vnj)
-        {
-            var notes = Wire.Parse<VerseNotes>(vnj);
-            Add(Para(14.5, R("margin notes", bold: true), R("  †", Palette.TierHuman, 11)));
-            foreach (var n in notes.Notes)
-                Add(Para(12.5, R(n, Palette.InkFaded)));
+            Fresh();
+            RenderBlocks(j);
         }
     }
 
-    /// Standalone study card for one Strong's code (the `code:CODE[:word]`
-    /// verb). Reverse rendering-lens links open this — the code's actual
-    /// entry — instead of a bare concordance. `word` is the surface that led
-    /// here ("" if none), so its rendering is highlighted on the card.
+    /// The standalone `code:CODE[:word]` study card (reverse rendering-lens target).
     public void ShowCodeStudy(string code, string word)
     {
-        if (Engine is null) return;
-        Fresh();
-        CodeStudy(code, word, IsFull());
-        if (IsFull()) AddTierLegend();
+        if (Engine?.CodeStudyBlocksJson(code, word.Length == 0 ? null : word, IsFull()) is { } j)
+        {
+            Fresh();
+            RenderBlocks(j);
+        }
     }
-
-    // Mirror of Rust bridge::source_label — a lay-friendly name per witness
-    // source key. Kept in sync with the GTK shell (FEATURE-MANIFEST.md).
-    private static string Humanize(string source) => source switch
-    {
-        "etymology" => "etymology",
-        "lxx" => "Septuagint",
-        "quotation" => "NT quotation",
-        "abbott-smith" => "Abbott-Smith (1922)",
-        "stepbible-tbesg" => "STEPBible",
-        "stepbible-tipnr" => "STEPBible names",
-        "rendering" => "1769 renderings",
-        "tsk" => "Treasury of Scripture Knowledge",
-        _ => source,
-    };
-
-    // ── concordance ────────────────────────────────────────────────────────
 
     public void ShowConcordance(string code)
     {
-        if (Engine is null) return;
-        Fresh();
-        string? lemma = Engine.StrongsJson(code) is { } sj
-            ? Wire.Parse<StrongsEntry>(sj).Lemma : null;
-        if (Engine.StrongsOccurrencesJson(code) is not { } oj)
-        {
-            Add(Para(14, Italic($"no occurrences of {code}")));
-            return;
-        }
-        var occ = Wire.Parse<Occurrences>(oj);
-        Add(Para(18, R(code, bold: true), lemma is not null ? $"  {lemma}" : ""));
-        Add(Para(13, R($"{occ.Total} occurrence{(occ.Total == 1 ? "" : "s")}", Palette.Gold)));
-        foreach (var v in occ.Verses.Take(300))
-            Add(Para(13.5, Go(v)));
-        if (occ.Total > 300)
-            Add(Para(12, Italic($"… {occ.Total - 300} more")));
+        if (Engine?.ConcordanceBlocksJson(code) is { } j) { Fresh(); RenderBlocks(j); }
     }
 
-    /// Concordance filtered to one rendering of a code — the verses where the
-    /// code is translated exactly this way (reached from a RENDERINGS chip).
     public void ShowConcordanceFiltered(string code, string rendering)
     {
-        if (Engine is null) return;
-        Fresh();
-        if (Engine.RenderingsJson(code) is not { } rj)
-        {
-            Add(Para(14, Italic($"no occurrences of {code}")));
-            return;
-        }
-        var lens = Wire.Parse<RenderingLens>(rj);
-        var key = RenderKey(rendering);
-        var match = lens.Renderings.FirstOrDefault(r => RenderKey(r.Rendering) == key);
-        if (match is null)
-        {
-            Add(Para(14, Italic($"no “{rendering}” rendering of {code}")));
-            return;
-        }
-        Add(Para(18, R(code, bold: true), $"  “{match.Rendering}”"));
-        Add(Para(13, R($"{match.Total} verse{(match.Total == 1 ? "" : "s")} rendered “{match.Rendering}”",
-            Palette.Gold)));
-        foreach (var rf in match.Refs.Take(300))
-            Add(Para(13.5, Go(rf.Verse, rf.Display)));
-        if (match.Total > 300)
-            Add(Para(12, Italic($"… {match.Total - 300} more")));
+        if (Engine?.RenderingConcordanceBlocksJson(code, rendering) is { } j) { Fresh(); RenderBlocks(j); }
     }
-
-    /// Fold a surface word to the rendering-lens key (letters only, lower) so a
-    /// tapped word matches a chip label. Mirrors core `renderings::normalize`
-    /// for the single-word case (multi-word labels never equal a single tap).
-    private static string RenderKey(string s) =>
-        new string(s.Where(char.IsLetter).ToArray()).ToLowerInvariant();
-
-    // ── threads / tags ─────────────────────────────────────────────────────
 
     public void ShowThreadsList()
     {
-        Fresh();
-        var threads = LoadThreads();
-        Add(Para(18, R($"Threads ({threads.Count})", bold: true)));
-        if (threads.Count == 0)
-            Add(Para(13, Italic("No threads yet — open a word study and “＋ add to thread”.")));
-        for (int i = 0; i < threads.Count; i++)
-            Add(Para(14, H(threads[i].Name, $"thread:{i}"),
-                R($"   {threads[i].Entries.Count} passage{(threads[i].Entries.Count == 1 ? "" : "s")}",
-                    Palette.InkFaded, 12)));
+        if (Engine?.ThreadsBlocksJson() is { } j) { Fresh(); RenderBlocks(j); }
     }
 
     public void ShowThreadDetail(int index)
     {
-        var threads = LoadThreads();
-        if (index >= threads.Count) { ShowThreadsList(); return; }
-        var t = threads[index];
-        Fresh();
-        Add(Para(18, R(t.Name, bold: true)));
-        Add(Para(13, R($"{t.Entries.Count} passage{(t.Entries.Count == 1 ? "" : "s")}", Palette.InkFaded),
-            "   ", H("✎ notes", $"editthreadnotes:{index}", Palette.InkFaded, 12)));
-        if (t.Notes.Length > 0) Add(Para(12.5, R(t.Notes, Palette.InkFaded)));
-        for (int e = 0; e < t.Entries.Count; e++)
-        {
-            var en = t.Entries[e];
-            Add(RuleLine());
-            Add(Para(13.5, Go(en.Verse, en.Display), "   ",
-                H("✎ note", $"editentrynote:{index}:{e}", Palette.InkFaded, 12)));
-            var snap = string.Join(" ", en.Text);
-            if (snap.Length > 70) snap = snap[..70].TrimEnd() + "…";
-            if (snap.Length > 0) Add(Para(12.5, Italic($"“{snap}”")));
-            if (!string.IsNullOrEmpty(en.Note))
-                Add(Para(12.5, R($"— {en.Note}", Color.FromArgb(255, 136, 136, 136))));
-        }
+        if (Engine?.ThreadBlocksJson((uint)index) is { } j) { Fresh(); RenderBlocks(j); }
     }
 
     public void ShowTagsList()
     {
-        Fresh();
-        var tags = LoadTags();
-        Add(Para(18, R($"Tags ({tags.Count})", bold: true)));
-        if (tags.Count == 0)
-            Add(Para(13, Italic("No tags yet — open a word study and “＋ tag verse”.")));
-        for (int i = 0; i < tags.Count; i++)
-            Add(Para(14, H(tags[i].Name, $"tag:{i}"),
-                R($"   {tags[i].Members.Count} member{(tags[i].Members.Count == 1 ? "" : "s")}",
-                    Palette.InkFaded, 12)));
+        if (Engine?.TagsBlocksJson() is { } j) { Fresh(); RenderBlocks(j); }
     }
 
     public void ShowTagDetail(int index)
     {
-        var tags = LoadTags();
-        if (index >= tags.Count) { ShowTagsList(); return; }
-        var t = tags[index];
-        Fresh();
-        Add(Para(18, R(t.Name, bold: true)));
-        foreach (var m in t.Members)
-        {
-            var p = m.Kind == "verse" && m.Verse is not null
-                ? Para(13.5, Go(m.Verse, m.Display ?? m.Verse))
-                : Para(13.5, H($"≈ {m.Strongs}", $"occ:{m.Strongs}"));
-            if (!string.IsNullOrEmpty(m.Note))
-                p.Inlines.Add(R($"   {m.Note}", Color.FromArgb(255, 136, 136, 136), 12));
-            Add(p);
-        }
+        if (Engine?.TagBlocksJson((uint)index) is { } j) { Fresh(); RenderBlocks(j); }
     }
 
-    /// The whole weave library, flat: name → compare card. (The constellation
-    /// is the graphical view of the same list.)
     public void ShowWeavesList()
     {
-        Fresh();
-        var ws = Weaves?.Weaves ?? new List<Weave1>();
-        Add(Para(18, R($"Weaves ({ws.Count})", bold: true)));
-        foreach (var w in ws.OrderByDescending(x => x.Links.Count))
-            Add(Para(14, H(w.Name, $"weave:{w.Index}"),
-                R($"   {w.KindLabel} · {w.Links.Count} link{(w.Links.Count == 1 ? "" : "s")}" +
-                  (w.Suggested ? " · suggested" : ""), Palette.InkFaded, 12)));
+        if (Engine?.WeavesBlocksJson() is { } j) { Fresh(); RenderBlocks(j); }
     }
-
-    // ── suggested weaves ───────────────────────────────────────────────────
 
     public void ShowSuggested()
     {
-        if (Engine?.SuggestedWeavesJson() is not { } json) return;
-        Fresh();
-        var suggested = Wire.Parse<SuggestedWeaves>(json).Suggested;
-        Add(Para(18, R($"Suggested weaves ({suggested.Count})", bold: true)));
-        if (suggested.Count == 0)
-            Add(Para(13, Italic("The review queue is empty (weaves/suggested).")));
-        foreach (var w in suggested)
-        {
-            Add(RuleLine());
-            int libIdx = Weaves?.Weaves.FindIndex(x => x.Suggested && x.Name == w.Name) ?? -1;
-            Add(Para(15, R(w.Name, bold: true),
-                R($"   {w.Kind}", Color.FromArgb(255, 136, 136, 136), 12)));
-            if (w.Notes.Length > 0) Add(Para(12.5, R(w.Notes, Palette.InkFaded)));
-            foreach (var l in w.Links.Take(40))
-                Add(Para(13.5, Go(l.A, l.ADisplay), "  ↔  ", Go(l.B, l.BDisplay),
-                    l.Label.Length > 0 ? R($"   {l.Label}", Palette.InkFaded, 12) : R("")));
-            if (w.Links.Count > 40)
-                Add(Para(12, Italic($"… {w.Links.Count - 40} more")));
-            var actions = Para(13.5,
-                libIdx >= 0 ? H("⇔ compare", $"weave:{libIdx}") : R(""), "   ",
-                H("✓ approve", $"approve:{w.Index}"), "   ",
-                H("✕ reject", $"reject:{w.Index}"), "   ",
-                libIdx >= 0 ? H("✎ note", $"editweavenotes:{libIdx}", Palette.InkFaded, 12) : R(""));
-            Add(actions);
-        }
+        if (Engine?.SuggestedBlocksJson() is { } j) { Fresh(); RenderBlocks(j); }
     }
-
-    // ── weave compare card ─────────────────────────────────────────────────
 
     public void ShowCompareCard(int weaveIndex)
     {
-        if (Engine is null || Weaves is null || weaveIndex >= Weaves.Weaves.Count) return;
-        var w = Weaves.Weaves[weaveIndex];
-        Fresh();
-        Add(Para(18, R(w.Name, bold: true),
-            R($"   {w.KindLabel}{(w.Suggested ? "  (suggested)" : "")}",
-                Color.FromArgb(255, 136, 136, 136), 12)));
-        var head = Para(13, R($"{w.Links.Count} link{(w.Links.Count == 1 ? "" : "s")}", Palette.InkFaded));
-        if (IsFull())
-        {
-            head.Inlines.Add(new Run { Text = "   " });
-            head.Inlines.Add(H("✎ note", $"editweavenotes:{weaveIndex}", Palette.InkFaded, 12));
-        }
-        Add(head);
-        if (w.Notes.Length > 0) Add(Para(12.5, R(w.Notes, Palette.InkFaded)));
-
-        foreach (var l in w.Links.Take(40))
-        {
-            Add(RuleLine());
-            if (l.Label.Length > 0)
-                Add(Para(12.5, R($"“{l.Label}”", Palette.Gold)));
-            AddCompareSide(l.A, l.ADisplay, l.SpanA);
-            AddCompareSide(l.B, l.BDisplay, l.SpanB);
-        }
-        if (w.Links.Count > 40)
-            Add(Para(12, Italic($"… {w.Links.Count - 40} more")));
+        if (Engine?.CompareBlocksJson((uint)weaveIndex, IsFull()) is { } j) { Fresh(); RenderBlocks(j); }
     }
 
-    /// One side of a compare card: the verse link, then its text small with
-    /// span words bold and added words italic gray.
-    private void AddCompareSide(string refKey, string display, ushort[]? span)
+    /// Search results (the panel runs the query itself now); MainWindow keeps
+    /// the direct-navigate short-circuit for a submitted reference.
+    public void ShowSearchBlocks(string query)
     {
-        Add(Para(13.5, Go(refKey, display)));
-        if (Engine?.VerseJson(refKey) is not { } vj) return;
-        var v = Wire.Parse<VerseData>(vj);
-        var tb = new TextBlock
-        {
-            FontSize = 12.5, TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(Palette.Ink),
-            Margin = new Thickness(10, 0, 0, 0),
-        };
-        for (int ti = 0; ti < v.Tokens.Count; ti++)
-        {
-            var t = v.Tokens[ti];
-            bool inSpan = span is not null && ti >= span[0] && ti <= span[1];
-            bool added = (t.Flags & PureFlags.Added) != 0;
-            tb.Inlines.Add(R(t.Render + " ",
-                added ? Palette.InkFaded : Palette.Ink,
-                bold: inSpan, italic: added));
-        }
-        Add(tb);
-    }
-
-    // ── search results ─────────────────────────────────────────────────────
-
-    public void ShowSearch(string query, SearchResult r)
-    {
-        Fresh();
-        if (r.Kind == "goto" && r.Book is not null && r.Chapter is not null)
-        {
-            var uri = r.Verse is { } v ? $"go:{r.Book}:{r.Chapter}:{v}" : $"go:{r.Book}:{r.Chapter}";
-            Add(Para(17, H($"go to {r.Display}", uri)));
-            return;
-        }
-        Add(Para(15, R($"{r.Total} result{(r.Total == 1 ? "" : "s")}", bold: true)));
-        if (!string.IsNullOrEmpty(r.How)) Add(Para(12, Italic(r.How!)));
-        foreach (var h in r.Hits ?? new())
-        {
-            var p = Para(13.5, Go(h.Verse, h.Display));
-            if (h.Why.Length > 0)
-                p.Inlines.Add(R($"   {h.Why}", Color.FromArgb(255, 136, 136, 136), 12));
-            if (h.Note)
-                p.Inlines.Add(R("   ※ note", Palette.Gold, 12));
-            Add(p);
-            if (Snippet(h.Verse, query) is { } snip) Add(snip);
-        }
-        if (r.Capped == true)
-            Add(Para(12, Italic($"… {r.Total - (r.Hits?.Count ?? 0)} more")));
-    }
-
-    /// A one-line context snippet for a search hit: the verse text windowed
-    /// around the first match of the query's first word, match emboldened.
-    private TextBlock? Snippet(string refKey, string query)
-    {
-        if (Engine?.VerseJson(refKey) is not { } vj) return null;
-        var body = Wire.Parse<VerseData>(vj).Body;
-        if (body.Length == 0) return null;
-
-        var needle = query.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
-        int at = needle.Length > 0
-            ? body.IndexOf(needle, StringComparison.OrdinalIgnoreCase) : -1;
-
-        const int Window = 46;
-        int start = at < 0 ? 0 : Math.Max(0, at - Window);
-        int end = at < 0 ? Math.Min(body.Length, 2 * Window)
-            : Math.Min(body.Length, at + needle.Length + Window);
-        // Snap to word boundaries.
-        while (start > 0 && body[start - 1] != ' ') start--;
-        while (end < body.Length && body[end] != ' ') end++;
-
-        var tb = new TextBlock
-        {
-            FontSize = 12,
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(Palette.InkFaded),
-            Margin = new Thickness(12, -4, 0, 2),
-        };
-        if (start > 0) tb.Inlines.Add(new Run { Text = "…" });
-        if (at >= 0 && at >= start)
-        {
-            tb.Inlines.Add(new Run { Text = body[start..at] });
-            tb.Inlines.Add(R(body[at..(at + needle.Length)], Palette.Ink, bold: true));
-            tb.Inlines.Add(new Run { Text = body[(at + needle.Length)..end] });
-        }
-        else
-        {
-            tb.Inlines.Add(new Run { Text = body[start..end] });
-        }
-        if (end < body.Length) tb.Inlines.Add(new Run { Text = "…" });
-        return tb;
+        if (Engine?.SearchBlocksJson(query) is { } j) { Fresh(); RenderBlocks(j); }
     }
 
     // ── prompts ────────────────────────────────────────────────────────────
