@@ -11,6 +11,7 @@
 //! pure-study data is v2; a v1 file currently surfaces as a parse error rather
 //! than being silently migrated. Port `migrateV1` when older data must load.
 
+use crate::corpus::Corpus;
 use crate::reference::VRef;
 use crate::Error;
 use serde::{Deserialize, Serialize};
@@ -479,6 +480,280 @@ pub struct LoadedWeave {
     pub weave: Weave,
 }
 
+/// All weave links across the library as canonical, deduped verse pairs. Each
+/// stored link is already ordered `a <= b` in reading order (see
+/// [`Link::canon_span`]), so the pair is taken as-is and a `HashSet` drops the
+/// duplicates a verse pair linked by several weaves would produce.
+///
+/// This is the one derivation behind the ambient connector lines and the chord
+/// map, shared by every shell: GTK calls it directly; the non-Rust shells
+/// receive the same pairs (with each endpoint resolved and located) through
+/// `pure_engine_link_pairs_json`. Resolvability against the corpus is a
+/// separate, drawing-time concern and is not filtered here.
+pub fn link_pairs(weaves: &[LoadedWeave]) -> Vec<(VRef, VRef)> {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for lw in weaves {
+        for l in &lw.weave.links {
+            if seen.insert((l.a.clone(), l.b.clone())) {
+                out.push((l.a.clone(), l.b.clone()));
+            }
+        }
+    }
+    out
+}
+
+/// Book-to-book weave density: how strongly each canon-ordered book pair is
+/// woven together, over the deduped [`link_pairs`]. Each entry is
+/// `(book_a_index, book_b_index, count)` with `a <= b` (canon order, so the pair
+/// is orientation-free), plus the maximum count for normalising ribbon
+/// weight/alpha. A pair whose endpoint book isn't in the canon (unknown id) is
+/// skipped, matching the drawing code that has nowhere to place it.
+///
+/// The one derivation behind the chord/arc "Weave map": GTK calls it directly;
+/// the non-Rust shells receive the same folded counts through
+/// `pure_engine_chord_map_json`, so no shell re-folds the pairs or re-derives
+/// the max.
+pub fn chord_pairs(weaves: &[LoadedWeave]) -> (Vec<(usize, usize, u32)>, u32) {
+    let mut counts: HashMap<(usize, usize), u32> = HashMap::new();
+    for (a, b) in link_pairs(weaves) {
+        let (Some(ia), Some(ib)) = (crate::canon::book_order(&a.book), crate::canon::book_order(&b.book))
+        else {
+            continue;
+        };
+        let key = if ia <= ib { (ia, ib) } else { (ib, ia) };
+        *counts.entry(key).or_insert(0) += 1;
+    }
+    let max = counts.values().copied().max().unwrap_or(1);
+    let mut pairs: Vec<(usize, usize, u32)> =
+        counts.into_iter().map(|((a, b), c)| (a, b, c)).collect();
+    // Deterministic order (HashMap iteration is not): by book pair. The shells
+    // re-sort by weight for painting, so this only fixes the wire/test output.
+    pairs.sort_unstable();
+    (pairs, max)
+}
+
+// ── constellation (the weave-library overview) ────────────────────────────────
+//
+// Ported from overlay `Constellation.hs`: a scoped overview of the weave
+// library, one weave per labelled lane (largest first), nodes on the canon book
+// backbone, links as gentle curves. Pinned lanes stay put while paging cycles
+// the free lanes past them. This is the one derivation behind the popup (review
+// item 3): GTK calls it directly; the non-Rust shells get the same laid-out
+// page (as camelCase JSON) via `pure_engine_constellation_json`.
+//
+// Everything here is **fractions / logical units** — the shell maps them to
+// pixels, picks colours, and paints. `x` is a canon fraction 0..1 across the
+// book backbone; `lane_frac` is a fraction 0..1 within a lane's band (jitter
+// already applied, always strictly inside so nothing clips); `size` is the
+// node's witness degree normalised 0..1.
+
+/// How many lanes the constellation shows at once. Both the paging arithmetic
+/// (here) and each shell's lane-height mapping key on it — served in the wire
+/// model so a shell never hardcodes a divisor that could drift from the paging.
+pub const CONSTELLATION_LANES: usize = 18;
+
+/// A laid-out page of the constellation: the lanes shown (pinned first, then
+/// this page's slice of the free lanes) plus the paging arithmetic already
+/// resolved into a caption.
+pub struct Constellation {
+    pub lanes: Vec<ConstellationLane>,
+    /// How many lanes are pinned, the total free (unpinned) weaves, the page
+    /// actually shown (the requested page clamped into range), and the last
+    /// page index — the paging state a shell echoes into its controls.
+    pub n_pins: usize,
+    pub free_total: usize,
+    pub page: usize,
+    pub max_page: usize,
+    /// The fully-composed paging caption ("N pinned · weaves lo–hi of total · …").
+    pub caption: String,
+    /// The fixed lane capacity ([`CONSTELLATION_LANES`]) — the shell's
+    /// lane-height denominator, carried so it can't drift from the paging.
+    pub lane_capacity: usize,
+}
+
+/// One lane of the current page: a weave drawn as its resolvable links.
+pub struct ConstellationLane {
+    /// The weave's index in the loaded library — the handle the compare card
+    /// takes and the pin set keys on. Stable until the next authoring write.
+    pub weave_index: usize,
+    pub name: String,
+    pub pinned: bool,
+    /// Deduped nodes on this lane (first-appearance order).
+    pub nodes: Vec<ConstellationNode>,
+    /// One curved edge per resolvable link; endpoint coords carried so the shell
+    /// draws and hit-tests the curve without re-placing the nodes.
+    pub edges: Vec<ConstellationEdge>,
+}
+
+/// A node on a lane: a verse on the canon backbone, sized by witness degree.
+pub struct ConstellationNode {
+    /// Canon fraction 0..1 across the book backbone (shell maps to plot x).
+    pub x: f32,
+    /// Fraction 0..1 within the lane's band (jitter applied), strictly inside.
+    pub lane_frac: f32,
+    /// Witness degree ÷ the library's max degree (0..1); the shell picks the
+    /// radius (both shells: `1.4 + 2.4 * size`).
+    pub size: f32,
+    /// The verse — located + displayed, so a click navigates and the tooltip
+    /// names it without the shell parsing a ref key.
+    pub ref_key: String,
+    pub book: String,
+    pub chapter: u16,
+    pub verse: u16,
+    pub display: String,
+}
+
+/// A link on a lane: both endpoints' `(x, lane_frac)` (same lane), for the curve.
+pub struct ConstellationEdge {
+    pub a_x: f32,
+    pub a_lane_frac: f32,
+    pub b_x: f32,
+    pub b_lane_frac: f32,
+}
+
+/// A verse's canon fraction 0..1: book position plus chapter progress within
+/// the book, over the 66 — the same backbone the canon strip uses.
+fn constellation_x(corpus: &Corpus, r: &VRef) -> f32 {
+    let bi = crate::canon::book_order(&r.book).unwrap_or(0) as f32;
+    let nc = corpus.chapter_count(&r.book).max(1) as f32;
+    (bi + (r.chapter.saturating_sub(1)) as f32 / nc) / crate::canon::BOOKS.len() as f32
+}
+
+/// A node's fractional position within its lane band: centre plus a small
+/// deterministic jitter from the verse identity, so co-lane nodes don't fuse
+/// into one flat line. In `(0.14, 0.86)` for every verse, so it never clips
+/// regardless of lane height.
+fn constellation_lane_frac(r: &VRef) -> f32 {
+    let j = ((r.chapter as i64 * 3 + r.verse as i64) % 7 - 3) as f32;
+    0.5 + j * 0.12
+}
+
+/// The paging caption: pins, the honest free-weave range, and the pin hint.
+fn constellation_caption(n_pins: usize, free_total: usize, page: usize) -> String {
+    let free_lanes = CONSTELLATION_LANES.saturating_sub(n_pins);
+    let pins = if n_pins > 0 { format!("{n_pins} pinned · ") } else { String::new() };
+    let body = if free_lanes == 0 {
+        "all lanes pinned — unpin one to page".to_string()
+    } else if free_total == 0 {
+        "no free weaves".to_string()
+    } else {
+        format!(
+            "weaves {}–{} of {} · largest first · click the ▪ to pin a lane",
+            page * free_lanes + 1,
+            free_total.min((page + 1) * free_lanes),
+            free_total
+        )
+    };
+    format!("{pins}{body}")
+}
+
+/// Lay out one page of the constellation for the given `page` and `pins` (weave
+/// indices into `weaves`, the same handles the lanes carry). Pinned lanes come
+/// first and stay put; the free lanes page past them. Recomputed per event —
+/// the weave library is small.
+pub fn constellation(
+    weaves: &[LoadedWeave],
+    corpus: &Corpus,
+    page: usize,
+    pins: &[usize],
+) -> Constellation {
+    // Witness degree over the whole library: how many weave links touch each
+    // verse (both endpoints, every weave). The busiest verse sets the scale, so
+    // node size is stable across pages.
+    let mut deg: HashMap<VRef, usize> = HashMap::new();
+    for lw in weaves {
+        for l in &lw.weave.links {
+            *deg.entry(l.a.clone()).or_default() += 1;
+            *deg.entry(l.b.clone()).or_default() += 1;
+        }
+    }
+    let max_deg = deg.values().copied().max().unwrap_or(1) as f32;
+
+    // Usable weaves: those with at least one link whose both ends resolve in the
+    // corpus (drawable). Keep the original library index for pins + compare.
+    let mut usable: Vec<(usize, Vec<(VRef, VRef)>)> = weaves
+        .iter()
+        .enumerate()
+        .map(|(i, lw)| {
+            let links: Vec<(VRef, VRef)> = lw
+                .weave
+                .links
+                .iter()
+                .filter(|l| corpus.verse(&l.a).is_some() && corpus.verse(&l.b).is_some())
+                .map(|l| (l.a.clone(), l.b.clone()))
+                .collect();
+            (i, links)
+        })
+        .filter(|(_, ls)| !ls.is_empty())
+        .collect();
+    // Largest first; a stable sort keeps ties in library (name) order.
+    usable.sort_by_key(|(_, ls)| std::cmp::Reverse(ls.len()));
+
+    let pinned_flag: Vec<bool> = usable.iter().map(|(i, _)| pins.contains(i)).collect();
+    let n_pins = pinned_flag.iter().filter(|p| **p).count();
+    let free_total = usable.len() - n_pins;
+    let free_lanes = CONSTELLATION_LANES.saturating_sub(n_pins);
+    let max_page =
+        if free_lanes == 0 || free_total == 0 { 0 } else { (free_total - 1) / free_lanes };
+    let page = page.min(max_page);
+
+    let make_lane = |i: usize, links: &[(VRef, VRef)], pinned: bool| -> ConstellationLane {
+        let mut seen: HashSet<VRef> = HashSet::new();
+        let mut nodes = Vec::new();
+        let mut edges = Vec::new();
+        for (a, b) in links {
+            let (ax, alf) = (constellation_x(corpus, a), constellation_lane_frac(a));
+            let (bx, blf) = (constellation_x(corpus, b), constellation_lane_frac(b));
+            edges.push(ConstellationEdge { a_x: ax, a_lane_frac: alf, b_x: bx, b_lane_frac: blf });
+            for r in [a, b] {
+                if seen.insert(r.clone()) {
+                    nodes.push(ConstellationNode {
+                        x: constellation_x(corpus, r),
+                        lane_frac: constellation_lane_frac(r),
+                        size: deg.get(r).copied().unwrap_or(0) as f32 / max_deg,
+                        ref_key: r.ref_key(),
+                        book: r.book.clone(),
+                        chapter: r.chapter,
+                        verse: r.verse,
+                        display: r.display(),
+                    });
+                }
+            }
+        }
+        ConstellationLane { weave_index: i, name: weaves[i].weave.name.clone(), pinned, nodes, edges }
+    };
+
+    // Pinned lanes first (in usable order), then this page's slice of the free.
+    let mut lanes = Vec::new();
+    for ((i, links), pinned) in usable.iter().zip(&pinned_flag) {
+        if *pinned {
+            lanes.push(make_lane(*i, links, true));
+        }
+    }
+    if free_lanes > 0 {
+        for ((i, links), _) in usable
+            .iter()
+            .zip(&pinned_flag)
+            .filter(|(_, p)| !**p)
+            .skip(page * free_lanes)
+            .take(free_lanes)
+        {
+            lanes.push(make_lane(*i, links, false));
+        }
+    }
+
+    Constellation {
+        lanes,
+        n_pins,
+        free_total,
+        page,
+        max_page,
+        caption: constellation_caption(n_pins, free_total, page),
+        lane_capacity: CONSTELLATION_LANES,
+    }
+}
+
 /// Slug a weave name into a JSON filename under `dir`. Ported from
 /// `weaveFileIn`.
 pub fn weave_file_in(dir: impl AsRef<Path>, name: &str) -> std::path::PathBuf {
@@ -800,6 +1075,129 @@ mod tests {
         w.add_links([Link::canon(r("Gen", 1, 2), r("Matt", 1, 1))]);
         assert!(!w.approved);
         assert_eq!(w.approved_count(), 1);
+    }
+
+    #[test]
+    fn link_pairs_dedupe_canonically_across_weaves() {
+        // Two weaves that share one link (Gen 1:1–John 1:1, endpoints given in
+        // opposite order) plus one unique link each.
+        let mut w1 = Weave::empty("a", WeaveKind::Retelling, "kjv1769-tok2", "now");
+        w1.add_links([
+            Link::canon(r("Gen", 1, 1), r("John", 1, 1)),
+            Link::canon(r("Gen", 2, 4), r("Matt", 19, 4)),
+        ]);
+        let mut w2 = Weave::empty("b", WeaveKind::Quotation, "kjv1769-tok2", "now");
+        w2.add_links([
+            Link::canon(r("John", 1, 1), r("Gen", 1, 1)), // same pair, reversed
+            Link::canon(r("Exod", 12, 3), r("Rev", 5, 6)),
+        ]);
+        let loaded = vec![
+            LoadedWeave { file: "a.json".into(), weave: w1 },
+            LoadedWeave { file: "b.json".into(), weave: w2 },
+        ];
+
+        let pairs = link_pairs(&loaded);
+        // The shared pair appears once → three pairs total.
+        assert_eq!(pairs.len(), 3);
+        assert!(pairs.contains(&(r("Gen", 1, 1), r("John", 1, 1))));
+        assert!(pairs.contains(&(r("Gen", 2, 4), r("Matt", 19, 4))));
+        assert!(pairs.contains(&(r("Exod", 12, 3), r("Rev", 5, 6))));
+        // Every pair is stored canonically (a <= b in reading order).
+        for (a, b) in &pairs {
+            assert!(a.reading_key() <= b.reading_key());
+        }
+    }
+
+    #[test]
+    fn chord_pairs_fold_book_density_over_deduped_links() {
+        // Two Gen↔John verse links (distinct verses) fold to one book pair with
+        // count 2; a Gen↔Gen link is a self-pair; a shared link counts once.
+        let mut w1 = Weave::empty("a", WeaveKind::Retelling, "kjv1769-tok2", "now");
+        w1.add_links([
+            Link::canon(r("Gen", 1, 1), r("John", 1, 1)),
+            Link::canon(r("Gen", 2, 4), r("John", 3, 16)),
+            Link::canon(r("Gen", 1, 1), r("Gen", 5, 1)), // OT self-pair
+        ]);
+        let mut w2 = Weave::empty("b", WeaveKind::Quotation, "kjv1769-tok2", "now");
+        w2.add_links([Link::canon(r("John", 1, 1), r("Gen", 1, 1))]); // dup of w1's first
+        let loaded = vec![
+            LoadedWeave { file: "a.json".into(), weave: w1 },
+            LoadedWeave { file: "b.json".into(), weave: w2 },
+        ];
+
+        let (pairs, max) = chord_pairs(&loaded);
+        let gen = crate::canon::book_order("Gen").unwrap();
+        let john = crate::canon::book_order("John").unwrap();
+        // Gen↔John woven by two distinct (deduped) verse links.
+        assert_eq!(pairs.iter().find(|(a, b, _)| *a == gen && *b == john).unwrap().2, 2);
+        // Gen↔Gen self-pair, count 1.
+        assert_eq!(pairs.iter().find(|(a, b, _)| *a == gen && *b == gen).unwrap().2, 1);
+        assert_eq!(max, 2);
+        // Deterministic (sorted) output.
+        let mut sorted = pairs.clone();
+        sorted.sort_unstable();
+        assert_eq!(pairs, sorted);
+    }
+
+    #[test]
+    fn constellation_lays_out_lanes_paging_and_pins() {
+        let jsonl = concat!(
+            r#"{"tokenization":"kjv1769-tok2","verses":3}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"v":1,"t":[["","In","",[],0]]}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"v":2,"t":[["","And","",[],0]]}"#,
+            "\n",
+            r#"{"b":"John","c":3,"v":16,"t":[["","For","",[],0]]}"#,
+        );
+        let corpus = crate::corpus::from_str(jsonl).unwrap();
+
+        let mut w1 = Weave::empty("alpha", WeaveKind::Retelling, "kjv1769-tok2", "now");
+        w1.add_links([
+            Link::canon(r("Gen", 1, 1), r("John", 3, 16)),
+            Link::canon(r("Gen", 1, 2), r("John", 3, 16)),
+        ]);
+        let mut w2 = Weave::empty("beta", WeaveKind::Quotation, "kjv1769-tok2", "now");
+        w2.add_links([Link::canon(r("Gen", 1, 1), r("Gen", 1, 2))]);
+        let loaded = vec![
+            LoadedWeave { file: "a.json".into(), weave: w1 },
+            LoadedWeave { file: "b.json".into(), weave: w2 },
+        ];
+
+        // Unpinned: the larger lane (w1, 2 links) comes first, then w2.
+        let c = constellation(&loaded, &corpus, 0, &[]);
+        assert_eq!(c.lanes.len(), 2);
+        assert_eq!(c.lanes[0].weave_index, 0);
+        assert_eq!(c.lanes[0].name, "alpha");
+        assert!(!c.lanes[0].pinned);
+        assert_eq!(c.lanes[0].edges.len(), 2);
+        // Gen 1:1, John 3:16 (shared, deduped), Gen 1:2 → three nodes.
+        assert_eq!(c.lanes[0].nodes.len(), 3);
+        assert_eq!(c.n_pins, 0);
+        assert_eq!(c.free_total, 2);
+        assert_eq!(c.lane_capacity, CONSTELLATION_LANES);
+        // Everything is an in-range fraction; jitter never clips the band.
+        for lane in &c.lanes {
+            for n in &lane.nodes {
+                assert!((0.0..=1.0).contains(&n.x));
+                assert!(n.lane_frac > 0.13 && n.lane_frac < 0.87);
+                assert!((0.0..=1.0).contains(&n.size));
+            }
+        }
+        // Genesis 1:1 anchors the very start of the backbone.
+        let g11 = c.lanes[0].nodes.iter().find(|n| n.ref_key == "Gen 1:1").unwrap();
+        assert!(g11.x < 0.02);
+        assert_eq!(g11.book, "Gen");
+        assert_eq!(g11.chapter, 1);
+
+        // Pin w2 (library index 1): it jumps to lane 0 (pinned first).
+        let c = constellation(&loaded, &corpus, 0, &[1]);
+        assert_eq!(c.n_pins, 1);
+        assert_eq!(c.free_total, 1);
+        assert_eq!(c.lanes[0].weave_index, 1);
+        assert!(c.lanes[0].pinned);
+        assert_eq!(c.lanes[1].weave_index, 0);
+        assert!(c.caption.starts_with("1 pinned · "));
     }
 
     #[test]

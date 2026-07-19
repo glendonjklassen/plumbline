@@ -242,6 +242,52 @@ fn strongs_entry_and_occurrences() {
 }
 
 #[test]
+fn renderings_and_word_codes() {
+    unsafe {
+        let e = open();
+
+        // Forward lens: G25 (agapao) is rendered "loved" in John 3:16, token 3.
+        let r: Value =
+            serde_json::from_str(&take(pure_engine_renderings_json(e, c"G25".as_ptr())).unwrap())
+                .unwrap();
+        assert_eq!(r["code"], "G25");
+        let rs = r["renderings"].as_array().unwrap();
+        assert_eq!(rs.len(), 1);
+        assert_eq!(rs[0]["rendering"], "loved");
+        assert_eq!(rs[0]["total"], 1);
+        assert_eq!(rs[0]["capped"], false);
+        assert_eq!(rs[0]["refs"][0]["verse"], "John 3:16");
+        assert_eq!(rs[0]["refs"][0]["span"][0], 3);
+        assert_eq!(rs[0]["refs"][0]["span"][1], 3);
+
+        // Unknown/untagged code → empty renderings, not null.
+        let empty: Value = serde_json::from_str(
+            &take(pure_engine_renderings_json(e, c"H9999".as_ptr())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(empty["renderings"].as_array().unwrap().len(), 0);
+
+        // Reverse lens: the surface word "God" (normalized) maps to G2316.
+        let w: Value =
+            serde_json::from_str(&take(pure_engine_word_codes_json(e, c"God".as_ptr())).unwrap())
+                .unwrap();
+        assert_eq!(w["word"], "God");
+        let codes = w["codes"].as_array().unwrap();
+        assert_eq!(codes.len(), 1);
+        assert_eq!(codes[0]["code"], "G2316");
+        assert_eq!(codes[0]["count"], 1);
+
+        // A translator-supplied (added) word carries no codes.
+        let the: Value =
+            serde_json::from_str(&take(pure_engine_word_codes_json(e, c"the".as_ptr())).unwrap())
+                .unwrap();
+        assert_eq!(the["codes"].as_array().unwrap().len(), 0);
+
+        pure_engine_free(e);
+    }
+}
+
+#[test]
 fn verse_and_token_lookup() {
     unsafe {
         let e = open();
@@ -479,10 +525,12 @@ fn rnd_tier_via_abi() {
              {\"b\":\"John\",\"c\":3,\"v\":16,\"e\":[[3,\"G25\",null,\"V-AAI-3S\"]]}\n",
         )
         .unwrap();
-        // External bridge witness + trust prior.
+        // External bridge witnesses + trust priors. lxx alone is machine-tier;
+        // the quotation pair adds a God-tier, research-grade partner so the
+        // authority-tier wire fields are exercised end to end.
         std::fs::write(
             home.join("bridge").join("lxx.json"),
-            r#"{"format":"overlay-bridge-sources-v1","links":[{"h":"H7225","g":"G25","source":"lxx"}]}"#,
+            r#"{"format":"overlay-bridge-sources-v1","links":[{"h":"H7225","g":"G25","source":"lxx"},{"h":"H430","g":"G25","source":"quotation"}]}"#,
         )
         .unwrap();
         std::fs::write(home.join("data").join("source-priors.json"), r#"{"priors":{"lxx":0.85,"_default":0.5}}"#).unwrap();
@@ -504,6 +552,15 @@ fn rnd_tier_via_abi() {
         let p = b["partners"].as_array().unwrap().iter().find(|x| x["code"] == "H7225").unwrap();
         assert_eq!(p["sources"][0], "lxx");
         assert!((p["prior"].as_f64().unwrap() - 0.85).abs() < 1e-6);
+        // Authority tiers (additive): lxx is machine-only, not research-grade.
+        assert_eq!(p["tiers"], serde_json::json!(["machine"]));
+        assert_eq!(p["researchGrade"], serde_json::json!(false));
+        // The quotation partner is God-tier content by a machine method, and
+        // research-grade until the harvest is audited.
+        let q = b["partners"].as_array().unwrap().iter().find(|x| x["code"] == "H430").unwrap();
+        assert_eq!(q["sources"][0], "quotation");
+        assert_eq!(q["tiers"], serde_json::json!(["god", "machine"]));
+        assert_eq!(q["researchGrade"], serde_json::json!(true));
 
         // Morphology of "loved".
         let m: Value = serde_json::from_str(&take(pure_engine_morph_json(e, c("John 3:16").as_ptr(), 3)).unwrap()).unwrap();
@@ -625,6 +682,118 @@ fn parity_endpoints_via_abi() {
         assert_eq!(pinned["links"][0]["spanA"][1], 3);
         assert!(pinned["links"][0]["spanB"].is_null());
 
+        // Link pairs: deduped canonical pairs, each endpoint located, with the
+        // resolvability flag (the Gen 1:1 endpoint is outside this corpus).
+        let lp: Value =
+            serde_json::from_str(&take(pure_engine_link_pairs_json(e)).unwrap()).unwrap();
+        let pairs = lp["pairs"].as_array().unwrap();
+        let resolved = pairs.iter().find(|p| p["resolved"] == true).unwrap();
+        assert_eq!(resolved["a"], "John 3:16");
+        assert_eq!(resolved["aBook"], "John");
+        assert_eq!(resolved["aChapter"], 3);
+        assert_eq!(resolved["aVerse"], 16);
+        assert_eq!(resolved["b"], "John 3:18");
+        let dangling = pairs.iter().find(|p| p["resolved"] == false).unwrap();
+        assert_eq!(dangling["a"], "Gen 1:1");
+        assert_eq!(dangling["aBook"], "Gen");
+        assert_eq!(dangling["b"], "John 3:16");
+
+        // Canon segments: the 8 frozen bands + the OT/NT divide, straight from
+        // core::reference (no shell hardcode).
+        let cs: Value =
+            serde_json::from_str(&take(pure_engine_canon_segments_json(e)).unwrap()).unwrap();
+        assert_eq!(cs["otNtDivide"], 39);
+        let segs = cs["segments"].as_array().unwrap();
+        assert_eq!(segs.len(), 8);
+        assert_eq!(segs[0]["label"], "Law");
+        assert_eq!(segs[0]["first"], 0);
+        assert_eq!(segs[0]["last"], 4);
+        assert_eq!(segs[4]["label"], "Gospels");
+        assert_eq!(segs[4]["first"], 39);
+
+        // Chord map: book-pair density folded over the deduped pairs. This
+        // corpus's two pairs are (Gen 1:1↔John 3:16) and (John 3:16↔John 3:18)
+        // — one cross-testament Gen↔John and one John↔John self-pair, each once.
+        // Unresolved endpoints (Gen 1:1 is outside the corpus) still count, so
+        // the map reflects authored density, not drawability.
+        let cm: Value =
+            serde_json::from_str(&take(pure_engine_chord_map_json(e)).unwrap()).unwrap();
+        assert_eq!(cm["otNtDivide"], 39);
+        assert_eq!(cm["bookCount"], 66);
+        assert_eq!(cm["max"], 1);
+        let cpairs = cm["pairs"].as_array().unwrap();
+        assert_eq!(cpairs.len(), 2);
+        // Gen↔John: Gen is book 0, John is in the NT (index ≥ 39); a <= b holds.
+        let cross = cpairs
+            .iter()
+            .find(|p| p["a"].as_u64() != p["b"].as_u64())
+            .expect("a cross-book pair");
+        assert_eq!(cross["a"], 0);
+        assert!(cross["b"].as_u64().unwrap() >= 39);
+        assert_eq!(cross["count"], 1);
+        // John↔John self-pair.
+        let selfp = cpairs
+            .iter()
+            .find(|p| p["a"].as_u64() == p["b"].as_u64())
+            .expect("a self-pair");
+        assert!(selfp["a"].as_u64().unwrap() >= 39);
+        assert_eq!(selfp["count"], 1);
+
+        // Concept map: centre label (gloss over lemma), spokes, and the
+        // canon-ordered dispersion. G2316 (θεός / "God") occurs once, in John.
+        let cmap: Value = serde_json::from_str(
+            &take(pure_engine_concept_map_json(e, c("G2316").as_ptr())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(cmap["code"], "G2316");
+        assert!(cmap["centerLabel"].as_str().unwrap().contains("θεός"));
+        assert_eq!(cmap["otNtDivide"], 39);
+        assert_eq!(cmap["bookCount"], 66);
+        let bb = cmap["byBook"].as_array().unwrap();
+        assert_eq!(bb.len(), 66);
+        // Exactly one occurrence, and it lands in the NT (John, index ≥ 39).
+        let total: u64 = bb.iter().map(|x| x.as_u64().unwrap()).sum();
+        assert_eq!(total, 1);
+        assert_eq!(bb[..39].iter().map(|x| x.as_u64().unwrap()).sum::<u64>(), 0);
+        // No embedding artifact here → no semantic (gold) spokes; community
+        // spokes (if any) are all green.
+        assert!(cmap["spokes"].as_array().unwrap().iter().all(|s| s["semantic"] == false));
+
+        // Constellation: the "Spanned" weave has one resolvable link (John
+        // 3:16↔John 3:18); its Gen 1:1↔John 3:16 link is unresolved, so it never
+        // becomes a lane. The "Pinned" weave (authored above) also resolves.
+        let con: Value = serde_json::from_str(
+            &take(pure_engine_constellation_json(e, 0, ptr::null())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(con["nPins"], 0);
+        assert_eq!(con["laneCapacity"], 18);
+        let lanes = con["lanes"].as_array().unwrap();
+        assert!(!lanes.is_empty());
+        let spanned = lanes.iter().find(|l| l["name"] == "Spanned").expect("Spanned lane");
+        // One resolvable link → one edge, two nodes (John 3:16 and John 3:18).
+        assert_eq!(spanned["edges"].as_array().unwrap().len(), 1);
+        let nodes = spanned["nodes"].as_array().unwrap();
+        assert_eq!(nodes.len(), 2);
+        for n in nodes {
+            let x = n["x"].as_f64().unwrap();
+            let lf = n["laneFrac"].as_f64().unwrap();
+            assert!((0.0..=1.0).contains(&x));
+            assert!(lf > 0.13 && lf < 0.87);
+            assert_eq!(n["book"], "John");
+        }
+        // Pin the "Spanned" lane by its weave index → it becomes lane 0, pinned.
+        let sidx = spanned["weaveIndex"].as_u64().unwrap();
+        let pins = CString::new(format!("[{sidx}]")).unwrap();
+        let con2: Value = serde_json::from_str(
+            &take(pure_engine_constellation_json(e, 0, pins.as_ptr())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(con2["nPins"], 1);
+        assert_eq!(con2["lanes"][0]["weaveIndex"], sidx);
+        assert_eq!(con2["lanes"][0]["pinned"], true);
+        assert!(con2["caption"].as_str().unwrap().starts_with("1 pinned · "));
+
         pure_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
     }
@@ -699,5 +868,102 @@ fn config_round_trip_via_abi() {
         assert!(take(pure_config_save_json(bad.as_ptr())).unwrap().contains("bad config json"));
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+/// The study-panel block endpoints (the P0.1 content model) over the ABI: the
+/// producer's blocks reach a shell as camelCase JSON with the pre-baked link
+/// URIs a shell routes back through the dispatcher.
+#[test]
+fn panel_blocks_via_abi() {
+    unsafe {
+        let e = open(); // bytes-opened KJV/STRONGS (John 3:16 tags G2316, G25)
+        let c = |s: &str| CString::new(s).unwrap();
+
+        // Every run `uri` across a blocks payload.
+        fn uris(v: &Value) -> Vec<String> {
+            v["blocks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|b| b["runs"].as_array())
+                .flatten()
+                .filter_map(|r| r["uri"].as_str().map(str::to_string))
+                .collect()
+        }
+
+        // Word study on "God" (John 3:16 token 1 → G2316), Full study.
+        let ws: Value = serde_json::from_str(
+            &take(pure_engine_word_study_blocks_json(e, c("John 3:16").as_ptr(), 1, true)).unwrap(),
+        )
+        .unwrap();
+        // Opens with the verse display, then the big word.
+        assert_eq!(ws["blocks"][0]["kind"], "para");
+        assert_eq!(ws["blocks"][0]["runs"][0]["text"], "John 3:16");
+        assert_eq!(ws["blocks"][1]["runs"][0]["text"], "God");
+        // The code's occurrence link is baked in.
+        assert!(uris(&ws).contains(&"occ:G2316".to_string()));
+        // A tier section header carries its provenance mark.
+        assert!(ws["blocks"].as_array().unwrap().iter().any(|b| b["kind"] == "section"));
+
+        // Simple mode drops the R&D sections.
+        let simple: Value = serde_json::from_str(
+            &take(pure_engine_word_study_blocks_json(e, c("John 3:16").as_ptr(), 1, false)).unwrap(),
+        )
+        .unwrap();
+        assert!(!simple["blocks"].as_array().unwrap().iter().any(|b| b["kind"] == "section"));
+
+        // Concordance: the go: link for the one occurrence verse.
+        let cc: Value =
+            serde_json::from_str(&take(pure_engine_concordance_blocks_json(e, c("G2316").as_ptr())).unwrap()).unwrap();
+        assert!(uris(&cc).contains(&"go:John:3:16".to_string()));
+
+        // A word search → ranked hits, each a go: link (John 3:16 has "God").
+        let sr: Value =
+            serde_json::from_str(&take(pure_engine_search_blocks_json(e, c("God").as_ptr())).unwrap()).unwrap();
+        assert!(uris(&sr).contains(&"go:John:3:16".to_string()));
+
+        // A blank query is null (not an empty payload).
+        assert!(pure_engine_search_blocks_json(e, c("   ").as_ptr()).is_null());
+
+        pure_engine_free(e);
+    }
+}
+
+/// The panel link parser over the ABI: a URI the panel bakes routes back to a
+/// typed verb a shell dispatches on, and an unknown verb is null.
+#[test]
+fn route_link_via_abi() {
+    use std::ffi::CString;
+    unsafe {
+        let c = |s: &str| CString::new(s).unwrap();
+        let route = |s: &str| -> Option<Value> {
+            take(pure_route_link_json(c(s).as_ptr())).map(|j| serde_json::from_str(&j).unwrap())
+        };
+
+        let go = route("go:1 John:3:16").unwrap();
+        assert_eq!(go["verb"], "go");
+        assert_eq!(go["book"], "1 John");
+        assert_eq!(go["chapter"], 3);
+        assert_eq!(go["verse"], 16);
+
+        let occ = route("occ:G25").unwrap();
+        assert_eq!(occ["verb"], "occurrences");
+        assert_eq!(occ["code"], "G25");
+
+        // A refkey with a colon survives (only the verb splits).
+        let untag = route("untag:2:John 3:16").unwrap();
+        assert_eq!(untag["verb"], "untag");
+        assert_eq!(untag["tag"], 2);
+        assert_eq!(untag["refKey"], "John 3:16");
+
+        let edit = route("editentrynote:1:4").unwrap();
+        assert_eq!(edit["verb"], "editEntryNote");
+        assert_eq!(edit["thread"], 1);
+        assert_eq!(edit["entry"], 4);
+
+        // Unknown verb / malformed → null.
+        assert!(pure_route_link_json(c("bogus:x").as_ptr()).is_null());
+        assert!(pure_route_link_json(c("thread:nan").as_ptr()).is_null());
     }
 }

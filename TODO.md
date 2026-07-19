@@ -1,5 +1,114 @@
 # pure-study — TODO
 
+## Rendering lens — seeing translation decisions
+
+*Requested 2026-07-15. **New invention — not in `../overlay`** (first feature
+with no reference implementation; design freely, but the parity contract still
+applies). Goal: give readers without Greek/Hebrew a lens on where the
+translators made choices. Select any tagged English word and see (a) the
+underlying G/H word and (b) every other English rendering of that word across
+the corpus, with counts and navigation — e.g. tap "charity" in 1 Cor 13 and
+learn G26 agape is elsewhere rendered "love", "beloved", "feast of charity";
+tap "love" in John 21 and see the agape/phileo distinction the English hides.
+No new dataset — derived entirely from the tagged text we already ship.*
+
+### Two directions, one corpus pass
+
+Both indexes fall out of a single fold over the corpus, sibling to
+`OccurrenceIx::build` in `crates/core/src/strongs.rs`:
+
+- **Renderings index** (code → renderings): Strong's ref → map of normalized
+  English rendering → occurrence list (VRef + token span). A *rendering* is
+  the contiguous run of same-code tokens within a verse, so one-to-many
+  translations ("suffereth long" ← G3114) stay one unit, exactly like the
+  multi-code/zero-code handling already in the token schema.
+- **Reverse index** (word → codes): normalized surface word → the codes it
+  translates, with counts — the "love hides both agape and phileo" direction.
+  The word-index fold in `crates/core/src/search.rs` (~line 52) already
+  lowercases every token surface; hang both indexes off one pass.
+
+### Tasks
+
+*Core, wire, UI, parity, and tests all landed 2026-07-15/16 (commits
+28aff7b → b03c378 → 9f4973c); the reverse-link follow-up below finished the
+feature.*
+
+- [x] **Core** (`crates/core`): the two indexes above + a normalization fold
+      (lowercase, letters-only). Exact surface forms are kept distinct
+      ("love"/"loved"/"loveth"); folding inflections via morphology stays a
+      later display-time refinement.
+- [x] **Wire** (`crates/ffi`): additive camelCase `pure_engine_renderings_json`
+      + `pure_engine_word_codes_json`; bindings regenerated; DLL rebuilt.
+- [x] **UI — word study panel**: the **RENDERINGS** tier (Full mode) with
+      rendering chips + counts, tapped rendering highlighted, chips → filtered
+      concordance (OCC_SHOWN cap), and the "also translates …" reverse line.
+- [x] **Parity**: GTK + WinUI shipped together; Compose delta + manifest
+      section logged in docs/FEATURE-MANIFEST.md.
+- [x] **Tests**: index unit tests (`renderings_and_word_codes`) + FFI
+      round-trip.
+
+### Design notes
+
+- The 1890 dictionary's `kjv_def` field lists renderings but is static,
+  count-free, and occasionally wrong for our text — derive from the corpus,
+  use `kjv_def` at most as a sanity cross-check in tests.
+- Punctuation/casing: normalize for grouping but display the most common
+  actual surface form as the chip label.
+- FLAG_ADDED (italic) words carry no tags and never enter either index.
+- Once the Luther 1912 tagging lands, the same indexes over the German corpus
+  give cross-translation rendering comparison for free — worth keeping the
+  index API corpus-parametric rather than KJV-global.
+
+### Follow-ups (from testing 2026-07-16)
+
+- [x] **Reverse links must land on a Strong's study card, not a bare list.**
+      *Done 2026-07-16.* Extracted the per-code block into one reusable
+      code-study view — GTK `code_study_markup` + `verse_study_extras`; WinUI
+      `CodeStudy` + `VerseStudyExtras` + `ShowCodeStudy` — behind a new
+      `code:CODE[:word]` link verb. The "'love' also translates G5368" reverse
+      line now opens G5368's own entry (definition / lemma / gloss + its tiers),
+      carrying the tapped word so its rendering is highlighted there. Same view
+      renders inline per code and standalone via the verb. Both shells.
+- [x] GTK window-icon wiring. *Done 2026-07-16.* `install_app_icon` (called
+      after `install_css`) adds `assets/icons` to the display `IconTheme` search
+      path and sets `Window::set_default_icon_name(APP_ID)`; the woven cross is
+      installed under the app id as a scalable SVG
+      (`assets/icons/hicolor/scalable/apps/dev.purestudy.app.svg`).
+      CI-validated (not run on the ARM64 box).
+
+## Authority tiers — provenance marks on evidence
+
+*Requested 2026-07-15. Port overlay's three-tier trust model so every piece of
+evidence in the study panel shows where it comes from, with a distinct icon per
+tier — the reader always knows the provenance of what they're looking at.*
+
+- overlay `Overlay/Bridge.hs`: `Tier` = `TierGod` (the text itself — TR /
+  Masoretic words, and scripture-quotes-scripture, which inherits the text's
+  own authority), `TierHuman` (curated scholarship — lexicons, the 1769
+  translators' renderings, TSK), and a machine/analytical tier (embeddings and
+  the R&D layer; the default for an unrecognized source, so nothing
+  over-claims). `sourceTiers`, `sourcePriors`, `sourceLabel`.
+  `Overlay/Panels.hs` draws the provenance marks (`provIcon`).
+- What we already have: the trust **priors** are ported (`crates/rnd/src/
+  bridge.rs` `Priors`, `data/source-priors.json`). NOT ported: the `Tier`
+  classification, `sourceTiers`/`sourceLabel`, and the provenance icon marks.
+- [x] Port `Tier` + `sourceTiers`/`sourceLabel` to pure-rnd and expose each
+      evidence item's tier(s) via an additive FFI field. *Done 2026-07-16.*
+      `crates/rnd/src/bridge.rs`: `Tier {God,Human,Machine}`, `source_tiers`
+      (a set — `quotation`→God+Machine, etc.), `research_grade`, `source_label`,
+      `tiers_of` (deduped union, ordered). `pure_engine_bridge_partners_json`
+      gained additive `tiers` + `researchGrade` (extern surface unchanged, so no
+      bindgen drift). Unit + FFI round-trip tests added.
+- [x] Render a tier mark beside evidence in both shells' study panels.
+      *Done 2026-07-16.* God `✝` gold, Human `†` green, Machine `≈` gray,
+      research-grade `⚗` red — per-chip on SAME ROOT partners, per-section on
+      RENDERINGS/analytics/TSK/verses-like-this/margin-notes headers. GTK uses
+      overlay's glyph-fallback set in Pango `<span>` (a GtkLabel can't embed
+      images); WinUI uses colored `Run`s. No icon pack needed.
+- [x] Parity: both shells in one change set; Compose delta logged in
+      FEATURE-MANIFEST (see "Authority tiers"); a legend closes each Full-study
+      card so the marks are learnable. *Done 2026-07-16.*
+
 ## AI-generated Strong's tagging for Luther 1912
 
 *Direction approved 2026-07-15. Goal: produce our own word-level Strong's

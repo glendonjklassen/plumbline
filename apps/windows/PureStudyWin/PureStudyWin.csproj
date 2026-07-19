@@ -22,6 +22,7 @@
     <RootNamespace>PureStudyWin</RootNamespace>
     <AssemblyName>PureStudyWin</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>../../desktop/assets/icons/pure-study.ico</ApplicationIcon>
     <!-- We provide Program.Main ourselves (code-only app). -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
@@ -55,6 +56,8 @@
           CopyToOutputDirectory="PreserveNewest" Link="Assets/Fonts/EBGaramond.ttf" />
     <None Include="../../desktop/assets/fonts/EBGaramond-Italic.ttf"
           CopyToOutputDirectory="PreserveNewest" Link="Assets/Fonts/EBGaramond-Italic.ttf" />
+    <None Include="../../desktop/assets/icons/pure-study.ico"
+          CopyToOutputDirectory="PreserveNewest" Link="Assets/pure-study.ico" />
   </ItemGroup>
 
 </Project>

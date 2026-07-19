@@ -93,6 +93,23 @@ public sealed unsafe class StudyEngine : IDisposable
             return Utf8.Take(PureStudyNative.pure_engine_strongs_occurrences_json(_handle, c));
     }
 
+    /// The rendering lens for a code: every English rendering of it with counts
+    /// and (capped) verse refs + token spans. `renderings` is empty (not null)
+    /// for an untagged code.
+    public string? RenderingsJson(string code)
+    {
+        fixed (byte* c = Utf8.NulTerminated(code))
+            return Utf8.Take(PureStudyNative.pure_engine_renderings_json(_handle, c));
+    }
+
+    /// The reverse lens: the codes a surface English word translates, with
+    /// counts. `codes` is empty for an untagged word.
+    public string? WordCodesJson(string word)
+    {
+        fixed (byte* w = Utf8.NulTerminated(word))
+            return Utf8.Take(PureStudyNative.pure_engine_word_codes_json(_handle, w));
+    }
+
     public string? SearchJson(string query)
     {
         fixed (byte* q = Utf8.NulTerminated(query))
@@ -105,6 +122,31 @@ public sealed unsafe class StudyEngine : IDisposable
     public string? TagsJson() => Utf8.Take(PureStudyNative.pure_engine_tags_json(_handle));
     public string? SuggestedWeavesJson() => Utf8.Take(PureStudyNative.pure_engine_suggested_weaves_json(_handle));
     public string? WeavesJson() => Utf8.Take(PureStudyNative.pure_engine_weaves_json(_handle));
+
+    /// Deduped canonical weave pairs (the connector lines + chord map), each
+    /// endpoint located and flagged resolved — the shell no longer dedupes or
+    /// parses ref keys itself.
+    public string? LinkPairsJson() => Utf8.Take(PureStudyNative.pure_engine_link_pairs_json(_handle));
+
+    /// The canon overview segmentation (8 bands + OT/NT divide), frozen in
+    /// core::reference — the shell reads it instead of hardcoding the bands.
+    public string? CanonSegmentsJson() => Utf8.Take(PureStudyNative.pure_engine_canon_segments_json(_handle));
+
+    /// The book-to-book weave chord map: canon-ordered book-pair counts + max
+    /// (the "Weave map" popup), folded once in the core — the shell lays out
+    /// ribbons without folding pairs or deriving the max.
+    public string? ChordMapJson() => Utf8.Take(PureStudyNative.pure_engine_chord_map_json(_handle));
+
+    /// One laid-out page of the constellation (the weave-library overview): lanes
+    /// with nodes + edges as fractions, plus the pin/paging state resolved into a
+    /// caption. `pins` are weave indices (the lanes' handles); the shell holds the
+    /// transient page + pin set and passes them in — it derives nothing.
+    public string? ConstellationJson(uint page, IReadOnlyCollection<int> pins)
+    {
+        var pinsJson = "[" + string.Join(",", pins) + "]";
+        fixed (byte* p = Utf8.NulTerminated(pinsJson))
+            return Utf8.Take(PureStudyNative.pure_engine_constellation_json(_handle, page, p));
+    }
 
     public string? VerseXrefsJson(string refKey)
     {
@@ -134,11 +176,80 @@ public sealed unsafe class StudyEngine : IDisposable
             return Utf8.Take(PureStudyNative.pure_engine_concept_json(_handle, c));
     }
 
+    /// The concept map for a code: the radial neighbourhood (embedding ∪
+    /// community, deduped, labels pre-baked) + canon-ordered dispersion counts.
+    /// One call replaces the shell's spoke assembly and its neighbours/concept/
+    /// gloss/lemma lookups; non-null for any valid code.
+    public string? ConceptMapJson(string code)
+    {
+        fixed (byte* c = Utf8.NulTerminated(code))
+            return Utf8.Take(PureStudyNative.pure_engine_concept_map_json(_handle, c));
+    }
+
     /// The short English gloss for a code (plain text, not JSON), or null.
     public string? Gloss(string code)
     {
         fixed (byte* c = Utf8.NulTerminated(code))
             return Utf8.Take(PureStudyNative.pure_engine_gloss(_handle, c));
+    }
+
+    /// Parse a panel link URI into the typed verb the shell dispatches on
+    /// (`{verb, …}`; see pure_core::panel::parse_link) — the one verb vocabulary,
+    /// so the shell never re-splits the URI itself. Null on an unknown verb.
+    /// Engine-independent (a static helper, no handle needed).
+    public static string? RouteLinkJson(string uri)
+    {
+        fixed (byte* u = Utf8.NulTerminated(uri))
+            return Utf8.Take(PureStudyNative.pure_route_link_json(u));
+    }
+
+    // ── study-panel content model (typed block lists; one producer in Rust) ──
+
+    /// Word study for a tapped token as a block list; `full` gates the R&D tiers.
+    public string? WordStudyBlocksJson(string refKey, uint tokenIndex, bool full)
+    {
+        fixed (byte* r = Utf8.NulTerminated(refKey))
+            return Utf8.Take(PureStudyNative.pure_engine_word_study_blocks_json(_handle, r, tokenIndex, full));
+    }
+
+    /// The standalone `code:CODE[:word]` study card as blocks (`word` may be null).
+    public string? CodeStudyBlocksJson(string code, string? word, bool full)
+    {
+        fixed (byte* c = Utf8.NulTerminated(code))
+        fixed (byte* w = Utf8.NulTerminatedOrNull(word))
+            return Utf8.Take(PureStudyNative.pure_engine_code_study_blocks_json(_handle, c, w, full));
+    }
+
+    public string? ConcordanceBlocksJson(string code)
+    {
+        fixed (byte* c = Utf8.NulTerminated(code))
+            return Utf8.Take(PureStudyNative.pure_engine_concordance_blocks_json(_handle, c));
+    }
+
+    public string? RenderingConcordanceBlocksJson(string code, string rendering)
+    {
+        fixed (byte* c = Utf8.NulTerminated(code))
+        fixed (byte* r = Utf8.NulTerminated(rendering))
+            return Utf8.Take(PureStudyNative.pure_engine_rendering_concordance_blocks_json(_handle, c, r));
+    }
+
+    public string? ThreadsBlocksJson() => Utf8.Take(PureStudyNative.pure_engine_threads_blocks_json(_handle));
+    public string? ThreadBlocksJson(uint index) => Utf8.Take(PureStudyNative.pure_engine_thread_blocks_json(_handle, index));
+    public string? TagsBlocksJson() => Utf8.Take(PureStudyNative.pure_engine_tags_blocks_json(_handle));
+    public string? TagBlocksJson(uint index) => Utf8.Take(PureStudyNative.pure_engine_tag_blocks_json(_handle, index));
+    public string? WeavesBlocksJson() => Utf8.Take(PureStudyNative.pure_engine_weaves_blocks_json(_handle));
+    public string? SuggestedBlocksJson() => Utf8.Take(PureStudyNative.pure_engine_suggested_blocks_json(_handle));
+
+    /// A weave compare card as blocks; `full` adds the edit-notes action.
+    public string? CompareBlocksJson(uint index, bool full) =>
+        Utf8.Take(PureStudyNative.pure_engine_compare_blocks_json(_handle, index, full));
+
+    /// Search results as blocks (goto link or ranked hits + snippets); null on a
+    /// blank query.
+    public string? SearchBlocksJson(string query)
+    {
+        fixed (byte* q = Utf8.NulTerminated(query))
+            return Utf8.Take(PureStudyNative.pure_engine_search_blocks_json(_handle, q));
     }
 
     // ── study data (author; null = success, else an error message) ────────

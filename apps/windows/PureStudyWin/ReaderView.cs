@@ -34,6 +34,11 @@ public static class Palette
     public static readonly Color Rule = Color.FromArgb(255, 216, 203, 168);
     public static readonly Color SectionGold = Color.FromArgb(255, 160, 137, 74); // #a0894a
     public static readonly Color Disputed = Color.FromArgb(255, 176, 74, 58);     // #b04a3a
+    // Authority-tier provenance mark colors (see StudyPanel tier marks).
+    public static readonly Color TierGod = Gold;                                  // ✝ the text itself
+    public static readonly Color TierHuman = Color.FromArgb(255, 111, 143, 106);  // † curated (#6f8f6a)
+    public static readonly Color TierMachine = Color.FromArgb(255, 153, 153, 153);// ≈ machine (#999)
+    public static readonly Color TierResearch = Disputed;                         // ⚗ research-grade
 }
 
 /// A pinned word span in a pane: first click sets the anchor; another click in
@@ -188,6 +193,23 @@ public sealed class ReaderView : UserControl, IDisposable
         }
     }
 
+    private bool _versePerLine;
+    /// Verse-per-line reading (GTK vpl toggle): each verse starts a fresh line.
+    /// Feeds PureLayoutConfig.verse_break, which the shared core layout honors.
+    public bool VersePerLine
+    {
+        get => _versePerLine;
+        set
+        {
+            if (value == _versePerLine) return;
+            _versePerLine = value;
+            Relayout();
+            UpdateScrollExtent();
+            _canvas.Invalidate();
+            Scrolled?.Invoke();
+        }
+    }
+
     /// Navigate. `verse` (refKey) scrolls there; `highlight` paints the band
     /// (persists until this pane next navigates).
     public void ShowChapter(string book, uint chapter, string? verse = null, bool highlight = false)
@@ -290,6 +312,7 @@ public sealed class ReaderView : UserControl, IDisposable
             verse_num_gap = space * 1.4f,
             para_indent = _lineH * 0.9f,
             para_spacing = _lineH * 0.45f,
+            verse_break = (uint)(_versePerLine ? 1 : 0),
         };
 
         try

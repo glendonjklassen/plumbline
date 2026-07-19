@@ -37,6 +37,13 @@ public sealed record StrongsEntry(
 
 public sealed record Occurrences(string Code, int Total, bool Capped, List<string> Verses);
 
+// ── rendering lens ───────────────────────────────────────────────────────────
+public sealed record RenderingLens(string Code, List<Rendering1> Renderings);
+public sealed record Rendering1(string Rendering, int Total, bool Capped, List<RenderingRef> Refs);
+public sealed record RenderingRef(string Verse, string Display, ushort[] Span);
+public sealed record WordCodes(string Word, List<WordCode1> Codes);
+public sealed record WordCode1(string Code, int Count);
+
 public sealed record SearchResult(
     string Kind,                 // "goto" | "hits"
     // goto
@@ -90,6 +97,39 @@ public sealed record WeaveLink1(
     string A, string ADisplay, string B, string BDisplay, string Label,
     bool Approved, ushort[]? SpanA, ushort[]? SpanB, bool Resolved);
 
+// Deduped canonical weave pairs from the core view-model
+// (pure_engine_link_pairs_json): each endpoint located + a resolvability flag,
+// so the connector layer neither dedupes nor parses ref keys itself.
+public sealed record LinkPairs(List<WeaveLinkPair> Pairs);
+public sealed record WeaveLinkPair(
+    string A, string ABook, ushort AChapter, ushort AVerse,
+    string B, string BBook, ushort BChapter, ushort BVerse, bool Resolved);
+
+// The canon overview segmentation (pure_engine_canon_segments_json), frozen in
+// core::reference — the strip reads it instead of hardcoding the 8 bands.
+public sealed record CanonSegments(List<CanonSegment> Segments, int OtNtDivide);
+public sealed record CanonSegment(string Label, int First, int Last);
+
+// The book-to-book chord map (pure_engine_chord_map_json): canon-ordered
+// book-pair counts + max, folded once in the core. The popup lays out ribbons
+// off this instead of folding link pairs and deriving the max itself.
+public sealed record ChordMapData(List<ChordPair> Pairs, uint Max, int OtNtDivide, int BookCount);
+public sealed record ChordPair(int A, int B, uint Count);
+
+// One laid-out page of the constellation (pure_engine_constellation_json). All
+// positions are fractions (X a canon fraction, LaneFrac 0..1 within a lane,
+// Size a 0..1 witness degree); the shell holds the transient Page + pin set,
+// maps fractions to pixels, and paints. It derives nothing (review item 3).
+public sealed record ConstellationData(
+    List<ConstellationLaneData> Lanes, int NPins, int FreeTotal, int Page, int MaxPage,
+    string Caption, int LaneCapacity);
+public sealed record ConstellationLaneData(
+    int WeaveIndex, string Name, bool Pinned,
+    List<ConstellationNodeData> Nodes, List<ConstellationEdgeData> Edges);
+public sealed record ConstellationNodeData(
+    float X, float LaneFrac, float Size, string RefKey, string Book, ushort Chapter, string Display);
+public sealed record ConstellationEdgeData(float AX, float ALaneFrac, float BX, float BLaneFrac);
+
 public sealed record Concept1(
     string Code, uint Total, uint Ot, uint Nt, List<BookCount> TopBooks,
     Dictionary<string, uint> ByBook, List<Scored> Collocates,
@@ -97,16 +137,56 @@ public sealed record Concept1(
 public sealed record BookCount(string Book, string Display, uint Count);
 public sealed record Leitwort(int N, int WinCount, double Score, string Label);
 
+// The concept-map popup's view-model (pure_engine_concept_map_json): spokes
+// (near ∪ community, deduped, labels pre-baked) + canon-ordered dispersion. The
+// popup renders this wholesale — no shell-side assembly, gloss/lemma lookups,
+// or book-order table (ByBook is indexed by canon position, 0 where absent).
+public sealed record ConceptMapData(
+    string Code, string CenterLabel, List<ConceptSpoke> Spokes,
+    List<uint> ByBook, int OtNtDivide, int BookCount);
+public sealed record ConceptSpoke(string Code, string Label, bool Semantic);
+
 public sealed record ConfigState(
-    string StudyMode, double BodySize, List<PaneRef1>? OpenPanes, int ActivePane, bool FirstRun);
+    string StudyMode, double BodySize, List<PaneRef1>? OpenPanes, int ActivePane, bool FirstRun,
+    // Frozen additive field shared with GTK's config.json. Must round-trip even
+    // before the toggle UI reads it, or a WinUI save silently resets it to
+    // false and clobbers a GTK user's verse-per-line preference.
+    bool VersePerLine = false);
 public sealed record PaneRef1(string Book, ushort Chapter);
+
+// The study-panel content model (pure_engine_*_blocks_json): a typed block
+// list the panel renders wholesale — no shell-side derivation. A run's Color is
+// a semantic role (mapped to the palette), Size a logical point size, Uri makes
+// it a link the panel dispatcher routes.
+public sealed record PanelData(List<PanelBlock> Blocks);
+public sealed record PanelBlock(
+    string Kind,
+    // section
+    string? Title, string? MarkGlyph, string? MarkColor,
+    // para
+    List<PanelRun>? Runs, bool Indent, bool TopGap);
+public sealed record PanelRun(
+    string Text, float Size, string Color, bool Bold, bool Italic, string? Uri);
+
+// A parsed panel link (pure_route_link_json): the one verb vocabulary, so the
+// shell dispatches on the typed shape instead of re-splitting the URI string.
+public sealed record PanelLinkData(
+    string Verb,
+    string? Book, uint? Chapter, uint? Verse,
+    string? Code, string? Rendering, string? Word,
+    int? Index, string? RefKey, int? Tag, int? Thread, int? Entry);
 
 // ── R&D tier ───────────────────────────────────────────────────────────────
 
 public sealed record Scored(string Code, float Score);
 public sealed record ConceptNeighbours(string Code, List<Scored> Near, List<Scored> Cross);
 public sealed record Morph(string Verse, uint TokenIndex, string Code, string Gloss);
-public sealed record BridgePartner(string Code, List<string> Sources, float Prior);
+// Tiers/ResearchGrade are additive fields carrying overlay's authority-tier
+// classification (`["god","human","machine"]`, research-grade flag) so the
+// shell needn't reimplement source→tier mapping. Nullable-tolerant of an
+// older DLL that predates the fields.
+public sealed record BridgePartner(string Code, List<string> Sources, float Prior,
+    List<string>? Tiers = null, bool ResearchGrade = false);
 public sealed record BridgePartners(string Code, List<BridgePartner> Partners);
 public sealed record SimilarVerse(string Verse, string Display, float Score);
 public sealed record SimilarVerses(string Verse, List<SimilarVerse> In, List<SimilarVerse> Cross);
