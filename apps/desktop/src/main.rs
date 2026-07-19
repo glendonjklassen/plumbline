@@ -2370,100 +2370,53 @@ fn untag_verse(state: &Shared, ui: &Ui, i: usize, vref: &VRef) {
 /// `occ:CODE` opens that Strong's concordance, `thread:`/`tag:` open a study
 /// collection, and `addthread:`/`addtag:`/`untag:` author study data.
 fn handle_link(state: &Shared, ui: &Ui, uri: &str) {
-    if let Some(rest) = uri.strip_prefix("go:") {
-        let active = state.borrow().active;
-        let parts: Vec<&str> = rest.split(':').collect();
-        if let [book, ch] = parts[..] {
-            if let Ok(c) = ch.parse::<u16>() {
-                navigate_pane(state, ui, active, book, c, None);
-            }
-        } else if let [book, ch, v] = parts[..] {
-            if let (Ok(c), Ok(v)) = (ch.parse::<u16>(), v.parse::<u16>()) {
-                navigate_pane(state, ui, active, book, c, Some(v));
-            }
+    use panel::PanelLink::*;
+    // The verb vocabulary is parsed once in the core (`panel::parse_link`), the
+    // same source the panel producer bakes URIs from — so GTK dispatches on the
+    // typed verb and can't drift from what it emits. An unknown verb is ignored.
+    let Some(link) = panel::parse_link(uri) else { return };
+    match link {
+        Go { book, chapter, verse } => {
+            let active = state.borrow().active;
+            navigate_pane(state, ui, active, &book, chapter as u16, verse.map(|v| v as u16));
         }
-    } else if let Some(code) = uri.strip_prefix("occ:") {
-        let markup = concordance_markup(&state.borrow(), code);
-        show_study(ui, &markup);
-    } else if let Some(rest) = uri.strip_prefix("rend:") {
-        // `rend:CODE:rendering` — a distinct verb from `occ:`, which consumes
-        // its whole remainder as the code. Split only on the first colon so a
-        // multi-word rendering ("suffereth long") survives intact.
-        if let Some((code, rendering)) = rest.split_once(':') {
-            let markup = rendering_concordance_markup(&state.borrow(), code, rendering);
-            show_study(ui, &markup);
+        Occurrences { code } => show_study(ui, &concordance_markup(&state.borrow(), &code)),
+        Rendering { code, rendering } => {
+            show_study(ui, &rendering_concordance_markup(&state.borrow(), &code, &rendering));
         }
-    } else if let Some(rest) = uri.strip_prefix("code:") {
-        // `code:CODE[:word]` — the reusable single-code study card (the same
-        // block a word study renders per code). Reverse rendering-lens links
-        // land here so an unfamiliar code opens its actual entry, not a bare
-        // verse list. The optional word is the surface that led here.
-        let (code, word) = rest.split_once(':').unwrap_or((rest, ""));
-        // The standalone card producer already appends the provenance legend
-        // in Full study, so the shell no longer adds it here.
-        let markup = code_study_markup(&state.borrow(), code, word);
-        show_study(ui, &markup);
-    } else if let Some(idx) = uri.strip_prefix("thread:") {
-        if let Ok(i) = idx.parse::<usize>() {
-            let markup = thread_markup(&state.borrow(), i);
-            show_study(ui, &markup);
-        }
-    } else if let Some(idx) = uri.strip_prefix("tag:") {
-        if let Ok(i) = idx.parse::<usize>() {
-            let markup = tag_markup(&state.borrow(), i);
-            show_study(ui, &markup);
-        }
-    } else if let Some(rk) = uri.strip_prefix("addtag:") {
-        if let Some(vref) = VRef::parse_ref_key(rk) {
-            let (state, ui) = (state.clone(), ui.clone());
-            let title = format!("Tag {}", vref.display());
-            prompt_name(window_of(&ui), &title, "tag name (new or existing)", move |name| {
-                add_verse_to_tag(&state, &ui, &vref, &name);
-            });
-        }
-    } else if let Some(rk) = uri.strip_prefix("addthread:") {
-        if let Some(vref) = VRef::parse_ref_key(rk) {
-            let (state, ui) = (state.clone(), ui.clone());
-            let title = format!("Add {} to thread", vref.display());
-            prompt_name(window_of(&ui), &title, "thread name (new or existing)", move |name| {
-                add_verse_to_thread(&state, &ui, &vref, &name);
-            });
-        }
-    } else if let Some(rest) = uri.strip_prefix("untag:") {
-        if let Some((idx, rk)) = rest.split_once(':') {
-            if let (Ok(i), Some(vref)) = (idx.parse::<usize>(), VRef::parse_ref_key(rk)) {
-                untag_verse(state, ui, i, &vref);
+        CodeStudy { code, word } => show_study(ui, &code_study_markup(&state.borrow(), &code, &word)),
+        Thread { index } => show_study(ui, &thread_markup(&state.borrow(), index)),
+        Tag { index } => show_study(ui, &tag_markup(&state.borrow(), index)),
+        Weave { index } => show_study(ui, &weave_markup(&state.borrow(), index)),
+        ConceptMap { code } => show_concept_map(state, ui, &code),
+        AddTag { refkey } => {
+            if let Some(vref) = VRef::parse_ref_key(&refkey) {
+                let (state, ui) = (state.clone(), ui.clone());
+                let title = format!("Tag {}", vref.display());
+                prompt_name(window_of(&ui), &title, "tag name (new or existing)", move |name| {
+                    add_verse_to_tag(&state, &ui, &vref, &name);
+                });
             }
         }
-    } else if let Some(idx) = uri.strip_prefix("approve:") {
-        if let Ok(i) = idx.parse::<usize>() {
-            review_weave(state, ui, i, true);
-        }
-    } else if let Some(idx) = uri.strip_prefix("reject:") {
-        if let Ok(i) = idx.parse::<usize>() {
-            review_weave(state, ui, i, false);
-        }
-    } else if let Some(idx) = uri.strip_prefix("editthreadnotes:") {
-        if let Ok(i) = idx.parse::<usize>() {
-            edit_thread_notes(state, ui, i);
-        }
-    } else if let Some(rest) = uri.strip_prefix("editentrynote:") {
-        if let Some((ti, ei)) = rest.split_once(':') {
-            if let (Ok(ti), Ok(ei)) = (ti.parse::<usize>(), ei.parse::<usize>()) {
-                edit_entry_note(state, ui, ti, ei);
+        AddThread { refkey } => {
+            if let Some(vref) = VRef::parse_ref_key(&refkey) {
+                let (state, ui) = (state.clone(), ui.clone());
+                let title = format!("Add {} to thread", vref.display());
+                prompt_name(window_of(&ui), &title, "thread name (new or existing)", move |name| {
+                    add_verse_to_thread(&state, &ui, &vref, &name);
+                });
             }
         }
-    } else if let Some(idx) = uri.strip_prefix("editweavenotes:") {
-        if let Ok(i) = idx.parse::<usize>() {
-            edit_weave_notes(state, ui, i);
+        Untag { tag, refkey } => {
+            if let Some(vref) = VRef::parse_ref_key(&refkey) {
+                untag_verse(state, ui, tag, &vref);
+            }
         }
-    } else if let Some(idx) = uri.strip_prefix("weave:") {
-        if let Ok(i) = idx.parse::<usize>() {
-            let m = weave_markup(&state.borrow(), i);
-            show_study(ui, &m);
-        }
-    } else if let Some(code) = uri.strip_prefix("conceptmap:") {
-        show_concept_map(state, ui, code);
+        Approve { index } => review_weave(state, ui, index, true),
+        Reject { index } => review_weave(state, ui, index, false),
+        EditThreadNotes { index } => edit_thread_notes(state, ui, index),
+        EditEntryNote { thread, entry } => edit_entry_note(state, ui, thread, entry),
+        EditWeaveNotes { index } => edit_weave_notes(state, ui, index),
     }
 }
 
