@@ -276,9 +276,27 @@ in CI; WinUI is compile-checked here with `dotnet build`, never auto-driven).
     Compose delta updated.
   - **Awaiting**: Glendon's manual WinUI check that connectors + the canon strip
     + the two map popups still render correctly.
-- ⏳ **P0.2 popup view-models (chord / constellation / concept map, items 2–4)** —
-  NEXT. Note the `Canon` holder + `link_pairs` already removed two of the popups'
-  shell-side derivations, so this phase now starts from a smaller surface.
-- ⏳ **P0.1 panel content-model (items 6–8)** — the big one; de-risk per the plan.
+- ✅ **P0.2 popup view-models (chord / constellation / concept map, items 2–4)** —
+  DONE, landed as three increments on `rendering-lens`:
+  - `P0.2a` (`c0fc8dc`) — **chord map**: `pure_core::weave::chord_pairs` (the
+    book-pair fold) + `pure_engine_chord_map_json`. GTK `chord_arcs` and WinUI's
+    fold both retired. Parity fix: WinUI now counts all deduped pairs (was
+    resolved-only), matching the GTK reference.
+  - `P0.2b` (`c08f931`) — **concept map**: `pure_rnd::concept::radial_spokes`
+    (the near ∪ community union) + `pure_engine_concept_map_json` (labels +
+    canon-ordered dispersion baked). WinUI's four-lookup assembly + `Label` +
+    the 66-id `BookOrder` hardcode all deleted; GTK uses the shared spokes.
+  - `P0.2c` (`af7644c`) — **constellation** (the big one): `pure_core::weave::constellation`
+    lays out a page as lanes of nodes/edges in **fractions** (x canon fraction,
+    laneFrac within-lane, size = deg/maxDeg) with paging + pins resolved into a
+    caption; `pure_engine_constellation_json(page, pins_json)`. GTK's
+    const_page/nodes/degrees/nearest_node/caption + WinUI's Visible()/NodePos/
+    degree-fold all deleted. Parity fixes folded in: global (not per-page) max
+    degree, one lane-height metric, one caption — GTK/WinUI had drifted on all.
+  - Each build+test-verified here (cargo tests, bindings surface check 51 fns,
+    `dotnet build` 0 errors, DLL rebuilt); GTK mirrored per pattern for CI.
+  - **Awaiting**: Glendon's manual WinUI check that the three map popups still
+    render + interact (hover/click/pin/page) after the rewrite.
+- ⏳ **P0.1 panel content-model (items 6–8)** — NEXT; the big one; de-risk per the plan.
 - ⏳ **P1.4 link-router single source**, **P1.5 split `main.rs`**,
   **P2.6/7 cross-shell golden tests + shrink the manifest** — pending.

@@ -304,36 +304,50 @@ weave xrefs + margin notes), canon strip, connectors, zoom.
 
 ## Chord/arc "Map" popup (M:887–935, 2994–3087)
 
-1000×360, Esc/click-outside closes. Fold deduped link pairs into canon-ordered
-book-pair counts. Canon axis with section bands + labels, gold baseline, OT/NT
-seam. Ribbons heaviest-first: alpha `0.12+0.30·(cnt/max)`, foot width
-`2+8·(cnt/max)`; colors OT `(0.82,0.70,0.43)` / NT `(0.50,0.70,0.90)` / cross
-`(0.78,0.59,0.86)` (+0.08 α, cap 0.5); apex `min(0.42·h, 22+0.26·h·|dx|/w)`;
-self-pair = small loop. Click: x→book → navigate active pane + close.
+1000×360, Esc/click-outside closes. **The book-pair fold lives in the core
+view-model** `pure_engine_chord_map_json` → `{pairs:[{a,b,count}] (canon book
+indices, a≤b), max, otNtDivide, bookCount}` (GTK calls `pure_core::weave::chord_pairs`
+directly). The shell only paints: canon axis with section bands + labels (from
+the `Canon` holder), gold baseline, OT/NT seam; ribbons heaviest-first, alpha
+`0.12+0.30·(cnt/max)`, foot width `2+8·(cnt/max)`; colours OT `(0.82,0.70,0.43)`
+/ NT `(0.50,0.70,0.90)` / cross `(0.78,0.59,0.86)` (+0.08 α, cap 0.5); apex
+`min(0.42·h, 22+0.26·h·|dx|/w)`; self-pair = small loop. Click: x→book →
+navigate active pane + close.
+*Parity fix:* the map counts every deduped pair (resolved or not); WinUI
+previously folded only the resolved connector links — now unified to the GTK
+reference.
 
 ## Constellation popup (M:937–1529)
 
 1200×640; ‹prev/next› + caption; Esc/click-outside closes; Left/Right page.
-Usable weaves = ≥1 link with both ends resolving in the corpus, sorted
-largest-first. 18 lanes; pinned lanes (by weave file identity) first and
-stay; the rest page. x = `162 + ((order + (ch−1)/chapters)/66)·(w−162)`; y =
-lane centre + jitter `((ch·3+v)%7−3)·laneH·0.12`; 7-colour cycle ×0.72; node =
-square, half-size `1.4+2.4·(deg/maxDeg)` (degree across the whole library).
-Pin gutter at x<150: filled gold 8×8 pinned / hollow gray otherwise; lane name
-≤22 chars; canon ruler on top; OT/NT seam. Hover tooltip "verse · weave" in a
-dark box. Hit priority **node > edge > pin-gutter**; node → navigate (stays
-open); edge → compare card (closes); gutter → toggle pin. Caption: "{N pinned
-· }weaves X–Y of Z · largest first · click the ▪ to pin a lane".
-*Data*: `weaves_json` (has `resolved` per link) + toc for chapter counts.
+**The whole layout is the core view-model** `pure_engine_constellation_json(page,
+pins_json)` (pins = a JSON array of weave indices) → lanes of nodes + edges as
+**fractions** (`x` a canon fraction, `laneFrac` 0..1 within a lane, `size` a
+0..1 witness degree) plus `nPins/freeTotal/page/maxPage/caption/laneCapacity`;
+GTK calls `pure_core::weave::constellation` directly. Usable = weaves with ≥1
+resolvable link, largest-first; `laneCapacity` (18) lanes, pinned (by weave
+**index**) first. The shell maps fractions to pixels + paints: `laneH =
+(h−topPad−10)/laneCapacity`, node `(plotLeft + x·(w−plotLeft), topPad +
+(lane+laneFrac)·laneH)` with plotLeft 162 / topPad 18 / gutter 150; 7-colour
+cycle ×0.72; node square half-size `1.4+2.4·size`; pin gutter x<150 (filled gold
+8×8 pinned / hollow gray); lane name ≤22 chars; canon ruler + OT/NT seam; hover
+tooltip "verse · weave". Hit priority **node > edge > pin-gutter**; node →
+navigate (stays open); edge → compare card (closes); gutter → toggle pin. The
+caption comes from the model.
+*Parity fixes* folded into the one model: node size normalises by the **global**
+max degree (GTK was per-page), and both shells now share one lane-height metric
+and one caption (they had drifted on all three).
 
 ## Concept map popup (`conceptmap:`; M:724–883)
 
-720×560: radial graph + 40-px dispersion strip. Neighbours = embedding
-nearest (6, gold spokes) + community (6, green spokes), deduped; radius
-`min(w,h)/2−60`; labels "gloss\nlemma"; centre node gold. Dispersion: per-book
-cells gold α `0.15+0.75·(cnt/max)`, OT/NT seam.
-*Data*: `concept_neighbours_json` + `concept_json` (byBook, community) +
-`gloss`.
+720×560: radial graph + 40-px dispersion strip. **The whole popup is the core
+view-model** `pure_engine_concept_map_json(code)` → `{code, centerLabel,
+spokes:[{code, label, semantic}], byBook (canon-ordered counts), otNtDivide,
+bookCount}`. The spoke union (embedding-near ∪ community, deduped, 6 each) lives
+in `pure_rnd::concept::radial_spokes` (GTK calls it directly); labels
+("gloss\nlemma") are baked by the endpoint. Paint only: radius `min(w,h)/2−95`;
+semantic spokes gold, community green; centre node gold; dispersion cells gold α
+`0.15+0.75·(cnt/max)` at `bi/bookCount`, OT/NT seam. No shell book-order table.
 
 ## C ABI surface (crates/ffi) — endpoint ↔ feature map
 
@@ -352,7 +366,7 @@ Added for shell parity (2026-07-14):
 |---|---|---|
 | `pure_engine_verse_notes_json(ref)` | `{verse, notes[]}` or null | margin notes |
 | `pure_engine_study_xrefs_json(ref)` | `{verse, refs:[{to, toDisplay, end?, votes}]}` | TSK tier |
-| `pure_engine_weaves_json()` | full library: weaves + links incl. `approved`, `spanA/B`, `resolved`, `suggested` | connectors, gutter dots, compare card, chord map, constellation |
+| `pure_engine_weaves_json()` | full library: weaves + links incl. `approved`, `spanA/B`, `resolved`, `suggested` | compare card, weaves list, panel xrefs (chord map + constellation now have their own view-model endpoints) |
 | `pure_engine_concept_json(code)` | `{total, ot, nt, topBooks, byBook, collocates, community, leitwort?}` | ALONGSIDE / CONCENTRATES / LEITWORT / dispersion |
 | `pure_engine_gloss(code)` | plain english gloss or null | concept chips |
 | `pure_engine_weave_add_link_spans(name, a, b, aLo, aHi, bLo, bHi, added)` | null/error (negative span = none) | word-span links |
@@ -383,6 +397,21 @@ Both are thin wrappers over the one core source: `link_pairs` wraps
 `pure_core::weave::link_pairs`; `canon_segments` wraps
 `core::reference::CANON_SEGMENTS` / `OT_NT_DIVIDE`. GTK (being Rust) calls those
 directly rather than round-tripping JSON.
+
+Added for the popup view-models (2026-07-18, architecture-review P0.2 — the
+three map popups' derivation moved into the core; positions cross the wire as
+**fractions/logical units**, never pixels/colours):
+
+| endpoint | returns | for |
+|---|---|---|
+| `pure_engine_chord_map_json()` | `{pairs:[{a, b, count}] (canon book indices, a≤b), max, otNtDivide, bookCount}` | chord/arc "Weave map" (retires the shell fold + max) |
+| `pure_engine_concept_map_json(code)` | `{code, centerLabel, spokes:[{code, label, semantic}], byBook[] (canon order), otNtDivide, bookCount}` | concept map (retires the spoke assembly + gloss/lemma lookups + book table) |
+| `pure_engine_constellation_json(page, pins_json)` | `{lanes:[{weaveIndex, name, pinned, nodes:[{x, laneFrac, size, refKey, book, chapter, verse, display}], edges:[{aX, aLaneFrac, bX, bLaneFrac}]}], nPins, freeTotal, page, maxPage, caption, laneCapacity}` (pins = JSON array of weave indices) | constellation (retires the usable/degree/jitter/paging/pin derivation) |
+
+Producers: `chord_map` wraps `pure_core::weave::chord_pairs`; `constellation`
+wraps `pure_core::weave::constellation`; `concept_map` bakes labels over
+`pure_rnd::concept::radial_spokes` + `concept.stat`. GTK calls the core fns
+directly; the non-Rust shells consume the JSON and map fractions → pixels.
 
 Not ported into any shell (by decision / data): signed patches + rules;
 text-witness grading (shipped data never passes, so the "disputed" marker
@@ -418,6 +447,15 @@ stays silent); quotation detection (awaits hydrated inputs).
   study-tier endpoints). A Compose shell adds the two JNA decls + wrappers, then
   consumes them for its connectors and canon strip instead of re-deriving —
   exactly what this phase removed from GTK/WinUI.
+- **Popup view-models (2026-07-18, P0.2) — Compose delta:** the three map
+  popups now come from `pure_engine_chord_map_json` / `pure_engine_concept_map_json`
+  / `pure_engine_constellation_json` (all **not yet in the Kotlin interface**).
+  A Compose shell adds the three JNA decls + wrappers and paints the returned
+  fractions — it never re-derives the fold / spoke assembly / lane layout.
+  Positions are fractions/logical units, so the Compose mapping is the SAME
+  `plotLeft + x·(w−plotLeft)` / `topPad + (lane+laneFrac)·laneH` the GTK/WinUI
+  reference uses; keep `laneCapacity`, plotLeft 162, topPad 18, gutter 150, and
+  the `1.4+2.4·size` radius identical so all three shells place a node alike.
 - Build gate: Android NDK + `cargo-ndk` for the `.so` per ABI; the Rust and
   the JSON contract are identical.
 - Measure callback: back it with `android.graphics.Paint.measureText` (or
