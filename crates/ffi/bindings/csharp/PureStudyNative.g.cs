@@ -692,6 +692,20 @@ namespace PureStudy.Native
         public static extern byte* pure_engine_weave_add_link_spans(PureEngine* engine, byte* name, byte* a_ref, byte* b_ref, int a_lo, int a_hi, int b_lo, int b_hi, byte* added);
 
         /// <summary>
+        ///  Parse a panel link URI into the typed verb the shell dispatches on
+        ///  (`{verb, …}`; see `pure_core::panel::parse_link`) — the one verb vocabulary,
+        ///  so a non-Rust shell routes clicks through the core instead of re-splitting
+        ///  the URI string and risking drift from what the panel emits. Engine-
+        ///  independent. Null for an unknown verb or malformed payload (a shell then
+        ///  ignores the click).
+        ///
+        ///  # Safety
+        ///  `uri` is null or valid NUL-terminated UTF-8 for the call.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_route_link_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_route_link_json(byte* uri);
+
+        /// <summary>
         ///  Load the cross-platform shell config (`%APPDATA%\pure-study\config.json` on
         ///  Windows) as JSON: `{studyMode, bodySize, openPanes, activePane, firstRun}`.
         ///  `firstRun` is true only when no config file existed. Never null.

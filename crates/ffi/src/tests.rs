@@ -929,3 +929,41 @@ fn panel_blocks_via_abi() {
         pure_engine_free(e);
     }
 }
+
+/// The panel link parser over the ABI: a URI the panel bakes routes back to a
+/// typed verb a shell dispatches on, and an unknown verb is null.
+#[test]
+fn route_link_via_abi() {
+    use std::ffi::CString;
+    unsafe {
+        let c = |s: &str| CString::new(s).unwrap();
+        let route = |s: &str| -> Option<Value> {
+            take(pure_route_link_json(c(s).as_ptr())).map(|j| serde_json::from_str(&j).unwrap())
+        };
+
+        let go = route("go:1 John:3:16").unwrap();
+        assert_eq!(go["verb"], "go");
+        assert_eq!(go["book"], "1 John");
+        assert_eq!(go["chapter"], 3);
+        assert_eq!(go["verse"], 16);
+
+        let occ = route("occ:G25").unwrap();
+        assert_eq!(occ["verb"], "occurrences");
+        assert_eq!(occ["code"], "G25");
+
+        // A refkey with a colon survives (only the verb splits).
+        let untag = route("untag:2:John 3:16").unwrap();
+        assert_eq!(untag["verb"], "untag");
+        assert_eq!(untag["tag"], 2);
+        assert_eq!(untag["refKey"], "John 3:16");
+
+        let edit = route("editentrynote:1:4").unwrap();
+        assert_eq!(edit["verb"], "editEntryNote");
+        assert_eq!(edit["thread"], 1);
+        assert_eq!(edit["entry"], 4);
+
+        // Unknown verb / malformed → null.
+        assert!(pure_route_link_json(c("bogus:x").as_ptr()).is_null());
+        assert!(pure_route_link_json(c("thread:nan").as_ptr()).is_null());
+    }
+}

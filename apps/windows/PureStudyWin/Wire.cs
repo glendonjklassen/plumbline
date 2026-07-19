@@ -168,6 +168,14 @@ public sealed record PanelBlock(
 public sealed record PanelRun(
     string Text, float Size, string Color, bool Bold, bool Italic, string? Uri);
 
+// A parsed panel link (pure_route_link_json): the one verb vocabulary, so the
+// shell dispatches on the typed shape instead of re-splitting the URI string.
+public sealed record PanelLinkData(
+    string Verb,
+    string? Book, uint? Chapter, uint? Verse,
+    string? Code, string? Rendering, string? Word,
+    int? Index, string? RefKey, int? Tag, int? Thread, int? Entry);
+
 // ── R&D tier ───────────────────────────────────────────────────────────────
 
 public sealed record Scored(string Code, float Score);

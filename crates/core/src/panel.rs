@@ -385,6 +385,100 @@ pub trait PanelSource {
     fn search(&self, query: &str) -> SearchView;
 }
 
+// ── the link router (one verb vocabulary, shared by every shell) ──────────────
+//
+// The producer above bakes every interactive `uri`; [`parse_link`] turns one
+// back into a typed verb. Emit and parse live side by side here, so the verb
+// vocabulary is a single source both shells route through (GTK calls it
+// directly; the non-Rust shells via `pure_route_link_json`) — a verb can't
+// drift between what the panel emits and what a shell handles. Navigation and
+// native prompts stay shell-side; the write verbs still call the author
+// endpoints (which need shell-gathered input).
+
+/// A parsed panel link. Read verbs re-fetch a view or navigate; write verbs
+/// (the `Edit*` / `Add*` / `Untag` / `Approve` / `Reject` family) drive an
+/// author endpoint after the shell gathers any input.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PanelLink {
+    /// `go:BOOK:CH[:V]` — navigate the active pane (V bands the verse).
+    Go { book: String, chapter: u32, verse: Option<u32> },
+    /// `occ:CODE` — the code's full concordance.
+    Occurrences { code: String },
+    /// `rend:CODE:RENDERING` — the concordance filtered to one rendering.
+    Rendering { code: String, rendering: String },
+    /// `code:CODE[:WORD]` — the standalone code-study card.
+    CodeStudy { code: String, word: String },
+    /// `thread:I` / `tag:I` / `weave:I` — open a detail / compare view.
+    Thread { index: usize },
+    Tag { index: usize },
+    Weave { index: usize },
+    /// `conceptmap:CODE` — open the radial concept map popup.
+    ConceptMap { code: String },
+    /// `addtag:REF` / `addthread:REF` — prompt, then author onto REF.
+    AddTag { refkey: String },
+    AddThread { refkey: String },
+    /// `untag:I:REF` — remove REF from tag I.
+    Untag { tag: usize, refkey: String },
+    /// `approve:I` / `reject:I` — resolve a suggested weave (suggested ordinal).
+    Approve { index: usize },
+    Reject { index: usize },
+    /// `editthreadnotes:I` / `editweavenotes:I` — prompt, then set notes.
+    EditThreadNotes { index: usize },
+    EditWeaveNotes { index: usize },
+    /// `editentrynote:T:E` — prompt, then set thread T's entry E note.
+    EditEntryNote { thread: usize, entry: usize },
+}
+
+/// Parse a panel `uri` into a typed [`PanelLink`]; `None` for an unknown verb or
+/// malformed payload (a shell then ignores the click, as both do today).
+pub fn parse_link(uri: &str) -> Option<PanelLink> {
+    let (verb, rest) = uri.split_once(':').unwrap_or((uri, ""));
+    Some(match verb {
+        "go" => {
+            // `BOOK:CH[:V]` — the book may contain spaces ("1 John") but never a
+            // ':', so split from the left into at most three parts.
+            let segs: Vec<&str> = rest.splitn(3, ':').collect();
+            match segs.as_slice() {
+                [book, ch] => PanelLink::Go { book: (*book).to_string(), chapter: ch.parse().ok()?, verse: None },
+                [book, ch, v] => PanelLink::Go {
+                    book: (*book).to_string(),
+                    chapter: ch.parse().ok()?,
+                    verse: Some(v.parse().ok()?),
+                },
+                _ => return None,
+            }
+        }
+        "occ" => PanelLink::Occurrences { code: rest.to_string() },
+        "rend" => {
+            let (code, rendering) = rest.split_once(':')?;
+            PanelLink::Rendering { code: code.to_string(), rendering: rendering.to_string() }
+        }
+        "code" => {
+            let (code, word) = rest.split_once(':').unwrap_or((rest, ""));
+            PanelLink::CodeStudy { code: code.to_string(), word: word.to_string() }
+        }
+        "thread" => PanelLink::Thread { index: rest.parse().ok()? },
+        "tag" => PanelLink::Tag { index: rest.parse().ok()? },
+        "weave" => PanelLink::Weave { index: rest.parse().ok()? },
+        "conceptmap" => PanelLink::ConceptMap { code: rest.to_string() },
+        "addtag" => PanelLink::AddTag { refkey: rest.to_string() },
+        "addthread" => PanelLink::AddThread { refkey: rest.to_string() },
+        "untag" => {
+            let (i, refkey) = rest.split_once(':')?;
+            PanelLink::Untag { tag: i.parse().ok()?, refkey: refkey.to_string() }
+        }
+        "approve" => PanelLink::Approve { index: rest.parse().ok()? },
+        "reject" => PanelLink::Reject { index: rest.parse().ok()? },
+        "editthreadnotes" => PanelLink::EditThreadNotes { index: rest.parse().ok()? },
+        "editweavenotes" => PanelLink::EditWeaveNotes { index: rest.parse().ok()? },
+        "editentrynote" => {
+            let (t, e) = rest.split_once(':')?;
+            PanelLink::EditEntryNote { thread: t.parse().ok()?, entry: e.parse().ok()? }
+        }
+        _ => return None,
+    })
+}
+
 // ── shared helpers ────────────────────────────────────────────────────────────
 
 /// `"Gen 1:7"` → `"go:Gen:1:7"` (the navigate verb the shell routes).

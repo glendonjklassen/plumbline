@@ -619,6 +619,17 @@ char *pure_engine_weave_add_link_spans(struct PureEngine *engine,
                                        int32_t b_hi,
                                        const char *added);
 
+// Parse a panel link URI into the typed verb the shell dispatches on
+// (`{verb, …}`; see `pure_core::panel::parse_link`) — the one verb vocabulary,
+// so a non-Rust shell routes clicks through the core instead of re-splitting
+// the URI string and risking drift from what the panel emits. Engine-
+// independent. Null for an unknown verb or malformed payload (a shell then
+// ignores the click).
+//
+// # Safety
+// `uri` is null or valid NUL-terminated UTF-8 for the call.
+char *pure_route_link_json(const char *uri);
+
 // Load the cross-platform shell config (`%APPDATA%\pure-study\config.json` on
 // Windows) as JSON: `{studyMode, bodySize, openPanes, activePane, firstRun}`.
 // `firstRun` is true only when no config file existed. Never null.

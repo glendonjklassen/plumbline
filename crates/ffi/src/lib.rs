@@ -2392,6 +2392,23 @@ pub unsafe extern "C" fn pure_engine_weave_add_link_spans(
     })
 }
 
+/// Parse a panel link URI into the typed verb the shell dispatches on
+/// (`{verb, …}`; see `pure_core::panel::parse_link`) — the one verb vocabulary,
+/// so a non-Rust shell routes clicks through the core instead of re-splitting
+/// the URI string and risking drift from what the panel emits. Engine-
+/// independent. Null for an unknown verb or malformed payload (a shell then
+/// ignores the click).
+///
+/// # Safety
+/// `uri` is null or valid NUL-terminated UTF-8 for the call.
+#[no_mangle]
+pub unsafe extern "C" fn pure_route_link_json(uri: *const c_char) -> *mut c_char {
+    guard(ptr::null_mut(), || match opt_str(uri).and_then(panel::parse_link) {
+        Some(link) => out_json(&wire::link_to_wire(link)),
+        None => ptr::null_mut(),
+    })
+}
+
 // ── config / session (engine-independent; shared with the GTK shell) ──────────
 
 /// Load the cross-platform shell config (`%APPDATA%\pure-study\config.json` on

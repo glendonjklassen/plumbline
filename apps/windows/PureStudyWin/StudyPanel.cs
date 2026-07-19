@@ -67,53 +67,44 @@ public sealed class StudyPanel : UserControl
     public async void Link(string uri)
     {
         if (Engine is null) return;
-        var (verb, rest) = Split2(uri, ':');
-        switch (verb)
+        // The verb vocabulary is parsed once in the core (pure_route_link_json);
+        // the shell dispatches on the typed shape, never re-splitting the URI.
+        if (StudyEngine.RouteLinkJson(uri) is not { } j) return;
+        var link = Wire.Parse<PanelLinkData>(j);
+        switch (link.Verb)
         {
             case "go":
-            {
-                var parts = rest.Split(':');
-                if (parts.Length >= 2 && uint.TryParse(parts[1], out var ch))
+                if (link.Book is { } b && link.Chapter is { } ch)
                 {
-                    string? verse = parts.Length >= 3 && ushort.TryParse(parts[2], out var v)
-                        ? $"{parts[0]} {ch}:{v}" : null;
-                    Navigate(parts[0], ch, verse);
+                    string? verse = link.Verse is { } v ? $"{b} {ch}:{v}" : null;
+                    Navigate(b, ch, verse);
                 }
                 break;
-            }
-            case "occ": ShowConcordance(rest); break;
-            case "rend":
+            case "occurrences": ShowConcordance(link.Code!); break;
+            case "rendering": ShowConcordanceFiltered(link.Code!, link.Rendering!); break;
+            case "codeStudy": ShowCodeStudy(link.Code!, link.Word ?? ""); break;
+            case "thread": ShowThreadDetail(link.Index!.Value); break;
+            case "tag": ShowTagDetail(link.Index!.Value); break;
+            case "weave": ShowCompareCard(link.Index!.Value); break;
+            case "conceptMap": OpenConceptMap(link.Code!); break;
+            case "addTag":
             {
-                var (rcode, rword) = Split2(rest, ':');
-                ShowConcordanceFiltered(rcode, rword);
-                break;
-            }
-            case "code":
-            {
-                var (ccode, cword) = Split2(rest, ':');
-                ShowCodeStudy(ccode, cword);
-                break;
-            }
-            case "thread": if (int.TryParse(rest, out var ti)) ShowThreadDetail(ti); break;
-            case "tag": if (int.TryParse(rest, out var gi)) ShowTagDetail(gi); break;
-            case "weave": if (int.TryParse(rest, out var wi)) ShowCompareCard(wi); break;
-            case "conceptmap": OpenConceptMap(rest); break;
-            case "addtag":
-            {
-                var name = await PromptName($"Tag {DisplayOf(rest)}", "tag name (new or existing)");
+                var refKey = link.RefKey!;
+                var name = await PromptName($"Tag {DisplayOf(refKey)}", "tag name (new or existing)");
                 if (name is null) break;
-                var err = Engine.TagAdd(name, "verse", rest, null, Now());
+                var err = Engine.TagAdd(name, "verse", refKey, null, Now());
                 if (err is not null) { ShowError(err); break; }
                 StudyDataChanged();
                 var idx = FindTag(name);
                 if (idx >= 0) ShowTagDetail(idx);
                 break;
             }
-            case "addthread":
+            case "addThread":
             {
-                var name = await PromptName($"Add {DisplayOf(rest)} to thread", "thread name (new or existing)");
+                var refKey = link.RefKey!;
+                var name = await PromptName($"Add {DisplayOf(refKey)} to thread", "thread name (new or existing)");
                 if (name is null) break;
-                var err = Engine.ThreadAdd(name, rest, null, Now());
+                var err = Engine.ThreadAdd(name, refKey, null, Now());
                 if (err is not null) { ShowError(err); break; }
                 StudyDataChanged();
                 var idx = FindThread(name);
@@ -122,11 +113,10 @@ public sealed class StudyPanel : UserControl
             }
             case "untag":
             {
-                var (i, refKey) = Split2(rest, ':');
-                if (!int.TryParse(i, out var idx2)) break;
+                int idx2 = link.Tag!.Value;
                 var tags = LoadTags();
                 if (idx2 >= tags.Count) break;
-                var err = Engine.TagRemove(tags[idx2].Name, "verse", refKey);
+                var err = Engine.TagRemove(tags[idx2].Name, "verse", link.RefKey!);
                 if (err is not null) { ShowError(err); break; }
                 StudyDataChanged();
                 var again = FindTag(tags[idx2].Name);
@@ -136,16 +126,16 @@ public sealed class StudyPanel : UserControl
             case "approve":
             case "reject":
             {
-                if (!uint.TryParse(rest, out var si)) break;
-                var err = verb == "approve" ? Engine.WeaveApprove(si) : Engine.WeaveReject(si);
+                var si = (uint)link.Index!.Value;
+                var err = link.Verb == "approve" ? Engine.WeaveApprove(si) : Engine.WeaveReject(si);
                 if (err is not null) { ShowError(err); break; }
                 StudyDataChanged();
                 ShowSuggested();
                 break;
             }
-            case "editthreadnotes":
+            case "editThreadNotes":
             {
-                if (!int.TryParse(rest, out var i3)) break;
+                int i3 = link.Index!.Value;
                 var threads = LoadThreads();
                 if (i3 >= threads.Count) break;
                 var text = await PromptText($"Notes — {threads[i3].Name}", threads[i3].Notes);
@@ -156,10 +146,10 @@ public sealed class StudyPanel : UserControl
                 ShowThreadDetail(i3);
                 break;
             }
-            case "editentrynote":
+            case "editEntryNote":
             {
-                var (a, b) = Split2(rest, ':');
-                if (!int.TryParse(a, out var t4) || !uint.TryParse(b, out var e4)) break;
+                int t4 = link.Thread!.Value;
+                uint e4 = (uint)link.Entry!.Value;
                 var threads = LoadThreads();
                 if (t4 >= threads.Count || e4 >= threads[t4].Entries.Count) break;
                 var text = await PromptText(
@@ -173,10 +163,10 @@ public sealed class StudyPanel : UserControl
                 ShowThreadDetail(t4);
                 break;
             }
-            case "editweavenotes":
+            case "editWeaveNotes":
             {
-                if (!int.TryParse(rest, out var i5) || Weaves is null ||
-                    i5 >= Weaves.Weaves.Count) break;
+                int i5 = link.Index!.Value;
+                if (Weaves is null || i5 >= Weaves.Weaves.Count) break;
                 var w = Weaves.Weaves[i5];
                 var text = await PromptText($"Notes — {w.Name}", w.Notes);
                 if (text is null) break;
@@ -187,12 +177,6 @@ public sealed class StudyPanel : UserControl
                 break;
             }
         }
-    }
-
-    private static (string, string) Split2(string s, char c)
-    {
-        int i = s.IndexOf(c);
-        return i < 0 ? (s, "") : (s[..i], s[(i + 1)..]);
     }
 
     private string DisplayOf(string refKey) =>

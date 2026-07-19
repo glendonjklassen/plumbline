@@ -173,6 +173,59 @@ fn go_uri_splits_on_the_last_space() {
 }
 
 #[test]
+fn parse_link_round_trips_the_producer_uris() {
+    // The go: verb a producer bakes parses back to the same reference — even
+    // for a multi-word book.
+    assert_eq!(
+        parse_link(&go_uri("1 John 3:16")),
+        Some(PanelLink::Go { book: "1 John".into(), chapter: 3, verse: Some(16) })
+    );
+    assert_eq!(
+        parse_link("go:John:3"),
+        Some(PanelLink::Go { book: "John".into(), chapter: 3, verse: None })
+    );
+
+    // Read verbs.
+    assert_eq!(parse_link("occ:G25"), Some(PanelLink::Occurrences { code: "G25".into() }));
+    assert_eq!(
+        parse_link("rend:G25:loved"),
+        Some(PanelLink::Rendering { code: "G25".into(), rendering: "loved".into() })
+    );
+    assert_eq!(
+        parse_link("code:G5368:loved"),
+        Some(PanelLink::CodeStudy { code: "G5368".into(), word: "loved".into() })
+    );
+    // code: with no word is allowed.
+    assert_eq!(parse_link("code:G5368"), Some(PanelLink::CodeStudy { code: "G5368".into(), word: "".into() }));
+    assert_eq!(parse_link("thread:2"), Some(PanelLink::Thread { index: 2 }));
+    assert_eq!(parse_link("tag:0"), Some(PanelLink::Tag { index: 0 }));
+    assert_eq!(parse_link("weave:4"), Some(PanelLink::Weave { index: 4 }));
+    assert_eq!(parse_link("conceptmap:G25"), Some(PanelLink::ConceptMap { code: "G25".into() }));
+
+    // Write verbs (refkeys may contain spaces + a colon; only the verb splits).
+    assert_eq!(parse_link("addtag:John 3:16"), Some(PanelLink::AddTag { refkey: "John 3:16".into() }));
+    assert_eq!(parse_link("addthread:John 3:16"), Some(PanelLink::AddThread { refkey: "John 3:16".into() }));
+    assert_eq!(
+        parse_link("untag:1:John 3:16"),
+        Some(PanelLink::Untag { tag: 1, refkey: "John 3:16".into() })
+    );
+    assert_eq!(parse_link("approve:3"), Some(PanelLink::Approve { index: 3 }));
+    assert_eq!(parse_link("reject:3"), Some(PanelLink::Reject { index: 3 }));
+    assert_eq!(parse_link("editthreadnotes:2"), Some(PanelLink::EditThreadNotes { index: 2 }));
+    assert_eq!(parse_link("editweavenotes:5"), Some(PanelLink::EditWeaveNotes { index: 5 }));
+    assert_eq!(
+        parse_link("editentrynote:2:4"),
+        Some(PanelLink::EditEntryNote { thread: 2, entry: 4 })
+    );
+
+    // Unknown verb / malformed payload → None (the shell ignores the click).
+    assert_eq!(parse_link("bogus:x"), None);
+    assert_eq!(parse_link("thread:notanumber"), None);
+    assert_eq!(parse_link("go:John"), None); // chapter missing
+    assert_eq!(parse_link("rend:G25"), None); // rendering missing
+}
+
+#[test]
 fn simple_word_study_is_just_display_word_and_dictionary() {
     let mut f = Fake::default();
     f.displays.insert("John 3:16".into(), "John 3:16".into());

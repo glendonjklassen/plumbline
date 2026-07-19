@@ -193,6 +193,16 @@ public sealed unsafe class StudyEngine : IDisposable
             return Utf8.Take(PureStudyNative.pure_engine_gloss(_handle, c));
     }
 
+    /// Parse a panel link URI into the typed verb the shell dispatches on
+    /// (`{verb, …}`; see pure_core::panel::parse_link) — the one verb vocabulary,
+    /// so the shell never re-splits the URI itself. Null on an unknown verb.
+    /// Engine-independent (a static helper, no handle needed).
+    public static string? RouteLinkJson(string uri)
+    {
+        fixed (byte* u = Utf8.NulTerminated(uri))
+            return Utf8.Take(PureStudyNative.pure_route_link_json(u));
+    }
+
     // ── study-panel content model (typed block lists; one producer in Rust) ──
 
     /// Word study for a tapped token as a block list; `full` gates the R&D tiers.

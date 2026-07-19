@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 use pure_core::config::{Config, PaneRef, StudyMode};
-use pure_core::panel::{Block, Color, Run};
+use pure_core::panel::{Block, Color, PanelLink, Run};
 use pure_core::corpus::{Corpus, Token, Verse};
 use pure_core::crossref::CrossRef;
 use pure_core::reference::VRef;
@@ -1105,6 +1105,61 @@ fn color_token(c: Color) -> &'static str {
 
 fn run_to_wire(r: Run) -> WireRun {
     WireRun { text: r.text, size: r.size, color: color_token(r.color), bold: r.bold, italic: r.italic, uri: r.uri }
+}
+
+/// A parsed panel link (`pure_core::panel::parse_link`) — the one verb
+/// vocabulary, tagged by `verb` so a shell dispatches on the typed shape
+/// instead of re-splitting the URI string.
+#[derive(Serialize)]
+#[serde(tag = "verb", rename_all = "camelCase")]
+pub enum WirePanelLink {
+    Go { book: String, chapter: u32, verse: Option<u32> },
+    Occurrences { code: String },
+    Rendering { code: String, rendering: String },
+    CodeStudy { code: String, word: String },
+    Thread { index: usize },
+    Tag { index: usize },
+    Weave { index: usize },
+    ConceptMap { code: String },
+    AddTag {
+        #[serde(rename = "refKey")]
+        ref_key: String,
+    },
+    AddThread {
+        #[serde(rename = "refKey")]
+        ref_key: String,
+    },
+    Untag {
+        tag: usize,
+        #[serde(rename = "refKey")]
+        ref_key: String,
+    },
+    Approve { index: usize },
+    Reject { index: usize },
+    EditThreadNotes { index: usize },
+    EditWeaveNotes { index: usize },
+    EditEntryNote { thread: usize, entry: usize },
+}
+
+pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
+    match l {
+        PanelLink::Go { book, chapter, verse } => WirePanelLink::Go { book, chapter, verse },
+        PanelLink::Occurrences { code } => WirePanelLink::Occurrences { code },
+        PanelLink::Rendering { code, rendering } => WirePanelLink::Rendering { code, rendering },
+        PanelLink::CodeStudy { code, word } => WirePanelLink::CodeStudy { code, word },
+        PanelLink::Thread { index } => WirePanelLink::Thread { index },
+        PanelLink::Tag { index } => WirePanelLink::Tag { index },
+        PanelLink::Weave { index } => WirePanelLink::Weave { index },
+        PanelLink::ConceptMap { code } => WirePanelLink::ConceptMap { code },
+        PanelLink::AddTag { refkey } => WirePanelLink::AddTag { ref_key: refkey },
+        PanelLink::AddThread { refkey } => WirePanelLink::AddThread { ref_key: refkey },
+        PanelLink::Untag { tag, refkey } => WirePanelLink::Untag { tag, ref_key: refkey },
+        PanelLink::Approve { index } => WirePanelLink::Approve { index },
+        PanelLink::Reject { index } => WirePanelLink::Reject { index },
+        PanelLink::EditThreadNotes { index } => WirePanelLink::EditThreadNotes { index },
+        PanelLink::EditWeaveNotes { index } => WirePanelLink::EditWeaveNotes { index },
+        PanelLink::EditEntryNote { thread, entry } => WirePanelLink::EditEntryNote { thread, entry },
+    }
 }
 
 pub fn blocks_to_wire(blocks: Vec<Block>) -> WirePanel {
