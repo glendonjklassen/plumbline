@@ -108,15 +108,20 @@ trimmed to 80 chars. *Data*: `pure_layout_hit_test_json` + `pure_engine_strongs_
 Sidebar 380 px, on-demand; Esc hides; clearing search hides. Content order —
 (F) = Full mode only.
 
-**Structure — one reusable code-study view.** The panel is assembled from three
-pieces so the per-code block can be reused: `word_study_markup` (M:3168) draws
-the header (1–2 below) then, per code, calls **`code_study_markup(st, code,
-word)`** (M:3209 — item 3), and finally `verse_study_extras` (M:3424 — items
-4–9). That same `code_study_markup` is what the **`code:CODE[:word]`** link verb
-opens standalone, so a reverse "also translates" link lands on a code's real
-entry, not a bare concordance. WinUI mirrors this with `CodeStudy` /
-`VerseStudyExtras` / `ShowCodeStudy` (StudyPanel.cs). `word` is the surface that
-led there (highlights its rendering, keys the reverse line); "" when none.
+**Structure — one core producer, thin per-block renderers (P0.1).** The whole
+panel is now a **typed block list** built once in `pure_core::panel` and served
+over `pure_engine_word_study_blocks_json` (+ the sibling `*_blocks_json`
+endpoints below). A block is `Section{title, mark?}` / `Para{runs, indent,
+topGap}` / `Rule`; a run carries text + a **semantic colour role** + a logical
+point size + bold/italic + an optional `uri`. The producer owns *everything*
+below — tier order, caps, (F)-gating, `humanize`, `RenderKey`, gloss/lemma
+formatting, the reverse-lens line, the provenance marks, snippet windowing, and
+the pre-baked link URIs. Each shell has a *small* per-block painter
+(`RenderBlocks` / `blocks_to_markup`); it derives nothing. The `word` (the
+surface that led here — highlights its rendering, keys the reverse line) is a
+producer argument; the same producer's `code_study_card` is what the
+`code:CODE[:word]` verb opens standalone. The items below document *what the
+producer emits*, not shell code.
 
 1. Verse ref bold; the word xx-large.
 2. (F) Morphology gloss line, small, `#6a5a2a`.
@@ -157,18 +162,21 @@ led there (highlights its rendering, keys the reverse line); "" when none.
    data, not evidence — no tier mark).
 9. **margin notes** *(Human †)* — the verse's 1769 notes, small.
 
-A **provenance legend** (`legend_markup` / WinUI `AddTierLegend`) closes a
-Full-study card once: "where this comes from: ✝ the text · † curated
-scholarship · ≈ machine-derived, weigh it · ⚗ research-grade". Weave
-cross-references (item 5) and tags carry no mark (mixed / user-authored, not
-trust-weighted evidence).
+A **provenance legend** closes a Full-study card once: "where this comes from:
+✝ the text · † curated scholarship · ≈ machine-derived, weigh it · ⚗
+research-grade". Weave cross-references (item 5) and tags carry no mark (mixed /
+user-authored, not trust-weighted evidence). The producer emits it as a `Para`
+of tier-coloured runs.
 
-Concept chips render english-first: "**gloss** *lemma*" joined by "  ·  ";
-the gloss is the modal KJV rendering across ≤80 occurrences (skip FLAG_ADDED
-tokens, strip edge punctuation, ties lexicographic; fallback: distilled
-def/kjv clause ≤30 chars). *Data*: `pure_engine_gloss` computes this
-engine-side; plus `strongs/occurrences/morph/bridge/concept-neighbours/
-concept/similar-verses/verse-xrefs/study-xrefs/tags/verse-notes` endpoints.
+Concept chips render english-first: "**gloss** *lemma*" joined by "  ·  "; the
+gloss is the modal KJV rendering across ≤80 occurrences (skip FLAG_ADDED tokens,
+strip edge punctuation, ties lexicographic; fallback: distilled def/kjv clause
+≤30 chars). All of this is inside the producer; the shell only paints the runs.
+The `PanelSource` trait (implemented by both the GTK `State` and the FFI
+`PureEngine`) is the producer's only input — a thin set of projected accessors
+(`strongs`/`occurrences`/`renderings`/`bridge_partners`/`concept`/
+`similar_verses`/`verse_xrefs`/`verse_notes`/…), so the same producer runs
+Rust→Rust for GTK and behind the endpoints for WinUI/Compose.
 
 ## Authority tiers — provenance marks on evidence
 
@@ -200,19 +208,24 @@ knows its provenance. The model is `pure_rnd::bridge` (`crates/rnd/src/bridge.rs
   Rust, calls `bridge::tiers_of`/`research_grade` directly. Fixed-by-block
   sections (SIMILAR CONCEPTS = Machine, TSK = Human, …) are marked shell-side.
 
-## Link routing (GTK `handle_link`, M:2531–2624)
+## Link routing — one verb vocabulary (P1.4)
 
-All panel interactivity funnels through one URI dispatcher — replicate it:
+All panel interactivity funnels through one URI dispatcher, and the verb
+vocabulary is **parsed once in the core**: `pure_core::panel::parse_link(uri) ->
+PanelLink` — co-located with the producers that *emit* the URIs, so a verb can't
+drift between what the panel bakes and what a shell handles. GTK matches on
+`PanelLink` directly; WinUI/Compose route through `pure_route_link_json(uri)`
+(`{verb, …}`, tagged) — neither re-splits the string. The 16 verbs:
 `go:Book:ch[:v]` · `occ:CODE` · `rend:CODE:rendering` · `code:CODE[:word]` ·
-`thread:i` · `tag:i` · `addtag:refkey` ·
+`thread:i` · `tag:i` · `weave:i` · `conceptmap:CODE` · `addtag:refkey` ·
 `addthread:refkey` · `untag:i:refkey` · `approve:i` · `reject:i` ·
-`editthreadnotes:i` · `editentrynote:ti:ei` · `editweavenotes:i` · `weave:i` ·
-`conceptmap:CODE`.
+`editthreadnotes:i` · `editentrynote:ti:ei` · `editweavenotes:i`.
 
-`code:CODE[:word]` splits on the **first** colon only (`CODE` has none; `word`
-is a single surface token) and opens the reusable code-study card
-(`code_study_markup` / WinUI `ShowCodeStudy`) — distinct from `occ:CODE` (verse
-list) and `rend:CODE:rendering` (filtered verse list).
+Navigation + native prompts + the write choreography (author endpoint →
+reload → refetch) stay shell-side. `parse_link` handles multi-word books
+("1 John") and colon-bearing refkeys; `code:CODE[:word]` keeps its `word`
+(a surface token) and opens the standalone code-study card — distinct from
+`occ:CODE` (verse list) and `rend:CODE:rendering` (filtered list).
 
 ## Concordance (`occ:`; M:3783)
 
@@ -413,6 +426,30 @@ wraps `pure_core::weave::constellation`; `concept_map` bakes labels over
 `pure_rnd::concept::radial_spokes` + `concept.stat`. GTK calls the core fns
 directly; the non-Rust shells consume the JSON and map fractions → pixels.
 
+Added for the panel content-model + link router (2026-07-18, P0.1 + P1.4 — the
+whole study panel and its verb vocabulary move into the core). Every block
+endpoint returns `{blocks:[Section|Para|Rule]}` (runs carry a semantic colour
+role + logical size + optional uri); `full` gates the R&D tiers + author actions.
+
+| endpoint | returns / for |
+|---|---|
+| `pure_engine_word_study_blocks_json(ref, tok, full)` | the tapped word's dictionary + Full tiers + this verse's xrefs/notes |
+| `pure_engine_code_study_blocks_json(code, word?, full)` | the standalone `code:` card |
+| `pure_engine_concordance_blocks_json(code)` / `pure_engine_rendering_concordance_blocks_json(code, rendering)` | full / rendering-filtered concordance |
+| `pure_engine_threads_blocks_json()` / `pure_engine_thread_blocks_json(i)` | threads list / detail |
+| `pure_engine_tags_blocks_json()` / `pure_engine_tag_blocks_json(i)` | tags list / detail |
+| `pure_engine_weaves_blocks_json()` / `pure_engine_suggested_blocks_json()` | weaves list / review queue |
+| `pure_engine_compare_blocks_json(i, full)` | weave compare card |
+| `pure_engine_search_blocks_json(query)` | search results (goto link or ranked hits + snippets); null on blank |
+| `pure_route_link_json(uri)` | parse a panel link into `{verb, …}` (engine-independent) |
+
+One producer (`pure_core::panel`) over the `PanelSource` trait feeds all of
+these; GTK implements the trait on `State` and calls the producer directly, the
+FFI implements it on `PureEngine`. **Golden coverage (P2.6):** `panel_blocks_via_abi`
+and `route_link_via_abi` exercise the block payloads + parser over the ABI, and
+the producer itself has 15 unit tests over a fake source; the block kinds are a
+Rust enum (a shell that meets an unknown kind renders nothing — forward-compat).
+
 Not ported into any shell (by decision / data): signed patches + rules;
 text-witness grading (shipped data never passes, so the "disputed" marker
 stays silent); quotation detection (awaits hydrated inputs).
@@ -447,6 +484,15 @@ stays silent); quotation detection (awaits hydrated inputs).
   study-tier endpoints). A Compose shell adds the two JNA decls + wrappers, then
   consumes them for its connectors and canon strip instead of re-deriving —
   exactly what this phase removed from GTK/WinUI.
+- **Panel content-model + link router (2026-07-18, P0.1 + P1.4) — Compose
+  delta:** the whole study panel is a typed block list from the
+  `pure_engine_*_blocks_json` family, and links parse via `pure_route_link_json`
+  — none are in the Kotlin interface yet. A Compose shell adds those JNA decls +
+  wrappers, then walks the blocks with a small per-block composable
+  (`Section`/`Para`/`Rule`, runs → `AnnotatedString` with the colour-role map +
+  clickable link URIs) and dispatches clicks on the parsed `{verb}`. It writes
+  **no** panel derivation — the producer owns tier order, caps, gloss/lemma,
+  snippets, and the verb vocabulary. Colour roles map identically to GTK/WinUI.
 - **Popup view-models (2026-07-18, P0.2) — Compose delta:** the three map
   popups now come from `pure_engine_chord_map_json` / `pure_engine_concept_map_json`
   / `pure_engine_constellation_json` (all **not yet in the Kotlin interface**).

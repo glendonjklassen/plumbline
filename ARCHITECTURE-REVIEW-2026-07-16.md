@@ -297,6 +297,31 @@ in CI; WinUI is compile-checked here with `dotnet build`, never auto-driven).
     `dotnet build` 0 errors, DLL rebuilt); GTK mirrored per pattern for CI.
   - **Awaiting**: Glendon's manual WinUI check that the three map popups still
     render + interact (hover/click/pin/page) after the rewrite.
-- ⏳ **P0.1 panel content-model (items 6–8)** — NEXT; the big one; de-risk per the plan.
-- ⏳ **P1.4 link-router single source**, **P1.5 split `main.rs`**,
-  **P2.6/7 cross-shell golden tests + shrink the manifest** — pending.
+- ✅ **P0.1 panel content-model (items 6–8)** — DONE (the big one), landed as two
+  increments: `6862989` (core producer + FFI + WinUI) and `b4edbc6` (GTK).
+  - Core: `pure_core::panel` — a tiny block model (Section/Para/Rule with styled
+    runs) + the `PanelSource` trait + the producer for every panel view (word
+    study, code study, concordance ×2, threads/tags list+detail, weaves,
+    suggested, compare card, search+snippet). Tier order, caps, (F)-gating,
+    humanize, RenderKey, gloss/lemma, snippet windowing, pre-baked URIs all live
+    here. 15 unit tests over a fake source.
+  - FFI: `impl PanelSource for PureEngine` + 12 `pure_engine_*_blocks_json`
+    endpoints + block→JSON; `panel_blocks_via_abi` test.
+  - WinUI: StudyPanel −550 lines (RenderBlocks + thin Show*); GTK: `impl
+    PanelSource for State` + `blocks_to_markup`, markup fns delegate, −721 lines.
+- ✅ **P1.4 link-router single source** — DONE (`7ca1020` core+FFI+WinUI, `6244ad9`
+  GTK). `pure_core::panel::{PanelLink, parse_link}` is the one verb vocabulary
+  (co-located with the URI producers); `pure_route_link_json` for non-Rust
+  shells; GTK matches on `PanelLink` directly. Unit + ABI tests.
+- ✅ **P2.6/P2.7 (partial)** — the manifest's panel/router/popup sections now
+  describe *what the endpoints emit* rather than how to re-implement; golden
+  coverage = `panel_blocks_via_abi` + `route_link_via_abi` + the popup ABI tests
+  + 15 producer unit tests; block kinds are a Rust enum (unknown kind → nothing,
+  forward-compat). A dedicated compile-checked block-kind enum *shared into the
+  shells* (vs. the current graceful default) is the remaining P2.6 nicety.
+- ⏳ **P1.5 split `main.rs`** — PENDING. `apps/desktop/src/main.rs` is now
+  ~3.6k lines (the P0.1/P1.4 extractions removed ~1.3k). This is a mechanical
+  module split (reader/panes/popups/panel/links/chrome) with **no logic change**;
+  best done in an environment where GTK compiles, since it's mostly visibility
+  (`pub(crate)`) adjustments that want iterative `cargo check` — not doable on
+  the Windows dev box.
