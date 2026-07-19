@@ -181,7 +181,16 @@ pub fn layout_chapter<M: Measure>(verses: &[Verse], m: &M, cfg: &LayoutConfig) -
         // number alone at the end of a line orphans it from its verse.
         let num = verse.verse.to_string();
         let num_w = m.text_width(&num);
-        let first_w = verse.tokens.first().map_or(0.0, |t| m.text_width(&t.render()));
+        // Measure the first token once: text_width is a native shaping call
+        // (Pango/DirectWrite) and render() heap-allocates. The result is reused
+        // for both the number/first-word wrap check here and placing the word
+        // at ti == 0 below, instead of measuring it twice per verse.
+        let mut first_measured = verse.tokens.first().map(|t| {
+            let text = t.render();
+            let w = m.text_width(&text);
+            (text, w)
+        });
+        let first_w = first_measured.as_ref().map_or(0.0, |(_, w)| *w);
         if pen.line_started && pen.x + num_w + cfg.verse_num_gap + first_w > cfg.width {
             pen.newline(cfg);
         }
@@ -207,8 +216,14 @@ pub fn layout_chapter<M: Measure>(verses: &[Verse], m: &M, cfg: &LayoutConfig) -
                 pen.x = cfg.para_indent;
             }
 
-            let text = token.render();
-            let w = m.text_width(&text);
+            let (text, w) = match first_measured.take() {
+                Some(fm) if ti == 0 => fm,
+                _ => {
+                    let text = token.render();
+                    let w = m.text_width(&text);
+                    (text, w)
+                }
+            };
 
             if pen.line_started && pen.x + w > cfg.width {
                 pen.newline(cfg);

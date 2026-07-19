@@ -11,6 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 use pure_core::config::{Config, PaneRef, StudyMode};
+use pure_core::panel::{Block, Color, PanelLink, Run};
 use pure_core::corpus::{Corpus, Token, Verse};
 use pure_core::crossref::CrossRef;
 use pure_core::reference::VRef;
@@ -212,6 +213,53 @@ pub struct Occurrences {
     pub total: usize,
     pub capped: bool,
     pub verses: Vec<String>,
+}
+
+// ── rendering lens ────────────────────────────────────────────────────────────
+
+/// One occurrence of a rendering: the verse plus the inclusive token span of
+/// the contiguous same-code run.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireRenderingRef {
+    pub verse: String,
+    pub display: String,
+    pub span: [u16; 2],
+}
+
+/// One English rendering of a code, with its occurrence count and (capped)
+/// refs.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireRendering {
+    pub rendering: String,
+    pub total: usize,
+    pub capped: bool,
+    pub refs: Vec<WireRenderingRef>,
+}
+
+/// The forward lens payload: a code and all the ways it is rendered.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireRenderings {
+    pub code: String,
+    pub renderings: Vec<WireRendering>,
+}
+
+/// One code a surface word translates, with how many tagged tokens carry it.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireWordCode {
+    pub code: String,
+    pub count: usize,
+}
+
+/// The reverse lens payload: a surface word and the codes it translates.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireWordCodes {
+    pub word: String,
+    pub codes: Vec<WireWordCode>,
 }
 
 // ── search ────────────────────────────────────────────────────────────────────
@@ -524,6 +572,14 @@ pub struct WireBridgePartner {
     pub sources: Vec<String>,
     /// The best trust prior across those witnesses.
     pub prior: f32,
+    /// The authority tiers those witnesses attest, deduped and ordered
+    /// God→Human→Machine (`"god"`/`"human"`/`"machine"`); e.g. a scripture
+    /// quotation is `["god","machine"]`. Additive field — a consumer that
+    /// ignores it sees the pre-tier behaviour.
+    pub tiers: Vec<String>,
+    /// True when any witness's method is still research-grade (has not passed
+    /// its held-out grading) — a lead, not a result.
+    pub research_grade: bool,
 }
 
 #[derive(Serialize)]
@@ -692,6 +748,234 @@ pub fn weaves_to_wire(loaded: &[LoadedWeave], corpus: &Corpus) -> WireWeaves {
     }
 }
 
+// ── connector link pairs (the ambient cross-reference lines + chord map) ──────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireLinkPairs {
+    pub pairs: Vec<WireLinkPair>,
+}
+
+/// One deduped canonical weave pair, each endpoint spelled out (ref key +
+/// located book/chapter/verse) so a shell draws connectors and lays out the
+/// chord map without parsing ref keys or re-deriving the dedup.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireLinkPair {
+    pub a: String,
+    pub a_book: String,
+    pub a_chapter: u16,
+    pub a_verse: u16,
+    pub b: String,
+    pub b_book: String,
+    pub b_chapter: u16,
+    pub b_verse: u16,
+    /// Both endpoints resolve in the loaded corpus (drawable / navigable). The
+    /// same calc `weaves_to_wire` applies per link — an unresolved pair has an
+    /// endpoint the reader can't reach, so a shell skips it when drawing.
+    pub resolved: bool,
+}
+
+pub fn link_pairs_to_wire(loaded: &[LoadedWeave], corpus: &Corpus) -> WireLinkPairs {
+    WireLinkPairs {
+        pairs: pure_core::weave::link_pairs(loaded)
+            .into_iter()
+            .map(|(a, b)| {
+                let resolved = corpus.verse(&a).is_some() && corpus.verse(&b).is_some();
+                WireLinkPair {
+                    a: a.ref_key(),
+                    a_book: a.book,
+                    a_chapter: a.chapter,
+                    a_verse: a.verse,
+                    b: b.ref_key(),
+                    b_book: b.book,
+                    b_chapter: b.chapter,
+                    b_verse: b.verse,
+                    resolved,
+                }
+            })
+            .collect(),
+    }
+}
+
+// ── canon overview segments (the 66-book strip + OT/NT seam) ───────────────────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireCanonSegments {
+    pub segments: Vec<WireCanonSegment>,
+    /// Book index (39) at which the New Testament begins — the OT/NT seam.
+    pub ot_nt_divide: usize,
+}
+
+/// One canon section as `(label, first book index, last book index)` over the
+/// 66 books in OSIS order. The single source is `core::reference` — a shell
+/// consumes this instead of hardcoding the bands (they were drifting).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireCanonSegment {
+    pub label: &'static str,
+    pub first: usize,
+    pub last: usize,
+}
+
+pub fn canon_segments_to_wire() -> WireCanonSegments {
+    WireCanonSegments {
+        segments: pure_core::reference::CANON_SEGMENTS
+            .iter()
+            .map(|&(label, first, last)| WireCanonSegment { label, first, last })
+            .collect(),
+        ot_nt_divide: pure_core::reference::OT_NT_DIVIDE,
+    }
+}
+
+// ── chord / arc map (book-to-book weave density) ──────────────────────────────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireChordMap {
+    /// Canon-ordered book-pair counts over the deduped link pairs.
+    pub pairs: Vec<WireChordPair>,
+    /// The heaviest pair count, for normalising ribbon weight/alpha.
+    pub max: u32,
+    /// Book index (39) at which the New Testament begins — ribbon colour marks
+    /// OT-internal / NT-internal / cross-testament off this seam.
+    pub ot_nt_divide: usize,
+    /// Book count (66) — the axis the shell lays the ribbon feet over.
+    pub book_count: usize,
+}
+
+/// One book-pair ribbon: two **canon book indices** (`a <= b`, so `a == b` is a
+/// self-pair) and how many deduped verse links weave those books together. The
+/// shell maps an index to a foot position and a name off its own book list —
+/// it neither folds the pairs nor re-derives the max.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireChordPair {
+    pub a: usize,
+    pub b: usize,
+    pub count: u32,
+}
+
+pub fn chord_map_to_wire(loaded: &[LoadedWeave]) -> WireChordMap {
+    let (pairs, max) = pure_core::weave::chord_pairs(loaded);
+    WireChordMap {
+        pairs: pairs.into_iter().map(|(a, b, count)| WireChordPair { a, b, count }).collect(),
+        max,
+        ot_nt_divide: pure_core::reference::OT_NT_DIVIDE,
+        book_count: pure_core::canon::BOOKS.len(),
+    }
+}
+
+// ── constellation (the weave-library overview) ────────────────────────────────
+
+/// A laid-out page of the constellation (review item 3). Positions are
+/// **fractions / logical units** — `x` a canon fraction 0..1, `laneFrac` a
+/// 0..1 within a lane's band, `size` a 0..1 witness degree. The shell holds the
+/// transient `page`/`pins` (the endpoint's inputs), maps fractions to pixels,
+/// picks colours, and paints; it derives nothing.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireConstellation {
+    pub lanes: Vec<WireConstellationLane>,
+    pub n_pins: usize,
+    pub free_total: usize,
+    /// The page actually shown (the requested page clamped into range).
+    pub page: usize,
+    pub max_page: usize,
+    /// The fully-composed paging caption.
+    pub caption: String,
+    /// The fixed lane capacity — the shell's lane-height denominator, so it
+    /// can't drift from the paging arithmetic.
+    pub lane_capacity: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireConstellationLane {
+    /// The weave's library index — the compare-card handle and the pin key.
+    pub weave_index: usize,
+    pub name: String,
+    pub pinned: bool,
+    pub nodes: Vec<WireConstellationNode>,
+    pub edges: Vec<WireConstellationEdge>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireConstellationNode {
+    /// Canon fraction 0..1 (plot x); within-lane fraction 0..1 (lane y).
+    pub x: f32,
+    pub lane_frac: f32,
+    /// Witness degree ÷ the library max (0..1) — the shell picks the radius.
+    pub size: f32,
+    pub ref_key: String,
+    pub book: String,
+    pub chapter: u16,
+    pub verse: u16,
+    pub display: String,
+}
+
+/// A link's two endpoints (same lane) as `(x, laneFrac)` — the drawn curve.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireConstellationEdge {
+    pub a_x: f32,
+    pub a_lane_frac: f32,
+    pub b_x: f32,
+    pub b_lane_frac: f32,
+}
+
+pub fn constellation_to_wire(
+    loaded: &[LoadedWeave],
+    corpus: &Corpus,
+    page: usize,
+    pins: &[usize],
+) -> WireConstellation {
+    let c = pure_core::weave::constellation(loaded, corpus, page, pins);
+    WireConstellation {
+        lanes: c
+            .lanes
+            .into_iter()
+            .map(|l| WireConstellationLane {
+                weave_index: l.weave_index,
+                name: l.name,
+                pinned: l.pinned,
+                nodes: l
+                    .nodes
+                    .into_iter()
+                    .map(|n| WireConstellationNode {
+                        x: n.x,
+                        lane_frac: n.lane_frac,
+                        size: n.size,
+                        ref_key: n.ref_key,
+                        book: n.book,
+                        chapter: n.chapter,
+                        verse: n.verse,
+                        display: n.display,
+                    })
+                    .collect(),
+                edges: l
+                    .edges
+                    .into_iter()
+                    .map(|e| WireConstellationEdge {
+                        a_x: e.a_x,
+                        a_lane_frac: e.a_lane_frac,
+                        b_x: e.b_x,
+                        b_lane_frac: e.b_lane_frac,
+                    })
+                    .collect(),
+            })
+            .collect(),
+        n_pins: c.n_pins,
+        free_total: c.free_total,
+        page: c.page,
+        max_page: c.max_page,
+        caption: c.caption,
+        lane_capacity: c.lane_capacity,
+    }
+}
+
 // ── the symbolic concept engine (collocations, distribution, leitwort) ────────
 
 #[derive(Serialize)]
@@ -731,6 +1015,172 @@ pub struct WireLeitwort {
     pub score: f64,
     /// Human window label, e.g. "Genesis 37–50".
     pub label: String,
+}
+
+// ── concept map (radial neighbourhood + dispersion strip) ─────────────────────
+
+/// Everything the concept-map popup paints for one code: the centre + its
+/// spokes (near ∪ community, deduped, labels pre-baked) and the per-book
+/// dispersion counts. One producer replaces the shell's assembly + its four
+/// lookups (neighbours / concept / gloss / lemma) with a single call. Assembled
+/// in `lib.rs` because the labels need the gloss + dictionary.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireConceptMap {
+    pub code: String,
+    /// The centre node's label (English gloss over lemma, `\n`-separated;
+    /// falls back to lemma, then the bare code).
+    pub center_label: String,
+    pub spokes: Vec<WireConceptSpoke>,
+    /// Per-book dispersion counts in **canon order** (length = `book_count`); a
+    /// book the concept never occurs in is 0. The strip places cell `i` at
+    /// `i / book_count` — no book-id table needed in the shell.
+    pub by_book: Vec<u32>,
+    pub ot_nt_divide: usize,
+    pub book_count: usize,
+}
+
+/// One spoke of the concept map: a neighbour code, its pre-baked label, and
+/// whether it is a **semantic** (embedding) neighbour — gold — or a collocation
+/// community member — green.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireConceptSpoke {
+    pub code: String,
+    pub label: String,
+    pub semantic: bool,
+}
+
+// ── study-panel content model (the typed block list) ──────────────────────────
+
+/// A panel view as a list of typed blocks (see `pure_core::panel`). The shell
+/// walks these with a small per-block renderer; it derives nothing.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WirePanel {
+    pub blocks: Vec<WireBlock>,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum WireBlock {
+    /// A section header, with an optional tier mark (glyph + colour role).
+    Section { title: String, mark_glyph: Option<String>, mark_color: Option<&'static str> },
+    /// A flowing paragraph of styled runs.
+    Para { runs: Vec<WireRun>, indent: bool, top_gap: bool },
+    /// A horizontal rule.
+    Rule,
+}
+
+/// One styled span: text + a **semantic** colour role + a logical point size +
+/// bold/italic, and an optional `uri` that makes it a link.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireRun {
+    pub text: String,
+    pub size: f32,
+    pub color: &'static str,
+    pub bold: bool,
+    pub italic: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+}
+
+/// The camelCase token for a colour role (the shell maps it to its palette).
+fn color_token(c: Color) -> &'static str {
+    match c {
+        Color::Ink => "ink",
+        Color::Faded => "faded",
+        Color::Gold => "gold",
+        Color::Section => "section",
+        Color::TierGod => "tierGod",
+        Color::TierHuman => "tierHuman",
+        Color::TierMachine => "tierMachine",
+        Color::TierResearch => "tierResearch",
+        Color::Mono => "mono",
+        Color::Morph => "morph",
+        Color::Lemma => "lemma",
+    }
+}
+
+fn run_to_wire(r: Run) -> WireRun {
+    WireRun { text: r.text, size: r.size, color: color_token(r.color), bold: r.bold, italic: r.italic, uri: r.uri }
+}
+
+/// A parsed panel link (`pure_core::panel::parse_link`) — the one verb
+/// vocabulary, tagged by `verb` so a shell dispatches on the typed shape
+/// instead of re-splitting the URI string.
+#[derive(Serialize)]
+#[serde(tag = "verb", rename_all = "camelCase")]
+pub enum WirePanelLink {
+    Go { book: String, chapter: u32, verse: Option<u32> },
+    Occurrences { code: String },
+    Rendering { code: String, rendering: String },
+    CodeStudy { code: String, word: String },
+    Thread { index: usize },
+    Tag { index: usize },
+    Weave { index: usize },
+    ConceptMap { code: String },
+    AddTag {
+        #[serde(rename = "refKey")]
+        ref_key: String,
+    },
+    AddThread {
+        #[serde(rename = "refKey")]
+        ref_key: String,
+    },
+    Untag {
+        tag: usize,
+        #[serde(rename = "refKey")]
+        ref_key: String,
+    },
+    Approve { index: usize },
+    Reject { index: usize },
+    EditThreadNotes { index: usize },
+    EditWeaveNotes { index: usize },
+    EditEntryNote { thread: usize, entry: usize },
+}
+
+pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
+    match l {
+        PanelLink::Go { book, chapter, verse } => WirePanelLink::Go { book, chapter, verse },
+        PanelLink::Occurrences { code } => WirePanelLink::Occurrences { code },
+        PanelLink::Rendering { code, rendering } => WirePanelLink::Rendering { code, rendering },
+        PanelLink::CodeStudy { code, word } => WirePanelLink::CodeStudy { code, word },
+        PanelLink::Thread { index } => WirePanelLink::Thread { index },
+        PanelLink::Tag { index } => WirePanelLink::Tag { index },
+        PanelLink::Weave { index } => WirePanelLink::Weave { index },
+        PanelLink::ConceptMap { code } => WirePanelLink::ConceptMap { code },
+        PanelLink::AddTag { refkey } => WirePanelLink::AddTag { ref_key: refkey },
+        PanelLink::AddThread { refkey } => WirePanelLink::AddThread { ref_key: refkey },
+        PanelLink::Untag { tag, refkey } => WirePanelLink::Untag { tag, ref_key: refkey },
+        PanelLink::Approve { index } => WirePanelLink::Approve { index },
+        PanelLink::Reject { index } => WirePanelLink::Reject { index },
+        PanelLink::EditThreadNotes { index } => WirePanelLink::EditThreadNotes { index },
+        PanelLink::EditWeaveNotes { index } => WirePanelLink::EditWeaveNotes { index },
+        PanelLink::EditEntryNote { thread, entry } => WirePanelLink::EditEntryNote { thread, entry },
+    }
+}
+
+pub fn blocks_to_wire(blocks: Vec<Block>) -> WirePanel {
+    WirePanel {
+        blocks: blocks
+            .into_iter()
+            .map(|b| match b {
+                Block::Section { title, mark } => WireBlock::Section {
+                    title,
+                    mark_glyph: mark.as_ref().map(|(g, _)| g.clone()),
+                    mark_color: mark.map(|(_, c)| color_token(c)),
+                },
+                Block::Para { runs, indent, top_gap } => WireBlock::Para {
+                    runs: runs.into_iter().map(run_to_wire).collect(),
+                    indent,
+                    top_gap,
+                },
+                Block::Rule => WireBlock::Rule,
+            })
+            .collect(),
+    }
 }
 
 // ── config / session (shared with the GTK shell via core::config) ─────────────

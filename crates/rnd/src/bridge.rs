@@ -214,6 +214,83 @@ pub fn load_priors(home: impl AsRef<Path>) -> Priors {
     }
 }
 
+/// The authority tier of a piece of evidence — where it comes from, so the
+/// reader always knows the provenance of what they are looking at. Ported from
+/// overlay `Bridge.hs` `Tier`.
+///
+/// - [`Tier::God`] — the text itself: TR/Masoretic words, and
+///   scripture-quotes-scripture, which is "the words read twice" and so
+///   inherits the text's own authority.
+/// - [`Tier::Human`] — curated scholarship: lexicons, the 1769 translators'
+///   renderings, TSK.
+/// - [`Tier::Machine`] — learned/aligned artifacts (the LXX alignment, concept
+///   embeddings, the R&D layer). Also the default for an unrecognized source,
+///   so nothing over-claims authority it has not earned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tier {
+    God,
+    Human,
+    Machine,
+}
+
+impl Tier {
+    /// The stable lowercase wire name (`"god"` / `"human"` / `"machine"`).
+    pub fn wire_name(self) -> &'static str {
+        match self {
+            Tier::God => "god",
+            Tier::Human => "human",
+            Tier::Machine => "machine",
+        }
+    }
+}
+
+/// The tier(s) a witness source attests — a *set*, because one source can carry
+/// both a content tier and a method tier (`quotation` is God-tier content found
+/// by a machine method). An unrecognized source defaults to machine-only, so it
+/// never over-claims. Ported from overlay `sourceTiers`.
+pub fn source_tiers(source: &str) -> &'static [Tier] {
+    match source {
+        "quotation" => &[Tier::God, Tier::Machine],
+        "etymology" | "rendering" | "abbott-smith" | "stepbible-tbesg" | "stepbible-tipnr"
+        | "tsk" => &[Tier::Human],
+        "lxx" | "embedding" | "text-witness" => &[Tier::Machine],
+        _ => &[Tier::Machine],
+    }
+}
+
+/// Whether a source's *method* has not yet passed its held-out grading — a
+/// lead, not a result. Ported from overlay `researchGrade`.
+pub fn research_grade(source: &str) -> bool {
+    matches!(source, "quotation" | "text-witness")
+}
+
+/// A short human label for a witness source, tuned for lay readers (no
+/// Greek/Hebrew assumed). Ported from overlay `sourceLabel`, keeping the app's
+/// own plain wording for the sources it surfaces.
+pub fn source_label(source: &str) -> &str {
+    match source {
+        "etymology" => "etymology",
+        "lxx" => "Septuagint",
+        "quotation" => "NT quotation",
+        "abbott-smith" => "Abbott-Smith (1922)",
+        "stepbible-tbesg" => "STEPBible",
+        "stepbible-tipnr" => "STEPBible names",
+        "rendering" => "1769 renderings",
+        "tsk" => "Treasury of Scripture Knowledge",
+        other => other,
+    }
+}
+
+/// The deduped union of tiers across a set of witness sources, ordered
+/// God → Human → Machine. The additive provenance model: a multi-source item
+/// shows every tier its witnesses attest, never a single "winning" one.
+pub fn tiers_of<S: AsRef<str>>(sources: &[S]) -> Vec<Tier> {
+    [Tier::God, Tier::Human, Tier::Machine]
+        .into_iter()
+        .filter(|t| sources.iter().any(|s| source_tiers(s.as_ref()).contains(t)))
+        .collect()
+}
+
 /// A cross-testament partner with the witnesses that assert it and their best
 /// trust prior. `etymology` (Strong's own derivations) is treated as an
 /// authoritative in-repo witness.
@@ -324,6 +401,60 @@ mod tests {
         assert_eq!(heb_refs_in("of Hebrew origin (H0031)"), vec!["H31"]);
         assert_eq!(heb_refs_in("from (H1254) and (h430)"), vec!["H1254", "H430"]);
         assert_eq!(heb_refs_in("no refs here"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn source_tiers_classify_provenance() {
+        // God-tier content found by a machine method — carries both.
+        assert_eq!(source_tiers("quotation"), &[Tier::God, Tier::Machine]);
+        // Curated scholarship.
+        assert_eq!(source_tiers("etymology"), &[Tier::Human]);
+        assert_eq!(source_tiers("abbott-smith"), &[Tier::Human]);
+        assert_eq!(source_tiers("rendering"), &[Tier::Human]);
+        assert_eq!(source_tiers("tsk"), &[Tier::Human]);
+        // Learned/aligned artifacts.
+        assert_eq!(source_tiers("lxx"), &[Tier::Machine]);
+        assert_eq!(source_tiers("embedding"), &[Tier::Machine]);
+        // Unknown → machine-only, so it never over-claims.
+        assert_eq!(source_tiers("who-knows"), &[Tier::Machine]);
+    }
+
+    #[test]
+    fn research_grade_flags_ungraded_methods() {
+        assert!(research_grade("quotation"));
+        assert!(research_grade("text-witness"));
+        assert!(!research_grade("etymology"));
+        assert!(!research_grade("lxx"));
+    }
+
+    #[test]
+    fn tiers_of_unions_and_orders_god_human_machine() {
+        // A quotation alone already spans God + Machine.
+        assert_eq!(
+            tiers_of(&["quotation".to_string()]),
+            vec![Tier::God, Tier::Machine]
+        );
+        // Etymology (Human) + LXX (Machine) fused on one partner: both marks,
+        // ordered God→Human→Machine (no God here).
+        assert_eq!(
+            tiers_of(&["etymology".to_string(), "lxx".to_string()]),
+            vec![Tier::Human, Tier::Machine]
+        );
+        // All three tiers present, deduped and ordered.
+        assert_eq!(
+            tiers_of(&["quotation".to_string(), "etymology".to_string()]),
+            vec![Tier::God, Tier::Human, Tier::Machine]
+        );
+        assert!(tiers_of::<String>(&[]).is_empty());
+    }
+
+    #[test]
+    fn source_label_is_lay_friendly() {
+        assert_eq!(source_label("lxx"), "Septuagint");
+        assert_eq!(source_label("quotation"), "NT quotation");
+        assert_eq!(source_label("abbott-smith"), "Abbott-Smith (1922)");
+        // Unknown falls back to the raw key.
+        assert_eq!(source_label("mystery"), "mystery");
     }
 
     #[test]

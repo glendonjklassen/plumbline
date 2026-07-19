@@ -228,6 +228,27 @@ char *pure_engine_strongs_json(const struct PureEngine *engine, const char *code
 // `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
 char *pure_engine_strongs_occurrences_json(const struct PureEngine *engine, const char *code);
 
+// The rendering lens for a Strong's code: every distinct English rendering of
+// it, most frequent first, each with an occurrence count and its (capped)
+// verse refs + token spans. `{"code","renderings":[{"rendering","total",
+// "capped","refs":[{"verse","display","span":[start,end]}]}]}`. Each `refs`
+// list is capped at [`OCCURRENCE_CAP`]; `renderings` is empty for an untagged
+// or unknown code. Null only on a null engine. Caller-freed.
+//
+// # Safety
+// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
+char *pure_engine_renderings_json(const struct PureEngine *engine, const char *code);
+
+// The reverse lens: the Strong's codes a surface English word translates,
+// most frequent first. `{"word","codes":[{"code","count"}]}`. Reveals where
+// one English word hides a Greek/Hebrew distinction ("love" ← agape and
+// phileo); `codes` is empty for an untagged word. Null only on a null engine.
+// Caller-freed.
+//
+// # Safety
+// `engine` is valid; `word` is a valid NUL-terminated UTF-8 string.
+char *pure_engine_word_codes_json(const struct PureEngine *engine, const char *word);
+
 // Run a query through the multi-tier search and return a `SearchAnswer` JSON:
 // either `{"kind":"goto",...}` (the query was a reference) or
 // `{"kind":"hits","how","total","capped","hits":[...]}`. Null when the query is
@@ -418,6 +439,52 @@ char *pure_engine_study_xrefs_json(const struct PureEngine *engine, const char *
 // `engine` is a live engine (or null → null).
 char *pure_engine_weaves_json(const struct PureEngine *engine);
 
+// Every weave link as a deduped canonical verse pair, each endpoint located
+// (ref key + book/chapter/verse) and flagged `resolved` when both ends are in
+// the corpus. The one derivation behind the ambient connector lines and the
+// chord map, so a shell neither dedupes nor parses ref keys itself. Never null
+// on a live engine (empty library → empty list).
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_link_pairs_json(const struct PureEngine *engine);
+
+// The canon overview segmentation: the 8 sections as `(label, first, last)`
+// book indices over the 66 books, plus the OT/NT divide (39). Static data
+// frozen in `core::reference` — served here so a non-Rust shell consumes the
+// one source instead of re-hardcoding the bands. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null); the payload does not depend on
+// engine state, but the arg keeps the call shape uniform.
+char *pure_engine_canon_segments_json(const struct PureEngine *engine);
+
+// The book-to-book weave chord map: canon-ordered book-pair counts over the
+// deduped link pairs (`{pairs:[{a,b,count}], max, otNtDivide, bookCount}`),
+// where `a`/`b` are book indices (`a <= b`). The one fold behind the "Weave
+// map" popup, so a shell lays out ribbons without folding pairs or deriving the
+// max. Never null on a live engine (empty library → empty pairs, max 1).
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_chord_map_json(const struct PureEngine *engine);
+
+// One laid-out page of the constellation (the weave-library overview popup):
+// lanes with nodes + edges as **fractions**, plus the pin/paging state already
+// resolved into a caption. The shell holds the transient `page` and `pins`
+// (weave indices, the same handles the lanes carry) and passes them in;
+// everything derived — usable filter, largest-first order, per-verse degree,
+// jitter, lane assignment, paging — lives here. `pins_json` is a JSON array of
+// weave indices (e.g. `"[3,7]"`); null / empty / malformed means no pins.
+// Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null); `pins_json` is null or valid
+// NUL-terminated UTF-8.
+char *pure_engine_constellation_json(const struct PureEngine *engine,
+                                     uint32_t page,
+                                     const char *pins_json);
+
 // The symbolic concept engine's view of a Strong's code: occurrence total,
 // testament split, concentrating books, per-book dispersion counts,
 // collocates, co-occurrence community, and the leitwort discovery when one
@@ -428,6 +495,17 @@ char *pure_engine_weaves_json(const struct PureEngine *engine);
 // `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
 char *pure_engine_concept_json(const struct PureEngine *engine, const char *code);
 
+// The concept map for a code: the radial neighbourhood (embedding neighbours ∪
+// collocation community, deduped, labels pre-baked) plus the per-book
+// dispersion counts in canon order. One call replaces the shell's spoke
+// assembly and its four separate lookups (neighbours / concept / gloss /
+// lemma). Never null on a live engine + valid code — a code with no stats
+// still yields its centre label and any embedding spokes (empty dispersion).
+//
+// # Safety
+// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
+char *pure_engine_concept_map_json(const struct PureEngine *engine, const char *code);
+
 // A short English gloss for a Strong's code — the modal KJV rendering across
 // its occurrences (≤80 sampled), falling back to a distilled dictionary
 // clause. Plain text (not JSON); null when nothing sensible exists.
@@ -435,6 +513,94 @@ char *pure_engine_concept_json(const struct PureEngine *engine, const char *code
 // # Safety
 // `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
 char *pure_engine_gloss(const struct PureEngine *engine, const char *code);
+
+// A panel view as the typed block list (`{blocks:[…]}`). Word study: the clicked
+// word's dictionary + Full-study tiers + this verse's cross-references/notes.
+// `full` gates the R&D tiers + author actions. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
+char *pure_engine_word_study_blocks_json(const struct PureEngine *engine,
+                                         const char *ref_key,
+                                         uint32_t token_index,
+                                         bool full);
+
+// The standalone `code:CODE[:word]` study card (the reverse rendering-lens
+// target). `word` may be null. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_code_study_blocks_json(const struct PureEngine *engine,
+                                         const char *code,
+                                         const char *word,
+                                         bool full);
+
+// The full concordance for a code as blocks. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
+char *pure_engine_concordance_blocks_json(const struct PureEngine *engine, const char *code);
+
+// The concordance filtered to one rendering of a code, as blocks. Never null
+// on a live engine.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_rendering_concordance_blocks_json(const struct PureEngine *engine,
+                                                    const char *code,
+                                                    const char *rendering);
+
+// The threads list as blocks. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_threads_blocks_json(const struct PureEngine *engine);
+
+// One thread's detail as blocks (out-of-range index → the threads list). Never
+// null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_thread_blocks_json(const struct PureEngine *engine, uint32_t index);
+
+// The tags list as blocks. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_tags_blocks_json(const struct PureEngine *engine);
+
+// One tag's detail as blocks (out-of-range index → the tags list). Never null
+// on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_tag_blocks_json(const struct PureEngine *engine, uint32_t index);
+
+// The weaves list as blocks. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_weaves_blocks_json(const struct PureEngine *engine);
+
+// The suggested-weave review queue as blocks. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_suggested_blocks_json(const struct PureEngine *engine);
+
+// A weave compare card as blocks (out-of-range index → empty). `full` adds the
+// edit-notes action. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_compare_blocks_json(const struct PureEngine *engine, uint32_t index, bool full);
+
+// Search results as blocks (goto link or ranked hits with snippets). Null when
+// the query is blank or the engine is null.
+//
+// # Safety
+// `engine` is a live engine; `query` is null or valid NUL-terminated UTF-8.
+char *pure_engine_search_blocks_json(const struct PureEngine *engine, const char *query);
 
 // Author a weave link carrying word spans — the Full-study "pin a word in
 // each pane, widen, ＋ link" flow. Span bounds are token indices; pass a
@@ -452,6 +618,17 @@ char *pure_engine_weave_add_link_spans(struct PureEngine *engine,
                                        int32_t b_lo,
                                        int32_t b_hi,
                                        const char *added);
+
+// Parse a panel link URI into the typed verb the shell dispatches on
+// (`{verb, …}`; see `pure_core::panel::parse_link`) — the one verb vocabulary,
+// so a non-Rust shell routes clicks through the core instead of re-splitting
+// the URI string and risking drift from what the panel emits. Engine-
+// independent. Null for an unknown verb or malformed payload (a shell then
+// ignores the click).
+//
+// # Safety
+// `uri` is null or valid NUL-terminated UTF-8 for the call.
+char *pure_route_link_json(const char *uri);
 
 // Load the cross-platform shell config (`%APPDATA%\pure-study\config.json` on
 // Windows) as JSON: `{studyMode, bodySize, openPanes, activePane, firstRun}`.

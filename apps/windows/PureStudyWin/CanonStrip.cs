@@ -10,15 +10,25 @@ using Windows.UI;
 
 namespace PureStudyWin;
 
+/// The canon overview segmentation — the 8 bands + OT/NT divide — fed once from
+/// the core view-model (pure_engine_canon_segments_json), frozen in
+/// core::reference. The single app-wide source read by both the strip and the
+/// map popups; nothing hardcodes the bands anymore (the old copies had drifted).
+public static class Canon
+{
+    public static CanonSegment[] Segments { get; private set; } = Array.Empty<CanonSegment>();
+    public static int OtNtDivide { get; private set; }
+
+    /// Populate once at startup from the engine's canon view-model.
+    public static void Set(CanonSegments cs)
+    {
+        Segments = cs.Segments.ToArray();
+        OtNtDivide = cs.OtNtDivide;
+    }
+}
+
 public sealed class CanonStrip : Microsoft.UI.Xaml.Controls.UserControl
 {
-    public static readonly (string Name, int First, int Last)[] Segments =
-    {
-        ("Law", 0, 4), ("History", 5, 16), ("Wisdom", 17, 21), ("Prophets", 22, 38),
-        ("Gospels", 39, 42), ("Acts", 43, 43), ("Letters", 44, 64), ("Revelation", 65, 65),
-    };
-    public const int OtNtDivide = 39;
-
     /// Book order → (pin per pane, active flag). Set by the shell.
     public List<(int bookOrder, bool active)> Pins = new();
     private List<TocBook> _books = new();
@@ -58,24 +68,24 @@ public sealed class CanonStrip : Microsoft.UI.Xaml.Controls.UserControl
     {
         var ds = args.DrawingSession;
         float w = (float)sender.ActualWidth, h = (float)sender.ActualHeight;
-        if (w < 10) return;
+        if (w < 10 || Canon.Segments.Length == 0) return;
 
         using var labelFmt = new CanvasTextFormat { FontSize = 11 };
-        for (int s = 0; s < Segments.Length; s++)
+        for (int s = 0; s < Canon.Segments.Length; s++)
         {
-            var seg = Segments[s];
+            var seg = Canon.Segments[s];
             float x0 = seg.First / 66f * w;
             float x1 = (seg.Last + 1) / 66f * w;
             if (s % 2 == 1)
                 ds.FillRectangle(x0, 0, x1 - x0, h, Color.FromArgb(10, 0, 0, 0));
-            using var tl = new CanvasTextLayout(sender, seg.Name, labelFmt, 1e6f, 1e6f);
+            using var tl = new CanvasTextLayout(sender, seg.Label, labelFmt, 1e6f, 1e6f);
             float tw = (float)tl.LayoutBounds.Width;
             if (tw <= x1 - x0 - 6)
                 ds.DrawTextLayout(tl, x0 + (x1 - x0 - tw) / 2, (h - (float)tl.LayoutBounds.Height) / 2,
                     Color.FromArgb(230, 89, 77, 56));
         }
         // OT/NT divide.
-        float dx = OtNtDivide / 66f * w;
+        float dx = Canon.OtNtDivide / 66f * w;
         ds.DrawLine(dx, 0, dx, h, Color.FromArgb(128, 102, 77, 51), 1f);
 
         foreach (var (order, active) in Pins)

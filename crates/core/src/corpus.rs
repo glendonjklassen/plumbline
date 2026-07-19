@@ -350,11 +350,20 @@ fn mk_corpus(tok_version: String, verses: Vec<Verse>) -> Corpus {
 
     for (i, v) in verses.iter().enumerate() {
         by_ref.insert(v.vref(), i);
-        let e = chapters.entry(v.book.clone()).or_insert(0);
-        *e = (*e).max(v.chapter);
-        chapter_ix
-            .entry(v.book.clone())
-            .or_default()
+        // Allocate a book-name key only on first sight of the book (~66 books,
+        // so ~132 allocations total) rather than cloning it for every verse
+        // (~62k). The chapter keys are u16 and never allocate.
+        match chapters.get_mut(&v.book) {
+            Some(hi) => *hi = (*hi).max(v.chapter),
+            None => {
+                chapters.insert(v.book.clone(), v.chapter);
+            }
+        }
+        let book_ix = match chapter_ix.get_mut(&v.book) {
+            Some(m) => m,
+            None => chapter_ix.entry(v.book.clone()).or_default(),
+        };
+        book_ix
             .entry(v.chapter)
             .and_modify(|(start, len)| {
                 *start = (*start).min(i);

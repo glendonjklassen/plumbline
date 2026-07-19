@@ -48,11 +48,13 @@ use std::sync::OnceLock;
 use pure_core::config;
 use pure_core::corpus::{self, Corpus};
 use pure_core::crossref::{self, XRefIx};
+use pure_core::renderings::Renderings;
 use pure_core::search::{self, Notes, SearchIx};
 use pure_core::strongs::{self, OccurrenceIx, StrongsDict};
 use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread, ThreadEntry};
 use pure_core::weave::{self, Link, LoadedWeave, WeaveKind};
+use pure_core::panel::{self, PanelSource};
 use pure_core::{canon, notes, VRef};
 use pure_layout::{layout_chapter, DisplayList, LayoutConfig, Measure};
 use pure_rnd::{bridge, burst, concept, embed, morph};
@@ -102,6 +104,9 @@ pub struct PureEngine {
     strongs: StrongsDict,
     search_ix: SearchIx,
     occ_ix: OccurrenceIx,
+    /// The rendering lens: code → English renderings and surface word → codes,
+    /// both corpus-derived and immutable after open (like `occ_ix`).
+    renderings: Renderings,
     /// The data home, if opened from one — required to author (write) study
     /// data. `None` when opened from bytes (study data is then read-only/empty).
     home: Option<PathBuf>,
@@ -134,6 +139,7 @@ impl PureEngine {
     fn new(corpus: Corpus, strongs: StrongsDict, home: Option<PathBuf>) -> PureEngine {
         let search_ix = SearchIx::build(&corpus);
         let occ_ix = OccurrenceIx::build(&corpus);
+        let renderings = Renderings::build(&corpus);
         // R&D artifacts. The bridge's etymology layer works from the in-memory
         // dict even without a home; external witnesses + the embedding/morph
         // sidecars need a home's files. Without a home, no filesystem is
@@ -167,6 +173,7 @@ impl PureEngine {
             strongs,
             search_ix,
             occ_ix,
+            renderings,
             home,
             study: std::sync::RwLock::new(study),
             bridge,
@@ -782,6 +789,79 @@ pub unsafe extern "C" fn pure_engine_strongs_occurrences_json(
     })
 }
 
+/// The rendering lens for a Strong's code: every distinct English rendering of
+/// it, most frequent first, each with an occurrence count and its (capped)
+/// verse refs + token spans. `{"code","renderings":[{"rendering","total",
+/// "capped","refs":[{"verse","display","span":[start,end]}]}]}`. Each `refs`
+/// list is capped at [`OCCURRENCE_CAP`]; `renderings` is empty for an untagged
+/// or unknown code. Null only on a null engine. Caller-freed.
+///
+/// # Safety
+/// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_renderings_json(
+    engine: *const PureEngine,
+    code: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(engine), Some(code)) = (engine.as_ref(), opt_str(code)) else {
+            return ptr::null_mut();
+        };
+        let renderings = engine
+            .renderings
+            .renderings(code)
+            .into_iter()
+            .map(|r| {
+                let total = r.count;
+                let refs: Vec<wire::WireRenderingRef> = r
+                    .occs
+                    .iter()
+                    .take(OCCURRENCE_CAP)
+                    .map(|o| wire::WireRenderingRef {
+                        verse: o.vref.ref_key(),
+                        display: o.vref.display(),
+                        span: [o.span.0, o.span.1],
+                    })
+                    .collect();
+                wire::WireRendering {
+                    rendering: r.label.to_string(),
+                    total,
+                    capped: total > refs.len(),
+                    refs,
+                }
+            })
+            .collect();
+        out_json(&wire::WireRenderings { code: code.to_string(), renderings })
+    })
+}
+
+/// The reverse lens: the Strong's codes a surface English word translates,
+/// most frequent first. `{"word","codes":[{"code","count"}]}`. Reveals where
+/// one English word hides a Greek/Hebrew distinction ("love" ← agape and
+/// phileo); `codes` is empty for an untagged word. Null only on a null engine.
+/// Caller-freed.
+///
+/// # Safety
+/// `engine` is valid; `word` is a valid NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_word_codes_json(
+    engine: *const PureEngine,
+    word: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(engine), Some(word)) = (engine.as_ref(), opt_str(word)) else {
+            return ptr::null_mut();
+        };
+        let codes = engine
+            .renderings
+            .word_codes(word)
+            .into_iter()
+            .map(|(code, count)| wire::WireWordCode { code: code.to_string(), count })
+            .collect();
+        out_json(&wire::WireWordCodes { word: word.to_string(), codes })
+    })
+}
+
 /// Run a query through the multi-tier search and return a `SearchAnswer` JSON:
 /// either `{"kind":"goto",...}` (the query was a reference) or
 /// `{"kind":"hits","how","total","capped","hits":[...]}`. Null when the query is
@@ -925,7 +1005,23 @@ pub unsafe extern "C" fn pure_engine_bridge_partners_json(
             .bridge
             .partners(code)
             .into_iter()
-            .map(|p| wire::WireBridgePartner { code: p.code, sources: p.sources, prior: p.prior })
+            .map(|p| {
+                // Authority provenance, classified once here (overlay `Tier`):
+                // the additive tier set + research-grade flag travel with each
+                // partner so non-Rust shells need not reimplement the mapping.
+                let tiers = bridge::tiers_of(&p.sources)
+                    .into_iter()
+                    .map(|t| t.wire_name().to_string())
+                    .collect();
+                let research_grade = p.sources.iter().any(|s| bridge::research_grade(s));
+                wire::WireBridgePartner {
+                    code: p.code,
+                    sources: p.sources,
+                    prior: p.prior,
+                    tiers,
+                    research_grade,
+                }
+            })
             .collect();
         out_json(&wire::WireBridgePartners { code: code.to_string(), partners })
     })
@@ -1422,6 +1518,85 @@ pub unsafe extern "C" fn pure_engine_weaves_json(engine: *const PureEngine) -> *
     })
 }
 
+/// Every weave link as a deduped canonical verse pair, each endpoint located
+/// (ref key + book/chapter/verse) and flagged `resolved` when both ends are in
+/// the corpus. The one derivation behind the ambient connector lines and the
+/// chord map, so a shell neither dedupes nor parses ref keys itself. Never null
+/// on a live engine (empty library → empty list).
+///
+/// # Safety
+/// `engine` is a live engine (or null → null).
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_link_pairs_json(engine: *const PureEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(e) => out_json(&wire::link_pairs_to_wire(&e.study_read().weaves, &e.corpus)),
+        None => ptr::null_mut(),
+    })
+}
+
+/// The canon overview segmentation: the 8 sections as `(label, first, last)`
+/// book indices over the 66 books, plus the OT/NT divide (39). Static data
+/// frozen in `core::reference` — served here so a non-Rust shell consumes the
+/// one source instead of re-hardcoding the bands. Never null on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine (or null → null); the payload does not depend on
+/// engine state, but the arg keeps the call shape uniform.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_canon_segments_json(engine: *const PureEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(_) => out_json(&wire::canon_segments_to_wire()),
+        None => ptr::null_mut(),
+    })
+}
+
+/// The book-to-book weave chord map: canon-ordered book-pair counts over the
+/// deduped link pairs (`{pairs:[{a,b,count}], max, otNtDivide, bookCount}`),
+/// where `a`/`b` are book indices (`a <= b`). The one fold behind the "Weave
+/// map" popup, so a shell lays out ribbons without folding pairs or deriving the
+/// max. Never null on a live engine (empty library → empty pairs, max 1).
+///
+/// # Safety
+/// `engine` is a live engine (or null → null).
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_chord_map_json(engine: *const PureEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(e) => out_json(&wire::chord_map_to_wire(&e.study_read().weaves)),
+        None => ptr::null_mut(),
+    })
+}
+
+/// One laid-out page of the constellation (the weave-library overview popup):
+/// lanes with nodes + edges as **fractions**, plus the pin/paging state already
+/// resolved into a caption. The shell holds the transient `page` and `pins`
+/// (weave indices, the same handles the lanes carry) and passes them in;
+/// everything derived — usable filter, largest-first order, per-verse degree,
+/// jitter, lane assignment, paging — lives here. `pins_json` is a JSON array of
+/// weave indices (e.g. `"[3,7]"`); null / empty / malformed means no pins.
+/// Never null on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine (or null → null); `pins_json` is null or valid
+/// NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_constellation_json(
+    engine: *const PureEngine,
+    page: u32,
+    pins_json: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let Some(e) = engine.as_ref() else { return ptr::null_mut() };
+        let pins: Vec<usize> =
+            opt_str(pins_json).and_then(|s| serde_json::from_str(s).ok()).unwrap_or_default();
+        out_json(&wire::constellation_to_wire(
+            &e.study_read().weaves,
+            &e.corpus,
+            page as usize,
+            &pins,
+        ))
+    })
+}
+
 /// The symbolic concept engine's view of a Strong's code: occurrence total,
 /// testament split, concentrating books, per-book dispersion counts,
 /// collocates, co-occurrence community, and the leitwort discovery when one
@@ -1476,6 +1651,78 @@ pub unsafe extern "C" fn pure_engine_concept_json(
     })
 }
 
+/// How many spokes each side (semantic / community) of the concept map shows.
+const CONCEPT_MAP_SPOKES: usize = 6;
+
+/// A concept-map node label: the English gloss over the lemma (`\n`-separated),
+/// falling back to whichever exists, then the bare code. Mirrors the GTK
+/// `label_of` closure so every shell labels the radial nodes identically.
+fn concept_label(e: &PureEngine, code: &str) -> String {
+    let gloss = english_gloss(e, code);
+    let lemma = e.strongs.get(code).and_then(|s| s.lemma.clone());
+    match (gloss, lemma) {
+        (Some(g), Some(l)) => format!("{g}\n{l}"),
+        (Some(g), None) => g,
+        (None, Some(l)) => l,
+        (None, None) => code.to_string(),
+    }
+}
+
+/// The concept map for a code: the radial neighbourhood (embedding neighbours ∪
+/// collocation community, deduped, labels pre-baked) plus the per-book
+/// dispersion counts in canon order. One call replaces the shell's spoke
+/// assembly and its four separate lookups (neighbours / concept / gloss /
+/// lemma). Never null on a live engine + valid code — a code with no stats
+/// still yields its centre label and any embedding spokes (empty dispersion).
+///
+/// # Safety
+/// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_concept_map_json(
+    engine: *const PureEngine,
+    code: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(code)) = (engine.as_ref(), opt_str(code)) else {
+            return ptr::null_mut();
+        };
+        // Semantic neighbours (gold) — empty without an embedding artifact.
+        let near: Vec<String> = e
+            .embedding
+            .as_ref()
+            .map(|emb| {
+                emb.nearest_concepts(code, CONCEPT_MAP_SPOKES)
+                    .into_iter()
+                    .map(|(c, _)| c)
+                    .collect()
+            })
+            .unwrap_or_default();
+        let ce = e.concept();
+        let community = ce.community(code);
+        let spokes = concept::radial_spokes(&near, &community, CONCEPT_MAP_SPOKES)
+            .into_iter()
+            .map(|(c, semantic)| wire::WireConceptSpoke {
+                label: concept_label(e, &c),
+                code: c,
+                semantic,
+            })
+            .collect();
+        // Dispersion in canon order (0 where the concept never occurs).
+        let by_book = ce
+            .stat(code)
+            .map(|s| canon::BOOKS.iter().map(|b| s.by_book.get(b.id).copied().unwrap_or(0)).collect())
+            .unwrap_or_else(|| vec![0; canon::BOOKS.len()]);
+        out_json(&wire::WireConceptMap {
+            center_label: concept_label(e, code),
+            code: code.to_string(),
+            spokes,
+            by_book,
+            ot_nt_divide: pure_core::reference::OT_NT_DIVIDE,
+            book_count: canon::BOOKS.len(),
+        })
+    })
+}
+
 /// A short English gloss for a Strong's code — the modal KJV rendering across
 /// its occurrences (≤80 sampled), falling back to a distilled dictionary
 /// clause. Plain text (not JSON); null when nothing sensible exists.
@@ -1495,6 +1742,525 @@ pub unsafe extern "C" fn pure_engine_gloss(
             Some(g) => out_string(g),
             None => ptr::null_mut(),
         }
+    })
+}
+
+// ── the study-panel content model ─────────────────────────────────────────────
+//
+// One Rust producer (`pure_core::panel`) builds the typed block list for every
+// panel view; this projects the engine's data into it and serves the blocks as
+// JSON. `full` (Full study vs simple reader) is a shell setting, so the endpoints
+// that gate on it take a `full` flag — the FFI itself is mode-agnostic.
+
+/// How many concordance verses a panel card lists before an "… N more" tail
+/// (matches the shells' prior cap).
+const PANEL_OCC_CAP: usize = 300;
+
+impl PanelSource for PureEngine {
+    fn token_word(&self, verse: &str, token: u32) -> Option<String> {
+        let v = VRef::parse_ref_key(verse)?;
+        self.corpus.verse(&v)?.tokens.get(token as usize).map(|t| t.word.clone())
+    }
+    fn verse_display(&self, refkey: &str) -> Option<String> {
+        VRef::parse_ref_key(refkey).map(|v| v.display())
+    }
+    fn morph_gloss(&self, verse: &str, token: u32) -> Option<String> {
+        let (md, v) = (self.morph.as_ref()?, VRef::parse_ref_key(verse)?);
+        md.gloss(&v, token)
+    }
+    fn occurrence_count(&self, code: &str) -> usize {
+        self.occ_ix.verses(code).len()
+    }
+    fn strongs(&self, code: &str) -> Option<panel::StrongsView> {
+        let e = self.strongs.get(code)?;
+        Some(panel::StrongsView {
+            lemma: e.lemma.clone(),
+            xlit: e.xlit.clone(),
+            pron: e.pron.clone(),
+            deriv: e.deriv.clone(),
+            def: e.def.clone(),
+            kjv: e.kjv.clone(),
+        })
+    }
+    fn gloss(&self, code: &str) -> Option<String> {
+        english_gloss(self, code)
+    }
+    fn chip(&self, code: &str) -> panel::ChipView {
+        panel::ChipView {
+            code: code.to_string(),
+            gloss: english_gloss(self, code),
+            lemma: self.strongs.get(code).and_then(|e| e.lemma.clone()),
+        }
+    }
+    fn renderings(&self, code: &str) -> Vec<panel::RenderingView> {
+        self.renderings
+            .renderings(code)
+            .into_iter()
+            .map(|r| panel::RenderingView { rendering: r.label.to_string(), total: r.count as u32 })
+            .collect()
+    }
+    fn rendering_refs(&self, code: &str, rendering: &str) -> Option<panel::RenderingRefsView> {
+        let key = pure_core::renderings::normalize(rendering);
+        let r = self
+            .renderings
+            .renderings(code)
+            .into_iter()
+            .find(|r| pure_core::renderings::normalize(r.label) == key)?;
+        Some(panel::RenderingRefsView {
+            rendering: r.label.to_string(),
+            total: r.count as u32,
+            refs: r.occs.iter().take(PANEL_OCC_CAP).map(|o| (o.vref.ref_key(), o.vref.display())).collect(),
+        })
+    }
+    fn word_codes(&self, word: &str) -> Vec<String> {
+        self.renderings.word_codes(word).into_iter().map(|(c, _)| c.to_string()).collect()
+    }
+    fn occurrences(&self, code: &str) -> panel::OccurrencesView {
+        let all = self.occ_ix.verses(code);
+        panel::OccurrencesView {
+            total: all.len() as u32,
+            verses: all.iter().take(PANEL_OCC_CAP).map(|v| (v.ref_key(), v.display())).collect(),
+        }
+    }
+    fn bridge_partners(&self, code: &str) -> Vec<panel::BridgePartnerView> {
+        self.bridge
+            .partners(code)
+            .into_iter()
+            .map(|p| panel::BridgePartnerView {
+                sources: p.sources.iter().map(|s| bridge::source_label(s).to_string()).collect(),
+                tiers: bridge::tiers_of(&p.sources).into_iter().map(|t| t.wire_name().to_string()).collect(),
+                research_grade: p.sources.iter().any(|s| bridge::research_grade(s)),
+                code: p.code,
+            })
+            .collect()
+    }
+    fn concept_near(&self, code: &str, k: usize) -> (Vec<String>, Vec<String>) {
+        match &self.embedding {
+            Some(emb) => (
+                emb.nearest_concepts(code, k).into_iter().map(|(c, _)| c).collect(),
+                emb.cross_concepts(code, k).into_iter().map(|(c, _)| c).collect(),
+            ),
+            None => (Vec::new(), Vec::new()),
+        }
+    }
+    fn concept(&self, code: &str) -> Option<panel::ConceptView> {
+        let ce = self.concept();
+        ce.stat(code)?;
+        let (ot, nt) = ce.testament_split(code);
+        let leitwort = self.leitwort().get(code).map(|b| panel::LeitwortView {
+            n: b.n,
+            win_count: b.win_count,
+            score: b.score,
+            label: burst::span_label(|id| canon::display_name(id).to_string(), &b.win_start, &b.win_end),
+        });
+        Some(panel::ConceptView {
+            community: ce.community(code),
+            top_books: ce.top_books(code, 5).into_iter().map(|(b, n)| (canon::display_name(&b).to_string(), n)).collect(),
+            ot,
+            nt,
+            leitwort,
+        })
+    }
+    fn verse_xrefs(&self, verse: &str) -> Vec<panel::XrefView> {
+        let Some(v) = VRef::parse_ref_key(verse) else { return Vec::new() };
+        let study = self.study_read();
+        wire::verse_xrefs_to_wire(&study.weaves, &v)
+            .partners
+            .into_iter()
+            .map(|p| {
+                let weave_index = study.weaves.iter().position(|lw| lw.weave.name == p.weave);
+                panel::XrefView { verse: p.verse, display: p.display, weave: p.weave, weave_index }
+            })
+            .collect()
+    }
+    fn study_xrefs(&self, verse: &str) -> Vec<panel::StudyXrefView> {
+        let Some(v) = VRef::parse_ref_key(verse) else { return Vec::new() };
+        match self.xref_ix.get(&v) {
+            Some(rs) => rs
+                .iter()
+                .map(|r| panel::StudyXrefView {
+                    to: r.to.ref_key(),
+                    to_display: r.to.display(),
+                    end: r.end.as_ref().map(|e| e.ref_key()),
+                    end_display: r.end.as_ref().map(|e| e.display()),
+                })
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+    fn similar_verses(&self, verse: &str, k: usize) -> (Vec<panel::SimilarView>, Vec<panel::SimilarView>) {
+        let (Some(vs), Some(v)) = (self.verse_sim(), VRef::parse_ref_key(verse)) else {
+            return (Vec::new(), Vec::new());
+        };
+        let map = |items: Vec<(VRef, f32)>| {
+            items.into_iter().map(|(r, _)| panel::SimilarView { verse: r.ref_key(), display: r.display() }).collect()
+        };
+        (map(vs.similar_verses_in(&v, k)), map(vs.similar_verses_cross(&v, k)))
+    }
+    fn verse_tags(&self, verse: &str) -> Vec<(usize, String)> {
+        self.study_read()
+            .tags
+            .iter()
+            .enumerate()
+            .filter_map(|(i, lt)| {
+                let holds = lt
+                    .tag
+                    .members
+                    .iter()
+                    .any(|m| matches!(&m.target, pure_core::tag::TagTarget::Verse(v) if v.ref_key() == verse));
+                holds.then(|| (i, lt.tag.name.clone()))
+            })
+            .collect()
+    }
+    fn verse_notes(&self, verse: &str) -> Vec<String> {
+        let Some(v) = VRef::parse_ref_key(verse) else { return Vec::new() };
+        self.study_read().notes.get(&v).cloned().unwrap_or_default()
+    }
+    fn threads(&self) -> Vec<panel::ThreadView> {
+        self.study_read()
+            .threads
+            .iter()
+            .map(|lt| panel::ThreadView {
+                name: lt.thread.name.clone(),
+                notes: lt.thread.notes.clone(),
+                entries: lt
+                    .thread
+                    .entries
+                    .iter()
+                    .map(|e| panel::ThreadEntryView {
+                        verse: e.vref.ref_key(),
+                        display: e.vref.display(),
+                        text: e.text.clone(),
+                        note: e.note.clone(),
+                    })
+                    .collect(),
+            })
+            .collect()
+    }
+    fn tags(&self) -> Vec<panel::TagView> {
+        self.study_read()
+            .tags
+            .iter()
+            .map(|lt| panel::TagView {
+                name: lt.tag.name.clone(),
+                members: lt
+                    .tag
+                    .members
+                    .iter()
+                    .map(|m| match &m.target {
+                        pure_core::tag::TagTarget::Verse(v) => panel::TagMemberView {
+                            kind: "verse".into(),
+                            verse: Some(v.ref_key()),
+                            display: Some(v.display()),
+                            strongs: None,
+                            note: m.note.clone(),
+                        },
+                        pure_core::tag::TagTarget::Concept(c) => panel::TagMemberView {
+                            kind: "concept".into(),
+                            verse: None,
+                            display: None,
+                            strongs: Some(c.clone()),
+                            note: m.note.clone(),
+                        },
+                    })
+                    .collect(),
+            })
+            .collect()
+    }
+    fn weaves(&self) -> Vec<panel::WeaveView> {
+        self.study_read()
+            .weaves
+            .iter()
+            .enumerate()
+            .map(|(index, lw)| panel::WeaveView {
+                index,
+                name: lw.weave.name.clone(),
+                kind_label: lw.weave.kind.label().to_string(),
+                notes: lw.weave.notes.clone(),
+                suggested: pure_core::weave::is_suggested(lw),
+                links: lw
+                    .weave
+                    .links
+                    .iter()
+                    .map(|l| panel::WeaveLinkView {
+                        a: l.a.ref_key(),
+                        a_display: l.a.display(),
+                        b: l.b.ref_key(),
+                        b_display: l.b.display(),
+                        label: l.label.clone(),
+                        span_a: l.span_a.map(|(lo, hi)| [lo, hi]),
+                        span_b: l.span_b.map(|(lo, hi)| [lo, hi]),
+                    })
+                    .collect(),
+            })
+            .collect()
+    }
+    fn suggested(&self) -> Vec<panel::SuggestedView> {
+        let study = self.study_read();
+        study
+            .weaves
+            .iter()
+            .filter(|lw| pure_core::weave::is_suggested(lw))
+            .enumerate()
+            .map(|(index, lw)| {
+                let lib_index = study
+                    .weaves
+                    .iter()
+                    .position(|x| pure_core::weave::is_suggested(x) && x.weave.name == lw.weave.name);
+                panel::SuggestedView {
+                    index,
+                    name: lw.weave.name.clone(),
+                    kind: lw.weave.kind.token().to_string(),
+                    notes: lw.weave.notes.clone(),
+                    lib_index,
+                    links: lw
+                        .weave
+                        .links
+                        .iter()
+                        .map(|l| panel::SuggestedLinkView {
+                            a: l.a.ref_key(),
+                            a_display: l.a.display(),
+                            b: l.b.ref_key(),
+                            b_display: l.b.display(),
+                            label: l.label.clone(),
+                        })
+                        .collect(),
+                }
+            })
+            .collect()
+    }
+    fn verse_tokens(&self, refkey: &str) -> Option<panel::VerseTokensView> {
+        let v = VRef::parse_ref_key(refkey)?;
+        let verse = self.corpus.verse(&v)?;
+        Some(panel::VerseTokensView {
+            tokens: verse
+                .tokens
+                .iter()
+                .map(|t| panel::TokenView { render: t.render(), added: t.has_flag(corpus::FLAG_ADDED) })
+                .collect(),
+        })
+    }
+    fn verse_body(&self, refkey: &str) -> Option<String> {
+        let v = VRef::parse_ref_key(refkey)?;
+        self.corpus.verse(&v).map(|verse| verse.body())
+    }
+    fn search(&self, query: &str) -> panel::SearchView {
+        let study = self.study_read();
+        match search::run_search(&self.corpus, &study.notes, &self.search_ix, query) {
+            Some(search::SearchAnswer::GoTo { book, chapter, verse }) => {
+                let display = match verse {
+                    Some(v) => VRef::new(book.clone(), chapter, v).display(),
+                    None => format!("{} {}", canon::display_name(&book), chapter),
+                };
+                panel::SearchView::Goto { book, chapter: chapter as u32, verse: verse.map(u32::from), display }
+            }
+            Some(search::SearchAnswer::Hits { how, total, hits }) => {
+                let capped = total > hits.len();
+                panel::SearchView::Hits {
+                    how,
+                    total,
+                    capped,
+                    hits: hits
+                        .into_iter()
+                        .map(|h| panel::SearchHitView { verse: h.vref.ref_key(), display: h.vref.display(), note: h.note, why: h.why })
+                        .collect(),
+                }
+            }
+            None => panel::SearchView::Hits { how: String::new(), total: 0, capped: false, hits: Vec::new() },
+        }
+    }
+}
+
+/// A panel view as the typed block list (`{blocks:[…]}`). Word study: the clicked
+/// word's dictionary + Full-study tiers + this verse's cross-references/notes.
+/// `full` gates the R&D tiers + author actions. Never null on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_word_study_blocks_json(
+    engine: *const PureEngine,
+    ref_key: *const c_char,
+    token_index: u32,
+    full: bool,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(rk)) = (engine.as_ref(), opt_str(ref_key)) else {
+            return ptr::null_mut();
+        };
+        let codes: Vec<String> = VRef::parse_ref_key(rk)
+            .and_then(|v| e.corpus.verse(&v).and_then(|verse| verse.tokens.get(token_index as usize).cloned()))
+            .map(|t| t.strongs)
+            .unwrap_or_default();
+        out_json(&wire::blocks_to_wire(panel::word_study(e, full, rk, token_index, &codes)))
+    })
+}
+
+/// The standalone `code:CODE[:word]` study card (the reverse rendering-lens
+/// target). `word` may be null. Never null on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_code_study_blocks_json(
+    engine: *const PureEngine,
+    code: *const c_char,
+    word: *const c_char,
+    full: bool,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(code)) = (engine.as_ref(), opt_str(code)) else {
+            return ptr::null_mut();
+        };
+        out_json(&wire::blocks_to_wire(panel::code_study_card(e, full, code, opt_str(word).unwrap_or(""))))
+    })
+}
+
+/// The full concordance for a code as blocks. Never null on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_concordance_blocks_json(
+    engine: *const PureEngine,
+    code: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(code)) = (engine.as_ref(), opt_str(code)) else {
+            return ptr::null_mut();
+        };
+        out_json(&wire::blocks_to_wire(panel::concordance(e, code)))
+    })
+}
+
+/// The concordance filtered to one rendering of a code, as blocks. Never null
+/// on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_rendering_concordance_blocks_json(
+    engine: *const PureEngine,
+    code: *const c_char,
+    rendering: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(code), Some(rendering)) = (engine.as_ref(), opt_str(code), opt_str(rendering)) else {
+            return ptr::null_mut();
+        };
+        out_json(&wire::blocks_to_wire(panel::rendering_concordance(e, code, rendering)))
+    })
+}
+
+/// The threads list as blocks. Never null on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine (or null → null).
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_threads_blocks_json(engine: *const PureEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(e) => out_json(&wire::blocks_to_wire(panel::threads_list(e))),
+        None => ptr::null_mut(),
+    })
+}
+
+/// One thread's detail as blocks (out-of-range index → the threads list). Never
+/// null on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine (or null → null).
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_thread_blocks_json(engine: *const PureEngine, index: u32) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(e) => out_json(&wire::blocks_to_wire(panel::thread_detail(e, index as usize))),
+        None => ptr::null_mut(),
+    })
+}
+
+/// The tags list as blocks. Never null on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine (or null → null).
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_tags_blocks_json(engine: *const PureEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(e) => out_json(&wire::blocks_to_wire(panel::tags_list(e))),
+        None => ptr::null_mut(),
+    })
+}
+
+/// One tag's detail as blocks (out-of-range index → the tags list). Never null
+/// on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine (or null → null).
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_tag_blocks_json(engine: *const PureEngine, index: u32) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(e) => out_json(&wire::blocks_to_wire(panel::tag_detail(e, index as usize))),
+        None => ptr::null_mut(),
+    })
+}
+
+/// The weaves list as blocks. Never null on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine (or null → null).
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_weaves_blocks_json(engine: *const PureEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(e) => out_json(&wire::blocks_to_wire(panel::weaves_list(e))),
+        None => ptr::null_mut(),
+    })
+}
+
+/// The suggested-weave review queue as blocks. Never null on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine (or null → null).
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_suggested_blocks_json(engine: *const PureEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(e) => out_json(&wire::blocks_to_wire(panel::suggested(e))),
+        None => ptr::null_mut(),
+    })
+}
+
+/// A weave compare card as blocks (out-of-range index → empty). `full` adds the
+/// edit-notes action. Never null on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine (or null → null).
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_compare_blocks_json(
+    engine: *const PureEngine,
+    index: u32,
+    full: bool,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(e) => out_json(&wire::blocks_to_wire(panel::compare_card(e, full, index as usize))),
+        None => ptr::null_mut(),
+    })
+}
+
+/// Search results as blocks (goto link or ranked hits with snippets). Null when
+/// the query is blank or the engine is null.
+///
+/// # Safety
+/// `engine` is a live engine; `query` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_search_blocks_json(
+    engine: *const PureEngine,
+    query: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(query)) = (engine.as_ref(), opt_str(query)) else {
+            return ptr::null_mut();
+        };
+        if query.trim().is_empty() {
+            return ptr::null_mut();
+        }
+        out_json(&wire::blocks_to_wire(panel::search(e, query)))
     })
 }
 
@@ -1623,6 +2389,23 @@ pub unsafe extern "C" fn pure_engine_weave_add_link_spans(
             }
             Err(e) => out_string(e.to_string()),
         }
+    })
+}
+
+/// Parse a panel link URI into the typed verb the shell dispatches on
+/// (`{verb, …}`; see `pure_core::panel::parse_link`) — the one verb vocabulary,
+/// so a non-Rust shell routes clicks through the core instead of re-splitting
+/// the URI string and risking drift from what the panel emits. Engine-
+/// independent. Null for an unknown verb or malformed payload (a shell then
+/// ignores the click).
+///
+/// # Safety
+/// `uri` is null or valid NUL-terminated UTF-8 for the call.
+#[no_mangle]
+pub unsafe extern "C" fn pure_route_link_json(uri: *const c_char) -> *mut c_char {
+    guard(ptr::null_mut(), || match opt_str(uri).and_then(panel::parse_link) {
+        Some(link) => out_json(&wire::link_to_wire(link)),
+        None => ptr::null_mut(),
     })
 }
 

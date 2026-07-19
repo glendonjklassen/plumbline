@@ -319,6 +319,29 @@ impl Concept {
     }
 }
 
+/// The concept map's spokes: the embedding neighbours (`near`, semantic — drawn
+/// gold) unioned with the collocation `community` (green), each capped at `n`
+/// and deduped so a code that is both stays a single **semantic** spoke (near
+/// wins). `near`/`community` are the raw code lists the callers already hold
+/// (from the embedding + this engine); passing them in keeps this helper free
+/// of the embedding dependency.
+///
+/// The one spoke assembly behind the concept-map popup (review item 4): GTK
+/// calls it directly; the non-Rust shells get the same spokes (with labels
+/// pre-baked) through `pure_engine_concept_map_json`.
+pub fn radial_spokes(near: &[String], community: &[String], n: usize) -> Vec<(String, bool)> {
+    let mut spokes: Vec<(String, bool)> = Vec::new();
+    for c in near.iter().take(n) {
+        spokes.push((c.clone(), true));
+    }
+    for c in community.iter().take(n) {
+        if !spokes.iter().any(|(x, _)| x == c) {
+            spokes.push((c.clone(), false));
+        }
+    }
+    spokes
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -335,6 +358,29 @@ mod tests {
         assert_eq!(top_books(&s, 2), vec![("Gen".into(), 5), ("John".into(), 3)]);
         // Gen + Ps are OT (8), John is NT (2).
         assert_eq!(testament_split(&s), (7, 3));
+    }
+
+    #[test]
+    fn radial_spokes_union_semantic_wins_and_caps() {
+        let near = vec!["G1".to_string(), "G2".to_string(), "G3".to_string()];
+        // G2 is in both — it must stay a single semantic spoke; extra community
+        // members past the cap are dropped.
+        let community = vec!["G2".to_string(), "G4".to_string(), "G5".to_string(), "G6".to_string()];
+        let spokes = radial_spokes(&near, &community, 3);
+        assert_eq!(
+            spokes,
+            vec![
+                ("G1".to_string(), true),
+                ("G2".to_string(), true),
+                ("G3".to_string(), true),
+                ("G4".to_string(), false),
+                ("G5".to_string(), false),
+            ]
+        );
+        // G2 appears once, and as semantic.
+        assert_eq!(spokes.iter().filter(|(c, _)| c == "G2").count(), 1);
+        // Community is capped at n=3 before dedup, so G6 never appears.
+        assert!(!spokes.iter().any(|(c, _)| c == "G6"));
     }
 
     #[test]

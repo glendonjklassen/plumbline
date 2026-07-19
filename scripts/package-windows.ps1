@@ -14,6 +14,13 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# Normalize -Arch so a comma list survives -File invocation. When CI runs
+# `pwsh scripts/package-windows.ps1 -Arch arm64,x64,x86`, pwsh is in -File
+# mode and binds "arm64,x64,x86" as a SINGLE string element (unlike in-session
+# parsing, which would split it) — the loop below would then see one bogus
+# arch. Splitting every element on commas makes both invocation styles work.
+$Arch = @($Arch | ForEach-Object { $_ -split ',' } | Where-Object { $_ -ne "" })
 $repo = Split-Path $PSScriptRoot -Parent
 $dist = Join-Path $repo "dist"
 New-Item -ItemType Directory -Force $dist | Out-Null
