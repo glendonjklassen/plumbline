@@ -17,25 +17,15 @@ The data home resolves like the core: `PURE_STUDY_HOME` / `OVERLAY_HOME`, else
 the nearest ancestor of the exe (or CWD) containing `data/kjv.jsonl` — running
 from the repo finds the in-repo pack.
 
-## What works (first milestone)
+## Feature surface
 
-- Chapter rendering: bundled EB Garamond, gold verse numbers, italic gray
-  KJV-supplied words, faint gold underline on Strong's-tagged words, ¶ breaks;
-  centered column capped at a readable measure.
-- Nav: book dropdown, chapter box, ‹ › (cross-book), `[` / `]`, ←/→,
-  PageUp/Down/Space/Home/End/↑↓, Ctrl+scroll & Ctrl+/− zoom, wheel scroll.
-- Double-click a word → study panel: verse text, Strong's entries (lemma,
-  translit, pronunciation, derivation, definition, KJV renderings) + the
-  concordance as jump links.
-- Search (Ctrl+F): references jump (with a soft gold band on the verse);
-  word/phrase queries list hits as jump links. Esc closes the panel.
-
-## Not yet (vs. the GTK shell)
-
-Multi-pane, weave connectors + authoring, threads/tags, suggested-weave
-review, hover glosses, canon strip, margin notes (needs an ABI addition),
-Simple/Full first-run config, session restore, R&D tiers (concept map,
-morphology, similar verses). The crash log (if any) lands next to the exe as
+At parity with the GTK shell: multi-pane reading, ambient weave connectors +
+authoring, threads/tags, suggested-weave review, hover glosses, the canon
+strip, margin notes, Simple/Full first-run config, session restore, and the
+Full-study tiers (word study, renderings lens, authority tiers, concept map,
+chord map, constellation, morphology, verses-like-this). The parity contract —
+and any shell deltas — is [docs/FEATURE-MANIFEST.md](../../../docs/FEATURE-MANIFEST.md);
+read it before shell work. The crash log (if any) lands next to the exe as
 `crash.log`.
 
 ## Notes

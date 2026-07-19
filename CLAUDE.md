@@ -37,7 +37,7 @@
   (`cargo run -p pure-ffi --features bindgen --bin pure-bindgen`) — CI fails
   on drift — and rebuild the release DLL for the app.
 - No 3k-line source files (the desktop `main.rs` split is tracked in
-  REVIEW-2026-07-14.md).
+  TODO.md §Engineering & data work).
 
 ## Releases
 

@@ -1,6 +1,13 @@
-# PROGRESS — `rust-rewrite` branch
+# PROGRESS — the Rust-rewrite porting log (historical)
 
-Where the Rust rebuild stands (2026-07-08 → 07-09). See [PLAN.md](PLAN.md) for
+> **Historical record** of the `rust-rewrite` build-out, 2026-07-08 → 07-14,
+> kept as porting history. It is a snapshot — some "next steps" below have
+> long since landed (the WinUI shell reached GTK parity, the view-model
+> consolidation moved shell logic into the core). Current status:
+> [README.md](README.md); current work: [TODO.md](TODO.md); architecture and
+> frozen contracts: [PLAN.md](PLAN.md).
+
+Where the Rust rebuild stood (2026-07-08 → 07-09). See [PLAN.md](PLAN.md) for
 the architecture and the locked decisions; see
 [crates/ffi/README.md](crates/ffi/README.md) for the C ABI + bindings.
 

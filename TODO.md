@@ -1,113 +1,229 @@
 # pure-study — TODO
 
-## Rendering lens — seeing translation decisions
+The approved feature roadmap from the product review of 2026-07-18 (first
+half), followed by the in-flight engineering and data work (second half). The
+product stays free — what God has given us in the KJV is far better than a
+Porsche, and it is free — with a paid sync service as the only premium piece
+(the workman's wages, never a feature gate).
 
-*Requested 2026-07-15. **New invention — not in `../overlay`** (first feature
-with no reference implementation; design freely, but the parity contract still
-applies). Goal: give readers without Greek/Hebrew a lens on where the
-translators made choices. Select any tagged English word and see (a) the
-underlying G/H word and (b) every other English rendering of that word across
-the corpus, with counts and navigation — e.g. tap "charity" in 1 Cor 13 and
-learn G26 agape is elsewhere rendered "love", "beloved", "feast of charity";
-tap "love" in John 21 and see the agape/phileo distinction the English hides.
-No new dataset — derived entirely from the tagged text we already ship.*
+House rules apply to every item here: shell parity in one change set (or a
+logged delta in [docs/FEATURE-MANIFEST.md](docs/FEATURE-MANIFEST.md)),
+additive camelCase wire, frozen formats untouched. Platforms: Linux, Windows,
+macOS, Android — ARM and x86; no iOS.
 
-### Two directions, one corpus pass
+## Tier 0 — daily-driver gaps (small, additive, do first)
 
-Both indexes fall out of a single fold over the corpus, sibling to
-`OccurrenceIx::build` in `crates/core/src/strongs.rs`:
+- [ ] **1. Copy & context menu.** There is no clipboard anywhere in either
+      shell. Left-click is taken (weave pinning), so: right-click a verse →
+      context menu — copy verse · copy with reference (`…text — John 3:16
+      (KJV)`) · copy chapter · tag · add to thread · note. Copy affordances on
+      panel cards too. Formats: plain, ref-suffixed, markdown.
+- [ ] **2. Back/forward history.** Study is a chain of jumps (concordance →
+      verse → xref → …) with no way back. Per-pane history stack, Alt+←/→,
+      mouse buttons 4/5. Everything already funnels through the core link
+      router (`pure_core::panel::parse_link` / `pure_route_link_json`), so the
+      push points exist today.
+- [ ] **3. Personal margin notes.** The 1769 translators' notes are
+      first-class; the user's aren't (notes exist only on
+      threads/entries/tags/weaves — [tag.rs:66](crates/core/src/tag.rs#L66)).
+      Per-verse notes in a `notes/` dir sibling to `tags/` (same atomic store,
+      refKey-keyed, additive endpoints), a gutter mark beside the weave dots,
+      a "your notes" panel section. Also the anchor of future sync value.
+- [ ] **4. Highlighting — reuse tags, add color.** Additive `color` field on
+      tags; members render as a soft wash behind the verse's line rects (the
+      highlight-band mechanism already computes these). A fixed, muted palette
+      of 5–6 tones tuned to the paper and the dark theme. The tags browser
+      doubles as the highlight browser for free.
+- [ ] **5. Dark + night themes, crafted like the light one.** `ForceLight`
+      today ([main.rs:414](apps/desktop/src/main.rs#L414)). A candlelight-warm
+      dark paper and a true-black night mode (OLED Android), designed with the
+      same care as `#fcf9f4` — not an inverted afterthought. Define the palette
+      tokens once (a small table/JSON every shell embeds at build) so shells ×
+      themes can't drift. Follow-system + manual toggle, persisted in config.
+- [ ] **6. Kill the first-study-click pause.**
+      [GUIDE.md:23-24](docs/GUIDE.md#L23-L24) documents it honestly. When
+      config says Full mode, warm the analytics indexes on a background thread
+      at startup; consider extending the `*.idxcache` to cover more of it.
+- [ ] **7. In-app guide, shortcuts overlay, About.** GUIDE.md and
+      BIBLIOGRAPHY.md are excellent and invisible — no Help affordance in
+      either header. `?`/F1 shortcut overlay; the guide rendered in-app; an
+      About page stating edition, provenance, and the "yours forever, no
+      account, no telemetry" covenant.
+- [ ] **8. Small unifications.** Cross-book header stepping (WinUI has it,
+      GTK clamps — manifest §Multi-pane): unify on cross-book. Paint **all**
+      search hits in the visible chapter, not just the goto verse. Modifier-
+      click a `go:` link → open in the *other* pane.
 
-- **Renderings index** (code → renderings): Strong's ref → map of normalized
-  English rendering → occurrence list (VRef + token span). A *rendering* is
-  the contiguous run of same-code tokens within a verse, so one-to-many
-  translations ("suffereth long" ← G3114) stay one unit, exactly like the
-  multi-code/zero-code handling already in the token schema.
-- **Reverse index** (word → codes): normalized surface word → the codes it
-  translates, with counts — the "love hides both agape and phileo" direction.
-  The word-index fold in `crates/core/src/search.rs` (~line 52) already
-  lowercases every token surface; hang both indexes off one pass.
+## Tier 1 — reach
 
-### Tasks
+- [ ] **9. Android (Compose).** The single biggest lever; already planned.
+      The pack (~48 MB `data/` + `bridge/`) fits a Play asset pack;
+      Simple-first onboarding matters more on phones; Kotlin binding gaps are
+      manifest-tracked. Typography survives intact (core layout +
+      `TextMeasurer`).
+- [ ] **10. Linux packaging.** Flathub (Linux discoverability, full stop),
+      AUR, AppImage — plus **ARM64 Linux** builds: a Raspberry Pi is a $70
+      offline study machine (missions, low-connectivity, church labs).
+- [ ] **11. Windows distribution.** `release.yml` already builds
+      self-contained arm64/x64/x86 apps. Missing: **code signing** (SmartScreen
+      scares exactly the non-technical people this serves — Azure Trusted
+      Signing or SignPath OSS), a **winget** manifest, a **Microsoft Store**
+      listing. Native ARM64 Windows is already a differentiator — say so.
+- [ ] **12. A one-page website + quiet update check.** Screenshots (the
+      constellation sells itself), downloads, the ethos statement. In-app: a
+      manual "check for updates" against GitHub releases — no auto-update, no
+      phoning home.
+- [ ] **13. macOS shell.** The portable crates already build on macOS and the
+      data home already resolves `~/Library/Application Support/pure-study`
+      ([GUIDE.md:127-131](docs/GUIDE.md#L127-L131)) — only the shell is
+      missing. SwiftUI/AppKit over the same C ABI with a CoreText-backed
+      measure callback; the view-model consolidation has landed, so shell #4
+      is paint-and-route. Developer ID signing + notarization, universal
+      binary, notarized DMG + Homebrew cask (Mac App Store later if ever — its
+      sandbox containerizes the file-based data home). Add a macos CI runner
+      for the portable crates and a macOS delta section to the manifest.
+- [ ] **14. Print & PDF export.** The core lays out via a measure callback; a
+      PDF measure/paint pass gives print output typeset exactly like the
+      screen, with no shell involved. Chapter handouts, large-print passages,
+      memorization flashcards (#15). No Bible app, free or paid, prints
+      beautifully — this architecture can, cheaply.
 
-*Core, wire, UI, parity, and tests all landed 2026-07-15/16 (commits
-28aff7b → b03c378 → 9f4973c); the reverse-link follow-up below finished the
-feature.*
+## Tier 2 — study differentiators
 
-- [x] **Core** (`crates/core`): the two indexes above + a normalization fold
-      (lowercase, letters-only). Exact surface forms are kept distinct
-      ("love"/"loved"/"loveth"); folding inflections via morphology stays a
-      later display-time refinement.
-- [x] **Wire** (`crates/ffi`): additive camelCase `pure_engine_renderings_json`
-      + `pure_engine_word_codes_json`; bindings regenerated; DLL rebuilt.
-- [x] **UI — word study panel**: the **RENDERINGS** tier (Full mode) with
-      rendering chips + counts, tapped rendering highlighted, chips → filtered
-      concordance (OCC_SHOWN cap), and the "also translates …" reverse line.
-- [x] **Parity**: GTK + WinUI shipped together; Compose delta + manifest
-      section logged in docs/FEATURE-MANIFEST.md.
-- [x] **Tests**: index unit tests (`renderings_and_word_codes`) + FFI
-      round-trip.
+- [ ] **15. Memorization — first-letter mode + spaced repetition.**
+      *Flagged top priority of the differentiators (2026-07-18).* Source = any
+      tag or thread ("memorize this thread"). First-letter prompts,
+      progressive blank-out, typed recall, SM-2 scheduling; printable
+      flashcards once #14 lands. Include a **coverage map**: the canon
+      strip/dispersion visual language reused to paint what you've spent time
+      with — cells shaded by verses memorized and review depth/recency, the
+      OT/NT divide marked, so a glance shows where your memory work has
+      reached and where it hasn't. The scheduler's per-verse review history
+      provides the data by construction. The KJV is *the* memorization text
+      (homeschool, AWANA, Bible bees) and that world has no quality free tool —
+      possibly the largest untapped audience. Progress lives in the "yours"
+      dirs (→ sync later).
+- [ ] **16. Finish grammar search; add the power tier.** `tense:aorist` is an
+      honest placeholder ([README.md](README.md) §Limitations); the morphology
+      is shipped and parsed. Then, all in core so every shell gets it at once:
+      scope filters (`in:Psalms`, `ot:`/`nt:`, ranges); case-exact and
+      **divine-name search** (FLAG_DIVINE is in the tokens); **italics search**
+      (`added:` — translator-supplied words; FLAG_ADDED is in the tokens — a
+      uniquely KJV study discipline with no good tool anywhere);
+      boolean/NEAR; search history; saved searches.
+- [ ] **17. Interlinear-lite → original-language pack.** Phase 1 needs no new
+      data: an under-word toggle showing lemma/xlit/parse (strongs.json +
+      morphology.jsonl are already keyed to tokens). Phase 2: optional WLC/TR
+      text pack (both PD; import pipeline exists in overlay/data-prep) for a
+      true reverse-interlinear — PLAN.md already notes cosmic-text gives RTL
+      Hebrew for free. Offline and beautiful where the web tools are neither.
+- [ ] **18. Harmony mode.** A curated Gospel-harmony weave pack (Robertson's
+      *Harmony*, PD, importable) plus "follow the weave": panes align
+      pericope-by-pericope as you scroll (Shift-lockstep exists; harmony mode
+      locks by link pairs instead of pixels). "Read all four Gospels as one" —
+      a headline feature that is ~90% built already.
+- [ ] **19. People & places.**
+      [bridge/stepbible-tipnr.json](bridge/stepbible-tipnr.json) already ships
+      TIPNR identities; upstream TIPNR carries unique person IDs +
+      relationships. A People browser and a chip on name-words: "Herod
+      Antipas, tetrarch of Galilee — distinct from Herod the Great." Six
+      Marys, four Herods, thirty Zechariahs — nobody free does this inline.
+      Genealogies from TIPNR relations later; places + offline maps
+      (openbible.info geodata, CC-BY) as a pack after that.
+- [ ] **20. Corpus-wide leitwort browser.** Port overlay `Burst.hs` corpus-wide
+      (PLAN.md marks it "later"): the per-word LEITWORT tier answers "does
+      *this* word cluster?"; Burst answers it for every word at once — a
+      browsable index of the canon's repeated motifs. Discovery, not just
+      display.
+- [ ] **21. Quotation/allusion detection — raise its priority.** Already
+      tracked below (weave coverage for allusive books). Ambient
+      connectors are the crown jewel and 17 books have zero weave endpoints —
+      Revelation, the most allusive book in the canon, is dark. Coverage here
+      *is* product quality.
+- [ ] **22. Reading plans — quiet ones.** M'Cheyne, Horner, canonical,
+      chronological (all PD). A chip — "Day 37 · Ps 119 ▸" — no streaks, no
+      badges, no guilt mechanics. Plans live in the "yours" dirs (→ sync).
+- [ ] **23. Read-aloud (TTS) with word-level highlighting.** Platform TTS
+      (SAPI/OneCore, Android TTS, macOS AVSpeechSynthesizer; optional Piper
+      voices on Linux) driving the existing per-word display list —
+      karaoke-style highlight, chapter autoplay. Zero licensing risk, and it
+      doubles as the honest answer to accessibility: canvas-drawn text is
+      invisible to screen readers today. PD human audio (LibriVox KJV) as an
+      optional pack later.
+- [ ] **24. Command palette (Ctrl+K).** The discoverability answer: the depth
+      is hidden behind Ctrl+click and small header buttons, and every action
+      already routes through the URI verb table (manifest §Link routing) +
+      search. Cheap now that the router consolidation has landed.
 
-### Design notes
+## Tier 3 — ecosystem & content
 
-- The 1890 dictionary's `kjv_def` field lists renderings but is static,
-  count-free, and occasionally wrong for our text — derive from the corpus,
-  use `kjv_def` at most as a sanity cross-check in tests.
-- Punctuation/casing: normalize for grouping but display the most common
-  actual surface form as the chip label.
-- FLAG_ADDED (italic) words carry no tags and never enter either index.
-- Once the Luther 1912 tagging lands, the same indexes over the German corpus
-  give cross-translation rendering comparison for free — worth keeping the
-  index API corpus-parametric rather than KJV-global.
+- [ ] **25. Weave commons.** Weaves/threads are already portable JSON. Add
+      export/import affordances + a `pure-study-commons` community repo where
+      PR review mirrors the in-app `approved` ethic. Ship more curated content
+      in-box: 29 approved weaves and one thread (`romans-road`) today; a dozen
+      excellent threads (Messianic prophecies, the Tabernacle, prayers of the
+      Bible) cost an afternoon each and make first-run Full mode feel
+      inhabited.
+- [ ] **26. Docs & showing the depth.** The guide as a small site with GIFs
+      (constellation, connectors, renderings lens) — the features are
+      unphotographable in prose; motion sells them.
 
-### Follow-ups (from testing 2026-07-16)
+## The premium sync service (the only paid piece)
 
-- [x] **Reverse links must land on a Strong's study card, not a bare list.**
-      *Done 2026-07-16.* Extracted the per-code block into one reusable
-      code-study view — GTK `code_study_markup` + `verse_study_extras`; WinUI
-      `CodeStudy` + `VerseStudyExtras` + `ShowCodeStudy` — behind a new
-      `code:CODE[:word]` link verb. The "'love' also translates G5368" reverse
-      line now opens G5368's own entry (definition / lemma / gloss + its tiers),
-      carrying the tapped word so its rendering is highlighted there. Same view
-      renders inline per code and standalone via the verb. Both shells.
-- [x] GTK window-icon wiring. *Done 2026-07-16.* `install_app_icon` (called
-      after `install_css`) adds `assets/icons` to the display `IconTheme` search
-      path and sets `Window::set_default_icon_name(APP_ID)`; the woven cross is
-      installed under the app id as a scalable SVG
-      (`assets/icons/hicolor/scalable/apps/dev.purestudy.app.svg`).
-      CI-validated (not run on the ARM64 box).
+Scope = exactly the "yours" list ([README.md](README.md) §Your data): weaves,
+threads, tags, patches — plus personal notes (#3), plans/memorization
+progress, config, reading position.
 
-## Authority tiers — provenance marks on evidence
+- **E2EE by default** — study notes are pastoral and private; zero-knowledge
+  server.
+- **Per-file version history** ("restore my library to last Tuesday") — the
+  atomic single-file JSON store makes this nearly free server-side.
+- **Continuity** — pane state / last position across devices (sync sells best
+  once Android exists; sequence accordingly).
+- **Shared libraries** — family / class / congregation spaces: a pastor
+  publishes a weave library; members subscribe read-only into their
+  *Suggested* queue and approve into their own library — the existing
+  approval flow *is* the sharing UX, already built.
+- **Read-only web publish** of a weave/thread — the invitation surface, and
+  the only "web app" this product ever needs.
+- **The covenant, stated on the pricing page**: local files remain canonical
+  and exportable forever; sync never gates a local feature. Convenience, not
+  captivity.
 
-*Requested 2026-07-15. Port overlay's three-tier trust model so every piece of
-evidence in the study panel shows where it comes from, with a distinct icon per
-tier — the reader always knows the provenance of what they're looking at.*
+## Suggested sequence
 
-- overlay `Overlay/Bridge.hs`: `Tier` = `TierGod` (the text itself — TR /
-  Masoretic words, and scripture-quotes-scripture, which inherits the text's
-  own authority), `TierHuman` (curated scholarship — lexicons, the 1769
-  translators' renderings, TSK), and a machine/analytical tier (embeddings and
-  the R&D layer; the default for an unrecognized source, so nothing
-  over-claims). `sourceTiers`, `sourcePriors`, `sourceLabel`.
-  `Overlay/Panels.hs` draws the provenance marks (`provIcon`).
-- What we already have: the trust **priors** are ported (`crates/rnd/src/
-  bridge.rs` `Priors`, `data/source-priors.json`). NOT ported: the `Tier`
-  classification, `sourceTiers`/`sourceLabel`, and the provenance icon marks.
-- [x] Port `Tier` + `sourceTiers`/`sourceLabel` to pure-rnd and expose each
-      evidence item's tier(s) via an additive FFI field. *Done 2026-07-16.*
-      `crates/rnd/src/bridge.rs`: `Tier {God,Human,Machine}`, `source_tiers`
-      (a set — `quotation`→God+Machine, etc.), `research_grade`, `source_label`,
-      `tiers_of` (deduped union, ordered). `pure_engine_bridge_partners_json`
-      gained additive `tiers` + `researchGrade` (extern surface unchanged, so no
-      bindgen drift). Unit + FFI round-trip tests added.
-- [x] Render a tier mark beside evidence in both shells' study panels.
-      *Done 2026-07-16.* God `✝` gold, Human `†` green, Machine `≈` gray,
-      research-grade `⚗` red — per-chip on SAME ROOT partners, per-section on
-      RENDERINGS/analytics/TSK/verses-like-this/margin-notes headers. GTK uses
-      overlay's glyph-fallback set in Pango `<span>` (a GtkLabel can't embed
-      images); WinUI uses colored `Run`s. No icon pack needed.
-- [x] Parity: both shells in one change set; Compose delta logged in
-      FEATURE-MANIFEST (see "Authority tiers"); a legend closes each Full-study
-      card so the marks are learnable. *Done 2026-07-16.*
+1. **Tier 0 (1–8)** now — small, additive, and they compound into every
+   future screenshot and review.
+2. **Android (9)** + packaging/signing/website (10–12); the macOS shell (13)
+   follows — the view-model consolidation already makes a fourth shell
+   paint-and-route cheap.
+3. Differentiators: **memorization (15) first**, then allusion coverage (21) →
+   power search (16) → harmony mode (18) → print/PDF (14, which also unlocks
+   15's flashcards) → interlinear-lite (17) → command palette (24) → reading
+   plans (22) → TTS/a11y (23) → people (19) → leitwort browser (20).
+4. **Commons (25) + the sync service** after Android ships (continuity is the
+   sync product's best demo).
+
+---
+
+# Engineering & data work
+
+## Split `apps/desktop/src/main.rs` into modules
+
+*The one remaining item from the 2026-07-16 architecture review (all of P0–P2
+landed: view-models, popup + panel content models, and the link router moved
+into the core; the manifest now describes endpoints instead of
+re-implementations).*
+
+- [ ] `main.rs` is ~3.6k lines — over the CLAUDE.md "no 3k-line files" rule.
+      Mechanical module split (`reader` / `panes` / `popups` / `panel` /
+      `links` / `chrome`) with **no logic change**; mostly `pub(crate)`
+      visibility adjustments that want iterative `cargo check`, so best done
+      in an environment where GTK compiles (not the Windows ARM64 box —
+      validate via the `desktop-gtk` CI job).
+- [ ] Nicety left from the review's P2.6: a compile-checked block-kind enum
+      *shared into the shells* (today an unknown kind gracefully renders as
+      nothing), so a shell that forgets a kind fails to build.
 
 ## AI-generated Strong's tagging for Luther 1912
 
@@ -295,7 +411,7 @@ Zechariah above all) fall through.*
 - [ ] Revive the deferred **cross-testament quotation/allusion detection**
       R&D tier with an allusion-sensitive method (n-gram + embedding hybrid),
       aimed specifically at Revelation's OT spine.
-- [ ] A first hand batch of widely-accepted suggestions landed in
+- [x] A first hand batch of widely-accepted suggestions landed in
       `weaves/suggested/` (2026-07-15); Song of Solomon and Philemon left
       empty deliberately -- Song's typological readings are tradition-specific
       rather than verse-level consensus, and Philemon has no OT parallels.

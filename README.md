@@ -8,7 +8,17 @@ offline — the repo ships the complete data pack, so a clone is a working app.
 ![Genesis 15 and Romans 4 side by side, joined by the "Abraham believed God"
 weave's connector lines](assets/readme/reader-weaves.png)
 
-## Install & run (Linux)
+## Install & run
+
+### Windows
+
+Download the zip for your architecture (arm64 / x64 / x86) from the
+[Releases page](https://github.com/glendonjklassen/pure-study/releases) —
+self-contained, data pack bundled. Unzip anywhere and run `PureStudyWin.exe`;
+no installer, no runtime to install. (The build is unsigned for now, so
+SmartScreen may ask once — "More info → Run anyway".)
+
+### Linux (from source)
 
 The GUI is GTK4 + libadwaita. You need the Rust toolchain
 ([rustup](https://rustup.rs)) and the GTK development packages:
@@ -25,8 +35,8 @@ cargo run --release -p pure-desktop
 
 That's it — the checkout itself is a hydrated data home (KJV text, Strong's,
 weaves, the full analytics pack), so everything lights up on first launch.
-There is no packaged installer yet (AppImage/flatpak/AUR are planned); building
-from source is currently the only path.
+There is no Linux package yet (AppImage/flatpak/AUR are planned); on Linux,
+building from source is currently the only path.
 
 To run the app from anywhere (not just the checkout), seed a per-user home
 once — `~/.local/share/pure-study` on Linux — and the binary will find it:
@@ -100,9 +110,11 @@ atomic (temp → fsync → rename), on every platform.
 ## Limitations, honestly
 
 - **KJV-only, by design.** The analytics ride the 1769 tokenization end to end.
-- **The GUI is Linux-only today.** The portable core cross-builds for Windows
-  (x86_64 and ARM64 — CI-verified) as the C ABI a planned WinUI shell will
-  bind; there is no Windows or Android GUI yet.
+- **Linux and Windows today.** The GTK (Linux) and WinUI (Windows) shells are
+  at feature parity over the same Rust core
+  ([docs/FEATURE-MANIFEST.md](docs/FEATURE-MANIFEST.md) is the parity
+  contract); Android (Compose) and macOS shells are planned — see
+  [TODO.md](TODO.md).
 - **No sync.** One machine, one home; copy the authored dirs to move.
 - **Grammar search** (`tense:aorist`-style form predicates) is a placeholder —
   word/phrase/reference/Strong's-code search all work (see the guide).
@@ -127,7 +139,8 @@ Scripture renders in EB Garamond (OFL, bundled).
 | `crates/rnd` | Feature-gated analytics: bridge, embeddings, morphology, keyness, witness, concept |
 | `crates/ffi` | The single flat C ABI for native shells (cdylib) — see [crates/ffi/README.md](crates/ffi/README.md) |
 | `crates/hydrate` | `pure-hydrate` CLI: copy/verify the data pack into a home |
-| `apps/desktop` | The GTK4 + libadwaita reader (Linux) |
+| `apps/desktop` | The GTK4 + libadwaita shell (Linux) |
+| `apps/windows` | The WinUI 3 + Win2D shell (Windows) — see [its README](apps/windows/PureStudyWin/README.md) |
 
 ```sh
 cargo test -p pure-core -p pure-layout -p pure-rnd -p pure-ffi -p pure-hydrate
