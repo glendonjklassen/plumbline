@@ -479,6 +479,17 @@ char *pure_engine_chord_map_json(const struct PureEngine *engine);
 // `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
 char *pure_engine_concept_json(const struct PureEngine *engine, const char *code);
 
+// The concept map for a code: the radial neighbourhood (embedding neighbours ∪
+// collocation community, deduped, labels pre-baked) plus the per-book
+// dispersion counts in canon order. One call replaces the shell's spoke
+// assembly and its four separate lookups (neighbours / concept / gloss /
+// lemma). Never null on a live engine + valid code — a code with no stats
+// still yields its centre label and any embedding spokes (empty dispersion).
+//
+// # Safety
+// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
+char *pure_engine_concept_map_json(const struct PureEngine *engine, const char *code);
+
 // A short English gloss for a Strong's code — the modal KJV rendering across
 // its occurrences (≤80 sampled), falling back to a distilled dictionary
 // clause. Plain text (not JSON); null when nothing sensible exists.

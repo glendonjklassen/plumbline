@@ -739,6 +739,26 @@ fn parity_endpoints_via_abi() {
         assert!(selfp["a"].as_u64().unwrap() >= 39);
         assert_eq!(selfp["count"], 1);
 
+        // Concept map: centre label (gloss over lemma), spokes, and the
+        // canon-ordered dispersion. G2316 (θεός / "God") occurs once, in John.
+        let cmap: Value = serde_json::from_str(
+            &take(pure_engine_concept_map_json(e, c("G2316").as_ptr())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(cmap["code"], "G2316");
+        assert!(cmap["centerLabel"].as_str().unwrap().contains("θεός"));
+        assert_eq!(cmap["otNtDivide"], 39);
+        assert_eq!(cmap["bookCount"], 66);
+        let bb = cmap["byBook"].as_array().unwrap();
+        assert_eq!(bb.len(), 66);
+        // Exactly one occurrence, and it lands in the NT (John, index ≥ 39).
+        let total: u64 = bb.iter().map(|x| x.as_u64().unwrap()).sum();
+        assert_eq!(total, 1);
+        assert_eq!(bb[..39].iter().map(|x| x.as_u64().unwrap()).sum::<u64>(), 0);
+        // No embedding artifact here → no semantic (gold) spokes; community
+        // spokes (if any) are all green.
+        assert!(cmap["spokes"].as_array().unwrap().iter().all(|s| s["semantic"] == false));
+
         pure_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
     }

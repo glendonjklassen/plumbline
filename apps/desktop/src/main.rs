@@ -789,20 +789,16 @@ fn draw_concept_radial(state: &Shared, code: &str, cr: &cairo::Context, w: i32, 
     let _ = cr.rectangle(0.0, 0.0, width, hf);
     let _ = cr.fill();
 
-    // Neighbours: embedding near (if built) then collocation community.
-    let mut nbrs: Vec<(String, bool)> = Vec::new(); // (code, is_semantic)
-    if let Some(emb) = &st.embedding {
-        for (c, _) in emb.nearest_concepts(code, 6) {
-            nbrs.push((c, true));
-        }
-    }
-    if let Some(ce) = &st.concept {
-        for c in ce.community(code).into_iter().take(6) {
-            if !nbrs.iter().any(|(x, _)| x == &c) {
-                nbrs.push((c, false));
-            }
-        }
-    }
+    // Neighbours: embedding near (if built) ∪ collocation community, deduped —
+    // the shared assembly lives in `concept::radial_spokes` (review item 4), fed
+    // the same spokes the non-Rust shells get via `pure_engine_concept_map_json`.
+    let near: Vec<String> = st
+        .embedding
+        .as_ref()
+        .map(|emb| emb.nearest_concepts(code, 6).into_iter().map(|(c, _)| c).collect())
+        .unwrap_or_default();
+    let community = st.concept.as_ref().map(|ce| ce.community(code)).unwrap_or_default();
+    let nbrs = concept::radial_spokes(&near, &community, 6); // (code, is_semantic)
 
     let layout = pangocairo::functions::create_layout(cr);
     let mut fd = pango::FontDescription::new();

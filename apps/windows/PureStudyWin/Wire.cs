@@ -123,6 +123,15 @@ public sealed record Concept1(
 public sealed record BookCount(string Book, string Display, uint Count);
 public sealed record Leitwort(int N, int WinCount, double Score, string Label);
 
+// The concept-map popup's view-model (pure_engine_concept_map_json): spokes
+// (near ∪ community, deduped, labels pre-baked) + canon-ordered dispersion. The
+// popup renders this wholesale — no shell-side assembly, gloss/lemma lookups,
+// or book-order table (ByBook is indexed by canon position, 0 where absent).
+public sealed record ConceptMapData(
+    string Code, string CenterLabel, List<ConceptSpoke> Spokes,
+    List<uint> ByBook, int OtNtDivide, int BookCount);
+public sealed record ConceptSpoke(string Code, string Label, bool Semantic);
+
 public sealed record ConfigState(
     string StudyMode, double BodySize, List<PaneRef1>? OpenPanes, int ActivePane, bool FirstRun,
     // Frozen additive field shared with GTK's config.json. Must round-trip even

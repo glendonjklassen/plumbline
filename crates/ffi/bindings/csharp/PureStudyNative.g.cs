@@ -522,6 +522,20 @@ namespace PureStudy.Native
         public static extern byte* pure_engine_concept_json(PureEngine* engine, byte* code);
 
         /// <summary>
+        ///  The concept map for a code: the radial neighbourhood (embedding neighbours ∪
+        ///  collocation community, deduped, labels pre-baked) plus the per-book
+        ///  dispersion counts in canon order. One call replaces the shell's spoke
+        ///  assembly and its four separate lookups (neighbours / concept / gloss /
+        ///  lemma). Never null on a live engine + valid code — a code with no stats
+        ///  still yields its centre label and any embedding spokes (empty dispersion).
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_concept_map_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_concept_map_json(PureEngine* engine, byte* code);
+
+        /// <summary>
         ///  A short English gloss for a Strong's code — the modal KJV rendering across
         ///  its occurrences (≤80 sampled), falling back to a distilled dictionary
         ///  clause. Plain text (not JSON); null when nothing sensible exists.

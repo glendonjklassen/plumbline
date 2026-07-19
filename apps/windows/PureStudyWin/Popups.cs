@@ -501,30 +501,13 @@ public static class Popups
     {
         var canvas = new CanvasControl { ClearColor = PopupPaper };
 
-        // Neighbours: semantic (embedding) in gold, collocation (community) in
-        // green; deduped, semantic wins.
-        var spokes = new List<(string code, bool semantic)>();
-        if (engine.ConceptNeighboursJson(code, 6) is { } nj)
-            foreach (var s in Wire.Parse<ConceptNeighbours>(nj).Near)
-                spokes.Add((s.Code, true));
-        Concept1? concept = engine.ConceptJson(code) is { } cj ? Wire.Parse<Concept1>(cj) : null;
-        if (concept is not null)
-            foreach (var c in concept.Community.Take(6))
-                if (spokes.All(s => s.code != c))
-                    spokes.Add((c, false));
-
-        string Label(string c)
-        {
-            var gloss = engine.Gloss(c);
-            var lemma = engine.StrongsJson(c) is { } sj ? Wire.Parse<StrongsEntry>(sj).Lemma : null;
-            return (gloss, lemma) switch
-            {
-                (not null, not null) => $"{gloss}\n{lemma}",
-                (not null, null) => gloss!,
-                (null, not null) => lemma!,
-                _ => c,
-            };
-        }
+        // The whole popup comes from one core view-model
+        // (pure_engine_concept_map_json): spokes (near ∪ community, deduped,
+        // labels pre-baked) + canon-ordered dispersion — no shell-side assembly,
+        // gloss/lemma lookups, or book-order table (review item 4).
+        if (engine.ConceptMapJson(code) is not { } cmj) return;
+        var map = Wire.Parse<ConceptMapData>(cmj);
+        var spokes = map.Spokes;
 
         canvas.Draw += (s, args) =>
         {
@@ -559,7 +542,7 @@ public static class Popups
                 float ca = (float)Math.Cos(angle), sa = (float)Math.Sin(angle);
                 float nx = cx + radius * ca;
                 float ny = cy + radius * sa;
-                var stroke = spokes[i].semantic
+                var stroke = spokes[i].Semantic
                     ? Color.FromArgb(128, 158, 125, 56)
                     : Color.FromArgb(128, 107, 140, 102);
                 ds.DrawLine(cx, cy, nx, ny, stroke, 1.4f);
@@ -567,7 +550,7 @@ public static class Popups
 
                 // Sides hang off the node left/right; top and bottom sit
                 // above/below it, per-line centred.
-                var text = Label(spokes[i].code);
+                var text = spokes[i].Label;
                 var fmt2 = ca > 0.35f ? fmtLeft : ca < -0.35f ? fmtRight : fmtCentre;
                 using var tl = new CanvasTextLayout(s, text, fmt2, Box, 100);
                 float th = (float)tl.LayoutBounds.Height;
@@ -581,46 +564,35 @@ public static class Popups
             }
 
             ds.FillCircle(cx, cy, 5, Palette.Gold);
-            using (var ctl = new CanvasTextLayout(s, Label(code), centreFmt, 260, 100))
+            using (var ctl = new CanvasTextLayout(s, map.CenterLabel, centreFmt, 260, 100))
             {
                 float th = (float)ctl.LayoutBounds.Height;
                 ds.DrawTextLayout(ctl, cx - 130, cy - 14 - th, Palette.Ink);
             }
 
-            // Dispersion strip: where across the 66 books this concept occurs.
-            if (concept is not null && concept.ByBook.Count > 0)
+            // Dispersion strip: where across the books this concept occurs.
+            // ByBook is canon-ordered (cell bi at bi/bookCount); the divide + book
+            // count come from the same view-model, so no shell book table.
+            if (map.ByBook.Any(v => v > 0))
             {
                 float y0 = h - stripH;
-                uint bmax = concept.ByBook.Values.Max();
+                uint bmax = Math.Max(1u, map.ByBook.Max());
+                float bc = Math.Max(1, map.BookCount);
                 ds.FillRectangle(0, y0, w, stripH, Color.FromArgb(10, 0, 0, 0));
-                int bi = 0;
-                foreach (var book in BookOrder)
+                for (int bi = 0; bi < map.ByBook.Count; bi++)
                 {
-                    if (concept.ByBook.TryGetValue(book, out var cnt) && cnt > 0)
-                    {
-                        float alpha = 0.15f + 0.75f * cnt / bmax;
-                        float x0 = bi / 66f * w, x1 = (bi + 1) / 66f * w;
-                        ds.FillRectangle(x0, y0, x1 - x0, stripH,
-                            Color.FromArgb((byte)(alpha * 255), 158, 125, 56));
-                    }
-                    bi++;
+                    var cnt = map.ByBook[bi];
+                    if (cnt == 0) continue;
+                    float alpha = 0.15f + 0.75f * cnt / bmax;
+                    float x0 = bi / bc * w, x1 = (bi + 1) / bc * w;
+                    ds.FillRectangle(x0, y0, x1 - x0, stripH,
+                        Color.FromArgb((byte)(alpha * 255), 158, 125, 56));
                 }
-                float seam = Canon.OtNtDivide / 66f * w;
+                float seam = map.OtNtDivide / bc * w;
                 ds.DrawLine(seam, y0, seam, h, Color.FromArgb(128, 102, 77, 51), 1f);
             }
         };
 
         Shell($"Concept map — {code}", 720, 560, canvas);
     }
-
-    /// OSIS ids in canon order (66) — for the dispersion strip cells.
-    public static readonly string[] BookOrder =
-    {
-        "Gen","Exod","Lev","Num","Deut","Josh","Judg","Ruth","1Sam","2Sam","1Kgs","2Kgs",
-        "1Chr","2Chr","Ezra","Neh","Esth","Job","Ps","Prov","Eccl","Song","Isa","Jer",
-        "Lam","Ezek","Dan","Hos","Joel","Amos","Obad","Jonah","Mic","Nah","Hab","Zeph",
-        "Hag","Zech","Mal","Matt","Mark","Luke","John","Acts","Rom","1Cor","2Cor","Gal",
-        "Eph","Phil","Col","1Thess","2Thess","1Tim","2Tim","Titus","Phlm","Heb","Jas",
-        "1Pet","2Pet","1John","2John","3John","Jude","Rev",
-    };
 }

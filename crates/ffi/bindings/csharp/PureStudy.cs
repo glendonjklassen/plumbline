@@ -165,6 +165,16 @@ public sealed unsafe class StudyEngine : IDisposable
             return Utf8.Take(PureStudyNative.pure_engine_concept_json(_handle, c));
     }
 
+    /// The concept map for a code: the radial neighbourhood (embedding ∪
+    /// community, deduped, labels pre-baked) + canon-ordered dispersion counts.
+    /// One call replaces the shell's spoke assembly and its neighbours/concept/
+    /// gloss/lemma lookups; non-null for any valid code.
+    public string? ConceptMapJson(string code)
+    {
+        fixed (byte* c = Utf8.NulTerminated(code))
+            return Utf8.Take(PureStudyNative.pure_engine_concept_map_json(_handle, c));
+    }
+
     /// The short English gloss for a code (plain text, not JSON), or null.
     public string? Gloss(string code)
     {

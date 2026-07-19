@@ -1619,6 +1619,78 @@ pub unsafe extern "C" fn pure_engine_concept_json(
     })
 }
 
+/// How many spokes each side (semantic / community) of the concept map shows.
+const CONCEPT_MAP_SPOKES: usize = 6;
+
+/// A concept-map node label: the English gloss over the lemma (`\n`-separated),
+/// falling back to whichever exists, then the bare code. Mirrors the GTK
+/// `label_of` closure so every shell labels the radial nodes identically.
+fn concept_label(e: &PureEngine, code: &str) -> String {
+    let gloss = english_gloss(e, code);
+    let lemma = e.strongs.get(code).and_then(|s| s.lemma.clone());
+    match (gloss, lemma) {
+        (Some(g), Some(l)) => format!("{g}\n{l}"),
+        (Some(g), None) => g,
+        (None, Some(l)) => l,
+        (None, None) => code.to_string(),
+    }
+}
+
+/// The concept map for a code: the radial neighbourhood (embedding neighbours ∪
+/// collocation community, deduped, labels pre-baked) plus the per-book
+/// dispersion counts in canon order. One call replaces the shell's spoke
+/// assembly and its four separate lookups (neighbours / concept / gloss /
+/// lemma). Never null on a live engine + valid code — a code with no stats
+/// still yields its centre label and any embedding spokes (empty dispersion).
+///
+/// # Safety
+/// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_concept_map_json(
+    engine: *const PureEngine,
+    code: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(code)) = (engine.as_ref(), opt_str(code)) else {
+            return ptr::null_mut();
+        };
+        // Semantic neighbours (gold) — empty without an embedding artifact.
+        let near: Vec<String> = e
+            .embedding
+            .as_ref()
+            .map(|emb| {
+                emb.nearest_concepts(code, CONCEPT_MAP_SPOKES)
+                    .into_iter()
+                    .map(|(c, _)| c)
+                    .collect()
+            })
+            .unwrap_or_default();
+        let ce = e.concept();
+        let community = ce.community(code);
+        let spokes = concept::radial_spokes(&near, &community, CONCEPT_MAP_SPOKES)
+            .into_iter()
+            .map(|(c, semantic)| wire::WireConceptSpoke {
+                label: concept_label(e, &c),
+                code: c,
+                semantic,
+            })
+            .collect();
+        // Dispersion in canon order (0 where the concept never occurs).
+        let by_book = ce
+            .stat(code)
+            .map(|s| canon::BOOKS.iter().map(|b| s.by_book.get(b.id).copied().unwrap_or(0)).collect())
+            .unwrap_or_else(|| vec![0; canon::BOOKS.len()]);
+        out_json(&wire::WireConceptMap {
+            center_label: concept_label(e, code),
+            code: code.to_string(),
+            spokes,
+            by_book,
+            ot_nt_divide: pure_core::reference::OT_NT_DIVIDE,
+            book_count: canon::BOOKS.len(),
+        })
+    })
+}
+
 /// A short English gloss for a Strong's code — the modal KJV rendering across
 /// its occurrences (≤80 sampled), falling back to a distilled dictionary
 /// clause. Plain text (not JSON); null when nothing sensible exists.

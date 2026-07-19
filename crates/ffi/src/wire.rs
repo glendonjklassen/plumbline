@@ -907,6 +907,40 @@ pub struct WireLeitwort {
     pub label: String,
 }
 
+// ── concept map (radial neighbourhood + dispersion strip) ─────────────────────
+
+/// Everything the concept-map popup paints for one code: the centre + its
+/// spokes (near ∪ community, deduped, labels pre-baked) and the per-book
+/// dispersion counts. One producer replaces the shell's assembly + its four
+/// lookups (neighbours / concept / gloss / lemma) with a single call. Assembled
+/// in `lib.rs` because the labels need the gloss + dictionary.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireConceptMap {
+    pub code: String,
+    /// The centre node's label (English gloss over lemma, `\n`-separated;
+    /// falls back to lemma, then the bare code).
+    pub center_label: String,
+    pub spokes: Vec<WireConceptSpoke>,
+    /// Per-book dispersion counts in **canon order** (length = `book_count`); a
+    /// book the concept never occurs in is 0. The strip places cell `i` at
+    /// `i / book_count` — no book-id table needed in the shell.
+    pub by_book: Vec<u32>,
+    pub ot_nt_divide: usize,
+    pub book_count: usize,
+}
+
+/// One spoke of the concept map: a neighbour code, its pre-baked label, and
+/// whether it is a **semantic** (embedding) neighbour — gold — or a collocation
+/// community member — green.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireConceptSpoke {
+    pub code: String,
+    pub label: String,
+    pub semantic: bool,
+}
+
 // ── config / session (shared with the GTK shell via core::config) ─────────────
 
 #[derive(Serialize, Deserialize, Default)]
