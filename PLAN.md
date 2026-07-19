@@ -81,8 +81,8 @@ when we port the pipeline).
 | `Strongs.hs` | `core::strongs` | ✅ |
 | `Search.hs` | `core::search` | ✅ (text/phrase/ref/bare-Strong's; morphology form-preds gated to `rnd`) |
 | `Weave.hs` | `core::weave` | ✅ |
-| `Thread.hs` | `core::thread` | ✅ (read side + serde) |
-| `Tag.hs` | `core::tag` | ✅ (read side + membership) |
+| `Thread.hs` | `core::thread` | ✅ (read + authoring) |
+| `Tag.hs` | `core::tag` | ✅ (read + membership + authoring) |
 | `Refs.hs` (display names, canon segments) | `core::reference` | ✅ (segments) |
 | `ReaderView.hs` (custom layout widget) | `layout` | ✅ (algorithm + hit-test, unit-tested) |
 | — (new: the one C ABI over core+layout) | `ffi` | ✅ (opaque handles, callback layout, JSON; C/C#/Kotlin bindings) |
@@ -90,12 +90,13 @@ when we port the pipeline).
 | `Bridge.hs` (OT↔NT etymology) | `rnd::bridge` (feature) | ✅ (etymology layer; rendering/trust deferred) |
 | `Embed.hs` (concept vectors, SIF) | `rnd::embed` (feature) | ✅ loader + neighbours + cross + SIF "verses like this" |
 | `Morph.hs` (OSHM/Robinson parse) | `rnd::morph` (feature) | ✅ consuming side (parse + render + sidecar); offline projection stays Python |
-| `Concept*`, `Witness`, `Burst`, `Quotation` | `rnd` (optional) | ⏳ later (fused-source/quotation tiers; need more hydrated inputs) |
+| `Concept*`, `Witness`, `Burst` | `rnd::{concept,witness,burst}` (features) | ✅ |
+| `Quotation` | `rnd` (optional) | ⏳ later (allusion-sensitive detection — see TODO.md) |
 | `Patch.hs`, `Rule.hs` | — | ❌ dropped by decision |
-| `UI/Panels/Events/Home/Startup` (Monomer) | `apps/desktop` (GTK), + WinUI/Compose over `ffi` | 🔨 |
+| `UI/Panels/Events/Home/Startup` (Monomer) | `apps/desktop` (GTK) + `apps/windows` (WinUI), Compose over `ffi` | ✅ GTK + WinUI at parity; Compose ⏳ |
 | `ml/*.py`, `pipelines/*.py` | `data-prep/` (offline Python; pack documented) | ✅ documented ([data-prep/README.md](data-prep/README.md)); generators stay in the overlay checkout |
 
-## Overnight scope (this session)
+## History
 
-Foundational core + a first visible desktop render. See git log on branch
-`rust-rewrite` and `PROGRESS.md` for exactly where it stopped.
+The build-out is recorded in [PROGRESS.md](PROGRESS.md) (the porting log) and
+the git log; current work is tracked in [TODO.md](TODO.md).
