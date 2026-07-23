@@ -550,6 +550,33 @@ New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
   the modifier in the link handler; GTK captures it with a capture-phase click
   gesture on the study label just before the link activates).
 
+## Memorization — spaced repetition (Tier 2 #15)
+
+`pure_core::memory`: one SM-2 SRS card per verse (VRef-keyed) — ease / interval /
+reps / lapses / due + a full **review log** — one JSON file per verse under
+`home/memory/` (`overlay-memory-v1`, refKey + `kjv1769-tok2`). `review()` (SM-2),
+`is_due`, `due_queue`, `mastery` (new/learning/young/mature), `grade_verse` +
+`Card::new`/`write_card` (seed) + `remove_card`. Pure-text drills over a verse's
+`body()`: `first_letters`, `blank_out(level)` (0…`MAX_BLANK_LEVEL`), and
+`score_recall` (LCS-aligned per-word hit/miss + accuracy). Aggregations, both from
+the log "by construction": `coverage`/`coverage_by_section` (per-verse mastery +
+recency + the 8-section rollup — the coverage map) and `activity_by_day` (the
+activity heatmap). Tiny civil-date math, no time dep.
+
+**C ABI** (`pure_engine_memory_*`, 9 fns): add / grade / remove / card_json /
+due_json / coverage_json / activity_json / drill_json / score_json. Grades cross
+as `again`/`hard`/`good`/`easy`; timestamps caller-supplied UTC. Cards load fresh
+per call from `home/memory` (small set); no home → read-empty / author-error.
+
+**GTK** drives `pure_core::memory` directly: `≡` → Memorize (Review due / Coverage
+map / Activity); context menu "Memorize this verse". The review window steps the
+due queue with a first-letter / blank-out-slider / typed-recall drill + the four
+grade buttons; the coverage map reuses the canon-strip dispersion language shaded
+by mastery; activity is reviews-per-day columns. **WinUI** mirrors via the C ABI
+(StudyEngine.Memory* + Wire memory records). Decks are sourced one verse at a
+time for v1; **delta:** a "memorize this tag/thread" bulk-enqueue and printable
+flashcards (needs #14) are follow-ups.
+
 ## Android notes
 
 - The Kotlin/JNA wrapper (`crates/ffi/bindings/kotlin/PureStudy.kt`, package
