@@ -457,11 +457,29 @@ public static class Popups
         var map = Wire.Parse<ConceptMapData>(cmj);
         var spokes = map.Spokes;
 
+        // Name the cross-testament partners the indigo bridge row paints, so the
+        // link is legible (viewing Christ names Messiah, not just a coloured
+        // band). The wire Label is "gloss\nlemma"; render it as GTK's
+        // "gloss (lemma)" — falling back to whichever line exists.
+        string? bridgeCaption = null;
+        if (map.Bridge is { Partners.Count: > 0 } bdg)
+        {
+            static string Name(string label)
+            {
+                var parts = label.Split('\n');
+                return parts.Length >= 2 && parts[1].Length > 0
+                    ? $"{parts[0]} ({parts[1]})"
+                    : parts[0];
+            }
+            bridgeCaption = "↔ across testaments: " +
+                string.Join(", ", bdg.Partners.Select(p => Name(p.Label)));
+        }
+
         canvas.Draw += (s, args) =>
         {
             var ds = args.DrawingSession;
             float w = (float)s.ActualWidth, h = (float)s.ActualHeight;
-            float stripH = 40, mapH = h - stripH;
+            float stripH = 52, mapH = h - stripH;
             float cx = w / 2, cy = mapH / 2;
             float radius = Math.Max(Math.Min(w, mapH) / 2 - 95, 40);
 
@@ -518,26 +536,78 @@ public static class Popups
                 ds.DrawTextLayout(ctl, cx - 130, cy - 14 - th, Palette.Ink);
             }
 
-            // Dispersion strip: where across the books this concept occurs.
-            // ByBook is canon-ordered (cell bi at bi/bookCount); the divide + book
-            // count come from the same view-model, so no shell book table.
-            if (map.ByBook.Any(v => v > 0))
+            // Dispersion strip: where across the books this concept occurs
+            // (gold), and — when a cross-testament bridge exists — its partners'
+            // unioned dispersion (indigo) in a band beneath a 1px gutter.
+            // Mirrors the GTK draw_dispersion banding. ByBook / Bridge.ByBook are
+            // canon-ordered (cell bi at bi/BookCount); the divide + book count
+            // come from the same view-model, so no shell book table.
+            var bridge = map.Bridge;
+            bool hasBridge = bridge is { } br && br.ByBook.Any(v => v > 0);
+            if (map.ByBook.Any(v => v > 0) || hasBridge)
             {
                 float y0 = h - stripH;
-                uint bmax = Math.Max(1u, map.ByBook.Max());
                 float bc = Math.Max(1, map.BookCount);
                 ds.FillRectangle(0, y0, w, stripH, Color.FromArgb(10, 0, 0, 0));
+
+                // Band the strip: the concept's own dispersion on top (~55%);
+                // when a bridge exists, the partner row beneath a 1px gutter.
+                const float gap = 1f;
+                float primH = hasBridge ? Math.Max((stripH - gap) * 0.55f, 1f) : stripH;
+                float brdgY = hasBridge ? primH + gap : stripH;
+                float brdgH = hasBridge ? stripH - primH - gap : 0f;
+
+                // Primary dispersion (gold): where Code itself occurs. Alpha ∝
+                // this row's own max; rgb 158,125,56 (GTK 0.62,0.49,0.22).
+                uint bmax = Math.Max(1u, map.ByBook.Count == 0 ? 1u : map.ByBook.Max());
                 for (int bi = 0; bi < map.ByBook.Count; bi++)
                 {
                     var cnt = map.ByBook[bi];
                     if (cnt == 0) continue;
                     float alpha = 0.15f + 0.75f * cnt / bmax;
                     float x0 = bi / bc * w, x1 = (bi + 1) / bc * w;
-                    ds.FillRectangle(x0, y0, x1 - x0, stripH,
+                    ds.FillRectangle(x0, y0, x1 - x0, primH,
                         Color.FromArgb((byte)(alpha * 255), 158, 125, 56));
                 }
+
+                // Bridge dispersion (indigo): where the cross-testament partners
+                // occur. Alpha ∝ the bridge row's OWN max; rgb 77,89,158 (GTK
+                // 0.30,0.35,0.62) — Palette has no indigo, so it is inline.
+                if (hasBridge)
+                {
+                    var bb = bridge!.ByBook;
+                    uint pmax = Math.Max(1u, bb.Max());
+                    for (int bi = 0; bi < bb.Count; bi++)
+                    {
+                        var cnt = bb[bi];
+                        if (cnt == 0) continue;
+                        float alpha = 0.18f + 0.72f * cnt / pmax;
+                        float x0 = bi / bc * w, x1 = (bi + 1) / bc * w;
+                        ds.FillRectangle(x0, y0 + brdgY, x1 - x0, brdgH,
+                            Color.FromArgb((byte)(alpha * 255), 77, 89, 158));
+                    }
+                }
+
+                // OT/NT seam (full height).
                 float seam = map.OtNtDivide / bc * w;
                 ds.DrawLine(seam, y0, seam, h, Color.FromArgb(128, 102, 77, 51), 1f);
+
+                // Caption naming the bridge partners, dim, just above the strip
+                // (the on-canvas equivalent of GTK's dim-label between the
+                // radial and the strip). Faded brown reads on the light paper in
+                // either app theme, like the other popup captions.
+                if (bridgeCaption is { } cap)
+                {
+                    using var capFmt = new CanvasTextFormat
+                    {
+                        FontSize = 11,
+                        WordWrapping = CanvasWordWrapping.NoWrap,
+                        TrimmingGranularity = CanvasTextTrimmingGranularity.Character,
+                    };
+                    using var capTl = new CanvasTextLayout(s, cap, capFmt, Math.Max(1, w - 16), 20);
+                    ds.DrawTextLayout(capTl, 8, y0 - (float)capTl.LayoutBounds.Height - 3,
+                        Color.FromArgb(190, 89, 77, 56));
+                }
             }
         };
 

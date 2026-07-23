@@ -383,10 +383,11 @@ their **unioned** per-book dispersion (`concept::union_by_book`), canon-ordered
 like `byBook`. Additive + `skip_serializing_if=None`, so the ABI/bindings are
 unchanged (same fn, richer JSON) and a partnerless code omits it. This is what
 makes an OT word light up its NT match: viewing *Christ* (G5547) fills the OT half
-via *Messiah* (H4899, prior 0.93). **GTK** paints it as a second indigo row
-beneath the gold one (strip now 52-px) and names the partners in a caption.
-**Delta:** WinUI/Android receive the field but don't paint the second row yet —
-tracked for their next concept-map pass.
+via *Messiah* (H4899, prior 0.93). **GTK** (`draw_dispersion`) and **WinUI**
+(`Popups.ConceptMap`) both paint it as a second indigo row beneath the gold one
+(strip 52-px, alpha `0.18+0.72·(cnt/max)` on the row's own max) and name the
+partners in a caption. **Delta:** the Android Compose concept view is the only
+remaining consumer of the `bridge` field (its Wire model already carries it).
 
 ## C ABI surface (crates/ffi) — endpoint ↔ feature map
 
@@ -592,9 +593,19 @@ flashcards (needs #14) are follow-ups.
 
 ## Android notes
 
-- The Kotlin/JNA wrapper (`crates/ffi/bindings/kotlin/PureStudy.kt`, package
-  `dev.purestudy.core`) predates the parity endpoints — extend it like
-  `bindings/csharp/PureStudy.cs` (which is current).
+- The Kotlin/JNA binding (`crates/ffi/bindings/kotlin/PureStudy.kt`, package
+  `dev.purestudy.core`) is now current with the 87-fn C ABI (incl. the 9
+  `pure_engine_memory_*`). It is the low-level `PureStudyNative` interface +
+  JNA types (`PureLayoutConfig`, `MeasureCallback`) **only** — the earlier
+  duplicate camelCase wrapper was removed (and the interface renamed from
+  `PureFfi`); the single PascalCase wrapper is `app/.../StudyEngine.kt`,
+  method-for-method with `bindings/csharp/PureStudy.cs`. The native lib
+  cross-builds with cargo-ndk into `jniLibs/{arm64-v8a,x86_64}/libpure_ffi.so`
+  (NDK r29, `--platform 26`), verified independently of the emulator/SDK.
+- **Memorization (Tier 2 #15) — Compose delta:** the binding + `StudyEngine`
+  (`Memory*`) + `Wire.kt` records are in place, but the Memorize UI (review
+  drill · coverage map · activity) is **not yet in the Compose shell** — build
+  it from the GTK/WinUI reference when the shell lands.
 - **Rendering lens (2026-07-16) — Compose delta:** the two endpoints
   (`renderingsJson` / `wordCodesJson`) are already in the Kotlin binding, but
   the RENDERINGS tier + the `rend:` and `code:` routes are **not yet in a

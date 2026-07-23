@@ -143,8 +143,21 @@ public sealed record Leitwort(int N, int WinCount, double Score, string Label);
 // or book-order table (ByBook is indexed by canon position, 0 where absent).
 public sealed record ConceptMapData(
     string Code, string CenterLabel, List<ConceptSpoke> Spokes,
-    List<uint> ByBook, int OtNtDivide, int BookCount);
+    List<uint> ByBook, int OtNtDivide, int BookCount,
+    // The cross-testament "bridge" row: the strongest other-testament
+    // equivalents of Code (Christ G5547 ↔ Messiah H4899) + their unioned
+    // per-book dispersion. Canon-ordered, length = BookCount, indexed exactly
+    // like ByBook — so the strip paints it as a second row. Absent (the Rust
+    // side omits the JSON field) when Code has no cross-testament partner;
+    // nullable with a null default so an older payload still decodes.
+    ConceptBridge? Bridge = null);
 public sealed record ConceptSpoke(string Code, string Label, bool Semantic);
+// Partners already truncated to the row count and ByBook already unioned on the
+// Rust side (pure_engine_concept_map_json) — the shell paints them wholesale.
+public sealed record ConceptBridge(List<BridgeNode> Partners, List<uint> ByBook);
+// One cross-testament partner: Label is "gloss\nlemma" (like the centre/spoke
+// labels), Prior the fused trust of the strongest witness tying it (0–1).
+public sealed record BridgeNode(string Code, string Label, float Prior);
 
 public sealed record ConfigState(
     string StudyMode, double BodySize, List<PaneRef1>? OpenPanes, int ActivePane, bool FirstRun,
