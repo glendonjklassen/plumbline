@@ -21,7 +21,8 @@ Item numbers are stable IDs — new items append, nothing renumbers.
 
 ## Landed — Tier 0 daily-driver gaps
 
-All eight shipped 2026-07-22 (`tier0-daily-driver`, 95b682c): shared logic in
+All eight shipped 2026-07-22 (the Tier-0 commit on `tier0-daily-driver`,
+still being amended in place as of this writing): shared logic in
 `pure-core`, GTK direct, WinUI over new additive FFI endpoints, deltas logged
 in the manifest. GTK was validated by CI only — **awaiting Glendon's hands-on
 pass on both shells** (tracked as the first item below).
