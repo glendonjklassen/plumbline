@@ -35,8 +35,9 @@ yay -S android-studio         # SDK Manager: Platform 35, Platform-Tools (adb), 
 
 ### Cross-compile the core → `.so`
 ```bash
-cargo ndk -t arm64-v8a -t x86_64 -p 24 \
+cargo ndk -t arm64-v8a -t x86_64 --platform 24 \
   -o apps/android/app/src/main/jniLibs build -p pure-ffi --release
+# NOTE: use --platform (or -P), NOT -p — lowercase -p collides with cargo's --package.
 ```
 NDK r27 (LTS) or r28+; cargo-ndk 4.x auto-injects the mandatory 16 KB page
 alignment (verify with `llvm-readelf -l`). Ship arm64-v8a (device) + x86_64
