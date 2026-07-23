@@ -3292,9 +3292,9 @@ fn draw_pane(state: &Shared, i: usize, area: &gtk::DrawingArea, cr: &cairo::Cont
     // Each run is a [lo,hi] token span in a verse, painted like the pin span so
     // the wash follows the actual words (partial first/last verse, whole middle).
     let run_alpha = if pal.dark { 0.25 } else { 0.36 };
-    let paint_run = |cr: &cairo::Context, vref: &VRef, lo: u32, hi: u32, rgb: (f64, f64, f64)| {
+    let paint_run = |cr: &cairo::Context, vref: &VRef, lo: u32, hi: u32, rgb: (f64, f64, f64), alpha: f64| {
         let (r, g, b) = rgb;
-        cr.set_source_rgba(r, g, b, run_alpha);
+        cr.set_source_rgba(r, g, b, alpha);
         for it in &dl.items {
             if let Some((wv, t)) = it.word() {
                 if wv == vref && t >= lo && t <= hi {
@@ -3313,16 +3313,20 @@ fn draw_pane(state: &Shared, i: usize, area: &gtk::DrawingArea, cr: &cairo::Cont
         let vref = VRef::new(&book, chapter, v.verse);
         let len = v.tokens.len().min(u16::MAX as usize) as u16;
         for run in tag::verse_highlight_runs(&st.tags, &vref, len) {
-            paint_run(cr, &vref, run.lo as u32, run.hi as u32, hex_rgb(&run.color));
+            paint_run(cr, &vref, run.lo as u32, run.hi as u32, hex_rgb(&run.color), run_alpha);
         }
     }
-    // Live preview while dragging: the same decomposition, in the default tone.
+    // Live preview while dragging: the same decomposition as the final wash, but
+    // a bolder alpha so the selection's full extent (whole in-between verses
+    // included — it's a text selection) is obvious before release. The highlight
+    // lands exactly where the preview shows.
     if let Some((sr, stok, er, etok)) = &hl_drag {
         let (lo_end, hi_end) = {
             let (a, b) = ((sr.reading_key(), *stok), (er.reading_key(), *etok));
             if a <= b { (a, b) } else { (b, a) }
         };
         let drag_rgb = hex_rgb(theme::HIGHLIGHT_TONES[0].1);
+        let preview_alpha = (run_alpha + 0.30).min(0.66);
         for v in &verses {
             let vref = VRef::new(&book, chapter, v.verse);
             let rk = vref.reading_key();
@@ -3333,7 +3337,7 @@ fn draw_pane(state: &Shared, i: usize, area: &gtk::DrawingArea, cr: &cairo::Cont
             let lo = if rk == lo_end.0 { lo_end.1 } else { 0 };
             let hi = if rk == hi_end.0 { hi_end.1 } else { last };
             if lo <= hi {
-                paint_run(cr, &vref, lo, hi, drag_rgb);
+                paint_run(cr, &vref, lo, hi, drag_rgb, preview_alpha);
             }
         }
     }
