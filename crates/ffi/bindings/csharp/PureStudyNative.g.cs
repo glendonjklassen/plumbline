@@ -870,6 +870,17 @@ namespace PureStudy.Native
         public static extern byte* pure_engine_memory_grade(PureEngine* engine, byte* verse_ref, byte* grade, byte* now);
 
         /// <summary>
+        ///  Start memorizing `verse_ref` — seed its SRS card (due now) if it isn't
+        ///  already one; no review is logged. `now` is a caller-supplied UTC timestamp.
+        ///  Null on success, else an owned error.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_memory_add", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_memory_add(PureEngine* engine, byte* verse_ref, byte* now);
+
+        /// <summary>
         ///  Stop memorizing `verse_ref` (remove its card); a missing card is a no-op.
         ///  Null on success, else an owned error.
         ///

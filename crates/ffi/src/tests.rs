@@ -1123,6 +1123,14 @@ fn tier0_endpoints_via_abi() {
             &take(pure_engine_memory_activity_json(e)).unwrap()).unwrap();
         assert_eq!(act["days"].as_array().unwrap().len(), 1);
 
+        // Seed a card without reviewing ("Memorize this verse") → new, reps 0.
+        assert!(pure_engine_memory_add(e, c("John 3:18").as_ptr(), stamp.as_ptr()).is_null());
+        let seeded: Value = serde_json::from_str(
+            &take(pure_engine_memory_card_json(e, c("John 3:18").as_ptr())).unwrap()).unwrap();
+        assert_eq!(seeded["reps"], 0);
+        assert_eq!(seeded["mastery"], "new");
+        assert!(pure_engine_memory_remove(e, c("John 3:18").as_ptr()).is_null());
+
         // Remove → the card is gone.
         assert!(pure_engine_memory_remove(e, c("John 3:16").as_ptr()).is_null());
         assert!(pure_engine_memory_card_json(e, c("John 3:16").as_ptr()).is_null());

@@ -2902,6 +2902,43 @@ pub unsafe extern "C" fn pure_engine_memory_grade(
     })
 }
 
+/// Start memorizing `verse_ref` — seed its SRS card (due now) if it isn't
+/// already one; no review is logged. `now` is a caller-supplied UTC timestamp.
+/// Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_add(
+    engine: *mut PureEngine,
+    verse_ref: *const c_char,
+    now: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory; cannot author".to_string());
+        };
+        let (Some(vr), Some(now)) = (opt_str(verse_ref), opt_str(now)) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let Some(vref) = VRef::parse_ref_key(vr) else {
+            return out_string("bad ref".to_string());
+        };
+        let (cards, _) = memory::load_cards(&home);
+        if cards.contains_key(&vref) {
+            return ptr::null_mut();
+        }
+        let card = memory::Card::new(vref, canon::TOKENIZATION_VERSION, now);
+        match memory::write_card(&home, &card) {
+            Ok(()) => ptr::null_mut(),
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
 /// Stop memorizing `verse_ref` (remove its card); a missing card is a no-op.
 /// Null on success, else an owned error.
 ///

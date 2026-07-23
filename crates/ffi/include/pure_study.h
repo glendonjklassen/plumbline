@@ -769,6 +769,14 @@ char *pure_engine_memory_grade(struct PureEngine *engine,
                                const char *grade,
                                const char *now);
 
+// Start memorizing `verse_ref` — seed its SRS card (due now) if it isn't
+// already one; no review is logged. `now` is a caller-supplied UTC timestamp.
+// Null on success, else an owned error.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_add(struct PureEngine *engine, const char *verse_ref, const char *now);
+
 // Stop memorizing `verse_ref` (remove its card); a missing card is a no-op.
 // Null on success, else an owned error.
 //

@@ -401,6 +401,15 @@ public sealed unsafe class StudyEngine : IDisposable
             return Utf8.Take(PureStudyNative.pure_engine_memory_grade(_handle, r, g, n));
     }
 
+    /// Start memorizing a verse — seed its SRS card (due now) if absent; no
+    /// review is logged. Null = success.
+    public string? MemoryAdd(string verseRef, string nowUtc)
+    {
+        fixed (byte* r = Utf8.NulTerminated(verseRef))
+        fixed (byte* n = Utf8.NulTerminated(nowUtc))
+            return Utf8.Take(PureStudyNative.pure_engine_memory_add(_handle, r, n));
+    }
+
     /// Stop memorizing a verse (remove its card). Null = success.
     public string? MemoryRemove(string verseRef)
     {
