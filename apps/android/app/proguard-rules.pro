@@ -10,7 +10,7 @@
 -keepclassmembers class com.sun.jna.** { *; }
 -dontwarn java.awt.**
 
-# Our JNA binding lives in dev.purestudy.core (PureFfi interface + the
+# Our JNA binding lives in dev.purestudy.core (PureStudyNative interface + the
 # PureLayoutConfig Structure with @Structure.FieldOrder). Keep it intact.
 -keep class dev.purestudy.core.** { *; }
 -keepclassmembers class dev.purestudy.core.** { *; }

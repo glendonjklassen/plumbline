@@ -384,10 +384,25 @@ data class ConceptMapData(
     val byBook: List<Int> = emptyList(),
     val otNtDivide: Int = 0,
     val bookCount: Int = 0,
+    /** The cross-testament "bridge" row (see WireConceptMap.bridge); null when
+     *  the code has no other-testament partner. */
+    val bridge: ConceptBridge? = null,
 )
 
 @Serializable
 data class ConceptSpoke(val code: String, val label: String, val semantic: Boolean = false)
+
+/** The concept map's cross-testament "bridge" row: the strongest other-testament
+ *  partners and their unioned per-book dispersion (canon order, length
+ *  `bookCount`) — so viewing Christ lights up where Messiah occurs. */
+@Serializable
+data class ConceptBridge(
+    val partners: List<BridgeNode> = emptyList(),
+    val byBook: List<Int> = emptyList(),
+)
+
+@Serializable
+data class BridgeNode(val code: String = "", val label: String = "", val prior: Float = 0f)
 
 // ── shell config / session ────────────────────────────────────────────────────
 
@@ -552,3 +567,73 @@ data class SimilarVerses(
     @SerialName("in") val `in`: List<SimilarVerse> = emptyList(),
     val cross: List<SimilarVerse> = emptyList(),
 )
+
+// ── memorization (Tier 2 #15): SRS cards, drills, coverage + activity ─────────
+// Schemas frozen in crates/ffi/src/wire.rs (WireMemory*) + crates/core/src/memory.rs.
+// `mastery`/`grade` are lowercase tokens. `ref` is a plain field (not a Kotlin
+// keyword, unlike C#, so no @SerialName). VerseCoverage.due is a bool
+// (is-due-now); MemoryCard.due is the next-due date string.
+
+@Serializable
+data class MemoryCard(
+    val ref: String = "",
+    val ease: Float = 0f,
+    val intervalDays: Int = 0,
+    val reps: Int = 0,
+    val lapses: Int = 0,
+    val due: String = "",
+    val mastery: String = "new",
+    val reviews: List<MemoryReview> = emptyList(),
+)
+
+@Serializable
+data class MemoryReview(val at: String = "", val grade: String = "", val intervalDays: Int = 0)
+
+@Serializable
+data class MemoryDue(val refs: List<String> = emptyList())
+
+@Serializable
+data class MemoryCoverage(
+    val verses: List<VerseCoverage> = emptyList(),
+    val sections: List<SectionCoverage> = emptyList(),
+)
+
+@Serializable
+data class VerseCoverage(
+    val ref: String = "",
+    val mastery: String = "new",
+    val reps: Int = 0,
+    val lapses: Int = 0,
+    val lastAt: String? = null,
+    val due: Boolean = false,
+)
+
+@Serializable
+data class SectionCoverage(
+    val label: String = "",
+    val cards: Int = 0,
+    val mature: Int = 0,
+    val reviews: Int = 0,
+)
+
+@Serializable
+data class MemoryActivity(val days: List<DayActivity> = emptyList())
+
+@Serializable
+data class DayActivity(val day: String = "", val reviews: Int = 0)
+
+@Serializable
+data class MemoryDrill(
+    val ref: String = "",
+    val text: String = "",
+    val firstLetters: String = "",
+    val blanked: String = "",
+    val level: Int = 0,
+    val maxLevel: Int = 0,
+)
+
+@Serializable
+data class RecallScore(val accuracy: Float = 0f, val words: List<WordHit> = emptyList())
+
+@Serializable
+data class WordHit(val word: String = "", val ok: Boolean = false)

@@ -7,7 +7,7 @@
 // stay one product.
 //
 // It rides the low-level JNA binding `PureStudyNative` (author A —
-// dev.purestudy.core), which mirrors the frozen 78-fn C ABI. Strings the ABI
+// dev.purestudy.core), which mirrors the frozen 87-fn C ABI. Strings the ABI
 // returns are owned `char*` typed as a JNA `Pointer`; [take] copies them out and
 // frees them through `pure_study_string_free`. Borrowed inputs cross as plain
 // Kotlin `String` (JNA encodes UTF-8), and a null `String?` becomes a null
@@ -295,6 +295,47 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
     /** Force the lazy analytics indexes to build now (call on a background thread
      *  at startup in Full mode). Safe from any thread; null = success. */
     fun WarmIndexes(): String? = take(ffi.pure_engine_warm_indexes(h))
+
+    // ── memorization (Tier 2 #15): SRS cards, drills, coverage + activity ─────
+
+    /** Grade a verse (`again`/`hard`/`good`/`easy`) at `nowUtc`, creating its
+     *  SRS card on first review; SM-2 reschedules. Null = success, else error. */
+    fun MemoryGrade(verseRef: String, grade: String, nowUtc: String): String? =
+        take(ffi.pure_engine_memory_grade(h, verseRef, grade, nowUtc))
+
+    /** Start memorizing a verse — seed its SRS card (due now) if absent; no
+     *  review is logged. Null = success. */
+    fun MemoryAdd(verseRef: String, nowUtc: String): String? =
+        take(ffi.pure_engine_memory_add(h, verseRef, nowUtc))
+
+    /** Stop memorizing a verse (remove its card). Null = success. */
+    fun MemoryRemove(verseRef: String): String? =
+        take(ffi.pure_engine_memory_remove(h, verseRef))
+
+    /** A verse's SRS card as JSON (schedule + mastery + review log), or null if
+     *  it isn't being memorized. */
+    fun MemoryCardJson(verseRef: String): String? =
+        take(ffi.pure_engine_memory_card_json(h, verseRef))
+
+    /** The study queue — verses due at `nowUtc`, reading order — as `{refs:[…]}`. */
+    fun MemoryDueJson(nowUtc: String): String? =
+        take(ffi.pure_engine_memory_due_json(h, nowUtc))
+
+    /** The coverage-map data at `nowUtc` (`{verses,sections}`). */
+    fun MemoryCoverageJson(nowUtc: String): String? =
+        take(ffi.pure_engine_memory_coverage_json(h, nowUtc))
+
+    /** The activity heatmap (`{days:[{day,reviews}]}`). */
+    fun MemoryActivityJson(): String? = take(ffi.pure_engine_memory_activity_json(h))
+
+    /** A drill prompt for a verse at blank-out `level`
+     *  (`{ref,text,firstLetters,blanked,level,maxLevel}`). */
+    fun MemoryDrillJson(verseRef: String, level: Int): String? =
+        take(ffi.pure_engine_memory_drill_json(h, verseRef, level))
+
+    /** Score a typed recall of a verse (`{accuracy, words:[{word,ok}]}`). */
+    fun MemoryScoreJson(verseRef: String, typed: String): String? =
+        take(ffi.pure_engine_memory_score_json(h, verseRef, typed))
 
     // ── R&D tier (null when the artifact is absent) ────────────────────────────
 

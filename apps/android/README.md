@@ -60,10 +60,13 @@ writes, when added, go to the app's private files dir.
 ## The shared JNA binding
 
 `app/build.gradle.kts` adds `crates/ffi/bindings/kotlin` as a source directory,
-so `PureStudy.kt` (package `dev.purestudy.core`: the raw `PureFfi` interface +
-the `StudyEngine` / `Chapter` safe wrappers) compiles straight into the app.
-That file is the single source of truth for the ABI and is **not copied** here —
-edits belong in the FFI crate.
+so `PureStudy.kt` (package `dev.purestudy.core`: the raw `PureStudyNative`
+interface + the `PureLayoutConfig` / `MeasureCallback` JNA types) compiles
+straight into the app. That file is the single source of truth for the ABI and
+is **not copied** here — edits belong in the FFI crate. The safe PascalCase
+wrappers (`StudyEngine` / `Chapter` / `StudyConfig`) live in
+`app/src/main/java/dev/purestudy/StudyEngine.kt`, method-for-method with
+`bindings/csharp/PureStudy.cs`.
 
 ## Run
 
