@@ -1087,6 +1087,46 @@ fn tier0_endpoints_via_abi() {
             &take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
         assert!(hr4["runs"].as_array().map(|a| a.is_empty()).unwrap_or(true));
 
+        // Memorization (Tier 2 #15): grade → card, drill, recall, coverage, activity.
+        assert!(pure_engine_memory_grade(
+            e, c("John 3:16").as_ptr(), c("good").as_ptr(), stamp.as_ptr()).is_null());
+        let card: Value = serde_json::from_str(
+            &take(pure_engine_memory_card_json(e, c("John 3:16").as_ptr())).unwrap()).unwrap();
+        assert_eq!(card["ref"], "John 3:16");
+        assert_eq!(card["reps"], 1);
+        assert_eq!(card["mastery"], "young"); // 1-day interval after one Good
+        assert_eq!(card["reviews"].as_array().unwrap().len(), 1);
+        // An unknown grade is rejected (non-null error).
+        assert!(!pure_engine_memory_grade(
+            e, c("John 3:16").as_ptr(), c("bogus").as_ptr(), stamp.as_ptr()).is_null());
+
+        // Drill: first-letter skeleton + (level-0) unblanked form of the verse.
+        let drill: Value = serde_json::from_str(
+            &take(pure_engine_memory_drill_json(e, c("John 3:16").as_ptr(), 0)).unwrap()).unwrap();
+        assert!(drill["text"].as_str().unwrap().starts_with("For God so loved"));
+        assert_eq!(drill["firstLetters"], "F G s l t w.");
+        assert!(!drill["blanked"].as_str().unwrap().contains('_')); // nothing hidden at level 0
+
+        // Recall scoring: a perfect (case/punctuation-tolerant) recall is 1.0.
+        let sc: Value = serde_json::from_str(&take(pure_engine_memory_score_json(
+            e, c("John 3:16").as_ptr(), c("for god so loved the world").as_ptr())).unwrap()).unwrap();
+        assert_eq!(sc["accuracy"], 1.0);
+
+        // Coverage + activity, from the review log.
+        let cov: Value = serde_json::from_str(&take(pure_engine_memory_coverage_json(
+            e, stamp.as_ptr())).unwrap()).unwrap();
+        assert_eq!(cov["verses"][0]["ref"], "John 3:16");
+        let gospels = cov["sections"].as_array().unwrap().iter()
+            .find(|s| s["label"] == "Gospels").unwrap().clone();
+        assert_eq!(gospels["cards"], 1);
+        let act: Value = serde_json::from_str(
+            &take(pure_engine_memory_activity_json(e)).unwrap()).unwrap();
+        assert_eq!(act["days"].as_array().unwrap().len(), 1);
+
+        // Remove → the card is gone.
+        assert!(pure_engine_memory_remove(e, c("John 3:16").as_ptr()).is_null());
+        assert!(pure_engine_memory_card_json(e, c("John 3:16").as_ptr()).is_null());
+
         // Warming is a null-on-success no-op that stays callable.
         assert!(pure_engine_warm_indexes(e).is_null());
 

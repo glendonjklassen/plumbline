@@ -52,6 +52,18 @@ pub enum Grade {
 }
 
 impl Grade {
+    /// Parse a grade token (`again` / `hard` / `good` / `easy`) — the shells'
+    /// four review buttons over the ABI.
+    pub fn parse(s: &str) -> Option<Grade> {
+        match s {
+            "again" => Some(Grade::Again),
+            "hard" => Some(Grade::Hard),
+            "good" => Some(Grade::Good),
+            "easy" => Some(Grade::Easy),
+            _ => None,
+        }
+    }
+
     /// SM-2 quality (q < 3 is a failed recall).
     fn quality(self) -> u8 {
         match self {

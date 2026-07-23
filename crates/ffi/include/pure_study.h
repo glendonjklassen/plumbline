@@ -758,6 +758,71 @@ char *pure_theme_highlight_tones_json(void);
 // `engine` is a live engine (or null → an error string).
 char *pure_engine_warm_indexes(const struct PureEngine *engine);
 
+// Grade the verse `verse_ref` at `now` (RFC3339 UTC), creating its SRS card on
+// first review; SM-2 reschedules and appends to the review log. `grade` is one
+// of `again` / `hard` / `good` / `easy`. Null on success, else an owned error.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_grade(struct PureEngine *engine,
+                               const char *verse_ref,
+                               const char *grade,
+                               const char *now);
+
+// Stop memorizing `verse_ref` (remove its card); a missing card is a no-op.
+// Null on success, else an owned error.
+//
+// # Safety
+// `engine` is valid; `verse_ref` is null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_remove(struct PureEngine *engine, const char *verse_ref);
+
+// The verse's SRS card as JSON (schedule + mastery + review log), or null if
+// the verse isn't being memorized (or the engine has no home).
+//
+// # Safety
+// `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_card_json(const struct PureEngine *engine, const char *verse_ref);
+
+// Verses due for review at `now` (RFC3339), reading order — the study queue, as
+// `{refs:[...]}`. Never null on a live engine (empty when nothing is due).
+//
+// # Safety
+// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_due_json(const struct PureEngine *engine, const char *now);
+
+// The coverage-map data at `now`: per-verse standing (mastery + recency) plus
+// the 8-section rollup, as `{verses:[...],sections:[...]}`.
+//
+// # Safety
+// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_coverage_json(const struct PureEngine *engine, const char *now);
+
+// The activity heatmap as `{days:[{day,reviews}]}` — reviews per calendar day,
+// oldest first, from every card's review log. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_memory_activity_json(const struct PureEngine *engine);
+
+// A drill prompt for `verse_ref` at blank-out `level` (0 = full text … max):
+// the verse text, its first-letter skeleton, and the blanked form. Null if the
+// verse isn't found.
+//
+// # Safety
+// `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_drill_json(const struct PureEngine *engine,
+                                    const char *verse_ref,
+                                    uint32_t level);
+
+// Score a typed recall of `verse_ref` against the verse text — `{accuracy,
+// words:[{word,ok}]}`, LCS-aligned. Null if the verse isn't found.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_score_json(const struct PureEngine *engine,
+                                    const char *verse_ref,
+                                    const char *typed);
+
 // The in-app guide as panel blocks. Engine-independent (static content). Never
 // null.
 char *pure_panel_guide_blocks_json(void);

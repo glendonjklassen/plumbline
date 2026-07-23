@@ -15,6 +15,7 @@ use pure_core::panel::{Block, Color, PanelLink, Run};
 use pure_core::theme::ThemeChoice;
 use pure_core::corpus::{Corpus, Token, Verse};
 use pure_core::crossref::CrossRef;
+use pure_core::memory;
 use pure_core::reference::VRef;
 use pure_core::search::{SearchAnswer, SearchHit};
 use pure_core::strongs::StrongsEntry;
@@ -1353,4 +1354,68 @@ pub fn highlight_tones_to_wire() -> WireHighlightTones {
             .map(|&(name, hex)| WireHighlightTone { name, hex })
             .collect(),
     }
+}
+
+// ── memorization (Tier 2 #15) — SRS cards, coverage/activity, drills ─────────
+
+/// A verse's SRS card: SM-2 schedule, mastery bucket, and full review log.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireMemoryCard {
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub ease: f32,
+    pub interval_days: u32,
+    pub reps: u32,
+    pub lapses: u32,
+    pub due: String,
+    pub mastery: memory::Mastery,
+    pub reviews: Vec<memory::Review>,
+}
+
+/// Build the wire card from a core card (folds in the derived mastery bucket).
+pub fn memory_card_to_wire(c: &memory::Card) -> WireMemoryCard {
+    WireMemoryCard {
+        reference: c.verse.ref_key(),
+        ease: c.ease,
+        interval_days: c.interval_days,
+        reps: c.reps,
+        lapses: c.lapses,
+        due: c.due.clone(),
+        mastery: memory::mastery(c),
+        reviews: c.reviews.clone(),
+    }
+}
+
+/// The study queue: verses due for review now, in reading order.
+#[derive(Serialize)]
+pub struct WireMemoryDue {
+    pub refs: Vec<String>,
+}
+
+/// The coverage-map data: per-verse standing plus the 8-section rollup.
+#[derive(Serialize)]
+pub struct WireMemoryCoverage {
+    pub verses: Vec<memory::VerseCoverage>,
+    pub sections: Vec<memory::SectionCoverage>,
+}
+
+/// The activity heatmap: reviews per calendar day, oldest first.
+#[derive(Serialize)]
+pub struct WireMemoryActivity {
+    pub days: Vec<memory::DayActivity>,
+}
+
+/// A drill prompt for a verse at a blank-out level: the plain text, its
+/// first-letter skeleton, and the progressively-blanked form.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireMemoryDrill {
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub text: String,
+    pub first_letters: String,
+    pub blanked: String,
+    pub level: u8,
+    pub max_level: u8,
 }

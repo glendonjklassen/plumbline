@@ -389,6 +389,66 @@ public sealed unsafe class StudyEngine : IDisposable
             return Utf8.Take(PureStudyNative.pure_engine_highlight_clear_verse(_handle, r));
     }
 
+    // ── memorization (Tier 2 #15): SRS cards, drills, coverage + activity ────
+
+    /// Grade a verse (`again`/`hard`/`good`/`easy`) at `nowUtc`, creating its SRS
+    /// card on first review; SM-2 reschedules. Null = success, else an error.
+    public string? MemoryGrade(string verseRef, string grade, string nowUtc)
+    {
+        fixed (byte* r = Utf8.NulTerminated(verseRef))
+        fixed (byte* g = Utf8.NulTerminated(grade))
+        fixed (byte* n = Utf8.NulTerminated(nowUtc))
+            return Utf8.Take(PureStudyNative.pure_engine_memory_grade(_handle, r, g, n));
+    }
+
+    /// Stop memorizing a verse (remove its card). Null = success.
+    public string? MemoryRemove(string verseRef)
+    {
+        fixed (byte* r = Utf8.NulTerminated(verseRef))
+            return Utf8.Take(PureStudyNative.pure_engine_memory_remove(_handle, r));
+    }
+
+    /// A verse's SRS card as JSON (schedule + mastery + review log), or null if
+    /// it isn't being memorized.
+    public string? MemoryCardJson(string verseRef)
+    {
+        fixed (byte* r = Utf8.NulTerminated(verseRef))
+            return Utf8.Take(PureStudyNative.pure_engine_memory_card_json(_handle, r));
+    }
+
+    /// The study queue — verses due at `nowUtc`, reading order — as `{refs:[…]}`.
+    public string? MemoryDueJson(string nowUtc)
+    {
+        fixed (byte* n = Utf8.NulTerminated(nowUtc))
+            return Utf8.Take(PureStudyNative.pure_engine_memory_due_json(_handle, n));
+    }
+
+    /// The coverage-map data at `nowUtc` (`{verses,sections}`).
+    public string? MemoryCoverageJson(string nowUtc)
+    {
+        fixed (byte* n = Utf8.NulTerminated(nowUtc))
+            return Utf8.Take(PureStudyNative.pure_engine_memory_coverage_json(_handle, n));
+    }
+
+    /// The activity heatmap (`{days:[{day,reviews}]}`).
+    public string? MemoryActivityJson() =>
+        Utf8.Take(PureStudyNative.pure_engine_memory_activity_json(_handle));
+
+    /// A drill prompt for a verse at blank-out `level` (`{text,firstLetters,blanked}`).
+    public string? MemoryDrillJson(string verseRef, uint level)
+    {
+        fixed (byte* r = Utf8.NulTerminated(verseRef))
+            return Utf8.Take(PureStudyNative.pure_engine_memory_drill_json(_handle, r, level));
+    }
+
+    /// Score a typed recall of a verse (`{accuracy, words:[{word,ok}]}`).
+    public string? MemoryScoreJson(string verseRef, string typed)
+    {
+        fixed (byte* r = Utf8.NulTerminated(verseRef))
+        fixed (byte* t = Utf8.NulTerminated(typed))
+            return Utf8.Take(PureStudyNative.pure_engine_memory_score_json(_handle, r, t));
+    }
+
     /// Force the lazy analytics indexes to build now (call on a background thread
     /// at startup in Full mode). Safe from any thread; null = success.
     public string? WarmIndexes() => Utf8.Take(PureStudyNative.pure_engine_warm_indexes(_handle));

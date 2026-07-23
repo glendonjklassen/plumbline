@@ -859,6 +859,88 @@ namespace PureStudy.Native
         public static extern byte* pure_engine_warm_indexes(PureEngine* engine);
 
         /// <summary>
+        ///  Grade the verse `verse_ref` at `now` (RFC3339 UTC), creating its SRS card on
+        ///  first review; SM-2 reschedules and appends to the review log. `grade` is one
+        ///  of `again` / `hard` / `good` / `easy`. Null on success, else an owned error.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_memory_grade", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_memory_grade(PureEngine* engine, byte* verse_ref, byte* grade, byte* now);
+
+        /// <summary>
+        ///  Stop memorizing `verse_ref` (remove its card); a missing card is a no-op.
+        ///  Null on success, else an owned error.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; `verse_ref` is null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_memory_remove", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_memory_remove(PureEngine* engine, byte* verse_ref);
+
+        /// <summary>
+        ///  The verse's SRS card as JSON (schedule + mastery + review log), or null if
+        ///  the verse isn't being memorized (or the engine has no home).
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_memory_card_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_memory_card_json(PureEngine* engine, byte* verse_ref);
+
+        /// <summary>
+        ///  Verses due for review at `now` (RFC3339), reading order — the study queue, as
+        ///  `{refs:[...]}`. Never null on a live engine (empty when nothing is due).
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_memory_due_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_memory_due_json(PureEngine* engine, byte* now);
+
+        /// <summary>
+        ///  The coverage-map data at `now`: per-verse standing (mastery + recency) plus
+        ///  the 8-section rollup, as `{verses:[...],sections:[...]}`.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_memory_coverage_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_memory_coverage_json(PureEngine* engine, byte* now);
+
+        /// <summary>
+        ///  The activity heatmap as `{days:[{day,reviews}]}` — reviews per calendar day,
+        ///  oldest first, from every card's review log. Never null on a live engine.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine (or null → null).
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_memory_activity_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_memory_activity_json(PureEngine* engine);
+
+        /// <summary>
+        ///  A drill prompt for `verse_ref` at blank-out `level` (0 = full text … max):
+        ///  the verse text, its first-letter skeleton, and the blanked form. Null if the
+        ///  verse isn't found.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_memory_drill_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_memory_drill_json(PureEngine* engine, byte* verse_ref, uint level);
+
+        /// <summary>
+        ///  Score a typed recall of `verse_ref` against the verse text — `{accuracy,
+        ///  words:[{word,ok}]}`, LCS-aligned. Null if the verse isn't found.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_memory_score_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_memory_score_json(PureEngine* engine, byte* verse_ref, byte* typed);
+
+        /// <summary>
         ///  The in-app guide as panel blocks. Engine-independent (static content). Never
         ///  null.
         /// </summary>

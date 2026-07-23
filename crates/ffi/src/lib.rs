@@ -51,6 +51,7 @@ use pure_core::crossref::{self, XRefIx};
 use pure_core::renderings::Renderings;
 use pure_core::search::{self, Notes, SearchIx};
 use pure_core::strongs::{self, OccurrenceIx, StrongsDict};
+use pure_core::memory;
 use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread, ThreadEntry};
 use pure_core::weave::{self, Link, LoadedWeave, WeaveKind};
@@ -2859,6 +2860,207 @@ pub unsafe extern "C" fn pure_engine_warm_indexes(engine: *const PureEngine) -> 
         e.leitwort();
         e.verse_sim();
         ptr::null_mut()
+    })
+}
+
+// ── memorization (Tier 2 #15): SRS cards, drills, coverage + activity ─────────
+
+/// Grade the verse `verse_ref` at `now` (RFC3339 UTC), creating its SRS card on
+/// first review; SM-2 reschedules and appends to the review log. `grade` is one
+/// of `again` / `hard` / `good` / `easy`. Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_grade(
+    engine: *mut PureEngine,
+    verse_ref: *const c_char,
+    grade: *const c_char,
+    now: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        };
+        let (Some(vr), Some(grade_s), Some(now)) = (opt_str(verse_ref), opt_str(grade), opt_str(now)) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let Some(vref) = VRef::parse_ref_key(vr) else {
+            return out_string("bad ref".to_string());
+        };
+        let Some(g) = memory::Grade::parse(grade_s) else {
+            return out_string(format!("unknown grade: {grade_s}"));
+        };
+        let (cards, _) = memory::load_cards(&home);
+        match memory::grade_verse(&home, &cards, &vref, canon::TOKENIZATION_VERSION, g, now) {
+            Ok(_) => ptr::null_mut(),
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Stop memorizing `verse_ref` (remove its card); a missing card is a no-op.
+/// Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is valid; `verse_ref` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_remove(
+    engine: *mut PureEngine,
+    verse_ref: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory; cannot author".to_string());
+        };
+        let Some(vref) = opt_str(verse_ref).and_then(VRef::parse_ref_key) else {
+            return out_string("bad ref".to_string());
+        };
+        match memory::remove_card(&home, &vref) {
+            Ok(()) => ptr::null_mut(),
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// The verse's SRS card as JSON (schedule + mastery + review log), or null if
+/// the verse isn't being memorized (or the engine has no home).
+///
+/// # Safety
+/// `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_card_json(
+    engine: *const PureEngine,
+    verse_ref: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(vref)) =
+            (engine.as_ref(), opt_str(verse_ref).and_then(VRef::parse_ref_key))
+        else {
+            return ptr::null_mut();
+        };
+        let Some(home) = e.home.as_ref() else { return ptr::null_mut() };
+        let (cards, _) = memory::load_cards(home);
+        match cards.get(&vref) {
+            Some(c) => out_json(&wire::memory_card_to_wire(c)),
+            None => ptr::null_mut(),
+        }
+    })
+}
+
+/// Verses due for review at `now` (RFC3339), reading order — the study queue, as
+/// `{refs:[...]}`. Never null on a live engine (empty when nothing is due).
+///
+/// # Safety
+/// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_due_json(
+    engine: *const PureEngine,
+    now: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(now)) = (engine.as_ref(), opt_str(now)) else {
+            return ptr::null_mut();
+        };
+        let cards = e.home.as_ref().map(|h| memory::load_cards(h).0).unwrap_or_default();
+        let refs = memory::due_queue(&cards, now).iter().map(VRef::ref_key).collect();
+        out_json(&wire::WireMemoryDue { refs })
+    })
+}
+
+/// The coverage-map data at `now`: per-verse standing (mastery + recency) plus
+/// the 8-section rollup, as `{verses:[...],sections:[...]}`.
+///
+/// # Safety
+/// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_coverage_json(
+    engine: *const PureEngine,
+    now: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(now)) = (engine.as_ref(), opt_str(now)) else {
+            return ptr::null_mut();
+        };
+        let cards = e.home.as_ref().map(|h| memory::load_cards(h).0).unwrap_or_default();
+        out_json(&wire::WireMemoryCoverage {
+            verses: memory::coverage(&cards, now),
+            sections: memory::coverage_by_section(&cards),
+        })
+    })
+}
+
+/// The activity heatmap as `{days:[{day,reviews}]}` — reviews per calendar day,
+/// oldest first, from every card's review log. Never null on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine (or null → null).
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_activity_json(engine: *const PureEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let Some(e) = engine.as_ref() else { return ptr::null_mut() };
+        let cards = e.home.as_ref().map(|h| memory::load_cards(h).0).unwrap_or_default();
+        out_json(&wire::WireMemoryActivity { days: memory::activity_by_day(&cards) })
+    })
+}
+
+/// A drill prompt for `verse_ref` at blank-out `level` (0 = full text … max):
+/// the verse text, its first-letter skeleton, and the blanked form. Null if the
+/// verse isn't found.
+///
+/// # Safety
+/// `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_drill_json(
+    engine: *const PureEngine,
+    verse_ref: *const c_char,
+    level: u32,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(vref)) =
+            (engine.as_ref(), opt_str(verse_ref).and_then(VRef::parse_ref_key))
+        else {
+            return ptr::null_mut();
+        };
+        let Some(v) = e.corpus.verse(&vref) else { return ptr::null_mut() };
+        let text = v.body();
+        let level = level.min(u8::MAX as u32) as u8;
+        out_json(&wire::WireMemoryDrill {
+            reference: vref.ref_key(),
+            first_letters: memory::first_letters(&text),
+            blanked: memory::blank_out(&text, level),
+            text,
+            level,
+            max_level: memory::MAX_BLANK_LEVEL,
+        })
+    })
+}
+
+/// Score a typed recall of `verse_ref` against the verse text — `{accuracy,
+/// words:[{word,ok}]}`, LCS-aligned. Null if the verse isn't found.
+///
+/// # Safety
+/// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_score_json(
+    engine: *const PureEngine,
+    verse_ref: *const c_char,
+    typed: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(vref), Some(typed)) =
+            (engine.as_ref(), opt_str(verse_ref).and_then(VRef::parse_ref_key), opt_str(typed))
+        else {
+            return ptr::null_mut();
+        };
+        let Some(v) = e.corpus.verse(&vref) else { return ptr::null_mut() };
+        out_json(&memory::score_recall(typed, &v.body()))
     })
 }
 
