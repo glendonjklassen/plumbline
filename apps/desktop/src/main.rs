@@ -2895,7 +2895,12 @@ fn show_context_menu(state: &Shared, ui: &Ui, i: usize, area: &gtk::DrawingArea,
     vbox.set_margin_end(4);
 
     let make = |label: &str| {
-        let b = gtk::Button::with_label(label);
+        // Left-align the item text: a Button::with_label centres its child, so
+        // build the button around a start-aligned, width-filling label instead.
+        let lbl = gtk::Label::new(Some(label));
+        lbl.set_xalign(0.0);
+        lbl.set_hexpand(true);
+        let b = gtk::Button::builder().child(&lbl).build();
         b.add_css_class("flat");
         b.set_halign(gtk::Align::Fill);
         b
