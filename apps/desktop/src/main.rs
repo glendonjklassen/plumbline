@@ -125,6 +125,10 @@ struct State {
 
 /// One reading column: what it shows plus its last paint (for hit-testing and
 /// scroll-to-verse).
+/// A drag must move at least this many pixels before it counts as a highlight
+/// selection rather than a click-to-pin (Tier 0 #4).
+const HL_DRAG_THRESHOLD: f64 = 6.0;
+
 struct Pane {
     book: String,
     chapter: u16,
@@ -136,6 +140,10 @@ struct Pane {
     /// A word (or word span) pinned as a link endpoint, for authoring weave
     /// links. `None` until the reader clicks a word in this pane.
     pin: Option<PinSpan>,
+    /// A live cross-verse highlight drag (Tier 0 #4): (startRef, startTok) →
+    /// (endRef, endTok), for the drag preview; set past the threshold, cleared
+    /// on release.
+    hl_drag: Option<(VRef, u32, VRef, u32)>,
     /// Per-pane reading history (Tier 0 #2): visited (book, chapter) + a cursor.
     history: Vec<(String, u16)>,
     hist_idx: isize,
@@ -165,6 +173,7 @@ impl Pane {
             scroll_to: None,
             highlight: None,
             pin: None,
+            hl_drag: None,
             // Seed the history with the opening chapter so the first "back" works.
             history: vec![(book.to_string(), chapter)],
             hist_idx: 0,
@@ -1803,6 +1812,71 @@ fn build_pane(state: &Shared, ui: &Ui, i: usize, n: usize) -> (gtk::Box, PaneUi)
         area.add_controller(click);
     }
 
+    // ── drag: paint a word-precise highlight across the pointer (Tier 0 #4) ─────
+    // The press already pinned the start word (above); a real drag past the
+    // threshold supersedes that pin and lays down a cross-verse highlight.
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        let area2 = area.clone();
+        let drag = gtk::GestureDrag::new();
+        drag.set_button(gdk::BUTTON_PRIMARY);
+        // The start (anchor) hit; the live end lives in Pane::hl_drag, set only
+        // once the drag passes the threshold so a plain click never previews.
+        let anchor: Rc<RefCell<Option<(VRef, u32)>>> = Rc::new(RefCell::new(None));
+        {
+            let (state, anchor) = (state.clone(), anchor.clone());
+            drag.connect_drag_begin(move |_g, x, y| {
+                let hit = {
+                    let st = state.borrow();
+                    st.panes.get(i).and_then(|p| {
+                        p.dl.as_ref().and_then(|dl| dl.hit_test(x as f32 - p.margin_x, y as f32 - MARGIN))
+                    })
+                };
+                *anchor.borrow_mut() = hit.map(|h| (h.verse, h.token_index));
+            });
+        }
+        {
+            let (state, area2, anchor) = (state.clone(), area2.clone(), anchor.clone());
+            drag.connect_drag_update(move |g, ox, oy| {
+                if ox.hypot(oy) < HL_DRAG_THRESHOLD {
+                    return;
+                }
+                let Some((av, at)) = anchor.borrow().clone() else { return };
+                let Some((sx, sy)) = g.start_point() else { return };
+                let (x, y) = (sx + ox, sy + oy);
+                let end = {
+                    let st = state.borrow();
+                    st.panes.get(i).and_then(|p| {
+                        p.dl.as_ref().and_then(|dl| dl.hit_test(x as f32 - p.margin_x, y as f32 - MARGIN))
+                    })
+                };
+                if let Some(h) = end {
+                    if let Some(p) = state.borrow_mut().panes.get_mut(i) {
+                        p.hl_drag = Some((av, at, h.verse, h.token_index));
+                    }
+                    area2.queue_draw();
+                }
+            });
+        }
+        {
+            let (state, ui, anchor) = (state.clone(), ui.clone(), anchor.clone());
+            drag.connect_drag_end(move |_g, _ox, _oy| {
+                anchor.borrow_mut().take();
+                // hl_drag is only set past the threshold, so a plain click leaves
+                // it None here and this is a no-op (the click already pinned).
+                let sel = state.borrow_mut().panes.get_mut(i).and_then(|p| p.hl_drag.take());
+                let Some((sr, stok, er, etok)) = sel else { return };
+                if let Some(p) = state.borrow_mut().panes.get_mut(i) {
+                    p.pin = None; // the drag supersedes the start-word pin
+                }
+                let (tone, hex) = theme::HIGHLIGHT_TONES[0];
+                highlight_range(&state, &ui, &sr, stok, &er, etok, tone, hex);
+            });
+        }
+        area.add_controller(drag);
+    }
+
     // ── right-click → the verse context menu (Tier 0 #1) ────────────────────────
     {
         let state = state.clone();
@@ -2721,21 +2795,81 @@ fn highlight_verse(state: &Shared, ui: &Ui, vref: &VRef, tone: &str, hex: &str) 
     }
 }
 
-/// Remove a verse from every colour-bearing tag that holds it (Tier 0 #4).
+/// Persist a word-precise cross-verse highlight (Tier 0 #4 drag) under a named
+/// tone, then reload + repaint. Endpoints are ordered canonically, so a
+/// backwards drag stores the same range.
+fn highlight_range(
+    state: &Shared,
+    ui: &Ui,
+    sref: &VRef,
+    stok: u32,
+    eref: &VRef,
+    etok: u32,
+    tone: &str,
+    hex: &str,
+) {
+    // "amber" → "Amber": the tag name for this tone (matches highlight_verse).
+    let mut chars = tone.chars();
+    let name = match chars.next() {
+        Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
+        None => return,
+    };
+    let ((s, s_tok), (e, e_tok)) = if (sref.reading_key(), stok) <= (eref.reading_key(), etok) {
+        ((sref.clone(), stok), (eref.clone(), etok))
+    } else {
+        ((eref.clone(), etok), (sref.clone(), stok))
+    };
+    let clamp = |t: u32| t.min(u16::MAX as u32) as u16;
+    let stamp = now_stamp();
+    let range = tag::HighlightRange {
+        start: s,
+        start_tok: clamp(s_tok),
+        end: e,
+        end_tok: clamp(e_tok),
+        color: Some(hex.to_string()),
+        note: None,
+        added: stamp.clone(),
+    };
+    let home = state.borrow().home.clone();
+    let res = {
+        let st = state.borrow();
+        tag::add_highlight(&home, &st.tags, &name, canon::TOKENIZATION_VERSION, range, &stamp)
+    };
+    if res.is_ok() {
+        reload_study_data(state);
+        redraw_all(ui);
+    }
+}
+
+/// Remove a verse from every colour-bearing tag that holds it, and drop any
+/// word-precise highlight range that covers it (Tier 0 #4). Each affected tag is
+/// rewritten once, so member and range clears never clobber one another.
 fn clear_highlight(state: &Shared, ui: &Ui, vref: &VRef) {
     let target = TagTarget::Verse(vref.clone());
-    let to_clear: Vec<LoadedTag> = {
+    let rk = vref.reading_key();
+    let covers = |h: &tag::HighlightRange| h.start.reading_key() <= rk && rk <= h.end.reading_key();
+    let affected: Vec<LoadedTag> = {
         let st = state.borrow();
         st.tags
             .iter()
-            .filter(|lt| lt.tag.color.is_some() && lt.tag.member_of(&target))
+            .filter(|lt| {
+                (lt.tag.color.is_some() && lt.tag.member_of(&target))
+                    || lt.tag.highlights.iter().any(covers)
+            })
             .cloned()
             .collect()
     };
-    for lt in &to_clear {
-        let _ = tag::remove_member(lt, &target);
+    for lt in &affected {
+        let mut t = lt.tag.clone();
+        // Only colour-bearing tags wash whole verses; leave a plain semantic
+        // tag's membership intact and just drop its covering ranges.
+        if t.color.is_some() {
+            t.members.retain(|m| m.target != target);
+        }
+        t.highlights.retain(|h| !covers(h));
+        let _ = tag::write_tag(&lt.file, &t);
     }
-    if !to_clear.is_empty() {
+    if !affected.is_empty() {
         reload_study_data(state);
         redraw_all(ui);
     }
@@ -3063,6 +3197,7 @@ fn draw_pane(state: &Shared, i: usize, area: &gtk::DrawingArea, cr: &cairo::Cont
     let chapter = st.panes[i].chapter;
     let highlight = st.panes[i].highlight;
     let pin = st.panes[i].pin;
+    let hl_drag = st.panes[i].hl_drag.clone();
 
     // One Pango layout, reused to measure then paint; three font variants.
     let layout = pangocairo::functions::create_layout(cr);
@@ -3152,6 +3287,57 @@ fn draw_pane(state: &Shared, i: usize, area: &gtk::DrawingArea, cr: &cairo::Cont
     for (vn, (r, g, b)) in &highlight_here {
         band(cr, *vn, *r, *g, *b, if pal.dark { 0.25 } else { 0.36 });
     }
+
+    // Word-precise highlight runs — cross-verse drag highlights (Tier 0 #4).
+    // Each run is a [lo,hi] token span in a verse, painted like the pin span so
+    // the wash follows the actual words (partial first/last verse, whole middle).
+    let run_alpha = if pal.dark { 0.25 } else { 0.36 };
+    let paint_run = |cr: &cairo::Context, vref: &VRef, lo: u32, hi: u32, rgb: (f64, f64, f64)| {
+        let (r, g, b) = rgb;
+        cr.set_source_rgba(r, g, b, run_alpha);
+        for it in &dl.items {
+            if let Some((wv, t)) = it.word() {
+                if wv == vref && t >= lo && t <= hi {
+                    let _ = cr.rectangle(
+                        (margin_x + it.x) as f64 - 1.5,
+                        top as f64 + it.y as f64,
+                        it.w as f64 + 3.0,
+                        it.h as f64,
+                    );
+                    let _ = cr.fill();
+                }
+            }
+        }
+    };
+    for v in &verses {
+        let vref = VRef::new(&book, chapter, v.verse);
+        let len = v.tokens.len().min(u16::MAX as usize) as u16;
+        for run in tag::verse_highlight_runs(&st.tags, &vref, len) {
+            paint_run(cr, &vref, run.lo as u32, run.hi as u32, hex_rgb(&run.color));
+        }
+    }
+    // Live preview while dragging: the same decomposition, in the default tone.
+    if let Some((sr, stok, er, etok)) = &hl_drag {
+        let (lo_end, hi_end) = {
+            let (a, b) = ((sr.reading_key(), *stok), (er.reading_key(), *etok));
+            if a <= b { (a, b) } else { (b, a) }
+        };
+        let drag_rgb = hex_rgb(theme::HIGHLIGHT_TONES[0].1);
+        for v in &verses {
+            let vref = VRef::new(&book, chapter, v.verse);
+            let rk = vref.reading_key();
+            if rk < lo_end.0 || rk > hi_end.0 {
+                continue;
+            }
+            let last = v.tokens.len().saturating_sub(1) as u32;
+            let lo = if rk == lo_end.0 { lo_end.1 } else { 0 };
+            let hi = if rk == hi_end.0 { hi_end.1 } else { last };
+            if lo <= hi {
+                paint_run(cr, &vref, lo, hi, drag_rgb);
+            }
+        }
+    }
+
     for &n in &hits_here {
         band(cr, n, gr, gg, gb, 0.12);
     }
