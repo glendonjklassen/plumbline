@@ -284,6 +284,16 @@ public sealed class MainWindow : Window
         pane.Reader.PinChanged += UpdateLinkButton;
         pane.Reader.ZoomRequested += Zoom;
         pane.Reader.ScrollAllRequested += px => { foreach (var p in _panes) p.Reader.ScrollBy(px); };
+        // Cross-verse drag highlight (Tier 0 #4): lay down the default tone.
+        var (dtName, dtHex) = DefaultTone();
+        pane.Reader.DragTone = Palette.Hex(dtHex);
+        pane.Reader.HighlightDragged += (sRef, sTok, eRef, eTok) =>
+        {
+            var name = char.ToUpper(dtName[0]) + dtName[1..];
+            var err = _engine?.HighlightAdd(name, dtHex, sRef, sTok, eRef, eTok, Now());
+            if (err is not null) { _status.Text = err; return; }
+            RefreshStudyData();
+        };
         pane.Reader.FontSize = _fontSize;
         pane.Reader.VersePerLine = _versePerLine;
         _panes.Add(pane);
@@ -418,10 +428,18 @@ public sealed class MainWindow : Window
     {
         if (_engine is null) return;
         var map = new Dictionary<string, Windows.UI.Color>();
+        var runs = new List<(string, uint, uint, Windows.UI.Color)>();
         if (_engine.ChapterHighlightsJson(pane.Reader.Book, pane.Reader.ChapterNumber) is { } hj)
-            foreach (var v in Wire.Parse<ChapterHighlights>(hj).Verses)
+        {
+            var ch = Wire.Parse<ChapterHighlights>(hj);
+            foreach (var v in ch.Verses)
                 map[v.Verse] = Palette.Hex(v.Color);
+            if (ch.Runs is { } rs)
+                foreach (var r in rs)
+                    runs.Add((r.Verse, (uint)r.Lo, (uint)r.Hi, Palette.Hex(r.Color)));
+        }
         pane.Reader.Highlights = map;
+        pane.Reader.Runs = runs;
         pane.Reader.Redraw();
     }
 
@@ -823,14 +841,30 @@ public sealed class MainWindow : Window
         RefreshStudyData();
     }
 
-    /// Remove a verse from every colour-bearing tag that holds it.
+    /// Remove a verse from every colour-bearing tag that holds it, and drop any
+    /// word-precise highlight range covering it (Tier 0 #4).
     private void RemoveHighlight(string verse)
     {
-        if (_engine?.TagsJson() is not { } tj) return;
-        foreach (var t in Wire.Parse<Tags>(tj).Items)
-            if (t.Color is not null && t.Members.Any(m => m.Kind == "verse" && m.Verse == verse))
-                _engine.TagRemove(t.Name, "verse", verse);
+        if (_engine is null) return;
+        if (_engine.TagsJson() is { } tj)
+            foreach (var t in Wire.Parse<Tags>(tj).Items)
+                if (t.Color is not null && t.Members.Any(m => m.Kind == "verse" && m.Verse == verse))
+                    _engine.TagRemove(t.Name, "verse", verse);
+        _engine.HighlightClearVerse(verse); // also drop any cross-verse drag range
         RefreshStudyData();
+    }
+
+    /// The first configured highlight tone (name, hex) — the default a drag lays
+    /// down; falls back to amber if the tone list is unavailable.
+    private static (string name, string hex) DefaultTone()
+    {
+        try
+        {
+            var tones = Wire.Parse<HighlightTones>(StudyEngine.HighlightTonesJson()).Tones;
+            if (tones.Count > 0) return (tones[0].Name, tones[0].Hex);
+        }
+        catch { /* fall through to the amber default */ }
+        return ("amber", "#d8a24a");
     }
 
     private async Task ShowShortcutsAsync()

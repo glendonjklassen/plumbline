@@ -499,8 +499,25 @@ New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
   tag washes its verses. `tag::set_color` + `tag::verse_color`; a fixed 6-tone
   palette (`theme::HIGHLIGHT_TONES`). The context menu's "Highlight — <tone>"
   adds the verse to that tone's tag (created coloured); "Remove highlight"
-  clears every colour-tag holding it. Washes paint at the band site (GTK
-  `band` closure; WinUI the highlight-band loop) under the search band.
+  clears every colour-tag holding it. Whole-verse washes paint at the band site
+  (GTK `band` closure; WinUI the highlight-band loop) under the search band.
+
+  **Word-precise cross-verse ranges (drag).** Click-drag in the reader lays down
+  a highlight from one word to another, spanning verses. Model: an additive
+  `highlights` array on the tag file — `{startRef,startTok,endRef,endTok,color?}`,
+  reusing the frozen refKey + `kjv1769-tok2` token offsets; an old reader ignores
+  it and still shows whole-verse member washes (no new `TargetRepr` variant, which
+  would break its parse). `tag::add_highlight` / `remove_highlight`;
+  `tag::verse_highlight_runs` decomposes a range into per-verse `[lo,hi]` runs
+  (partial first/last verse, whole interior). FFI (all additive):
+  `pure_engine_highlight_add` / `_remove` / `_clear_verse`, and
+  `pure_engine_chapter_highlights_json` gains a `runs` array beside `verses`.
+  Both shells paint the runs as per-word rects (like the pinned-span band) and
+  preview the live drag in the default tone; a press still pins the start word,
+  a drag past a 6px threshold supersedes the pin, and endpoints are canonicalised
+  (a backwards drag stores the same range). "Remove highlight" also drops any
+  range covering the verse (GTK removes inline; WinUI via `_clear_verse`). GTK
+  uses a `gtk::GestureDrag`; WinUI a pointer-capture drag on the `CanvasControl`.
 - **5. Dark + night themes.** `pure_core::theme::Palette` is the one source
   (`palette(theme)`), served as `pure_theme_palette_json`; light values are the
   shipped ones (no regression), dark (candlelight-warm) + night (true-black) are

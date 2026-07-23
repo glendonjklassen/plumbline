@@ -133,6 +133,11 @@ public sealed class ReaderView : UserControl, IDisposable
     public HashSet<string> HitVerses = new();
     /// refKey → highlight tone (member of a colour-bearing tag; Tier 0 #4).
     public Dictionary<string, Color> Highlights = new();
+    /// Word-precise cross-verse highlight runs to wash (Tier 0 #4 drag): each is
+    /// a verse refKey + inclusive token span + resolved tone.
+    public List<(string Verse, uint Lo, uint Hi, Color Color)> Runs = new();
+    /// The tone a fresh drag lays down + previews with (set by the shell).
+    public Color DragTone = Color.FromArgb(255, 0xc8, 0xb0, 0xe0);
 
     // Per-pane reading history (Tier 0 #2): the chapters visited, with a cursor.
     private readonly List<(string book, uint ch)> _history = new();
@@ -140,6 +145,13 @@ public sealed class ReaderView : UserControl, IDisposable
     private bool _inHistoryNav;
 
     public PinSpan? Pin { get; private set; }
+
+    // Live cross-verse highlight drag (Tier 0 #4): the anchor hit + current end,
+    // set only past the threshold so a plain click never previews.
+    private const double HlDragThreshold = 6.0;
+    private (string Verse, uint Tok)? _dragAnchor;
+    private Windows.Foundation.Point _dragStart;
+    private (string SRef, uint STok, string ERef, uint ETok)? _hlDrag;
 
     private readonly CanvasControl _canvas = new();
     private readonly ScrollBar _bar = new()
@@ -187,6 +199,8 @@ public sealed class ReaderView : UserControl, IDisposable
     public event Action<string, uint>? ChapterShown;
     /// Pin state changed (single-click word).
     public event Action? PinChanged;
+    /// A completed cross-verse highlight drag: (startRef, startTok, endRef, endTok).
+    public event Action<string, uint, string, uint>? HighlightDragged;
     /// Scroll position changed (connector overlay redraws).
     public event Action? Scrolled;
     /// Ctrl+wheel / Ctrl+± zoom request, in ±1-pt steps (0 = reset).
@@ -216,9 +230,26 @@ public sealed class ReaderView : UserControl, IDisposable
         _canvas.PointerWheelChanged += OnWheel;
         _canvas.DoubleTapped += OnDoubleTapped;
         _canvas.PointerPressed += OnPressed;
+        _canvas.PointerReleased += OnReleased;
         _canvas.PointerMoved += (_, e) =>
         {
-            var pos = e.GetCurrentPoint(_canvas).Position;
+            var cp = e.GetCurrentPoint(_canvas);
+            var pos = cp.Position;
+            // Cross-verse highlight drag (Tier 0 #4): past the threshold, extend
+            // the selection to the word under the pointer (supersedes the gloss).
+            if (_dragAnchor is { } anchor && cp.Properties.IsLeftButtonPressed)
+            {
+                double ddx = pos.X - _dragStart.X, ddy = pos.Y - _dragStart.Y;
+                if (ddx * ddx + ddy * ddy >= HlDragThreshold * HlDragThreshold && HitAt(pos) is { } h)
+                {
+                    _canvas.CapturePointer(e.Pointer);
+                    _hlDrag = (anchor.Verse, anchor.Tok, h.Verse, h.TokenIndex);
+                    HideGloss();
+                    _hover.Stop();
+                    _canvas.Invalidate();
+                }
+                return;
+            }
             // Resting on a word must not flicker the gloss: ignore sub-pixel
             // jitter while it is showing; only real movement re-arms it.
             if (_gloss.Visibility == Visibility.Visible)
@@ -566,6 +597,31 @@ public sealed class ReaderView : UserControl, IDisposable
                     ds.FillRectangle(-6, line.Key, _column + 12, line.First().H, wash);
             }
 
+        // Word-precise runs (cross-verse drag highlights, Tier 0 #4) — per-word
+        // rects, like the pin band, so the wash follows the actual words.
+        foreach (var run in Runs)
+            foreach (var it in _dl.Items.Where(i => i.Verse == run.Verse &&
+                         i.TokenIndex is { } t && t >= run.Lo && t <= run.Hi))
+                ds.FillRectangle(it.X - 1.5f, it.Y, it.W + 3, it.H, Palette.Wash(run.Color));
+        // Live drag preview: every word item between the two endpoints in reading
+        // order (the display list is already ordered), in the default tone.
+        if (_hlDrag is { } hd)
+        {
+            var items = _dl.Items.ToList();
+            int ia = items.FindIndex(i => i.Verse == hd.SRef && i.TokenIndex == hd.STok);
+            int ib = items.FindIndex(i => i.Verse == hd.ERef && i.TokenIndex == hd.ETok);
+            if (ia >= 0 && ib >= 0)
+            {
+                var tone = Palette.Wash(DragTone);
+                for (int k = Math.Min(ia, ib); k <= Math.Max(ia, ib); k++)
+                {
+                    var it = items[k];
+                    if (it.Kind == "verseNumber") continue;
+                    ds.FillRectangle(it.X - 1.5f, it.Y, it.W + 3, it.H, tone);
+                }
+            }
+        }
+
         // Every current search hit in this chapter (Tier 0 #8), as a soft band.
         if (HitVerses.Count > 0)
             foreach (var grp in _dl.Items.GroupBy(RefOf).Where(g => HitVerses.Contains(g.Key)))
@@ -659,6 +715,27 @@ public sealed class ReaderView : UserControl, IDisposable
             : new PinSpan(hit.Verse, hit.TokenIndex, hit.TokenIndex, hit.TokenIndex);
         _canvas.Invalidate();
         PinChanged?.Invoke();
+
+        // Arm a possible highlight drag (Tier 0 #4): the press pinned the start
+        // word; a drag past the threshold will supersede it (see PointerMoved).
+        _dragAnchor = (hit.Verse, hit.TokenIndex);
+        _dragStart = pt.Position;
+        _hlDrag = null;
+    }
+
+    private void OnReleased(object sender, PointerRoutedEventArgs e)
+    {
+        _canvas.ReleasePointerCapture(e.Pointer);
+        var drag = _hlDrag;
+        _dragAnchor = null;
+        _hlDrag = null;
+        if (drag is { } d)
+        {
+            // The press already pinned the start word; the drag supersedes it.
+            ClearPin();
+            _canvas.Invalidate();
+            HighlightDragged?.Invoke(d.SRef, d.STok, d.ERef, d.ETok);
+        }
     }
 
     private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)

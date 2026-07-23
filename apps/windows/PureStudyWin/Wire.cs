@@ -175,8 +175,11 @@ public sealed record UserNote(
     string Verse, string Display, string Text, string Created, string Updated);
 public sealed record UserNotes(List<UserNote> Notes);
 
-public sealed record ChapterHighlights(string Book, ushort Chapter, List<VerseHighlight> Verses);
+public sealed record ChapterHighlights(string Book, ushort Chapter, List<VerseHighlight> Verses, List<HighlightRun>? Runs = null);
 public sealed record VerseHighlight(string Verse, string Color);
+/// One word-precise wash run within a verse: inclusive token indices [Lo, Hi]
+/// plus the tone — the cross-verse drag highlights (Tier 0 #4).
+public sealed record HighlightRun(string Verse, ushort Lo, ushort Hi, string Color);
 
 // The study-panel content model (pure_engine_*_blocks_json): a typed block
 // list the panel renders wholesale — no shell-side derivation. A run's Color is
