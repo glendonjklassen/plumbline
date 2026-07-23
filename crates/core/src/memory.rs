@@ -1,0 +1,685 @@
+//! Memorization: spaced-repetition over verses (Tier 2 #15 — flagged top
+//! priority). The KJV is *the* memorization text (homeschool, AWANA, Bible
+//! bees); this is the core every shell drives.
+//!
+//! One SRS card per verse (keyed by [`VRef`]), scheduled with **SM-2** (the
+//! proven SuperMemo/Anki-classic algorithm). Each card keeps its full **review
+//! log** — that log is the data, "by construction", behind both views the
+//! product wants: a **coverage map** across the canon (per-verse mastery +
+//! recency, in the canon-strip visual language) and an **activity heatmap over
+//! time** (reviews per day).
+//!
+//! Also here: pure text drills over a verse's words — first-letter prompts,
+//! progressive blank-out, and typed-recall scoring — shell-agnostic so every
+//! shell renders the same drill. Decks are sourced from a tag or thread by the
+//! shell (it passes the verse set); this module owns the per-verse cards.
+//!
+//! Personal study data: one plain JSON file per verse under `home/memory/`,
+//! `format` stamped, additive-friendly, refKey inside (the filename is a slug).
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+use crate::reference::VRef;
+use crate::Error;
+
+const FORMAT: &str = "overlay-memory-v1";
+
+/// The starting ease factor (SM-2 EF); the floor it can never drop below.
+const EASE_START: f32 = 2.5;
+const EASE_FLOOR: f32 = 1.3;
+/// Interval (days) at/above which a card counts as "mature" (Anki's convention).
+const MATURE_DAYS: u32 = 21;
+/// Blank-out levels: 0 = full text … [`MAX_BLANK_LEVEL`] = every word masked.
+pub const MAX_BLANK_LEVEL: u8 = 4;
+
+// ── grades + review log ──────────────────────────────────────────────────────
+
+/// A recall grade (Anki's four buttons), mapped to an SM-2 quality 0–5.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Grade {
+    /// Failed to recall — a lapse; the card resets to relearning.
+    Again,
+    /// Recalled with serious difficulty.
+    Hard,
+    /// Recalled correctly.
+    Good,
+    /// Recalled effortlessly.
+    Easy,
+}
+
+impl Grade {
+    /// SM-2 quality (q < 3 is a failed recall).
+    fn quality(self) -> u8 {
+        match self {
+            Grade::Again => 1,
+            Grade::Hard => 3,
+            Grade::Good => 4,
+            Grade::Easy => 5,
+        }
+    }
+    fn passed(self) -> bool {
+        self.quality() >= 3
+    }
+}
+
+/// One review event — the audit + heatmap source. `at` is the caller-supplied
+/// UTC timestamp; `interval_days` is the interval this review scheduled next.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Review {
+    pub at: String,
+    pub grade: Grade,
+    #[serde(rename = "intervalDays")]
+    pub interval_days: u32,
+}
+
+// ── the card ─────────────────────────────────────────────────────────────────
+
+/// An SRS card for one verse: its SM-2 schedule plus every review.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Card {
+    pub verse: VRef,
+    pub tok_version: String,
+    pub created: String,
+    /// SM-2 ease factor (EF), ≥ 1.3.
+    pub ease: f32,
+    /// Current inter-review interval, in days (0 for a brand-new card).
+    pub interval_days: u32,
+    /// Consecutive successful recalls (resets to 0 on a lapse).
+    pub reps: u32,
+    /// Lifetime count of lapses (`Again`).
+    pub lapses: u32,
+    /// Next-due date, `YYYY-MM-DD` (day granularity, the SRS norm).
+    pub due: String,
+    pub reviews: Vec<Review>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct CardRepr {
+    format: String,
+    #[serde(rename = "ref")]
+    ref_key: String,
+    tokenization: String,
+    created: String,
+    ease: f32,
+    #[serde(rename = "intervalDays")]
+    interval_days: u32,
+    reps: u32,
+    lapses: u32,
+    due: String,
+    #[serde(default)]
+    reviews: Vec<Review>,
+}
+
+impl Card {
+    /// A fresh card for `vref`, due immediately (interval 0), at `created`.
+    pub fn new(vref: VRef, tok_version: &str, created: &str) -> Card {
+        Card {
+            verse: vref,
+            tok_version: tok_version.to_string(),
+            created: created.to_string(),
+            ease: EASE_START,
+            interval_days: 0,
+            reps: 0,
+            lapses: 0,
+            due: days_to_date(date_to_days(created).unwrap_or(0)),
+            reviews: Vec::new(),
+        }
+    }
+
+    fn to_repr(&self) -> CardRepr {
+        CardRepr {
+            format: FORMAT.to_string(),
+            ref_key: self.verse.ref_key(),
+            tokenization: self.tok_version.clone(),
+            created: self.created.clone(),
+            ease: self.ease,
+            interval_days: self.interval_days,
+            reps: self.reps,
+            lapses: self.lapses,
+            due: self.due.clone(),
+            reviews: self.reviews.clone(),
+        }
+    }
+}
+
+/// The mastery bucket a card falls in — drives the coverage-map shading.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Mastery {
+    /// Never reviewed.
+    New,
+    /// In the early (sub-day … first steps) phase, or relearning after a lapse.
+    Learning,
+    /// Scheduled but not yet mature (interval < 21 days).
+    Young,
+    /// Interval ≥ 21 days — settled into long-term memory.
+    Mature,
+}
+
+// ── SM-2 scheduling ────────────────────────────────────────────────────────────
+
+/// Apply a review `grade` at `now` (RFC3339 UTC): update the SM-2 schedule and
+/// append to the review log. On a lapse the card resets to relearning; on a
+/// pass the interval grows (1 → 6 → ×ease). The ease factor moves per SM-2.
+pub fn review(card: &mut Card, grade: Grade, now: &str) {
+    let q = grade.quality() as f32;
+    // SM-2 ease update; never below the floor.
+    card.ease = (card.ease + (0.1 - (5.0 - q) * (0.08 + (5.0 - q) * 0.02))).max(EASE_FLOOR);
+
+    if grade.passed() {
+        card.reps += 1;
+        card.interval_days = match card.reps {
+            1 => 1,
+            2 => 6,
+            _ => ((card.interval_days.max(1) as f32) * card.ease).round().max(1.0) as u32,
+        };
+    } else {
+        card.lapses += 1;
+        card.reps = 0;
+        card.interval_days = 1; // relearn tomorrow
+    }
+
+    card.due = add_days(now, card.interval_days as i64);
+    card.reviews.push(Review { at: now.to_string(), grade, interval_days: card.interval_days });
+}
+
+/// Whether the card is due for review at `now` (RFC3339 UTC) — `due` on or
+/// before today. Unparseable dates are treated as due (fail-safe to surfacing).
+pub fn is_due(card: &Card, now: &str) -> bool {
+    match (date_to_days(&card.due), date_to_days(now)) {
+        (Some(due), Some(today)) => due <= today,
+        _ => true,
+    }
+}
+
+/// The card's mastery bucket (coverage-map shading).
+pub fn mastery(card: &Card) -> Mastery {
+    if card.reviews.is_empty() {
+        Mastery::New
+    } else if card.reps == 0 || card.interval_days < 1 {
+        Mastery::Learning // brand-new-but-touched, or relearning after a lapse
+    } else if card.interval_days < MATURE_DAYS {
+        Mastery::Young
+    } else {
+        Mastery::Mature
+    }
+}
+
+// ── storage (one file per verse, under home/memory) ──────────────────────────
+
+fn memory_dir(home: impl AsRef<Path>) -> PathBuf {
+    home.as_ref().join("memory")
+}
+
+/// The file a card for `vref` lives in (`home/memory/<slug>.json`).
+pub fn card_file(home: impl AsRef<Path>, vref: &VRef) -> PathBuf {
+    memory_dir(home).join(format!("{}.json", crate::store::slug(&vref.ref_key(), "card")))
+}
+
+/// Load every `home/memory/*.json` into a map by verse. Returns the cards plus
+/// any per-file parse errors (a bad file never sinks the rest).
+pub fn load_cards(home: impl AsRef<Path>) -> (HashMap<VRef, Card>, Vec<String>) {
+    let dir = memory_dir(&home);
+    let mut cards = HashMap::new();
+    let mut errors = Vec::new();
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(e) => e,
+        Err(_) => return (cards, errors),
+    };
+    for path in entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")) {
+        match std::fs::read(&path) {
+            Err(e) => errors.push(format!("{}: {e}", path.display())),
+            Ok(bytes) => match serde_json::from_slice::<CardRepr>(&bytes) {
+                Ok(r) if r.format == FORMAT => match VRef::parse_ref_key(&r.ref_key) {
+                    Some(vref) => {
+                        cards.insert(
+                            vref.clone(),
+                            Card {
+                                verse: vref,
+                                tok_version: r.tokenization,
+                                created: r.created,
+                                ease: r.ease,
+                                interval_days: r.interval_days,
+                                reps: r.reps,
+                                lapses: r.lapses,
+                                due: r.due,
+                                reviews: r.reviews,
+                            },
+                        );
+                    }
+                    None => errors.push(format!("{}: bad ref {}", path.display(), r.ref_key)),
+                },
+                Ok(r) => errors.push(format!("{}: unknown memory format {}", path.display(), r.format)),
+                Err(e) => errors.push(format!("{}: {e}", path.display())),
+            },
+        }
+    }
+    (cards, errors)
+}
+
+/// Serialize a card to pretty JSON with a trailing newline.
+pub fn to_json(card: &Card) -> Result<String, Error> {
+    serde_json::to_string_pretty(&card.to_repr()).map(|s| s + "\n").map_err(|e| Error::Parse(e.to_string()))
+}
+
+/// Atomically write a card to its file under `home`.
+pub fn write_card(home: impl AsRef<Path>, card: &Card) -> Result<(), Error> {
+    crate::store::write_atomic(card_file(&home, &card.verse), &to_json(card)?)
+}
+
+/// Grade the verse at `now`, creating the card on first review; persists and
+/// returns the updated card. `loaded` is the current card set (from
+/// [`load_cards`]); a caller reloads after.
+pub fn grade_verse(
+    home: impl AsRef<Path>,
+    loaded: &HashMap<VRef, Card>,
+    vref: &VRef,
+    tok_version: &str,
+    grade: Grade,
+    now: &str,
+) -> Result<Card, Error> {
+    let mut card = loaded.get(vref).cloned().unwrap_or_else(|| Card::new(vref.clone(), tok_version, now));
+    review(&mut card, grade, now);
+    write_card(&home, &card)?;
+    Ok(card)
+}
+
+/// Remove a verse's card (stop memorizing it).
+pub fn remove_card(home: impl AsRef<Path>, vref: &VRef) -> Result<(), Error> {
+    let path = card_file(&home, vref);
+    match std::fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(Error::Corpus(format!("{}: {e}", path.display()))),
+    }
+}
+
+/// The verses due for review at `now`, in reading order — the study queue.
+pub fn due_queue(cards: &HashMap<VRef, Card>, now: &str) -> Vec<VRef> {
+    let mut due: Vec<&VRef> = cards.keys().filter(|v| is_due(&cards[*v], now)).collect();
+    due.sort_by_key(|v| v.reading_key());
+    due.into_iter().cloned().collect()
+}
+
+// ── drills (pure text over a verse's words) ──────────────────────────────────
+
+/// First-letter prompt: each word reduced to its first letter (leading/trailing
+/// punctuation kept, the rest dropped) — the classic memory scaffold.
+/// `"For God so loved the world,"` → `"F G s l t w,"`.
+pub fn first_letters(text: &str) -> String {
+    text.split_whitespace().map(first_letter_hint).collect::<Vec<_>>().join(" ")
+}
+
+fn first_letter_hint(word: &str) -> String {
+    let chars: Vec<char> = word.chars().collect();
+    let lead: String = chars.iter().take_while(|c| !c.is_alphanumeric()).collect();
+    let first = chars.iter().find(|c| c.is_alphanumeric()).copied();
+    let trail: String = chars.iter().rev().take_while(|c| !c.is_alphanumeric()).collect::<Vec<_>>()
+        .into_iter().rev().collect();
+    match first {
+        Some(c) => format!("{lead}{c}{trail}"),
+        None => word.to_string(), // punctuation-only token
+    }
+}
+
+/// Progressive blank-out: mask a share of the words (their letters → `_`,
+/// punctuation kept), rising with `level` (0 = full text … [`MAX_BLANK_LEVEL`] =
+/// every word masked). Which words hide is deterministic and spread out, so a
+/// given level always yields the same prompt.
+pub fn blank_out(text: &str, level: u8) -> String {
+    let f = (level.min(MAX_BLANK_LEVEL) as f64) / (MAX_BLANK_LEVEL as f64);
+    text.split_whitespace()
+        .enumerate()
+        .map(|(i, w)| if hide_fraction(i) < f { mask_word(w) } else { w.to_string() })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// A stable per-index value in [0,1) that spreads hidden words evenly-ish.
+fn hide_fraction(i: usize) -> f64 {
+    let h = (i as u64).wrapping_mul(2_654_435_761) ^ 0x9e37_79b9;
+    ((h >> 11) & 0xffff) as f64 / 65535.0
+}
+
+fn mask_word(w: &str) -> String {
+    w.chars().map(|c| if c.is_alphanumeric() { '_' } else { c }).collect()
+}
+
+/// The result of scoring a typed recall against the verse.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct RecallScore {
+    /// Fraction of the verse's words recalled correctly (0.0–1.0).
+    pub accuracy: f32,
+    /// One entry per expected word (original casing), and whether it was hit.
+    pub words: Vec<WordHit>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct WordHit {
+    pub word: String,
+    pub ok: bool,
+}
+
+/// Score `typed` against the verse `actual`, tolerant of casing, punctuation,
+/// and skipped/extra words (a longest-common-subsequence match, so one missing
+/// word doesn't misalign the rest). Marks each expected word hit or missed.
+pub fn score_recall(typed: &str, actual: &str) -> RecallScore {
+    let expected: Vec<&str> = actual.split_whitespace().collect();
+    let exp_norm: Vec<String> = expected.iter().map(|w| normalize(w)).collect();
+    let got_norm: Vec<String> = typed.split_whitespace().map(normalize).collect();
+    let hits = lcs_hits(&exp_norm, &got_norm);
+    let correct = hits.iter().filter(|&&h| h).count();
+    let accuracy = if exp_norm.is_empty() { 0.0 } else { correct as f32 / exp_norm.len() as f32 };
+    let words = expected
+        .iter()
+        .zip(hits.iter())
+        .map(|(w, &ok)| WordHit { word: (*w).to_string(), ok })
+        .collect();
+    RecallScore { accuracy, words }
+}
+
+fn normalize(w: &str) -> String {
+    w.chars().filter(|c| c.is_alphanumeric()).flat_map(|c| c.to_lowercase()).collect()
+}
+
+/// LCS over the two token lists; returns, per expected token, whether it is part
+/// of the longest common subsequence with the typed tokens (in order).
+fn lcs_hits(expected: &[String], got: &[String]) -> Vec<bool> {
+    let (n, m) = (expected.len(), got.len());
+    let mut dp = vec![vec![0u16; m + 1]; n + 1];
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            dp[i][j] = if expected[i] == got[j] {
+                dp[i + 1][j + 1] + 1
+            } else {
+                dp[i + 1][j].max(dp[i][j + 1])
+            };
+        }
+    }
+    let mut hits = vec![false; n];
+    let (mut i, mut j) = (0, 0);
+    while i < n && j < m {
+        if expected[i] == got[j] {
+            hits[i] = true;
+            i += 1;
+            j += 1;
+        } else if dp[i + 1][j] >= dp[i][j + 1] {
+            i += 1;
+        } else {
+            j += 1;
+        }
+    }
+    hits
+}
+
+// ── aggregations: the coverage map + the activity heatmap ────────────────────
+
+/// One verse's standing, for the canon-strip coverage map.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct VerseCoverage {
+    #[serde(rename = "ref")]
+    pub ref_key: String,
+    pub mastery: Mastery,
+    pub reps: u32,
+    pub lapses: u32,
+    /// UTC timestamp of the most recent review, if any (drives recency shading).
+    #[serde(rename = "lastAt", skip_serializing_if = "Option::is_none")]
+    pub last_at: Option<String>,
+    pub due: bool,
+}
+
+/// Per-verse coverage across every card — the spatial map "shaded by verses
+/// memorized and review depth/recency", in reading order.
+pub fn coverage(cards: &HashMap<VRef, Card>, now: &str) -> Vec<VerseCoverage> {
+    let mut out: Vec<VerseCoverage> = cards
+        .values()
+        .map(|c| VerseCoverage {
+            ref_key: c.verse.ref_key(),
+            mastery: mastery(c),
+            reps: c.reps,
+            lapses: c.lapses,
+            last_at: c.reviews.last().map(|r| r.at.clone()),
+            due: is_due(c, now),
+        })
+        .collect();
+    out.sort_by_key(|v| VRef::parse_ref_key(&v.ref_key).map(|r| r.reading_key()));
+    out
+}
+
+/// Reviews on one calendar day — the temporal activity heatmap.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DayActivity {
+    /// `YYYY-MM-DD` (UTC).
+    pub day: String,
+    pub reviews: u32,
+}
+
+/// Review counts bucketed by calendar day, oldest first — the "how much activity
+/// when" heatmap. Built from every card's review log.
+pub fn activity_by_day(cards: &HashMap<VRef, Card>) -> Vec<DayActivity> {
+    let mut by_day: HashMap<String, u32> = HashMap::new();
+    for c in cards.values() {
+        for r in &c.reviews {
+            if let Some(day) = r.at.get(0..10) {
+                *by_day.entry(day.to_string()).or_insert(0) += 1;
+            }
+        }
+    }
+    let mut out: Vec<DayActivity> =
+        by_day.into_iter().map(|(day, reviews)| DayActivity { day, reviews }).collect();
+    out.sort_by(|a, b| a.day.cmp(&b.day));
+    out
+}
+
+/// Coverage rolled up to the 8 canon sections (Law … Revelation) — a compact
+/// spatial summary beside the per-verse map.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SectionCoverage {
+    pub label: &'static str,
+    /// Verses with a card (being memorized) in this section.
+    pub cards: u32,
+    /// Cards that have reached `Mature`.
+    pub mature: u32,
+    /// Total reviews logged against this section.
+    pub reviews: u32,
+}
+
+/// Roll coverage up to [`crate::reference::CANON_SEGMENTS`].
+pub fn coverage_by_section(cards: &HashMap<VRef, Card>) -> Vec<SectionCoverage> {
+    use crate::reference::CANON_SEGMENTS;
+    let mut acc: Vec<SectionCoverage> = CANON_SEGMENTS
+        .iter()
+        .map(|(label, _, _)| SectionCoverage { label, cards: 0, mature: 0, reviews: 0 })
+        .collect();
+    for c in cards.values() {
+        let Some(bi) = crate::canon::book_order(&c.verse.book) else { continue };
+        if let Some(si) = CANON_SEGMENTS.iter().position(|(_, lo, hi)| bi >= *lo && bi <= *hi) {
+            acc[si].cards += 1;
+            acc[si].reviews += c.reviews.len() as u32;
+            if mastery(c) == Mastery::Mature {
+                acc[si].mature += 1;
+            }
+        }
+    }
+    acc
+}
+
+// ── civil-date math (no external time dep; day granularity for SRS) ──────────
+
+/// Howard Hinnant's days-from-civil (proleptic Gregorian; 1970-01-01 == 0).
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe - 719468
+}
+
+fn civil_from_days(z: i64) -> (i64, i64, i64) {
+    let z = z + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+/// Parse the `YYYY-MM-DD` date out of an RFC3339 stamp → days since epoch.
+fn date_to_days(stamp: &str) -> Option<i64> {
+    let mut it = stamp.get(0..10)?.split('-');
+    let y: i64 = it.next()?.parse().ok()?;
+    let m: i64 = it.next()?.parse().ok()?;
+    let d: i64 = it.next()?.parse().ok()?;
+    Some(days_from_civil(y, m, d))
+}
+
+fn days_to_date(days: i64) -> String {
+    let (y, m, d) = civil_from_days(days);
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+/// `stamp`'s date advanced by `n` days, as `YYYY-MM-DD`.
+fn add_days(stamp: &str, n: i64) -> String {
+    days_to_date(date_to_days(stamp).unwrap_or(0) + n)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const T0: &str = "2026-01-01T00:00:00Z";
+
+    #[test]
+    fn sm2_interval_progression_on_good() {
+        let mut c = Card::new(VRef::new("John", 3, 16), "kjv1769-tok2", T0);
+        review(&mut c, Grade::Good, T0); // rep 1 → 1 day
+        assert_eq!((c.reps, c.interval_days), (1, 1));
+        review(&mut c, Grade::Good, "2026-01-02T00:00:00Z"); // rep 2 → 6 days
+        assert_eq!((c.reps, c.interval_days), (2, 6));
+        review(&mut c, Grade::Good, "2026-01-08T00:00:00Z"); // rep 3 → 6*ease
+        assert!(c.interval_days >= 14, "interval was {}", c.interval_days);
+        assert_eq!(c.reviews.len(), 3);
+        assert_eq!(c.due, add_days("2026-01-08T00:00:00Z", c.interval_days as i64));
+    }
+
+    #[test]
+    fn again_lapses_and_resets() {
+        let mut c = Card::new(VRef::new("John", 3, 16), "kjv1769-tok2", T0);
+        review(&mut c, Grade::Good, T0);
+        review(&mut c, Grade::Good, "2026-01-02T00:00:00Z");
+        let ease_before = c.ease;
+        review(&mut c, Grade::Again, "2026-01-08T00:00:00Z");
+        assert_eq!((c.reps, c.interval_days, c.lapses), (0, 1, 1));
+        assert!(c.ease < ease_before && c.ease >= EASE_FLOOR);
+        assert_eq!(mastery(&c), Mastery::Learning);
+    }
+
+    #[test]
+    fn mastery_buckets_and_due() {
+        let mut c = Card::new(VRef::new("Ps", 23, 1), "kjv1769-tok2", T0);
+        assert_eq!(mastery(&c), Mastery::New);
+        assert!(is_due(&c, T0)); // new cards are due now
+        // Grind Good until mature (interval crosses 21 days).
+        let mut day = 0i64;
+        for _ in 0..6 {
+            let now = add_days(T0, day) + "T00:00:00Z";
+            review(&mut c, Grade::Good, &now);
+            day += c.interval_days as i64;
+        }
+        assert!(c.interval_days >= MATURE_DAYS, "interval {}", c.interval_days);
+        assert_eq!(mastery(&c), Mastery::Mature);
+        // Due exactly on its scheduled day, but not the day before (scheduled ahead).
+        assert!(is_due(&c, &(add_days(T0, day) + "T00:00:00Z")));
+        assert!(!is_due(&c, &(add_days(T0, day - 1) + "T00:00:00Z")));
+    }
+
+    #[test]
+    fn first_letters_prompt() {
+        assert_eq!(first_letters("For God so loved the world,"), "F G s l t w,");
+        assert_eq!(first_letters("(the LORD)"), "(t L)");
+    }
+
+    #[test]
+    fn blank_out_progressive() {
+        let v = "For God so loved the world";
+        assert_eq!(blank_out(v, 0), v); // nothing hidden at level 0
+        assert_eq!(blank_out(v, MAX_BLANK_LEVEL).replace(['_', ' '], ""), ""); // all letters gone
+        let mid = blank_out(v, 2);
+        assert!(mid.contains('_') && mid.split_whitespace().any(|w| !w.contains('_')));
+    }
+
+    #[test]
+    fn recall_scoring_is_alignment_tolerant() {
+        let actual = "For God so loved the world";
+        assert_eq!(score_recall("for god so loved the world", actual).accuracy, 1.0);
+        // A skipped word: the rest still align via LCS, not a cascade of misses.
+        let s = score_recall("For God loved the world", actual);
+        assert_eq!(s.words.iter().filter(|w| w.ok).count(), 5); // all but "so"
+        assert!(!s.words[2].ok && s.words[2].word == "so");
+        assert!((s.accuracy - 5.0 / 6.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn store_roundtrip_and_queue() {
+        let home = std::env::temp_dir().join(format!("pure-mem-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let (loaded, _) = load_cards(&home);
+        assert!(loaded.is_empty());
+
+        let jn = VRef::new("John", 3, 16);
+        grade_verse(&home, &loaded, &jn, "kjv1769-tok2", Grade::Good, T0).unwrap();
+        let (loaded, errs) = load_cards(&home);
+        assert!(errs.is_empty());
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[&jn].reps, 1);
+
+        // Due yesterday-scheduled card shows in the queue; a far-future one doesn't.
+        let ps = VRef::new("Ps", 119, 11);
+        grade_verse(&home, &loaded, &ps, "kjv1769-tok2", Grade::Easy, T0).unwrap();
+        let (loaded, _) = load_cards(&home);
+        let q = due_queue(&loaded, "2026-01-02T00:00:00Z");
+        assert!(q.contains(&jn)); // John 3:16 was due after 1 day
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn coverage_and_activity() {
+        let mut cards = HashMap::new();
+        let mut c = Card::new(VRef::new("John", 3, 16), "kjv1769-tok2", T0);
+        review(&mut c, Grade::Good, T0);
+        review(&mut c, Grade::Good, "2026-01-03T00:00:00Z");
+        cards.insert(c.verse.clone(), c);
+
+        let cov = coverage(&cards, "2026-01-10T00:00:00Z");
+        assert_eq!(cov.len(), 1);
+        assert_eq!(cov[0].ref_key, "John 3:16");
+        assert_eq!(cov[0].reps, 2);
+
+        let act = activity_by_day(&cards);
+        assert_eq!(act, vec![
+            DayActivity { day: "2026-01-01".into(), reviews: 1 },
+            DayActivity { day: "2026-01-03".into(), reviews: 1 },
+        ]);
+
+        let sec = coverage_by_section(&cards);
+        let gospels = sec.iter().find(|s| s.label == "Gospels").unwrap();
+        assert_eq!((gospels.cards, gospels.reviews), (1, 2));
+    }
+
+    #[test]
+    fn date_math_handles_month_and_leap_boundaries() {
+        assert_eq!(add_days("2026-01-31T00:00:00Z", 1), "2026-02-01");
+        assert_eq!(add_days("2026-12-31T12:00:00Z", 1), "2027-01-01");
+        assert_eq!(add_days("2024-02-28T00:00:00Z", 1), "2024-02-29"); // 2024 is leap
+        assert_eq!(add_days("2026-02-28T00:00:00Z", 1), "2026-03-01"); // 2026 is not
+    }
+}
