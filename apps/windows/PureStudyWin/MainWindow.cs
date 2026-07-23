@@ -37,15 +37,21 @@ public sealed class MainWindow : Window
     private readonly Button _threadsBtn = new() { Content = "Threads", IsEnabled = false };
     private readonly Button _tagsBtn = new() { Content = "Tags", IsEnabled = false };
     private readonly Button _weavesBtn = new() { Content = "Weaves", IsEnabled = false };
-    private readonly Button _suggestedBtn = new() { Content = "Suggested", IsEnabled = false };
-    private readonly Button _mapBtn = new() { Content = "Map", IsEnabled = false };
-    private readonly Button _constBtn = new() { Content = "Constellation", IsEnabled = false };
     private readonly Button _linkBtn = new() { Content = "＋ link", IsEnabled = false };
-    private readonly Button _modeBtn = new() { Content = "Simple reader", IsEnabled = false };
-    private readonly Button _vplBtn = new() { Content = "Flowing text", IsEnabled = false };
-    // Always available (no engine needed): the theme toggle and the Help button.
-    private readonly Button _themeBtn = new() { Content = "Theme: system" };
-    private readonly Button _helpBtn = new() { Content = "?" };
+    // Primary menu (≡): weave views, reading mode, theme, and help — the clean
+    // home for everything that used to be scattered across header buttons. Its
+    // items mirror the GTK win.* menu.
+    private readonly DropDownButton _menuBtn = new() { Content = new FontIcon { Glyph = "" } };
+    private readonly MenuFlyoutItem _miSuggested = new() { Text = "Suggested weaves", IsEnabled = false };
+    private readonly MenuFlyoutItem _miMap = new() { Text = "Weave map", IsEnabled = false };
+    private readonly MenuFlyoutItem _miConst = new() { Text = "Constellation", IsEnabled = false };
+    private readonly RadioMenuFlyoutItem _miModeSimple = new() { Text = "Simple reader", GroupName = "mode" };
+    private readonly RadioMenuFlyoutItem _miModeFull = new() { Text = "Full study", GroupName = "mode" };
+    private readonly ToggleMenuFlyoutItem _miVpl = new() { Text = "Verse per line" };
+    private readonly RadioMenuFlyoutItem _miThemeLight = new() { Text = "Light", GroupName = "theme" };
+    private readonly RadioMenuFlyoutItem _miThemeDark = new() { Text = "Dark", GroupName = "theme" };
+    private readonly RadioMenuFlyoutItem _miThemeNight = new() { Text = "Night", GroupName = "theme" };
+    private readonly RadioMenuFlyoutItem _miThemeSystem = new() { Text = "Follow system", GroupName = "theme" };
     private string _themeChoice = "system";
     private readonly TextBlock _status = new()
     {
@@ -69,7 +75,6 @@ public sealed class MainWindow : Window
             Palette.ApplyTheme(ResolveTheme(_themeChoice));
         }
         catch { _themeChoice = "system"; /* keep the default light palette */ }
-        _themeBtn.Content = ThemeLabel(_themeChoice);
 
         var header = new StackPanel
         {
@@ -80,15 +85,9 @@ public sealed class MainWindow : Window
         header.Children.Add(_threadsBtn);
         header.Children.Add(_tagsBtn);
         header.Children.Add(_weavesBtn);
-        header.Children.Add(_suggestedBtn);
-        header.Children.Add(_mapBtn);
-        header.Children.Add(_constBtn);
         header.Children.Add(_linkBtn);
         header.Children.Add(_search);
-        header.Children.Add(_modeBtn);
-        header.Children.Add(_vplBtn);
-        header.Children.Add(_themeBtn);
-        header.Children.Add(_helpBtn);
+        header.Children.Add(_menuBtn);
         header.Children.Add(_status);
 
         var centre = new Grid();
@@ -208,8 +207,7 @@ public sealed class MainWindow : Window
         _active = Math.Clamp(cfg.ActivePane, 0, _panes.Count - 1);
         RebuildPaneRow();
 
-        foreach (var c in new Control[]
-                 { _search, _threadsBtn, _tagsBtn, _weavesBtn, _suggestedBtn, _mapBtn, _constBtn, _modeBtn, _vplBtn })
+        foreach (var c in new Control[] { _search, _threadsBtn, _tagsBtn, _weavesBtn })
             c.IsEnabled = true;
         _status.Text = "";
         // Warm the analytics indexes off the UI thread in Full mode, so the
@@ -434,37 +432,8 @@ public sealed class MainWindow : Window
         _threadsBtn.Click += (_, _) => _panel.ShowThreadsList();
         _tagsBtn.Click += (_, _) => _panel.ShowTagsList();
         _weavesBtn.Click += (_, _) => _panel.ShowWeavesList();
-        _suggestedBtn.Click += (_, _) => _panel.ShowSuggested();
-        _mapBtn.Click += (_, _) =>
-        {
-            // Book-pair density folded once in the core (pure_engine_chord_map_json);
-            // the popup only lays out ribbons over it.
-            if (_books.Count > 0 && _engine?.ChordMapJson() is { } cmj
-                && Wire.Parse<ChordMapData>(cmj) is { Pairs.Count: > 0 } map)
-                Popups.ChordMap(map, _books, (book) => NavigateActive(book, 1, null));
-        };
-        _constBtn.Click += (_, _) =>
-        {
-            // The layout comes from the core view-model (pure_engine_constellation_json);
-            // the popup holds only the page + pin set and paints it.
-            if (_engine is not null)
-                Popups.Constellation(_engine,
-                    (book, ch, verse) => NavigateActive(book, ch, verse),
-                    i => _panel.ShowCompareCard(i));
-        };
         _linkBtn.Click += (_, _) => _ = MakeLinkAsync();
-        _modeBtn.Click += (_, _) =>
-        {
-            _fullMode = !_fullMode;
-            ApplyMode(persist: true);
-        };
-        _vplBtn.Click += (_, _) =>
-        {
-            _versePerLine = !_versePerLine;
-            ApplyVersePerLine(persist: true);
-        };
-        _themeBtn.Click += (_, _) => CycleTheme();
-        _helpBtn.Click += (_, _) => _panel.ShowGuide();
+        BuildPrimaryMenu();
 
         _search.TextChanged += (_, _) => RunSearch(_search.Text, live: true);
         _search.KeyDown += (_, e) =>
@@ -491,6 +460,73 @@ public sealed class MainWindow : Window
         AddAccel(root, (VirtualKey)0xBF /* / → ? */, VirtualKeyModifiers.Shift, () => _ = ShowShortcutsAsync(), skipWhenTyping: true);
 
         _strip.BookPicked += book => NavigateActive(book, 1, null);
+    }
+
+    /// Build the primary (≡) menu: weave views, reading, theme, and help — the
+    /// WinUI mirror of the GTK win.* menu. Radios/toggles reflect + drive state.
+    private void BuildPrimaryMenu()
+    {
+        _miSuggested.Click += (_, _) => _panel.ShowSuggested();
+        _miMap.Click += (_, _) =>
+        {
+            // Book-pair density folded once in the core (pure_engine_chord_map_json).
+            if (_books.Count > 0 && _engine?.ChordMapJson() is { } cmj
+                && Wire.Parse<ChordMapData>(cmj) is { Pairs.Count: > 0 } map)
+                Popups.ChordMap(map, _books, (book) => NavigateActive(book, 1, null));
+        };
+        _miConst.Click += (_, _) =>
+        {
+            if (_engine is not null)
+                Popups.Constellation(_engine,
+                    (book, ch, verse) => NavigateActive(book, ch, verse),
+                    i => _panel.ShowCompareCard(i));
+        };
+
+        _miModeSimple.Click += (_, _) => { if (_fullMode) { _fullMode = false; ApplyMode(persist: true); } };
+        _miModeFull.Click += (_, _) => { if (!_fullMode) { _fullMode = true; ApplyMode(persist: true); } };
+        _miVpl.Click += (_, _) => { _versePerLine = _miVpl.IsChecked; ApplyVersePerLine(persist: true); };
+
+        _miThemeLight.Click += (_, _) => SetTheme("light");
+        _miThemeDark.Click += (_, _) => SetTheme("dark");
+        _miThemeNight.Click += (_, _) => SetTheme("night");
+        _miThemeSystem.Click += (_, _) => SetTheme("system");
+
+        var guide = new MenuFlyoutItem { Text = "Guide" };
+        guide.Click += (_, _) => _panel.ShowGuide();
+        var shortcuts = new MenuFlyoutItem { Text = "Keyboard shortcuts" };
+        shortcuts.Click += (_, _) => _ = ShowShortcutsAsync();
+        var about = new MenuFlyoutItem { Text = "About pure-study" };
+        about.Click += (_, _) => _panel.ShowAbout();
+
+        var views = new MenuFlyoutSubItem { Text = "Weave views" };
+        views.Items.Add(_miSuggested);
+        views.Items.Add(_miMap);
+        views.Items.Add(_miConst);
+
+        var reading = new MenuFlyoutSubItem { Text = "Reading" };
+        reading.Items.Add(_miModeSimple);
+        reading.Items.Add(_miModeFull);
+        reading.Items.Add(new MenuFlyoutSeparator());
+        reading.Items.Add(_miVpl);
+
+        var theme = new MenuFlyoutSubItem { Text = "Theme" };
+        theme.Items.Add(_miThemeLight);
+        theme.Items.Add(_miThemeDark);
+        theme.Items.Add(_miThemeNight);
+        theme.Items.Add(_miThemeSystem);
+
+        var flyout = new MenuFlyout();
+        flyout.Items.Add(views);
+        flyout.Items.Add(reading);
+        flyout.Items.Add(theme);
+        flyout.Items.Add(new MenuFlyoutSeparator());
+        flyout.Items.Add(guide);
+        flyout.Items.Add(shortcuts);
+        flyout.Items.Add(about);
+        _menuBtn.Flyout = flyout;
+
+        _miVpl.IsChecked = _versePerLine;
+        SyncThemeRadio();
     }
 
     private void FocusActive()
@@ -554,7 +590,7 @@ public sealed class MainWindow : Window
     /// GTK vpl toggle: flow ↔ verse-per-line for every pane; persists at once.
     private void ApplyVersePerLine(bool persist)
     {
-        _vplBtn.Content = _versePerLine ? "Verse / line" : "Flowing text";
+        _miVpl.IsChecked = _versePerLine;
         foreach (var p in _panes) p.Reader.VersePerLine = _versePerLine;
         _connectors.Redraw();
         if (persist) PersistConfig();
@@ -562,15 +598,19 @@ public sealed class MainWindow : Window
 
     private void ApplyMode(bool persist)
     {
-        _modeBtn.Content = _fullMode ? "Full study" : "Simple reader";
+        // Study browse buttons show only in Full study; the weave-view menu items
+        // (also Full-study features) are gated the same way, and the menu's mode
+        // radio is kept in sync.
         var vis = _fullMode ? Visibility.Visible : Visibility.Collapsed;
         _threadsBtn.Visibility = vis;
         _tagsBtn.Visibility = vis;
         _weavesBtn.Visibility = vis;
-        _suggestedBtn.Visibility = vis;
-        _mapBtn.Visibility = vis;
-        _constBtn.Visibility = vis;
         _linkBtn.Visibility = vis;
+        _miSuggested.IsEnabled = _fullMode;
+        _miMap.IsEnabled = _fullMode;
+        _miConst.IsEnabled = _fullMode;
+        _miModeSimple.IsChecked = !_fullMode;
+        _miModeFull.IsChecked = _fullMode;
         if (!_fullMode) _panel.Close();
         if (persist) PersistConfig();
     }
@@ -678,23 +718,23 @@ public sealed class MainWindow : Window
         _ => SystemIsDark() ? "dark" : "light",
     };
 
-    private static string NextChoice(string c) => c switch
+    /// Apply a specific theme choice (light · dark · night · follow system),
+    /// driven by the ≡ menu's theme radio; re-themes chrome + panes and persists.
+    private void SetTheme(string choice)
     {
-        "light" => "dark",
-        "dark" => "night",
-        "night" => "system",
-        _ => "light",
-    };
-
-    private static string ThemeLabel(string c) => "Theme: " + (c is "light" or "dark" or "night" ? c : "system");
-
-    private void CycleTheme()
-    {
-        _themeChoice = NextChoice(_themeChoice);
+        _themeChoice = choice;
         Palette.ApplyTheme(ResolveTheme(_themeChoice));
-        _themeBtn.Content = ThemeLabel(_themeChoice);
         ApplyThemeToUi();
+        SyncThemeRadio();
         PersistConfig();
+    }
+
+    private void SyncThemeRadio()
+    {
+        _miThemeLight.IsChecked = _themeChoice == "light";
+        _miThemeDark.IsChecked = _themeChoice == "dark";
+        _miThemeNight.IsChecked = _themeChoice == "night";
+        _miThemeSystem.IsChecked = _themeChoice is not ("light" or "dark" or "night");
     }
 
     /// Re-apply the current palette to chrome whose brushes were captured earlier

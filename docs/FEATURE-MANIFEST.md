@@ -309,15 +309,28 @@ position intentionally transient. *Data*: `pure_config_load_json` /
 
 First run: modal "Welcome to pure-study" with two cards — "Simple reader"
 ("Just the text…") / "Full study" ("Everything…"); closing without choosing
-keeps Simple. Header toggle button shows the *current* mode; leaving Full
-collapses the panel. Simple hides the header study tools (Threads, Tags,
-Suggested, Map, Constellation, ＋link) and every (F) item above; Simple keeps
-reading, search, hover gloss, basic word study (Strong's + occurrences +
-weave xrefs + margin notes), canon strip, connectors, zoom.
+keeps Simple. Reading mode is now a radio in the primary ≡ menu (Reading ▸
+Simple reader / Full study), not a header button; leaving Full collapses the
+panel. Simple hides the header study tools (Threads, Tags, Weaves, ＋link) and
+disables the menu's weave views (Suggested, Weave map, Constellation) plus every
+(F) item above; Simple keeps reading, search, hover gloss, basic word study
+(Strong's + occurrences + weave xrefs + margin notes), canon strip, connectors,
+zoom.
+
+## Primary menu (≡)
+
+The header keeps only the core browse buttons (Threads, Tags, Weaves, ＋link) +
+search; everything else moved into a right-aligned primary ≡ menu, in both
+shells: **Weave views** (Suggested, Weave map, Constellation — disabled outside
+Full study), **Reading** (Simple/Full radio + Verse-per-line toggle), **Theme**
+(light/dark/night/follow-system radio), and **Guide / Keyboard shortcuts /
+About**. GTK: a `gtk::MenuButton` + `gio::Menu` backed by `win.*` `SimpleAction`s
+(string-stateful radios, boolean toggle). WinUI: a `DropDownButton` + `MenuFlyout`
+with `RadioMenuFlyoutItem` / `ToggleMenuFlyoutItem`.
 
 ## Chord/arc "Map" popup (M:887–935, 2994–3087)
 
-1000×360, Esc/click-outside closes. **The book-pair fold lives in the core
+1000×360, Esc or the close button closes. **The book-pair fold lives in the core
 view-model** `pure_engine_chord_map_json` → `{pairs:[{a,b,count}] (canon book
 indices, a≤b), max, otNtDivide, bookCount}` (GTK calls `pure_core::weave::chord_pairs`
 directly). The shell only paints: canon axis with section bands + labels (from
@@ -332,7 +345,7 @@ reference.
 
 ## Constellation popup (M:937–1529)
 
-1200×640; ‹prev/next› + caption; Esc/click-outside closes; Left/Right page.
+1200×640; ‹prev/next› + caption; Esc or the close button closes; Left/Right page.
 **The whole layout is the core view-model** `pure_engine_constellation_json(page,
 pins_json)` (pins = a JSON array of weave indices) → lanes of nodes + edges as
 **fractions** (`x` a canon fraction, `laneFrac` 0..1 within a lane, `size` a
@@ -492,8 +505,8 @@ New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
   (`palette(theme)`), served as `pure_theme_palette_json`; light values are the
   shipped ones (no regression), dark (candlelight-warm) + night (true-black) are
   new. Config gains `theme` (`system`/`light`/`dark`/`night`, additive). The
-  reader canvas + chrome paint from the palette; the theme button cycles +
-  persists. GTK drives the CSS provider + `AdwStyleManager` scheme from the
+  reader canvas + chrome paint from the palette; the ≡ menu's Theme radio
+  (light/dark/night/follow-system) sets the choice + persists. GTK drives the CSS provider + `AdwStyleManager` scheme from the
   palette; the study panel's accent hexes come from the palette via a
   thread-local (`MARKUP_PALETTE`, set at load + on switch) while its base ink
   inherits the `ForceDark`-themed label. WinUI re-applies the `Palette` static +

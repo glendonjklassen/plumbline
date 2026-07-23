@@ -24,7 +24,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use adw::prelude::*;
-use gtk::{cairo, gdk, glib};
+use gtk::{cairo, gdk, gio, glib};
 
 use pure_core::config::{self, Config, StudyMode};
 use pure_core::corpus::{Corpus, FLAG_ADDED, FLAG_DIVINE, FLAG_TITLE};
@@ -468,77 +468,43 @@ fn build_ui(app: &adw::Application) {
     let search = gtk::SearchEntry::new();
     search.set_placeholder_text(Some("search — word, phrase, or reference"));
     search.set_width_chars(28);
-    header.pack_end(&search);
 
     let threads_btn = gtk::Button::with_label("Threads");
     threads_btn.add_css_class("flat");
     let tags_btn = gtk::Button::with_label("Tags");
-    let weaves_btn = gtk::Button::with_label("Weaves");
-    weaves_btn.set_tooltip_text(Some("Browse the weave library"));
     tags_btn.add_css_class("flat");
-    let suggested_btn = gtk::Button::with_label("Suggested");
-    suggested_btn.add_css_class("flat");
-    suggested_btn.set_tooltip_text(Some("Review proposed weaves — approve to keep, reject to discard"));
+    let weaves_btn = gtk::Button::with_label("Weaves");
+    weaves_btn.add_css_class("flat");
+    weaves_btn.set_tooltip_text(Some("Browse the weave library"));
     let link_btn = gtk::Button::with_label("＋ link");
     link_btn.add_css_class("flat");
     link_btn.set_tooltip_text(Some("Weave the two pinned words (click a word in each pane; click another word in the same verse to widen the span)"));
     link_btn.set_sensitive(false);
-    let map_btn = gtk::Button::with_label("Map");
-    map_btn.add_css_class("flat");
-    map_btn.set_tooltip_text(Some("Weave map — how strongly each pair of books is woven together"));
-    let const_btn = gtk::Button::with_label("Constellation");
-    const_btn.add_css_class("flat");
-    const_btn.set_tooltip_text(Some(
-        "Weave constellation — every weave a labelled lane on the canon backbone; page through the library, pin lanes to compare",
-    ));
 
     // The study tools live together so "Simple reader" mode can hide the whole
     // group at once (decision #4), leaving a clean reader + search + lookup.
+    // Suggested / Weave map / Constellation, reading mode, verse-per-line, theme,
+    // and Help now live in the primary ≡ menu (built below) — the header keeps
+    // just the core browse buttons + search + the menu, so nothing is scattered.
     let study_tools = gtk::Box::new(gtk::Orientation::Horizontal, 4);
     study_tools.append(&threads_btn);
     study_tools.append(&tags_btn);
     study_tools.append(&weaves_btn);
-    study_tools.append(&suggested_btn);
-    study_tools.append(&map_btn);
-    study_tools.append(&const_btn);
     study_tools.append(&link_btn);
     header.pack_start(&study_tools);
 
-    // Mode toggle: switch between Simple reader and Full study (persisted).
-    let mode_btn = gtk::Button::new();
-    mode_btn.add_css_class("flat");
-    mode_btn.set_tooltip_text(Some("Switch between Simple reader and Full study"));
-    header.pack_end(&mode_btn);
+    // Primary menu (≡): the clean home for weave views, reading mode, theme, and
+    // help. Its GActions ("win.…") are installed on the window further below.
+    let menu_btn = gtk::MenuButton::new();
+    menu_btn.set_icon_name("open-menu-symbolic");
+    menu_btn.set_tooltip_text(Some("Menu — weave views, reading, theme, help"));
+    menu_btn.set_menu_model(Some(&build_primary_menu()));
+    header.pack_end(&menu_btn);
+    header.pack_end(&search);
 
-    // Verse-per-line toggle (persisted; the label shows the current mode).
-    let vpl_btn = gtk::Button::new();
-    vpl_btn.add_css_class("flat");
-    vpl_btn.set_tooltip_text(Some("Toggle verse-per-line reading"));
-    vpl_btn.set_label(if state.borrow().verse_per_line { "verse / line" } else { "flowing text" });
-    header.pack_end(&vpl_btn);
-
-    // Theme toggle (light · dark · night · follow system) + Help (Tier 0 #5/#7).
-    let theme_btn = gtk::Button::new();
-    theme_btn.add_css_class("flat");
-    theme_btn.set_tooltip_text(Some("Cycle the colour theme"));
-    theme_btn.set_label(state.borrow().theme_choice.label());
-    header.pack_end(&theme_btn);
-
-    let help_btn = gtk::Button::with_label("?");
-    help_btn.add_css_class("flat");
-    help_btn.set_tooltip_text(Some("Guide — press ? or F1 for keyboard shortcuts"));
-    header.pack_end(&help_btn);
-
-    // Apply a mode to the header chrome: show/hide the study tools + relabel.
-    let apply_mode: Rc<dyn Fn(StudyMode)> = {
-        let study_tools = study_tools.clone();
-        let mode_btn = mode_btn.clone();
-        Rc::new(move |mode: StudyMode| {
-            study_tools.set_visible(mode.is_full());
-            mode_btn.set_label(if mode.is_full() { "Full study" } else { "Simple reader" });
-        })
-    };
-    apply_mode(state.borrow().mode);
+    // apply_mode + the primary-menu GActions are installed after the window is
+    // built (they need the window's "win" action group); see "primary menu
+    // actions" below.
 
     // ── study side panel ─────────────────────────────────────────────────────
     let study = gtk::Label::new(Some(
@@ -695,71 +661,9 @@ fn build_ui(app: &adw::Application) {
             show_study(&ui, &m);
         });
     }
-    {
-        let state = state.clone();
-        let ui = ui.clone();
-        suggested_btn.connect_clicked(move |_| {
-            let m = suggested_list_markup(&state.borrow());
-            show_study(&ui, &m);
-        });
-    }
-    {
-        let state = state.clone();
-        let ui = ui.clone();
-        map_btn.connect_clicked(move |_| show_weave_map(&state, &ui));
-    }
-    {
-        let state = state.clone();
-        let ui = ui.clone();
-        const_btn.connect_clicked(move |_| show_constellation(&state, &ui));
-    }
-    // ── theme cycle + Help (guide) buttons (Tier 0 #5 / #7) ─────────────────────
-    {
-        let state = state.clone();
-        let ui = ui.clone();
-        let btn = theme_btn.clone();
-        theme_btn.connect_clicked(move |_| cycle_theme(&state, &ui, &btn));
-    }
-    {
-        let ui = ui.clone();
-        help_btn.connect_clicked(move |_| show_study(&ui, &blocks_to_markup(&panel::guide_blocks())));
-    }
-    // ── study mode toggle (Simple ⇄ Full), persisted ────────────────────────────
-    {
-        let state = state.clone();
-        let ui = ui.clone();
-        let apply_mode = apply_mode.clone();
-        mode_btn.connect_clicked(move |_| {
-            let new = {
-                let mut st = state.borrow_mut();
-                st.mode = if st.mode.is_full() { StudyMode::Simple } else { StudyMode::Full };
-                st.mode
-            };
-            persist_config(&state);
-            apply_mode(new);
-            // Leaving Full: collapse the study panel so no authoring view lingers.
-            if !new.is_full() {
-                hide_study(&ui);
-            }
-        });
-    }
-
-    // ── verse-per-line toggle, persisted ────────────────────────────────────────
-    {
-        let state = state.clone();
-        let ui = ui.clone();
-        let btn = vpl_btn.clone();
-        vpl_btn.connect_clicked(move |_| {
-            let now = {
-                let mut st = state.borrow_mut();
-                st.verse_per_line = !st.verse_per_line;
-                st.verse_per_line
-            };
-            persist_config(&state);
-            btn.set_label(if now { "verse / line" } else { "flowing text" });
-            redraw_all(&ui);
-        });
-    }
+    // Suggested / Weave map / Constellation, reading mode, verse-per-line, theme,
+    // and help are all driven by the primary ≡ menu now — their GActions are
+    // installed on the window below (see "primary menu actions").
 
     // ── search box → results in the study panel ─────────────────────────────────
     {
@@ -816,6 +720,130 @@ fn build_ui(app: &adw::Application) {
             glib::Propagation::Proceed
         });
     }
+
+    // ── primary menu actions (win.*): drive the ≡ menu ──────────────────────────
+    // Weave views — Full-study features, so they are disabled in Simple reader.
+    let act_suggested = gio::SimpleAction::new("suggested", None);
+    {
+        let (state, ui) = (state.clone(), ui.clone());
+        act_suggested.connect_activate(move |_, _| {
+            let m = suggested_list_markup(&state.borrow());
+            show_study(&ui, &m);
+        });
+    }
+    window.add_action(&act_suggested);
+
+    let act_weave_map = gio::SimpleAction::new("weave-map", None);
+    {
+        let (state, ui) = (state.clone(), ui.clone());
+        act_weave_map.connect_activate(move |_, _| show_weave_map(&state, &ui));
+    }
+    window.add_action(&act_weave_map);
+
+    let act_const = gio::SimpleAction::new("constellation", None);
+    {
+        let (state, ui) = (state.clone(), ui.clone());
+        act_const.connect_activate(move |_, _| show_constellation(&state, &ui));
+    }
+    window.add_action(&act_const);
+
+    // Theme radio (light · dark · night · follow system), persisted.
+    let act_theme = gio::SimpleAction::new_stateful(
+        "theme",
+        Some(glib::VariantTy::STRING),
+        &state.borrow().theme_choice.token().to_variant(),
+    );
+    {
+        let (state, ui, act) = (state.clone(), ui.clone(), act_theme.clone());
+        act_theme.connect_activate(move |_, param| {
+            if let Some(choice) = param.and_then(|p| p.str()).and_then(theme::ThemeChoice::parse) {
+                apply_theme_choice(&state, &ui, choice);
+                act.set_state(&choice.token().to_variant());
+            }
+        });
+    }
+    window.add_action(&act_theme);
+
+    // Verse-per-line checkbox, persisted.
+    let act_vpl =
+        gio::SimpleAction::new_stateful("verse-per-line", None, &state.borrow().verse_per_line.to_variant());
+    {
+        let (state, ui) = (state.clone(), ui.clone());
+        act_vpl.connect_activate(move |a, _| {
+            let now = {
+                let mut st = state.borrow_mut();
+                st.verse_per_line = !st.verse_per_line;
+                st.verse_per_line
+            };
+            persist_config(&state);
+            a.set_state(&now.to_variant());
+            redraw_all(&ui);
+        });
+    }
+    window.add_action(&act_vpl);
+
+    // Reading-mode radio (Simple reader ⇄ Full study), persisted.
+    let act_mode = gio::SimpleAction::new_stateful(
+        "mode",
+        Some(glib::VariantTy::STRING),
+        &(if state.borrow().mode.is_full() { "full" } else { "simple" }).to_variant(),
+    );
+    window.add_action(&act_mode);
+
+    // Help.
+    let act_guide = gio::SimpleAction::new("guide", None);
+    {
+        let ui = ui.clone();
+        act_guide.connect_activate(move |_, _| show_study(&ui, &blocks_to_markup(&panel::guide_blocks())));
+    }
+    window.add_action(&act_guide);
+
+    let act_shortcuts = gio::SimpleAction::new("shortcuts", None);
+    {
+        let (state, ui) = (state.clone(), ui.clone());
+        act_shortcuts.connect_activate(move |_, _| show_shortcuts(&state, &ui));
+    }
+    window.add_action(&act_shortcuts);
+
+    let act_about = gio::SimpleAction::new("about", None);
+    {
+        let ui = ui.clone();
+        act_about.connect_activate(move |_, _| show_study(&ui, &blocks_to_markup(&panel::about_blocks())));
+    }
+    window.add_action(&act_about);
+
+    // Reflect a study mode across the chrome: show/hide the study tools, gate the
+    // Full-study-only weave views, and keep the menu's mode radio in sync.
+    let apply_mode: Rc<dyn Fn(StudyMode)> = {
+        let study_tools = study_tools.clone();
+        let ui = ui.clone();
+        let (a_sug, a_map, a_con, a_mode) =
+            (act_suggested.clone(), act_weave_map.clone(), act_const.clone(), act_mode.clone());
+        Rc::new(move |mode: StudyMode| {
+            let full = mode.is_full();
+            study_tools.set_visible(full);
+            a_sug.set_enabled(full);
+            a_map.set_enabled(full);
+            a_con.set_enabled(full);
+            a_mode.set_state(&(if full { "full" } else { "simple" }).to_variant());
+            if !full {
+                hide_study(&ui);
+            }
+        })
+    };
+    {
+        let (state, apply_mode) = (state.clone(), apply_mode.clone());
+        act_mode.connect_activate(move |_, param| {
+            let mode = match param.and_then(|p| p.str()) {
+                Some("full") => StudyMode::Full,
+                _ => StudyMode::Simple,
+            };
+            state.borrow_mut().mode = mode;
+            persist_config(&state);
+            apply_mode(mode);
+        });
+    }
+    apply_mode(state.borrow().mode);
 
     install_app_icon();
     rebuild_panes(&state, &ui); // builds the pane columns + first paint
@@ -1003,7 +1031,6 @@ fn show_concept_map(state: &Shared, ui: &Ui, code: &str) {
         win.add_controller(key);
     }
     win.set_child(Some(&vbox));
-    close_on_defocus(&win);
     win.present();
 }
 
@@ -1055,7 +1082,6 @@ fn show_weave_map(state: &Shared, ui: &Ui) {
         win.add_controller(key);
     }
     win.set_child(Some(&area));
-    close_on_defocus(&win);
     win.present();
 }
 
@@ -1340,7 +1366,7 @@ fn draw_constellation(
 /// Open the constellation: one page of weaves as labelled lanes over the canon
 /// backbone. ‹/› (or Left/Right) page the free lanes past the pinned ones;
 /// click a node to jump the active pane there, an edge to open its weave card,
-/// the gutter marker to pin/unpin. Esc or clicking outside closes.
+/// the gutter marker to pin/unpin. Esc or the close button dismisses it.
 fn show_constellation(state: &Shared, ui: &Ui) {
     let win = gtk::Window::builder()
         .title("Constellation")
@@ -1508,19 +1534,7 @@ fn show_constellation(state: &Shared, ui: &Ui) {
     }
 
     win.set_child(Some(&vbox));
-    close_on_defocus(&win);
     win.present();
-}
-
-/// Close a transient popup when it stops being the active window — clicking
-/// outside (back into the reader, or anywhere else) dismisses it, matching how
-/// a popover behaves. Only for view-only popups, never editing dialogs.
-fn close_on_defocus(win: &gtk::Window) {
-    win.connect_is_active_notify(|w| {
-        if !w.is_active() {
-            w.close();
-        }
-    });
 }
 
 /// Persist the current mode + body size + reading session (open panes) to the
@@ -2819,15 +2833,12 @@ fn show_context_menu(state: &Shared, ui: &Ui, i: usize, area: &gtk::DrawingArea,
     pop.popup();
 }
 
-/// Cycle the colour theme (light · dark · night · follow system), re-theme the
-/// chrome + CSS + canvases, and persist (Tier 0 #5).
-fn cycle_theme(state: &Shared, ui: &Ui, theme_btn: &gtk::Button) {
+/// Apply a specific colour theme (light · dark · night · follow system), re-theme
+/// the chrome + CSS + canvases, and persist (Tier 0 #5). Driven by the win.theme
+/// menu radio.
+fn apply_theme_choice(state: &Shared, ui: &Ui, choice: theme::ThemeChoice) {
     let sm = adw::StyleManager::default();
-    let choice = {
-        let mut st = state.borrow_mut();
-        st.theme_choice = st.theme_choice.next();
-        st.theme_choice
-    };
+    state.borrow_mut().theme_choice = choice;
     // System follows the OS scheme; the explicit choices force it.
     match choice {
         theme::ThemeChoice::System => sm.set_color_scheme(adw::ColorScheme::Default),
@@ -2838,11 +2849,47 @@ fn cycle_theme(state: &Shared, ui: &Ui, theme_btn: &gtk::Button) {
     state.borrow_mut().palette = palette.clone();
     set_markup_palette(&palette);
     ui.css.load_from_data(&css_string(&palette));
-    theme_btn.set_label(choice.label());
     persist_config(state);
     redraw_all(ui);
     ui.canon_map.queue_draw();
     ui.link_layer.queue_draw();
+}
+
+/// Build the primary (≡) menu model: weave views, reading, theme, and help.
+/// Backed by the win.* GActions installed on the window.
+fn build_primary_menu() -> gio::Menu {
+    let menu = gio::Menu::new();
+
+    let views = gio::Menu::new();
+    views.append(Some("Suggested weaves"), Some("win.suggested"));
+    views.append(Some("Weave map"), Some("win.weave-map"));
+    views.append(Some("Constellation"), Some("win.constellation"));
+    menu.append_submenu(Some("Weave views"), &views);
+
+    let reading = gio::Menu::new();
+    let modes = gio::Menu::new();
+    modes.append(Some("Simple reader"), Some("win.mode::simple"));
+    modes.append(Some("Full study"), Some("win.mode::full"));
+    reading.append_section(None, &modes);
+    let vpl = gio::Menu::new();
+    vpl.append(Some("Verse per line"), Some("win.verse-per-line"));
+    reading.append_section(None, &vpl);
+    menu.append_submenu(Some("Reading"), &reading);
+
+    let themes = gio::Menu::new();
+    themes.append(Some("Light"), Some("win.theme::light"));
+    themes.append(Some("Dark"), Some("win.theme::dark"));
+    themes.append(Some("Night"), Some("win.theme::night"));
+    themes.append(Some("Follow system"), Some("win.theme::system"));
+    menu.append_submenu(Some("Theme"), &themes);
+
+    let help = gio::Menu::new();
+    help.append(Some("Guide"), Some("win.guide"));
+    help.append(Some("Keyboard shortcuts"), Some("win.shortcuts"));
+    help.append(Some("About pure-study"), Some("win.about"));
+    menu.append_section(None, &help);
+
+    menu
 }
 
 /// The keyboard-shortcuts overlay (Tier 0 #7), a small modal window.
