@@ -36,7 +36,7 @@ use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread};
 use pure_core::panel::{self, PanelSource};
 use pure_core::weave::{self, Link, LoadedWeave, Span, WeaveKind};
-use pure_core::{canon, corpus, crossref, export, home, notes, theme, usernote, VRef};
+use pure_core::{canon, corpus, crossref, export, home, memory, notes, theme, usernote, VRef};
 use pure_rnd::{bridge, burst, concept, embed, morph, witness};
 use pure_layout::{layout_chapter, DisplayList, Hit, ItemKind, LayoutConfig, Measure};
 
@@ -820,6 +820,26 @@ fn build_ui(app: &adw::Application) {
         act_about.connect_activate(move |_, _| show_study(&ui, &blocks_to_markup(&panel::about_blocks())));
     }
     window.add_action(&act_about);
+
+    // Memorization (Tier 2 #15): review, coverage map, activity.
+    let act_mem_review = gio::SimpleAction::new("mem-review", None);
+    {
+        let (state, ui) = (state.clone(), ui.clone());
+        act_mem_review.connect_activate(move |_, _| show_memorize(&state, &ui));
+    }
+    window.add_action(&act_mem_review);
+    let act_mem_coverage = gio::SimpleAction::new("mem-coverage", None);
+    {
+        let (state, ui) = (state.clone(), ui.clone());
+        act_mem_coverage.connect_activate(move |_, _| show_mem_coverage(&state, &ui));
+    }
+    window.add_action(&act_mem_coverage);
+    let act_mem_activity = gio::SimpleAction::new("mem-activity", None);
+    {
+        let (state, ui) = (state.clone(), ui.clone());
+        act_mem_activity.connect_activate(move |_, _| show_mem_activity(&state, &ui));
+    }
+    window.add_action(&act_mem_activity);
 
     // Reflect a study mode across the chrome: show/hide the study tools, gate the
     // Full-study-only weave views, and keep the menu's mode radio in sync.
@@ -2934,6 +2954,17 @@ fn show_context_menu(state: &Shared, ui: &Ui, i: usize, area: &gtk::DrawingArea,
         vbox.append(&b);
     }
 
+    // Start memorizing this verse (Tier 2 #15).
+    {
+        let b = make("Memorize this verse");
+        let (state, ui, vref, pop) = (state.clone(), ui.clone(), vref.clone(), pop.clone());
+        b.connect_clicked(move |_| {
+            memorize_verse(&state, &ui, &vref);
+            pop.popdown();
+        });
+        vbox.append(&b);
+    }
+
     // Highlight tones + clear.
     for (tone, hex) in theme::HIGHLIGHT_TONES {
         let b = make(&format!("Highlight — {tone}"));
@@ -2994,6 +3025,396 @@ fn apply_theme_choice(state: &Shared, ui: &Ui, choice: theme::ThemeChoice) {
     ui.link_layer.queue_draw();
 }
 
+/// Start memorizing a verse: create its SRS card (due now) if it isn't already
+/// one. Sourced one verse at a time for v1; a tag/thread bulk-enqueue follows.
+fn memorize_verse(state: &Shared, ui: &Ui, vref: &VRef) {
+    let home = state.borrow().home.clone();
+    let (cards, _) = memory::load_cards(&home);
+    if cards.contains_key(vref) {
+        return;
+    }
+    let card = memory::Card::new(vref.clone(), canon::TOKENIZATION_VERSION, &now_stamp());
+    let _ = memory::write_card(&home, &card);
+    let _ = ui; // no reader-visible change yet; the card surfaces in Review/Coverage
+}
+
+/// The spaced-repetition review window (Tier 2 #15): step the verses due now,
+/// drilling each (first-letter · progressive blank-out · typed recall), then
+/// grade with SM-2 (Again / Hard / Good / Easy).
+fn show_memorize(state: &Shared, ui: &Ui) {
+    let home = state.borrow().home.clone();
+    let (cards, _) = memory::load_cards(&home);
+    let queue = memory::due_queue(&cards, &now_stamp());
+
+    let win = gtk::Window::builder().title("Memorize").default_width(720).default_height(520).build();
+    if let Some(p) = window_of(ui) {
+        win.set_transient_for(Some(&p));
+    }
+    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    vbox.set_margin_top(18);
+    vbox.set_margin_bottom(18);
+    vbox.set_margin_start(22);
+    vbox.set_margin_end(22);
+
+    if queue.is_empty() {
+        let empty = gtk::Label::new(Some(
+            "Nothing due for review.\n\nRight-click a verse → “Memorize this verse” to start a card.",
+        ));
+        empty.set_wrap(true);
+        empty.set_xalign(0.0);
+        vbox.append(&empty);
+        win.set_child(Some(&vbox));
+        win.present();
+        return;
+    }
+
+    #[derive(Clone, Copy)]
+    enum Prompt {
+        FirstLetters,
+        Blank(u8),
+        Full,
+    }
+    struct Mem {
+        queue: Vec<VRef>,
+        idx: usize,
+        prompt: Prompt,
+    }
+    let mem = Rc::new(RefCell::new(Mem { queue, idx: 0, prompt: Prompt::FirstLetters }));
+
+    let caption = gtk::Label::new(None);
+    caption.add_css_class("dim-label");
+    caption.set_xalign(0.0);
+    let ref_lbl = gtk::Label::new(None);
+    ref_lbl.add_css_class("heading");
+    ref_lbl.set_xalign(0.0);
+    let prompt = gtk::Label::new(None);
+    prompt.set_wrap(true);
+    prompt.set_xalign(0.0);
+    prompt.set_selectable(true);
+    prompt.set_vexpand(true);
+    prompt.set_valign(gtk::Align::Start);
+    prompt.add_css_class("studypanel");
+
+    // Prompt-mode controls: first-letters, a blank-out slider, reveal.
+    let controls = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let fl_btn = gtk::Button::with_label("First letters");
+    fl_btn.add_css_class("flat");
+    let hide = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, memory::MAX_BLANK_LEVEL as f64, 1.0);
+    hide.set_hexpand(true);
+    hide.set_draw_value(false);
+    hide.set_tooltip_text(Some("Blank out words progressively"));
+    let reveal_btn = gtk::Button::with_label("Reveal");
+    reveal_btn.add_css_class("flat");
+    controls.append(&fl_btn);
+    controls.append(&hide);
+    controls.append(&reveal_btn);
+
+    // Typed recall.
+    let recall = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let entry = gtk::Entry::new();
+    entry.set_placeholder_text(Some("Type the verse from memory, then Check"));
+    entry.set_hexpand(true);
+    let check_btn = gtk::Button::with_label("Check");
+    check_btn.add_css_class("flat");
+    recall.append(&entry);
+    recall.append(&check_btn);
+    let result = gtk::Label::new(None);
+    result.set_xalign(0.0);
+    result.set_wrap(true);
+
+    // Grade buttons.
+    let grades = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    grades.set_homogeneous(true);
+    let again = gtk::Button::with_label("Again");
+    again.add_css_class("destructive-action");
+    let hard = gtk::Button::with_label("Hard");
+    let good = gtk::Button::with_label("Good");
+    let easy = gtk::Button::with_label("Easy");
+    easy.add_css_class("suggested-action");
+    for b in [&again, &hard, &good, &easy] {
+        grades.append(b);
+    }
+
+    vbox.append(&caption);
+    vbox.append(&ref_lbl);
+    vbox.append(&prompt);
+    vbox.append(&controls);
+    vbox.append(&recall);
+    vbox.append(&result);
+    vbox.append(&grades);
+
+    let refresh: Rc<dyn Fn()> = {
+        let (state, mem, caption, ref_lbl, prompt, result, entry) = (
+            state.clone(),
+            mem.clone(),
+            caption.clone(),
+            ref_lbl.clone(),
+            prompt.clone(),
+            result.clone(),
+            entry.clone(),
+        );
+        Rc::new(move || {
+            let (vref, mode, idx, len) = {
+                let m = mem.borrow();
+                if m.idx >= m.queue.len() {
+                    return;
+                }
+                (m.queue[m.idx].clone(), m.prompt, m.idx, m.queue.len())
+            };
+            caption.set_text(&format!("Card {} of {} due", idx + 1, len));
+            ref_lbl.set_text(&vref.display());
+            let body = state.borrow().corpus.verse(&vref).map(|v| v.body()).unwrap_or_default();
+            let text = match mode {
+                Prompt::FirstLetters => memory::first_letters(&body),
+                Prompt::Blank(l) => memory::blank_out(&body, l),
+                Prompt::Full => body,
+            };
+            prompt.set_text(&text);
+            result.set_text("");
+            entry.set_text("");
+        })
+    };
+
+    let advance: Rc<dyn Fn()> = {
+        let (mem, win, refresh) = (mem.clone(), win.clone(), refresh.clone());
+        Rc::new(move || {
+            let done = {
+                let mut m = mem.borrow_mut();
+                m.idx += 1;
+                m.prompt = Prompt::FirstLetters;
+                m.idx >= m.queue.len()
+            };
+            if done {
+                win.close();
+            } else {
+                refresh();
+            }
+        })
+    };
+
+    let grade_fn: Rc<dyn Fn(memory::Grade)> = {
+        let (state, mem, advance) = (state.clone(), mem.clone(), advance.clone());
+        Rc::new(move |g| {
+            let vref = {
+                let m = mem.borrow();
+                m.queue[m.idx].clone()
+            };
+            let home = state.borrow().home.clone();
+            let (cards, _) = memory::load_cards(&home);
+            let _ = memory::grade_verse(&home, &cards, &vref, canon::TOKENIZATION_VERSION, g, &now_stamp());
+            advance();
+        })
+    };
+    for (btn, g) in [
+        (&again, memory::Grade::Again),
+        (&hard, memory::Grade::Hard),
+        (&good, memory::Grade::Good),
+        (&easy, memory::Grade::Easy),
+    ] {
+        let grade_fn = grade_fn.clone();
+        btn.connect_clicked(move |_| grade_fn(g));
+    }
+    {
+        let (mem, refresh) = (mem.clone(), refresh.clone());
+        fl_btn.connect_clicked(move |_| {
+            mem.borrow_mut().prompt = Prompt::FirstLetters;
+            refresh();
+        });
+    }
+    {
+        let (mem, refresh) = (mem.clone(), refresh.clone());
+        hide.connect_value_changed(move |s| {
+            mem.borrow_mut().prompt = Prompt::Blank(s.value().round() as u8);
+            refresh();
+        });
+    }
+    {
+        let (mem, refresh) = (mem.clone(), refresh.clone());
+        reveal_btn.connect_clicked(move |_| {
+            mem.borrow_mut().prompt = Prompt::Full;
+            refresh();
+        });
+    }
+    {
+        let (state, mem, entry, result) = (state.clone(), mem.clone(), entry.clone(), result.clone());
+        check_btn.connect_clicked(move |_| {
+            let vref = {
+                let m = mem.borrow();
+                m.queue[m.idx].clone()
+            };
+            let body = state.borrow().corpus.verse(&vref).map(|v| v.body()).unwrap_or_default();
+            let typed = entry.text();
+            let score = memory::score_recall(typed.as_str(), &body);
+            let pct = (score.accuracy * 100.0).round() as i32;
+            let missed: Vec<&str> = score.words.iter().filter(|w| !w.ok).map(|w| w.word.as_str()).collect();
+            result.set_text(&if missed.is_empty() {
+                format!("✓ {pct}% — perfect")
+            } else {
+                format!("{pct}% — missed: {}", missed.join(" "))
+            });
+        });
+    }
+
+    win.set_child(Some(&vbox));
+    refresh();
+    win.present();
+}
+
+/// The memorization coverage map (Tier 2 #15): the canon strip shaded by how
+/// much of each book you're memorizing and how well (mastery), OT/NT divide
+/// marked — the dispersion visual language reused for memory work.
+fn show_mem_coverage(state: &Shared, ui: &Ui) {
+    let win = gtk::Window::builder().title("Memory coverage").default_width(1000).default_height(220).build();
+    if let Some(p) = window_of(ui) {
+        win.set_transient_for(Some(&p));
+    }
+    let area = gtk::DrawingArea::new();
+    area.set_hexpand(true);
+    area.set_vexpand(true);
+    {
+        let state = state.clone();
+        area.set_draw_func(move |_a, cr, w, h| draw_mem_coverage(&state, cr, w, h));
+    }
+    win.set_child(Some(&area));
+    win.present();
+}
+
+fn draw_mem_coverage(state: &Shared, cr: &cairo::Context, w: i32, h: i32) {
+    let pal = state.borrow().palette.clone();
+    let (width, hf) = (w as f64, h as f64);
+    let (pr, pg, pb) = hex_rgb(&pal.paper);
+    cr.set_source_rgb(pr, pg, pb);
+    let _ = cr.rectangle(0.0, 0.0, width, hf);
+    let _ = cr.fill();
+
+    let home = state.borrow().home.clone();
+    let (cards, _) = memory::load_cards(&home);
+    let cov = memory::coverage(&cards, &now_stamp());
+    // Per-book: card count + summed mastery score → an average shade.
+    let mut by_book: HashMap<String, (u32, f64)> = HashMap::new();
+    for c in &cov {
+        if let Some(v) = VRef::parse_ref_key(&c.ref_key) {
+            let score = match c.mastery {
+                memory::Mastery::New => 0.15,
+                memory::Mastery::Learning => 0.40,
+                memory::Mastery::Young => 0.70,
+                memory::Mastery::Mature => 1.0,
+            };
+            let e = by_book.entry(v.book).or_insert((0, 0.0));
+            e.0 += 1;
+            e.1 += score;
+        }
+    }
+    let nb = canon::BOOKS.len() as f64;
+    let (gr, gg, gb) = hex_rgb(&pal.gold);
+    let top = 26.0;
+    for (i, b) in canon::BOOKS.iter().enumerate() {
+        let x0 = i as f64 / nb * width;
+        let x1 = (i as f64 + 1.0) / nb * width;
+        let alpha = match by_book.get(b.id) {
+            Some((count, sum)) => 0.2 + 0.75 * (sum / *count as f64),
+            None => 0.05,
+        };
+        cr.set_source_rgba(gr, gg, gb, alpha);
+        let _ = cr.rectangle(x0, top, (x1 - x0 - 0.5).max(0.5), hf - top);
+        let _ = cr.fill();
+    }
+    // OT/NT seam.
+    let dx = OT_NT_DIVIDE as f64 / nb * width;
+    cr.set_source_rgba(gr, gg, gb, 0.9);
+    let _ = cr.rectangle(dx - 0.75, 0.0, 1.5, hf);
+    let _ = cr.fill();
+    // Section labels along the top.
+    let layout = pangocairo::functions::create_layout(cr);
+    let mut fd = pango::FontDescription::new();
+    fd.set_family(&state.borrow().family);
+    fd.set_absolute_size(11.0 * pango::SCALE as f64);
+    layout.set_font_description(Some(&fd));
+    let (fr, fg, fb) = hex_rgb(&pal.faded);
+    cr.set_source_rgb(fr, fg, fb);
+    for &(label, lo, hi) in CANON_SEGMENTS.iter() {
+        let mid = (lo as f64 + hi as f64 + 1.0) / 2.0 / nb * width;
+        layout.set_text(label);
+        let tw = layout.size().0 as f64 / pango::SCALE as f64;
+        cr.move_to((mid - tw / 2.0).max(1.0), 6.0);
+        pangocairo::functions::show_layout(cr, &layout);
+    }
+}
+
+/// The activity heatmap (Tier 2 #15): reviews per calendar day, oldest → newest
+/// — a glance at when the memory work happened.
+fn show_mem_activity(state: &Shared, ui: &Ui) {
+    let win = gtk::Window::builder().title("Memory activity").default_width(720).default_height(280).build();
+    if let Some(p) = window_of(ui) {
+        win.set_transient_for(Some(&p));
+    }
+    let area = gtk::DrawingArea::new();
+    area.set_hexpand(true);
+    area.set_vexpand(true);
+    {
+        let state = state.clone();
+        area.set_draw_func(move |_a, cr, w, h| draw_mem_activity(&state, cr, w, h));
+    }
+    win.set_child(Some(&area));
+    win.present();
+}
+
+fn draw_mem_activity(state: &Shared, cr: &cairo::Context, w: i32, h: i32) {
+    let pal = state.borrow().palette.clone();
+    let (width, hf) = (w as f64, h as f64);
+    let (pr, pg, pb) = hex_rgb(&pal.paper);
+    cr.set_source_rgb(pr, pg, pb);
+    let _ = cr.rectangle(0.0, 0.0, width, hf);
+    let _ = cr.fill();
+
+    let home = state.borrow().home.clone();
+    let (cards, _) = memory::load_cards(&home);
+    let days = memory::activity_by_day(&cards);
+    let (gr, gg, gb) = hex_rgb(&pal.gold);
+    let (fr, fg, fb) = hex_rgb(&pal.faded);
+
+    let layout = pangocairo::functions::create_layout(cr);
+    let mut fd = pango::FontDescription::new();
+    fd.set_family(&state.borrow().family);
+
+    if days.is_empty() {
+        fd.set_absolute_size(13.0 * pango::SCALE as f64);
+        layout.set_font_description(Some(&fd));
+        layout.set_text("No reviews yet — grade some cards in Review due.");
+        cr.set_source_rgb(fr, fg, fb);
+        cr.move_to(24.0, hf / 2.0 - 8.0);
+        pangocairo::functions::show_layout(cr, &layout);
+        return;
+    }
+
+    let max = days.iter().map(|d| d.reviews).max().unwrap_or(1).max(1) as f64;
+    let n = days.len() as f64;
+    let baseline = hf - 28.0;
+    let plot_h = baseline - 24.0;
+    let gap = (width - 48.0) / n;
+    let bar_w = gap.min(28.0).max(2.0) - 2.0;
+    for (i, d) in days.iter().enumerate() {
+        let x = 24.0 + i as f64 * gap;
+        let bh = (d.reviews as f64 / max) * plot_h;
+        cr.set_source_rgba(gr, gg, gb, 0.85);
+        let _ = cr.rectangle(x, baseline - bh, bar_w.max(2.0), bh);
+        let _ = cr.fill();
+    }
+    // First + last day labels.
+    fd.set_absolute_size(10.0 * pango::SCALE as f64);
+    layout.set_font_description(Some(&fd));
+    cr.set_source_rgb(fr, fg, fb);
+    layout.set_text(&days[0].day);
+    cr.move_to(24.0, baseline + 6.0);
+    pangocairo::functions::show_layout(cr, &layout);
+    if days.len() > 1 {
+        layout.set_text(&days[days.len() - 1].day);
+        let tw = layout.size().0 as f64 / pango::SCALE as f64;
+        cr.move_to(width - 24.0 - tw, baseline + 6.0);
+        pangocairo::functions::show_layout(cr, &layout);
+    }
+}
+
 /// Build the primary (≡) menu model: weave views, reading, theme, and help.
 /// Backed by the win.* GActions installed on the window.
 fn build_primary_menu() -> gio::Menu {
@@ -3004,6 +3425,12 @@ fn build_primary_menu() -> gio::Menu {
     views.append(Some("Weave map"), Some("win.weave-map"));
     views.append(Some("Constellation"), Some("win.constellation"));
     menu.append_submenu(Some("Weave views"), &views);
+
+    let mem = gio::Menu::new();
+    mem.append(Some("Review due"), Some("win.mem-review"));
+    mem.append(Some("Coverage map"), Some("win.mem-coverage"));
+    mem.append(Some("Activity"), Some("win.mem-activity"));
+    menu.append_submenu(Some("Memorize"), &mem);
 
     let reading = gio::Menu::new();
     let modes = gio::Menu::new();
