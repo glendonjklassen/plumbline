@@ -807,6 +807,17 @@ namespace PureStudy.Native
         public static extern byte* pure_engine_highlight_remove(PureEngine* engine, byte* name, byte* start_ref, uint start_tok, byte* end_ref, uint end_tok);
 
         /// <summary>
+        ///  Drop every highlight range covering `verse_ref` from all tags, then reload —
+        ///  the drag-remove path (a whole range goes even if only one of its verses was
+        ///  targeted). Null on success, else an owned error.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; `verse_ref` is null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_highlight_clear_verse", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_highlight_clear_verse(PureEngine* engine, byte* verse_ref);
+
+        /// <summary>
         ///  The highlight washes for a chapter as JSON (`{book,chapter,verses:[{verse,
         ///  color}]}`): each verse that belongs to a colour-bearing tag, with the tone
         ///  the shell washes behind it. Never null on a live engine (none → empty list).

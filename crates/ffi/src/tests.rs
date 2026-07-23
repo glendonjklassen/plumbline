@@ -1076,6 +1076,17 @@ fn tier0_endpoints_via_abi() {
             &take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
         assert!(hr2["runs"].as_array().map(|a| a.is_empty()).unwrap_or(true));
 
+        // Clear-by-verse (WinUI's "Remove highlight"): re-add, then clear on any
+        // covered verse drops the whole range.
+        assert!(pure_engine_highlight_add(
+            e, c("dragged").as_ptr(), c("#c8b0e0").as_ptr(),
+            c("John 3:16").as_ptr(), 2, c("John 3:18").as_ptr(), 1, stamp.as_ptr(),
+        ).is_null());
+        assert!(pure_engine_highlight_clear_verse(e, c("John 3:16").as_ptr()).is_null());
+        let hr4: Value = serde_json::from_str(
+            &take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+        assert!(hr4["runs"].as_array().map(|a| a.is_empty()).unwrap_or(true));
+
         // Warming is a null-on-success no-op that stays callable.
         assert!(pure_engine_warm_indexes(e).is_null());
 

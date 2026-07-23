@@ -2735,6 +2735,47 @@ pub unsafe extern "C" fn pure_engine_highlight_remove(
     })
 }
 
+/// Drop every highlight range covering `verse_ref` from all tags, then reload —
+/// the drag-remove path (a whole range goes even if only one of its verses was
+/// targeted). Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is valid; `verse_ref` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_highlight_clear_verse(
+    engine: *mut PureEngine,
+    verse_ref: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(vr) = opt_str(verse_ref).and_then(VRef::parse_ref_key) else {
+            return out_string("bad ref".to_string());
+        };
+        let rk = vr.reading_key();
+        let covers = |h: &tag::HighlightRange| h.start.reading_key() <= rk && rk <= h.end.reading_key();
+        let mut study = engine.study_write();
+        let affected: Vec<_> = study
+            .tags
+            .iter()
+            .filter(|lt| lt.tag.highlights.iter().any(covers))
+            .cloned()
+            .collect();
+        for lt in &affected {
+            let mut t = lt.tag.clone();
+            t.highlights.retain(|h| !covers(h));
+            if let Err(e) = tag::write_tag(&lt.file, &t) {
+                return out_string(e.to_string());
+            }
+        }
+        if !affected.is_empty() {
+            *study = load_study(&engine.home);
+        }
+        ptr::null_mut()
+    })
+}
+
 /// The highlight washes for a chapter as JSON (`{book,chapter,verses:[{verse,
 /// color}]}`): each verse that belongs to a colour-bearing tag, with the tone
 /// the shell washes behind it. Never null on a live engine (none → empty list).

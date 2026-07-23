@@ -350,12 +350,43 @@ public sealed unsafe class StudyEngine : IDisposable
             return Utf8.Take(PureStudyNative.pure_engine_tag_set_color(_handle, n, c));
     }
 
-    /// The highlight washes for a chapter (`{book,chapter,verses:[{verse,color}]}`);
-    /// never null on a live engine (none → empty list).
+    /// The highlight washes for a chapter (`{book,chapter,verses:[{verse,color}],
+    /// runs:[{verse,lo,hi,color}]}`) — `verses` are whole-verse member washes,
+    /// `runs` are word-precise cross-verse ranges. Never null on a live engine.
     public string? ChapterHighlightsJson(string book, uint chapter)
     {
         fixed (byte* b = Utf8.NulTerminated(book))
             return Utf8.Take(PureStudyNative.pure_engine_chapter_highlights_json(_handle, b, chapter));
+    }
+
+    /// Add a word-precise cross-verse highlight range to a tone tag (created
+    /// coloured on first use); endpoints are ordered canonically in core, so a
+    /// backwards drag is fine. `color` may be null. Null = success.
+    public string? HighlightAdd(
+        string name, string? color, string startRef, uint startTok, string endRef, uint endTok, string addedUtc)
+    {
+        fixed (byte* n = Utf8.NulTerminated(name))
+        fixed (byte* c = Utf8.NulTerminatedOrNull(color))
+        fixed (byte* s = Utf8.NulTerminated(startRef))
+        fixed (byte* e = Utf8.NulTerminated(endRef))
+        fixed (byte* a = Utf8.NulTerminated(addedUtc))
+            return Utf8.Take(PureStudyNative.pure_engine_highlight_add(_handle, n, c, s, startTok, e, endTok, a));
+    }
+
+    /// Remove the highlight range with these exact endpoints from a tag. Null = success.
+    public string? HighlightRemove(string name, string startRef, uint startTok, string endRef, uint endTok)
+    {
+        fixed (byte* n = Utf8.NulTerminated(name))
+        fixed (byte* s = Utf8.NulTerminated(startRef))
+        fixed (byte* e = Utf8.NulTerminated(endRef))
+            return Utf8.Take(PureStudyNative.pure_engine_highlight_remove(_handle, n, s, startTok, e, endTok));
+    }
+
+    /// Drop every highlight range covering a verse (the drag-remove path). Null = success.
+    public string? HighlightClearVerse(string verseRef)
+    {
+        fixed (byte* r = Utf8.NulTerminated(verseRef))
+            return Utf8.Take(PureStudyNative.pure_engine_highlight_clear_verse(_handle, r));
     }
 
     /// Force the lazy analytics indexes to build now (call on a background thread

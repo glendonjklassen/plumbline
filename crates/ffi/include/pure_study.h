@@ -719,6 +719,14 @@ char *pure_engine_highlight_remove(struct PureEngine *engine,
                                    const char *end_ref,
                                    uint32_t end_tok);
 
+// Drop every highlight range covering `verse_ref` from all tags, then reload —
+// the drag-remove path (a whole range goes even if only one of its verses was
+// targeted). Null on success, else an owned error.
+//
+// # Safety
+// `engine` is valid; `verse_ref` is null or valid NUL-terminated UTF-8.
+char *pure_engine_highlight_clear_verse(struct PureEngine *engine, const char *verse_ref);
+
 // The highlight washes for a chapter as JSON (`{book,chapter,verses:[{verse,
 // color}]}`): each verse that belongs to a colour-bearing tag, with the tone
 // the shell washes behind it. Never null on a live engine (none → empty list).
