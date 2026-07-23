@@ -688,6 +688,37 @@ char *pure_engine_user_note_set(struct PureEngine *engine,
 // UTF-8 for the call.
 char *pure_engine_tag_set_color(struct PureEngine *engine, const char *name, const char *color);
 
+// Add a word-precise highlight range to the tag named `name` (created on first
+// use, taking `color` as its tone). The range runs from `start_ref`+`start_tok`
+// to `end_ref`+`end_tok` (inclusive token indices under `kjv1769-tok2`);
+// endpoints are ordered canonically here, so a backwards drag is fine. `color`
+// may be null (the range then inherits the tag's colour). `added` is a
+// caller-supplied UTC timestamp. Null on success, else an owned error.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_highlight_add(struct PureEngine *engine,
+                                const char *name,
+                                const char *color,
+                                const char *start_ref,
+                                uint32_t start_tok,
+                                const char *end_ref,
+                                uint32_t end_tok,
+                                const char *added);
+
+// Remove the highlight range with these endpoints from the tag named `name`.
+// Endpoints are ordered canonically to match how they were stored. A missing
+// range is a no-op; a missing tag is an error. Null on success, else an error.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_highlight_remove(struct PureEngine *engine,
+                                   const char *name,
+                                   const char *start_ref,
+                                   uint32_t start_tok,
+                                   const char *end_ref,
+                                   uint32_t end_tok);
+
 // The highlight washes for a chapter as JSON (`{book,chapter,verses:[{verse,
 // color}]}`): each verse that belongs to a colour-bearing tag, with the tone
 // the shell washes behind it. Never null on a live engine (none → empty list).

@@ -2615,6 +2615,126 @@ pub unsafe extern "C" fn pure_engine_tag_set_color(
     })
 }
 
+/// Add a word-precise highlight range to the tag named `name` (created on first
+/// use, taking `color` as its tone). The range runs from `start_ref`+`start_tok`
+/// to `end_ref`+`end_tok` (inclusive token indices under `kjv1769-tok2`);
+/// endpoints are ordered canonically here, so a backwards drag is fine. `color`
+/// may be null (the range then inherits the tag's colour). `added` is a
+/// caller-supplied UTC timestamp. Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_highlight_add(
+    engine: *mut PureEngine,
+    name: *const c_char,
+    color: *const c_char,
+    start_ref: *const c_char,
+    start_tok: u32,
+    end_ref: *const c_char,
+    end_tok: u32,
+    added: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        };
+        let (Some(name), Some(sr), Some(er), Some(added)) =
+            (opt_str(name), opt_str(start_ref), opt_str(end_ref), opt_str(added))
+        else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let (Some(sv), Some(ev)) = (VRef::parse_ref_key(sr), VRef::parse_ref_key(er)) else {
+            return out_string("bad ref".to_string());
+        };
+        let (st, et) = (start_tok.min(u16::MAX as u32) as u16, end_tok.min(u16::MAX as u32) as u16);
+        // Canonicalize so start ≤ end (a drag can go either direction).
+        let ((sv, st), (ev, et)) = if (sv.reading_key(), st) <= (ev.reading_key(), et) {
+            ((sv, st), (ev, et))
+        } else {
+            ((ev, et), (sv, st))
+        };
+        let range = tag::HighlightRange {
+            start: sv,
+            start_tok: st,
+            end: ev,
+            end_tok: et,
+            color: opt_str(color).map(str::to_string),
+            note: None,
+            added: added.to_string(),
+        };
+        let mut study = engine.study_write();
+        match tag::add_highlight(&home, &study.tags, name, canon::TOKENIZATION_VERSION, range, added) {
+            Ok(_) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Remove the highlight range with these endpoints from the tag named `name`.
+/// Endpoints are ordered canonically to match how they were stored. A missing
+/// range is a no-op; a missing tag is an error. Null on success, else an error.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_highlight_remove(
+    engine: *mut PureEngine,
+    name: *const c_char,
+    start_ref: *const c_char,
+    start_tok: u32,
+    end_ref: *const c_char,
+    end_tok: u32,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let (Some(name), Some(sr), Some(er)) =
+            (opt_str(name), opt_str(start_ref), opt_str(end_ref))
+        else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let (Some(sv), Some(ev)) = (VRef::parse_ref_key(sr), VRef::parse_ref_key(er)) else {
+            return out_string("bad ref".to_string());
+        };
+        let (st, et) = (start_tok.min(u16::MAX as u32) as u16, end_tok.min(u16::MAX as u32) as u16);
+        let ((sv, st), (ev, et)) = if (sv.reading_key(), st) <= (ev.reading_key(), et) {
+            ((sv, st), (ev, et))
+        } else {
+            ((ev, et), (sv, st))
+        };
+        let range = tag::HighlightRange {
+            start: sv,
+            start_tok: st,
+            end: ev,
+            end_tok: et,
+            color: None,
+            note: None,
+            added: String::new(),
+        };
+        let wanted = name.trim().to_lowercase();
+        let mut study = engine.study_write();
+        let found = study.tags.iter().find(|lt| lt.tag.name.to_lowercase() == wanted).cloned();
+        match found {
+            Some(lt) => match tag::remove_highlight(&lt, &range) {
+                Ok(()) => {
+                    *study = load_study(&engine.home);
+                    ptr::null_mut()
+                }
+                Err(e) => out_string(e.to_string()),
+            },
+            None => out_string(format!("no tag named {name}")),
+        }
+    })
+}
+
 /// The highlight washes for a chapter as JSON (`{book,chapter,verses:[{verse,
 /// color}]}`): each verse that belongs to a colour-bearing tag, with the tone
 /// the shell washes behind it. Never null on a live engine (none → empty list).
@@ -2633,9 +2753,8 @@ pub unsafe extern "C" fn pure_engine_chapter_highlights_json(
         };
         let Ok(chapter) = u16::try_from(chapter) else { return ptr::null_mut() };
         let study = e.study_read();
-        let verses = e
-            .corpus
-            .chapter_verses(book, chapter)
+        let chapter_verses = e.corpus.chapter_verses(book, chapter);
+        let verses = chapter_verses
             .iter()
             .filter_map(|v| {
                 let vref = v.vref();
@@ -2643,7 +2762,21 @@ pub unsafe extern "C" fn pure_engine_chapter_highlights_json(
                     .map(|c| wire::WireVerseHighlight { verse: vref.ref_key(), color: c.to_string() })
             })
             .collect();
-        out_json(&wire::WireChapterHighlights { book: book.to_string(), chapter, verses })
+        // Word-precise cross-verse ranges → per-verse [lo,hi] runs (Tier 0 #4).
+        let mut runs = Vec::new();
+        for v in chapter_verses {
+            let vref = v.vref();
+            let len = u16::try_from(v.tokens.len()).unwrap_or(u16::MAX);
+            for r in tag::verse_highlight_runs(&study.tags, &vref, len) {
+                runs.push(wire::WireHighlightRun {
+                    verse: vref.ref_key(),
+                    lo: r.lo,
+                    hi: r.hi,
+                    color: r.color,
+                });
+            }
+        }
+        out_json(&wire::WireChapterHighlights { book: book.to_string(), chapter, verses, runs })
     })
 }
 

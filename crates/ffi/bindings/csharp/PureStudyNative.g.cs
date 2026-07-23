@@ -782,6 +782,31 @@ namespace PureStudy.Native
         public static extern byte* pure_engine_tag_set_color(PureEngine* engine, byte* name, byte* color);
 
         /// <summary>
+        ///  Add a word-precise highlight range to the tag named `name` (created on first
+        ///  use, taking `color` as its tone). The range runs from `start_ref`+`start_tok`
+        ///  to `end_ref`+`end_tok` (inclusive token indices under `kjv1769-tok2`);
+        ///  endpoints are ordered canonically here, so a backwards drag is fine. `color`
+        ///  may be null (the range then inherits the tag's colour). `added` is a
+        ///  caller-supplied UTC timestamp. Null on success, else an owned error.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_highlight_add", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_highlight_add(PureEngine* engine, byte* name, byte* color, byte* start_ref, uint start_tok, byte* end_ref, uint end_tok, byte* added);
+
+        /// <summary>
+        ///  Remove the highlight range with these endpoints from the tag named `name`.
+        ///  Endpoints are ordered canonically to match how they were stored. A missing
+        ///  range is a no-op; a missing tag is an error. Null on success, else an error.
+        ///
+        ///  # Safety
+        ///  `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_highlight_remove", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_highlight_remove(PureEngine* engine, byte* name, byte* start_ref, uint start_tok, byte* end_ref, uint end_tok);
+
+        /// <summary>
         ///  The highlight washes for a chapter as JSON (`{book,chapter,verses:[{verse,
         ///  color}]}`): each verse that belongs to a colour-bearing tag, with the tone
         ///  the shell washes behind it. Never null on a live engine (none → empty list).

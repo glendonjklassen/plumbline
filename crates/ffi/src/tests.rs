@@ -1041,6 +1041,41 @@ fn tier0_endpoints_via_abi() {
         let hl2: Value = serde_json::from_str(&take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
         assert!(hl2["verses"].as_array().unwrap().is_empty());
 
+        // Word-precise cross-verse highlight: "drag" John 3:16 tok2 → 3:18 tok1
+        // with a tone. The fixture has 3:16 (6 tokens) and 3:18 (3 tokens), so
+        // the range lands as a start-partial run (tok 2..last=5) plus an
+        // end-partial run (0..1).
+        assert!(pure_engine_highlight_add(
+            e, c("dragged").as_ptr(), c("#c8b0e0").as_ptr(),
+            c("John 3:16").as_ptr(), 2, c("John 3:18").as_ptr(), 1, stamp.as_ptr(),
+        ).is_null());
+        let hr: Value = serde_json::from_str(
+            &take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+        let runs = hr["runs"].as_array().unwrap();
+        assert_eq!(runs.len(), 2, "runs: {runs:?}");
+        assert_eq!(runs[0]["verse"], "John 3:16");
+        assert_eq!(runs[0]["lo"], 2);
+        assert_eq!(runs[0]["hi"], 5);
+        assert_eq!(runs[0]["color"], "#c8b0e0");
+        assert_eq!(runs[1]["verse"], "John 3:18");
+        assert_eq!(runs[1]["lo"], 0);
+        assert_eq!(runs[1]["hi"], 1);
+        // A backwards drag (end→start) is ordered the same and dedupes.
+        assert!(pure_engine_highlight_add(
+            e, c("dragged").as_ptr(), c("#c8b0e0").as_ptr(),
+            c("John 3:18").as_ptr(), 1, c("John 3:16").as_ptr(), 2, stamp.as_ptr(),
+        ).is_null());
+        let hr_dup: Value = serde_json::from_str(
+            &take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+        assert_eq!(hr_dup["runs"].as_array().unwrap().len(), 2, "backwards drag must dedupe");
+        // Remove it → runs gone.
+        assert!(pure_engine_highlight_remove(
+            e, c("dragged").as_ptr(), c("John 3:16").as_ptr(), 2, c("John 3:18").as_ptr(), 1,
+        ).is_null());
+        let hr2: Value = serde_json::from_str(
+            &take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+        assert!(hr2["runs"].as_array().map(|a| a.is_empty()).unwrap_or(true));
+
         // Warming is a null-on-success no-op that stays callable.
         assert!(pure_engine_warm_indexes(e).is_null());
 
