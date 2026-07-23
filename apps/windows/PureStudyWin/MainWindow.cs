@@ -521,6 +521,20 @@ public sealed class MainWindow : Window
         views.Items.Add(_miMap);
         views.Items.Add(_miConst);
 
+        // Memorize (Tier 2 #15): review due · coverage map · activity. Not gated
+        // to Full study (GTK enables these actions in both modes); each guards on
+        // the engine, since the menu opens the moment the shell does.
+        var mem = new MenuFlyoutSubItem { Text = "Memorize" };
+        var miMemReview = new MenuFlyoutItem { Text = "Review due" };
+        miMemReview.Click += (_, _) => { if (_engine is not null) Memorize.Review(_engine, Now); };
+        var miMemCoverage = new MenuFlyoutItem { Text = "Coverage map" };
+        miMemCoverage.Click += (_, _) => { if (_engine is not null) Memorize.Coverage(_engine, _books, Now); };
+        var miMemActivity = new MenuFlyoutItem { Text = "Activity" };
+        miMemActivity.Click += (_, _) => { if (_engine is not null) Memorize.Activity(_engine); };
+        mem.Items.Add(miMemReview);
+        mem.Items.Add(miMemCoverage);
+        mem.Items.Add(miMemActivity);
+
         var reading = new MenuFlyoutSubItem { Text = "Reading" };
         reading.Items.Add(_miModeSimple);
         reading.Items.Add(_miModeFull);
@@ -535,6 +549,7 @@ public sealed class MainWindow : Window
 
         var flyout = new MenuFlyout();
         flyout.Items.Add(views);
+        flyout.Items.Add(mem);
         flyout.Items.Add(reading);
         flyout.Items.Add(theme);
         flyout.Items.Add(new MenuFlyoutSeparator());
@@ -820,6 +835,13 @@ public sealed class MainWindow : Window
         flyout.Items.Add(hi);
 
         Item("Note…", () => _panel.Link($"editnote:{verse}"));
+        // Start memorizing this verse (Tier 2 #15): seed its SRS card, due now.
+        // Both modes (GTK adds it unconditionally); no reader-visible change —
+        // the card surfaces in Review due / Coverage map.
+        Item("Memorize this verse", () =>
+        {
+            if (_engine.MemoryAdd(verse, Now()) is { } err) _status.Text = err;
+        });
         if (_fullMode)
         {
             flyout.Items.Add(new MenuFlyoutSeparator());

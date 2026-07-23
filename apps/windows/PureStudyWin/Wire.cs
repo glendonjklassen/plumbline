@@ -217,3 +217,45 @@ public sealed record BridgePartner(string Code, List<string> Sources, float Prio
 public sealed record BridgePartners(string Code, List<BridgePartner> Partners);
 public sealed record SimilarVerse(string Verse, string Display, float Score);
 public sealed record SimilarVerses(string Verse, List<SimilarVerse> In, List<SimilarVerse> Cross);
+
+// ── memorization (Tier 2 #15): SRS cards, drills, coverage + activity ───────
+// Schemas frozen in crates/ffi/src/wire.rs (WireMemory*) and
+// crates/core/src/memory.rs. camelCase; `Mastery` is a lowercase token
+// ("new"/"learning"/"young"/"mature") and `Grade` a lowercase token
+// ("again"/"hard"/"good"/"easy"). The compact ref key crosses as the "ref"
+// JSON field, so — like the other ref-bearing records — it takes an explicit
+// JsonPropertyName rather than relying on the camelCase policy.
+
+/// A verse's SRS card: SM-2 schedule, mastery bucket, and full review log.
+/// (`Due` here is the next-due date string; contrast VerseCoverage.Due, a bool.)
+public sealed record MemoryCard(
+    [property: System.Text.Json.Serialization.JsonPropertyName("ref")] string Ref,
+    float Ease, int IntervalDays, int Reps, int Lapses,
+    string Due, string Mastery, List<MemoryReview> Reviews);
+public sealed record MemoryReview(string At, string Grade, int IntervalDays);
+
+/// The study queue: verses due for review now, in reading order.
+public sealed record MemoryDue(List<string> Refs);
+
+/// The coverage-map data at a given `now`: per-verse standing + the 8-section
+/// rollup. The map shades books by average mastery; the sections are a summary.
+public sealed record MemoryCoverage(List<VerseCoverage> Verses, List<SectionCoverage> Sections);
+public sealed record VerseCoverage(
+    [property: System.Text.Json.Serialization.JsonPropertyName("ref")] string Ref,
+    string Mastery, int Reps, int Lapses, string? LastAt, bool Due);
+public sealed record SectionCoverage(string Label, int Cards, int Mature, int Reviews);
+
+/// The activity heatmap: reviews per calendar day, oldest first.
+public sealed record MemoryActivity(List<DayActivity> Days);
+public sealed record DayActivity(string Day, int Reviews);
+
+/// A drill prompt for a verse at a blank-out level: the plain text, its
+/// first-letter skeleton, and the progressively-blanked form. `FirstLetters`
+/// and `Text` are level-independent; only `Blanked` changes with `Level`.
+public sealed record MemoryDrill(
+    [property: System.Text.Json.Serialization.JsonPropertyName("ref")] string Ref,
+    string Text, string FirstLetters, string Blanked, int Level, int MaxLevel);
+
+/// The result of scoring a typed recall against the verse (LCS-aligned).
+public sealed record RecallScore(float Accuracy, List<WordHit> Words);
+public sealed record WordHit(string Word, bool Ok);
