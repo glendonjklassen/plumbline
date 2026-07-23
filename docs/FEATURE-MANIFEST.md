@@ -375,6 +375,19 @@ in `pure_rnd::concept::radial_spokes` (GTK calls it directly); labels
 semantic spokes gold, community green; centre node gold; dispersion cells gold α
 `0.15+0.75·(cnt/max)` at `bi/bookCount`, OT/NT seam. No shell book-order table.
 
+**Cross-testament bridge row.** `concept_map_json` also carries an optional
+`bridge:{partners:[{code,label,prior}], byBook}` — the strongest other-testament
+equivalents of `code` (top `concept::BRIDGE_ROW_PARTNERS`=6 from the already-fused
+`FusedBridge`, i.e. etymology + `bridge/*.json` witnesses like Abbott-Smith) and
+their **unioned** per-book dispersion (`concept::union_by_book`), canon-ordered
+like `byBook`. Additive + `skip_serializing_if=None`, so the ABI/bindings are
+unchanged (same fn, richer JSON) and a partnerless code omits it. This is what
+makes an OT word light up its NT match: viewing *Christ* (G5547) fills the OT half
+via *Messiah* (H4899, prior 0.93). **GTK** paints it as a second indigo row
+beneath the gold one (strip now 52-px) and names the partners in a caption.
+**Delta:** WinUI/Android receive the field but don't paint the second row yet —
+tracked for their next concept-map pass.
+
 ## C ABI surface (crates/ffi) — endpoint ↔ feature map
 
 Pre-existing: `open`/`open_from_bytes`/`free`, `toc_json`, `chapter_count`,
