@@ -113,7 +113,7 @@ atomic (temp → fsync → rename), on every platform.
 - **Linux and Windows today.** The GTK (Linux) and WinUI (Windows) shells are
   at feature parity over the same Rust core
   ([docs/FEATURE-MANIFEST.md](docs/FEATURE-MANIFEST.md) is the parity
-  contract); Android (Compose) and macOS shells are planned — see
+  contract); the Android (Compose) shell is next, macOS much later — see
   [TODO.md](TODO.md).
 - **No sync.** One machine, one home; copy the authored dirs to move.
 - **Grammar search** (`tense:aorist`-style form predicates) is a placeholder —
@@ -149,10 +149,65 @@ cargo test -p pure-rnd --features "bridge embeddings morphology concept"
 
 The five portable crates are dependency-light pure Rust and build on Linux,
 macOS, and Windows including ARM64 (`aarch64-pc-windows-msvc` — on the ARM box:
-VS Build Tools C++ workload, then `cargo build --release -p pure-ffi` →
-`pure_ffi.dll` + the committed C header / C# P/Invoke shim). CI runs the
-portable tests, the R&D-feature tests, an FFI binding-drift guard, and Windows
-x86_64 + ARM64 cross-builds of the C ABI on every push. The offline pipeline
-that produced the data pack is documented in
-[data-prep/README.md](data-prep/README.md); porting history in
-[PROGRESS.md](PROGRESS.md) and [PLAN.md](PLAN.md).
+VS Build Tools with the **C++ ARM64/ARM64EC build tools** component, then
+`cargo build --release -p pure-ffi` → `pure_ffi.dll` + the committed C header /
+C# P/Invoke shim; without that component rustc silently falls back to whatever
+`link.exe` is on PATH and fails cryptically). CI runs the portable tests, the
+R&D-feature tests, an FFI binding-drift guard, and Windows x86_64 + ARM64
+cross-builds of the C ABI on every push. The offline pipeline that produced
+the data pack is documented in [data-prep/README.md](data-prep/README.md); the
+porting history (from the Haskell *overlay*, 2026-07) lives in the git log.
+
+### Architecture
+
+Decisions locked 2026-07-08, still in force:
+
+| # | Decision | Choice |
+|---|----------|--------|
+| 1 | UI strategy | **Native shell per platform** over a shared Rust core — GTK4 (Linux), WinUI 3 (Windows), Jetpack Compose (Android); macOS later. |
+| 2 | Build order | Desktop first (GTK4), then Windows, then Android over the same core. |
+| 3 | Data delivery | **Bundle core, download R&D** — KJV + Strong's ship in-app; heavy analytics artifacts are optional packs. |
+| 4 | R&D default | **Off + guided first-run** — first launch asks *Simple reader* vs *Full study*; casual users never see the complexity. |
+| — | Patches / signed rules | Dropped — overlay's Ed25519 point-patch/rule layer was not ported. |
+| — | Future | A paid cross-device **sync SaaS**; the data model must not block it (stable ids, no host-local assumptions). |
+
+```
+Rust core (pure, headless, fully testable)
+  ├─ crates/core     domain: canon, references, corpus, Strong's, search, weaves, threads
+  ├─ crates/rnd      OPTIONAL, feature-gated analytics
+  ├─ crates/layout   text layout + per-word HIT-TESTING → a display list
+  └─ crates/ffi      one C ABI surface → C#/WinUI + Kotlin/Android bindings
+
+Thin native shells (paint the display list, forward input coords back to core)
+  ├─ apps/desktop    GTK4 + libadwaita (Linux)
+  ├─ apps/windows    WinUI 3 (C#)
+  └─ apps/android    Jetpack Compose — next up
+```
+
+The load-bearing idea: **layout and hit-testing live in the core.** Given a
+chapter + width + font metrics (via an injected measure callback — Pango on
+GTK, Win2D on Windows), the core produces a *display list*: positioned glyph
+runs plus a table of tappable word rectangles, each carrying its verse ref,
+token index, and Strong's refs. A shell only paints that list and sends tap /
+hover `(x, y)` back for the core to hit-test. Word-level study features are
+written once, and shells stay genuinely thin.
+
+### Data formats (frozen — carried verbatim from overlay)
+
+- **`kjv.jsonl`** — line 1 is a header `{format, tokenization, source, verses}`;
+  every subsequent line is a verse `{"b":OSIS,"c":ch,"v":vs,"t":[token,...]}`.
+  A **token** is a positional array `[pre, word, post, [strongs], flags]`.
+  `flags` is a bitfield: `1` added (KJV italics), `2` divine name, `4` title
+  (psalm superscription), `8` paragraph mark (¶) precedes the word.
+- **`strongs.json`** — one minified object, `"H7225" → {lemma?, xlit?, pron?,
+  derivation?, strongs_def?, kjv_def?}` (14,197 entries).
+- **`kjv-notes.jsonl`** — `{"b","c","v","note"}` (1769 translators' margin notes).
+- **weave** — `{format:"overlay-weave-v2", name, kind, tokenization, notes,
+  notesSource, created, approved, links:[{a:"Gen 1:7", b:..., label?, approved?,
+  spanA?, spanB?}]}`. A weave is an undirected graph of verse↔verse links.
+- **`refKey`** — the frozen compact ref string, `"Gen 1:7"` (OSIS book id).
+- **tokenization version** — `kjv1769-tok2`; loaders refuse a version mismatch.
+
+The **tokenizer** (SWORD `mod2imp` → `overlay-import`) stays an offline
+data-prep step — the runtime only *consumes* `kjv.jsonl`, carrying the version
+stamp check but not the tokenizer itself.

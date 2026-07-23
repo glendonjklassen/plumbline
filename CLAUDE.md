@@ -11,7 +11,7 @@
   re-surveying the repo.
 - `../overlay` (Haskell) is the read-only reference implementation — port
   from it, never modify it.
-- Frozen contracts: the on-disk data formats (PLAN.md), `kjv1769-tok2`
+- Frozen contracts: the on-disk data formats (README.md §Data formats), `kjv1769-tok2`
   tokenization stamp, the camelCase wire JSON (additive evolution only), and
   refKey (`"Gen 1:7"`).
 
