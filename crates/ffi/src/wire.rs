@@ -1040,6 +1040,13 @@ pub struct WireConceptMap {
     pub by_book: Vec<u32>,
     pub ot_nt_divide: usize,
     pub book_count: usize,
+    /// The cross-testament **bridge row**: the strongest other-testament
+    /// equivalents of `code` and their unioned dispersion. Absent when the code
+    /// has no cross-testament partner. This is what makes viewing *Christ*
+    /// (Greek) light up where *Messiah* (Hebrew) occurs — the OT half of the
+    /// strip fills in even though `by_book` (this code) is NT-only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bridge: Option<WireConceptBridge>,
 }
 
 /// One spoke of the concept map: a neighbour code, its pre-baked label, and
@@ -1051,6 +1058,30 @@ pub struct WireConceptSpoke {
     pub code: String,
     pub label: String,
     pub semantic: bool,
+}
+
+/// The dispersion strip's cross-testament overlay (see [`WireConceptMap::bridge`]):
+/// the other-testament partner lemmas plus their unioned per-book dispersion,
+/// rendered as a second row beneath the concept's own.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireConceptBridge {
+    /// The other-testament partners, strongest-first. `label` is the English
+    /// gloss over lemma, exactly like the centre and spoke labels.
+    pub partners: Vec<WireBridgeNode>,
+    /// The partners' unioned per-book dispersion in **canon order**
+    /// (length = `book_count`) — so the shell paints it exactly like `by_book`.
+    pub by_book: Vec<u32>,
+}
+
+/// One cross-testament partner node in a [`WireConceptBridge`].
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireBridgeNode {
+    pub code: String,
+    pub label: String,
+    /// The fused trust prior of the strongest witness tying this partner (0–1).
+    pub prior: f32,
 }
 
 // ── study-panel content model (the typed block list) ──────────────────────────

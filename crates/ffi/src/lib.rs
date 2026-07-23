@@ -1717,6 +1717,28 @@ pub unsafe extern "C" fn pure_engine_concept_map_json(
             .stat(code)
             .map(|s| canon::BOOKS.iter().map(|b| s.by_book.get(b.id).copied().unwrap_or(0)).collect())
             .unwrap_or_else(|| vec![0; canon::BOOKS.len()]);
+        // Cross-testament bridge row: the strongest other-testament partners and
+        // their unioned dispersion (so Christ reveals where Messiah occurs).
+        let partners = e.bridge.partners(code);
+        let bridge = (!partners.is_empty()).then(|| {
+            let top: Vec<&bridge::Partner> =
+                partners.iter().take(concept::BRIDGE_ROW_PARTNERS).collect();
+            let union = ce.union_by_book(top.iter().map(|p| p.code.as_str()));
+            wire::WireConceptBridge {
+                partners: top
+                    .iter()
+                    .map(|p| wire::WireBridgeNode {
+                        label: concept_label(e, &p.code),
+                        code: p.code.clone(),
+                        prior: p.prior,
+                    })
+                    .collect(),
+                by_book: canon::BOOKS
+                    .iter()
+                    .map(|b| union.get(b.id).copied().unwrap_or(0))
+                    .collect(),
+            }
+        });
         out_json(&wire::WireConceptMap {
             center_label: concept_label(e, code),
             code: code.to_string(),
@@ -1724,6 +1746,7 @@ pub unsafe extern "C" fn pure_engine_concept_map_json(
             by_book,
             ot_nt_divide: pure_core::reference::OT_NT_DIVIDE,
             book_count: canon::BOOKS.len(),
+            bridge,
         })
     })
 }

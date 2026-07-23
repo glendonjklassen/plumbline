@@ -18,6 +18,11 @@ use pure_core::corpus::Corpus;
 use pure_core::reference::OT_NT_DIVIDE;
 use pure_core::canon;
 
+/// How many of a concept's strongest cross-testament partners feed the
+/// dispersion strip's "bridge" row — kept small so the row shows the
+/// equivalents that matter (Christ↔Messiah), not every faint lexical echo.
+pub const BRIDGE_ROW_PARTNERS: usize = 6;
+
 /// A Strong's number's occurrence statistics.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ConceptStat {
@@ -287,6 +292,23 @@ impl Concept {
 
     pub fn stat(&self, code: &str) -> Option<&ConceptStat> {
         self.ix.get(code)
+    }
+
+    /// Union the per-book dispersion of several codes, summing counts book by
+    /// book. Codes with no stats contribute nothing; the keys are OSIS book ids
+    /// like [`ConceptStat::by_book`]. Used to lay a concept's cross-testament
+    /// partners' occurrences — the dispersion strip's "bridge" row — over its
+    /// own, so viewing *Christ* (G5547) reveals where *Messiah* (H4899) occurs.
+    pub fn union_by_book<'a>(&self, codes: impl IntoIterator<Item = &'a str>) -> HashMap<String, u32> {
+        let mut acc: HashMap<String, u32> = HashMap::new();
+        for code in codes {
+            if let Some(s) = self.ix.get(code) {
+                for (book, cnt) in &s.by_book {
+                    *acc.entry(book.clone()).or_insert(0) += *cnt;
+                }
+            }
+        }
+        acc
     }
 
     /// The `n` books this concept occurs in most.

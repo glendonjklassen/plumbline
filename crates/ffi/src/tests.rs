@@ -586,6 +586,72 @@ fn rnd_tier_via_abi() {
 }
 
 #[test]
+fn concept_map_bridge_row_lights_up_the_other_testament() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("pure-ffi-bridgemap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::create_dir_all(home.join("bridge")).unwrap();
+        // A Hebrew verse (H7225 in Genesis) and a Greek verse (G25 in John) — the
+        // cross-testament shape that makes "Christ lights up Messiah" meaningful.
+        let kjv = concat!(
+            r#"{"format":"x","tokenization":"kjv1769-tok2","verses":2}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"t":[["","In","",[],0],["","the","",[],1],["","beginning","",["H7225"],0]],"v":1}"#,
+            "\n",
+            r#"{"b":"John","c":3,"t":[["","God","",["G2316"],0],["","loved","",["G25"],0]],"v":16}"#,
+        );
+        std::fs::write(home.join("data").join("kjv.jsonl"), kjv).unwrap();
+        std::fs::write(
+            home.join("data").join("strongs.json"),
+            r#"{"G25":{"lemma":"ἀγαπάω","strongs_def":"to love"},"H7225":{"lemma":"רֵאשִׁית","kjv_def":"beginning"},"G2316":{"lemma":"θεός","kjv_def":"God"}}"#,
+        )
+        .unwrap();
+        // A bridge witness tying G25 ↔ H7225 (fixture stand-in for Christ↔Messiah).
+        std::fs::write(
+            home.join("bridge").join("x.json"),
+            r#"{"format":"overlay-bridge-sources-v1","links":[{"h":"H7225","g":"G25","source":"lxx"}]}"#,
+        )
+        .unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = pure_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null() && !e.is_null());
+        let c = |s: &str| CString::new(s).unwrap();
+
+        // G25's concept map carries a bridge row: its Hebrew partner H7225, whose
+        // dispersion lights up Genesis (canon index 0) — even though G25 itself
+        // occurs only in the NT (its own by_book is 0 at Genesis).
+        let m: Value =
+            serde_json::from_str(&take(pure_engine_concept_map_json(e, c("G25").as_ptr())).unwrap()).unwrap();
+        assert_eq!(m["byBook"][0].as_u64().unwrap(), 0, "G25 itself is not in Genesis");
+        let bridge = &m["bridge"];
+        assert!(bridge.is_object(), "a bridge row exists when a partner does");
+        assert!(bridge["partners"].as_array().unwrap().iter().any(|p| p["code"] == "H7225"));
+        assert!(
+            bridge["byBook"][0].as_u64().unwrap() >= 1,
+            "the partner H7225 lights up Genesis in the bridge row"
+        );
+        assert_eq!(
+            bridge["byBook"].as_array().unwrap().len(),
+            m["bookCount"].as_u64().unwrap() as usize,
+            "the bridge row is canon-length, like by_book"
+        );
+
+        // A code with no cross-testament partner omits the bridge row entirely
+        // (serde skips the None), so shells draw a single dispersion band.
+        let m2: Value =
+            serde_json::from_str(&take(pure_engine_concept_map_json(e, c("G2316").as_ptr())).unwrap()).unwrap();
+        assert!(m2["bridge"].is_null(), "no bridge row without a cross-testament partner");
+
+        pure_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
+#[test]
 fn parity_endpoints_via_abi() {
     use std::ffi::CString;
     unsafe {

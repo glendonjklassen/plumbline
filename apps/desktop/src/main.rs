@@ -917,6 +917,29 @@ fn draw_dispersion(state: &Shared, code: &str, cr: &cairo::Context, w: i32, h: i
     let _ = cr.fill();
 
     let by_book = st.concept.as_ref().and_then(|ce| ce.stat(code)).map(|s| s.by_book.clone()).unwrap_or_default();
+
+    // Cross-testament partners' unioned dispersion — the "bridge" row that lets
+    // an OT word light up its NT equivalent (Christ → Messiah) and vice versa.
+    let partners = st.bridge.partners(code);
+    let bridge_books: std::collections::HashMap<String, u32> = match st.concept.as_ref() {
+        Some(ce) if !partners.is_empty() => ce.union_by_book(
+            partners.iter().take(concept::BRIDGE_ROW_PARTNERS).map(|p| p.code.as_str()),
+        ),
+        _ => std::collections::HashMap::new(),
+    };
+    let has_bridge = bridge_books.values().any(|&c| c > 0);
+
+    // Band the strip: the concept's own dispersion on top; when a bridge exists,
+    // a partner row beneath a 1px gutter.
+    let gap = 1.0;
+    let (prim_h, brdg_y, brdg_h) = if has_bridge {
+        let ph = ((hf - gap) * 0.55).max(1.0);
+        (ph, ph + gap, hf - ph - gap)
+    } else {
+        (hf, hf, 0.0)
+    };
+
+    // Primary dispersion (gold): where `code` itself occurs.
     let max = by_book.values().copied().max().unwrap_or(1) as f64;
     for (i, b) in canon::BOOKS.iter().enumerate() {
         let cnt = by_book.get(b.id).copied().unwrap_or(0) as f64;
@@ -924,11 +947,27 @@ fn draw_dispersion(state: &Shared, code: &str, cr: &cairo::Context, w: i32, h: i
             let x0 = i as f64 / nb * width;
             let x1 = (i as f64 + 1.0) / nb * width;
             cr.set_source_rgba(0.62, 0.49, 0.22, 0.15 + 0.75 * (cnt / max));
-            let _ = cr.rectangle(x0, 0.0, x1 - x0, hf);
+            let _ = cr.rectangle(x0, 0.0, x1 - x0, prim_h);
             let _ = cr.fill();
         }
     }
-    // OT/NT seam
+
+    // Bridge dispersion (indigo): where the cross-testament partners occur.
+    if has_bridge {
+        let bmax = bridge_books.values().copied().max().unwrap_or(1) as f64;
+        for (i, b) in canon::BOOKS.iter().enumerate() {
+            let cnt = bridge_books.get(b.id).copied().unwrap_or(0) as f64;
+            if cnt > 0.0 {
+                let x0 = i as f64 / nb * width;
+                let x1 = (i as f64 + 1.0) / nb * width;
+                cr.set_source_rgba(0.30, 0.35, 0.62, 0.18 + 0.72 * (cnt / bmax));
+                let _ = cr.rectangle(x0, brdg_y, x1 - x0, brdg_h);
+                let _ = cr.fill();
+            }
+        }
+    }
+
+    // OT/NT seam (full height).
     let dx = OT_NT_DIVIDE as f64 / nb * width;
     cr.set_source_rgba(0.4, 0.3, 0.2, 0.5);
     let _ = cr.rectangle(dx - 0.5, 0.0, 1.0, hf);
@@ -1037,14 +1076,48 @@ fn show_concept_map(state: &Shared, ui: &Ui, code: &str) {
         radial.set_draw_func(move |_a, cr, w, h| draw_concept_radial(&state, &code, cr, w, h));
     }
     let strip = gtk::DrawingArea::new();
-    strip.set_content_height(40);
+    strip.set_content_height(52);
     strip.set_hexpand(true);
-    strip.set_tooltip_text(Some("Dispersion: where across the 66 books this concept occurs"));
+    strip.set_tooltip_text(Some(
+        "Dispersion across the 66 books (gold). The indigo row below shows the \
+         cross-testament equivalents — an OT word lights up where its NT match \
+         occurs, and the reverse.",
+    ));
     {
         let (state, code) = (state.clone(), code.to_string());
         strip.set_draw_func(move |_a, cr, w, h| draw_dispersion(&state, &code, cr, w, h));
     }
     vbox.append(&radial);
+    // Name the cross-testament partners the indigo bridge row paints, so the
+    // link is legible (viewing Christ names Messiah, not just a coloured band).
+    {
+        let st = state.borrow();
+        let partners = st.bridge.partners(code);
+        if !partners.is_empty() {
+            let names: Vec<String> = partners
+                .iter()
+                .take(concept::BRIDGE_ROW_PARTNERS)
+                .map(|p| {
+                    let en = english_gloss(&st, &p.code);
+                    let lem = st.strongs.get(&p.code).and_then(|e| e.lemma.clone());
+                    match (en, lem) {
+                        (Some(e), Some(l)) => format!("{e} ({l})"),
+                        (Some(e), None) => e,
+                        (None, Some(l)) => l,
+                        (None, None) => p.code.clone(),
+                    }
+                })
+                .collect();
+            let cap = gtk::Label::new(Some(&format!("↔ across testaments: {}", names.join(", "))));
+            cap.set_xalign(0.0);
+            cap.add_css_class("dim-label");
+            cap.set_margin_start(8);
+            cap.set_margin_end(8);
+            cap.set_margin_top(4);
+            cap.set_wrap(true);
+            vbox.append(&cap);
+        }
+    }
     vbox.append(&strip);
     {
         let win2 = win.clone();
