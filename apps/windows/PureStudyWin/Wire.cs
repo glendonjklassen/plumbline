@@ -151,8 +151,32 @@ public sealed record ConfigState(
     // Frozen additive field shared with GTK's config.json. Must round-trip even
     // before the toggle UI reads it, or a WinUI save silently resets it to
     // false and clobbers a GTK user's verse-per-line preference.
-    bool VersePerLine = false);
+    bool VersePerLine = false,
+    // Colour theme choice: "system" | "light" | "dark" | "night" (Tier 0 #5).
+    // Additive; must round-trip so a save doesn't clobber the GTK preference.
+    string Theme = "system");
 public sealed record PaneRef1(string Book, ushort Chapter);
+
+// ── Tier 0: themes, personal notes, highlights ──────────────────────────────
+
+// The colour palette for a theme (pure_theme_palette_json): every semantic role
+// as a #rrggbb hex. The single source is core::theme, so light/dark/night can't
+// drift between shells. `Dark` drives the system-chrome (ElementTheme) choice.
+public sealed record PaletteData(
+    bool Dark, string Paper, string Ink, string Faded, string Added, string Divine,
+    string TitleInk, string Gold, string Section, string TierGod, string TierHuman,
+    string TierMachine, string TierResearch, string Mono, string Morph, string Lemma,
+    string Rule, string PopupPaper, string PaneNavBg, string StripBg, string Pin);
+
+public sealed record HighlightTones(List<HighlightTone> Tones);
+public sealed record HighlightTone(string Name, string Hex);
+
+public sealed record UserNote(
+    string Verse, string Display, string Text, string Created, string Updated);
+public sealed record UserNotes(List<UserNote> Notes);
+
+public sealed record ChapterHighlights(string Book, ushort Chapter, List<VerseHighlight> Verses);
+public sealed record VerseHighlight(string Verse, string Color);
 
 // The study-panel content model (pure_engine_*_blocks_json): a typed block
 // list the panel renders wholesale — no shell-side derivation. A run's Color is

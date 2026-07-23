@@ -17,8 +17,9 @@ public sealed class ConnectorLayer : Microsoft.UI.Xaml.Controls.UserControl
 {
     private const float Inset = 14f;   // LINK_INSET
     private const float YInset = 5f;   // LINK_YINSET
-    private static readonly Color Stroke = Color.FromArgb(89, 158, 125, 56);   // α0.35
-    private static readonly Color Dot = Color.FromArgb(178, 158, 125, 56);     // α0.7
+    // Derived from the palette gold at paint time, so connectors follow the theme.
+    private static Color Stroke => Color.FromArgb(89, Palette.Gold.R, Palette.Gold.G, Palette.Gold.B);
+    private static Color Dot => Color.FromArgb(178, Palette.Gold.R, Palette.Gold.G, Palette.Gold.B);
 
     public List<LinkPair> Links = new();
     public IReadOnlyList<PaneView> Panes = Array.Empty<PaneView>();

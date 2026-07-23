@@ -454,6 +454,72 @@ Not ported into any shell (by decision / data): signed patches + rules;
 text-witness grading (shipped data never passes, so the "disputed" marker
 stays silent); quotation detection (awaits hydrated inputs).
 
+## Tier 0 daily-driver features (2026-07-19)
+
+The eight small, additive daily-driver features from [TODO.md](../TODO.md) Tier
+0. Shared logic lives in `pure-core`; GTK calls it directly, WinUI/Compose
+through new FFI endpoints. New endpoints (all additive; bindings regenerated):
+`pure_engine_copy_text`, `pure_engine_user_note_json` / `_notes_json` / `_set`,
+`pure_engine_tag_set_color`, `pure_engine_chapter_highlights_json`,
+`pure_theme_palette_json`, `pure_theme_highlight_tones_json`,
+`pure_engine_warm_indexes`, `pure_panel_guide_blocks_json` / `_about_blocks_json`.
+New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
+
+- **1. Copy & context menu.** Formatting is `pure_core::export::copy_text`
+  (verse / verse+ref / markdown / chapter). Right-click a verse → menu: copy
+  shapes, Note…, highlight tones, and (Full) Tag… / Add to thread… (the last
+  three route through the panel dispatcher). GTK: a `gtk::Popover` of buttons +
+  `area.clipboard().set_text`; WinUI: a `MenuFlyout` + `Clipboard.SetContent`.
+  Verse-under-point = hit word's verse, else nearest verse-number by y.
+- **2. Back/forward history.** Per-pane `(book, chapter)` stack + cursor, seeded
+  with the opening chapter; navigation pushes (unless it *is* a history move),
+  forward entries drop on a new jump. Alt+←/→ and mouse buttons 4/5 (GTK
+  buttons 8/9; WinUI `XButton1/2`). Lives in the pane (GTK `Pane`, WinUI
+  `ReaderView`), fed by `navigate_pane` / `ShowChapter`.
+- **3. Personal margin notes.** `pure_core::usernote`: one JSON file per verse
+  under `home/notes/`, refKey-keyed, atomic store; empty text deletes. A new
+  `PanelSource::user_note` surfaces the "your note" block (both modes) via the
+  content model; the `editnote:` verb prompts (multi-line). A square gutter mark
+  sits left of the weave dot. GTK reads `State.usernotes`; WinUI via
+  `user_notes_json` (gutter set) + `user_note_json` (prefill).
+- **4. Highlighting.** Reuses the existing tag `color` field: a colour-bearing
+  tag washes its verses. `tag::set_color` + `tag::verse_color`; a fixed 6-tone
+  palette (`theme::HIGHLIGHT_TONES`). The context menu's "Highlight — <tone>"
+  adds the verse to that tone's tag (created coloured); "Remove highlight"
+  clears every colour-tag holding it. Washes paint at the band site (GTK
+  `band` closure; WinUI the highlight-band loop) under the search band.
+- **5. Dark + night themes.** `pure_core::theme::Palette` is the one source
+  (`palette(theme)`), served as `pure_theme_palette_json`; light values are the
+  shipped ones (no regression), dark (candlelight-warm) + night (true-black) are
+  new. Config gains `theme` (`system`/`light`/`dark`/`night`, additive). The
+  reader canvas + chrome paint from the palette; the theme button cycles +
+  persists. GTK drives the CSS provider + `AdwStyleManager` scheme from the
+  palette; the study panel's accent hexes come from the palette via a
+  thread-local (`MARKUP_PALETTE`, set at load + on switch) while its base ink
+  inherits the `ForceDark`-themed label. WinUI re-applies the `Palette` static +
+  `ElementTheme` and rebuilds captured brushes; its panel "ink" runs inherit the
+  element theme (accents are palette-driven via `ColorOf`). **Delta (both shells): the analytical popups (chord / constellation /
+  concept map) stay on their light popup paper in dark/night** — reading + panel
+  + chrome are themed; the transient map overlays are not (a follow-up).
+- **6. Kill the first-study-click pause.** `pure_engine_warm_indexes` forces the
+  lazy analytics (concept / leitwort / SIF) to build. **Delta:** WinUI warms on
+  a background thread (`Task.Run`) at startup in Full mode; GTK, whose engine
+  state is single-threaded `Rc<RefCell>`, warms on the main loop via a
+  `glib::timeout_add_local_once` just after first paint (proactive, not
+  off-thread). Both move the stall off the first click.
+- **7. In-app guide, shortcuts, About.** `panel::guide_blocks` / `about_blocks`
+  are shared block lists (served engine-free); a Help button opens the guide in
+  the panel, the guide links to About and vice-versa. The shortcuts overlay is
+  shell-native (keybindings differ): `?`/F1 → a modal list (GTK `gtk::Window`,
+  WinUI `ContentDialog`).
+- **8. Small unifications.** Cross-book stepping via `canon::adjacent_book` —
+  past a book's last chapter enters the next, before ch.1 the previous (was
+  clamped in **both** shells, not just GTK as an earlier note said). All search
+  hits band in any visible chapter (a hit set on the reader, painted at the band
+  site). A Shift/Ctrl-click on a `go:` link opens the other pane (WinUI reads
+  the modifier in the link handler; GTK captures it with a capture-phase click
+  gesture on the study label just before the link activates).
+
 ## Android notes
 
 - The Kotlin/JNA wrapper (`crates/ffi/bindings/kotlin/PureStudy.kt`, package
@@ -502,6 +568,17 @@ stays silent); quotation detection (awaits hydrated inputs).
   `plotLeft + x·(w−plotLeft)` / `topPad + (lane+laneFrac)·laneH` the GTK/WinUI
   reference uses; keep `laneCapacity`, plotLeft 162, topPad 18, gutter 150, and
   the `1.4+2.4·size` radius identical so all three shells place a node alike.
+- **Tier 0 (2026-07-19) — Compose delta:** the new endpoints (copy text,
+  user-note read/write, chapter highlights, palette, highlight tones, warm,
+  guide/about blocks) are **not yet in the Kotlin `PureFfi` interface**. A
+  Compose shell adds the JNA decls + wrappers, then: a long-press/overflow
+  context menu (copy via `ClipboardManager`, note, highlight tones, tag/thread);
+  per-pane history (system back + gesture); a note gutter mark + the "your note"
+  block (already in the content model); highlight washes from
+  `chapterHighlightsJson`; theme from `paletteJson` (Compose is well-suited —
+  a `MaterialTheme`/`Color` map, follow-system via `isSystemInDarkTheme()`);
+  `warmIndexes` on a coroutine at startup; the guide/about blocks + a shortcuts
+  sheet; cross-book stepping + all-hits banding + modifier-open-other-pane.
 - Build gate: Android NDK + `cargo-ndk` for the `.so` per ABI; the Rust and
   the JSON contract are identical.
 - Measure callback: back it with `android.graphics.Paint.measureText` (or

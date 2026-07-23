@@ -36,7 +36,7 @@ use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread};
 use pure_core::panel::{self, PanelSource};
 use pure_core::weave::{self, Link, LoadedWeave, Span, WeaveKind};
-use pure_core::{canon, corpus, crossref, home, notes, VRef};
+use pure_core::{canon, corpus, crossref, export, home, notes, theme, usernote, VRef};
 use pure_rnd::{bridge, burst, concept, embed, morph, witness};
 use pure_layout::{layout_chapter, DisplayList, Hit, ItemKind, LayoutConfig, Measure};
 
@@ -74,6 +74,10 @@ struct State {
     /// Personal study data: threads (ordered passage trails) and tags.
     threads: Vec<LoadedThread>,
     tags: Vec<LoadedTag>,
+    /// The reader's personal per-verse notes (Tier 0 #3), keyed by verse.
+    usernotes: HashMap<VRef, usernote::LoadedNote>,
+    /// Every current search hit — banded in whatever chapter shows them (#8).
+    hits: HashSet<VRef>,
     /// TSK topical cross-references per verse (empty when the file is absent).
     xref_ix: crossref::XRefIx,
     /// The OT↔NT bridge: Strong's etymology fused with external witnesses (LXX,
@@ -108,6 +112,12 @@ struct State {
     mode: StudyMode,
     /// Verse-per-line reading mode (each verse starts a fresh line).
     verse_per_line: bool,
+    /// The active colour theme + the user's choice (Tier 0 #5).
+    palette: theme::Palette,
+    theme_choice: theme::ThemeChoice,
+    /// Set true by a capture-phase click on a panel link when a modifier is
+    /// held, so the next `go:` opens in the other pane (Tier 0 #8).
+    link_other: bool,
     panes: Vec<Pane>,
     /// Which pane search / cross-references / the study panel act on.
     active: usize,
@@ -126,6 +136,10 @@ struct Pane {
     /// A word (or word span) pinned as a link endpoint, for authoring weave
     /// links. `None` until the reader clicks a word in this pane.
     pin: Option<PinSpan>,
+    /// Per-pane reading history (Tier 0 #2): visited (book, chapter) + a cursor.
+    history: Vec<(String, u16)>,
+    hist_idx: isize,
+    in_history_nav: bool,
 }
 
 /// A pinned link endpoint: a token span within one verse of a pane. A single
@@ -151,6 +165,10 @@ impl Pane {
             scroll_to: None,
             highlight: None,
             pin: None,
+            // Seed the history with the opening chapter so the first "back" works.
+            history: vec![(book.to_string(), chapter)],
+            hist_idx: 0,
+            in_history_nav: false,
         }
     }
 }
@@ -233,6 +251,8 @@ struct Ui {
     pane_uis: Rc<RefCell<Vec<PaneUi>>>,
     /// Guards programmatic widget updates from re-entering their handlers.
     guard: Rc<Cell<bool>>,
+    /// The app CSS provider, re-loaded on a theme switch (Tier 0 #5).
+    css: gtk::CssProvider,
 }
 
 /// The GTK handles for one pane column.
@@ -351,6 +371,8 @@ fn load_state(cfg: &Config) -> Result<State, String> {
     let links = weave::link_pairs(&weaves);
     let (threads, _thread_errs) = thread::load_threads(&home);
     let (tags, _tag_errs) = tag::load_tags(&home);
+    // Personal per-verse notes (Tier 0 #3), keyed by verse.
+    let (usernotes, _note_errs) = usernote::load_notes(&home);
     // TSK cross-references (topical study tier) — optional, absent → empty.
     let xref_ix = crossref::load_cross_refs(data.join("cross-references.tsv"));
     // The OT↔NT bridge — etymology (from strongs.json) fused with any external
@@ -376,6 +398,13 @@ fn load_state(cfg: &Config) -> Result<State, String> {
         cfg.panes.iter().take(MAX_PANES).map(|p| Pane::new(&p.book, p.chapter)).collect()
     };
     let active = cfg.active.min(panes.len().saturating_sub(1));
+    // Resolve the colour theme (Tier 0 #5): the user's choice, with `System`
+    // following the platform dark preference the style manager reports.
+    let sys_dark = adw::StyleManager::default().is_dark();
+    let theme_choice = cfg.theme;
+    let palette = theme::palette(theme_choice.resolve(sys_dark));
+    // Point the panel-markup helpers at the resolved theme (Tier 0 #5).
+    set_markup_palette(&palette);
     Ok(State {
         corpus,
         strongs,
@@ -388,6 +417,8 @@ fn load_state(cfg: &Config) -> Result<State, String> {
         links,
         threads,
         tags,
+        usernotes,
+        hits: HashSet::new(),
         xref_ix,
         bridge,
         witness,
@@ -402,18 +433,15 @@ fn load_state(cfg: &Config) -> Result<State, String> {
         font_size: cfg.body_size,
         mode: cfg.mode,
         verse_per_line: cfg.verse_per_line,
+        palette,
+        theme_choice,
+        link_other: false,
         panes,
         active,
     })
 }
 
 fn build_ui(app: &adw::Application) {
-    // The reader is a warm-paper light design (cream scripture, gold accents);
-    // force the light color scheme so the chrome — header nav, dropdowns, the
-    // study panel — matches it instead of following a dark system theme (which
-    // left light text on the light nav strip, illegible).
-    adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceLight);
-
     let (cfg, first_run) = config::load();
     let state = match load_state(&cfg) {
         Ok(s) => Rc::new(RefCell::new(s)),
@@ -422,6 +450,15 @@ fn build_ui(app: &adw::Application) {
             return;
         }
     };
+
+    // Force the resolved colour scheme so the chrome (header nav, dropdowns,
+    // scrollbars, dialogs) matches the reader theme (Tier 0 #5). The reader
+    // itself paints from the palette; this keeps libadwaita's chrome in step.
+    adw::StyleManager::default().set_color_scheme(if state.borrow().palette.dark {
+        adw::ColorScheme::ForceDark
+    } else {
+        adw::ColorScheme::ForceLight
+    });
 
     // ── header: brand/title + global search (acts on the active pane) ──────────
     let header = adw::HeaderBar::new();
@@ -479,6 +516,18 @@ fn build_ui(app: &adw::Application) {
     vpl_btn.set_tooltip_text(Some("Toggle verse-per-line reading"));
     vpl_btn.set_label(if state.borrow().verse_per_line { "verse / line" } else { "flowing text" });
     header.pack_end(&vpl_btn);
+
+    // Theme toggle (light · dark · night · follow system) + Help (Tier 0 #5/#7).
+    let theme_btn = gtk::Button::new();
+    theme_btn.add_css_class("flat");
+    theme_btn.set_tooltip_text(Some("Cycle the colour theme"));
+    theme_btn.set_label(state.borrow().theme_choice.label());
+    header.pack_end(&theme_btn);
+
+    let help_btn = gtk::Button::with_label("?");
+    help_btn.add_css_class("flat");
+    help_btn.set_tooltip_text(Some("Guide — press ? or F1 for keyboard shortcuts"));
+    header.pack_end(&help_btn);
 
     // Apply a mode to the header chrome: show/hide the study tools + relabel.
     let apply_mode: Rc<dyn Fn(StudyMode)> = {
@@ -557,6 +606,7 @@ fn build_ui(app: &adw::Application) {
         link_btn: link_btn.clone(),
         pane_uis: Rc::new(RefCell::new(Vec::new())),
         guard: Rc::new(Cell::new(false)),
+        css: install_css(&state.borrow().palette),
     };
 
     {
@@ -605,6 +655,20 @@ fn build_ui(app: &adw::Application) {
             glib::Propagation::Stop
         });
     }
+    // Capture the modifier state just before a link activates, so a Shift/Ctrl-
+    // click on a `go:` link opens in the other pane (Tier 0 #8). The capture-
+    // phase gesture fires ahead of the label's link activation.
+    {
+        let state = state.clone();
+        let click = gtk::GestureClick::new();
+        click.set_propagation_phase(gtk::PropagationPhase::Capture);
+        click.connect_pressed(move |g, _n, _x, _y| {
+            let m = g.current_event_state();
+            state.borrow_mut().link_other =
+                m.contains(gdk::ModifierType::SHIFT_MASK) || m.contains(gdk::ModifierType::CONTROL_MASK);
+        });
+        study.add_controller(click);
+    }
 
     // ── Threads / Tags browse buttons ───────────────────────────────────────────
     {
@@ -648,6 +712,17 @@ fn build_ui(app: &adw::Application) {
         let state = state.clone();
         let ui = ui.clone();
         const_btn.connect_clicked(move |_| show_constellation(&state, &ui));
+    }
+    // ── theme cycle + Help (guide) buttons (Tier 0 #5 / #7) ─────────────────────
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        let btn = theme_btn.clone();
+        theme_btn.connect_clicked(move |_| cycle_theme(&state, &ui, &btn));
+    }
+    {
+        let ui = ui.clone();
+        help_btn.connect_clicked(move |_| show_study(&ui, &blocks_to_markup(&panel::guide_blocks())));
     }
     // ── study mode toggle (Simple ⇄ Full), persisted ────────────────────────────
     {
@@ -693,10 +768,25 @@ fn build_ui(app: &adw::Application) {
         search.connect_search_changed(move |entry| {
             let q = entry.text().to_string();
             if q.trim().is_empty() {
+                state.borrow_mut().hits.clear();
+                redraw_all(&ui);
                 hide_study(&ui);
             } else {
+                // Band every hit that falls in a visible chapter (Tier 0 #8).
+                {
+                    let mut st = state.borrow_mut();
+                    st.hits.clear();
+                    if let Some(SearchAnswer::Hits { hits, .. }) =
+                        search::run_search(&st.corpus, &st.notes, &st.search_ix, &q)
+                    {
+                        for h in hits {
+                            st.hits.insert(h.vref);
+                        }
+                    }
+                }
                 let markup = search_markup(&state.borrow(), &q);
                 show_study(&ui, &markup);
+                redraw_all(&ui);
             }
         });
     }
@@ -727,10 +817,19 @@ fn build_ui(app: &adw::Application) {
         });
     }
 
-    install_css();
     install_app_icon();
     rebuild_panes(&state, &ui); // builds the pane columns + first paint
     window.present();
+
+    // Warm the Full-study analytics just after first paint so the first study
+    // click doesn't stall building them (Tier 0 #6). GTK's engine state is
+    // single-threaded (Rc<RefCell>), so this runs on the main loop right after
+    // launch rather than on a background thread (a logged delta vs WinUI, which
+    // warms off-thread via pure_engine_warm_indexes).
+    if state.borrow().mode.is_full() {
+        let state = state.clone();
+        glib::timeout_add_local_once(Duration::from_millis(200), move || ensure_analytics(&state));
+    }
 
     // First launch: ask Simple reader vs Full study, then remember the choice.
     if first_run {
@@ -1439,6 +1538,7 @@ fn persist_config(state: &Shared) {
                 .collect(),
             active: st.active,
             verse_per_line: st.verse_per_line,
+            theme: st.theme_choice,
         }
     };
     let _ = config::save(&cfg);
@@ -1689,6 +1789,34 @@ fn build_pane(state: &Shared, ui: &Ui, i: usize, n: usize) -> (gtk::Box, PaneUi)
         area.add_controller(click);
     }
 
+    // ── right-click → the verse context menu (Tier 0 #1) ────────────────────────
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        let area2 = area.clone();
+        let click = gtk::GestureClick::new();
+        click.set_button(gdk::BUTTON_SECONDARY);
+        click.connect_pressed(move |_g, _n, x, y| {
+            set_active(&state, &ui, i);
+            show_context_menu(&state, &ui, i, &area2, x, y);
+        });
+        area.add_controller(click);
+    }
+
+    // ── mouse buttons 4/5 (back/forward) walk the history (Tier 0 #2) ───────────
+    {
+        let state = state.clone();
+        let ui = ui.clone();
+        let click = gtk::GestureClick::new();
+        click.set_button(0); // any button — we only act on 8 (back) / 9 (forward)
+        click.connect_pressed(move |g, _n, _x, _y| match g.current_button() {
+            8 => pane_history(&state, &ui, i, -1),
+            9 => pane_history(&state, &ui, i, 1),
+            _ => {}
+        });
+        area.add_controller(click);
+    }
+
     // ── wheel: Ctrl zooms every pane · Shift locks the panes together ────────────
     {
         let state = state.clone();
@@ -1726,6 +1854,7 @@ fn build_pane(state: &Shared, ui: &Ui, i: usize, n: usize) -> (gtk::Box, PaneUi)
         keys.connect_key_pressed(move |_c, key, _code, mods| {
             let ctrl = mods.contains(gdk::ModifierType::CONTROL_MASK);
             let shift = mods.contains(gdk::ModifierType::SHIFT_MASK);
+            let alt = mods.contains(gdk::ModifierType::ALT_MASK);
             let stop = glib::Propagation::Stop;
             // Up/Down move a few lines, PageUp/Down/Space nearly a page. Holding
             // Shift locks every pane together (parallel reading); otherwise just
@@ -1749,11 +1878,14 @@ fn build_pane(state: &Shared, ui: &Ui, i: usize, n: usize) -> (gtk::Box, PaneUi)
                     vadj2.set_value((vadj2.upper() - vadj2.page_size()).max(vadj2.lower()));
                     stop
                 }
+                gdk::Key::Left if alt => { pane_history(&state, &ui, i, -1); stop }
+                gdk::Key::Right if alt => { pane_history(&state, &ui, i, 1); stop }
                 gdk::Key::Right | gdk::Key::bracketright => { step_pane(&state, &ui, i, 1); stop }
                 gdk::Key::Left | gdk::Key::bracketleft => { step_pane(&state, &ui, i, -1); stop }
                 gdk::Key::_0 | gdk::Key::KP_0 if ctrl => { zoom(&state, &ui, 0.0); stop }
                 gdk::Key::plus | gdk::Key::equal if ctrl => { zoom(&state, &ui, 1.0); stop }
                 gdk::Key::minus if ctrl => { zoom(&state, &ui, -1.0); stop }
+                gdk::Key::F1 | gdk::Key::question => { show_shortcuts(&state, &ui); stop }
                 gdk::Key::Escape => { hide_study(&ui); stop }
                 _ => glib::Propagation::Proceed,
             }
@@ -1882,6 +2014,18 @@ fn navigate_pane(state: &Shared, ui: &Ui, i: usize, book: &str, chapter: u16, ve
         let p = &mut st.panes[i];
         p.book = book.to_string();
         p.chapter = chapter.max(1);
+        // Record the destination in the reading history unless this navigation
+        // *is* a history move (Tier 0 #2); forward entries past the cursor drop.
+        if !p.in_history_nav {
+            if p.hist_idx >= 0 && (p.hist_idx as usize) + 1 < p.history.len() {
+                p.history.truncate(p.hist_idx as usize + 1);
+            }
+            let cur = (p.book.clone(), p.chapter);
+            if p.history.last() != Some(&cur) {
+                p.history.push(cur);
+                p.hist_idx = p.history.len() as isize - 1;
+            }
+        }
         p.scroll_to = verse;
         p.highlight = verse;
         // Drop the stale layout so the verse scroll can't act on the old
@@ -1918,15 +2062,46 @@ fn navigate_pane(state: &Shared, ui: &Ui, i: usize, book: &str, chapter: u16, ve
     }
 }
 
-/// Step pane `i`'s chapter within its book, clamped to range.
+/// Step pane `i`'s chapter, rolling across book boundaries (Tier 0 #8): past the
+/// last chapter enters the next book, before chapter 1 enters the previous.
 fn step_pane(state: &Shared, ui: &Ui, i: usize, delta: i32) {
-    let (book, ch) = {
+    let target = {
         let st = state.borrow();
         let p = &st.panes[i];
-        let count = st.corpus.chapter_count(&p.book);
-        (p.book.clone(), (p.chapter as i32 + delta).clamp(1, count.max(1) as i32) as u16)
+        let count = st.corpus.chapter_count(&p.book) as i32;
+        let ch = p.chapter as i32 + delta;
+        if ch < 1 {
+            canon::adjacent_book(&p.book, -1)
+                .map(|b| (b.to_string(), st.corpus.chapter_count(b).max(1)))
+        } else if ch > count {
+            canon::adjacent_book(&p.book, 1).map(|b| (b.to_string(), 1u16))
+        } else {
+            Some((p.book.clone(), ch as u16))
+        }
     };
-    navigate_pane(state, ui, i, &book, ch, None);
+    if let Some((book, ch)) = target {
+        navigate_pane(state, ui, i, &book, ch, None);
+    }
+}
+
+/// Walk pane `i`'s reading history by `delta` (−1 back, +1 forward). Navigates
+/// without pushing a new history entry.
+fn pane_history(state: &Shared, ui: &Ui, i: usize, delta: isize) {
+    let target = {
+        let mut st = state.borrow_mut();
+        let Some(p) = st.panes.get_mut(i) else { return };
+        let new_idx = p.hist_idx + delta;
+        if new_idx < 0 || new_idx >= p.history.len() as isize {
+            return;
+        }
+        p.hist_idx = new_idx;
+        p.in_history_nav = true;
+        p.history[new_idx as usize].clone()
+    };
+    navigate_pane(state, ui, i, &target.0, target.1, None);
+    if let Some(p) = state.borrow_mut().panes.get_mut(i) {
+        p.in_history_nav = false;
+    }
 }
 
 /// Try to scroll pane `i` so its pending target verse sits near the top.
@@ -2149,14 +2324,16 @@ fn now_stamp() -> String {
         .unwrap_or_default()
 }
 
-/// Re-read threads + tags from disk after an authoring write.
+/// Re-read threads + tags + personal notes from disk after an authoring write.
 fn reload_study_data(state: &Shared) {
     let home = state.borrow().home.clone();
     let (threads, _) = thread::load_threads(&home);
     let (tags, _) = tag::load_tags(&home);
+    let (usernotes, _) = usernote::load_notes(&home);
     let mut st = state.borrow_mut();
     st.threads = threads;
     st.tags = tags;
+    st.usernotes = usernotes;
 }
 
 /// A modal name prompt; `on_ok` runs with the trimmed name if non-empty.
@@ -2377,8 +2554,15 @@ fn handle_link(state: &Shared, ui: &Ui, uri: &str) {
     let Some(link) = panel::parse_link(uri) else { return };
     match link {
         Go { book, chapter, verse } => {
-            let active = state.borrow().active;
-            navigate_pane(state, ui, active, &book, chapter as u16, verse.map(|v| v as u16));
+            // A modifier-click captured just before this (Tier 0 #8) targets the
+            // other pane; otherwise the active one.
+            let target = {
+                let mut st = state.borrow_mut();
+                let other = st.link_other && st.panes.len() > 1;
+                st.link_other = false;
+                if other { (st.active + 1) % st.panes.len() } else { st.active }
+            };
+            navigate_pane(state, ui, target, &book, chapter as u16, verse.map(|v| v as u16));
         }
         Occurrences { code } => show_study(ui, &concordance_markup(&state.borrow(), &code)),
         Rendering { code, rendering } => {
@@ -2417,7 +2601,300 @@ fn handle_link(state: &Shared, ui: &Ui, uri: &str) {
         EditThreadNotes { index } => edit_thread_notes(state, ui, index),
         EditEntryNote { thread, entry } => edit_entry_note(state, ui, thread, entry),
         EditWeaveNotes { index } => edit_weave_notes(state, ui, index),
+        EditNote { refkey } => edit_user_note(state, ui, &refkey),
+        Guide => show_study(ui, &blocks_to_markup(&panel::guide_blocks())),
+        About => show_study(ui, &blocks_to_markup(&panel::about_blocks())),
     }
+}
+
+/// Prompt for and save the reader's personal note on `refkey` (Tier 0 #3), then
+/// refresh the gutter and re-show the verse's word study.
+fn edit_user_note(state: &Shared, ui: &Ui, refkey: &str) {
+    let Some(vref) = VRef::parse_ref_key(refkey) else { return };
+    let current = state.borrow().usernotes.get(&vref).map(|ln| ln.note.text.clone()).unwrap_or_default();
+    let (state, ui) = (state.clone(), ui.clone());
+    let title = format!("Your note — {}", vref.display());
+    prompt_text(window_of(&ui), &title, "note (empty clears it)", &current, move |text| {
+        let res = {
+            let st = state.borrow();
+            usernote::set_note(&st.home, &vref, &text, &now_stamp())
+        };
+        match res {
+            Ok(_) => {
+                reload_study_data(&state);
+                redraw_all(&ui);
+                // Re-render the verse's word study so the "your note" line updates.
+                let m = {
+                    let st = state.borrow();
+                    let strongs = st
+                        .corpus
+                        .verse(&vref)
+                        .and_then(|v| v.tokens.first())
+                        .map(|t| t.strongs.clone())
+                        .unwrap_or_default();
+                    let hit = Hit { verse: vref.clone(), token_index: 0, strongs };
+                    word_study_markup(&st, &hit)
+                };
+                show_study(&ui, &m);
+            }
+            Err(e) => show_study(&ui, &format!("<i>Could not save note: {}</i>", esc(&e.to_string()))),
+        }
+    });
+}
+
+/// The verse under a reader point: the hit word's verse, else the nearest
+/// verse-number line by y (Tier 0 #1 — a right-click anywhere in a verse's
+/// lines targets that verse). `None` when no chapter is laid out.
+fn verse_at(state: &Shared, i: usize, x: f64, y: f64) -> Option<VRef> {
+    let st = state.borrow();
+    let p = st.panes.get(i)?;
+    let dl = p.dl.as_ref()?;
+    if let Some(hit) = dl.hit_test(x as f32 - p.margin_x, y as f32 - MARGIN) {
+        return Some(hit.verse);
+    }
+    let ty = y as f32 - MARGIN;
+    let mut best: Option<(f32, u16)> = None;
+    for it in &dl.items {
+        if let Some(n) = item_verse_num(it) {
+            let d = (it.y - ty).abs();
+            if best.map_or(true, |(bd, _)| d < bd) {
+                best = Some((d, n));
+            }
+        }
+    }
+    best.map(|(_, n)| VRef::new(&p.book, p.chapter, n))
+}
+
+/// Copy a verse (or its chapter) to the clipboard in one shape (Tier 0 #1).
+fn copy_verse(state: &Shared, area: &gtk::DrawingArea, vref: &VRef, kind: export::CopyKind) {
+    let text = export::copy_text(&state.borrow().corpus, vref, kind);
+    if let Some(t) = text {
+        area.clipboard().set_text(&t);
+    }
+}
+
+/// Highlight a verse with a named tone: add it to that colour's tag (creating it
+/// coloured), then reload + repaint (Tier 0 #4).
+fn highlight_verse(state: &Shared, ui: &Ui, vref: &VRef, tone: &str, hex: &str) {
+    // "amber" → "Amber": the tag name for this tone.
+    let mut chars = tone.chars();
+    let name = match chars.next() {
+        Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
+        None => return,
+    };
+    let home = state.borrow().home.clone();
+    let stamp = now_stamp();
+    let added = {
+        let st = state.borrow();
+        tag::add_member(
+            &home,
+            &st.tags,
+            &name,
+            canon::TOKENIZATION_VERSION,
+            TagTarget::Verse(vref.clone()),
+            None,
+            &stamp,
+        )
+    };
+    if added.is_ok() {
+        reload_study_data(state);
+        {
+            let st = state.borrow();
+            let _ = tag::set_color(&st.tags, &name, Some(hex));
+        }
+        reload_study_data(state);
+        redraw_all(ui);
+    }
+}
+
+/// Remove a verse from every colour-bearing tag that holds it (Tier 0 #4).
+fn clear_highlight(state: &Shared, ui: &Ui, vref: &VRef) {
+    let target = TagTarget::Verse(vref.clone());
+    let to_clear: Vec<LoadedTag> = {
+        let st = state.borrow();
+        st.tags
+            .iter()
+            .filter(|lt| lt.tag.color.is_some() && lt.tag.member_of(&target))
+            .cloned()
+            .collect()
+    };
+    for lt in &to_clear {
+        let _ = tag::remove_member(lt, &target);
+    }
+    if !to_clear.is_empty() {
+        reload_study_data(state);
+        redraw_all(ui);
+    }
+}
+
+/// The right-click verse context menu (Tier 0 #1): copy shapes, highlight tones,
+/// a personal note, and (Full study) tag / add-to-thread — the last three route
+/// through the panel dispatcher so they share the prompts + authoring flow.
+fn show_context_menu(state: &Shared, ui: &Ui, i: usize, area: &gtk::DrawingArea, x: f64, y: f64) {
+    let Some(vref) = verse_at(state, i, x, y) else { return };
+    let refkey = vref.ref_key();
+    let full = state.borrow().mode.is_full();
+
+    let pop = gtk::Popover::new();
+    pop.set_parent(area);
+    pop.set_has_arrow(false);
+    pop.set_pointing_to(Some(&gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+
+    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    vbox.set_margin_top(4);
+    vbox.set_margin_bottom(4);
+    vbox.set_margin_start(4);
+    vbox.set_margin_end(4);
+
+    let make = |label: &str| {
+        let b = gtk::Button::with_label(label);
+        b.add_css_class("flat");
+        b.set_halign(gtk::Align::Fill);
+        b
+    };
+
+    // Copy shapes.
+    for (label, kind) in [
+        ("Copy verse", export::CopyKind::Verse),
+        ("Copy with reference", export::CopyKind::VerseRef),
+        ("Copy (markdown)", export::CopyKind::VerseMarkdown),
+        ("Copy chapter", export::CopyKind::Chapter),
+    ] {
+        let b = make(label);
+        let (state, area, vref, pop) = (state.clone(), area.clone(), vref.clone(), pop.clone());
+        b.connect_clicked(move |_| {
+            copy_verse(&state, &area, &vref, kind);
+            pop.popdown();
+        });
+        vbox.append(&b);
+    }
+    vbox.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
+
+    // Personal note (both modes).
+    {
+        let b = make("Note…");
+        let (state, ui, refkey, pop) = (state.clone(), ui.clone(), refkey.clone(), pop.clone());
+        b.connect_clicked(move |_| {
+            handle_link(&state, &ui, &format!("editnote:{refkey}"));
+            pop.popdown();
+        });
+        vbox.append(&b);
+    }
+
+    // Highlight tones + clear.
+    for (tone, hex) in theme::HIGHLIGHT_TONES {
+        let b = make(&format!("Highlight — {tone}"));
+        let (state, ui, vref, pop) = (state.clone(), ui.clone(), vref.clone(), pop.clone());
+        b.connect_clicked(move |_| {
+            highlight_verse(&state, &ui, &vref, tone, hex);
+            pop.popdown();
+        });
+        vbox.append(&b);
+    }
+    {
+        let b = make("Remove highlight");
+        let (state, ui, vref, pop) = (state.clone(), ui.clone(), vref.clone(), pop.clone());
+        b.connect_clicked(move |_| {
+            clear_highlight(&state, &ui, &vref);
+            pop.popdown();
+        });
+        vbox.append(&b);
+    }
+
+    // Tag / add-to-thread (Full study only), routed through the dispatcher.
+    if full {
+        vbox.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
+        for (label, verb) in [("Tag…", "addtag"), ("Add to thread…", "addthread")] {
+            let b = make(label);
+            let (state, ui, refkey, pop) = (state.clone(), ui.clone(), refkey.clone(), pop.clone());
+            b.connect_clicked(move |_| {
+                handle_link(&state, &ui, &format!("{verb}:{refkey}"));
+                pop.popdown();
+            });
+            vbox.append(&b);
+        }
+    }
+
+    pop.set_child(Some(&vbox));
+    pop.popup();
+}
+
+/// Cycle the colour theme (light · dark · night · follow system), re-theme the
+/// chrome + CSS + canvases, and persist (Tier 0 #5).
+fn cycle_theme(state: &Shared, ui: &Ui, theme_btn: &gtk::Button) {
+    let sm = adw::StyleManager::default();
+    let choice = {
+        let mut st = state.borrow_mut();
+        st.theme_choice = st.theme_choice.next();
+        st.theme_choice
+    };
+    // System follows the OS scheme; the explicit choices force it.
+    match choice {
+        theme::ThemeChoice::System => sm.set_color_scheme(adw::ColorScheme::Default),
+        theme::ThemeChoice::Light => sm.set_color_scheme(adw::ColorScheme::ForceLight),
+        _ => sm.set_color_scheme(adw::ColorScheme::ForceDark),
+    }
+    let palette = theme::palette(choice.resolve(sm.is_dark()));
+    state.borrow_mut().palette = palette.clone();
+    set_markup_palette(&palette);
+    ui.css.load_from_data(&css_string(&palette));
+    theme_btn.set_label(choice.label());
+    persist_config(state);
+    redraw_all(ui);
+    ui.canon_map.queue_draw();
+    ui.link_layer.queue_draw();
+}
+
+/// The keyboard-shortcuts overlay (Tier 0 #7), a small modal window.
+fn show_shortcuts(_state: &Shared, ui: &Ui) {
+    let win = gtk::Window::builder().title("Keyboard shortcuts").modal(true).default_width(480).build();
+    if let Some(p) = window_of(ui) {
+        win.set_transient_for(Some(&p));
+    }
+    let grid = gtk::Grid::new();
+    grid.set_row_spacing(6);
+    grid.set_column_spacing(20);
+    grid.set_margin_top(18);
+    grid.set_margin_bottom(18);
+    grid.set_margin_start(18);
+    grid.set_margin_end(18);
+    let rows = [
+        ("↑ / ↓ / Space", "scroll"),
+        ("PageUp / PageDown", "scroll a page"),
+        ("Home / End", "chapter start / end"),
+        ("← / →  (or [ / ])", "step chapters, across books"),
+        ("Alt + ← / →", "back / forward in history"),
+        ("Mouse back / forward", "back / forward in history"),
+        ("Shift + scroll", "lock all panes together"),
+        ("Ctrl + scroll, Ctrl +/−", "zoom · Ctrl 0 resets"),
+        ("Ctrl + click / double-click", "word study"),
+        ("Right-click a verse", "copy · note · highlight · tag"),
+        ("Esc", "close the panel / a popup"),
+        ("F1 / ?", "this list"),
+    ];
+    for (r, (k, v)) in rows.iter().enumerate() {
+        let key = gtk::Label::new(Some(k));
+        key.set_xalign(0.0);
+        key.add_css_class("heading");
+        let act = gtk::Label::new(Some(v));
+        act.set_xalign(0.0);
+        act.set_wrap(true);
+        grid.attach(&key, 0, r as i32, 1, 1);
+        grid.attach(&act, 1, r as i32, 1, 1);
+    }
+    win.set_child(Some(&grid));
+    let keyc = gtk::EventControllerKey::new();
+    let w2 = win.clone();
+    keyc.connect_key_pressed(move |_c, key, _code, _m| {
+        if key == gdk::Key::Escape {
+            w2.close();
+            glib::Propagation::Stop
+        } else {
+            glib::Propagation::Proceed
+        }
+    });
+    win.add_controller(keyc);
+    win.present();
 }
 
 /// Prompt for and save the running notes document of thread `i`.
@@ -2512,14 +2989,24 @@ fn review_weave(state: &Shared, ui: &Ui, i: usize, approve: bool) {
     }
 }
 
+/// Parse a `#rrggbb` palette hex into cairo's 0..1 `(r, g, b)`. Falls back to a
+/// near-black on a malformed value.
+fn hex_rgb(hex: &str) -> (f64, f64, f64) {
+    let h = hex.trim_start_matches('#');
+    let c = |a: usize, b: usize| u8::from_str_radix(h.get(a..b).unwrap_or("00"), 16).unwrap_or(0) as f64 / 255.0;
+    if h.len() >= 6 { (c(0, 2), c(2, 4), c(4, 6)) } else { (0.1, 0.1, 0.1) }
+}
+
 /// Lay out and paint pane `i`'s chapter. Measurement and painting share one
 /// Pango layout, so the stored hit regions match the glyphs exactly.
 fn draw_pane(state: &Shared, i: usize, area: &gtk::DrawingArea, cr: &cairo::Context, width: i32) {
-    // warm paper background
-    cr.set_source_rgb(0.988, 0.976, 0.957);
+    let mut st = state.borrow_mut();
+    let pal = st.palette.clone();
+    // Paper background from the theme (warm cream in light; dark in dark/night).
+    let (pr0, pg0, pb0) = hex_rgb(&pal.paper);
+    cr.set_source_rgb(pr0, pg0, pb0);
     let _ = cr.paint();
 
-    let mut st = state.borrow_mut();
     if i >= st.panes.len() {
         return;
     }
@@ -2572,6 +3059,26 @@ fn draw_pane(state: &Shared, i: usize, area: &gtk::DrawingArea, cr: &cairo::Cont
         .map(|v| v.verse)
         .filter(|&n| st.xrefs.contains_key(&VRef::new(&book, chapter, n)))
         .collect();
+    // Verses with a personal note get a second gutter mark (Tier 0 #3).
+    let note_here: HashSet<u16> = verses
+        .iter()
+        .map(|v| v.verse)
+        .filter(|&n| st.usernotes.contains_key(&VRef::new(&book, chapter, n)))
+        .collect();
+    // Verses that are search hits get a soft band (Tier 0 #8).
+    let hits_here: Vec<u16> = verses
+        .iter()
+        .map(|v| v.verse)
+        .filter(|&n| st.hits.contains(&VRef::new(&book, chapter, n)))
+        .collect();
+    // Verses in a colour-bearing tag get a highlight wash (Tier 0 #4).
+    let highlight_here: Vec<(u16, (f64, f64, f64))> = verses
+        .iter()
+        .filter_map(|v| {
+            tag::verse_color(&st.tags, &VRef::new(&book, chapter, v.verse))
+                .map(|hex| (v.verse, hex_rgb(hex)))
+        })
+        .collect();
 
     // Soft band behind a verse: gold for a search/cross-ref target, blue for a
     // pinned weave-link endpoint.
@@ -2593,14 +3100,23 @@ fn draw_pane(state: &Shared, i: usize, area: &gtk::DrawingArea, cr: &cairo::Cont
             let _ = cr.fill();
         }
     };
+    let (gr, gg, gb) = hex_rgb(&pal.gold);
+    // Highlight washes first (underneath), then search hits, then the goto band.
+    for (vn, (r, g, b)) in &highlight_here {
+        band(cr, *vn, *r, *g, *b, if pal.dark { 0.25 } else { 0.36 });
+    }
+    for &n in &hits_here {
+        band(cr, n, gr, gg, gb, 0.12);
+    }
     if let Some(hv) = highlight {
-        band(cr, hv, 0.62, 0.49, 0.22, 0.12);
+        band(cr, hv, gr, gg, gb, 0.12);
     }
     // A pinned endpoint highlights its exact word span (blue), so the reader
     // sees which words the link will point at — not just the whole verse.
     if let Some(ps) = pin {
         let pv = VRef::new(&book, chapter, ps.verse);
-        cr.set_source_rgba(0.25, 0.45, 0.75, 0.22);
+        let (pnr, png, pnb) = hex_rgb(&pal.pin);
+        cr.set_source_rgba(pnr, png, pnb, 0.22);
         for it in &dl.items {
             if let Some((v, t)) = it.word() {
                 if *v == pv && t >= ps.lo && t <= ps.hi {
@@ -2623,36 +3139,45 @@ fn draw_pane(state: &Shared, i: usize, area: &gtk::DrawingArea, cr: &cairo::Cont
         match &item.kind {
             ItemKind::VerseNumber(n) => {
                 layout.set_font_description(Some(&bold));
-                cr.set_source_rgb(0.62, 0.49, 0.22); // gold
+                cr.set_source_rgb(gr, gg, gb); // gold
                 cr.move_to(px, py);
                 layout.set_text(&item.text);
                 pangocairo::functions::show_layout(cr, &layout);
                 if xref_here.contains(n) {
-                    cr.set_source_rgba(0.62, 0.49, 0.22, 0.75);
+                    cr.set_source_rgba(gr, gg, gb, 0.75);
                     cr.arc((margin_x as f64 - 9.0).max(3.0), baseline - 4.0, 2.3, 0.0, std::f64::consts::TAU);
+                    let _ = cr.fill();
+                }
+                // A square note mark, left of the xref dot (Tier 0 #3).
+                if note_here.contains(n) {
+                    let (fr, fg, fb) = hex_rgb(&pal.faded);
+                    cr.set_source_rgb(fr, fg, fb);
+                    let _ = cr.rectangle((margin_x as f64 - 13.5).max(1.0), baseline - 8.0, 3.2, 3.2);
                     let _ = cr.fill();
                 }
             }
             ItemKind::Word { .. } => {
                 if item.flags & FLAG_ADDED != 0 {
                     layout.set_font_description(Some(&italic));
-                    cr.set_source_rgb(0.42, 0.40, 0.38);
+                    let (r, g, b) = hex_rgb(&pal.added);
+                    cr.set_source_rgb(r, g, b);
                 } else {
                     layout.set_font_description(Some(&regular));
-                    if item.flags & FLAG_DIVINE != 0 {
-                        cr.set_source_rgb(0.30, 0.20, 0.15);
+                    let (r, g, b) = if item.flags & FLAG_DIVINE != 0 {
+                        hex_rgb(&pal.divine)
                     } else if item.flags & FLAG_TITLE != 0 {
-                        cr.set_source_rgb(0.40, 0.36, 0.30);
+                        hex_rgb(&pal.title_ink)
                     } else {
-                        cr.set_source_rgb(0.13, 0.12, 0.10);
-                    }
+                        hex_rgb(&pal.ink)
+                    };
+                    cr.set_source_rgb(r, g, b);
                 }
                 cr.move_to(px, py);
                 layout.set_text(&item.text);
                 pangocairo::functions::show_layout(cr, &layout);
 
                 if !item.strongs.is_empty() {
-                    cr.set_source_rgba(0.62, 0.49, 0.22, 0.30);
+                    cr.set_source_rgba(gr, gg, gb, 0.30);
                     cr.set_line_width(1.0);
                     cr.move_to(px, baseline + 2.5);
                     cr.line_to(px + item.w as f64, baseline + 2.5);
@@ -2798,8 +3323,12 @@ fn draw_canon(state: &Shared, cr: &cairo::Context, w: i32, h: i32) {
     let width = w as f64;
     let hf = h as f64;
     let nb = canon::BOOKS.len() as f64;
+    let pal = &st.palette;
+    let (gr, gg, gb) = hex_rgb(&pal.gold);
+    let (fr, fg, fb) = hex_rgb(&pal.faded);
 
-    cr.set_source_rgb(0.92, 0.90, 0.86);
+    let (sr, sg, sb) = hex_rgb(&pal.strip_bg);
+    cr.set_source_rgb(sr, sg, sb);
     let _ = cr.rectangle(0.0, 0.0, width, hf);
     let _ = cr.fill();
 
@@ -2813,21 +3342,26 @@ fn draw_canon(state: &Shared, cr: &cairo::Context, w: i32, h: i32) {
         let x0 = *lo as f64 / nb * width;
         let x1 = (*hi + 1) as f64 / nb * width;
         if k % 2 == 1 {
-            cr.set_source_rgba(0.0, 0.0, 0.0, 0.04);
+            if pal.dark {
+                cr.set_source_rgba(1.0, 1.0, 1.0, 0.06);
+            } else {
+                cr.set_source_rgba(0.0, 0.0, 0.0, 0.04);
+            }
             let _ = cr.rectangle(x0, 0.0, x1 - x0, hf);
             let _ = cr.fill();
         }
         layout.set_text(lbl);
         let (tw, th) = layout.pixel_size();
         if (tw as f64) < (x1 - x0) - 6.0 {
-            cr.set_source_rgba(0.35, 0.30, 0.22, 0.9);
+            let (lr, lg, lb) = hex_rgb(&pal.section);
+            cr.set_source_rgba(lr, lg, lb, 0.95);
             cr.move_to((x0 + x1) / 2.0 - tw as f64 / 2.0, hf / 2.0 - th as f64 / 2.0 - 2.0);
             pangocairo::functions::show_layout(cr, &layout);
         }
     }
 
     let dx = OT_NT_DIVIDE as f64 / nb * width;
-    cr.set_source_rgba(0.4, 0.3, 0.2, 0.5);
+    cr.set_source_rgba(fr, fg, fb, 0.55);
     cr.set_line_width(1.0);
     cr.move_to(dx, 0.0);
     cr.line_to(dx, hf);
@@ -2837,9 +3371,9 @@ fn draw_canon(state: &Shared, cr: &cairo::Context, w: i32, h: i32) {
         let bi = canon::book_order(&p.book).unwrap_or(0) as f64;
         let x = (bi + 0.5) / nb * width;
         if i == st.active {
-            cr.set_source_rgb(0.62, 0.49, 0.22);
+            cr.set_source_rgb(gr, gg, gb);
         } else {
-            cr.set_source_rgba(0.3, 0.3, 0.3, 0.6);
+            cr.set_source_rgba(fr, fg, fb, 0.6);
         }
         cr.arc(x, hf - 4.0, 3.5, 0.0, std::f64::consts::TAU);
         let _ = cr.fill();
@@ -3113,6 +3647,10 @@ impl PanelSource for State {
         let Some(v) = VRef::parse_ref_key(verse) else { return Vec::new() };
         self.notes.get(&v).cloned().unwrap_or_default()
     }
+    fn user_note(&self, verse: &str) -> Option<String> {
+        let v = VRef::parse_ref_key(verse)?;
+        self.usernotes.get(&v).map(|ln| ln.note.text.clone())
+    }
     fn threads(&self) -> Vec<panel::ThreadView> {
         self.threads
             .iter()
@@ -3256,23 +3794,24 @@ impl PanelSource for State {
 /// How many concordance verses a panel card lists before an "… N more" tail.
 const PANEL_OCC_CAP: usize = 300;
 
-/// A semantic colour role → this shell's Pango hex; `None` inherits the label's
-/// ink. Every shell maps these identically, so the panel reads the same.
-fn role_hex(c: panel::Color) -> Option<&'static str> {
-    use panel::Color::*;
-    match c {
-        Ink => None,
-        Faded => Some("#8a8276"),
-        Gold => Some("#9e7d38"),
-        Section => Some("#a0894a"),
-        TierGod => Some("#9e7d38"),
-        TierHuman => Some("#6f8f6a"),
-        TierMachine => Some("#999"),
-        TierResearch => Some("#b04a3a"),
-        Mono => Some("#888"),
-        Morph => Some("#6a5a2a"),
-        Lemma => Some("#8a7a52"),
-    }
+thread_local! {
+    /// The palette the panel-markup helpers colour with (Tier 0 #5). GTK is
+    /// single-threaded (one main loop), so a thread-local lets the study panel's
+    /// accents follow the theme without threading a palette arg through every
+    /// `*_markup` wrapper. Set at load and on each theme switch.
+    static MARKUP_PALETTE: RefCell<theme::Palette> = RefCell::new(theme::palette(theme::Theme::Light));
+}
+
+/// Point the panel-markup helpers at `palette` (call on load + theme change).
+fn set_markup_palette(palette: &theme::Palette) {
+    MARKUP_PALETTE.with(|p| *p.borrow_mut() = palette.clone());
+}
+
+/// A semantic colour role → the active theme's Pango hex; `None` (Ink) inherits
+/// the label's themed ink. Every shell maps these identically, so the panel
+/// reads the same on each platform.
+fn role_hex(c: panel::Color) -> Option<String> {
+    MARKUP_PALETTE.with(|p| p.borrow().panel_color(c).map(str::to_string))
 }
 
 /// One styled run as Pango markup: size (logical points → Pango units) + bold/
@@ -3296,16 +3835,23 @@ fn run_markup(r: &panel::Run) -> String {
 
 /// Render the core's typed block list as one Pango markup string for the panel.
 fn blocks_to_markup(blocks: &[panel::Block]) -> String {
+    let (rule_hex, section_hex) =
+        MARKUP_PALETTE.with(|p| (p.borrow().rule.clone(), p.borrow().section.clone()));
     let mut s = String::new();
     for b in blocks {
         match b {
-            panel::Block::Rule => s.push_str("<span foreground=\"#d8cfb8\">──────────────</span>\n"),
+            panel::Block::Rule => {
+                s.push_str(&format!("<span foreground=\"{rule_hex}\">──────────────</span>\n"));
+            }
             panel::Block::Section { title, mark } => {
-                s.push_str(&format!("\n<span foreground=\"#a0894a\" size=\"x-small\"><b>{}</b></span>", esc(title)));
+                s.push_str(&format!(
+                    "\n<span foreground=\"{section_hex}\" size=\"x-small\"><b>{}</b></span>",
+                    esc(title)
+                ));
                 if let Some((glyph, color)) = mark {
                     s.push_str(&format!(
                         " <span foreground=\"{}\" size=\"x-small\">{}</span>",
-                        role_hex(*color).unwrap_or("#888"),
+                        role_hex(*color).unwrap_or_else(|| "#888".to_string()),
                         esc(glyph)
                     ));
                 }
@@ -3510,15 +4056,26 @@ fn rendering_concordance_markup(st: &State, code: &str, rendering: &str) -> Stri
     blocks_to_markup(&panel::rendering_concordance(st, code, rendering))
 }
 
-fn install_css() {
+/// The app CSS, built from the active palette so the scripture paper, pane-nav
+/// strip, and active-pane accent follow the theme (Tier 0 #5).
+fn css_string(p: &theme::Palette) -> String {
+    format!(
+        ".scripture {{ background: {paper}; }} \
+         label {{ font-family: \"EB Garamond\", serif; }} \
+         .studypanel {{ font-size: 14pt; }} \
+         .panenav {{ background: {nav}; padding: 3px; }} \
+         box.pane-active {{ border-top: 2px solid {gold}; }}",
+        paper = p.paper,
+        nav = p.pane_nav_bg,
+        gold = p.gold,
+    )
+}
+
+/// Install the app CSS for `palette` and return the provider so a theme switch
+/// can re-load it live (`provider.load_from_data(&css_string(&new_palette))`).
+fn install_css(palette: &theme::Palette) -> gtk::CssProvider {
     let provider = gtk::CssProvider::new();
-    provider.load_from_data(
-        ".scripture { background: #fcf9f4; } \
-         label { font-family: \"EB Garamond\", serif; } \
-         .studypanel { font-size: 14pt; } \
-         .panenav { background: #efeae1; padding: 3px; } \
-         box.pane-active { border-top: 2px solid #9e7d38; }",
-    );
+    provider.load_from_data(&css_string(palette));
     if let Some(display) = gtk::gdk::Display::default() {
         gtk::style_context_add_provider_for_display(
             &display,
@@ -3526,6 +4083,7 @@ fn install_css() {
             gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
     }
+    provider
 }
 
 /// Point the icon theme at the bundled hicolor tree and make the woven-cross

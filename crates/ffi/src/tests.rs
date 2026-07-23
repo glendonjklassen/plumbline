@@ -962,8 +962,89 @@ fn route_link_via_abi() {
         assert_eq!(edit["thread"], 1);
         assert_eq!(edit["entry"], 4);
 
+        // The new Tier-0 verbs route too.
+        let note = route("editnote:John 3:16").unwrap();
+        assert_eq!(note["verb"], "editNote");
+        assert_eq!(note["refKey"], "John 3:16");
+        assert_eq!(route("guide").unwrap()["verb"], "guide");
+        assert_eq!(route("about").unwrap()["verb"], "about");
+
         // Unknown verb / malformed → null.
         assert!(pure_route_link_json(c("bogus:x").as_ptr()).is_null());
         assert!(pure_route_link_json(c("thread:nan").as_ptr()).is_null());
+    }
+}
+
+/// The Tier-0 endpoints over the ABI: copy text, personal notes (write → read),
+/// tag colour → chapter highlights, the theme palette, guide/about blocks, and
+/// index warming. Exercised through a temp home exactly as a shell would.
+#[test]
+fn tier0_endpoints_via_abi() {
+    use std::ffi::CString;
+    unsafe {
+        // Engine-independent endpoints first (no home needed).
+        let c = |s: &str| CString::new(s).unwrap();
+        // A null / unknown theme falls back to light; "night" is true-black.
+        let light: Value =
+            serde_json::from_str(&take(pure_theme_palette_json(ptr::null())).unwrap()).unwrap();
+        assert_eq!(light["paper"], "#fcf9f4");
+        assert_eq!(light["dark"], false);
+        let palette: Value =
+            serde_json::from_str(&take(pure_theme_palette_json(c("night").as_ptr())).unwrap()).unwrap();
+        assert_eq!(palette["paper"], "#000000");
+        assert_eq!(palette["dark"], true);
+        let tones: Value =
+            serde_json::from_str(&take(pure_theme_highlight_tones_json()).unwrap()).unwrap();
+        assert!(tones["tones"].as_array().unwrap().len() >= 5);
+        let guide: Value = serde_json::from_str(&take(pure_panel_guide_blocks_json()).unwrap()).unwrap();
+        assert!(!guide["blocks"].as_array().unwrap().is_empty());
+        assert!(!take(pure_panel_about_blocks_json()).unwrap().is_empty());
+
+        // A temp home for the authoring endpoints.
+        let home = std::env::temp_dir().join(format!("pure-ffi-tier0-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = pure_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null());
+        assert!(!e.is_null());
+        let stamp = c("2026-01-01T00:00:00Z");
+
+        // Copy: plain, ref-suffixed, markdown.
+        let plain = take(pure_engine_copy_text(e, c("John 3:16").as_ptr(), c("verse").as_ptr())).unwrap();
+        assert!(plain.starts_with("For God so loved"));
+        let refd = take(pure_engine_copy_text(e, c("John 3:16").as_ptr(), c("verseRef").as_ptr())).unwrap();
+        assert!(refd.ends_with("— John 3:16 (KJV)"));
+        assert!(pure_engine_copy_text(e, c("John 3:16").as_ptr(), c("bogus").as_ptr()).is_null());
+
+        // Personal note: absent → null, set → readable, cleared → null again.
+        assert!(pure_engine_user_note_json(e, c("John 3:16").as_ptr()).is_null());
+        assert!(pure_engine_user_note_set(e, c("John 3:16").as_ptr(), c("golden text").as_ptr(), stamp.as_ptr()).is_null());
+        let note: Value = serde_json::from_str(&take(pure_engine_user_note_json(e, c("John 3:16").as_ptr())).unwrap()).unwrap();
+        assert_eq!(note["text"], "golden text");
+        let all: Value = serde_json::from_str(&take(pure_engine_user_notes_json(e)).unwrap()).unwrap();
+        assert_eq!(all["notes"].as_array().unwrap().len(), 1);
+        assert!(pure_engine_user_note_set(e, c("John 3:16").as_ptr(), c("").as_ptr(), stamp.as_ptr()).is_null());
+        assert!(pure_engine_user_note_json(e, c("John 3:16").as_ptr()).is_null());
+
+        // Highlight: tag a verse, colour the tag, then the chapter reports the wash.
+        assert!(pure_engine_tag_add(e, c("amber").as_ptr(), c("verse").as_ptr(), c("John 3:16").as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
+        assert!(pure_engine_tag_set_color(e, c("amber").as_ptr(), c("#f6e0a0").as_ptr()).is_null());
+        let hl: Value = serde_json::from_str(&take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+        assert_eq!(hl["verses"][0]["verse"], "John 3:16");
+        assert_eq!(hl["verses"][0]["color"], "#f6e0a0");
+        // Clearing the colour clears the wash.
+        assert!(pure_engine_tag_set_color(e, c("amber").as_ptr(), ptr::null()).is_null());
+        let hl2: Value = serde_json::from_str(&take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+        assert!(hl2["verses"].as_array().unwrap().is_empty());
+
+        // Warming is a null-on-success no-op that stays callable.
+        assert!(pure_engine_warm_indexes(e).is_null());
+
+        pure_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

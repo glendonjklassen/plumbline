@@ -237,6 +237,32 @@ pub fn remove_member(lt: &LoadedTag, target: &TagTarget) -> Result<(), Error> {
     write_tag(&lt.file, &tag)
 }
 
+/// Set (or clear, with `None`) the swatch colour of the tag named `name`
+/// (case-insensitive). Drives the highlighting feature (Tier 0 #4): a verse's
+/// wash is the colour of a colour-bearing tag it belongs to. Errors if no such
+/// tag is loaded.
+pub fn set_color(loaded: &[LoadedTag], name: &str, color: Option<&str>) -> Result<(), Error> {
+    let wanted = name.trim().to_lowercase();
+    match loaded.iter().find(|lt| lt.tag.name.to_lowercase() == wanted) {
+        Some(lt) => {
+            let mut tag = lt.tag.clone();
+            tag.color = color.map(str::to_string);
+            write_tag(&lt.file, &tag)
+        }
+        None => Err(Error::Corpus(format!("no tag named {name}"))),
+    }
+}
+
+/// The highlight colour for a verse: the swatch of the first colour-bearing tag
+/// (in load order) that holds it, or `None`. "The tags browser doubles as the
+/// highlight browser" — any coloured tag paints a wash behind its verses.
+pub fn verse_color<'a>(tags: &'a [LoadedTag], vref: &VRef) -> Option<&'a str> {
+    let target = TagTarget::Verse(vref.clone());
+    tags.iter().find_map(|lt| {
+        lt.tag.color.as_deref().filter(|_| lt.tag.member_of(&target))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

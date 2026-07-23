@@ -15,6 +15,7 @@ pub mod canon;
 pub mod config;
 pub mod corpus;
 pub mod crossref;
+pub mod export;
 pub mod home;
 pub mod notes;
 pub mod panel;
@@ -24,7 +25,9 @@ pub mod search;
 pub mod store;
 pub mod strongs;
 pub mod tag;
+pub mod theme;
 pub mod thread;
+pub mod usernote;
 pub mod weave;
 
 pub use corpus::{Corpus, Token, Verse};

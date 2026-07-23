@@ -19,12 +19,17 @@ public sealed class StudyPanel : UserControl
 {
     private readonly StackPanel _body = new() { Spacing = 8 };
     private readonly ScrollViewer _scroll;
+    private readonly Border _frame;
 
     public StudyEngine? Engine;
     public Func<bool> IsFull = () => false;
     /// Navigate the active pane (book, chapter, optional verse refKey to band).
     public Action<string, uint, string?> Navigate = (_, _, _) => { };
+    /// Navigate the *other* pane (modifier-click a go: link; Tier 0 #8).
+    public Action<string, uint, string?> NavigateOther = (_, _, _) => { };
     public Action<string> OpenConceptMap = _ => { };
+    /// The last word study shown, so a note edit can re-render it in place.
+    private Hit? _lastHit;
     /// Study data changed on disk (weaves/threads/tags) — shell refreshes
     /// its link/xref indexes and repaints connectors.
     public Action StudyDataChanged = () => { };
@@ -36,13 +41,23 @@ public sealed class StudyPanel : UserControl
         Width = 400;
         Visibility = Visibility.Collapsed;
         _scroll = new ScrollViewer { Padding = new Thickness(18, 14, 18, 14), Content = _body };
-        Content = new Border
+        _frame = new Border
         {
             Background = new SolidColorBrush(Palette.PanelBg),
             BorderBrush = new SolidColorBrush(Palette.Rule),
             BorderThickness = new Thickness(1, 0, 0, 0),
             Child = _scroll,
         };
+        Content = _frame;
+    }
+
+    /// Re-theme the panel frame after a palette change (Tier 0 #5). Base text
+    /// follows the element theme, so the on-screen content stays readable; the
+    /// accent runs re-colour on the next view open.
+    public void ApplyTheme()
+    {
+        _frame.Background = new SolidColorBrush(Palette.PanelBg);
+        _frame.BorderBrush = new SolidColorBrush(Palette.Rule);
     }
 
     public void Open() => Visibility = Visibility.Visible;
@@ -77,7 +92,8 @@ public sealed class StudyPanel : UserControl
                 if (link.Book is { } b && link.Chapter is { } ch)
                 {
                     string? verse = link.Verse is { } v ? $"{b} {ch}:{v}" : null;
-                    Navigate(b, ch, verse);
+                    // Modifier-click (Shift/Ctrl) opens the link in the other pane.
+                    (ModifierDown() ? NavigateOther : Navigate)(b, ch, verse);
                 }
                 break;
             case "occurrences": ShowConcordance(link.Code!); break;
@@ -176,7 +192,31 @@ public sealed class StudyPanel : UserControl
                 ShowCompareCard(i5);
                 break;
             }
+            case "editNote":
+            {
+                var refKey = link.RefKey!;
+                var current = Engine.UserNoteJson(refKey) is { } nj ? Wire.Parse<UserNote>(nj).Text : "";
+                var text = await PromptText($"Your note — {DisplayOf(refKey)}", current);
+                if (text is null) break;
+                var err = Engine.UserNoteSet(refKey, text, Now());
+                if (err is not null) { ShowError(err); break; }
+                StudyDataChanged();
+                // Re-render the word study so the note line updates in place.
+                if (_lastHit is { } h) ShowWordStudy(h);
+                break;
+            }
+            case "guide": ShowGuide(); break;
+            case "about": ShowAbout(); break;
         }
+    }
+
+    /// True when Shift or Ctrl is held (modifier-click routing).
+    private static bool ModifierDown()
+    {
+        bool Down(Windows.System.VirtualKey k) =>
+            Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(k)
+                .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+        return Down(Windows.System.VirtualKey.Shift) || Down(Windows.System.VirtualKey.Control);
     }
 
     private string DisplayOf(string refKey) =>
@@ -257,11 +297,12 @@ public sealed class StudyPanel : UserControl
     private TextBlock ParaBlock(PanelBlock b)
     {
         var runs = b.Runs ?? new();
+        // No explicit base Foreground: "ink" runs inherit the element theme's
+        // text colour, so the panel stays readable across a live theme switch.
         var tb = new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
             IsTextSelectionEnabled = true,
-            Foreground = new SolidColorBrush(Palette.Ink),
             FontSize = runs.Count > 0 ? runs[0].Size : 14,
             Margin = new Thickness(b.Indent ? 12 : 0, b.TopGap ? 6 : 0, 0, 0),
         };
@@ -284,12 +325,10 @@ public sealed class StudyPanel : UserControl
 
     private static Run RunOf(PanelRun r)
     {
-        var run = new Run
-        {
-            Text = r.Text,
-            FontSize = r.Size,
-            Foreground = new SolidColorBrush(ColorOf(r.Color)),
-        };
+        var run = new Run { Text = r.Text, FontSize = r.Size };
+        // "ink" (and unknown) inherits the themed default; accents are explicit.
+        if (r.Color is not (null or "ink"))
+            run.Foreground = new SolidColorBrush(ColorOf(r.Color));
         if (r.Bold) run.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
         if (r.Italic) run.FontStyle = Windows.UI.Text.FontStyle.Italic;
         return run;
@@ -300,16 +339,16 @@ public sealed class StudyPanel : UserControl
     private static Color ColorOf(string? role) => role switch
     {
         "ink" => Palette.Ink,
-        "faded" => Palette.InkFaded,
+        "faded" => Palette.Faded,
         "gold" => Palette.Gold,
         "section" => Palette.SectionGold,
         "tierGod" => Palette.TierGod,
         "tierHuman" => Palette.TierHuman,
         "tierMachine" => Palette.TierMachine,
         "tierResearch" => Palette.TierResearch,
-        "mono" => Color.FromArgb(255, 136, 136, 136),
-        "morph" => Color.FromArgb(255, 106, 90, 42),
-        "lemma" => Color.FromArgb(255, 138, 122, 82),
+        "mono" => Palette.Mono,
+        "morph" => Palette.Morph,
+        "lemma" => Palette.Lemma,
         _ => Palette.Ink,
     };
 
@@ -319,10 +358,15 @@ public sealed class StudyPanel : UserControl
     {
         if (Engine?.WordStudyBlocksJson(hit.Verse, hit.TokenIndex, IsFull()) is { } j)
         {
+            _lastHit = hit;
             Fresh();
             RenderBlocks(j);
         }
     }
+
+    /// The in-app guide / About card (Tier 0 #7); static content from the core.
+    public void ShowGuide() { Fresh(); RenderBlocks(StudyEngine.GuideBlocksJson()); }
+    public void ShowAbout() { Fresh(); RenderBlocks(StudyEngine.AboutBlocksJson()); }
 
     /// The standalone `code:CODE[:word]` study card (reverse rendering-lens target).
     public void ShowCodeStudy(string code, string word)

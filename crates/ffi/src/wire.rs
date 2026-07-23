@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use pure_core::config::{Config, PaneRef, StudyMode};
 use pure_core::panel::{Block, Color, PanelLink, Run};
+use pure_core::theme::ThemeChoice;
 use pure_core::corpus::{Corpus, Token, Verse};
 use pure_core::crossref::CrossRef;
 use pure_core::reference::VRef;
@@ -1139,6 +1140,12 @@ pub enum WirePanelLink {
     EditThreadNotes { index: usize },
     EditWeaveNotes { index: usize },
     EditEntryNote { thread: usize, entry: usize },
+    EditNote {
+        #[serde(rename = "refKey")]
+        ref_key: String,
+    },
+    Guide,
+    About,
 }
 
 pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
@@ -1159,6 +1166,9 @@ pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
         PanelLink::EditThreadNotes { index } => WirePanelLink::EditThreadNotes { index },
         PanelLink::EditWeaveNotes { index } => WirePanelLink::EditWeaveNotes { index },
         PanelLink::EditEntryNote { thread, entry } => WirePanelLink::EditEntryNote { thread, entry },
+        PanelLink::EditNote { refkey } => WirePanelLink::EditNote { ref_key: refkey },
+        PanelLink::Guide => WirePanelLink::Guide,
+        PanelLink::About => WirePanelLink::About,
     }
 }
 
@@ -1199,6 +1209,9 @@ pub struct WireConfigState {
     /// Verse-per-line reading mode.
     #[serde(default)]
     pub verse_per_line: bool,
+    /// Colour theme choice (`system`/`light`/`dark`/`night`).
+    #[serde(default)]
+    pub theme: String,
     /// Load-only: true when no config file existed yet (guided first run).
     #[serde(default)]
     pub first_run: bool,
@@ -1223,6 +1236,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
             .collect(),
         active_pane: cfg.active,
         verse_per_line: cfg.verse_per_line,
+        theme: cfg.theme.token().to_string(),
         first_run,
     }
 }
@@ -1238,6 +1252,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
             .collect(),
         active: w.active_pane,
         verse_per_line: w.verse_per_line,
+        theme: ThemeChoice::parse(&w.theme).unwrap_or_default(),
     }
 }
 
@@ -1261,5 +1276,66 @@ pub fn search_to_wire(a: &SearchAnswer) -> WireSearch {
             capped: *total > hits.len(),
             hits: hits.iter().map(search_hit_to_wire).collect(),
         },
+    }
+}
+
+// ── personal notes (Tier 0 #3) ─────────────────────────────────────────────────
+
+/// One personal note on a verse.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireUserNote {
+    pub verse: String,
+    pub display: String,
+    pub text: String,
+    pub created: String,
+    pub updated: String,
+}
+
+/// All the reader's personal notes (for the gutter marks + a browser).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireUserNotes {
+    pub notes: Vec<WireUserNote>,
+}
+
+// ── highlight washes (Tier 0 #4) ───────────────────────────────────────────────
+
+/// The highlight colour for one verse in a chapter (member of a colour-bearing
+/// tag). `color` is a `#rrggbb` tone the shell washes behind the verse.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireVerseHighlight {
+    pub verse: String,
+    pub color: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireChapterHighlights {
+    pub book: String,
+    pub chapter: u16,
+    pub verses: Vec<WireVerseHighlight>,
+}
+
+/// One selectable highlight tone (`name`, `#rrggbb`) — the shell's swatch menu.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireHighlightTone {
+    pub name: &'static str,
+    pub hex: &'static str,
+}
+
+#[derive(Serialize)]
+pub struct WireHighlightTones {
+    pub tones: Vec<WireHighlightTone>,
+}
+
+pub fn highlight_tones_to_wire() -> WireHighlightTones {
+    WireHighlightTones {
+        tones: pure_core::theme::HIGHLIGHT_TONES
+            .iter()
+            .map(|&(name, hex)| WireHighlightTone { name, hex })
+            .collect(),
     }
 }

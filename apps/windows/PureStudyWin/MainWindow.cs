@@ -5,6 +5,7 @@
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using PureStudy;
@@ -42,6 +43,10 @@ public sealed class MainWindow : Window
     private readonly Button _linkBtn = new() { Content = "＋ link", IsEnabled = false };
     private readonly Button _modeBtn = new() { Content = "Simple reader", IsEnabled = false };
     private readonly Button _vplBtn = new() { Content = "Flowing text", IsEnabled = false };
+    // Always available (no engine needed): the theme toggle and the Help button.
+    private readonly Button _themeBtn = new() { Content = "Theme: system" };
+    private readonly Button _helpBtn = new() { Content = "?" };
+    private string _themeChoice = "system";
     private readonly TextBlock _status = new()
     {
         VerticalAlignment = VerticalAlignment.Center,
@@ -55,6 +60,16 @@ public sealed class MainWindow : Window
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1500, 1000));
         var iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "pure-study.ico");
         if (System.IO.File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
+
+        // Resolve + apply the colour theme before building the UI, so chrome and
+        // brushes pick it up (Tier 0 #5). Config load is engine-independent.
+        try
+        {
+            _themeChoice = Wire.Parse<ConfigState>(StudyConfig.LoadJson()).Theme ?? "system";
+            Palette.ApplyTheme(ResolveTheme(_themeChoice));
+        }
+        catch { _themeChoice = "system"; /* keep the default light palette */ }
+        _themeBtn.Content = ThemeLabel(_themeChoice);
 
         var header = new StackPanel
         {
@@ -72,6 +87,8 @@ public sealed class MainWindow : Window
         header.Children.Add(_search);
         header.Children.Add(_modeBtn);
         header.Children.Add(_vplBtn);
+        header.Children.Add(_themeBtn);
+        header.Children.Add(_helpBtn);
         header.Children.Add(_status);
 
         var centre = new Grid();
@@ -92,7 +109,7 @@ public sealed class MainWindow : Window
 
         var root = new Grid
         {
-            RequestedTheme = ElementTheme.Light,
+            RequestedTheme = Palette.Dark ? ElementTheme.Dark : ElementTheme.Light,
             // Accelerators (Esc, brackets, Ctrl+…) must not surface key-tip
             // tooltips that linger over the reader.
             KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden,
@@ -105,6 +122,9 @@ public sealed class MainWindow : Window
         root.Children.Add(main);
         Content = root;
 
+        // Re-apply the theme to the field-initialized chrome (their brushes were
+        // captured with the default light palette before the theme was applied).
+        ApplyThemeToUi();
         WireHeader(root);
         Closed += (_, _) =>
         {
@@ -177,6 +197,7 @@ public sealed class MainWindow : Window
         _panel.Engine = _engine;
         _panel.IsFull = () => _fullMode;
         _panel.Navigate = (book, ch, verse) => NavigateActive(book, ch, verse);
+        _panel.NavigateOther = (book, ch, verse) => NavigateOtherPane(book, ch, verse);
         _panel.OpenConceptMap = code => Popups.ConceptMap(_engine!, code, _fullMode);
         _panel.StudyDataChanged = RefreshStudyData;
 
@@ -191,6 +212,10 @@ public sealed class MainWindow : Window
                  { _search, _threadsBtn, _tagsBtn, _weavesBtn, _suggestedBtn, _mapBtn, _constBtn, _modeBtn, _vplBtn })
             c.IsEnabled = true;
         _status.Text = "";
+        // Warm the analytics indexes off the UI thread in Full mode, so the
+        // first study click doesn't stall building them (Tier 0 #6).
+        if (_fullMode && _engine is { } warmEngine)
+            _ = Task.Run(() => { try { warmEngine.WarmIndexes(); } catch { /* best-effort */ } });
         ApplyMode(persist: false);
         ApplyVersePerLine(persist: false);
         // Canon bands from the core view-model — the single app-wide source for
@@ -212,7 +237,8 @@ public sealed class MainWindow : Window
             _panes.Select(p => new PaneRef1(p.Reader.Book, (ushort)p.Reader.ChapterNumber)).ToList(),
             _active,
             false,
-            _versePerLine);
+            _versePerLine,
+            _themeChoice);
         StudyConfig.SaveJson(System.Text.Json.JsonSerializer.Serialize(state, Wire.Options));
     }
 
@@ -253,8 +279,10 @@ public sealed class MainWindow : Window
         {
             if (Idx() == _active) UpdateTitle();
             UpdateStripPins();
+            RefreshVerseDecorations(pane);
             _connectors.Redraw();
         };
+        pane.Reader.ContextRequested += (verse, pt) => ShowContextMenu(pane, verse, pt);
         pane.Reader.PinChanged += UpdateLinkButton;
         pane.Reader.ZoomRequested += Zoom;
         pane.Reader.ScrollAllRequested += px => { foreach (var p in _panes) p.Reader.ScrollBy(px); };
@@ -367,13 +395,36 @@ public sealed class MainWindow : Window
                 xrefVerses.Add(p.B);
             }
         _connectors.Links = links;
+
+        // Personal-note gutter marks: the whole note set (a global list), shared
+        // by every pane (each paints the verses in its own chapter).
+        var noteVerses = new HashSet<string>();
+        if (_engine.UserNotesJson() is { } unj)
+            foreach (var n in Wire.Parse<UserNotes>(unj).Notes)
+                noteVerses.Add(n.Verse);
+
         foreach (var p in _panes)
         {
             p.Reader.XrefVerses = xrefVerses;
+            p.Reader.NoteVerses = noteVerses;
+            RefreshVerseDecorations(p);
             p.Reader.Redraw();
         }
         _connectors.Redraw();
         UpdateLinkButton();
+    }
+
+    /// Refresh the highlight washes for a pane's current chapter (its verses that
+    /// belong to a colour-bearing tag). Called on nav + on any study-data change.
+    private void RefreshVerseDecorations(PaneView pane)
+    {
+        if (_engine is null) return;
+        var map = new Dictionary<string, Windows.UI.Color>();
+        if (_engine.ChapterHighlightsJson(pane.Reader.Book, pane.Reader.ChapterNumber) is { } hj)
+            foreach (var v in Wire.Parse<ChapterHighlights>(hj).Verses)
+                map[v.Verse] = Palette.Hex(v.Color);
+        pane.Reader.Highlights = map;
+        pane.Reader.Redraw();
     }
 
     // ── header wiring ──────────────────────────────────────────────────────
@@ -412,6 +463,8 @@ public sealed class MainWindow : Window
             _versePerLine = !_versePerLine;
             ApplyVersePerLine(persist: true);
         };
+        _themeBtn.Click += (_, _) => CycleTheme();
+        _helpBtn.Click += (_, _) => _panel.ShowGuide();
 
         _search.TextChanged += (_, _) => RunSearch(_search.Text, live: true);
         _search.KeyDown += (_, e) =>
@@ -430,6 +483,12 @@ public sealed class MainWindow : Window
         AddAccel(root, VirtualKey.Number0, VirtualKeyModifiers.Control, () => Zoom(0));
         AddAccel(root, (VirtualKey)0xBB /* =/+ */, VirtualKeyModifiers.Control, () => Zoom(+1));
         AddAccel(root, (VirtualKey)0xBD /* - */, VirtualKeyModifiers.Control, () => Zoom(-1));
+        // Reading history: Alt+←/→ walk the active pane's history (Tier 0 #2).
+        AddAccel(root, VirtualKey.Left, VirtualKeyModifiers.Menu, () => ActiveReader()?.GoBack(), skipWhenTyping: true);
+        AddAccel(root, VirtualKey.Right, VirtualKeyModifiers.Menu, () => ActiveReader()?.GoForward(), skipWhenTyping: true);
+        // Help: F1 (and ?) open the shortcuts overlay (Tier 0 #7).
+        AddAccel(root, VirtualKey.F1, VirtualKeyModifiers.None, () => _ = ShowShortcutsAsync());
+        AddAccel(root, (VirtualKey)0xBF /* / → ? */, VirtualKeyModifiers.Shift, () => _ = ShowShortcutsAsync(), skipWhenTyping: true);
 
         _strip.BookPicked += book => NavigateActive(book, 1, null);
     }
@@ -439,6 +498,8 @@ public sealed class MainWindow : Window
         if (_panes.Count > 0) _panes[_active].Reader.Focus(FocusState.Programmatic);
     }
 
+    /// Step the active pane a chapter, rolling across book boundaries (Tier 0 #8:
+    /// keep pressing past the last chapter to enter the next book, and vice versa).
     private void StepActive(int dir)
     {
         if (_panes.Count == 0 || _books.Count == 0) return;
@@ -446,9 +507,22 @@ public sealed class MainWindow : Window
         int idx = _books.FindIndex(b => b.Id == r.Book);
         if (idx < 0) return;
         int ch = (int)r.ChapterNumber + dir;
-        if (ch >= 1 && ch <= _books[idx].Chapters)
+        if (ch < 1)
+        {
+            if (idx > 0) { var prev = _books[idx - 1]; r.ShowChapter(prev.Id, (uint)Math.Max(1, (int)prev.Chapters)); }
+        }
+        else if (ch > _books[idx].Chapters)
+        {
+            if (idx < _books.Count - 1) r.ShowChapter(_books[idx + 1].Id, 1);
+        }
+        else
+        {
             r.ShowChapter(r.Book, (uint)ch);
+        }
     }
+
+    private ReaderView? ActiveReader() =>
+        _panes.Count > 0 ? _panes[Math.Clamp(_active, 0, _panes.Count - 1)].Reader : null;
 
     private void AddAccel(UIElement host, VirtualKey key, VirtualKeyModifiers mods,
         Action action, bool skipWhenTyping = false)
@@ -548,6 +622,7 @@ public sealed class MainWindow : Window
         query = query.Trim();
         if (query.Length == 0)
         {
+            SetHitVerses(null);
             _panel.Close();
             return;
         }
@@ -555,14 +630,205 @@ public sealed class MainWindow : Window
         var r = Wire.Parse<SearchResult>(json);
         if (!live && r.Kind == "goto" && r.Book is not null && r.Chapter is not null)
         {
+            SetHitVerses(null);
             var refKey = r.Verse is { } v ? $"{r.Book} {r.Chapter}:{v}" : null;
             NavigateActive(r.Book, r.Chapter.Value, refKey);
             _panel.Close();
             FocusActive();
             return;
         }
-        // The panel builds its own result blocks from the core (snippets +
-        // ranking included); the goto short-circuit above stays shell-side.
+        // Band every hit that falls in a visible chapter (Tier 0 #8), then let
+        // the panel build its own ranked result blocks from the core.
+        SetHitVerses(r.Kind == "hits" ? r.Hits?.Select(h => h.Verse) : null);
         _panel.ShowSearchBlocks(query);
+    }
+
+    /// Set (or clear, with null) the search-hit set banded across every pane.
+    private void SetHitVerses(IEnumerable<string>? verses)
+    {
+        var set = verses is null ? new HashSet<string>() : new HashSet<string>(verses);
+        foreach (var p in _panes) { p.Reader.HitVerses = set; p.Reader.Redraw(); }
+    }
+
+    // ── themes, history target, context menu, shortcuts (Tier 0) ────────────
+
+    private void NavigateOtherPane(string book, uint chapter, string? verse)
+    {
+        if (_panes.Count < 2) { NavigateActive(book, chapter, verse); return; }
+        int other = (_active + 1) % _panes.Count;
+        _panes[other].Reader.ShowChapter(book, chapter, verse, highlight: verse is not null);
+    }
+
+    private static bool SystemIsDark()
+    {
+        try
+        {
+            var bg = new Windows.UI.ViewManagement.UISettings()
+                .GetColorValue(Windows.UI.ViewManagement.UIColorType.Background);
+            return (bg.R * 299 + bg.G * 587 + bg.B * 114) / 1000 < 128;
+        }
+        catch { return false; }
+    }
+
+    private static string ResolveTheme(string choice) => choice switch
+    {
+        "light" => "light",
+        "dark" => "dark",
+        "night" => "night",
+        _ => SystemIsDark() ? "dark" : "light",
+    };
+
+    private static string NextChoice(string c) => c switch
+    {
+        "light" => "dark",
+        "dark" => "night",
+        "night" => "system",
+        _ => "light",
+    };
+
+    private static string ThemeLabel(string c) => "Theme: " + (c is "light" or "dark" or "night" ? c : "system");
+
+    private void CycleTheme()
+    {
+        _themeChoice = NextChoice(_themeChoice);
+        Palette.ApplyTheme(ResolveTheme(_themeChoice));
+        _themeBtn.Content = ThemeLabel(_themeChoice);
+        ApplyThemeToUi();
+        PersistConfig();
+    }
+
+    /// Re-apply the current palette to chrome whose brushes were captured earlier
+    /// (a theme switch, or the initial fix-up after the theme is resolved).
+    private void ApplyThemeToUi()
+    {
+        if (Content is Grid g)
+            g.RequestedTheme = Palette.Dark ? ElementTheme.Dark : ElementTheme.Light;
+        _status.Foreground = new SolidColorBrush(Palette.InkFaded);
+        _panel.ApplyTheme();
+        _strip.Invalidate();
+        _connectors.Redraw();
+        foreach (var p in _panes) { p.Reader.ApplyTheme(); p.ApplyTheme(); }
+    }
+
+    private static string Now() => DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+
+    /// Copy `text` to the clipboard (Tier 0 #1).
+    private static void CopyToClipboard(string text)
+    {
+        var dp = new Windows.ApplicationModel.DataTransfer.DataPackage();
+        dp.SetText(text);
+        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dp);
+    }
+
+    /// The right-click verse context menu: copy shapes, tag/thread/note authoring
+    /// (routed through the panel dispatcher), and the highlight swatches.
+    private void ShowContextMenu(PaneView pane, string verse, Windows.Foundation.Point pt)
+    {
+        if (_engine is null) return;
+        SetActive(_panes.IndexOf(pane));
+        var flyout = new MenuFlyout();
+
+        void Item(string label, Action act)
+        {
+            var mi = new MenuFlyoutItem { Text = label };
+            mi.Click += (_, _) => act();
+            flyout.Items.Add(mi);
+        }
+        void Copy(string label, string kind) =>
+            Item(label, () => { if (_engine.CopyText(verse, kind) is { } t) CopyToClipboard(t); });
+
+        Copy("Copy verse", "verse");
+        Copy("Copy with reference", "verseRef");
+        Copy("Copy (markdown)", "verseMarkdown");
+        Copy("Copy chapter", "chapter");
+        flyout.Items.Add(new MenuFlyoutSeparator());
+
+        // Highlight submenu: the fixed tones + a remove.
+        var hi = new MenuFlyoutSubItem { Text = "Highlight" };
+        try
+        {
+            foreach (var tone in Wire.Parse<HighlightTones>(StudyEngine.HighlightTonesJson()).Tones)
+            {
+                var mi = new MenuFlyoutItem { Text = char.ToUpper(tone.Name[0]) + tone.Name[1..] };
+                mi.Click += (_, _) => HighlightVerse(verse, tone.Name, tone.Hex);
+                hi.Items.Add(mi);
+            }
+        }
+        catch { /* tones unavailable → just the remove item */ }
+        hi.Items.Add(new MenuFlyoutSeparator());
+        var rm = new MenuFlyoutItem { Text = "Remove highlight" };
+        rm.Click += (_, _) => RemoveHighlight(verse);
+        hi.Items.Add(rm);
+        flyout.Items.Add(hi);
+
+        Item("Note…", () => _panel.Link($"editnote:{verse}"));
+        if (_fullMode)
+        {
+            flyout.Items.Add(new MenuFlyoutSeparator());
+            Item("Tag…", () => _panel.Link($"addtag:{verse}"));
+            Item("Add to thread…", () => _panel.Link($"addthread:{verse}"));
+        }
+
+        flyout.ShowAt(pane.Reader, new FlyoutShowOptions { Position = pt });
+    }
+
+    /// Highlight a verse: add it to the tag for `tone` (creating it, coloured).
+    private void HighlightVerse(string verse, string tone, string hex)
+    {
+        if (_engine is null) return;
+        var tag = char.ToUpper(tone[0]) + tone[1..]; // e.g. "Amber"
+        var err = _engine.TagAdd(tag, "verse", verse, null, Now());
+        if (err is null) err = _engine.TagSetColor(tag, hex);
+        if (err is not null) { _status.Text = err; return; }
+        RefreshStudyData();
+    }
+
+    /// Remove a verse from every colour-bearing tag that holds it.
+    private void RemoveHighlight(string verse)
+    {
+        if (_engine?.TagsJson() is not { } tj) return;
+        foreach (var t in Wire.Parse<Tags>(tj).Items)
+            if (t.Color is not null && t.Members.Any(m => m.Kind == "verse" && m.Verse == verse))
+                _engine.TagRemove(t.Name, "verse", verse);
+        RefreshStudyData();
+    }
+
+    private async Task ShowShortcutsAsync()
+    {
+        var rows = new (string, string)[]
+        {
+            ("↑ / ↓ / Space", "scroll"),
+            ("PageUp / PageDown", "scroll a page"),
+            ("Home / End", "chapter start / end"),
+            ("← / →  (or [ / ])", "step chapters (across books)"),
+            ("Alt + ← / →", "back / forward in history"),
+            ("Shift + scroll", "lock all panes together"),
+            ("Ctrl + scroll, Ctrl +/−", "zoom · Ctrl 0 resets"),
+            ("Ctrl + click / double-click", "word study"),
+            ("Right-click a verse", "copy · tag · note · highlight"),
+            ("Ctrl + F", "search"),
+            ("Esc", "close the panel / a popup"),
+            ("F1 / ?", "this list"),
+        };
+        var panel = new StackPanel { Spacing = 4 };
+        foreach (var (k, v) in rows)
+        {
+            var row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var key = new TextBlock { Text = k, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+            var act = new TextBlock { Text = v, TextWrapping = TextWrapping.Wrap };
+            Grid.SetColumn(key, 0); Grid.SetColumn(act, 1);
+            row.Children.Add(key); row.Children.Add(act);
+            panel.Children.Add(row);
+        }
+        var dialog = new ContentDialog
+        {
+            Title = "Keyboard shortcuts",
+            Content = new ScrollViewer { Content = panel },
+            CloseButtonText = "Close",
+            XamlRoot = Content.XamlRoot,
+        };
+        await dialog.ShowAsync();
     }
 }

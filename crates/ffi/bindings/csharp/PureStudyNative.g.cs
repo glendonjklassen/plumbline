@@ -723,6 +723,119 @@ namespace PureStudy.Native
         [DllImport(__DllName, EntryPoint = "pure_config_save_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         public static extern byte* pure_config_save_json(byte* json);
 
+        /// <summary>
+        ///  Clipboard text for a verse (or its chapter, for the `chapter*` kinds) in one
+        ///  of the shapes `pure_core::export::CopyKind` names (`verse` / `verseRef` /
+        ///  `verseMarkdown` / `chapter` / `chapterMarkdown`). Plain text, not JSON; null
+        ///  on a bad ref, an unknown kind, or a verse the corpus lacks. Caller-freed.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; the string args are null or valid NUL-terminated
+        ///  UTF-8 for the call.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_copy_text", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_copy_text(PureEngine* engine, byte* ref_key, byte* kind);
+
+        /// <summary>
+        ///  The reader's personal note on a verse as JSON (`{verse,display,text,created,
+        ///  updated}`), or null when the verse has no note (or the engine has no home).
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_user_note_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_user_note_json(PureEngine* engine, byte* ref_key);
+
+        /// <summary>
+        ///  All the reader's personal notes as JSON (`{notes:[…]}`), in canonical reading
+        ///  order — for the gutter marks and a "your notes" browser. Never null on a live
+        ///  engine (no notes → empty list).
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine (or null → null).
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_user_notes_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_user_notes_json(PureEngine* engine);
+
+        /// <summary>
+        ///  Set (or clear, with an empty `text`) the reader's personal note on a verse,
+        ///  atomically, then reload. `stamp` is a caller-supplied UTC timestamp. Null on
+        ///  success, else an owned error string.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; the string args are null or valid NUL-terminated
+        ///  UTF-8 for the call.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_user_note_set", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_user_note_set(PureEngine* engine, byte* ref_key, byte* text, byte* stamp);
+
+        /// <summary>
+        ///  Set (or clear, with a null `color`) the swatch colour of the tag named
+        ///  `name`, then reload. Drives highlighting (a colour-bearing tag washes its
+        ///  verses). Null on success, else an owned error.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; the string args are null or valid NUL-terminated
+        ///  UTF-8 for the call.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_tag_set_color", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_tag_set_color(PureEngine* engine, byte* name, byte* color);
+
+        /// <summary>
+        ///  The highlight washes for a chapter as JSON (`{book,chapter,verses:[{verse,
+        ///  color}]}`): each verse that belongs to a colour-bearing tag, with the tone
+        ///  the shell washes behind it. Never null on a live engine (none → empty list).
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine; `book` is null or valid NUL-terminated UTF-8.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_chapter_highlights_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_chapter_highlights_json(PureEngine* engine, byte* book, uint chapter);
+
+        /// <summary>
+        ///  The colour palette for a theme (`light`/`dark`/`night`; unknown → light) as
+        ///  JSON — every semantic role as a `#rrggbb` hex. Engine-independent. Never null.
+        ///
+        ///  # Safety
+        ///  `theme` is null or valid NUL-terminated UTF-8 for the call.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_theme_palette_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_theme_palette_json(byte* theme);
+
+        /// <summary>
+        ///  The fixed highlight tones (`{tones:[{name,hex}]}`) — the shell's swatch menu.
+        ///  Engine-independent. Never null.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_theme_highlight_tones_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_theme_highlight_tones_json();
+
+        /// <summary>
+        ///  Force the lazy analytics indexes (concept engine, leitwort scan, SIF verse
+        ///  similarity) to build now — call once on a background thread at startup in
+        ///  Full mode so the first study click doesn't stall. Safe to call from any
+        ///  thread (the builds are `OnceLock`-guarded) and idempotent. Null on success,
+        ///  else an owned error.
+        ///
+        ///  # Safety
+        ///  `engine` is a live engine (or null → an error string).
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_warm_indexes", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_warm_indexes(PureEngine* engine);
+
+        /// <summary>
+        ///  The in-app guide as panel blocks. Engine-independent (static content). Never
+        ///  null.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_panel_guide_blocks_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_panel_guide_blocks_json();
+
+        /// <summary>
+        ///  The About card as panel blocks. Engine-independent (static content). Never
+        ///  null.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_panel_about_blocks_json", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_panel_about_blocks_json();
+
 
     }
 

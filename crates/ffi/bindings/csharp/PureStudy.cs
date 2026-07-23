@@ -309,6 +309,74 @@ public sealed unsafe class StudyEngine : IDisposable
     public string? WeaveApprove(uint index) => Utf8.Take(PureStudyNative.pure_engine_weave_approve(_handle, index));
     public string? WeaveReject(uint index) => Utf8.Take(PureStudyNative.pure_engine_weave_reject(_handle, index));
 
+    // ── Tier 0: copy, personal notes, highlights, warming ──────────────────
+
+    /// Clipboard text for a verse / its chapter, in one of the CopyKind shapes
+    /// (`verse`/`verseRef`/`verseMarkdown`/`chapter`/`chapterMarkdown`). Plain
+    /// text (not JSON); null on a bad ref or unknown kind.
+    public string? CopyText(string refKey, string kind)
+    {
+        fixed (byte* r = Utf8.NulTerminated(refKey))
+        fixed (byte* k = Utf8.NulTerminated(kind))
+            return Utf8.Take(PureStudyNative.pure_engine_copy_text(_handle, r, k));
+    }
+
+    /// The reader's personal note on a verse, or null when it has none.
+    public string? UserNoteJson(string refKey)
+    {
+        fixed (byte* r = Utf8.NulTerminated(refKey))
+            return Utf8.Take(PureStudyNative.pure_engine_user_note_json(_handle, r));
+    }
+
+    /// All personal notes (`{notes:[…]}`), canonical order — gutter marks + browser.
+    public string? UserNotesJson() => Utf8.Take(PureStudyNative.pure_engine_user_notes_json(_handle));
+
+    /// Set (or clear, with an empty `text`) the personal note on a verse. Null =
+    /// success, else an error message.
+    public string? UserNoteSet(string refKey, string text, string stampUtc)
+    {
+        fixed (byte* r = Utf8.NulTerminated(refKey))
+        fixed (byte* t = Utf8.NulTerminated(text))
+        fixed (byte* s = Utf8.NulTerminated(stampUtc))
+            return Utf8.Take(PureStudyNative.pure_engine_user_note_set(_handle, r, t, s));
+    }
+
+    /// Set (or clear, with a null `color`) the swatch colour of a tag — drives
+    /// highlighting. Null = success, else an error message.
+    public string? TagSetColor(string name, string? color)
+    {
+        fixed (byte* n = Utf8.NulTerminated(name))
+        fixed (byte* c = Utf8.NulTerminatedOrNull(color))
+            return Utf8.Take(PureStudyNative.pure_engine_tag_set_color(_handle, n, c));
+    }
+
+    /// The highlight washes for a chapter (`{book,chapter,verses:[{verse,color}]}`);
+    /// never null on a live engine (none → empty list).
+    public string? ChapterHighlightsJson(string book, uint chapter)
+    {
+        fixed (byte* b = Utf8.NulTerminated(book))
+            return Utf8.Take(PureStudyNative.pure_engine_chapter_highlights_json(_handle, b, chapter));
+    }
+
+    /// Force the lazy analytics indexes to build now (call on a background thread
+    /// at startup in Full mode). Safe from any thread; null = success.
+    public string? WarmIndexes() => Utf8.Take(PureStudyNative.pure_engine_warm_indexes(_handle));
+
+    /// The colour palette for a theme (`light`/`dark`/`night`) as JSON. Static
+    /// (engine-independent). Never null.
+    public static string PaletteJson(string theme)
+    {
+        fixed (byte* t = Utf8.NulTerminated(theme))
+            return Utf8.Take(PureStudyNative.pure_theme_palette_json(t))!;
+    }
+
+    /// The fixed highlight tones (`{tones:[{name,hex}]}`) — the swatch menu.
+    public static string HighlightTonesJson() => Utf8.Take(PureStudyNative.pure_theme_highlight_tones_json())!;
+
+    /// The in-app guide / About card as panel blocks. Static (engine-independent).
+    public static string GuideBlocksJson() => Utf8.Take(PureStudyNative.pure_panel_guide_blocks_json())!;
+    public static string AboutBlocksJson() => Utf8.Take(PureStudyNative.pure_panel_about_blocks_json())!;
+
     public string? ThreadSetNotes(string name, string notes)
     {
         fixed (byte* n = Utf8.NulTerminated(name))
