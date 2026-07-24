@@ -642,6 +642,203 @@ char *pure_config_load_json(void);
 // `json` is null or valid NUL-terminated UTF-8 for the call.
 char *pure_config_save_json(const char *json);
 
+// Clipboard text for a verse (or its chapter, for the `chapter*` kinds) in one
+// of the shapes `pure_core::export::CopyKind` names (`verse` / `verseRef` /
+// `verseMarkdown` / `chapter` / `chapterMarkdown`). Plain text, not JSON; null
+// on a bad ref, an unknown kind, or a verse the corpus lacks. Caller-freed.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated
+// UTF-8 for the call.
+char *pure_engine_copy_text(const struct PureEngine *engine, const char *ref_key, const char *kind);
+
+// The reader's personal note on a verse as JSON (`{verse,display,text,created,
+// updated}`), or null when the verse has no note (or the engine has no home).
+//
+// # Safety
+// `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
+char *pure_engine_user_note_json(const struct PureEngine *engine, const char *ref_key);
+
+// All the reader's personal notes as JSON (`{notes:[…]}`), in canonical reading
+// order — for the gutter marks and a "your notes" browser. Never null on a live
+// engine (no notes → empty list).
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_user_notes_json(const struct PureEngine *engine);
+
+// Set (or clear, with an empty `text`) the reader's personal note on a verse,
+// atomically, then reload. `stamp` is a caller-supplied UTC timestamp. Null on
+// success, else an owned error string.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated
+// UTF-8 for the call.
+char *pure_engine_user_note_set(struct PureEngine *engine,
+                                const char *ref_key,
+                                const char *text,
+                                const char *stamp);
+
+// Set (or clear, with a null `color`) the swatch colour of the tag named
+// `name`, then reload. Drives highlighting (a colour-bearing tag washes its
+// verses). Null on success, else an owned error.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated
+// UTF-8 for the call.
+char *pure_engine_tag_set_color(struct PureEngine *engine, const char *name, const char *color);
+
+// Add a word-precise highlight range to the tag named `name` (created on first
+// use, taking `color` as its tone). The range runs from `start_ref`+`start_tok`
+// to `end_ref`+`end_tok` (inclusive token indices under `kjv1769-tok2`);
+// endpoints are ordered canonically here, so a backwards drag is fine. `color`
+// may be null (the range then inherits the tag's colour). `added` is a
+// caller-supplied UTC timestamp. Null on success, else an owned error.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_highlight_add(struct PureEngine *engine,
+                                const char *name,
+                                const char *color,
+                                const char *start_ref,
+                                uint32_t start_tok,
+                                const char *end_ref,
+                                uint32_t end_tok,
+                                const char *added);
+
+// Remove the highlight range with these endpoints from the tag named `name`.
+// Endpoints are ordered canonically to match how they were stored. A missing
+// range is a no-op; a missing tag is an error. Null on success, else an error.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_highlight_remove(struct PureEngine *engine,
+                                   const char *name,
+                                   const char *start_ref,
+                                   uint32_t start_tok,
+                                   const char *end_ref,
+                                   uint32_t end_tok);
+
+// Drop every highlight range covering `verse_ref` from all tags, then reload —
+// the drag-remove path (a whole range goes even if only one of its verses was
+// targeted). Null on success, else an owned error.
+//
+// # Safety
+// `engine` is valid; `verse_ref` is null or valid NUL-terminated UTF-8.
+char *pure_engine_highlight_clear_verse(struct PureEngine *engine, const char *verse_ref);
+
+// The highlight washes for a chapter as JSON (`{book,chapter,verses:[{verse,
+// color}]}`): each verse that belongs to a colour-bearing tag, with the tone
+// the shell washes behind it. Never null on a live engine (none → empty list).
+//
+// # Safety
+// `engine` is a live engine; `book` is null or valid NUL-terminated UTF-8.
+char *pure_engine_chapter_highlights_json(const struct PureEngine *engine,
+                                          const char *book,
+                                          uint32_t chapter);
+
+// The colour palette for a theme (`light`/`dark`/`night`; unknown → light) as
+// JSON — every semantic role as a `#rrggbb` hex. Engine-independent. Never null.
+//
+// # Safety
+// `theme` is null or valid NUL-terminated UTF-8 for the call.
+char *pure_theme_palette_json(const char *theme);
+
+// The fixed highlight tones (`{tones:[{name,hex}]}`) — the shell's swatch menu.
+// Engine-independent. Never null.
+char *pure_theme_highlight_tones_json(void);
+
+// Force the lazy analytics indexes (concept engine, leitwort scan, SIF verse
+// similarity) to build now — call once on a background thread at startup in
+// Full mode so the first study click doesn't stall. Safe to call from any
+// thread (the builds are `OnceLock`-guarded) and idempotent. Null on success,
+// else an owned error.
+//
+// # Safety
+// `engine` is a live engine (or null → an error string).
+char *pure_engine_warm_indexes(const struct PureEngine *engine);
+
+// Grade the verse `verse_ref` at `now` (RFC3339 UTC), creating its SRS card on
+// first review; SM-2 reschedules and appends to the review log. `grade` is one
+// of `again` / `hard` / `good` / `easy`. Null on success, else an owned error.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_grade(struct PureEngine *engine,
+                               const char *verse_ref,
+                               const char *grade,
+                               const char *now);
+
+// Start memorizing `verse_ref` — seed its SRS card (due now) if it isn't
+// already one; no review is logged. `now` is a caller-supplied UTC timestamp.
+// Null on success, else an owned error.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_add(struct PureEngine *engine, const char *verse_ref, const char *now);
+
+// Stop memorizing `verse_ref` (remove its card); a missing card is a no-op.
+// Null on success, else an owned error.
+//
+// # Safety
+// `engine` is valid; `verse_ref` is null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_remove(struct PureEngine *engine, const char *verse_ref);
+
+// The verse's SRS card as JSON (schedule + mastery + review log), or null if
+// the verse isn't being memorized (or the engine has no home).
+//
+// # Safety
+// `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_card_json(const struct PureEngine *engine, const char *verse_ref);
+
+// Verses due for review at `now` (RFC3339), reading order — the study queue, as
+// `{refs:[...]}`. Never null on a live engine (empty when nothing is due).
+//
+// # Safety
+// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_due_json(const struct PureEngine *engine, const char *now);
+
+// The coverage-map data at `now`: per-verse standing (mastery + recency) plus
+// the 8-section rollup, as `{verses:[...],sections:[...]}`.
+//
+// # Safety
+// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_coverage_json(const struct PureEngine *engine, const char *now);
+
+// The activity heatmap as `{days:[{day,reviews}]}` — reviews per calendar day,
+// oldest first, from every card's review log. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *pure_engine_memory_activity_json(const struct PureEngine *engine);
+
+// A drill prompt for `verse_ref` at blank-out `level` (0 = full text … max):
+// the verse text, its first-letter skeleton, and the blanked form. Null if the
+// verse isn't found.
+//
+// # Safety
+// `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_drill_json(const struct PureEngine *engine,
+                                    const char *verse_ref,
+                                    uint32_t level);
+
+// Score a typed recall of `verse_ref` against the verse text — `{accuracy,
+// words:[{word,ok}]}`, LCS-aligned. Null if the verse isn't found.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+char *pure_engine_memory_score_json(const struct PureEngine *engine,
+                                    const char *verse_ref,
+                                    const char *typed);
+
+// The in-app guide as panel blocks. Engine-independent (static content). Never
+// null.
+char *pure_panel_guide_blocks_json(void);
+
+// The About card as panel blocks. Engine-independent (static content). Never
+// null.
+char *pure_panel_about_blocks_json(void);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

@@ -11,7 +11,7 @@
   re-surveying the repo.
 - `../overlay` (Haskell) is the read-only reference implementation — port
   from it, never modify it.
-- Frozen contracts: the on-disk data formats (PLAN.md), `kjv1769-tok2`
+- Frozen contracts: the on-disk data formats (README.md §Data formats), `kjv1769-tok2`
   tokenization stamp, the camelCase wire JSON (additive evolution only), and
   refKey (`"Gen 1:7"`).
 
@@ -42,6 +42,16 @@
 ## Releases
 
 - Tag `v*` → `.github/workflows/release.yml` builds self-contained Windows
-  apps (arm64/x64/x86, data pack bundled) and attaches them to a GitHub
-  Release — the repo is the download page. Local dry run:
+  apps (arm64/x64/x86, data pack bundled) **and** a signed Android APK
+  (arm64-v8a + x86_64), attaching them all to a GitHub Release — the repo is
+  the download page. Local dry run:
   `pwsh scripts/package-windows.ps1 -Arch x64 -Version vtest`.
+- The Android APK job needs four repo secrets — `ANDROID_KEYSTORE_BASE64`,
+  `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
+  (generation steps are in the workflow header). Without them the job no-ops
+  with a warning so the Windows release still ships. The keystore is the app's
+  stable update identity — back it up; losing it forces users to uninstall to
+  upgrade. Local APK build: `apps/android/gradlew -p apps/android
+  :app:assembleDebug` with `JAVA_HOME=java-21-openjdk` (the .so comes from
+  `cargo ndk -t arm64-v8a -t x86_64 -o apps/android/app/src/main/jniLibs build
+  -p pure-ffi --release`).

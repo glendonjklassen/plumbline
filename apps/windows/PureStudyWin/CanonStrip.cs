@@ -32,10 +32,9 @@ public sealed class CanonStrip : Microsoft.UI.Xaml.Controls.UserControl
     /// Book order → (pin per pane, active flag). Set by the shell.
     public List<(int bookOrder, bool active)> Pins = new();
     private List<TocBook> _books = new();
-    private readonly CanvasControl _canvas = new()
-    {
-        ClearColor = Color.FromArgb(255, 235, 230, 219),
-    };
+    // Background painted per-frame from the palette (so a theme switch takes on
+    // the next Invalidate); the clear colour is just the initial paint.
+    private readonly CanvasControl _canvas = new() { ClearColor = Palette.StripBg };
 
     /// Click → book id (the shell navigates the active pane to chapter 1).
     public event Action<string>? BookPicked;
@@ -67,9 +66,13 @@ public sealed class CanonStrip : Microsoft.UI.Xaml.Controls.UserControl
     private void OnDraw(CanvasControl sender, CanvasDrawEventArgs args)
     {
         var ds = args.DrawingSession;
+        ds.Clear(Palette.StripBg);
         float w = (float)sender.ActualWidth, h = (float)sender.ActualHeight;
         if (w < 10 || Canon.Segments.Length == 0) return;
 
+        var faded = Palette.Faded;
+        // Alternating section wash: subtle dark-on-light / light-on-dark.
+        var wash = Palette.Dark ? Color.FromArgb(22, 255, 255, 255) : Color.FromArgb(10, 0, 0, 0);
         using var labelFmt = new CanvasTextFormat { FontSize = 11 };
         for (int s = 0; s < Canon.Segments.Length; s++)
         {
@@ -77,22 +80,22 @@ public sealed class CanonStrip : Microsoft.UI.Xaml.Controls.UserControl
             float x0 = seg.First / 66f * w;
             float x1 = (seg.Last + 1) / 66f * w;
             if (s % 2 == 1)
-                ds.FillRectangle(x0, 0, x1 - x0, h, Color.FromArgb(10, 0, 0, 0));
+                ds.FillRectangle(x0, 0, x1 - x0, h, wash);
             using var tl = new CanvasTextLayout(sender, seg.Label, labelFmt, 1e6f, 1e6f);
             float tw = (float)tl.LayoutBounds.Width;
             if (tw <= x1 - x0 - 6)
                 ds.DrawTextLayout(tl, x0 + (x1 - x0 - tw) / 2, (h - (float)tl.LayoutBounds.Height) / 2,
-                    Color.FromArgb(230, 89, 77, 56));
+                    Palette.SectionGold);
         }
         // OT/NT divide.
         float dx = Canon.OtNtDivide / 66f * w;
-        ds.DrawLine(dx, 0, dx, h, Color.FromArgb(128, 102, 77, 51), 1f);
+        ds.DrawLine(dx, 0, dx, h, Color.FromArgb(140, faded.R, faded.G, faded.B), 1f);
 
         foreach (var (order, active) in Pins)
         {
             float px = (order + 0.5f) / 66f * w;
             ds.FillCircle(px, h - 4, 3.5f,
-                active ? Palette.Gold : Color.FromArgb(153, 77, 77, 77));
+                active ? Palette.Gold : Color.FromArgb(153, faded.R, faded.G, faded.B));
         }
     }
 }

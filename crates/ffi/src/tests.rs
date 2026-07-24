@@ -586,6 +586,72 @@ fn rnd_tier_via_abi() {
 }
 
 #[test]
+fn concept_map_bridge_row_lights_up_the_other_testament() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("pure-ffi-bridgemap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::create_dir_all(home.join("bridge")).unwrap();
+        // A Hebrew verse (H7225 in Genesis) and a Greek verse (G25 in John) — the
+        // cross-testament shape that makes "Christ lights up Messiah" meaningful.
+        let kjv = concat!(
+            r#"{"format":"x","tokenization":"kjv1769-tok2","verses":2}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"t":[["","In","",[],0],["","the","",[],1],["","beginning","",["H7225"],0]],"v":1}"#,
+            "\n",
+            r#"{"b":"John","c":3,"t":[["","God","",["G2316"],0],["","loved","",["G25"],0]],"v":16}"#,
+        );
+        std::fs::write(home.join("data").join("kjv.jsonl"), kjv).unwrap();
+        std::fs::write(
+            home.join("data").join("strongs.json"),
+            r#"{"G25":{"lemma":"ἀγαπάω","strongs_def":"to love"},"H7225":{"lemma":"רֵאשִׁית","kjv_def":"beginning"},"G2316":{"lemma":"θεός","kjv_def":"God"}}"#,
+        )
+        .unwrap();
+        // A bridge witness tying G25 ↔ H7225 (fixture stand-in for Christ↔Messiah).
+        std::fs::write(
+            home.join("bridge").join("x.json"),
+            r#"{"format":"overlay-bridge-sources-v1","links":[{"h":"H7225","g":"G25","source":"lxx"}]}"#,
+        )
+        .unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = pure_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null() && !e.is_null());
+        let c = |s: &str| CString::new(s).unwrap();
+
+        // G25's concept map carries a bridge row: its Hebrew partner H7225, whose
+        // dispersion lights up Genesis (canon index 0) — even though G25 itself
+        // occurs only in the NT (its own by_book is 0 at Genesis).
+        let m: Value =
+            serde_json::from_str(&take(pure_engine_concept_map_json(e, c("G25").as_ptr())).unwrap()).unwrap();
+        assert_eq!(m["byBook"][0].as_u64().unwrap(), 0, "G25 itself is not in Genesis");
+        let bridge = &m["bridge"];
+        assert!(bridge.is_object(), "a bridge row exists when a partner does");
+        assert!(bridge["partners"].as_array().unwrap().iter().any(|p| p["code"] == "H7225"));
+        assert!(
+            bridge["byBook"][0].as_u64().unwrap() >= 1,
+            "the partner H7225 lights up Genesis in the bridge row"
+        );
+        assert_eq!(
+            bridge["byBook"].as_array().unwrap().len(),
+            m["bookCount"].as_u64().unwrap() as usize,
+            "the bridge row is canon-length, like by_book"
+        );
+
+        // A code with no cross-testament partner omits the bridge row entirely
+        // (serde skips the None), so shells draw a single dispersion band.
+        let m2: Value =
+            serde_json::from_str(&take(pure_engine_concept_map_json(e, c("G2316").as_ptr())).unwrap()).unwrap();
+        assert!(m2["bridge"].is_null(), "no bridge row without a cross-testament partner");
+
+        pure_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
+#[test]
 fn parity_endpoints_via_abi() {
     use std::ffi::CString;
     unsafe {
@@ -962,8 +1028,183 @@ fn route_link_via_abi() {
         assert_eq!(edit["thread"], 1);
         assert_eq!(edit["entry"], 4);
 
+        // The new Tier-0 verbs route too.
+        let note = route("editnote:John 3:16").unwrap();
+        assert_eq!(note["verb"], "editNote");
+        assert_eq!(note["refKey"], "John 3:16");
+        assert_eq!(route("guide").unwrap()["verb"], "guide");
+        assert_eq!(route("about").unwrap()["verb"], "about");
+
         // Unknown verb / malformed → null.
         assert!(pure_route_link_json(c("bogus:x").as_ptr()).is_null());
         assert!(pure_route_link_json(c("thread:nan").as_ptr()).is_null());
+    }
+}
+
+/// The Tier-0 endpoints over the ABI: copy text, personal notes (write → read),
+/// tag colour → chapter highlights, the theme palette, guide/about blocks, and
+/// index warming. Exercised through a temp home exactly as a shell would.
+#[test]
+fn tier0_endpoints_via_abi() {
+    use std::ffi::CString;
+    unsafe {
+        // Engine-independent endpoints first (no home needed).
+        let c = |s: &str| CString::new(s).unwrap();
+        // A null / unknown theme falls back to light; "night" is true-black.
+        let light: Value =
+            serde_json::from_str(&take(pure_theme_palette_json(ptr::null())).unwrap()).unwrap();
+        assert_eq!(light["paper"], "#fcf9f4");
+        assert_eq!(light["dark"], false);
+        let palette: Value =
+            serde_json::from_str(&take(pure_theme_palette_json(c("night").as_ptr())).unwrap()).unwrap();
+        assert_eq!(palette["paper"], "#000000");
+        assert_eq!(palette["dark"], true);
+        let tones: Value =
+            serde_json::from_str(&take(pure_theme_highlight_tones_json()).unwrap()).unwrap();
+        assert!(tones["tones"].as_array().unwrap().len() >= 5);
+        let guide: Value = serde_json::from_str(&take(pure_panel_guide_blocks_json()).unwrap()).unwrap();
+        assert!(!guide["blocks"].as_array().unwrap().is_empty());
+        assert!(!take(pure_panel_about_blocks_json()).unwrap().is_empty());
+
+        // A temp home for the authoring endpoints.
+        let home = std::env::temp_dir().join(format!("pure-ffi-tier0-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = pure_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null());
+        assert!(!e.is_null());
+        let stamp = c("2026-01-01T00:00:00Z");
+
+        // Copy: plain, ref-suffixed, markdown.
+        let plain = take(pure_engine_copy_text(e, c("John 3:16").as_ptr(), c("verse").as_ptr())).unwrap();
+        assert!(plain.starts_with("For God so loved"));
+        let refd = take(pure_engine_copy_text(e, c("John 3:16").as_ptr(), c("verseRef").as_ptr())).unwrap();
+        assert!(refd.ends_with("— John 3:16 (KJV)"));
+        assert!(pure_engine_copy_text(e, c("John 3:16").as_ptr(), c("bogus").as_ptr()).is_null());
+
+        // Personal note: absent → null, set → readable, cleared → null again.
+        assert!(pure_engine_user_note_json(e, c("John 3:16").as_ptr()).is_null());
+        assert!(pure_engine_user_note_set(e, c("John 3:16").as_ptr(), c("golden text").as_ptr(), stamp.as_ptr()).is_null());
+        let note: Value = serde_json::from_str(&take(pure_engine_user_note_json(e, c("John 3:16").as_ptr())).unwrap()).unwrap();
+        assert_eq!(note["text"], "golden text");
+        let all: Value = serde_json::from_str(&take(pure_engine_user_notes_json(e)).unwrap()).unwrap();
+        assert_eq!(all["notes"].as_array().unwrap().len(), 1);
+        assert!(pure_engine_user_note_set(e, c("John 3:16").as_ptr(), c("").as_ptr(), stamp.as_ptr()).is_null());
+        assert!(pure_engine_user_note_json(e, c("John 3:16").as_ptr()).is_null());
+
+        // Highlight: tag a verse, colour the tag, then the chapter reports the wash.
+        assert!(pure_engine_tag_add(e, c("amber").as_ptr(), c("verse").as_ptr(), c("John 3:16").as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
+        assert!(pure_engine_tag_set_color(e, c("amber").as_ptr(), c("#f6e0a0").as_ptr()).is_null());
+        let hl: Value = serde_json::from_str(&take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+        assert_eq!(hl["verses"][0]["verse"], "John 3:16");
+        assert_eq!(hl["verses"][0]["color"], "#f6e0a0");
+        // Clearing the colour clears the wash.
+        assert!(pure_engine_tag_set_color(e, c("amber").as_ptr(), ptr::null()).is_null());
+        let hl2: Value = serde_json::from_str(&take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+        assert!(hl2["verses"].as_array().unwrap().is_empty());
+
+        // Word-precise cross-verse highlight: "drag" John 3:16 tok2 → 3:18 tok1
+        // with a tone. The fixture has 3:16 (6 tokens) and 3:18 (3 tokens), so
+        // the range lands as a start-partial run (tok 2..last=5) plus an
+        // end-partial run (0..1).
+        assert!(pure_engine_highlight_add(
+            e, c("dragged").as_ptr(), c("#c8b0e0").as_ptr(),
+            c("John 3:16").as_ptr(), 2, c("John 3:18").as_ptr(), 1, stamp.as_ptr(),
+        ).is_null());
+        let hr: Value = serde_json::from_str(
+            &take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+        let runs = hr["runs"].as_array().unwrap();
+        assert_eq!(runs.len(), 2, "runs: {runs:?}");
+        assert_eq!(runs[0]["verse"], "John 3:16");
+        assert_eq!(runs[0]["lo"], 2);
+        assert_eq!(runs[0]["hi"], 5);
+        assert_eq!(runs[0]["color"], "#c8b0e0");
+        assert_eq!(runs[1]["verse"], "John 3:18");
+        assert_eq!(runs[1]["lo"], 0);
+        assert_eq!(runs[1]["hi"], 1);
+        // A backwards drag (end→start) is ordered the same and dedupes.
+        assert!(pure_engine_highlight_add(
+            e, c("dragged").as_ptr(), c("#c8b0e0").as_ptr(),
+            c("John 3:18").as_ptr(), 1, c("John 3:16").as_ptr(), 2, stamp.as_ptr(),
+        ).is_null());
+        let hr_dup: Value = serde_json::from_str(
+            &take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+        assert_eq!(hr_dup["runs"].as_array().unwrap().len(), 2, "backwards drag must dedupe");
+        // Remove it → runs gone.
+        assert!(pure_engine_highlight_remove(
+            e, c("dragged").as_ptr(), c("John 3:16").as_ptr(), 2, c("John 3:18").as_ptr(), 1,
+        ).is_null());
+        let hr2: Value = serde_json::from_str(
+            &take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+        assert!(hr2["runs"].as_array().map(|a| a.is_empty()).unwrap_or(true));
+
+        // Clear-by-verse (WinUI's "Remove highlight"): re-add, then clear on any
+        // covered verse drops the whole range.
+        assert!(pure_engine_highlight_add(
+            e, c("dragged").as_ptr(), c("#c8b0e0").as_ptr(),
+            c("John 3:16").as_ptr(), 2, c("John 3:18").as_ptr(), 1, stamp.as_ptr(),
+        ).is_null());
+        assert!(pure_engine_highlight_clear_verse(e, c("John 3:16").as_ptr()).is_null());
+        let hr4: Value = serde_json::from_str(
+            &take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+        assert!(hr4["runs"].as_array().map(|a| a.is_empty()).unwrap_or(true));
+
+        // Memorization (Tier 2 #15): grade → card, drill, recall, coverage, activity.
+        assert!(pure_engine_memory_grade(
+            e, c("John 3:16").as_ptr(), c("good").as_ptr(), stamp.as_ptr()).is_null());
+        let card: Value = serde_json::from_str(
+            &take(pure_engine_memory_card_json(e, c("John 3:16").as_ptr())).unwrap()).unwrap();
+        assert_eq!(card["ref"], "John 3:16");
+        assert_eq!(card["reps"], 1);
+        assert_eq!(card["mastery"], "young"); // 1-day interval after one Good
+        assert_eq!(card["reviews"].as_array().unwrap().len(), 1);
+        // An unknown grade is rejected (non-null error).
+        assert!(!pure_engine_memory_grade(
+            e, c("John 3:16").as_ptr(), c("bogus").as_ptr(), stamp.as_ptr()).is_null());
+
+        // Drill: first-letter skeleton + (level-0) unblanked form of the verse.
+        let drill: Value = serde_json::from_str(
+            &take(pure_engine_memory_drill_json(e, c("John 3:16").as_ptr(), 0)).unwrap()).unwrap();
+        assert!(drill["text"].as_str().unwrap().starts_with("For God so loved"));
+        assert_eq!(drill["firstLetters"], "F G s l t w.");
+        assert!(!drill["blanked"].as_str().unwrap().contains('_')); // nothing hidden at level 0
+
+        // Recall scoring: a perfect (case/punctuation-tolerant) recall is 1.0.
+        let sc: Value = serde_json::from_str(&take(pure_engine_memory_score_json(
+            e, c("John 3:16").as_ptr(), c("for god so loved the world").as_ptr())).unwrap()).unwrap();
+        assert_eq!(sc["accuracy"], 1.0);
+
+        // Coverage + activity, from the review log.
+        let cov: Value = serde_json::from_str(&take(pure_engine_memory_coverage_json(
+            e, stamp.as_ptr())).unwrap()).unwrap();
+        assert_eq!(cov["verses"][0]["ref"], "John 3:16");
+        let gospels = cov["sections"].as_array().unwrap().iter()
+            .find(|s| s["label"] == "Gospels").unwrap().clone();
+        assert_eq!(gospels["cards"], 1);
+        let act: Value = serde_json::from_str(
+            &take(pure_engine_memory_activity_json(e)).unwrap()).unwrap();
+        assert_eq!(act["days"].as_array().unwrap().len(), 1);
+
+        // Seed a card without reviewing ("Memorize this verse") → new, reps 0.
+        assert!(pure_engine_memory_add(e, c("John 3:18").as_ptr(), stamp.as_ptr()).is_null());
+        let seeded: Value = serde_json::from_str(
+            &take(pure_engine_memory_card_json(e, c("John 3:18").as_ptr())).unwrap()).unwrap();
+        assert_eq!(seeded["reps"], 0);
+        assert_eq!(seeded["mastery"], "new");
+        assert!(pure_engine_memory_remove(e, c("John 3:18").as_ptr()).is_null());
+
+        // Remove → the card is gone.
+        assert!(pure_engine_memory_remove(e, c("John 3:16").as_ptr()).is_null());
+        assert!(pure_engine_memory_card_json(e, c("John 3:16").as_ptr()).is_null());
+
+        // Warming is a null-on-success no-op that stays callable.
+        assert!(pure_engine_warm_indexes(e).is_null());
+
+        pure_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

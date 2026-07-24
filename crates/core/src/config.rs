@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::theme::ThemeChoice;
 use crate::Error;
 
 /// How much of the app the reader sees. `Full` unlocks the study surface
@@ -71,11 +72,20 @@ pub struct Config {
     pub active: usize,
     /// Verse-per-line reading mode (each verse starts a fresh line).
     pub verse_per_line: bool,
+    /// The reader's colour theme (Tier 0 #5). `System` follows the OS.
+    pub theme: ThemeChoice,
 }
 
 impl Default for Config {
     fn default() -> Config {
-        Config { mode: StudyMode::Simple, body_size: 18.0, panes: Vec::new(), active: 0, verse_per_line: false }
+        Config {
+            mode: StudyMode::Simple,
+            body_size: 18.0,
+            panes: Vec::new(),
+            active: 0,
+            verse_per_line: false,
+            theme: ThemeChoice::default(),
+        }
     }
 }
 
@@ -94,6 +104,8 @@ struct ConfigWire {
     active_pane: usize,
     #[serde(default)]
     verse_per_line: bool,
+    #[serde(default = "default_theme_token")]
+    theme: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -107,6 +119,9 @@ fn default_mode_token() -> String {
 }
 fn default_body_size() -> f64 {
     Config::default().body_size
+}
+fn default_theme_token() -> String {
+    ThemeChoice::default().token().to_string()
 }
 
 impl Config {
@@ -124,6 +139,7 @@ impl Config {
             // Clamp: shells index panes with this.
             active: if n_panes == 0 { 0 } else { w.active_pane.min(n_panes - 1) },
             verse_per_line: w.verse_per_line,
+            theme: ThemeChoice::parse(&w.theme).unwrap_or_default(),
         }
     }
 
@@ -134,6 +150,7 @@ impl Config {
             open_panes: self.panes.iter().map(|p| PaneWire { book: p.book.clone(), chapter: p.chapter }).collect(),
             active_pane: self.active,
             verse_per_line: self.verse_per_line,
+            theme: self.theme.token().to_string(),
         }
     }
 }
@@ -235,6 +252,7 @@ mod tests {
             panes: vec![PaneRef { book: "John".into(), chapter: 3 }, PaneRef { book: "Rom".into(), chapter: 8 }],
             active: 1,
             verse_per_line: true,
+            theme: ThemeChoice::Night,
         };
         save_to(&path, &cfg).unwrap();
 

@@ -143,16 +143,56 @@ public sealed record Leitwort(int N, int WinCount, double Score, string Label);
 // or book-order table (ByBook is indexed by canon position, 0 where absent).
 public sealed record ConceptMapData(
     string Code, string CenterLabel, List<ConceptSpoke> Spokes,
-    List<uint> ByBook, int OtNtDivide, int BookCount);
+    List<uint> ByBook, int OtNtDivide, int BookCount,
+    // The cross-testament "bridge" row: the strongest other-testament
+    // equivalents of Code (Christ G5547 ↔ Messiah H4899) + their unioned
+    // per-book dispersion. Canon-ordered, length = BookCount, indexed exactly
+    // like ByBook — so the strip paints it as a second row. Absent (the Rust
+    // side omits the JSON field) when Code has no cross-testament partner;
+    // nullable with a null default so an older payload still decodes.
+    ConceptBridge? Bridge = null);
 public sealed record ConceptSpoke(string Code, string Label, bool Semantic);
+// Partners already truncated to the row count and ByBook already unioned on the
+// Rust side (pure_engine_concept_map_json) — the shell paints them wholesale.
+public sealed record ConceptBridge(List<BridgeNode> Partners, List<uint> ByBook);
+// One cross-testament partner: Label is "gloss\nlemma" (like the centre/spoke
+// labels), Prior the fused trust of the strongest witness tying it (0–1).
+public sealed record BridgeNode(string Code, string Label, float Prior);
 
 public sealed record ConfigState(
     string StudyMode, double BodySize, List<PaneRef1>? OpenPanes, int ActivePane, bool FirstRun,
     // Frozen additive field shared with GTK's config.json. Must round-trip even
     // before the toggle UI reads it, or a WinUI save silently resets it to
     // false and clobbers a GTK user's verse-per-line preference.
-    bool VersePerLine = false);
+    bool VersePerLine = false,
+    // Colour theme choice: "system" | "light" | "dark" | "night" (Tier 0 #5).
+    // Additive; must round-trip so a save doesn't clobber the GTK preference.
+    string Theme = "system");
 public sealed record PaneRef1(string Book, ushort Chapter);
+
+// ── Tier 0: themes, personal notes, highlights ──────────────────────────────
+
+// The colour palette for a theme (pure_theme_palette_json): every semantic role
+// as a #rrggbb hex. The single source is core::theme, so light/dark/night can't
+// drift between shells. `Dark` drives the system-chrome (ElementTheme) choice.
+public sealed record PaletteData(
+    bool Dark, string Paper, string Ink, string Faded, string Added, string Divine,
+    string TitleInk, string Gold, string Section, string TierGod, string TierHuman,
+    string TierMachine, string TierResearch, string Mono, string Morph, string Lemma,
+    string Rule, string PopupPaper, string PaneNavBg, string StripBg, string Pin);
+
+public sealed record HighlightTones(List<HighlightTone> Tones);
+public sealed record HighlightTone(string Name, string Hex);
+
+public sealed record UserNote(
+    string Verse, string Display, string Text, string Created, string Updated);
+public sealed record UserNotes(List<UserNote> Notes);
+
+public sealed record ChapterHighlights(string Book, ushort Chapter, List<VerseHighlight> Verses, List<HighlightRun>? Runs = null);
+public sealed record VerseHighlight(string Verse, string Color);
+/// One word-precise wash run within a verse: inclusive token indices [Lo, Hi]
+/// plus the tone — the cross-verse drag highlights (Tier 0 #4).
+public sealed record HighlightRun(string Verse, ushort Lo, ushort Hi, string Color);
 
 // The study-panel content model (pure_engine_*_blocks_json): a typed block
 // list the panel renders wholesale — no shell-side derivation. A run's Color is
@@ -190,3 +230,45 @@ public sealed record BridgePartner(string Code, List<string> Sources, float Prio
 public sealed record BridgePartners(string Code, List<BridgePartner> Partners);
 public sealed record SimilarVerse(string Verse, string Display, float Score);
 public sealed record SimilarVerses(string Verse, List<SimilarVerse> In, List<SimilarVerse> Cross);
+
+// ── memorization (Tier 2 #15): SRS cards, drills, coverage + activity ───────
+// Schemas frozen in crates/ffi/src/wire.rs (WireMemory*) and
+// crates/core/src/memory.rs. camelCase; `Mastery` is a lowercase token
+// ("new"/"learning"/"young"/"mature") and `Grade` a lowercase token
+// ("again"/"hard"/"good"/"easy"). The compact ref key crosses as the "ref"
+// JSON field, so — like the other ref-bearing records — it takes an explicit
+// JsonPropertyName rather than relying on the camelCase policy.
+
+/// A verse's SRS card: SM-2 schedule, mastery bucket, and full review log.
+/// (`Due` here is the next-due date string; contrast VerseCoverage.Due, a bool.)
+public sealed record MemoryCard(
+    [property: System.Text.Json.Serialization.JsonPropertyName("ref")] string Ref,
+    float Ease, int IntervalDays, int Reps, int Lapses,
+    string Due, string Mastery, List<MemoryReview> Reviews);
+public sealed record MemoryReview(string At, string Grade, int IntervalDays);
+
+/// The study queue: verses due for review now, in reading order.
+public sealed record MemoryDue(List<string> Refs);
+
+/// The coverage-map data at a given `now`: per-verse standing + the 8-section
+/// rollup. The map shades books by average mastery; the sections are a summary.
+public sealed record MemoryCoverage(List<VerseCoverage> Verses, List<SectionCoverage> Sections);
+public sealed record VerseCoverage(
+    [property: System.Text.Json.Serialization.JsonPropertyName("ref")] string Ref,
+    string Mastery, int Reps, int Lapses, string? LastAt, bool Due);
+public sealed record SectionCoverage(string Label, int Cards, int Mature, int Reviews);
+
+/// The activity heatmap: reviews per calendar day, oldest first.
+public sealed record MemoryActivity(List<DayActivity> Days);
+public sealed record DayActivity(string Day, int Reviews);
+
+/// A drill prompt for a verse at a blank-out level: the plain text, its
+/// first-letter skeleton, and the progressively-blanked form. `FirstLetters`
+/// and `Text` are level-independent; only `Blanked` changes with `Level`.
+public sealed record MemoryDrill(
+    [property: System.Text.Json.Serialization.JsonPropertyName("ref")] string Ref,
+    string Text, string FirstLetters, string Blanked, int Level, int MaxLevel);
+
+/// The result of scoring a typed recall against the verse (LCS-aligned).
+public sealed record RecallScore(float Accuracy, List<WordHit> Words);
+public sealed record WordHit(string Word, bool Ok);

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The pure-study mark: a woven Latin cross (two vertical + two horizontal gold
+     strands), centred in the adaptive-icon safe zone. Ported from the desktop
+     SVG (apps/desktop/assets/icons/.../dev.purestudy.app.svg); the intricate
+     basket-weave tuck detail is dropped at launcher size. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#9e7d38"
+        android:pathData="M46,22 h7 v64 h-7 z M55,22 h7 v64 h-7 z M28,33 h52 v7 h-52 z M28,45 h52 v7 h-52 z" />
+</vector>

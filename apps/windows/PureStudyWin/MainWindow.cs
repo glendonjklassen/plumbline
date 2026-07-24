@@ -5,6 +5,7 @@
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using PureStudy;
@@ -36,12 +37,22 @@ public sealed class MainWindow : Window
     private readonly Button _threadsBtn = new() { Content = "Threads", IsEnabled = false };
     private readonly Button _tagsBtn = new() { Content = "Tags", IsEnabled = false };
     private readonly Button _weavesBtn = new() { Content = "Weaves", IsEnabled = false };
-    private readonly Button _suggestedBtn = new() { Content = "Suggested", IsEnabled = false };
-    private readonly Button _mapBtn = new() { Content = "Map", IsEnabled = false };
-    private readonly Button _constBtn = new() { Content = "Constellation", IsEnabled = false };
     private readonly Button _linkBtn = new() { Content = "＋ link", IsEnabled = false };
-    private readonly Button _modeBtn = new() { Content = "Simple reader", IsEnabled = false };
-    private readonly Button _vplBtn = new() { Content = "Flowing text", IsEnabled = false };
+    // Primary menu (≡): weave views, reading mode, theme, and help — the clean
+    // home for everything that used to be scattered across header buttons. Its
+    // items mirror the GTK win.* menu.
+    private readonly DropDownButton _menuBtn = new() { Content = new FontIcon { Glyph = "" } };
+    private readonly MenuFlyoutItem _miSuggested = new() { Text = "Suggested weaves", IsEnabled = false };
+    private readonly MenuFlyoutItem _miMap = new() { Text = "Weave map", IsEnabled = false };
+    private readonly MenuFlyoutItem _miConst = new() { Text = "Constellation", IsEnabled = false };
+    private readonly RadioMenuFlyoutItem _miModeSimple = new() { Text = "Simple reader", GroupName = "mode" };
+    private readonly RadioMenuFlyoutItem _miModeFull = new() { Text = "Full study", GroupName = "mode" };
+    private readonly ToggleMenuFlyoutItem _miVpl = new() { Text = "Verse per line" };
+    private readonly RadioMenuFlyoutItem _miThemeLight = new() { Text = "Light", GroupName = "theme" };
+    private readonly RadioMenuFlyoutItem _miThemeDark = new() { Text = "Dark", GroupName = "theme" };
+    private readonly RadioMenuFlyoutItem _miThemeNight = new() { Text = "Night", GroupName = "theme" };
+    private readonly RadioMenuFlyoutItem _miThemeSystem = new() { Text = "Follow system", GroupName = "theme" };
+    private string _themeChoice = "system";
     private readonly TextBlock _status = new()
     {
         VerticalAlignment = VerticalAlignment.Center,
@@ -56,6 +67,15 @@ public sealed class MainWindow : Window
         var iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "pure-study.ico");
         if (System.IO.File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
 
+        // Resolve + apply the colour theme before building the UI, so chrome and
+        // brushes pick it up (Tier 0 #5). Config load is engine-independent.
+        try
+        {
+            _themeChoice = Wire.Parse<ConfigState>(StudyConfig.LoadJson()).Theme ?? "system";
+            Palette.ApplyTheme(ResolveTheme(_themeChoice));
+        }
+        catch { _themeChoice = "system"; /* keep the default light palette */ }
+
         var header = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -65,13 +85,9 @@ public sealed class MainWindow : Window
         header.Children.Add(_threadsBtn);
         header.Children.Add(_tagsBtn);
         header.Children.Add(_weavesBtn);
-        header.Children.Add(_suggestedBtn);
-        header.Children.Add(_mapBtn);
-        header.Children.Add(_constBtn);
         header.Children.Add(_linkBtn);
         header.Children.Add(_search);
-        header.Children.Add(_modeBtn);
-        header.Children.Add(_vplBtn);
+        header.Children.Add(_menuBtn);
         header.Children.Add(_status);
 
         var centre = new Grid();
@@ -92,7 +108,7 @@ public sealed class MainWindow : Window
 
         var root = new Grid
         {
-            RequestedTheme = ElementTheme.Light,
+            RequestedTheme = Palette.Dark ? ElementTheme.Dark : ElementTheme.Light,
             // Accelerators (Esc, brackets, Ctrl+…) must not surface key-tip
             // tooltips that linger over the reader.
             KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden,
@@ -105,6 +121,9 @@ public sealed class MainWindow : Window
         root.Children.Add(main);
         Content = root;
 
+        // Re-apply the theme to the field-initialized chrome (their brushes were
+        // captured with the default light palette before the theme was applied).
+        ApplyThemeToUi();
         WireHeader(root);
         Closed += (_, _) =>
         {
@@ -177,6 +196,7 @@ public sealed class MainWindow : Window
         _panel.Engine = _engine;
         _panel.IsFull = () => _fullMode;
         _panel.Navigate = (book, ch, verse) => NavigateActive(book, ch, verse);
+        _panel.NavigateOther = (book, ch, verse) => NavigateOtherPane(book, ch, verse);
         _panel.OpenConceptMap = code => Popups.ConceptMap(_engine!, code, _fullMode);
         _panel.StudyDataChanged = RefreshStudyData;
 
@@ -187,10 +207,13 @@ public sealed class MainWindow : Window
         _active = Math.Clamp(cfg.ActivePane, 0, _panes.Count - 1);
         RebuildPaneRow();
 
-        foreach (var c in new Control[]
-                 { _search, _threadsBtn, _tagsBtn, _weavesBtn, _suggestedBtn, _mapBtn, _constBtn, _modeBtn, _vplBtn })
+        foreach (var c in new Control[] { _search, _threadsBtn, _tagsBtn, _weavesBtn })
             c.IsEnabled = true;
         _status.Text = "";
+        // Warm the analytics indexes off the UI thread in Full mode, so the
+        // first study click doesn't stall building them (Tier 0 #6).
+        if (_fullMode && _engine is { } warmEngine)
+            _ = Task.Run(() => { try { warmEngine.WarmIndexes(); } catch { /* best-effort */ } });
         ApplyMode(persist: false);
         ApplyVersePerLine(persist: false);
         // Canon bands from the core view-model — the single app-wide source for
@@ -212,7 +235,8 @@ public sealed class MainWindow : Window
             _panes.Select(p => new PaneRef1(p.Reader.Book, (ushort)p.Reader.ChapterNumber)).ToList(),
             _active,
             false,
-            _versePerLine);
+            _versePerLine,
+            _themeChoice);
         StudyConfig.SaveJson(System.Text.Json.JsonSerializer.Serialize(state, Wire.Options));
     }
 
@@ -253,11 +277,23 @@ public sealed class MainWindow : Window
         {
             if (Idx() == _active) UpdateTitle();
             UpdateStripPins();
+            RefreshVerseDecorations(pane);
             _connectors.Redraw();
         };
+        pane.Reader.ContextRequested += (verse, pt) => ShowContextMenu(pane, verse, pt);
         pane.Reader.PinChanged += UpdateLinkButton;
         pane.Reader.ZoomRequested += Zoom;
         pane.Reader.ScrollAllRequested += px => { foreach (var p in _panes) p.Reader.ScrollBy(px); };
+        // Cross-verse drag highlight (Tier 0 #4): lay down the default tone.
+        var (dtName, dtHex) = DefaultTone();
+        pane.Reader.DragTone = Palette.Hex(dtHex);
+        pane.Reader.HighlightDragged += (sRef, sTok, eRef, eTok) =>
+        {
+            var name = char.ToUpper(dtName[0]) + dtName[1..];
+            var err = _engine?.HighlightAdd(name, dtHex, sRef, sTok, eRef, eTok, Now());
+            if (err is not null) { _status.Text = err; return; }
+            RefreshStudyData();
+        };
         pane.Reader.FontSize = _fontSize;
         pane.Reader.VersePerLine = _versePerLine;
         _panes.Add(pane);
@@ -367,13 +403,44 @@ public sealed class MainWindow : Window
                 xrefVerses.Add(p.B);
             }
         _connectors.Links = links;
+
+        // Personal-note gutter marks: the whole note set (a global list), shared
+        // by every pane (each paints the verses in its own chapter).
+        var noteVerses = new HashSet<string>();
+        if (_engine.UserNotesJson() is { } unj)
+            foreach (var n in Wire.Parse<UserNotes>(unj).Notes)
+                noteVerses.Add(n.Verse);
+
         foreach (var p in _panes)
         {
             p.Reader.XrefVerses = xrefVerses;
+            p.Reader.NoteVerses = noteVerses;
+            RefreshVerseDecorations(p);
             p.Reader.Redraw();
         }
         _connectors.Redraw();
         UpdateLinkButton();
+    }
+
+    /// Refresh the highlight washes for a pane's current chapter (its verses that
+    /// belong to a colour-bearing tag). Called on nav + on any study-data change.
+    private void RefreshVerseDecorations(PaneView pane)
+    {
+        if (_engine is null) return;
+        var map = new Dictionary<string, Windows.UI.Color>();
+        var runs = new List<(string, uint, uint, Windows.UI.Color)>();
+        if (_engine.ChapterHighlightsJson(pane.Reader.Book, pane.Reader.ChapterNumber) is { } hj)
+        {
+            var ch = Wire.Parse<ChapterHighlights>(hj);
+            foreach (var v in ch.Verses)
+                map[v.Verse] = Palette.Hex(v.Color);
+            if (ch.Runs is { } rs)
+                foreach (var r in rs)
+                    runs.Add((r.Verse, (uint)r.Lo, (uint)r.Hi, Palette.Hex(r.Color)));
+        }
+        pane.Reader.Highlights = map;
+        pane.Reader.Runs = runs;
+        pane.Reader.Redraw();
     }
 
     // ── header wiring ──────────────────────────────────────────────────────
@@ -383,35 +450,8 @@ public sealed class MainWindow : Window
         _threadsBtn.Click += (_, _) => _panel.ShowThreadsList();
         _tagsBtn.Click += (_, _) => _panel.ShowTagsList();
         _weavesBtn.Click += (_, _) => _panel.ShowWeavesList();
-        _suggestedBtn.Click += (_, _) => _panel.ShowSuggested();
-        _mapBtn.Click += (_, _) =>
-        {
-            // Book-pair density folded once in the core (pure_engine_chord_map_json);
-            // the popup only lays out ribbons over it.
-            if (_books.Count > 0 && _engine?.ChordMapJson() is { } cmj
-                && Wire.Parse<ChordMapData>(cmj) is { Pairs.Count: > 0 } map)
-                Popups.ChordMap(map, _books, (book) => NavigateActive(book, 1, null));
-        };
-        _constBtn.Click += (_, _) =>
-        {
-            // The layout comes from the core view-model (pure_engine_constellation_json);
-            // the popup holds only the page + pin set and paints it.
-            if (_engine is not null)
-                Popups.Constellation(_engine,
-                    (book, ch, verse) => NavigateActive(book, ch, verse),
-                    i => _panel.ShowCompareCard(i));
-        };
         _linkBtn.Click += (_, _) => _ = MakeLinkAsync();
-        _modeBtn.Click += (_, _) =>
-        {
-            _fullMode = !_fullMode;
-            ApplyMode(persist: true);
-        };
-        _vplBtn.Click += (_, _) =>
-        {
-            _versePerLine = !_versePerLine;
-            ApplyVersePerLine(persist: true);
-        };
+        BuildPrimaryMenu();
 
         _search.TextChanged += (_, _) => RunSearch(_search.Text, live: true);
         _search.KeyDown += (_, e) =>
@@ -430,8 +470,96 @@ public sealed class MainWindow : Window
         AddAccel(root, VirtualKey.Number0, VirtualKeyModifiers.Control, () => Zoom(0));
         AddAccel(root, (VirtualKey)0xBB /* =/+ */, VirtualKeyModifiers.Control, () => Zoom(+1));
         AddAccel(root, (VirtualKey)0xBD /* - */, VirtualKeyModifiers.Control, () => Zoom(-1));
+        // Reading history: Alt+←/→ walk the active pane's history (Tier 0 #2).
+        AddAccel(root, VirtualKey.Left, VirtualKeyModifiers.Menu, () => ActiveReader()?.GoBack(), skipWhenTyping: true);
+        AddAccel(root, VirtualKey.Right, VirtualKeyModifiers.Menu, () => ActiveReader()?.GoForward(), skipWhenTyping: true);
+        // Help: F1 (and ?) open the shortcuts overlay (Tier 0 #7).
+        AddAccel(root, VirtualKey.F1, VirtualKeyModifiers.None, () => _ = ShowShortcutsAsync());
+        AddAccel(root, (VirtualKey)0xBF /* / → ? */, VirtualKeyModifiers.Shift, () => _ = ShowShortcutsAsync(), skipWhenTyping: true);
 
         _strip.BookPicked += book => NavigateActive(book, 1, null);
+    }
+
+    /// Build the primary (≡) menu: weave views, reading, theme, and help — the
+    /// WinUI mirror of the GTK win.* menu. Radios/toggles reflect + drive state.
+    private void BuildPrimaryMenu()
+    {
+        _miSuggested.Click += (_, _) => _panel.ShowSuggested();
+        _miMap.Click += (_, _) =>
+        {
+            // Book-pair density folded once in the core (pure_engine_chord_map_json).
+            if (_books.Count > 0 && _engine?.ChordMapJson() is { } cmj
+                && Wire.Parse<ChordMapData>(cmj) is { Pairs.Count: > 0 } map)
+                Popups.ChordMap(map, _books, (book) => NavigateActive(book, 1, null));
+        };
+        _miConst.Click += (_, _) =>
+        {
+            if (_engine is not null)
+                Popups.Constellation(_engine,
+                    (book, ch, verse) => NavigateActive(book, ch, verse),
+                    i => _panel.ShowCompareCard(i));
+        };
+
+        _miModeSimple.Click += (_, _) => { if (_fullMode) { _fullMode = false; ApplyMode(persist: true); } };
+        _miModeFull.Click += (_, _) => { if (!_fullMode) { _fullMode = true; ApplyMode(persist: true); } };
+        _miVpl.Click += (_, _) => { _versePerLine = _miVpl.IsChecked; ApplyVersePerLine(persist: true); };
+
+        _miThemeLight.Click += (_, _) => SetTheme("light");
+        _miThemeDark.Click += (_, _) => SetTheme("dark");
+        _miThemeNight.Click += (_, _) => SetTheme("night");
+        _miThemeSystem.Click += (_, _) => SetTheme("system");
+
+        var guide = new MenuFlyoutItem { Text = "Guide" };
+        guide.Click += (_, _) => _panel.ShowGuide();
+        var shortcuts = new MenuFlyoutItem { Text = "Keyboard shortcuts" };
+        shortcuts.Click += (_, _) => _ = ShowShortcutsAsync();
+        var about = new MenuFlyoutItem { Text = "About pure-study" };
+        about.Click += (_, _) => _panel.ShowAbout();
+
+        var views = new MenuFlyoutSubItem { Text = "Weave views" };
+        views.Items.Add(_miSuggested);
+        views.Items.Add(_miMap);
+        views.Items.Add(_miConst);
+
+        // Memorize (Tier 2 #15): review due · coverage map · activity. Not gated
+        // to Full study (GTK enables these actions in both modes); each guards on
+        // the engine, since the menu opens the moment the shell does.
+        var mem = new MenuFlyoutSubItem { Text = "Memorize" };
+        var miMemReview = new MenuFlyoutItem { Text = "Review due" };
+        miMemReview.Click += (_, _) => { if (_engine is not null) Memorize.Review(_engine, Now); };
+        var miMemCoverage = new MenuFlyoutItem { Text = "Coverage map" };
+        miMemCoverage.Click += (_, _) => { if (_engine is not null) Memorize.Coverage(_engine, _books, Now); };
+        var miMemActivity = new MenuFlyoutItem { Text = "Activity" };
+        miMemActivity.Click += (_, _) => { if (_engine is not null) Memorize.Activity(_engine); };
+        mem.Items.Add(miMemReview);
+        mem.Items.Add(miMemCoverage);
+        mem.Items.Add(miMemActivity);
+
+        var reading = new MenuFlyoutSubItem { Text = "Reading" };
+        reading.Items.Add(_miModeSimple);
+        reading.Items.Add(_miModeFull);
+        reading.Items.Add(new MenuFlyoutSeparator());
+        reading.Items.Add(_miVpl);
+
+        var theme = new MenuFlyoutSubItem { Text = "Theme" };
+        theme.Items.Add(_miThemeLight);
+        theme.Items.Add(_miThemeDark);
+        theme.Items.Add(_miThemeNight);
+        theme.Items.Add(_miThemeSystem);
+
+        var flyout = new MenuFlyout();
+        flyout.Items.Add(views);
+        flyout.Items.Add(mem);
+        flyout.Items.Add(reading);
+        flyout.Items.Add(theme);
+        flyout.Items.Add(new MenuFlyoutSeparator());
+        flyout.Items.Add(guide);
+        flyout.Items.Add(shortcuts);
+        flyout.Items.Add(about);
+        _menuBtn.Flyout = flyout;
+
+        _miVpl.IsChecked = _versePerLine;
+        SyncThemeRadio();
     }
 
     private void FocusActive()
@@ -439,6 +567,8 @@ public sealed class MainWindow : Window
         if (_panes.Count > 0) _panes[_active].Reader.Focus(FocusState.Programmatic);
     }
 
+    /// Step the active pane a chapter, rolling across book boundaries (Tier 0 #8:
+    /// keep pressing past the last chapter to enter the next book, and vice versa).
     private void StepActive(int dir)
     {
         if (_panes.Count == 0 || _books.Count == 0) return;
@@ -446,9 +576,22 @@ public sealed class MainWindow : Window
         int idx = _books.FindIndex(b => b.Id == r.Book);
         if (idx < 0) return;
         int ch = (int)r.ChapterNumber + dir;
-        if (ch >= 1 && ch <= _books[idx].Chapters)
+        if (ch < 1)
+        {
+            if (idx > 0) { var prev = _books[idx - 1]; r.ShowChapter(prev.Id, (uint)Math.Max(1, (int)prev.Chapters)); }
+        }
+        else if (ch > _books[idx].Chapters)
+        {
+            if (idx < _books.Count - 1) r.ShowChapter(_books[idx + 1].Id, 1);
+        }
+        else
+        {
             r.ShowChapter(r.Book, (uint)ch);
+        }
     }
+
+    private ReaderView? ActiveReader() =>
+        _panes.Count > 0 ? _panes[Math.Clamp(_active, 0, _panes.Count - 1)].Reader : null;
 
     private void AddAccel(UIElement host, VirtualKey key, VirtualKeyModifiers mods,
         Action action, bool skipWhenTyping = false)
@@ -480,7 +623,7 @@ public sealed class MainWindow : Window
     /// GTK vpl toggle: flow ↔ verse-per-line for every pane; persists at once.
     private void ApplyVersePerLine(bool persist)
     {
-        _vplBtn.Content = _versePerLine ? "Verse / line" : "Flowing text";
+        _miVpl.IsChecked = _versePerLine;
         foreach (var p in _panes) p.Reader.VersePerLine = _versePerLine;
         _connectors.Redraw();
         if (persist) PersistConfig();
@@ -488,15 +631,19 @@ public sealed class MainWindow : Window
 
     private void ApplyMode(bool persist)
     {
-        _modeBtn.Content = _fullMode ? "Full study" : "Simple reader";
+        // Study browse buttons show only in Full study; the weave-view menu items
+        // (also Full-study features) are gated the same way, and the menu's mode
+        // radio is kept in sync.
         var vis = _fullMode ? Visibility.Visible : Visibility.Collapsed;
         _threadsBtn.Visibility = vis;
         _tagsBtn.Visibility = vis;
         _weavesBtn.Visibility = vis;
-        _suggestedBtn.Visibility = vis;
-        _mapBtn.Visibility = vis;
-        _constBtn.Visibility = vis;
         _linkBtn.Visibility = vis;
+        _miSuggested.IsEnabled = _fullMode;
+        _miMap.IsEnabled = _fullMode;
+        _miConst.IsEnabled = _fullMode;
+        _miModeSimple.IsChecked = !_fullMode;
+        _miModeFull.IsChecked = _fullMode;
         if (!_fullMode) _panel.Close();
         if (persist) PersistConfig();
     }
@@ -548,6 +695,7 @@ public sealed class MainWindow : Window
         query = query.Trim();
         if (query.Length == 0)
         {
+            SetHitVerses(null);
             _panel.Close();
             return;
         }
@@ -555,14 +703,228 @@ public sealed class MainWindow : Window
         var r = Wire.Parse<SearchResult>(json);
         if (!live && r.Kind == "goto" && r.Book is not null && r.Chapter is not null)
         {
+            SetHitVerses(null);
             var refKey = r.Verse is { } v ? $"{r.Book} {r.Chapter}:{v}" : null;
             NavigateActive(r.Book, r.Chapter.Value, refKey);
             _panel.Close();
             FocusActive();
             return;
         }
-        // The panel builds its own result blocks from the core (snippets +
-        // ranking included); the goto short-circuit above stays shell-side.
+        // Band every hit that falls in a visible chapter (Tier 0 #8), then let
+        // the panel build its own ranked result blocks from the core.
+        SetHitVerses(r.Kind == "hits" ? r.Hits?.Select(h => h.Verse) : null);
         _panel.ShowSearchBlocks(query);
+    }
+
+    /// Set (or clear, with null) the search-hit set banded across every pane.
+    private void SetHitVerses(IEnumerable<string>? verses)
+    {
+        var set = verses is null ? new HashSet<string>() : new HashSet<string>(verses);
+        foreach (var p in _panes) { p.Reader.HitVerses = set; p.Reader.Redraw(); }
+    }
+
+    // ── themes, history target, context menu, shortcuts (Tier 0) ────────────
+
+    private void NavigateOtherPane(string book, uint chapter, string? verse)
+    {
+        if (_panes.Count < 2) { NavigateActive(book, chapter, verse); return; }
+        int other = (_active + 1) % _panes.Count;
+        _panes[other].Reader.ShowChapter(book, chapter, verse, highlight: verse is not null);
+    }
+
+    private static bool SystemIsDark()
+    {
+        try
+        {
+            var bg = new Windows.UI.ViewManagement.UISettings()
+                .GetColorValue(Windows.UI.ViewManagement.UIColorType.Background);
+            return (bg.R * 299 + bg.G * 587 + bg.B * 114) / 1000 < 128;
+        }
+        catch { return false; }
+    }
+
+    private static string ResolveTheme(string choice) => choice switch
+    {
+        "light" => "light",
+        "dark" => "dark",
+        "night" => "night",
+        _ => SystemIsDark() ? "dark" : "light",
+    };
+
+    /// Apply a specific theme choice (light · dark · night · follow system),
+    /// driven by the ≡ menu's theme radio; re-themes chrome + panes and persists.
+    private void SetTheme(string choice)
+    {
+        _themeChoice = choice;
+        Palette.ApplyTheme(ResolveTheme(_themeChoice));
+        ApplyThemeToUi();
+        SyncThemeRadio();
+        PersistConfig();
+    }
+
+    private void SyncThemeRadio()
+    {
+        _miThemeLight.IsChecked = _themeChoice == "light";
+        _miThemeDark.IsChecked = _themeChoice == "dark";
+        _miThemeNight.IsChecked = _themeChoice == "night";
+        _miThemeSystem.IsChecked = _themeChoice is not ("light" or "dark" or "night");
+    }
+
+    /// Re-apply the current palette to chrome whose brushes were captured earlier
+    /// (a theme switch, or the initial fix-up after the theme is resolved).
+    private void ApplyThemeToUi()
+    {
+        if (Content is Grid g)
+            g.RequestedTheme = Palette.Dark ? ElementTheme.Dark : ElementTheme.Light;
+        _status.Foreground = new SolidColorBrush(Palette.InkFaded);
+        _panel.ApplyTheme();
+        _strip.Invalidate();
+        _connectors.Redraw();
+        foreach (var p in _panes) { p.Reader.ApplyTheme(); p.ApplyTheme(); }
+    }
+
+    private static string Now() => DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+
+    /// Copy `text` to the clipboard (Tier 0 #1).
+    private static void CopyToClipboard(string text)
+    {
+        var dp = new Windows.ApplicationModel.DataTransfer.DataPackage();
+        dp.SetText(text);
+        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dp);
+    }
+
+    /// The right-click verse context menu: copy shapes, tag/thread/note authoring
+    /// (routed through the panel dispatcher), and the highlight swatches.
+    private void ShowContextMenu(PaneView pane, string verse, Windows.Foundation.Point pt)
+    {
+        if (_engine is null) return;
+        SetActive(_panes.IndexOf(pane));
+        var flyout = new MenuFlyout();
+
+        void Item(string label, Action act)
+        {
+            var mi = new MenuFlyoutItem { Text = label };
+            mi.Click += (_, _) => act();
+            flyout.Items.Add(mi);
+        }
+        void Copy(string label, string kind) =>
+            Item(label, () => { if (_engine.CopyText(verse, kind) is { } t) CopyToClipboard(t); });
+
+        Copy("Copy verse", "verse");
+        Copy("Copy with reference", "verseRef");
+        Copy("Copy (markdown)", "verseMarkdown");
+        Copy("Copy chapter", "chapter");
+        flyout.Items.Add(new MenuFlyoutSeparator());
+
+        // Highlight submenu: the fixed tones + a remove.
+        var hi = new MenuFlyoutSubItem { Text = "Highlight" };
+        try
+        {
+            foreach (var tone in Wire.Parse<HighlightTones>(StudyEngine.HighlightTonesJson()).Tones)
+            {
+                var mi = new MenuFlyoutItem { Text = char.ToUpper(tone.Name[0]) + tone.Name[1..] };
+                mi.Click += (_, _) => HighlightVerse(verse, tone.Name, tone.Hex);
+                hi.Items.Add(mi);
+            }
+        }
+        catch { /* tones unavailable → just the remove item */ }
+        hi.Items.Add(new MenuFlyoutSeparator());
+        var rm = new MenuFlyoutItem { Text = "Remove highlight" };
+        rm.Click += (_, _) => RemoveHighlight(verse);
+        hi.Items.Add(rm);
+        flyout.Items.Add(hi);
+
+        Item("Note…", () => _panel.Link($"editnote:{verse}"));
+        // Start memorizing this verse (Tier 2 #15): seed its SRS card, due now.
+        // Both modes (GTK adds it unconditionally); no reader-visible change —
+        // the card surfaces in Review due / Coverage map.
+        Item("Memorize this verse", () =>
+        {
+            if (_engine.MemoryAdd(verse, Now()) is { } err) _status.Text = err;
+        });
+        if (_fullMode)
+        {
+            flyout.Items.Add(new MenuFlyoutSeparator());
+            Item("Tag…", () => _panel.Link($"addtag:{verse}"));
+            Item("Add to thread…", () => _panel.Link($"addthread:{verse}"));
+        }
+
+        flyout.ShowAt(pane.Reader, new FlyoutShowOptions { Position = pt });
+    }
+
+    /// Highlight a verse: add it to the tag for `tone` (creating it, coloured).
+    private void HighlightVerse(string verse, string tone, string hex)
+    {
+        if (_engine is null) return;
+        var tag = char.ToUpper(tone[0]) + tone[1..]; // e.g. "Amber"
+        var err = _engine.TagAdd(tag, "verse", verse, null, Now());
+        if (err is null) err = _engine.TagSetColor(tag, hex);
+        if (err is not null) { _status.Text = err; return; }
+        RefreshStudyData();
+    }
+
+    /// Remove a verse from every colour-bearing tag that holds it, and drop any
+    /// word-precise highlight range covering it (Tier 0 #4).
+    private void RemoveHighlight(string verse)
+    {
+        if (_engine is null) return;
+        if (_engine.TagsJson() is { } tj)
+            foreach (var t in Wire.Parse<Tags>(tj).Items)
+                if (t.Color is not null && t.Members.Any(m => m.Kind == "verse" && m.Verse == verse))
+                    _engine.TagRemove(t.Name, "verse", verse);
+        _engine.HighlightClearVerse(verse); // also drop any cross-verse drag range
+        RefreshStudyData();
+    }
+
+    /// The first configured highlight tone (name, hex) — the default a drag lays
+    /// down; falls back to amber if the tone list is unavailable.
+    private static (string name, string hex) DefaultTone()
+    {
+        try
+        {
+            var tones = Wire.Parse<HighlightTones>(StudyEngine.HighlightTonesJson()).Tones;
+            if (tones.Count > 0) return (tones[0].Name, tones[0].Hex);
+        }
+        catch { /* fall through to the amber default */ }
+        return ("amber", "#d8a24a");
+    }
+
+    private async Task ShowShortcutsAsync()
+    {
+        var rows = new (string, string)[]
+        {
+            ("↑ / ↓ / Space", "scroll"),
+            ("PageUp / PageDown", "scroll a page"),
+            ("Home / End", "chapter start / end"),
+            ("← / →  (or [ / ])", "step chapters (across books)"),
+            ("Alt + ← / →", "back / forward in history"),
+            ("Shift + scroll", "lock all panes together"),
+            ("Ctrl + scroll, Ctrl +/−", "zoom · Ctrl 0 resets"),
+            ("Ctrl + click / double-click", "word study"),
+            ("Right-click a verse", "copy · tag · note · highlight"),
+            ("Ctrl + F", "search"),
+            ("Esc", "close the panel / a popup"),
+            ("F1 / ?", "this list"),
+        };
+        var panel = new StackPanel { Spacing = 4 };
+        foreach (var (k, v) in rows)
+        {
+            var row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var key = new TextBlock { Text = k, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+            var act = new TextBlock { Text = v, TextWrapping = TextWrapping.Wrap };
+            Grid.SetColumn(key, 0); Grid.SetColumn(act, 1);
+            row.Children.Add(key); row.Children.Add(act);
+            panel.Children.Add(row);
+        }
+        var dialog = new ContentDialog
+        {
+            Title = "Keyboard shortcuts",
+            Content = new ScrollViewer { Content = panel },
+            CloseButtonText = "Close",
+            XamlRoot = Content.XamlRoot,
+        };
+        await dialog.ShowAsync();
     }
 }

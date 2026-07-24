@@ -18,27 +18,88 @@ using Windows.UI;
 
 namespace PureStudyWin;
 
+/// The reader's colour palette. Theme-aware (Tier 0 #5): the single source is
+/// core::theme, fetched as JSON (`StudyEngine.PaletteJson`) and applied here, so
+/// light/dark/night can't drift between shells. Defaults are the shipped light
+/// values, so the reader looks right even before `Apply` runs. Alpha variants
+/// (GoldFaint / Band / PinBand / GutterDot) derive from the base tones, so they
+/// follow the theme for free. Most consumers read these at paint time, so a
+/// theme switch takes effect on the next `Invalidate()` / re-render.
 public static class Palette
 {
-    public static readonly Color Paper = Color.FromArgb(255, 252, 249, 244);      // #fcf9f4
-    public static readonly Color Ink = Color.FromArgb(255, 33, 31, 26);           // rgb(.13,.12,.10)
-    public static readonly Color InkFaded = Color.FromArgb(255, 107, 104, 98);    // #6b6862
-    public static readonly Color Divine = Color.FromArgb(255, 77, 51, 38);
-    public static readonly Color TitleInk = Color.FromArgb(255, 102, 92, 77);
-    public static readonly Color Gold = Color.FromArgb(255, 158, 125, 56);        // #9e7d38
-    public static readonly Color GoldFaint = Color.FromArgb(77, 158, 125, 56);    // α0.30
-    public static readonly Color Band = Color.FromArgb(31, 158, 125, 56);         // α0.12
-    public static readonly Color PinBand = Color.FromArgb(56, 64, 115, 191);      // blue α0.22
-    public static readonly Color PanelBg = Color.FromArgb(255, 242, 238, 230);    // popup paper
-    public static readonly Color PaneNavBg = Color.FromArgb(255, 239, 234, 225);  // #efeae1
-    public static readonly Color Rule = Color.FromArgb(255, 216, 203, 168);
-    public static readonly Color SectionGold = Color.FromArgb(255, 160, 137, 74); // #a0894a
-    public static readonly Color Disputed = Color.FromArgb(255, 176, 74, 58);     // #b04a3a
+    public static Color Paper { get; private set; } = Color.FromArgb(255, 252, 249, 244);      // #fcf9f4
+    public static Color Ink { get; private set; } = Color.FromArgb(255, 33, 31, 26);
+    public static Color InkFaded { get; private set; } = Color.FromArgb(255, 107, 104, 98);    // added-word gray
+    public static Color Faded { get; private set; } = Color.FromArgb(255, 138, 130, 118);      // panel muted #8a8276
+    public static Color Divine { get; private set; } = Color.FromArgb(255, 77, 51, 38);
+    public static Color TitleInk { get; private set; } = Color.FromArgb(255, 102, 92, 77);
+    public static Color Gold { get; private set; } = Color.FromArgb(255, 158, 125, 56);        // #9e7d38
+    public static Color GoldFaint { get; private set; } = Color.FromArgb(77, 158, 125, 56);    // α0.30
+    public static Color Band { get; private set; } = Color.FromArgb(31, 158, 125, 56);         // α0.12
+    public static Color GutterDot { get; private set; } = Color.FromArgb(191, 158, 125, 56);   // α0.75
+    public static Color PinBand { get; private set; } = Color.FromArgb(56, 64, 115, 191);      // blue α0.22
+    public static Color PanelBg { get; private set; } = Color.FromArgb(255, 242, 238, 230);    // panel / gloss paper
+    public static Color PaneNavBg { get; private set; } = Color.FromArgb(255, 239, 234, 225);  // #efeae1
+    public static Color StripBg { get; private set; } = Color.FromArgb(255, 235, 230, 219);    // canon strip
+    public static Color Rule { get; private set; } = Color.FromArgb(255, 216, 203, 168);
+    public static Color SectionGold { get; private set; } = Color.FromArgb(255, 160, 137, 74); // #a0894a
+    public static Color Disputed { get; private set; } = Color.FromArgb(255, 176, 74, 58);     // #b04a3a
+    public static Color Mono { get; private set; } = Color.FromArgb(255, 136, 136, 136);
+    public static Color Morph { get; private set; } = Color.FromArgb(255, 106, 90, 42);
+    public static Color Lemma { get; private set; } = Color.FromArgb(255, 138, 122, 82);
     // Authority-tier provenance mark colors (see StudyPanel tier marks).
-    public static readonly Color TierGod = Gold;                                  // ✝ the text itself
-    public static readonly Color TierHuman = Color.FromArgb(255, 111, 143, 106);  // † curated (#6f8f6a)
-    public static readonly Color TierMachine = Color.FromArgb(255, 153, 153, 153);// ≈ machine (#999)
-    public static readonly Color TierResearch = Disputed;                         // ⚗ research-grade
+    public static Color TierGod { get; private set; } = Color.FromArgb(255, 158, 125, 56);     // ✝ the text itself
+    public static Color TierHuman { get; private set; } = Color.FromArgb(255, 111, 143, 106);  // † curated
+    public static Color TierMachine { get; private set; } = Color.FromArgb(255, 153, 153, 153);// ≈ machine
+    public static Color TierResearch { get; private set; } = Color.FromArgb(255, 176, 74, 58); // ⚗ research-grade
+
+    /// Whether the current theme is dark-ish (drives ElementTheme for chrome).
+    public static bool Dark { get; private set; }
+
+    /// Fired after a theme change so shells can rebuild captured brushes.
+    public static event Action? Changed;
+
+    /// Apply a palette fetched from the core (`StudyEngine.PaletteJson`).
+    public static void Apply(PaletteData p)
+    {
+        Paper = Hex(p.Paper); Ink = Hex(p.Ink); InkFaded = Hex(p.Added); Faded = Hex(p.Faded);
+        Divine = Hex(p.Divine); TitleInk = Hex(p.TitleInk); Gold = Hex(p.Gold);
+        PanelBg = Hex(p.PopupPaper); PaneNavBg = Hex(p.PaneNavBg); StripBg = Hex(p.StripBg);
+        Rule = Hex(p.Rule); SectionGold = Hex(p.Section); Disputed = Hex(p.TierResearch);
+        Mono = Hex(p.Mono); Morph = Hex(p.Morph); Lemma = Hex(p.Lemma);
+        TierGod = Hex(p.TierGod); TierHuman = Hex(p.TierHuman); TierMachine = Hex(p.TierMachine);
+        TierResearch = Hex(p.TierResearch);
+        GoldFaint = WithAlpha(Gold, 77);
+        Band = WithAlpha(Gold, 31);
+        GutterDot = WithAlpha(Gold, 191);
+        PinBand = WithAlpha(Hex(p.Pin), 56);
+        Dark = p.Dark;
+        Changed?.Invoke();
+    }
+
+    /// Apply the palette for a theme token (`light`/`dark`/`night`). Convenience
+    /// over parsing `PaletteJson` at every call site.
+    public static void ApplyTheme(string themeToken) =>
+        Apply(Wire.Parse<PaletteData>(StudyEngine.PaletteJson(themeToken)));
+
+    /// A verse-highlight wash: the tag tone at a soft alpha behind the text.
+    public static Color Wash(Color tone) => WithAlpha(tone, (byte)(Dark ? 64 : 92));
+
+    private static Color WithAlpha(Color c, byte a) => Color.FromArgb(a, c.R, c.G, c.B);
+
+    /// Parse `#rrggbb` (opaque). Falls back to ink on a malformed value.
+    public static Color Hex(string h)
+    {
+        try
+        {
+            h = h.TrimStart('#');
+            return Color.FromArgb(255,
+                Convert.ToByte(h.Substring(0, 2), 16),
+                Convert.ToByte(h.Substring(2, 2), 16),
+                Convert.ToByte(h.Substring(4, 2), 16));
+        }
+        catch { return Color.FromArgb(255, 33, 31, 26); }
+    }
 }
 
 /// A pinned word span in a pane: first click sets the anchor; another click in
@@ -66,8 +127,31 @@ public sealed class ReaderView : UserControl, IDisposable
 
     /// Verses (refKeys) that have weave partners — painted as gutter dots.
     public HashSet<string> XrefVerses = new();
+    /// Verses with a personal note — a second gutter mark (Tier 0 #3).
+    public HashSet<string> NoteVerses = new();
+    /// Every current search hit — banded in whatever chapter shows them (#8).
+    public HashSet<string> HitVerses = new();
+    /// refKey → highlight tone (member of a colour-bearing tag; Tier 0 #4).
+    public Dictionary<string, Color> Highlights = new();
+    /// Word-precise cross-verse highlight runs to wash (Tier 0 #4 drag): each is
+    /// a verse refKey + inclusive token span + resolved tone.
+    public List<(string Verse, uint Lo, uint Hi, Color Color)> Runs = new();
+    /// The tone a fresh drag lays down + previews with (set by the shell).
+    public Color DragTone = Color.FromArgb(255, 0xc8, 0xb0, 0xe0);
+
+    // Per-pane reading history (Tier 0 #2): the chapters visited, with a cursor.
+    private readonly List<(string book, uint ch)> _history = new();
+    private int _histIdx = -1;
+    private bool _inHistoryNav;
 
     public PinSpan? Pin { get; private set; }
+
+    // Live cross-verse highlight drag (Tier 0 #4): the anchor hit + current end,
+    // set only past the threshold so a plain click never previews.
+    private const double HlDragThreshold = 6.0;
+    private (string Verse, uint Tok)? _dragAnchor;
+    private Windows.Foundation.Point _dragStart;
+    private (string SRef, uint STok, string ERef, uint ETok)? _hlDrag;
 
     private readonly CanvasControl _canvas = new();
     private readonly ScrollBar _bar = new()
@@ -115,12 +199,16 @@ public sealed class ReaderView : UserControl, IDisposable
     public event Action<string, uint>? ChapterShown;
     /// Pin state changed (single-click word).
     public event Action? PinChanged;
+    /// A completed cross-verse highlight drag: (startRef, startTok, endRef, endTok).
+    public event Action<string, uint, string, uint>? HighlightDragged;
     /// Scroll position changed (connector overlay redraws).
     public event Action? Scrolled;
     /// Ctrl+wheel / Ctrl+± zoom request, in ±1-pt steps (0 = reset).
     public event Action<int>? ZoomRequested;
     /// Shift+scroll: move all panes in lockstep by this many pixels.
     public event Action<float>? ScrollAllRequested;
+    /// Right-click on a verse: (refKey, canvas point) → the context menu.
+    public event Action<string, Windows.Foundation.Point>? ContextRequested;
 
     public string Book => _book;
     public uint ChapterNumber => _ch;
@@ -142,9 +230,26 @@ public sealed class ReaderView : UserControl, IDisposable
         _canvas.PointerWheelChanged += OnWheel;
         _canvas.DoubleTapped += OnDoubleTapped;
         _canvas.PointerPressed += OnPressed;
+        _canvas.PointerReleased += OnReleased;
         _canvas.PointerMoved += (_, e) =>
         {
-            var pos = e.GetCurrentPoint(_canvas).Position;
+            var cp = e.GetCurrentPoint(_canvas);
+            var pos = cp.Position;
+            // Cross-verse highlight drag (Tier 0 #4): past the threshold, extend
+            // the selection to the word under the pointer (supersedes the gloss).
+            if (_dragAnchor is { } anchor && cp.Properties.IsLeftButtonPressed)
+            {
+                double ddx = pos.X - _dragStart.X, ddy = pos.Y - _dragStart.Y;
+                if (ddx * ddx + ddy * ddy >= HlDragThreshold * HlDragThreshold && HitAt(pos) is { } h)
+                {
+                    _canvas.CapturePointer(e.Pointer);
+                    _hlDrag = (anchor.Verse, anchor.Tok, h.Verse, h.TokenIndex);
+                    HideGloss();
+                    _hover.Stop();
+                    _canvas.Invalidate();
+                }
+                return;
+            }
             // Resting on a word must not flicker the gloss: ignore sub-pixel
             // jitter while it is showing; only real movement re-arms it.
             if (_gloss.Visibility == Visibility.Visible)
@@ -219,6 +324,18 @@ public sealed class ReaderView : UserControl, IDisposable
         if (count == 0) return;
         _book = book;
         _ch = Math.Clamp(chapter, 1u, count);
+        // Record the destination in the reading history (unless this navigation
+        // *is* a history move). Forward entries past the cursor are discarded.
+        if (!_inHistoryNav)
+        {
+            if (_histIdx < _history.Count - 1)
+                _history.RemoveRange(_histIdx + 1, _history.Count - _histIdx - 1);
+            if (_history.Count == 0 || _history[^1] != (_book, _ch))
+            {
+                _history.Add((_book, _ch));
+                _histIdx = _history.Count - 1;
+            }
+        }
         _scrollY = 0;
         _pendingScrollVerse = verse;
         _highlightVerse = highlight ? verse : null;
@@ -233,6 +350,61 @@ public sealed class ReaderView : UserControl, IDisposable
         Pin = null;
         _canvas.Invalidate();
         PinChanged?.Invoke();
+    }
+
+    // ── reading history (Tier 0 #2) ──────────────────────────────────────────
+
+    public bool CanGoBack => _histIdx > 0;
+    public bool CanGoForward => _histIdx >= 0 && _histIdx < _history.Count - 1;
+
+    public void GoBack()
+    {
+        if (!CanGoBack) return;
+        _histIdx--;
+        NavigateHistory();
+    }
+
+    public void GoForward()
+    {
+        if (!CanGoForward) return;
+        _histIdx++;
+        NavigateHistory();
+    }
+
+    private void NavigateHistory()
+    {
+        var (b, c) = _history[_histIdx];
+        _inHistoryNav = true;
+        ShowChapter(b, c);
+        _inHistoryNav = false;
+    }
+
+    /// Re-read theme-dependent resources after a palette change, then repaint.
+    public void ApplyTheme()
+    {
+        _canvas.ClearColor = Palette.Paper;
+        _gloss.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Palette.PanelBg);
+        _gloss.BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Palette.Rule);
+        _glossText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Palette.Ink);
+        _canvas.Invalidate();
+    }
+
+    /// The verse under a canvas point: the hit word's verse, else the nearest
+    /// verse-number by y. Null when no chapter is laid out. Drives the context
+    /// menu (a right-click anywhere in a verse's lines targets that verse).
+    public string? VerseAt(Windows.Foundation.Point p)
+    {
+        if (HitAt(p) is { } hit) return hit.Verse;
+        if (_dl is null) return null;
+        float y = (float)p.Y - Margin + _scrollY;
+        DisplayItem? best = null;
+        float bestD = float.MaxValue;
+        foreach (var it in _dl.Items.Where(i => i.Kind == "verseNumber"))
+        {
+            float d = Math.Abs(it.Y + it.H * 0.5f - y);
+            if (d < bestD) { bestD = d; best = it; }
+        }
+        return best is null ? null : RefOf(best);
     }
 
     // ── fonts + measurement ────────────────────────────────────────────────
@@ -416,12 +588,50 @@ public sealed class ReaderView : UserControl, IDisposable
         float top = _scrollY - Margin;
         ds.Transform = Matrix3x2.CreateTranslation(_originX, Margin - _scrollY);
 
-        // Search/goto highlight: one line-wide band per laid-out line.
+        // Highlight washes (persistent user tag colours) — underneath everything.
+        if (Highlights.Count > 0)
+            foreach (var grp in _dl.Items.GroupBy(RefOf).Where(g => Highlights.ContainsKey(g.Key)))
+            {
+                var wash = Palette.Wash(Highlights[grp.Key]);
+                foreach (var line in grp.GroupBy(i => i.Y))
+                    ds.FillRectangle(-6, line.Key, _column + 12, line.First().H, wash);
+            }
+
+        // Word-precise runs (cross-verse drag highlights, Tier 0 #4) — per-word
+        // rects, like the pin band, so the wash follows the actual words.
+        foreach (var run in Runs)
+            foreach (var it in _dl.Items.Where(i => i.Verse == run.Verse &&
+                         i.TokenIndex is { } t && t >= run.Lo && t <= run.Hi))
+                ds.FillRectangle(it.X - 1.5f, it.Y, it.W + 3, it.H, Palette.Wash(run.Color));
+        // Live drag preview: every word item between the two endpoints in reading
+        // order (the display list is already ordered), in the default tone.
+        if (_hlDrag is { } hd)
+        {
+            var items = _dl.Items.ToList();
+            int ia = items.FindIndex(i => i.Verse == hd.SRef && i.TokenIndex == hd.STok);
+            int ib = items.FindIndex(i => i.Verse == hd.ERef && i.TokenIndex == hd.ETok);
+            if (ia >= 0 && ib >= 0)
+            {
+                var tone = Palette.Wash(DragTone);
+                for (int k = Math.Min(ia, ib); k <= Math.Max(ia, ib); k++)
+                {
+                    var it = items[k];
+                    if (it.Kind == "verseNumber") continue;
+                    ds.FillRectangle(it.X - 1.5f, it.Y, it.W + 3, it.H, tone);
+                }
+            }
+        }
+
+        // Every current search hit in this chapter (Tier 0 #8), as a soft band.
+        if (HitVerses.Count > 0)
+            foreach (var grp in _dl.Items.GroupBy(RefOf).Where(g => HitVerses.Contains(g.Key)))
+                foreach (var line in grp.GroupBy(i => i.Y))
+                    ds.FillRectangle(-6, line.Key, _column + 12, line.First().H, Palette.Band);
+
+        // Search/goto highlight: the primary jump target (banded, one per line).
         if (_highlightVerse is not null)
-            foreach (var y in _dl.Items.Where(i => i.Verse == _highlightVerse ||
-                         (i.Kind == "verseNumber" && RefOf(i) == _highlightVerse))
-                         .GroupBy(i => i.Y))
-                ds.FillRectangle(-6, y.Key, _column + 12, y.First().H, Palette.Band);
+            foreach (var line in _dl.Items.Where(i => RefOf(i) == _highlightVerse).GroupBy(i => i.Y))
+                ds.FillRectangle(-6, line.Key, _column + 12, line.First().H, Palette.Band);
 
         // Pinned span: blue band per word rect.
         if (Pin is { } pin)
@@ -437,10 +647,13 @@ public sealed class ReaderView : UserControl, IDisposable
             if (it.Kind == "verseNumber")
             {
                 ds.DrawText(it.Text, new Vector2(it.X, dy), Palette.Gold, _fmtBold);
+                var rk = RefOf(it);
                 // Gutter dot: this verse has weave partners.
-                if (XrefVerses.Contains(RefOf(it)))
-                    ds.FillCircle(-9f, it.Y + it.H * 0.65f, 2.3f,
-                        Color.FromArgb(191, 158, 125, 56));
+                if (XrefVerses.Contains(rk))
+                    ds.FillCircle(-9f, it.Y + it.H * 0.65f, 2.3f, Palette.GutterDot);
+                // A second, square gutter mark: this verse has a personal note.
+                if (NoteVerses.Contains(rk))
+                    ds.FillRectangle(-13f, it.Y + it.H * 0.30f, 3.2f, 3.2f, Palette.InkFaded);
                 continue;
             }
             bool added = (it.Flags & PureFlags.Added) != 0;
@@ -475,6 +688,17 @@ public sealed class ReaderView : UserControl, IDisposable
         Activated?.Invoke();
 
         var pt = e.GetCurrentPoint(_canvas);
+        // Mouse back/forward buttons walk the reading history (Tier 0 #2).
+        var upd = pt.Properties.PointerUpdateKind;
+        if (upd == Microsoft.UI.Input.PointerUpdateKind.XButton1Pressed) { GoBack(); e.Handled = true; return; }
+        if (upd == Microsoft.UI.Input.PointerUpdateKind.XButton2Pressed) { GoForward(); e.Handled = true; return; }
+        // Right-click → the verse context menu (Tier 0 #1).
+        if (upd == Microsoft.UI.Input.PointerUpdateKind.RightButtonPressed)
+        {
+            if (VerseAt(pt.Position) is { } v) ContextRequested?.Invoke(v, pt.Position);
+            e.Handled = true;
+            return;
+        }
         if (!pt.Properties.IsLeftButtonPressed) return;
         bool ctrl = e.KeyModifiers.HasFlag(VirtualKeyModifiers.Control);
         var hit = HitAt(pt.Position);
@@ -491,6 +715,27 @@ public sealed class ReaderView : UserControl, IDisposable
             : new PinSpan(hit.Verse, hit.TokenIndex, hit.TokenIndex, hit.TokenIndex);
         _canvas.Invalidate();
         PinChanged?.Invoke();
+
+        // Arm a possible highlight drag (Tier 0 #4): the press pinned the start
+        // word; a drag past the threshold will supersede it (see PointerMoved).
+        _dragAnchor = (hit.Verse, hit.TokenIndex);
+        _dragStart = pt.Position;
+        _hlDrag = null;
+    }
+
+    private void OnReleased(object sender, PointerRoutedEventArgs e)
+    {
+        _canvas.ReleasePointerCapture(e.Pointer);
+        var drag = _hlDrag;
+        _dragAnchor = null;
+        _hlDrag = null;
+        if (drag is { } d)
+        {
+            // The press already pinned the start word; the drag supersedes it.
+            ClearPin();
+            _canvas.Invalidate();
+            HighlightDragged?.Invoke(d.SRef, d.STok, d.ERef, d.ETok);
+        }
     }
 
     private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)

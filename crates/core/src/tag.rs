@@ -67,6 +67,83 @@ pub struct TagMember {
     pub added: String,
 }
 
+/// A word-precise highlight range that may span verses: from `start`+`start_tok`
+/// to `end`+`end_tok` (inclusive token indices under `kjv1769-tok2`). Additive to
+/// `overlay-tag-v1` — older readers ignore the `highlights` array and still show
+/// whole-verse member washes. Endpoints reuse the frozen refKey; the token
+/// offsets follow the same convention as thread/weave spans.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HighlightRange {
+    pub start: VRef,
+    pub start_tok: u16,
+    pub end: VRef,
+    pub end_tok: u16,
+    /// Per-range swatch hex; `None` falls back to the owning tag's colour.
+    pub color: Option<String>,
+    pub note: Option<String>,
+    pub added: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct HighlightRepr {
+    #[serde(rename = "startRef")]
+    start_ref: String,
+    #[serde(rename = "startTok")]
+    start_tok: u16,
+    #[serde(rename = "endRef")]
+    end_ref: String,
+    #[serde(rename = "endTok")]
+    end_tok: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    note: Option<String>,
+    added: String,
+}
+
+impl Serialize for HighlightRange {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        HighlightRepr {
+            start_ref: self.start.ref_key(),
+            start_tok: self.start_tok,
+            end_ref: self.end.ref_key(),
+            end_tok: self.end_tok,
+            color: self.color.clone(),
+            note: self.note.clone(),
+            added: self.added.clone(),
+        }
+        .serialize(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for HighlightRange {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let r = HighlightRepr::deserialize(d)?;
+        let start = VRef::parse_ref_key(&r.start_ref)
+            .ok_or_else(|| D::Error::custom(format!("bad highlight startRef: {}", r.start_ref)))?;
+        let end = VRef::parse_ref_key(&r.end_ref)
+            .ok_or_else(|| D::Error::custom(format!("bad highlight endRef: {}", r.end_ref)))?;
+        Ok(HighlightRange {
+            start,
+            start_tok: r.start_tok,
+            end,
+            end_tok: r.end_tok,
+            color: r.color,
+            note: r.note,
+            added: r.added,
+        })
+    }
+}
+
+/// A per-verse wash run produced from highlight ranges: inclusive token indices
+/// `[lo, hi]` within this verse, plus the resolved colour.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HighlightRun {
+    pub lo: u16,
+    pub hi: u16,
+    pub color: String,
+}
+
 /// A named collection of targets.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tag {
@@ -76,6 +153,8 @@ pub struct Tag {
     pub tok_version: String,
     pub created: String,
     pub members: Vec<TagMember>,
+    /// Word-precise, possibly cross-verse highlight ranges (additive to v1).
+    pub highlights: Vec<HighlightRange>,
 }
 
 #[derive(Deserialize)]
@@ -88,17 +167,24 @@ struct TagRepr {
     created: String,
     #[serde(default)]
     members: Vec<TagMember>,
+    #[serde(default)]
+    highlights: Vec<HighlightRange>,
 }
 
 impl Serialize for Tag {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
-        let mut st = s.serialize_struct("Tag", 6)?;
+        let mut st = s.serialize_struct("Tag", 7)?;
         st.serialize_field("format", FORMAT)?;
         st.serialize_field("name", &self.name)?;
         st.serialize_field("tokenization", &self.tok_version)?;
         st.serialize_field("created", &self.created)?;
         st.serialize_field("members", &self.members)?;
+        if self.highlights.is_empty() {
+            st.skip_field("highlights")?;
+        } else {
+            st.serialize_field("highlights", &self.highlights)?;
+        }
         if let Some(c) = &self.color {
             st.serialize_field("color", c)?;
         } else {
@@ -120,6 +206,7 @@ impl<'de> Deserialize<'de> for Tag {
             tok_version: r.tokenization,
             created: r.created,
             members: r.members,
+            highlights: r.highlights,
         })
     }
 }
@@ -224,6 +311,7 @@ pub fn add_member(
             tok_version: tok_version.to_string(),
             created: added.to_string(),
             members: vec![member],
+            highlights: Vec::new(),
         };
         write_tag(&path, &tag)?;
         Ok(path)
@@ -235,6 +323,120 @@ pub fn remove_member(lt: &LoadedTag, target: &TagTarget) -> Result<(), Error> {
     let mut tag = lt.tag.clone();
     tag.members.retain(|m| &m.target != target);
     write_tag(&lt.file, &tag)
+}
+
+/// Set (or clear, with `None`) the swatch colour of the tag named `name`
+/// (case-insensitive). Drives the highlighting feature (Tier 0 #4): a verse's
+/// wash is the colour of a colour-bearing tag it belongs to. Errors if no such
+/// tag is loaded.
+pub fn set_color(loaded: &[LoadedTag], name: &str, color: Option<&str>) -> Result<(), Error> {
+    let wanted = name.trim().to_lowercase();
+    match loaded.iter().find(|lt| lt.tag.name.to_lowercase() == wanted) {
+        Some(lt) => {
+            let mut tag = lt.tag.clone();
+            tag.color = color.map(str::to_string);
+            write_tag(&lt.file, &tag)
+        }
+        None => Err(Error::Corpus(format!("no tag named {name}"))),
+    }
+}
+
+/// The highlight colour for a verse: the swatch of the first colour-bearing tag
+/// (in load order) that holds it, or `None`. "The tags browser doubles as the
+/// highlight browser" — any coloured tag paints a wash behind its verses.
+pub fn verse_color<'a>(tags: &'a [LoadedTag], vref: &VRef) -> Option<&'a str> {
+    let target = TagTarget::Verse(vref.clone());
+    tags.iter().find_map(|lt| {
+        lt.tag.color.as_deref().filter(|_| lt.tag.member_of(&target))
+    })
+}
+
+/// Append a word-precise highlight `range` to the tag named `name`
+/// (case-insensitive), creating its file on first use. An identical range (same
+/// endpoints) is left as-is (no duplicate). On create the tag takes the range's
+/// colour, so it shows as a colour-bearing tone in the browser. The token
+/// offsets are only meaningful under `tok_version` (`kjv1769-tok2`).
+pub fn add_highlight(
+    home: impl AsRef<Path>,
+    loaded: &[LoadedTag],
+    name: &str,
+    tok_version: &str,
+    range: HighlightRange,
+    added: &str,
+) -> Result<PathBuf, Error> {
+    let same = |h: &HighlightRange| {
+        h.start == range.start
+            && h.start_tok == range.start_tok
+            && h.end == range.end
+            && h.end_tok == range.end_tok
+    };
+    let wanted = name.trim().to_lowercase();
+    if let Some(lt) = loaded.iter().find(|lt| lt.tag.name.to_lowercase() == wanted) {
+        if lt.tag.highlights.iter().any(same) {
+            return Ok(lt.file.clone());
+        }
+        let mut tag = lt.tag.clone();
+        tag.highlights.push(range);
+        write_tag(&lt.file, &tag)?;
+        Ok(lt.file.clone())
+    } else {
+        let path = tag_file(&home, name);
+        if path.exists() {
+            return Err(Error::Corpus(format!(
+                "{} exists but could not be read — refusing to overwrite",
+                path.display()
+            )));
+        }
+        let tag = Tag {
+            name: name.trim().to_string(),
+            color: range.color.clone(),
+            tok_version: tok_version.to_string(),
+            created: added.to_string(),
+            members: Vec::new(),
+            highlights: vec![range],
+        };
+        write_tag(&path, &tag)?;
+        Ok(path)
+    }
+}
+
+/// Rewrite a tag's file without the highlight range whose endpoints match.
+pub fn remove_highlight(lt: &LoadedTag, range: &HighlightRange) -> Result<(), Error> {
+    let mut tag = lt.tag.clone();
+    tag.highlights.retain(|h| {
+        !(h.start == range.start
+            && h.start_tok == range.start_tok
+            && h.end == range.end
+            && h.end_tok == range.end_tok)
+    });
+    write_tag(&lt.file, &tag)
+}
+
+/// The word-precise wash runs for a single verse (`verse_len` = its token
+/// count), decomposed from every highlight range that covers it: a range fully
+/// washes its interior verses and its partial first/last verse by token index.
+/// The colour is the range's own, else the owning tag's; ranges with neither are
+/// skipped (nothing to paint). Complements [`verse_color`]'s whole-verse washes.
+pub fn verse_highlight_runs(tags: &[LoadedTag], vref: &VRef, verse_len: u16) -> Vec<HighlightRun> {
+    let rk = vref.reading_key();
+    let mut runs = Vec::new();
+    for lt in tags {
+        for h in &lt.tag.highlights {
+            let (s, e) = (h.start.reading_key(), h.end.reading_key());
+            if rk < s || rk > e {
+                continue;
+            }
+            let Some(color) = h.color.as_deref().or(lt.tag.color.as_deref()) else {
+                continue;
+            };
+            let lo = if rk == s { h.start_tok } else { 0 };
+            let hi = if rk == e { h.end_tok } else { verse_len.saturating_sub(1) };
+            if lo <= hi {
+                runs.push(HighlightRun { lo, hi, color: color.to_string() });
+            }
+        }
+    }
+    runs
 }
 
 #[cfg(test)]
@@ -303,6 +505,104 @@ mod tests {
         assert_eq!(loaded[0].tag.members.len(), 1);
         assert_eq!(loaded[0].tag.members[0].target, concept);
 
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    const HL_SAMPLE: &str = r##"{
+      "format":"overlay-tag-v1","name":"Amber","color":"#d8a24a",
+      "tokenization":"kjv1769-tok2","created":"2026-07-01T00:00:00Z",
+      "members":[],
+      "highlights":[
+        {"startRef":"John 3:16","startTok":3,"endRef":"John 3:18","endTok":5,"added":"2026-07-01T00:00:00Z"}
+      ]}"##;
+
+    #[test]
+    fn parses_and_roundtrips_highlight_range() {
+        let t: Tag = serde_json::from_str(HL_SAMPLE).unwrap();
+        assert_eq!(t.highlights.len(), 1);
+        let h = &t.highlights[0];
+        assert_eq!(h.start, VRef::new("John", 3, 16));
+        assert_eq!(h.start_tok, 3);
+        assert_eq!(h.end, VRef::new("John", 3, 18));
+        assert_eq!(h.end_tok, 5);
+        let back: Tag = serde_json::from_str(&to_json(&t).unwrap()).unwrap();
+        assert_eq!(t, back);
+    }
+
+    #[test]
+    fn old_v1_file_without_highlights_defaults_empty() {
+        // SAMPLE has no `highlights` array — additive default keeps it loading.
+        let t: Tag = serde_json::from_str(SAMPLE).unwrap();
+        assert!(t.highlights.is_empty());
+    }
+
+    #[test]
+    fn highlight_runs_decompose_across_verses() {
+        let t: Tag = serde_json::from_str(HL_SAMPLE).unwrap();
+        let lt = LoadedTag { file: "x".into(), tag: t };
+        let tags = std::slice::from_ref(&lt);
+        // start verse (len 9 → last index 8): from start_tok to the end
+        assert_eq!(
+            verse_highlight_runs(tags, &VRef::new("John", 3, 16), 9),
+            vec![HighlightRun { lo: 3, hi: 8, color: "#d8a24a".into() }]
+        );
+        // interior verse (len 6 → 0..5): whole verse
+        assert_eq!(
+            verse_highlight_runs(tags, &VRef::new("John", 3, 17), 6),
+            vec![HighlightRun { lo: 0, hi: 5, color: "#d8a24a".into() }]
+        );
+        // end verse: 0..end_tok
+        assert_eq!(
+            verse_highlight_runs(tags, &VRef::new("John", 3, 18), 20),
+            vec![HighlightRun { lo: 0, hi: 5, color: "#d8a24a".into() }]
+        );
+        // outside the range on either side: nothing
+        assert!(verse_highlight_runs(tags, &VRef::new("John", 3, 19), 10).is_empty());
+        assert!(verse_highlight_runs(tags, &VRef::new("John", 3, 15), 10).is_empty());
+    }
+
+    #[test]
+    fn single_verse_highlight_run() {
+        let t: Tag = serde_json::from_str(
+            r##"{"format":"overlay-tag-v1","name":"A","color":"#111111",
+            "tokenization":"kjv1769-tok2","created":"t","members":[],
+            "highlights":[{"startRef":"Gen 1:1","startTok":2,"endRef":"Gen 1:1","endTok":4,"added":"t"}]}"##,
+        )
+        .unwrap();
+        let lt = LoadedTag { file: "x".into(), tag: t };
+        assert_eq!(
+            verse_highlight_runs(std::slice::from_ref(&lt), &VRef::new("Gen", 1, 1), 10),
+            vec![HighlightRun { lo: 2, hi: 4, color: "#111111".into() }]
+        );
+    }
+
+    #[test]
+    fn add_and_remove_highlight_roundtrip() {
+        let home = std::env::temp_dir().join(format!("pure-hl-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let range = HighlightRange {
+            start: VRef::new("John", 3, 16),
+            start_tok: 1,
+            end: VRef::new("John", 3, 17),
+            end_tok: 2,
+            color: Some("#d8a24a".into()),
+            note: None,
+            added: "t".into(),
+        };
+        let (loaded, _) = load_tags(&home);
+        add_highlight(&home, &loaded, "Amber", "kjv1769-tok2", range.clone(), "t").unwrap();
+        // dedup: the same range again is a no-op (case-insensitive tag match)
+        let (loaded, _) = load_tags(&home);
+        add_highlight(&home, &loaded, "amber", "kjv1769-tok2", range.clone(), "t").unwrap();
+        let (loaded, errs) = load_tags(&home);
+        assert!(errs.is_empty());
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].tag.highlights.len(), 1);
+        assert_eq!(loaded[0].tag.color.as_deref(), Some("#d8a24a"));
+
+        remove_highlight(&loaded[0], &range).unwrap();
+        let (loaded, _) = load_tags(&home);
+        assert!(loaded[0].tag.highlights.is_empty());
         let _ = std::fs::remove_dir_all(&home);
     }
 }

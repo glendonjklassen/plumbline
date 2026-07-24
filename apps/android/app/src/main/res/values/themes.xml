@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The activity theme. A Compose app draws its own surfaces (the shared
+     pure-core Palette), so the platform theme only needs to be a no-action-bar
+     base with the paper window background — no com.google.android.material
+     dependency. Edge-to-edge + status-bar tint are handled in Compose. -->
+<resources>
+    <style name="Theme.PureStudy" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/ic_launcher_background</item>
+    </style>
+</resources>
