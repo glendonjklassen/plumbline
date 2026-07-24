@@ -532,6 +532,9 @@ fun Modifier.zoomable(minScale: Float = 1f, maxScale: Float = 6f): Modifier = co
         scaleY = scale
         translationX = offset.x
         translationY = offset.y
+        // Clip the panned/zoomed drawing to the canvas bounds, so a dragged
+        // coverage/activity map can't paint over the frame's back bar above it.
+        clip = true
     }.pointerInput(Unit) {
         detectTransformGestures { _, pan, zoom, _ ->
             scale = (scale * zoom).coerceIn(minScale, maxScale)

@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -215,6 +216,12 @@ fun ReaderPane(
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
+                // Confine all painting to the pane. The washes/text are drawn in a
+                // scroll-translated space, so without this an item scrolled just
+                // above the pane paints upward over the top bar (which sits earlier
+                // in the Column, i.e. underneath in draw order). Belt to the
+                // per-item viewport cull below.
+                .clipToBounds()
                 .onSizeChanged { viewportH = it.height.toFloat() }
                 .scrollable(scrollState, Orientation.Vertical)
                 .pointerInput(chapterHandle) {
@@ -254,9 +261,14 @@ fun ReaderPane(
             val viewH = size.height
 
             translate(left = originX, top = MARGIN - scrollY) {
+                // Same viewport cull the text uses (§5): a wash/band for an item
+                // scrolled off-screen must not paint — otherwise it lands over the
+                // chrome above the pane on scroll. clipToBounds is the safety net.
+                fun onScreen(item: DisplayItem) = item.y + item.h >= top && item.y <= top + viewH
+
                 // 1. Whole-verse highlight washes — underneath everything.
                 if (highlights.isNotEmpty()) {
-                    list.items.filter { highlights.containsKey(it.refOf(book, chapter)) }
+                    list.items.filter { highlights.containsKey(it.refOf(book, chapter)) && onScreen(it) }
                         .groupBy { it.refOf(book, chapter) }
                         .forEach { (rk, items) ->
                             val wash = palette.wash(highlights.getValue(rk))
@@ -270,13 +282,14 @@ fun ReaderPane(
                 for (run in runs) {
                     val wash = palette.wash(run.color)
                     list.items.filter {
-                        it.verse == run.verse && it.tokenIndex?.toInt()?.let { t -> t in run.lo..run.hi } == true
+                        it.verse == run.verse && onScreen(it) &&
+                            it.tokenIndex?.toInt()?.let { t -> t in run.lo..run.hi } == true
                     }.forEach { drawRect(wash, Offset(it.x - 1.5f, it.y), Size(it.w + 3f, it.h)) }
                 }
 
                 // 3. Search hits — a soft band per line.
                 if (searchHits.isNotEmpty()) {
-                    list.items.filter { it.refOf(book, chapter) in searchHits }
+                    list.items.filter { it.refOf(book, chapter) in searchHits && onScreen(it) }
                         .groupBy { it.y }
                         .forEach { (y, line) ->
                             drawRect(palette.band, Offset(-6f, y), Size(column + 12f, line.first().h))
@@ -286,7 +299,8 @@ fun ReaderPane(
                 // 4. Pinned span — a blue band per word rect.
                 pin?.let { p ->
                     list.items.filter {
-                        it.verse == p.verse && it.tokenIndex?.toInt()?.let { t -> t in p.lo..p.hi } == true
+                        it.verse == p.verse && onScreen(it) &&
+                            it.tokenIndex?.toInt()?.let { t -> t in p.lo..p.hi } == true
                     }.forEach { drawRect(palette.pinBand, Offset(it.x - 1.5f, it.y), Size(it.w + 3f, it.h)) }
                 }
 

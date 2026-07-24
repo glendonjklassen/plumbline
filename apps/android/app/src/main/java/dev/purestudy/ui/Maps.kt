@@ -138,6 +138,10 @@ fun Modifier.zoomable(state: ZoomState): Modifier =
             translationX = state.offset.x
             translationY = state.offset.y
             transformOrigin = TransformOrigin(0f, 0f)
+            // Clip the panned/zoomed drawing to the canvas bounds. Without this a
+            // dragged map overflows its frame and — being later in draw order —
+            // paints over the overlay's back bar (and any chrome above it).
+            clip = true
         }
 
 // ── shared paint helpers (ReaderPane's convention: measure + draw via Paint) ──
