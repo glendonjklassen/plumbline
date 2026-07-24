@@ -88,7 +88,12 @@ private data class AuthorPrompt(val title: String, val initial: String, val onCo
  * [fold] is the live FoldingFeature (null when the device is not opened flat).
  */
 @Composable
-fun PureStudyApp(engine: StudyEngine, fold: FoldingFeature?) {
+fun PureStudyApp(
+    engine: StudyEngine,
+    fold: FoldingFeature?,
+    bundledOn: Boolean = true,
+    onToggleBundled: () -> Unit = {},
+) {
     // Light is the v0 default; dark/night are a future toggle (item 6).
     val theme = "light"
     val palette = remember(theme) { ReaderPalette.forTheme(theme) }
@@ -98,12 +103,18 @@ fun PureStudyApp(engine: StudyEngine, fold: FoldingFeature?) {
         lightColorScheme(background = palette.paper, surface = palette.paper, onSurface = palette.ink)
     }
     MaterialTheme(colorScheme = scheme) {
-        StudyScreen(engine, fold, palette)
+        StudyScreen(engine, fold, palette, bundledOn, onToggleBundled)
     }
 }
 
 @Composable
-fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalette) {
+fun StudyScreen(
+    engine: StudyEngine,
+    fold: FoldingFeature?,
+    palette: ReaderPalette,
+    bundledOn: Boolean = true,
+    onToggleBundled: () -> Unit = {},
+) {
     val toc = remember {
         runCatching { parseWire<Toc>(engine.TocJson()).books }.getOrElse { emptyList() }
     }
@@ -325,6 +336,8 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
             fullStudy = fullMode,
             onToggleFull = { fullMode = !fullMode },
             onTextSize = { showTextSize = true },
+            bundledOn = bundledOn,
+            onToggleBundled = onToggleBundled,
         )
         HorizontalDivider(color = palette.rule)
 
@@ -468,6 +481,8 @@ private fun TopBar(
     fullStudy: Boolean,
     onToggleFull: () -> Unit,
     onTextSize: () -> Unit,
+    bundledOn: Boolean,
+    onToggleBundled: () -> Unit,
 ) {
     Surface(color = palette.paneNavBg) {
         Row(
@@ -534,6 +549,10 @@ private fun TopBar(
                         onClick = { onToggleFull(); menu = false },
                     )
                     DropdownMenuItem(text = { Text("Text size…") }, onClick = { onTextSize(); menu = false })
+                    DropdownMenuItem(
+                        text = { Text(if (bundledOn) "Bundled study set  ✓" else "Bundled study set") },
+                        onClick = { onToggleBundled(); menu = false },
+                    )
                 }
             }
         }
