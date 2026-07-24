@@ -172,6 +172,7 @@ fun StudyScreen(
     // Overlays / sheets layered over the reader (parity features).
     var actionVerse by remember { mutableStateOf<String?>(null) }   // long-press verse sheet
     var memView by remember { mutableStateOf<MemorizeView?>(null) } // memorize destinations
+    var drillRef by remember { mutableStateOf<String?>(null) }      // drill one chosen verse
     var conceptCode by remember { mutableStateOf<String?>(null) }   // conceptmap:CODE
     var showConstellation by remember { mutableStateOf(false) }
     var showChord by remember { mutableStateOf(false) }
@@ -437,9 +438,14 @@ fun StudyScreen(
             MemorizeScreen(
                 engine, v, toc, palette,
                 onSelectView = { memView = it },
-                onOpen = { b, c -> book = b; chapter = c; memView = null },
+                onDrill = { ref -> drillRef = ref },
                 onClose = { memView = null },
             )
+        }
+        // Drilling a single verse tapped in the hub — drawn over it; back returns
+        // to the list.
+        drillRef?.let { ref ->
+            MemorizeReview(engine, palette, onClose = { drillRef = null }, only = ref)
         }
         if (showSettings) {
             SettingsDialog(

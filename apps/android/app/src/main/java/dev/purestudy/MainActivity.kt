@@ -44,6 +44,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // config.json resolves through XDG_CONFIG_HOME / $HOME on Linux-family
+        // platforms (core::config::config_dir). Android sets neither to a
+        // writable path, so the core's config save silently failed and every
+        // launch loaded defaults — the reader always reopened John 3 and no
+        // preference (text size, theme, last passage, history) persisted. Point
+        // it at our private filesDir BEFORE any pure_config_* call. Os.setenv
+        // writes the libc environ that the Rust core's std::env reads.
+        runCatching { android.system.Os.setenv("XDG_CONFIG_HOME", filesDir.absolutePath, true) }
+
         // Make sure the cdylib is present before the first JNA call. JNA's
         // Native.load would also resolve it, but loading here surfaces a missing
         // .so as a clear crash rather than a lazy failure deep in the binding.

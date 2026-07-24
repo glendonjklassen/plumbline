@@ -113,12 +113,12 @@ fun MemorizeScreen(
     books: List<TocBook>,
     palette: ReaderPalette,
     onSelectView: (MemorizeView) -> Unit = {},
-    onOpen: (book: String, chapter: Int) -> Unit = { _, _ -> },
+    onDrill: (ref: String) -> Unit = {},
     onClose: () -> Unit,
 ) {
     when (view) {
         MemorizeView.ReviewDue -> MemorizeReview(engine, palette, onClose)
-        MemorizeView.List -> MemorizeList(engine, books, palette, onSelectView, onOpen, onClose)
+        MemorizeView.List -> MemorizeList(engine, books, palette, onSelectView, onDrill, onClose)
         MemorizeView.Coverage -> MemorizeCoverage(engine, books, palette, onClose)
         MemorizeView.Activity -> MemorizeActivity(engine, palette, onClose)
     }
@@ -134,7 +134,7 @@ fun MemorizeList(
     books: List<TocBook>,
     palette: ReaderPalette,
     onSelectView: (MemorizeView) -> Unit,
-    onOpen: (book: String, chapter: Int) -> Unit,
+    onDrill: (ref: String) -> Unit,
     onClose: () -> Unit,
 ) {
     val coverage = remember {
@@ -182,7 +182,7 @@ fun MemorizeList(
                 LazyColumn(Modifier.fillMaxSize()) {
                     item {
                         Text(
-                            "${verses.size} verse${if (verses.size == 1) "" else "s"} · tap to open",
+                            "${verses.size} verse${if (verses.size == 1) "" else "s"} · tap to drill",
                             color = palette.faded, fontSize = 12.sp,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                         )
@@ -191,10 +191,9 @@ fun MemorizeList(
                         val sp = v.ref.lastIndexOf(' ')
                         val bookId = if (sp > 0) v.ref.substring(0, sp) else v.ref
                         val chv = if (sp > 0) v.ref.substring(sp + 1) else ""
-                        val chapter = chv.substringBefore(':').toIntOrNull() ?: 1
                         Row(
                             Modifier.fillMaxWidth()
-                                .clickable { onOpen(bookId, chapter); onClose() }
+                                .clickable { onDrill(v.ref) }
                                 .padding(horizontal = 20.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -273,17 +272,22 @@ private enum class Prompt { FirstLetters, Blank, Full }
  * closing when the queue empties.
  */
 @Composable
-fun MemorizeReview(engine: StudyEngine, palette: ReaderPalette, onClose: () -> Unit) {
-    // Snapshot the due queue once at open (like the desktop shells) — grading
-    // reschedules, but this session works the queue as it stood on entry.
-    val due = remember {
-        runCatching {
-            synchronized(engine) { engine.MemoryDueJson(nowUtc()) }
-                ?.let { parseWire<MemoryDue>(it).refs }
-        }.getOrNull() ?: emptyList()
+fun MemorizeReview(engine: StudyEngine, palette: ReaderPalette, onClose: () -> Unit, only: String? = null) {
+    // [only] drills a single chosen verse (the hub taps one directly); otherwise
+    // snapshot the due queue once at open (grading reschedules, but this session
+    // works the queue as it stood on entry).
+    val due = remember(only) {
+        if (only != null) {
+            listOf(only)
+        } else {
+            runCatching {
+                synchronized(engine) { engine.MemoryDueJson(nowUtc()) }
+                    ?.let { parseWire<MemoryDue>(it).refs }
+            }.getOrNull() ?: emptyList()
+        }
     }
 
-    MemFrame("Memorize", palette, onClose) {
+    MemFrame(if (only != null) "Memorize verse" else "Memorize", palette, onClose) {
         if (due.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(22.dp), contentAlignment = Alignment.Center) {
                 Text(
@@ -362,19 +366,19 @@ private fun ReviewBody(
     }
 
     Column(
-        // imePadding lifts the grade row above the keyboard during typed recall;
-        // the tighter vertical padding keeps the last line of a long verse from
-        // crowding the controls at the bottom on shorter windows.
-        Modifier.fillMaxSize().imePadding().padding(horizontal = 22.dp, vertical = 10.dp),
+        // The whole card scrolls, so typing (which raises the keyboard) never
+        // collapses the prompt — the first-letter/blanked hint stays visible
+        // above the recall field. imePadding lifts the field clear of the keyboard.
+        Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
+            .padding(horizontal = 22.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("Card ${idx + 1} of ${due.size} due", color = palette.faded, fontSize = 12.sp)
+        Text("Card ${idx + 1} of ${due.size}", color = palette.faded, fontSize = 12.sp)
         Text(refDisplay, color = palette.ink, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
 
-        // The prompt — the only element that grows to fill the free space.
-        Box(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
-            Text(promptText, color = palette.ink, fontSize = 18.sp)
-        }
+        // The prompt/hint — natural height (no weight), so it can't be squeezed
+        // away when the keyboard opens.
+        Text(promptText, color = palette.ink, fontSize = 18.sp, modifier = Modifier.fillMaxWidth())
 
         // Prompt-mode controls: first-letters · a blank-out slider · reveal.
         Row(
