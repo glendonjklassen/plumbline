@@ -78,8 +78,12 @@ class MainActivity : ComponentActivity() {
                     StudyEngine.Open(home.absolutePath)
                 }
             }
-            result.onSuccess { engine = it }
-                .onFailure { loadError = it.message ?: "could not open corpus" }
+            result.onSuccess { e ->
+                engine = e
+                // Warm the analytics indexes off the UI thread so the first word
+                // study / search / map isn't a cold multi-second stall on tap.
+                lifecycleScope.launch(Dispatchers.Default) { runCatching { e.WarmIndexes() } }
+            }.onFailure { loadError = it.message ?: "could not open corpus" }
         }
 
         // Track the fold posture lifecycle-aware; expose the FoldingFeature (if any)

@@ -96,13 +96,31 @@ class ZoomState(minScale: Float = 1f, maxScale: Float = 8f) {
         private set
     var offset by mutableStateOf(Offset.Zero)
         private set
+    private var viewportW = 0f
+    private var viewportH = 0f
+
+    /** Record the canvas size so the pan can be bounded to the content. */
+    fun setViewport(w: Float, h: Float) {
+        viewportW = w
+        viewportH = h
+        offset = clamp(offset, scale)
+    }
+
+    /** Keep the scaled content covering the viewport — no empty gutters, and it
+     *  can't be flung off-screen. At scale 1 this pins the offset to 0 (fitted). */
+    private fun clamp(o: Offset, s: Float): Offset {
+        val minX = minOf(0f, viewportW * (1f - s))
+        val minY = minOf(0f, viewportH * (1f - s))
+        return Offset(o.x.coerceIn(minX, 0f), o.y.coerceIn(minY, 0f))
+    }
 
     /** Apply one transform-gesture step (centroid/pan in screen space). Zoom is
-     *  anchored on the centroid so the point under the fingers stays put. */
+     *  anchored on the centroid so the point under the fingers stays put; the
+     *  result is clamped so the map stays within its frame. */
     fun onGesture(centroid: Offset, pan: Offset, zoom: Float) {
         val newScale = (scale * zoom).coerceIn(minScale, maxScale)
         val content = (centroid - offset) / scale       // point under the centroid
-        offset = centroid - content * newScale + pan
+        offset = clamp(centroid - content * newScale + pan, newScale)
         scale = newScale
     }
 
@@ -255,6 +273,7 @@ fun ConceptMap(
             else -> Canvas(
                 Modifier
                     .fillMaxSize()
+                    .onSizeChanged { zoom.setViewport(it.width.toFloat(), it.height.toFloat()) }
                     .pointerInput(Unit) { detectTapGestures(onDoubleTap = { zoom.reset() }) }
                     .zoomable(zoom),
             ) {
@@ -458,7 +477,7 @@ fun Constellation(
             Canvas(
                 Modifier
                     .fillMaxSize()
-                    .onSizeChanged { canvasSize = it }
+                    .onSizeChanged { canvasSize = it; zoom.setViewport(it.width.toFloat(), it.height.toFloat()) }
                     .pointerInput(model) {
                         detectTapGestures(
                             onDoubleTap = { zoom.reset() },
@@ -680,7 +699,7 @@ fun ChordMap(
             else -> Canvas(
                 Modifier
                     .fillMaxSize()
-                    .onSizeChanged { canvasSize = it }
+                    .onSizeChanged { canvasSize = it; zoom.setViewport(it.width.toFloat(), it.height.toFloat()) }
                     .pointerInput(map) {
                         detectTapGestures(
                             onDoubleTap = { zoom.reset() },

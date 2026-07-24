@@ -1260,50 +1260,45 @@ pub fn guide_blocks() -> Vec<Block> {
     );
     out.push(Block::Rule);
     out.push(Block::para(vec![
-        Run::new("More: press ? for keyboard shortcuts, or open ", sz::SMALL, Color::Faded),
-        Run::new("About", sz::SMALL, Color::Gold).link("about"),
-        Run::new(".", sz::SMALL, Color::Faded),
+        Run::new("Press ? for keyboard shortcuts.", sz::SMALL, Color::Faded),
     ]));
+    // Guide & About are one combined card — inline the About content here.
+    out.push(Block::Rule);
+    about_body(&mut out);
     out
 }
 
-/// The About card: edition, provenance, and the covenant.
-pub fn about_blocks() -> Vec<Block> {
-    let mut out = vec![
-        Block::para(vec![Run::new("pure-study", sz::WORD, Color::Ink).bold()]),
-        Block::para(vec![Run::new(
-            "A KJV-only Bible-study tool: a parallel-passage reader with an optional Full-study tier of Strong's, morphology, cross-references, and corpus analytics. Everything runs locally and offline.",
-            sz::BODY,
-            Color::Ink,
-        )]),
-    ];
+/// The About content (edition, provenance, covenant), pushed onto `out` so both
+/// the standalone About card and the combined guide can reuse it verbatim.
+fn about_body(out: &mut Vec<Block>) {
+    out.push(Block::para(vec![Run::new("About pure-study", sz::TITLE, Color::Ink).bold()]));
+    out.push(Block::para(vec![Run::new(
+        "A KJV-only Bible-study tool: a parallel-passage reader with an optional Full-study tier of Strong's, morphology, cross-references, and corpus analytics. Everything runs locally and offline.",
+        sz::BODY,
+        Color::Ink,
+    )]));
+    guide_section(out, "THE TEXT", &["The traditional 1769 King James Version, in the public domain."]);
     guide_section(
-        &mut out,
-        "THE TEXT",
-        &[
-            "The traditional 1769 King James Version, in the public domain.",
-        ],
-    );
-    guide_section(
-        &mut out,
+        out,
         "PROVENANCE",
         &[
             "KJV text via eBible.org; Strong's via Open Scriptures (CC-BY-SA); morphology from OSHB (CC-BY 4.0) and Robinson's public-domain Textus Receptus tagging; cross-references from the Treasury of Scripture Knowledge via openbible.info. Full credits are in BIBLIOGRAPHY.md.",
         ],
     );
     guide_section(
-        &mut out,
+        out,
         "THE COVENANT",
         &[
             "Yours forever: no account, no ads, no tracking, nothing sent anywhere. Your library — highlights, notes, tags, threads — is saved as ordinary files on your device that you can back up or move. The app is free.",
         ],
     );
-    out.push(Block::Rule);
-    out.push(Block::para(vec![
-        Run::new("Open the ", sz::SMALL, Color::Faded),
-        Run::new("guide", sz::SMALL, Color::Gold).link("guide"),
-        Run::new(".", sz::SMALL, Color::Faded),
-    ]));
+}
+
+/// The About card: edition, provenance, and the covenant (also inlined at the
+/// end of [`guide_blocks`] so Guide & About read as one card).
+pub fn about_blocks() -> Vec<Block> {
+    let mut out = Vec::new();
+    about_body(&mut out);
     out
 }
 

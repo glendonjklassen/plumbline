@@ -1253,6 +1253,9 @@ pub struct WireConfigState {
     /// Reader line-height as a multiple of the text height.
     #[serde(default)]
     pub line_spacing: f64,
+    /// Reading history, most-recent-first (capped by the core).
+    #[serde(default)]
+    pub history: Vec<WirePaneRef>,
     /// Load-only: true when no config file existed yet (guided first run).
     #[serde(default)]
     pub first_run: bool,
@@ -1281,6 +1284,11 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         copy_style: cfg.copy_style.clone(),
         side_margin: cfg.side_margin,
         line_spacing: cfg.line_spacing,
+        history: cfg
+            .history
+            .iter()
+            .map(|p| WirePaneRef { book: p.book.clone(), chapter: p.chapter })
+            .collect(),
         first_run,
     }
 }
@@ -1311,6 +1319,11 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         } else {
             Config::default().line_spacing
         },
+        history: w
+            .history
+            .iter()
+            .map(|p| PaneRef { book: p.book.clone(), chapter: p.chapter.max(1) })
+            .collect(),
     }
 }
 

@@ -300,10 +300,13 @@ Zoom **persists config on every change** (M:2117).
 `%APPDATA%\pure-study\config.json` (XDG / App Support elsewhere):
 `{"studyMode":"simple"|"full","bodySize":18.0,"openPanes":[{"book","chapter"}],
 "activePane":0,"versePerLine":false,"theme":"system","copyStyle":"verseRef",
-"sideMargin":28.0,"lineSpacing":1.35}`. All additive (default on absence); a
-save must round-trip fields it doesn't expose (each shell carries them forward).
-`copyStyle` (`verse`|`verseRef`|`verseMarkdown`) is the one-tap copy shape;
-`sideMargin` (px, 0–160) + `lineSpacing` (×text-height, 1–3) are reader spacing.
+"sideMargin":28.0,"lineSpacing":1.35,"history":[{"book":"John","chapter":3}]}`.
+All additive (default on absence); a save must round-trip fields it doesn't
+expose (each shell carries them forward). `copyStyle`
+(`verse`|`verseRef`|`verseMarkdown`) is the one-tap copy shape; `sideMargin`
+(px, 0–160) + `lineSpacing` (×text-height, 1–3) are reader spacing. `history`
+is recent (book, chapter), most-recent-first, deduped, core-capped at 50
+(`config::HISTORY_CAP`) — powers "start where I left off" + a history list.
 `first_run` only when the file is absent; corrupt file →
 defaults, no re-prompt. Restore panes (≤3; default John 3) + active + zoom at
 startup; persist on close, mode toggle, first-run pick, every zoom. Scroll
@@ -707,3 +710,21 @@ flashcards (needs #14) are follow-ups.
   the desktop UI for `copyStyle`/`sideMargin`/`lineSpacing` is a pending follow-up
   (the fields round-trip on both desktop shells regardless). Requires the
   `material-icons-core` dependency.
+- **v1 phone shell, round 2 (2026-07-24) — Compose delta.** Overflow menu cut to
+  five entries — Memorize / Explore / History / Guide & About / Settings — so it
+  never scrolls; the fold's second-pane flip is a top-bar icon, not a menu item.
+  **Memorize** is a hub (a list of every card from `MemoryCoverageJson`, canon-
+  sorted, + Review due / Coverage / Activity buttons). **Explore** is a described
+  card list (Threads, Tags, Weaves, Constellation, Chord) so the tools aren't
+  cryptic; **Weaves** is one screen with an All/Suggested filter (was two items).
+  **History** is a bottom sheet over the new `history` config field; the reader
+  restores the last-viewed passage from `openPanes` and persists it + history on
+  every chapter change (off-thread). **Settings** folds Full study + text size /
+  margin / line-spacing + copy format + bundled set into one dialog. Guide &
+  About are combined in the core (`guide_blocks` inlines `about_body`; the
+  standalone About card stays for the `about` link verb). Word study / library /
+  search run off the main thread and the analytics index warms at startup
+  (`WarmIndexes`) to kill the first-tap stall. Map pan is bounded (the shared
+  `zoomable` clamps the offset so a map can't be flung off-screen; pinned at 1×).
+  A memorize add shows a Toast. Desktop keeps its menu/right-click layout; these
+  are phone form-factor deltas.

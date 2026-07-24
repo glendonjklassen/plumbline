@@ -58,6 +58,7 @@ public sealed class MainWindow : Window
     private string _copyStyle = "verseRef";
     private double _sideMargin = 28.0;
     private double _lineSpacing = 1.35;
+    private List<PaneRef1>? _history;
     private readonly TextBlock _status = new()
     {
         VerticalAlignment = VerticalAlignment.Center,
@@ -183,6 +184,7 @@ public sealed class MainWindow : Window
         _copyStyle = string.IsNullOrEmpty(cfg.CopyStyle) ? "verseRef" : cfg.CopyStyle;
         _sideMargin = cfg.SideMargin is >= 0 and <= 160 ? cfg.SideMargin : 28.0;
         _lineSpacing = cfg.LineSpacing is >= 1 and <= 3 ? cfg.LineSpacing : 1.35;
+        _history = cfg.History;
 
         var home = FindHome();
         if (home is null)
@@ -247,7 +249,8 @@ public sealed class MainWindow : Window
             _themeChoice,
             _copyStyle,
             _sideMargin,
-            _lineSpacing);
+            _lineSpacing,
+            _history);
         StudyConfig.SaveJson(System.Text.Json.JsonSerializer.Serialize(state, Wire.Options));
     }
 

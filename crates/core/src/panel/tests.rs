@@ -604,12 +604,14 @@ fn word_study_shows_personal_note_and_edit_link_in_both_modes() {
 }
 
 #[test]
-fn guide_and_about_render_and_cross_link() {
+fn guide_and_about_render_combined() {
+    // Guide & About are now one combined card: the guide opens with its tour and
+    // inlines the About content (edition + covenant) at the end.
     let guide = guide_blocks();
     assert!(guide.iter().any(|b| text_of(b).contains("Using pure-study")));
-    assert!(uris(&guide).contains(&"about".to_string()));
+    assert!(guide.iter().any(|b| text_of(b).contains("COVENANT")));
+    // The standalone About card (the `about` link verb) still renders on its own.
     let about = about_blocks();
     assert!(about.iter().any(|b| text_of(b).contains("covenant") || text_of(b).contains("COVENANT")));
-    assert!(uris(&about).contains(&"guide".to_string()));
 }
 

@@ -19,7 +19,10 @@ import android.graphics.Paint
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,7 +64,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.purestudy.CanonSegments
@@ -89,15 +94,17 @@ fun nowUtc(): String = Instant.now().toString()
 fun memorizeVerse(engine: StudyEngine, verseRef: String): String? =
     synchronized(engine) { engine.MemoryAdd(verseRef, nowUtc()) }
 
-/** The three memorization destinations, mirroring GTK's "Memorize ▸" submenu
- *  (Review due / Coverage map / Activity). */
-enum class MemorizeView { ReviewDue, Coverage, Activity }
+/** The memorization destinations, mirroring GTK's "Memorize ▸" submenu plus the
+ *  [List] of everything the reader is memorizing (Review due / My verses /
+ *  Coverage map / Activity). */
+enum class MemorizeView { ReviewDue, List, Coverage, Activity }
 
 /**
  * The single entry point StudyScreen mounts full-screen while a memorization view
- * is open. [books] is the TOC (66 books, canon order) — only [MemorizeView.Coverage]
- * needs it. [onClose] restores the reader (StudyScreen sets its memorize state to
- * null).
+ * is open. [books] is the TOC (66 books, canon order) — [MemorizeView.Coverage]
+ * and [MemorizeView.List] use it. [onOpen] jumps the reader to a verse (the list
+ * taps through); [onClose] restores the reader (StudyScreen clears its memorize
+ * state).
  */
 @Composable
 fun MemorizeScreen(
@@ -105,13 +112,118 @@ fun MemorizeScreen(
     view: MemorizeView,
     books: List<TocBook>,
     palette: ReaderPalette,
+    onSelectView: (MemorizeView) -> Unit = {},
+    onOpen: (book: String, chapter: Int) -> Unit = { _, _ -> },
     onClose: () -> Unit,
 ) {
     when (view) {
         MemorizeView.ReviewDue -> MemorizeReview(engine, palette, onClose)
+        MemorizeView.List -> MemorizeList(engine, books, palette, onSelectView, onOpen, onClose)
         MemorizeView.Coverage -> MemorizeCoverage(engine, books, palette, onClose)
         MemorizeView.Activity -> MemorizeActivity(engine, palette, onClose)
     }
+}
+
+/** The memorization hub (the single "Memorize" menu entry): a list of every
+ *  verse the reader is memorizing (tap to open it), with buttons up top to Review
+ *  due / Coverage map / Activity. Built from `MemoryCoverageJson` (all cards,
+ *  canon-sorted) — no new core endpoint. */
+@Composable
+fun MemorizeList(
+    engine: StudyEngine,
+    books: List<TocBook>,
+    palette: ReaderPalette,
+    onSelectView: (MemorizeView) -> Unit,
+    onOpen: (book: String, chapter: Int) -> Unit,
+    onClose: () -> Unit,
+) {
+    val coverage = remember {
+        runCatching {
+            synchronized(engine) { engine.MemoryCoverageJson(nowUtc()) }
+                ?.let { parseWire<MemoryCoverage>(it) }
+        }.getOrNull()
+    }
+    val nameOf = remember(books) { books.associate { it.id to it.name } }
+    val verses = coverage?.verses ?: emptyList()
+    val dueCount = verses.count { it.due }
+
+    MemFrame("Memorize", palette, onClose) {
+        Column(Modifier.fillMaxSize()) {
+            // Actions: Review due (with a count), Coverage map, Activity.
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(
+                    onClick = { onSelectView(MemorizeView.ReviewDue) },
+                    enabled = dueCount > 0,
+                    colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
+                ) { Text(if (dueCount > 0) "Review $dueCount due" else "Nothing due") }
+                OutlinedButton(
+                    onClick = { onSelectView(MemorizeView.Coverage) },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.ink),
+                ) { Text("Coverage") }
+                OutlinedButton(
+                    onClick = { onSelectView(MemorizeView.Activity) },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.ink),
+                ) { Text("Activity") }
+            }
+            HorizontalDivider(color = palette.rule)
+
+            if (verses.isEmpty()) {
+                Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        "No verses yet.\n\nLong-press a verse → “Memorize this verse” to start a card.",
+                        color = palette.ink, fontSize = 16.sp,
+                    )
+                }
+            } else {
+                LazyColumn(Modifier.fillMaxSize()) {
+                    item {
+                        Text(
+                            "${verses.size} verse${if (verses.size == 1) "" else "s"} · tap to open",
+                            color = palette.faded, fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                        )
+                    }
+                    items(verses) { v ->
+                        val sp = v.ref.lastIndexOf(' ')
+                        val bookId = if (sp > 0) v.ref.substring(0, sp) else v.ref
+                        val chv = if (sp > 0) v.ref.substring(sp + 1) else ""
+                        val chapter = chv.substringBefore(':').toIntOrNull() ?: 1
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .clickable { onOpen(bookId, chapter); onClose() }
+                                .padding(horizontal = 20.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("${nameOf[bookId] ?: bookId} $chv", color = palette.ink, fontSize = 16.sp)
+                                Text(
+                                    masteryLabel(v.mastery) + " · " + v.reps + " review" + (if (v.reps == 1) "" else "s"),
+                                    color = palette.faded, fontSize = 12.sp,
+                                )
+                            }
+                            if (v.due) {
+                                Text("due", color = palette.gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        HorizontalDivider(color = palette.rule)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A mastery token → a reader-facing label. */
+private fun masteryLabel(m: String): String = when (m) {
+    "new" -> "New"
+    "learning" -> "Learning"
+    "young" -> "Young"
+    "mature" -> "Mature"
+    else -> m.replaceFirstChar { it.uppercase() }
 }
 
 /** A plain, theme-aware full-screen frame: a ‹ back / title bar over [content].
@@ -537,18 +649,32 @@ private fun DrawScope.drawTopText(text: String, x: Float, top: Float, paint: Pai
 fun Modifier.zoomable(minScale: Float = 1f, maxScale: Float = 6f): Modifier = composed {
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
-    graphicsLayer {
-        scaleX = scale
-        scaleY = scale
-        translationX = offset.x
-        translationY = offset.y
-        // Clip the panned/zoomed drawing to the canvas bounds, so a dragged
-        // coverage/activity map can't paint over the frame's back bar above it.
-        clip = true
-    }.pointerInput(Unit) {
-        detectTransformGestures { _, pan, zoom, _ ->
-            scale = (scale * zoom).coerceIn(minScale, maxScale)
-            offset = if (scale <= 1f) Offset.Zero else offset + pan
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    onSizeChanged { size = it }
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+            translationX = offset.x
+            translationY = offset.y
+            // Clip the panned/zoomed drawing to the canvas bounds, so a dragged
+            // coverage/activity map can't paint over the frame's back bar above it.
+            clip = true
         }
-    }
+        .pointerInput(Unit) {
+            detectTransformGestures { _, pan, zoom, _ ->
+                val s = (scale * zoom).coerceIn(minScale, maxScale)
+                scale = s
+                // Bound the pan so the map can't be flung off-screen; pin at 1×.
+                offset = if (s <= 1f) {
+                    Offset.Zero
+                } else {
+                    val minX = size.width * (1f - s)
+                    val minY = size.height * (1f - s)
+                    Offset(
+                        (offset.x + pan.x).coerceIn(minX, 0f),
+                        (offset.y + pan.y).coerceIn(minY, 0f),
+                    )
+                }
+            }
+        }
 }

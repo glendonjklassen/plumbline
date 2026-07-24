@@ -1662,6 +1662,7 @@ fn persist_config(state: &Shared) {
             copy_style: prior.copy_style,
             side_margin: prior.side_margin,
             line_spacing: prior.line_spacing,
+            history: prior.history,
         }
     };
     let _ = config::save(&cfg);

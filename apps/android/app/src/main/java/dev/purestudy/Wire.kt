@@ -422,6 +422,8 @@ data class ConfigState(
     // Reader spacing: px margin either side of the text; line-height multiple.
     val sideMargin: Double = 28.0,
     val lineSpacing: Double = 1.35,
+    // Reading history, most-recent-first (capped by the core). Additive.
+    val history: List<PaneRef1> = emptyList(),
 )
 
 @Serializable

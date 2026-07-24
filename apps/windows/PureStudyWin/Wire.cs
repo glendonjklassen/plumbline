@@ -172,7 +172,8 @@ public sealed record ConfigState(
     // preference set on another shell. CopyStyle: "verse"|"verseRef"|"verseMarkdown".
     string CopyStyle = "verseRef",
     double SideMargin = 28.0,
-    double LineSpacing = 1.35);
+    double LineSpacing = 1.35,
+    List<PaneRef1>? History = null);
 public sealed record PaneRef1(string Book, ushort Chapter);
 
 // ── Tier 0: themes, personal notes, highlights ──────────────────────────────

@@ -84,10 +84,16 @@ pub struct Config {
     /// Reader line-height as a multiple of the text height (feature-manifest
     /// line_height; default 1.35).
     pub line_spacing: f64,
+    /// Reading history, most-recent-first, deduped by (book, chapter) and capped
+    /// at [`HISTORY_CAP`] — powers a "recently read" list + jump-back.
+    pub history: Vec<PaneRef>,
 }
 
 /// A verse copy-shape token accepted for [`Config::copy_style`].
 pub const COPY_STYLES: [&str; 3] = ["verse", "verseRef", "verseMarkdown"];
+
+/// The most reading-history entries kept (persisted + returned).
+pub const HISTORY_CAP: usize = 50;
 
 impl Default for Config {
     fn default() -> Config {
@@ -101,6 +107,7 @@ impl Default for Config {
             copy_style: "verseRef".to_string(),
             side_margin: 28.0,
             line_spacing: 1.35,
+            history: Vec::new(),
         }
     }
 }
@@ -128,6 +135,8 @@ struct ConfigWire {
     side_margin: f64,
     #[serde(default = "default_line_spacing")]
     line_spacing: f64,
+    #[serde(default)]
+    history: Vec<PaneWire>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -183,6 +192,12 @@ impl Config {
             copy_style: normalize_copy_style(&w.copy_style),
             side_margin: clamp_or(w.side_margin, 0.0, 160.0, Config::default().side_margin),
             line_spacing: clamp_or(w.line_spacing, 1.0, 3.0, Config::default().line_spacing),
+            history: w
+                .history
+                .into_iter()
+                .map(|p| PaneRef { book: p.book, chapter: p.chapter.max(1) })
+                .take(HISTORY_CAP)
+                .collect(),
         }
     }
 
@@ -197,6 +212,12 @@ impl Config {
             copy_style: self.copy_style.clone(),
             side_margin: self.side_margin,
             line_spacing: self.line_spacing,
+            history: self
+                .history
+                .iter()
+                .take(HISTORY_CAP)
+                .map(|p| PaneWire { book: p.book.clone(), chapter: p.chapter })
+                .collect(),
         }
     }
 }
@@ -302,6 +323,7 @@ mod tests {
             copy_style: "verseMarkdown".to_string(),
             side_margin: 40.0,
             line_spacing: 1.6,
+            history: vec![PaneRef { book: "Gen".into(), chapter: 1 }, PaneRef { book: "Rom".into(), chapter: 8 }],
         };
         save_to(&path, &cfg).unwrap();
 

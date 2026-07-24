@@ -27,6 +27,7 @@
 package dev.purestudy.ui
 
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -231,9 +232,14 @@ fun VerseActionSheet(
 
     fun memorize() {
         scope.launch {
-            withContext(Dispatchers.Default) {
-                runCatching { synchronized(engine) { engine.MemoryAdd(verseRef, Instant.now().toString()) } }
+            val err = withContext(Dispatchers.Default) {
+                runCatching { synchronized(engine) { engine.MemoryAdd(verseRef, Instant.now().toString()) } }.getOrNull()
             }
+            Toast.makeText(
+                context,
+                if (err.isNullOrBlank()) "Added “$display” to your memory list" else err,
+                Toast.LENGTH_SHORT,
+            ).show()
             hide()
         }
     }
