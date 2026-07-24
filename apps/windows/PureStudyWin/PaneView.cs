@@ -30,6 +30,12 @@ public sealed class PaneView : UserControl, IDisposable
         Background = new SolidColorBrush(Palette.Gold),
         Visibility = Visibility.Collapsed,
     };
+    private readonly StackPanel _nav = new()
+    {
+        Orientation = Orientation.Horizontal,
+        Spacing = 6,
+        Padding = new Thickness(6, 3, 6, 3),
+    };
 
     private List<TocBook> _books = new();
     private bool _guard;
@@ -41,29 +47,23 @@ public sealed class PaneView : UserControl, IDisposable
 
     public PaneView()
     {
-        var nav = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 6,
-            Padding = new Thickness(6, 3, 6, 3),
-            Background = new SolidColorBrush(Palette.PaneNavBg),
-        };
-        nav.Children.Add(_bookBox);
-        nav.Children.Add(_chapterBox);
-        nav.Children.Add(_prev);
-        nav.Children.Add(_next);
-        nav.Children.Add(_add);
-        nav.Children.Add(_close);
+        _nav.Background = new SolidColorBrush(Palette.PaneNavBg);
+        _nav.Children.Add(_bookBox);
+        _nav.Children.Add(_chapterBox);
+        _nav.Children.Add(_prev);
+        _nav.Children.Add(_next);
+        _nav.Children.Add(_add);
+        _nav.Children.Add(_close);
 
         var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         Grid.SetRow(_accent, 0);
-        Grid.SetRow(nav, 1);
+        Grid.SetRow(_nav, 1);
         Grid.SetRow(Reader, 2);
         root.Children.Add(_accent);
-        root.Children.Add(nav);
+        root.Children.Add(_nav);
         root.Children.Add(Reader);
         Content = root;
 
@@ -125,6 +125,13 @@ public sealed class PaneView : UserControl, IDisposable
         _accent.Visibility = active && paneCount > 1 ? Visibility.Visible : Visibility.Collapsed;
         _add.Visibility = paneCount < 3 ? Visibility.Visible : Visibility.Collapsed;
         _close.Visibility = paneCount > 1 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// Re-theme the pane chrome after a palette change (Tier 0 #5).
+    public void ApplyTheme()
+    {
+        _nav.Background = new SolidColorBrush(Palette.PaneNavBg);
+        _accent.Background = new SolidColorBrush(Palette.Gold);
     }
 
     public void Dispose() => Reader.Dispose();

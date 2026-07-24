@@ -1,0 +1,37 @@
+{
+  "format": "overlay-weave-v2",
+  "name": "The way of Cain",
+  "kind": "retelling",
+  "tokenization": "kjv1769-tok2",
+  "notes": "John and Jude both reach back to Cain; Jude adds Balaam, Korah, and Zechariah's rebuke.",
+  "notesSource": "generated",
+  "created": "2026-07-15T07:10:00Z",
+  "approved": false,
+  "links": [
+    {
+      "a": "Gen 4:8",
+      "b": "1John 3:12",
+      "label": "slew his brother"
+    },
+    {
+      "a": "Gen 4:8",
+      "b": "Jude 1:11",
+      "label": "the way of Cain"
+    },
+    {
+      "a": "Num 22:7",
+      "b": "Jude 1:11",
+      "label": "the error of Balaam"
+    },
+    {
+      "a": "Num 16:3",
+      "b": "Jude 1:11",
+      "label": "the gainsaying of Core"
+    },
+    {
+      "a": "Zech 3:2",
+      "b": "Jude 1:9",
+      "label": "The Lord rebuke thee"
+    }
+  ]
+}

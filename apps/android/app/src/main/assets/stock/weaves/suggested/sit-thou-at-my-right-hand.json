@@ -1,0 +1,32 @@
+{
+  "format": "overlay-weave-v2",
+  "name": "Sit thou at my right hand",
+  "kind": "quotation",
+  "tokenization": "kjv1769-tok2",
+  "notes": "Psalm 110:1 -- the most-quoted verse in the New Testament -- from the riddle to the Pharisees to Pentecost, Hebrews, and Colossians.",
+  "notesSource": "generated",
+  "created": "2026-07-15T07:10:00Z",
+  "approved": false,
+  "links": [
+    {
+      "a": "Ps 110:1",
+      "b": "Matt 22:44",
+      "label": "The LORD said unto my Lord"
+    },
+    {
+      "a": "Ps 110:1",
+      "b": "Acts 2:34",
+      "label": "Sit thou on my right hand"
+    },
+    {
+      "a": "Ps 110:1",
+      "b": "Heb 1:13",
+      "label": "until I make thine enemies thy footstool"
+    },
+    {
+      "a": "Ps 110:1",
+      "b": "Col 3:1",
+      "label": "where Christ sitteth on the right hand of God"
+    }
+  ]
+}

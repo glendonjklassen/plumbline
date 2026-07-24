@@ -1,0 +1,21 @@
+# Gradle / Android build outputs
+.gradle/
+build/
+app/build/
+
+# Cross-compiled native libraries (produced by `cargo ndk`, not committed)
+app/src/main/jniLibs/**/*.so
+
+# Bundled data pack (copied in by the syncData task from repo /data)
+app/src/main/assets/data/
+app/src/main/assets/bridge/
+
+# Local SDK / machine config
+local.properties
+
+# Android Studio / IDE
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/

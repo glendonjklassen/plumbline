@@ -138,6 +138,18 @@ pub fn book_ids() -> impl Iterator<Item = &'static str> {
     BOOKS.iter().map(|b| b.id)
 }
 
+/// The OSIS id `delta` books away from `id` in canon order (`delta` may be
+/// negative), or `None` past either end / for an unknown id. Used to roll
+/// chapter-stepping across book boundaries (Tier 0 #8).
+pub fn adjacent_book(id: &str, delta: i32) -> Option<&'static str> {
+    let i = book_order(id)? as i32 + delta;
+    if i < 0 || i as usize >= BOOKS.len() {
+        None
+    } else {
+        Some(BOOKS[i as usize].id)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Warm paper (#fcf9f4) — the shared reader background + adaptive-icon field. -->
+    <color name="ic_launcher_background">#fcf9f4</color>
+</resources>

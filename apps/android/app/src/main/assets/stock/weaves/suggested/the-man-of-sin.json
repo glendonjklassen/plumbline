@@ -1,0 +1,17 @@
+{
+  "format": "overlay-weave-v2",
+  "name": "The man of sin",
+  "kind": "prophecy",
+  "tokenization": "kjv1769-tok2",
+  "notes": "Paul's man of sin speaks with the voice of Daniel's self-exalting king.",
+  "notesSource": "generated",
+  "created": "2026-07-15T07:10:00Z",
+  "approved": false,
+  "links": [
+    {
+      "a": "Dan 11:36",
+      "b": "2Thess 2:4",
+      "label": "exalteth himself above all that is called God"
+    }
+  ]
+}

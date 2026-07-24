@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "C ABI surface for pure-study: consumed by UniFFI (Kotlin/Android) and csbindgen (C#/WinUI)."
+description = "C ABI surface for pure-study: consumed by JNA (Kotlin/Android) and csbindgen (C#/WinUI)."
 
 [lib]
 # A C-callable dynamic + static lib. `cdylib` for Android/.so and Windows/.dll;

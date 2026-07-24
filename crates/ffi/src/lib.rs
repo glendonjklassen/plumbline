@@ -51,11 +51,12 @@ use pure_core::crossref::{self, XRefIx};
 use pure_core::renderings::Renderings;
 use pure_core::search::{self, Notes, SearchIx};
 use pure_core::strongs::{self, OccurrenceIx, StrongsDict};
+use pure_core::memory;
 use pure_core::tag::{self, LoadedTag, TagTarget};
 use pure_core::thread::{self, LoadedThread, ThreadEntry};
 use pure_core::weave::{self, Link, LoadedWeave, WeaveKind};
 use pure_core::panel::{self, PanelSource};
-use pure_core::{canon, notes, VRef};
+use pure_core::{canon, export, notes, theme, usernote, VRef};
 use pure_layout::{layout_chapter, DisplayList, LayoutConfig, Measure};
 use pure_rnd::{bridge, burst, concept, embed, morph};
 
@@ -228,9 +229,12 @@ struct StudyData {
     threads: Vec<LoadedThread>,
     tags: Vec<LoadedTag>,
     weaves: Vec<LoadedWeave>,
+    /// The reader's personal per-verse notes (Tier 0 #3), keyed by verse.
+    user_notes: std::collections::HashMap<VRef, usernote::LoadedNote>,
 }
 
-/// Load notes + threads + tags + weaves from `home` (empty without one).
+/// Load notes + threads + tags + weaves + personal notes from `home` (empty
+/// without one).
 fn load_study(home: &Option<PathBuf>) -> StudyData {
     match home {
         Some(home) => StudyData {
@@ -239,6 +243,7 @@ fn load_study(home: &Option<PathBuf>) -> StudyData {
             threads: thread::load_threads(home).0,
             tags: tag::load_tags(home).0,
             weaves: weave::load_weaves(home).0,
+            user_notes: usernote::load_notes(home).0,
         },
         None => StudyData::default(),
     }
@@ -1712,6 +1717,28 @@ pub unsafe extern "C" fn pure_engine_concept_map_json(
             .stat(code)
             .map(|s| canon::BOOKS.iter().map(|b| s.by_book.get(b.id).copied().unwrap_or(0)).collect())
             .unwrap_or_else(|| vec![0; canon::BOOKS.len()]);
+        // Cross-testament bridge row: the strongest other-testament partners and
+        // their unioned dispersion (so Christ reveals where Messiah occurs).
+        let partners = e.bridge.partners(code);
+        let bridge = (!partners.is_empty()).then(|| {
+            let top: Vec<&bridge::Partner> =
+                partners.iter().take(concept::BRIDGE_ROW_PARTNERS).collect();
+            let union = ce.union_by_book(top.iter().map(|p| p.code.as_str()));
+            wire::WireConceptBridge {
+                partners: top
+                    .iter()
+                    .map(|p| wire::WireBridgeNode {
+                        label: concept_label(e, &p.code),
+                        code: p.code.clone(),
+                        prior: p.prior,
+                    })
+                    .collect(),
+                by_book: canon::BOOKS
+                    .iter()
+                    .map(|b| union.get(b.id).copied().unwrap_or(0))
+                    .collect(),
+            }
+        });
         out_json(&wire::WireConceptMap {
             center_label: concept_label(e, code),
             code: code.to_string(),
@@ -1719,6 +1746,7 @@ pub unsafe extern "C" fn pure_engine_concept_map_json(
             by_book,
             ot_nt_divide: pure_core::reference::OT_NT_DIVIDE,
             book_count: canon::BOOKS.len(),
+            bridge,
         })
     })
 }
@@ -1915,6 +1943,10 @@ impl PanelSource for PureEngine {
     fn verse_notes(&self, verse: &str) -> Vec<String> {
         let Some(v) = VRef::parse_ref_key(verse) else { return Vec::new() };
         self.study_read().notes.get(&v).cloned().unwrap_or_default()
+    }
+    fn user_note(&self, verse: &str) -> Option<String> {
+        let v = VRef::parse_ref_key(verse)?;
+        self.study_read().user_notes.get(&v).map(|ln| ln.note.text.clone())
     }
     fn threads(&self) -> Vec<panel::ThreadView> {
         self.study_read()
@@ -2442,6 +2474,668 @@ pub unsafe extern "C" fn pure_config_save_json(json: *const c_char) -> *mut c_ch
             Err(e) => out_string(e.to_string()),
         }
     })
+}
+
+// ── Tier 0: copy, personal notes, highlights, themes, warming, guide ──────────
+
+/// Clipboard text for a verse (or its chapter, for the `chapter*` kinds) in one
+/// of the shapes `pure_core::export::CopyKind` names (`verse` / `verseRef` /
+/// `verseMarkdown` / `chapter` / `chapterMarkdown`). Plain text, not JSON; null
+/// on a bad ref, an unknown kind, or a verse the corpus lacks. Caller-freed.
+///
+/// # Safety
+/// `engine` is a live engine; the string args are null or valid NUL-terminated
+/// UTF-8 for the call.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_copy_text(
+    engine: *const PureEngine,
+    ref_key: *const c_char,
+    kind: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(rk), Some(kind)) = (engine.as_ref(), opt_str(ref_key), opt_str(kind))
+        else {
+            return ptr::null_mut();
+        };
+        let (Some(vref), Some(kind)) = (VRef::parse_ref_key(rk), export::parse_kind(kind)) else {
+            return ptr::null_mut();
+        };
+        match export::copy_text(&e.corpus, &vref, kind) {
+            Some(s) => out_string(s),
+            None => ptr::null_mut(),
+        }
+    })
+}
+
+/// The reader's personal note on a verse as JSON (`{verse,display,text,created,
+/// updated}`), or null when the verse has no note (or the engine has no home).
+///
+/// # Safety
+/// `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_user_note_json(
+    engine: *const PureEngine,
+    ref_key: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(rk)) = (engine.as_ref(), opt_str(ref_key)) else {
+            return ptr::null_mut();
+        };
+        let Some(v) = VRef::parse_ref_key(rk) else { return ptr::null_mut() };
+        match e.study_read().user_notes.get(&v) {
+            Some(ln) => out_json(&wire::WireUserNote {
+                verse: v.ref_key(),
+                display: v.display(),
+                text: ln.note.text.clone(),
+                created: ln.note.created.clone(),
+                updated: ln.note.updated.clone(),
+            }),
+            None => ptr::null_mut(),
+        }
+    })
+}
+
+/// All the reader's personal notes as JSON (`{notes:[…]}`), in canonical reading
+/// order — for the gutter marks and a "your notes" browser. Never null on a live
+/// engine (no notes → empty list).
+///
+/// # Safety
+/// `engine` is a live engine (or null → null).
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_user_notes_json(engine: *const PureEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let Some(e) = engine.as_ref() else { return ptr::null_mut() };
+        let study = e.study_read();
+        let mut notes: Vec<&usernote::LoadedNote> = study.user_notes.values().collect();
+        notes.sort_by(|a, b| a.note.vref.reading_key().cmp(&b.note.vref.reading_key()));
+        let notes = notes
+            .into_iter()
+            .map(|ln| wire::WireUserNote {
+                verse: ln.note.vref.ref_key(),
+                display: ln.note.vref.display(),
+                text: ln.note.text.clone(),
+                created: ln.note.created.clone(),
+                updated: ln.note.updated.clone(),
+            })
+            .collect();
+        out_json(&wire::WireUserNotes { notes })
+    })
+}
+
+/// Set (or clear, with an empty `text`) the reader's personal note on a verse,
+/// atomically, then reload. `stamp` is a caller-supplied UTC timestamp. Null on
+/// success, else an owned error string.
+///
+/// # Safety
+/// `engine` is a live engine; the string args are null or valid NUL-terminated
+/// UTF-8 for the call.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_user_note_set(
+    engine: *mut PureEngine,
+    ref_key: *const c_char,
+    text: *const c_char,
+    stamp: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string(
+                "engine has no home directory (opened from bytes); cannot author".to_string(),
+            );
+        };
+        let (Some(rk), Some(text), Some(stamp)) = (opt_str(ref_key), opt_str(text), opt_str(stamp))
+        else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let Some(v) = VRef::parse_ref_key(rk) else {
+            return out_string(format!("bad ref: {rk}"));
+        };
+        let mut study = engine.study_write();
+        match usernote::set_note(&home, &v, text, stamp) {
+            Ok(_) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Set (or clear, with a null `color`) the swatch colour of the tag named
+/// `name`, then reload. Drives highlighting (a colour-bearing tag washes its
+/// verses). Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is a live engine; the string args are null or valid NUL-terminated
+/// UTF-8 for the call.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_tag_set_color(
+    engine: *mut PureEngine,
+    name: *const c_char,
+    color: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        if engine.home.is_none() {
+            return out_string(
+                "engine has no home directory (opened from bytes); cannot author".to_string(),
+            );
+        }
+        let Some(name) = opt_str(name) else {
+            return out_string("null or invalid name".to_string());
+        };
+        let mut study = engine.study_write();
+        match tag::set_color(&study.tags, name, opt_str(color)) {
+            Ok(()) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Add a word-precise highlight range to the tag named `name` (created on first
+/// use, taking `color` as its tone). The range runs from `start_ref`+`start_tok`
+/// to `end_ref`+`end_tok` (inclusive token indices under `kjv1769-tok2`);
+/// endpoints are ordered canonically here, so a backwards drag is fine. `color`
+/// may be null (the range then inherits the tag's colour). `added` is a
+/// caller-supplied UTC timestamp. Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_highlight_add(
+    engine: *mut PureEngine,
+    name: *const c_char,
+    color: *const c_char,
+    start_ref: *const c_char,
+    start_tok: u32,
+    end_ref: *const c_char,
+    end_tok: u32,
+    added: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        };
+        let (Some(name), Some(sr), Some(er), Some(added)) =
+            (opt_str(name), opt_str(start_ref), opt_str(end_ref), opt_str(added))
+        else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let (Some(sv), Some(ev)) = (VRef::parse_ref_key(sr), VRef::parse_ref_key(er)) else {
+            return out_string("bad ref".to_string());
+        };
+        let (st, et) = (start_tok.min(u16::MAX as u32) as u16, end_tok.min(u16::MAX as u32) as u16);
+        // Canonicalize so start ≤ end (a drag can go either direction).
+        let ((sv, st), (ev, et)) = if (sv.reading_key(), st) <= (ev.reading_key(), et) {
+            ((sv, st), (ev, et))
+        } else {
+            ((ev, et), (sv, st))
+        };
+        let range = tag::HighlightRange {
+            start: sv,
+            start_tok: st,
+            end: ev,
+            end_tok: et,
+            color: opt_str(color).map(str::to_string),
+            note: None,
+            added: added.to_string(),
+        };
+        let mut study = engine.study_write();
+        match tag::add_highlight(&home, &study.tags, name, canon::TOKENIZATION_VERSION, range, added) {
+            Ok(_) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Remove the highlight range with these endpoints from the tag named `name`.
+/// Endpoints are ordered canonically to match how they were stored. A missing
+/// range is a no-op; a missing tag is an error. Null on success, else an error.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_highlight_remove(
+    engine: *mut PureEngine,
+    name: *const c_char,
+    start_ref: *const c_char,
+    start_tok: u32,
+    end_ref: *const c_char,
+    end_tok: u32,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let (Some(name), Some(sr), Some(er)) =
+            (opt_str(name), opt_str(start_ref), opt_str(end_ref))
+        else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let (Some(sv), Some(ev)) = (VRef::parse_ref_key(sr), VRef::parse_ref_key(er)) else {
+            return out_string("bad ref".to_string());
+        };
+        let (st, et) = (start_tok.min(u16::MAX as u32) as u16, end_tok.min(u16::MAX as u32) as u16);
+        let ((sv, st), (ev, et)) = if (sv.reading_key(), st) <= (ev.reading_key(), et) {
+            ((sv, st), (ev, et))
+        } else {
+            ((ev, et), (sv, st))
+        };
+        let range = tag::HighlightRange {
+            start: sv,
+            start_tok: st,
+            end: ev,
+            end_tok: et,
+            color: None,
+            note: None,
+            added: String::new(),
+        };
+        let wanted = name.trim().to_lowercase();
+        let mut study = engine.study_write();
+        let found = study.tags.iter().find(|lt| lt.tag.name.to_lowercase() == wanted).cloned();
+        match found {
+            Some(lt) => match tag::remove_highlight(&lt, &range) {
+                Ok(()) => {
+                    *study = load_study(&engine.home);
+                    ptr::null_mut()
+                }
+                Err(e) => out_string(e.to_string()),
+            },
+            None => out_string(format!("no tag named {name}")),
+        }
+    })
+}
+
+/// Drop every highlight range covering `verse_ref` from all tags, then reload —
+/// the drag-remove path (a whole range goes even if only one of its verses was
+/// targeted). Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is valid; `verse_ref` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_highlight_clear_verse(
+    engine: *mut PureEngine,
+    verse_ref: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(vr) = opt_str(verse_ref).and_then(VRef::parse_ref_key) else {
+            return out_string("bad ref".to_string());
+        };
+        let rk = vr.reading_key();
+        let covers = |h: &tag::HighlightRange| h.start.reading_key() <= rk && rk <= h.end.reading_key();
+        let mut study = engine.study_write();
+        let affected: Vec<_> = study
+            .tags
+            .iter()
+            .filter(|lt| lt.tag.highlights.iter().any(covers))
+            .cloned()
+            .collect();
+        for lt in &affected {
+            let mut t = lt.tag.clone();
+            t.highlights.retain(|h| !covers(h));
+            if let Err(e) = tag::write_tag(&lt.file, &t) {
+                return out_string(e.to_string());
+            }
+        }
+        if !affected.is_empty() {
+            *study = load_study(&engine.home);
+        }
+        ptr::null_mut()
+    })
+}
+
+/// The highlight washes for a chapter as JSON (`{book,chapter,verses:[{verse,
+/// color}]}`): each verse that belongs to a colour-bearing tag, with the tone
+/// the shell washes behind it. Never null on a live engine (none → empty list).
+///
+/// # Safety
+/// `engine` is a live engine; `book` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_chapter_highlights_json(
+    engine: *const PureEngine,
+    book: *const c_char,
+    chapter: u32,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(book)) = (engine.as_ref(), opt_str(book)) else {
+            return ptr::null_mut();
+        };
+        let Ok(chapter) = u16::try_from(chapter) else { return ptr::null_mut() };
+        let study = e.study_read();
+        let chapter_verses = e.corpus.chapter_verses(book, chapter);
+        let verses = chapter_verses
+            .iter()
+            .filter_map(|v| {
+                let vref = v.vref();
+                tag::verse_color(&study.tags, &vref)
+                    .map(|c| wire::WireVerseHighlight { verse: vref.ref_key(), color: c.to_string() })
+            })
+            .collect();
+        // Word-precise cross-verse ranges → per-verse [lo,hi] runs (Tier 0 #4).
+        let mut runs = Vec::new();
+        for v in chapter_verses {
+            let vref = v.vref();
+            let len = u16::try_from(v.tokens.len()).unwrap_or(u16::MAX);
+            for r in tag::verse_highlight_runs(&study.tags, &vref, len) {
+                runs.push(wire::WireHighlightRun {
+                    verse: vref.ref_key(),
+                    lo: r.lo,
+                    hi: r.hi,
+                    color: r.color,
+                });
+            }
+        }
+        out_json(&wire::WireChapterHighlights { book: book.to_string(), chapter, verses, runs })
+    })
+}
+
+/// The colour palette for a theme (`light`/`dark`/`night`; unknown → light) as
+/// JSON — every semantic role as a `#rrggbb` hex. Engine-independent. Never null.
+///
+/// # Safety
+/// `theme` is null or valid NUL-terminated UTF-8 for the call.
+#[no_mangle]
+pub unsafe extern "C" fn pure_theme_palette_json(theme: *const c_char) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let t = opt_str(theme).and_then(theme::Theme::parse).unwrap_or(theme::Theme::Light);
+        out_json(&theme::palette(t))
+    })
+}
+
+/// The fixed highlight tones (`{tones:[{name,hex}]}`) — the shell's swatch menu.
+/// Engine-independent. Never null.
+#[no_mangle]
+pub extern "C" fn pure_theme_highlight_tones_json() -> *mut c_char {
+    guard(ptr::null_mut(), || out_json(&wire::highlight_tones_to_wire()))
+}
+
+/// Force the lazy analytics indexes (concept engine, leitwort scan, SIF verse
+/// similarity) to build now — call once on a background thread at startup in
+/// Full mode so the first study click doesn't stall. Safe to call from any
+/// thread (the builds are `OnceLock`-guarded) and idempotent. Null on success,
+/// else an owned error.
+///
+/// # Safety
+/// `engine` is a live engine (or null → an error string).
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_warm_indexes(engine: *const PureEngine) -> *mut c_char {
+    guard_err(|| {
+        let Some(e) = engine.as_ref() else {
+            return out_string("null engine".to_string());
+        };
+        e.concept();
+        e.leitwort();
+        e.verse_sim();
+        ptr::null_mut()
+    })
+}
+
+// ── memorization (Tier 2 #15): SRS cards, drills, coverage + activity ─────────
+
+/// Grade the verse `verse_ref` at `now` (RFC3339 UTC), creating its SRS card on
+/// first review; SM-2 reschedules and appends to the review log. `grade` is one
+/// of `again` / `hard` / `good` / `easy`. Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_grade(
+    engine: *mut PureEngine,
+    verse_ref: *const c_char,
+    grade: *const c_char,
+    now: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        };
+        let (Some(vr), Some(grade_s), Some(now)) = (opt_str(verse_ref), opt_str(grade), opt_str(now)) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let Some(vref) = VRef::parse_ref_key(vr) else {
+            return out_string("bad ref".to_string());
+        };
+        let Some(g) = memory::Grade::parse(grade_s) else {
+            return out_string(format!("unknown grade: {grade_s}"));
+        };
+        let (cards, _) = memory::load_cards(&home);
+        match memory::grade_verse(&home, &cards, &vref, canon::TOKENIZATION_VERSION, g, now) {
+            Ok(_) => ptr::null_mut(),
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Start memorizing `verse_ref` — seed its SRS card (due now) if it isn't
+/// already one; no review is logged. `now` is a caller-supplied UTC timestamp.
+/// Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_add(
+    engine: *mut PureEngine,
+    verse_ref: *const c_char,
+    now: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory; cannot author".to_string());
+        };
+        let (Some(vr), Some(now)) = (opt_str(verse_ref), opt_str(now)) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let Some(vref) = VRef::parse_ref_key(vr) else {
+            return out_string("bad ref".to_string());
+        };
+        let (cards, _) = memory::load_cards(&home);
+        if cards.contains_key(&vref) {
+            return ptr::null_mut();
+        }
+        let card = memory::Card::new(vref, canon::TOKENIZATION_VERSION, now);
+        match memory::write_card(&home, &card) {
+            Ok(()) => ptr::null_mut(),
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Stop memorizing `verse_ref` (remove its card); a missing card is a no-op.
+/// Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is valid; `verse_ref` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_remove(
+    engine: *mut PureEngine,
+    verse_ref: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory; cannot author".to_string());
+        };
+        let Some(vref) = opt_str(verse_ref).and_then(VRef::parse_ref_key) else {
+            return out_string("bad ref".to_string());
+        };
+        match memory::remove_card(&home, &vref) {
+            Ok(()) => ptr::null_mut(),
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// The verse's SRS card as JSON (schedule + mastery + review log), or null if
+/// the verse isn't being memorized (or the engine has no home).
+///
+/// # Safety
+/// `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_card_json(
+    engine: *const PureEngine,
+    verse_ref: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(vref)) =
+            (engine.as_ref(), opt_str(verse_ref).and_then(VRef::parse_ref_key))
+        else {
+            return ptr::null_mut();
+        };
+        let Some(home) = e.home.as_ref() else { return ptr::null_mut() };
+        let (cards, _) = memory::load_cards(home);
+        match cards.get(&vref) {
+            Some(c) => out_json(&wire::memory_card_to_wire(c)),
+            None => ptr::null_mut(),
+        }
+    })
+}
+
+/// Verses due for review at `now` (RFC3339), reading order — the study queue, as
+/// `{refs:[...]}`. Never null on a live engine (empty when nothing is due).
+///
+/// # Safety
+/// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_due_json(
+    engine: *const PureEngine,
+    now: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(now)) = (engine.as_ref(), opt_str(now)) else {
+            return ptr::null_mut();
+        };
+        let cards = e.home.as_ref().map(|h| memory::load_cards(h).0).unwrap_or_default();
+        let refs = memory::due_queue(&cards, now).iter().map(VRef::ref_key).collect();
+        out_json(&wire::WireMemoryDue { refs })
+    })
+}
+
+/// The coverage-map data at `now`: per-verse standing (mastery + recency) plus
+/// the 8-section rollup, as `{verses:[...],sections:[...]}`.
+///
+/// # Safety
+/// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_coverage_json(
+    engine: *const PureEngine,
+    now: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(now)) = (engine.as_ref(), opt_str(now)) else {
+            return ptr::null_mut();
+        };
+        let cards = e.home.as_ref().map(|h| memory::load_cards(h).0).unwrap_or_default();
+        out_json(&wire::WireMemoryCoverage {
+            verses: memory::coverage(&cards, now),
+            sections: memory::coverage_by_section(&cards),
+        })
+    })
+}
+
+/// The activity heatmap as `{days:[{day,reviews}]}` — reviews per calendar day,
+/// oldest first, from every card's review log. Never null on a live engine.
+///
+/// # Safety
+/// `engine` is a live engine (or null → null).
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_activity_json(engine: *const PureEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let Some(e) = engine.as_ref() else { return ptr::null_mut() };
+        let cards = e.home.as_ref().map(|h| memory::load_cards(h).0).unwrap_or_default();
+        out_json(&wire::WireMemoryActivity { days: memory::activity_by_day(&cards) })
+    })
+}
+
+/// A drill prompt for `verse_ref` at blank-out `level` (0 = full text … max):
+/// the verse text, its first-letter skeleton, and the blanked form. Null if the
+/// verse isn't found.
+///
+/// # Safety
+/// `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_drill_json(
+    engine: *const PureEngine,
+    verse_ref: *const c_char,
+    level: u32,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(vref)) =
+            (engine.as_ref(), opt_str(verse_ref).and_then(VRef::parse_ref_key))
+        else {
+            return ptr::null_mut();
+        };
+        let Some(v) = e.corpus.verse(&vref) else { return ptr::null_mut() };
+        let text = v.body();
+        let level = level.min(u8::MAX as u32) as u8;
+        out_json(&wire::WireMemoryDrill {
+            reference: vref.ref_key(),
+            first_letters: memory::first_letters(&text),
+            blanked: memory::blank_out(&text, level),
+            text,
+            level,
+            max_level: memory::MAX_BLANK_LEVEL,
+        })
+    })
+}
+
+/// Score a typed recall of `verse_ref` against the verse text — `{accuracy,
+/// words:[{word,ok}]}`, LCS-aligned. Null if the verse isn't found.
+///
+/// # Safety
+/// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_memory_score_json(
+    engine: *const PureEngine,
+    verse_ref: *const c_char,
+    typed: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(vref), Some(typed)) =
+            (engine.as_ref(), opt_str(verse_ref).and_then(VRef::parse_ref_key), opt_str(typed))
+        else {
+            return ptr::null_mut();
+        };
+        let Some(v) = e.corpus.verse(&vref) else { return ptr::null_mut() };
+        out_json(&memory::score_recall(typed, &v.body()))
+    })
+}
+
+/// The in-app guide as panel blocks. Engine-independent (static content). Never
+/// null.
+#[no_mangle]
+pub extern "C" fn pure_panel_guide_blocks_json() -> *mut c_char {
+    guard(ptr::null_mut(), || out_json(&wire::blocks_to_wire(panel::guide_blocks())))
+}
+
+/// The About card as panel blocks. Engine-independent (static content). Never
+/// null.
+#[no_mangle]
+pub extern "C" fn pure_panel_about_blocks_json() -> *mut c_char {
+    guard(ptr::null_mut(), || out_json(&wire::blocks_to_wire(panel::about_blocks())))
 }
 
 /// Parse a `(kind, value)` pair into a [`TagTarget`].

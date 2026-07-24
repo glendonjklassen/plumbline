@@ -29,6 +29,7 @@ struct Fake {
     similar: HashMap<String, (Vec<SimilarView>, Vec<SimilarView>)>,
     verse_tags: HashMap<String, Vec<(usize, String)>>,
     notes: HashMap<String, Vec<String>>,
+    user_notes: HashMap<String, String>,
     threads: Vec<ThreadView>,
     tags: Vec<TagView>,
     weaves: Vec<WeaveView>,
@@ -99,6 +100,9 @@ impl PanelSource for Fake {
     }
     fn verse_notes(&self, verse: &str) -> Vec<String> {
         self.notes.get(verse).cloned().unwrap_or_default()
+    }
+    fn user_note(&self, verse: &str) -> Option<String> {
+        self.user_notes.get(verse).cloned()
     }
     fn threads(&self) -> Vec<ThreadView> {
         self.threads.clone()
@@ -217,6 +221,11 @@ fn parse_link_round_trips_the_producer_uris() {
         parse_link("editentrynote:2:4"),
         Some(PanelLink::EditEntryNote { thread: 2, entry: 4 })
     );
+
+    // Personal note + help verbs.
+    assert_eq!(parse_link("editnote:John 3:16"), Some(PanelLink::EditNote { refkey: "John 3:16".into() }));
+    assert_eq!(parse_link("guide"), Some(PanelLink::Guide));
+    assert_eq!(parse_link("about"), Some(PanelLink::About));
 
     // Unknown verb / malformed payload → None (the shell ignores the click).
     assert_eq!(parse_link("bogus:x"), None);
@@ -569,5 +578,38 @@ fn search_goto_vs_hits_with_snippet() {
     assert!(snip.iter().any(|r| r.text == "loved" && r.bold));
     // capped → an "N more" tail (2 total − 1 shown).
     assert!(blocks.iter().any(|b| text_of(b) == "… 1 more"));
+}
+
+#[test]
+fn word_study_shows_personal_note_and_edit_link_in_both_modes() {
+    let mut f = Fake::default();
+    f.displays.insert("John 3:16".into(), "John 3:16".into());
+    f.words.insert(("John 3:16".into(), 1), "God".into());
+    f.entries.insert("G2316".into(), StrongsView { lemma: Some("θεός".into()), ..Default::default() });
+    f.user_notes.insert("John 3:16".into(), "the whole gospel in one verse".into());
+
+    // Simple mode still surfaces the personal note + an edit link.
+    let sb = word_study(&f, false, "John 3:16", 1, &["G2316".to_string()]);
+    assert!(uris(&sb).contains(&"editnote:John 3:16".to_string()));
+    assert!(sb.iter().any(|b| text_of(b) == "the whole gospel in one verse"));
+    assert!(sb.iter().any(|b| text_of(b).contains("✎ edit")));
+
+    // With no note, the link says "add".
+    let mut g = Fake::default();
+    g.displays.insert("John 3:16".into(), "John 3:16".into());
+    g.words.insert(("John 3:16".into(), 1), "God".into());
+    g.entries.insert("G2316".into(), StrongsView::default());
+    let gb = word_study(&g, false, "John 3:16", 1, &["G2316".to_string()]);
+    assert!(gb.iter().any(|b| text_of(b).contains("✎ add")));
+}
+
+#[test]
+fn guide_and_about_render_and_cross_link() {
+    let guide = guide_blocks();
+    assert!(guide.iter().any(|b| text_of(b).contains("Using pure-study")));
+    assert!(uris(&guide).contains(&"about".to_string()));
+    let about = about_blocks();
+    assert!(about.iter().any(|b| text_of(b).contains("covenant") || text_of(b).contains("COVENANT")));
+    assert!(uris(&about).contains(&"guide".to_string()));
 }
 

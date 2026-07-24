@@ -12,8 +12,10 @@ use serde::{Deserialize, Serialize};
 
 use pure_core::config::{Config, PaneRef, StudyMode};
 use pure_core::panel::{Block, Color, PanelLink, Run};
+use pure_core::theme::ThemeChoice;
 use pure_core::corpus::{Corpus, Token, Verse};
 use pure_core::crossref::CrossRef;
+use pure_core::memory;
 use pure_core::reference::VRef;
 use pure_core::search::{SearchAnswer, SearchHit};
 use pure_core::strongs::StrongsEntry;
@@ -1038,6 +1040,13 @@ pub struct WireConceptMap {
     pub by_book: Vec<u32>,
     pub ot_nt_divide: usize,
     pub book_count: usize,
+    /// The cross-testament **bridge row**: the strongest other-testament
+    /// equivalents of `code` and their unioned dispersion. Absent when the code
+    /// has no cross-testament partner. This is what makes viewing *Christ*
+    /// (Greek) light up where *Messiah* (Hebrew) occurs — the OT half of the
+    /// strip fills in even though `by_book` (this code) is NT-only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bridge: Option<WireConceptBridge>,
 }
 
 /// One spoke of the concept map: a neighbour code, its pre-baked label, and
@@ -1049,6 +1058,30 @@ pub struct WireConceptSpoke {
     pub code: String,
     pub label: String,
     pub semantic: bool,
+}
+
+/// The dispersion strip's cross-testament overlay (see [`WireConceptMap::bridge`]):
+/// the other-testament partner lemmas plus their unioned per-book dispersion,
+/// rendered as a second row beneath the concept's own.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireConceptBridge {
+    /// The other-testament partners, strongest-first. `label` is the English
+    /// gloss over lemma, exactly like the centre and spoke labels.
+    pub partners: Vec<WireBridgeNode>,
+    /// The partners' unioned per-book dispersion in **canon order**
+    /// (length = `book_count`) — so the shell paints it exactly like `by_book`.
+    pub by_book: Vec<u32>,
+}
+
+/// One cross-testament partner node in a [`WireConceptBridge`].
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireBridgeNode {
+    pub code: String,
+    pub label: String,
+    /// The fused trust prior of the strongest witness tying this partner (0–1).
+    pub prior: f32,
 }
 
 // ── study-panel content model (the typed block list) ──────────────────────────
@@ -1139,6 +1172,12 @@ pub enum WirePanelLink {
     EditThreadNotes { index: usize },
     EditWeaveNotes { index: usize },
     EditEntryNote { thread: usize, entry: usize },
+    EditNote {
+        #[serde(rename = "refKey")]
+        ref_key: String,
+    },
+    Guide,
+    About,
 }
 
 pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
@@ -1159,6 +1198,9 @@ pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
         PanelLink::EditThreadNotes { index } => WirePanelLink::EditThreadNotes { index },
         PanelLink::EditWeaveNotes { index } => WirePanelLink::EditWeaveNotes { index },
         PanelLink::EditEntryNote { thread, entry } => WirePanelLink::EditEntryNote { thread, entry },
+        PanelLink::EditNote { refkey } => WirePanelLink::EditNote { ref_key: refkey },
+        PanelLink::Guide => WirePanelLink::Guide,
+        PanelLink::About => WirePanelLink::About,
     }
 }
 
@@ -1199,6 +1241,9 @@ pub struct WireConfigState {
     /// Verse-per-line reading mode.
     #[serde(default)]
     pub verse_per_line: bool,
+    /// Colour theme choice (`system`/`light`/`dark`/`night`).
+    #[serde(default)]
+    pub theme: String,
     /// Load-only: true when no config file existed yet (guided first run).
     #[serde(default)]
     pub first_run: bool,
@@ -1223,6 +1268,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
             .collect(),
         active_pane: cfg.active,
         verse_per_line: cfg.verse_per_line,
+        theme: cfg.theme.token().to_string(),
         first_run,
     }
 }
@@ -1238,6 +1284,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
             .collect(),
         active: w.active_pane,
         verse_per_line: w.verse_per_line,
+        theme: ThemeChoice::parse(&w.theme).unwrap_or_default(),
     }
 }
 
@@ -1262,4 +1309,144 @@ pub fn search_to_wire(a: &SearchAnswer) -> WireSearch {
             hits: hits.iter().map(search_hit_to_wire).collect(),
         },
     }
+}
+
+// ── personal notes (Tier 0 #3) ─────────────────────────────────────────────────
+
+/// One personal note on a verse.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireUserNote {
+    pub verse: String,
+    pub display: String,
+    pub text: String,
+    pub created: String,
+    pub updated: String,
+}
+
+/// All the reader's personal notes (for the gutter marks + a browser).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireUserNotes {
+    pub notes: Vec<WireUserNote>,
+}
+
+// ── highlight washes (Tier 0 #4) ───────────────────────────────────────────────
+
+/// The highlight colour for one verse in a chapter (member of a colour-bearing
+/// tag). `color` is a `#rrggbb` tone the shell washes behind the verse.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireVerseHighlight {
+    pub verse: String,
+    pub color: String,
+}
+
+/// One word-precise wash run within a verse: inclusive token indices `[lo, hi]`
+/// plus the tone. Additive companion to the whole-verse `verses` list, carrying
+/// cross-verse drag highlights (Tier 0 #4). A range's interior verses arrive as
+/// a full run (`lo` 0 … last token); its first/last as partial runs.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireHighlightRun {
+    pub verse: String,
+    pub lo: u16,
+    pub hi: u16,
+    pub color: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireChapterHighlights {
+    pub book: String,
+    pub chapter: u16,
+    pub verses: Vec<WireVerseHighlight>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub runs: Vec<WireHighlightRun>,
+}
+
+/// One selectable highlight tone (`name`, `#rrggbb`) — the shell's swatch menu.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireHighlightTone {
+    pub name: &'static str,
+    pub hex: &'static str,
+}
+
+#[derive(Serialize)]
+pub struct WireHighlightTones {
+    pub tones: Vec<WireHighlightTone>,
+}
+
+pub fn highlight_tones_to_wire() -> WireHighlightTones {
+    WireHighlightTones {
+        tones: pure_core::theme::HIGHLIGHT_TONES
+            .iter()
+            .map(|&(name, hex)| WireHighlightTone { name, hex })
+            .collect(),
+    }
+}
+
+// ── memorization (Tier 2 #15) — SRS cards, coverage/activity, drills ─────────
+
+/// A verse's SRS card: SM-2 schedule, mastery bucket, and full review log.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireMemoryCard {
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub ease: f32,
+    pub interval_days: u32,
+    pub reps: u32,
+    pub lapses: u32,
+    pub due: String,
+    pub mastery: memory::Mastery,
+    pub reviews: Vec<memory::Review>,
+}
+
+/// Build the wire card from a core card (folds in the derived mastery bucket).
+pub fn memory_card_to_wire(c: &memory::Card) -> WireMemoryCard {
+    WireMemoryCard {
+        reference: c.verse.ref_key(),
+        ease: c.ease,
+        interval_days: c.interval_days,
+        reps: c.reps,
+        lapses: c.lapses,
+        due: c.due.clone(),
+        mastery: memory::mastery(c),
+        reviews: c.reviews.clone(),
+    }
+}
+
+/// The study queue: verses due for review now, in reading order.
+#[derive(Serialize)]
+pub struct WireMemoryDue {
+    pub refs: Vec<String>,
+}
+
+/// The coverage-map data: per-verse standing plus the 8-section rollup.
+#[derive(Serialize)]
+pub struct WireMemoryCoverage {
+    pub verses: Vec<memory::VerseCoverage>,
+    pub sections: Vec<memory::SectionCoverage>,
+}
+
+/// The activity heatmap: reviews per calendar day, oldest first.
+#[derive(Serialize)]
+pub struct WireMemoryActivity {
+    pub days: Vec<memory::DayActivity>,
+}
+
+/// A drill prompt for a verse at a blank-out level: the plain text, its
+/// first-letter skeleton, and the progressively-blanked form.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireMemoryDrill {
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub text: String,
+    pub first_letters: String,
+    pub blanked: String,
+    pub level: u8,
+    pub max_level: u8,
 }

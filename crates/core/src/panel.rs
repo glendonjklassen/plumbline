@@ -370,6 +370,8 @@ pub trait PanelSource {
     /// The tags holding a verse, as `(tag index, name)`.
     fn verse_tags(&self, verse: &str) -> Vec<(usize, String)>;
     fn verse_notes(&self, verse: &str) -> Vec<String>;
+    /// The reader's own personal note on a verse (Tier 0 #3), if any.
+    fn user_note(&self, verse: &str) -> Option<String>;
 
     fn threads(&self) -> Vec<ThreadView>;
     fn tags(&self) -> Vec<TagView>;
@@ -427,6 +429,11 @@ pub enum PanelLink {
     EditWeaveNotes { index: usize },
     /// `editentrynote:T:E` — prompt, then set thread T's entry E note.
     EditEntryNote { thread: usize, entry: usize },
+    /// `editnote:REF` — prompt, then set the reader's personal note on REF.
+    EditNote { refkey: String },
+    /// `guide` / `about` — open the in-app guide / about card in the panel.
+    Guide,
+    About,
 }
 
 /// Parse a panel `uri` into a typed [`PanelLink`]; `None` for an unknown verb or
@@ -475,6 +482,9 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
             let (t, e) = rest.split_once(':')?;
             PanelLink::EditEntryNote { thread: t.parse().ok()?, entry: e.parse().ok()? }
         }
+        "editnote" => PanelLink::EditNote { refkey: rest.to_string() },
+        "guide" => PanelLink::Guide,
+        "about" => PanelLink::About,
         _ => return None,
     })
 }
@@ -794,6 +804,29 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, full: bool, out: &mut Vec<Bl
         ]));
         for n in &notes {
             out.push(Block::para(vec![Run::new(n, sz::NOTE, Color::Faded)]));
+        }
+    }
+
+    // Your own note — a daily-driver feature, so it shows in both modes (not
+    // gated on Full study like weave/thread authoring). The edit link prompts.
+    let mine = src.user_note(verse);
+    out.push(Block::Para {
+        runs: vec![
+            Run::new("your note", sz::LABEL, Color::Ink).bold(),
+            Run::new("   ", sz::LABEL, Color::Ink),
+            Run::new(
+                if mine.as_deref().is_some_and(|t| !t.is_empty()) { "✎ edit" } else { "✎ add" },
+                sz::CAPTION,
+                Color::Gold,
+            )
+            .link(format!("editnote:{verse}")),
+        ],
+        indent: false,
+        top_gap: true,
+    });
+    if let Some(text) = mine {
+        if !text.is_empty() {
+            out.push(Block::para(vec![Run::new(text, sz::NOTE, Color::Ink)]));
         }
     }
 }
@@ -1163,6 +1196,115 @@ fn snippet(src: &dyn PanelSource, refkey: &str, query: &str) -> Option<Block> {
         runs.push(Run::new("…", sz::CAPTION, Color::Faded));
     }
     Some(Block::Para { runs, indent: true, top_gap: false })
+}
+
+// ── in-app guide + about (Tier 0 #7) ──────────────────────────────────────────
+//
+// Static content, produced as blocks so both shells render it with the same
+// per-block renderer they already have (no shell-side guide layout). The header
+// Help affordance opens `guide`; the `?`/F1 shortcuts overlay is shell-native
+// (keybindings differ per shell), but the guide and about card are shared here.
+
+/// A guide section heading + its body paragraphs.
+fn guide_section(out: &mut Vec<Block>, title: &str, paras: &[&str]) {
+    out.push(Block::section(title));
+    for p in paras {
+        out.push(Block::para(vec![Run::new(*p, sz::BODY, Color::Ink)]));
+    }
+}
+
+/// The in-app guide: a concise tour of the reader. (The full manual lives in
+/// docs/GUIDE.md; this is the on-screen version.)
+pub fn guide_blocks() -> Vec<Block> {
+    let mut out = vec![Block::para(vec![Run::new("Using pure-study", sz::TITLE, Color::Ink).bold()])];
+    guide_section(
+        &mut out,
+        "GETTING AROUND",
+        &[
+            "One to three reading panes sit side by side; the ＋ / ✕ in the pane strip add and remove them. Each pane has its own book and chapter and scrolls on its own.",
+            "The active pane (gold top border — click a pane to activate it) is where searches and jumps land. Hold Shift while scrolling to lock every pane together.",
+            "Left / Right (or [ / ]) step chapters and roll across book boundaries. Alt+Left / Alt+Right (and the mouse back/forward buttons) walk your reading history.",
+        ],
+    );
+    guide_section(
+        &mut out,
+        "SEARCH",
+        &[
+            "Type a word, a phrase, or a reference. A reference (John 3:16, 1 Cor 13, psalms) jumps there; a word or phrase lists ranked hits — every hit in the open chapter is banded as you read.",
+            "A bare Strong's code (H430, G26) lists every verse tagged with it.",
+        ],
+    );
+    guide_section(
+        &mut out,
+        "THE STUDY PANEL",
+        &[
+            "Ctrl+click (or double-click) a word for its Strong's entry, its renderings across the KJV, cross-references, and — in Full study — the analytics tiers and the concept map.",
+            "Full study adds weave authoring, threads, tags, and the R&D tiers; Simple is a clean reader. The header button flips between them any time.",
+        ],
+    );
+    guide_section(
+        &mut out,
+        "WEAVES, THREADS, TAGS",
+        &[
+            "A weave ties parallel passages together; point two panes at linked passages and the connector lines draw themselves. The Map and Constellation show the whole library.",
+            "Threads are ordered trails of passages; tags are labelled sets of verses and concepts. Give a tag a colour and its verses get a highlight wash — the tags browser doubles as your highlight browser.",
+        ],
+    );
+    guide_section(
+        &mut out,
+        "NOTES, COPY, THEMES",
+        &[
+            "Right-click a verse to copy it (plain, with a reference, or as markdown), copy the chapter, tag it, add it to a thread, highlight it, or write a personal note. Your notes show a gutter mark and a “your note” line in the study panel.",
+            "The theme button cycles light, a candlelight-warm dark, a true-black night, and follow-system. Your choice, text size, and last reading position are remembered.",
+        ],
+    );
+    out.push(Block::Rule);
+    out.push(Block::para(vec![
+        Run::new("More: press ? for keyboard shortcuts, or open ", sz::SMALL, Color::Faded),
+        Run::new("About", sz::SMALL, Color::Gold).link("about"),
+        Run::new(".", sz::SMALL, Color::Faded),
+    ]));
+    out
+}
+
+/// The About card: edition, provenance, and the covenant.
+pub fn about_blocks() -> Vec<Block> {
+    let mut out = vec![
+        Block::para(vec![Run::new("pure-study", sz::WORD, Color::Ink).bold()]),
+        Block::para(vec![Run::new(
+            "A KJV-only Bible-study tool: a parallel-passage reader with an optional Full-study tier of Strong's, morphology, cross-references, and corpus analytics. Everything runs locally and offline.",
+            sz::BODY,
+            Color::Ink,
+        )]),
+    ];
+    guide_section(
+        &mut out,
+        "THE TEXT",
+        &[
+            "The 1769 King James text (public domain), tokenized once and frozen. Scripture is set in EB Garamond (SIL Open Font License, bundled).",
+        ],
+    );
+    guide_section(
+        &mut out,
+        "PROVENANCE",
+        &[
+            "KJV text via eBible.org; Strong's via Open Scriptures (CC-BY-SA); morphology from OSHB (CC-BY 4.0) and Robinson's public-domain Textus Receptus tagging; cross-references from the Treasury of Scripture Knowledge via openbible.info. Full credits are in BIBLIOGRAPHY.md.",
+        ],
+    );
+    guide_section(
+        &mut out,
+        "THE COVENANT",
+        &[
+            "Yours forever: no account, no telemetry, no phoning home. Your library — weaves, threads, tags, notes — lives in plain files you own and can back up or move. The app is free; a future sync service is the only paid piece, and it never gates a local feature.",
+        ],
+    );
+    out.push(Block::Rule);
+    out.push(Block::para(vec![
+        Run::new("Open the ", sz::SMALL, Color::Faded),
+        Run::new("guide", sz::SMALL, Color::Gold).link("guide"),
+        Run::new(".", sz::SMALL, Color::Faded),
+    ]));
+    out
 }
 
 /// Case-insensitive (ASCII-fold) substring search over char slices.
