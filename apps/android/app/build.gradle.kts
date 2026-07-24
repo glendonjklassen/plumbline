@@ -13,8 +13,12 @@ android {
         applicationId = "dev.purestudy"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.2"
+        // Version identity comes from the release workflow, derived from the git
+        // tag (-PpureVersionName / -PpureVersionCode). versionCode MUST increase
+        // per release or Android won't treat a new APK as an in-place upgrade.
+        // Local + CI-debug builds fall back to a dev stamp.
+        versionCode = (project.findProperty("pureVersionCode") as String?)?.toInt() ?: 1
+        versionName = (project.findProperty("pureVersionName") as String?) ?: "0.0.0-dev"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

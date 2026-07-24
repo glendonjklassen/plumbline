@@ -13,8 +13,25 @@ permissions:
   contents: write
 
 jobs:
+  # Create the GitHub Release up front so each platform job attaches its own
+  # artifacts independently. Before v0.3.1 the Android APK job was gated on the
+  # Windows job (`needs: windows`), so a Windows compile error meant no APK
+  # shipped at all — which is exactly what happened at v0.3.0. Now a break in
+  # one platform never blocks the others from shipping.
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create the release if it does not exist yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${{ github.ref_name }}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "${{ github.ref_name }}" --repo "$GITHUB_REPOSITORY" \
+                 --title "pure study ${{ github.ref_name }}" --generate-notes
+
   windows:
     runs-on: windows-latest
+    needs: create-release
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -31,17 +48,20 @@ jobs:
           copy target\aarch64-pc-windows-msvc\release\pure_ffi.dll dist\pure_ffi-${{ github.ref_name }}-arm64.dll
           copy target\x86_64-pc-windows-msvc\release\pure_ffi.dll dist\pure_ffi-${{ github.ref_name }}-x64.dll
           copy target\i686-pc-windows-msvc\release\pure_ffi.dll dist\pure_ffi-${{ github.ref_name }}-x86.dll
-      - name: Create the release
+      - name: Attach the Windows apps + engine DLLs to the release
+        # bash so `dist/*` is glob-expanded (windows-latest defaults to pwsh,
+        # which passes the literal string to gh — gh does not expand globs).
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "${{ github.ref_name }}" dist/* --title "pure study ${{ github.ref_name }}" --generate-notes
+        run: gh release upload "${{ github.ref_name }}" dist/* --clobber
 
   # Cross-compiles the Rust core for Android, builds a signed release APK
   # (arm64-v8a for the device + x86_64 for emulators), and attaches it to the
-  # release the Windows job created. Requires four repo secrets (Settings →
-  # Secrets and variables → Actions); without them the job no-ops with a warning
-  # so the Windows release still ships:
+  # release created by create-release. Independent of the Windows job, so the
+  # APK ships even if the Windows build breaks. Requires four repo secrets
+  # (Settings → Secrets and variables → Actions); without them the job no-ops
+  # with a warning so the rest of the release still ships:
   #   ANDROID_KEYSTORE_BASE64    base64 of your release keystore (.jks)
   #   ANDROID_KEYSTORE_PASSWORD  store password
   #   ANDROID_KEY_ALIAS          key alias
@@ -53,7 +73,7 @@ jobs:
   #   base64 -w0 pure-study.jks    # → paste into ANDROID_KEYSTORE_BASE64
   android:
     runs-on: ubuntu-latest
-    needs: windows
+    needs: create-release
     steps:
       - uses: actions/checkout@v4
 
@@ -103,6 +123,20 @@ jobs:
           cargo ndk -t arm64-v8a -t x86_64 --platform 26 \
             -o apps/android/app/src/main/jniLibs build -p pure-ffi --release
 
+      # versionName = the tag without the leading 'v' (0.3.1); versionCode =
+      # major*10000 + minor*100 + patch (0.3.1 -> 301), monotonic across semver
+      # so each release installs in place over the last. Any pre-release suffix
+      # (-rc1) is dropped from the patch before the arithmetic.
+      - name: Derive the app version from the tag
+        id: ver
+        if: steps.sign.outputs.ready == 'true'
+        run: |
+          name="${{ github.ref_name }}"; name="${name#v}"
+          IFS=. read -r maj min pat <<< "$name"
+          pat="${pat%%-*}"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "code=$(( ${maj:-0} * 10000 + ${min:-0} * 100 + ${pat:-0} ))" >> "$GITHUB_OUTPUT"
+
       - name: Build the signed release APK
         if: steps.sign.outputs.ready == 'true'
         env:
@@ -114,7 +148,9 @@ jobs:
         run: |
           echo "$KS" | base64 -d > "$ANDROID_KEYSTORE_FILE"
           chmod +x apps/android/gradlew
-          apps/android/gradlew -p apps/android :app:assembleRelease --console=plain
+          apps/android/gradlew -p apps/android :app:assembleRelease --console=plain \
+            -PpureVersionName="${{ steps.ver.outputs.name }}" \
+            -PpureVersionCode="${{ steps.ver.outputs.code }}"
 
       - name: Attach the APK to the release
         if: steps.sign.outputs.ready == 'true'

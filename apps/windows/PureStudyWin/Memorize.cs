@@ -11,6 +11,7 @@ using Microsoft.Graphics.Canvas.Text;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using PureStudy;
@@ -171,7 +172,7 @@ public static class Memorize
             GridLength.Auto, GridLength.Auto, GridLength.Auto, GridLength.Auto,
         })
             grid.RowDefinitions.Add(new RowDefinition { Height = hgt });
-        var rows = new UIElement[] { caption, refLabel, promptScroll, controls, recall, result, grades };
+        var rows = new FrameworkElement[] { caption, refLabel, promptScroll, controls, recall, result, grades };
         for (int i = 0; i < rows.Length; i++)
         {
             Grid.SetRow(rows[i], i);
@@ -290,7 +291,7 @@ public static class Memorize
                         "mature" => 1.0,
                         _ => 0.15,
                     };
-                    var e = byBook.TryGetValue(book, out var cur) ? cur : (0, 0.0);
+                    var e = byBook.TryGetValue(book, out var cur) ? cur : (count: 0, sum: 0.0);
                     byBook[book] = (e.count + 1, e.sum + sc);
                 }
 
