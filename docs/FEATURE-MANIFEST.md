@@ -386,8 +386,8 @@ makes an OT word light up its NT match: viewing *Christ* (G5547) fills the OT ha
 via *Messiah* (H4899, prior 0.93). **GTK** (`draw_dispersion`) and **WinUI**
 (`Popups.ConceptMap`) both paint it as a second indigo row beneath the gold one
 (strip 52-px, alpha `0.18+0.72·(cnt/max)` on the row's own max) and name the
-partners in a caption. **Delta:** the Android Compose concept view is the only
-remaining consumer of the `bridge` field (its Wire model already carries it).
+partners in a caption. **Android** (`Maps.ConceptMap`) paints the same banded
+row on its zoomable concept-map canvas — all three shells now show it.
 
 ## C ABI surface (crates/ffi) — endpoint ↔ feature map
 
@@ -593,6 +593,27 @@ flashcards (needs #14) are follow-ups.
 
 ## Android notes
 
+- **Compose parity (passes 1–3, 2026-07-24).** The Compose shell reached
+  near-parity with GTK/WinUI. Beyond the v0 reader + word study + search + fold
+  layouts it now has: **memorization** (review drill · coverage · activity —
+  `ui/Memorize.kt`); the **concept / constellation / chord** maps as
+  pinch-zoom/pan canvases (`ui/Maps.kt`, incl. the cross-testament bridge row);
+  **Tier-0 verse actions** via a long-press sheet (copy/share · note ·
+  verse-then-trim highlight · memorize — `ui/VerseActions.kt`); **study
+  routing** for every panel verb (occurrences / rendering / codeStudy / thread /
+  tag / weave / guide / about → the block pane); the **≡ study libraries**
+  (threads / tags / weaves / suggested / guide / about) + a **Full-study**
+  toggle (surfacing the morphology / similar / bridge-partner + authority-tier
+  blocks); a **word-study bottom sheet** on narrow screens; and **authoring**
+  (add tag/thread, edit note, approve/reject suggested weaves). Form-factor
+  calls (see memory `android-formfactor-ux`): zoomable canvases, study bottom
+  sheet, verse-then-trim highlighting. So the per-feature "Compose delta" notes
+  below are **resolved** except: `editThreadNotes` / `editWeaveNotes` /
+  `editEntryNote` / `untag` (need an index→name lookup); the cross-testament
+  **bridge data isn't loaded on Android yet** — `OpenFromBytes` has no home dir,
+  so `bridge/*.json` isn't read; the bridge row is wired but empty until asset
+  or extract-to-home wiring lands; and posture-driven fold-mode switching is
+  untested on hardware.
 - The Kotlin/JNA binding (`crates/ffi/bindings/kotlin/PureStudy.kt`, package
   `dev.purestudy.core`) is now current with the 87-fn C ABI (incl. the 9
   `pure_engine_memory_*`). It is the low-level `PureStudyNative` interface +
