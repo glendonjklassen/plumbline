@@ -21,7 +21,7 @@ package dev.purestudy
 
 import com.sun.jna.NativeLong
 import com.sun.jna.Pointer
-import com.sun.jna.PointerByReference
+import com.sun.jna.ptr.PointerByReference
 import dev.purestudy.core.MeasureCallback
 import dev.purestudy.core.PureLayoutConfig
 import dev.purestudy.core.PureStudyNative

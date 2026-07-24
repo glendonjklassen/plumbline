@@ -26,6 +26,23 @@ android {
         }
     }
 
+    // Release signing reads the keystore + passwords from the environment (the
+    // GitHub Actions secrets wired in .github/workflows/release.yml). Absent
+    // locally, so a local `assembleRelease` just produces an unsigned APK and
+    // debug builds (their own auto keystore) are unaffected. The stable release
+    // key is what lets a tagged build install in place over the previous one.
+    val releaseKeystore: String? = System.getenv("ANDROID_KEYSTORE_FILE")
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
@@ -37,6 +54,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -51,6 +69,16 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    lint {
+        // AGP 8.7's bundled lint crashes analysing our Compose / Kotlin-2.0
+        // sources: androidx.lifecycle's NonNullableMutableLiveDataDetector hits
+        // an IncompatibleClassChangeError against the Kotlin 2.0 analysis API
+        // (a lint/tooling bug, not our code). We don't gate releases on lint, so
+        // skip the release-build vital check and never abort on a lint fault.
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 
     // Compile the shared Kotlin/JNA binding (package dev.purestudy.core) straight

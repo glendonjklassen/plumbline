@@ -24,7 +24,7 @@ import com.sun.jna.Library
 import com.sun.jna.Native
 import com.sun.jna.NativeLong
 import com.sun.jna.Pointer
-import com.sun.jna.PointerByReference
+import com.sun.jna.ptr.PointerByReference
 import com.sun.jna.Structure
 
 /** Raw JNA view of the C ABI (`pure_study.h`). Owned string returns are typed
