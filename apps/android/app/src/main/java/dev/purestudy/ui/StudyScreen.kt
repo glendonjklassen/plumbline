@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -297,7 +298,11 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    // systemBarsPadding keeps the app's chrome out from under the status bar
+    // (top) + gesture nav (bottom) — Android 15 (targetSdk 35) draws edge-to-edge
+    // by default, which otherwise put the top bar under the clock/wifi and ate
+    // taps there. The window background (paper) fills the bars for a seamless look.
+    Box(Modifier.fillMaxSize().systemBarsPadding()) {
     Column(Modifier.fillMaxSize().background(palette.paper)) {
         TopBar(
             palette = palette,

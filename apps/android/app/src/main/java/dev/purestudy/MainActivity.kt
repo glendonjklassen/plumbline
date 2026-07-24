@@ -1,8 +1,8 @@
-// The Android entry point. Loads the native core, opens the study engine from
-// bundled asset bytes (no writable home needed for reading — personal study data
-// would go to the app's private files dir later), tracks the fold posture, and
-// hands off to the Compose UI. Mirrors the WinUI App/MainWindow startup: resolve
-// data, open the engine off the UI thread, then build the reader.
+// The Android entry point. Loads the native core, extracts the bundled reference
+// data into the app's private files dir (a WRITABLE home, so authored study data
+// persists), opens the engine from there off the UI thread, tracks the fold
+// posture, and hands off to the Compose UI. Mirrors the WinUI App/MainWindow
+// startup: resolve data, open the engine, then build the reader.
 //
 // Author D (Compose UI).
 
@@ -31,6 +31,7 @@ import dev.purestudy.ui.PureStudyApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class MainActivity : ComponentActivity() {
 
@@ -46,13 +47,25 @@ class MainActivity : ComponentActivity() {
         // .so as a clear crash rather than a lazy failure deep in the binding.
         runCatching { System.loadLibrary("pure_ffi") }
 
-        // Open the engine from bundled assets, off the UI thread (~22 MB).
+        // Open from a WRITABLE home so authored study data — notes, highlights,
+        // tags, threads, weaves, memorization — persists (a bytes-opened engine
+        // has no home and rejects every write). Extract the bundled read-only
+        // reference data into the app's private filesDir once, then open FROM
+        // there; the user's authored subdirs live alongside it and survive
+        // restarts + app updates. Bump the marker name when the bundled data changes.
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val kjv = assets.open("data/kjv.jsonl").use { it.readBytes() }
-                    val strongs = assets.open("data/strongs.json").use { it.readBytes() }
-                    StudyEngine.OpenFromBytes(kjv, strongs)
+                    val home = filesDir
+                    val marker = File(home, ".data-v1")
+                    if (!marker.exists()) {
+                        copyAsset("data", File(home, "data"))
+                        if ((assets.list("bridge")?.size ?: 0) > 0) {
+                            copyAsset("bridge", File(home, "bridge"))
+                        }
+                        marker.createNewFile()
+                    }
+                    StudyEngine.Open(home.absolutePath)
                 }
             }
             result.onSuccess { engine = it }
@@ -78,6 +91,18 @@ class MainActivity : ComponentActivity() {
                 loadError != null -> ErrorScreen(loadError!!)
                 else -> LoadingScreen()
             }
+        }
+    }
+
+    /** Recursively copy an asset path (file or directory) into [dest]. */
+    private fun copyAsset(path: String, dest: File) {
+        val children = assets.list(path) ?: emptyArray()
+        if (children.isEmpty()) {
+            dest.parentFile?.mkdirs()
+            assets.open(path).use { input -> dest.outputStream().use { input.copyTo(it) } }
+        } else {
+            dest.mkdirs()
+            for (c in children) copyAsset("$path/$c", File(dest, c))
         }
     }
 

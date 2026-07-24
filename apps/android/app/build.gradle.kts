@@ -151,6 +151,15 @@ tasks.register<Copy>("syncData") {
     into(layout.projectDirectory.dir("src/main/assets/data"))
 }
 
+// Bundle the cross-testament bridge sources so the fused bridge (and the
+// dispersion "bridge row") has data on-device once the engine opens from a home.
+tasks.register<Copy>("syncBridge") {
+    description = "Copy bridge/*.json into app assets."
+    group = "pure-study"
+    from(rootProject.file("../../bridge")) { include("*.json") }
+    into(layout.projectDirectory.dir("src/main/assets/bridge"))
+}
+
 tasks.named("preBuild") {
-    dependsOn("syncData")
+    dependsOn("syncData", "syncBridge")
 }
