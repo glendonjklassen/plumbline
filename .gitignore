@@ -38,3 +38,10 @@ target
 /weaves/
 /threads/
 /notes/
+/memory/
+
+# Android signing keystores — the app's permanent signing identity. NEVER
+# commit; keep it in a password manager, and feed CI via the
+# ANDROID_KEYSTORE_BASE64 GitHub secret (see .github/workflows/release.yml).
+*.jks
+*.keystore
