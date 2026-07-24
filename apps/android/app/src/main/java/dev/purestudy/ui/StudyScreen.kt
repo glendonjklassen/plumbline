@@ -150,23 +150,18 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
         else -> UiMode.SplitVertical
     }
 
-    // ── navigation (mirrors MainWindow.StepActive: roll across book bounds) ──
-    fun stepPrimary(dir: Int) {
-        val idx = toc.indexOfFirst { it.id == book }
-        if (idx < 0) return
-        val ch = chapter + dir
-        when {
-            ch < 1 -> if (idx > 0) {
-                val prev = toc[idx - 1]; book = prev.id; chapter = maxOf(1, prev.chapters.toInt())
-            }
-            ch > toc[idx].chapters.toInt() -> if (idx < toc.size - 1) {
-                book = toc[idx + 1].id; chapter = 1
-            }
-            else -> chapter = ch
+    // ── navigation: roll a (book, chapter) across book bounds, per pane.
+    //    Mirrors MainWindow.StepActive. ───────────────────────────────────────
+    fun step(curBook: String, curChap: Int, dir: Int): Pair<String, Int> {
+        val idx = toc.indexOfFirst { it.id == curBook }
+        if (idx < 0) return curBook to curChap
+        val ch = curChap + dir
+        return when {
+            ch < 1 -> if (idx > 0) toc[idx - 1].let { it.id to maxOf(1, it.chapters.toInt()) } else curBook to curChap
+            ch > toc[idx].chapters.toInt() -> if (idx < toc.size - 1) toc[idx + 1].id to 1 else curBook to curChap
+            else -> curBook to ch
         }
     }
-
-    fun openBook(b: TocBook) { book = b.id; chapter = 1 }
 
     // Reveal the study surface for the current mode (deeper study / search / links).
     fun revealStudy() {
@@ -266,14 +261,35 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
         }
     }
 
-    val readerFor: @Composable (Modifier, String, Int) -> Unit = { m, b, c ->
-        ReaderPane(
-            engine = engine, book = b, chapter = c, palette = palette,
-            modifier = m, searchHits = searchHits, fontSizeSp = bodySize.toFloat(),
-            onWordTap = ::onWord,
-            onVerseLongPress = { verse -> actionVerse = verse },
-            highlightEpoch = highlightEpoch,
-        )
+    // A Bible pane = its own compact ‹ Book Ch › header (per-pane navigation) +
+    // the reader. `isSecond` picks the primary or the second pane's state.
+    val biblePane: @Composable (Modifier, Boolean) -> Unit = { m, isSecond ->
+        val b = if (isSecond) secondBook else book
+        val c = if (isSecond) secondChapter else chapter
+        Column(m) {
+            PaneHeader(
+                toc = toc, book = b, chapter = c, palette = palette,
+                onPrev = {
+                    val (nb, nc) = step(b, c, -1)
+                    if (isSecond) { secondBook = nb; secondChapter = nc } else { book = nb; chapter = nc }
+                },
+                onNext = {
+                    val (nb, nc) = step(b, c, +1)
+                    if (isSecond) { secondBook = nb; secondChapter = nc } else { book = nb; chapter = nc }
+                },
+                onPick = { bk ->
+                    if (isSecond) { secondBook = bk.id; secondChapter = 1 } else { book = bk.id; chapter = 1 }
+                },
+            )
+            HorizontalDivider(color = palette.rule)
+            ReaderPane(
+                engine = engine, book = b, chapter = c, palette = palette,
+                modifier = Modifier.weight(1f), searchHits = searchHits, fontSizeSp = bodySize.toFloat(),
+                onWordTap = ::onWord,
+                onVerseLongPress = { verse -> actionVerse = verse },
+                highlightEpoch = highlightEpoch,
+            )
+        }
     }
     val study: @Composable (Modifier) -> Unit = { m ->
         Box(m.background(palette.panelBg)) {
@@ -284,11 +300,9 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().background(palette.paper)) {
         TopBar(
-            toc = toc, book = book, chapter = chapter, palette = palette,
+            palette = palette,
             searchText = searchText, onSearchChange = { searchText = it },
             onSearchSubmit = { runSearch(searchText) },
-            onPrev = { stepPrimary(-1) }, onNext = { stepPrimary(+1) },
-            onPickBook = ::openBook,
             mode = mode,
             singlePane = singlePane, onToggleSplit = { singlePane = !singlePane },
             singleStudy = singleView == SingleView.Study,
@@ -311,7 +325,7 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
 
         when (mode) {
             UiMode.SplitVertical -> Column(Modifier.fillMaxSize()) {
-                readerFor(Modifier.fillMaxWidth().weight(1f), book, chapter)
+                biblePane(Modifier.fillMaxWidth().weight(1f), false)
                 HingeSpacerHorizontal(fold)
                 HorizontalDivider(color = palette.rule)
                 study(Modifier.fillMaxWidth().weight(1f))
@@ -319,15 +333,15 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
 
             UiMode.FullscreenVertical -> Box(Modifier.fillMaxSize()) {
                 if (singleView == SingleView.Study) study(Modifier.fillMaxSize())
-                else readerFor(Modifier.fillMaxSize(), book, chapter)
+                else biblePane(Modifier.fillMaxSize(), false)
             }
 
             UiMode.FoldFullscreen -> Row(Modifier.fillMaxSize()) {
-                readerFor(Modifier.fillMaxHeight().weight(1f), book, chapter)
+                biblePane(Modifier.fillMaxHeight().weight(1f), false)
                 HingeSpacerVertical(fold)
                 VerticalDivider(color = palette.rule)
                 if (secondPane == SecondPane.Study) study(Modifier.fillMaxHeight().weight(1f))
-                else readerFor(Modifier.fillMaxHeight().weight(1f), secondBook, secondChapter)
+                else biblePane(Modifier.fillMaxHeight().weight(1f), true)
             }
         }
     }
@@ -393,19 +407,48 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
     }
 }
 
-/** Minimal chrome: book picker + chapter nav, a mode/pane toggle, and search. */
+/** A pane's own compact navigation: ‹ Book Ch › with a book picker. One per
+ *  Bible pane, so the left pane and the second (fold) pane navigate
+ *  independently — no shared or duplicated toolbar. */
 @Composable
-private fun TopBar(
+private fun PaneHeader(
     toc: List<TocBook>,
     book: String,
     chapter: Int,
     palette: ReaderPalette,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onPick: (TocBook) -> Unit,
+) {
+    var menu by remember { mutableStateOf(false) }
+    val name = toc.firstOrNull { it.id == book }?.name ?: book
+    Surface(color = palette.paneNavBg) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(onClick = onPrev) { Text("‹", fontSize = 18.sp, color = palette.ink) }
+            Box {
+                TextButton(onClick = { menu = true }) { Text("$name $chapter", color = palette.ink) }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    for (b in toc) {
+                        DropdownMenuItem(text = { Text(b.name) }, onClick = { onPick(b); menu = false })
+                    }
+                }
+            }
+            TextButton(onClick = onNext) { Text("›", fontSize = 18.sp, color = palette.ink) }
+        }
+    }
+}
+
+/** Top chrome: search, the mode/pane toggle, and the ≡ menu. Book/chapter
+ *  navigation lives per-pane in [PaneHeader] now. */
+@Composable
+private fun TopBar(
+    palette: ReaderPalette,
     searchText: String,
     onSearchChange: (String) -> Unit,
     onSearchSubmit: () -> Unit,
-    onPrev: () -> Unit,
-    onNext: () -> Unit,
-    onPickBook: (TocBook) -> Unit,
     mode: UiMode,
     singlePane: Boolean,
     onToggleSplit: () -> Unit,
@@ -421,31 +464,12 @@ private fun TopBar(
     onToggleFull: () -> Unit,
     onTextSize: () -> Unit,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
-    val bookName = toc.firstOrNull { it.id == book }?.name ?: book
-
     Surface(color = palette.paneNavBg) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            TextButton(onClick = onPrev) { Text("‹", fontSize = 20.sp, color = palette.ink) }
-            Box {
-                TextButton(onClick = { menuOpen = true }) {
-                    Text("$bookName $chapter", color = palette.ink)
-                }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    for (b in toc) {
-                        DropdownMenuItem(
-                            text = { Text(b.name) },
-                            onClick = { onPickBook(b); menuOpen = false },
-                        )
-                    }
-                }
-            }
-            TextButton(onClick = onNext) { Text("›", fontSize = 20.sp, color = palette.ink) }
-
             OutlinedTextField(
                 value = searchText,
                 onValueChange = onSearchChange,
