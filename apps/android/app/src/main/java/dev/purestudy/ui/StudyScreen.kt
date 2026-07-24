@@ -24,13 +24,16 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -65,6 +68,9 @@ private enum class SecondPane { Study, Bible }
 
 /** The single-pane (mode 2) view choice. */
 private enum class SingleView { Bible, Study }
+
+/** A study "library" the ≡ menu loads into the study pane as blocks. */
+enum class Library { Threads, Tags, Weaves, Suggested, Guide, About }
 
 /**
  * The app root. Resolves a palette from the current theme and mounts [StudyScreen].
@@ -113,6 +119,8 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
     var showConstellation by remember { mutableStateOf(false) }
     var showChord by remember { mutableStateOf(false) }
     var highlightEpoch by remember { mutableStateOf(0) }            // repaint after highlight edits
+    var fullMode by remember { mutableStateOf(true) }               // Simple vs Full study depth
+    var wordSheet by remember { mutableStateOf(false) }             // word study as a sheet (narrow)
 
     val base = rememberUiMode(fold)
     val mode = when {
@@ -139,16 +147,40 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
 
     fun openBook(b: TocBook) { book = b.id; chapter = 1 }
 
-    // ── word tap → word study; ensure the study surface is visible ──────────
-    fun onWord(hit: Hit) {
-        studyBlocks = runCatching {
-            engine.WordStudyBlocksJson(hit.verse, hit.tokenIndex.toInt(), false)
-        }.getOrNull()
+    // Reveal the study surface for the current mode (deeper study / search / links).
+    fun revealStudy() {
         when (mode) {
             UiMode.FullscreenVertical -> singleView = SingleView.Study
             UiMode.FoldFullscreen -> secondPane = SecondPane.Study
             else -> {}
         }
+    }
+
+    // ── word tap → word study. On a narrow single screen it's a bottom sheet (a
+    //    quick look-up that keeps the reading place); elsewhere the study pane. ─
+    fun onWord(hit: Hit) {
+        studyBlocks = runCatching {
+            engine.WordStudyBlocksJson(hit.verse, hit.tokenIndex.toInt(), fullMode)
+        }.getOrNull()
+        when (mode) {
+            UiMode.FullscreenVertical -> wordSheet = true
+            UiMode.FoldFullscreen -> secondPane = SecondPane.Study
+            else -> {}
+        }
+    }
+
+    // Load a study library (threads / tags / weaves / suggested / guide / about)
+    // into the study pane — StudyPane renders each block list identically.
+    fun openLibrary(which: Library) {
+        val b = when (which) {
+            Library.Threads -> engine.ThreadsBlocksJson()
+            Library.Tags -> engine.TagsBlocksJson()
+            Library.Weaves -> engine.WeavesBlocksJson()
+            Library.Suggested -> engine.SuggestedBlocksJson()
+            Library.Guide -> StudyEngine.GuideBlocksJson()
+            Library.About -> StudyEngine.AboutBlocksJson()
+        }
+        if (b != null) { studyBlocks = b; revealStudy() }
     }
 
     // ── search: a reference jumps; a query bands hits + shows result blocks ──
@@ -164,25 +196,35 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
         } else {
             searchHits = r.hits?.map { it.verse }?.toSet() ?: emptySet()
             studyBlocks = runCatching { engine.SearchBlocksJson(q) }.getOrNull()
-            when (mode) {
-                UiMode.FullscreenVertical -> singleView = SingleView.Study
-                UiMode.FoldFullscreen -> secondPane = SecondPane.Study
-                else -> {}
-            }
+            revealStudy()
         }
     }
 
-    // ── link routing (parity-lite): only "go" navigates in v0; TODO the rest ─
+    // ── link routing: navigate, open a map, or load a study card into the pane.
+    //    Authoring verbs (addTag/addThread/approve/reject/edit*) are pass 3. ────
     fun onLink(uri: String) {
         val j = runCatching { StudyEngine.RouteLinkJson(uri) }.getOrNull() ?: return
         val link = runCatching { parseWire<PanelLinkData>(j) }.getOrNull() ?: return
-        when {
-            link.verb == "go" && link.book != null && link.chapter != null -> {
+        fun show(blocks: String?) {
+            if (blocks != null) { studyBlocks = blocks; wordSheet = false; revealStudy() }
+        }
+        when (link.verb) {
+            "go" -> if (link.book != null && link.chapter != null) {
                 book = link.book!!; chapter = link.chapter!!.toInt()
             }
-            link.verb == "conceptMap" && link.code != null -> conceptCode = link.code
+            "conceptMap" -> link.code?.let { conceptCode = it }
+            "occurrences" -> link.code?.let { show(engine.ConcordanceBlocksJson(it)) }
+            "rendering" -> if (link.code != null && link.rendering != null) {
+                show(engine.RenderingConcordanceBlocksJson(link.code!!, link.rendering!!))
+            }
+            "codeStudy" -> link.code?.let { show(engine.CodeStudyBlocksJson(it, link.word, fullMode)) }
+            "thread" -> link.index?.let { show(engine.ThreadBlocksJson(it)) }
+            "tag" -> link.index?.let { show(engine.TagBlocksJson(it)) }
+            "weave" -> link.index?.let { show(engine.CompareBlocksJson(it, fullMode)) }
+            "guide" -> show(StudyEngine.GuideBlocksJson())
+            "about" -> show(StudyEngine.AboutBlocksJson())
+            // TODO pass 3: addTag / addThread / approve / reject / edit*note(s).
         }
-        // TODO: occurrences / codeStudy / tag / thread authoring dialogs.
     }
 
     val readerFor: @Composable (Modifier, String, Int) -> Unit = { m, b, c ->
@@ -219,6 +261,9 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
             onMemorize = { memView = it },
             onConstellation = { showConstellation = true },
             onChord = { showChord = true },
+            onLibrary = ::openLibrary,
+            fullStudy = fullMode,
+            onToggleFull = { fullMode = !fullMode },
         )
         HorizontalDivider(color = palette.rule)
 
@@ -254,6 +299,7 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
             )
         }
         memView?.let { v -> MemorizeScreen(engine, v, toc, palette, onClose = { memView = null }) }
+        if (wordSheet) WordStudySheet(studyBlocks, palette, ::onLink) { wordSheet = false }
         conceptCode?.let { c ->
             MapOverlay("Concept map — $c", palette, { conceptCode = null }) {
                 ConceptMap(engine, c, palette, Modifier.fillMaxSize())
@@ -298,6 +344,9 @@ private fun TopBar(
     onMemorize: (MemorizeView) -> Unit,
     onConstellation: () -> Unit,
     onChord: () -> Unit,
+    onLibrary: (Library) -> Unit,
+    fullStudy: Boolean,
+    onToggleFull: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val bookName = toc.firstOrNull { it.id == book }?.name ?: book
@@ -365,8 +414,42 @@ private fun TopBar(
                     HorizontalDivider(color = palette.rule)
                     DropdownMenuItem(text = { Text("Constellation") }, onClick = { onConstellation(); menu = false })
                     DropdownMenuItem(text = { Text("Chord map") }, onClick = { onChord(); menu = false })
+                    HorizontalDivider(color = palette.rule)
+                    Text(
+                        "Study",
+                        color = palette.faded,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    )
+                    DropdownMenuItem(text = { Text("Threads") }, onClick = { onLibrary(Library.Threads); menu = false })
+                    DropdownMenuItem(text = { Text("Tags") }, onClick = { onLibrary(Library.Tags); menu = false })
+                    DropdownMenuItem(text = { Text("Weave library") }, onClick = { onLibrary(Library.Weaves); menu = false })
+                    DropdownMenuItem(text = { Text("Suggested weaves") }, onClick = { onLibrary(Library.Suggested); menu = false })
+                    DropdownMenuItem(text = { Text("Guide") }, onClick = { onLibrary(Library.Guide); menu = false })
+                    DropdownMenuItem(text = { Text("About") }, onClick = { onLibrary(Library.About); menu = false })
+                    HorizontalDivider(color = palette.rule)
+                    DropdownMenuItem(
+                        text = { Text(if (fullStudy) "Full study  ✓" else "Full study") },
+                        onClick = { onToggleFull(); menu = false },
+                    )
                 }
             }
+        }
+    }
+}
+
+/** Word study as a bottom sheet — the narrow-screen quick look-up (the reader
+ *  stays behind it). Links inside route through [onLink] like the pane does. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WordStudySheet(
+    blocksJson: String?,
+    palette: ReaderPalette,
+    onLink: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = palette.panelBg) {
+        Box(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
+            StudyPane(blocksJson, palette, onLink = onLink)
         }
     }
 }
