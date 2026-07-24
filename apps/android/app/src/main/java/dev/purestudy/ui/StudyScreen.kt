@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,6 +62,7 @@ import dev.purestudy.SearchResult
 import dev.purestudy.StudyEngine
 import dev.purestudy.Toc
 import dev.purestudy.TocBook
+import dev.purestudy.UserNote
 import dev.purestudy.parseWire
 
 /** What the second (right) pane shows in fold mode. */
@@ -71,6 +73,9 @@ private enum class SingleView { Bible, Study }
 
 /** A study "library" the ≡ menu loads into the study pane as blocks. */
 enum class Library { Threads, Tags, Weaves, Suggested, Guide, About }
+
+/** A one-field text-input authoring dialog (add tag / add thread / edit note). */
+private data class AuthorPrompt(val title: String, val initial: String, val onConfirm: (String) -> Unit)
 
 /**
  * The app root. Resolves a palette from the current theme and mounts [StudyScreen].
@@ -121,6 +126,7 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
     var highlightEpoch by remember { mutableStateOf(0) }            // repaint after highlight edits
     var fullMode by remember { mutableStateOf(true) }               // Simple vs Full study depth
     var wordSheet by remember { mutableStateOf(false) }             // word study as a sheet (narrow)
+    var prompt by remember { mutableStateOf<AuthorPrompt?>(null) }   // text-input authoring dialog
 
     val base = rememberUiMode(fold)
     val mode = when {
@@ -223,7 +229,25 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
             "weave" -> link.index?.let { show(engine.CompareBlocksJson(it, fullMode)) }
             "guide" -> show(StudyEngine.GuideBlocksJson())
             "about" -> show(StudyEngine.AboutBlocksJson())
-            // TODO pass 3: addTag / addThread / approve / reject / edit*note(s).
+            "addTag" -> link.refKey?.let { ref ->
+                prompt = AuthorPrompt("New tag on $ref", "") { name ->
+                    if (name.isNotBlank()) engine.TagAdd(name, "verse", ref, null, nowUtc())
+                }
+            }
+            "addThread" -> link.refKey?.let { ref ->
+                prompt = AuthorPrompt("New thread on $ref", "") { name ->
+                    if (name.isNotBlank()) engine.ThreadAdd(name, ref, null, nowUtc())
+                }
+            }
+            "editNote" -> link.refKey?.let { ref ->
+                val cur = engine.UserNoteJson(ref)
+                    ?.let { runCatching { parseWire<UserNote>(it).text }.getOrNull() } ?: ""
+                prompt = AuthorPrompt("Note on $ref", cur) { text -> engine.UserNoteSet(ref, text, nowUtc()) }
+            }
+            "approve" -> link.index?.let { engine.WeaveApprove(it); openLibrary(Library.Suggested) }
+            "reject" -> link.index?.let { engine.WeaveReject(it); openLibrary(Library.Suggested) }
+            // editThreadNotes / editWeaveNotes / editEntryNote / untag need an
+            // index→name lookup — a documented follow-up (rarer authoring).
         }
     }
 
@@ -300,6 +324,16 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
         }
         memView?.let { v -> MemorizeScreen(engine, v, toc, palette, onClose = { memView = null }) }
         if (wordSheet) WordStudySheet(studyBlocks, palette, ::onLink) { wordSheet = false }
+        prompt?.let { p ->
+            var text by remember(p) { mutableStateOf(p.initial) }
+            AlertDialog(
+                onDismissRequest = { prompt = null },
+                title = { Text(p.title) },
+                text = { OutlinedTextField(value = text, onValueChange = { text = it }) },
+                confirmButton = { TextButton(onClick = { p.onConfirm(text); prompt = null }) { Text("Save") } },
+                dismissButton = { TextButton(onClick = { prompt = null }) { Text("Cancel") } },
+            )
+        }
         conceptCode?.let { c ->
             MapOverlay("Concept map — $c", palette, { conceptCode = null }) {
                 ConceptMap(engine, c, palette, Modifier.fillMaxSize())
