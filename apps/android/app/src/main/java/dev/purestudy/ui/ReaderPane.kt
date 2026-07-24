@@ -101,6 +101,9 @@ fun ReaderPane(
     searchHits: Set<String> = emptySet(),
     onWordTap: (Hit) -> Unit = {},
     onVerseLongPress: (String) -> Unit = {},
+    // Bump to force a highlight re-fetch after an add/trim/remove that didn't
+    // change book/chapter (the verse-action sheet edits highlights in place).
+    highlightEpoch: Int = 0,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -177,7 +180,7 @@ fun ReaderPane(
         }
 
         // Fetch this chapter's highlight washes (whole-verse members + word runs).
-        LaunchedEffect(book, chapter) {
+        LaunchedEffect(book, chapter, highlightEpoch) {
             val hj = withContext(Dispatchers.Default) {
                 runCatching { synchronized(engine) { engine.ChapterHighlightsJson(book, chapter) } }
                     .getOrNull()

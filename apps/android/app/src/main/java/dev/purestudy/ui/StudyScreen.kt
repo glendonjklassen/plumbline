@@ -13,6 +13,7 @@
 
 package dev.purestudy.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -105,6 +106,14 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
     var singleView by remember { mutableStateOf(SingleView.Bible) }
     var secondPane by remember { mutableStateOf(SecondPane.Study) }
 
+    // Overlays / sheets layered over the reader (parity features).
+    var actionVerse by remember { mutableStateOf<String?>(null) }   // long-press verse sheet
+    var memView by remember { mutableStateOf<MemorizeView?>(null) } // memorize destinations
+    var conceptCode by remember { mutableStateOf<String?>(null) }   // conceptmap:CODE
+    var showConstellation by remember { mutableStateOf(false) }
+    var showChord by remember { mutableStateOf(false) }
+    var highlightEpoch by remember { mutableStateOf(0) }            // repaint after highlight edits
+
     val base = rememberUiMode(fold)
     val mode = when {
         base == UiMode.FoldFullscreen -> UiMode.FoldFullscreen
@@ -167,8 +176,11 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
     fun onLink(uri: String) {
         val j = runCatching { StudyEngine.RouteLinkJson(uri) }.getOrNull() ?: return
         val link = runCatching { parseWire<PanelLinkData>(j) }.getOrNull() ?: return
-        if (link.verb == "go" && link.book != null && link.chapter != null) {
-            book = link.book!!; chapter = link.chapter!!.toInt()
+        when {
+            link.verb == "go" && link.book != null && link.chapter != null -> {
+                book = link.book!!; chapter = link.chapter!!.toInt()
+            }
+            link.verb == "conceptMap" && link.code != null -> conceptCode = link.code
         }
         // TODO: occurrences / codeStudy / tag / thread authoring dialogs.
     }
@@ -178,13 +190,15 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
             engine = engine, book = b, chapter = c, palette = palette,
             modifier = m, searchHits = searchHits,
             onWordTap = ::onWord,
-            onVerseLongPress = { /* TODO: verse context menu (copy / tag / note) */ },
+            onVerseLongPress = { verse -> actionVerse = verse },
+            highlightEpoch = highlightEpoch,
         )
     }
     val study: @Composable (Modifier) -> Unit = { m ->
         Box(m.background(palette.panelBg)) { StudyPane(studyBlocks, palette, onLink = ::onLink) }
     }
 
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().background(palette.paper)) {
         TopBar(
             toc = toc, book = book, chapter = chapter, palette = palette,
@@ -202,6 +216,9 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
             onToggleSecondPane = {
                 secondPane = if (secondPane == SecondPane.Study) SecondPane.Bible else SecondPane.Study
             },
+            onMemorize = { memView = it },
+            onConstellation = { showConstellation = true },
+            onChord = { showChord = true },
         )
         HorizontalDivider(color = palette.rule)
 
@@ -227,6 +244,35 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
             }
         }
     }
+
+        // ── overlays / sheets (parity features layered over the reader) ──────
+        actionVerse?.let { v ->
+            VerseActionSheet(
+                engine, palette, v,
+                onHighlightsChanged = { highlightEpoch++ },
+                onDismiss = { actionVerse = null },
+            )
+        }
+        memView?.let { v -> MemorizeScreen(engine, v, toc, palette, onClose = { memView = null }) }
+        conceptCode?.let { c ->
+            MapOverlay("Concept map — $c", palette, { conceptCode = null }) {
+                ConceptMap(engine, c, palette, Modifier.fillMaxSize())
+            }
+        }
+        if (showConstellation) MapOverlay("Constellation", palette, { showConstellation = false }) {
+            Constellation(
+                engine, palette, Modifier.fillMaxSize(),
+                onNavigate = { b, ch, _ -> book = b; chapter = ch; showConstellation = false },
+                onOpenWeave = {},
+            )
+        }
+        if (showChord) MapOverlay("Chord map", palette, { showChord = false }) {
+            ChordMap(
+                engine, toc, palette, Modifier.fillMaxSize(),
+                onPickBook = { b -> book = b; chapter = 1; showChord = false },
+            )
+        }
+    }
 }
 
 /** Minimal chrome: book picker + chapter nav, a mode/pane toggle, and search. */
@@ -249,6 +295,9 @@ private fun TopBar(
     onToggleSingleView: () -> Unit,
     secondStudy: Boolean,
     onToggleSecondPane: () -> Unit,
+    onMemorize: (MemorizeView) -> Unit,
+    onConstellation: () -> Unit,
+    onChord: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val bookName = toc.firstOrNull { it.id == book }?.name ?: book
@@ -300,7 +349,50 @@ private fun TopBar(
                     Text(if (singlePane) "Split" else "Single", color = palette.ink)
                 }
             }
+
+            Box {
+                var menu by remember { mutableStateOf(false) }
+                TextButton(onClick = { menu = true }) { Text("⋮", fontSize = 20.sp, color = palette.ink) }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    Text(
+                        "Memorize",
+                        color = palette.faded,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    )
+                    DropdownMenuItem(text = { Text("Review due") }, onClick = { onMemorize(MemorizeView.ReviewDue); menu = false })
+                    DropdownMenuItem(text = { Text("Coverage map") }, onClick = { onMemorize(MemorizeView.Coverage); menu = false })
+                    DropdownMenuItem(text = { Text("Activity") }, onClick = { onMemorize(MemorizeView.Activity); menu = false })
+                    HorizontalDivider(color = palette.rule)
+                    DropdownMenuItem(text = { Text("Constellation") }, onClick = { onConstellation(); menu = false })
+                    DropdownMenuItem(text = { Text("Chord map") }, onClick = { onChord(); menu = false })
+                }
+            }
         }
+    }
+}
+
+/** A full-screen overlay frame for the map canvases: a back bar over the paper;
+ *  system-back closes. The map composable paints into the content slot. */
+@Composable
+private fun MapOverlay(
+    title: String,
+    palette: ReaderPalette,
+    onClose: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    BackHandler(onBack = onClose)
+    Column(Modifier.fillMaxSize().background(palette.paper)) {
+        Surface(color = palette.paneNavBg) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onClose) { Text("‹", fontSize = 20.sp, color = palette.ink) }
+                Text(title, color = palette.ink)
+            }
+        }
+        HorizontalDivider(color = palette.rule)
+        Box(Modifier.fillMaxSize()) { content() }
     }
 }
 
