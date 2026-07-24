@@ -113,6 +113,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
+    // Common Material icons (Search, Close, MoreVert, ArrowBack) for the top-bar
+    // chrome — the phone shell leans on icons over text labels.
+    implementation("androidx.compose.material:material-icons-core")
 
     // Adaptive / fold-aware panes (the three fold modes). These APIs churn —
     // member names are version-specific; pinned deliberately.

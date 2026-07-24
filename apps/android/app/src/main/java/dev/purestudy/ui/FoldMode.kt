@@ -1,8 +1,13 @@
 // The fold-aware layout decision. One derived [UiMode] from
-// (window width breakpoint + FoldingFeature present? + posture), mapping to the
-// three modes in docs/ANDROID-BOOTSTRAP.md. Per that doc we NEVER gate two-pane
-// on width alone — the Pixel 9 Pro Fold's inner display is ~1:1 and may not clear
-// the 840dp "Expanded" breakpoint, so a present FoldingFeature is the signal.
+// (window width breakpoint + FoldingFeature present? + posture). Per
+// docs/ANDROID-BOOTSTRAP.md we NEVER gate two-pane on width alone — the Pixel 9
+// Pro Fold's inner display is ~1:1 and may not clear the 840dp "Expanded"
+// breakpoint, so a present (vertical, opened) FoldingFeature is the signal.
+//
+// v1 phone shell (Glendon's call): the phone is always a single fullscreen
+// reader — study/search/library surface on demand as a dismissible bottom sheet,
+// never a permanent split with a toggle button. Two side-by-side panes appear
+// only when the fold is opened flat with a vertical hinge.
 //
 // Author D (Compose UI). Depends only on androidx.window + material3-adaptive.
 
@@ -18,21 +23,18 @@ import androidx.window.layout.FoldingFeature
 // Wire JSON is decoded through Author B's shared `parseWire` / `PureJson`
 // (package dev.purestudy) — this shell adds no second codec.
 
-/** The three fold-aware layouts (docs/ANDROID-BOOTSTRAP.md §"The three fold modes").
- *  - [SplitVertical]      folded/portrait, stacked halves: Bible over Study.
- *  - [FullscreenVertical] folded/portrait, one pane; a Bible↔Study toggle.
+/** The two fold-aware layouts.
+ *  - [FullscreenVertical] a plain phone / closed cover / tabletop posture: one
+ *    fullscreen reading pane. Study, search, and libraries open as a dismissible
+ *    bottom sheet over it.
  *  - [FoldFullscreen]     device opened flat with a vertical hinge: two panes
- *                         side-by-side (Bible∥Bible or Bible∥Study). */
-enum class UiMode { SplitVertical, FullscreenVertical, FoldFullscreen }
+ *    side-by-side (Bible∥Bible or Bible∥Study), split at the hinge. */
+enum class UiMode { FullscreenVertical, FoldFullscreen }
 
 /**
- * The *base* mode implied by the hardware posture. The choice between
- * [SplitVertical] and [FullscreenVertical] is a user preference layered on top by
- * [StudyScreen]; this function only decides whether the device is opened flat
- * (→ [FoldFullscreen]) or not (→ [SplitVertical] baseline).
- *
- * A missing FoldingFeature ("closed cover screen" / a plain phone) is a compact
- * window → modes 1/2, never the two-pane fold mode.
+ * The layout implied by the hardware posture. Opened flat with a vertical hinge
+ * → two side-by-side pages ([FoldFullscreen]); anything else → a single
+ * fullscreen reader ([FullscreenVertical]).
  */
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
@@ -57,10 +59,8 @@ internal fun computeUiMode(
             fold.state == FoldingFeature.State.HALF_OPENED
         // Opened flat/book with a vertical hinge → left/right pages, side-by-side.
         if (verticalHinge && opened) return UiMode.FoldFullscreen
-        // A horizontal hinge (tabletop posture) → stacked halves above/below it.
-        return UiMode.SplitVertical
     }
-    // No hinge reported. Baseline is the stacked reader; the user can collapse it
-    // to a single fullscreen pane (mode 2) via the top-bar toggle.
-    return UiMode.SplitVertical
+    // No separating vertical hinge (plain phone, closed cover, tabletop) → a
+    // single fullscreen reader; the study surface is a bottom sheet on demand.
+    return UiMode.FullscreenVertical
 }

@@ -16,6 +16,8 @@ import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.gestures.rememberScrollableState
 import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -39,6 +41,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.purestudy.Chapter
 import dev.purestudy.ChapterHighlights
@@ -98,10 +101,18 @@ fun ReaderPane(
     palette: ReaderPalette,
     modifier: Modifier = Modifier,
     fontSizeSp: Float = 18f,
+    // Horizontal margin (px) either side of the text column, and the line-height
+    // multiple — both reader prefs (config), defaulting to the feature-manifest
+    // MARGIN 28 / line_height 1.35.
+    sideMarginPx: Float = 28f,
+    lineSpacing: Float = 1.35f,
     versePerLine: Boolean = false,
     searchHits: Set<String> = emptySet(),
     onWordTap: (Hit) -> Unit = {},
     onVerseLongPress: (String) -> Unit = {},
+    // A horizontal fling steps the chapter: +1 (swipe left → next), -1 (swipe
+    // right → previous).
+    onSwipeChapter: (Int) -> Unit = {},
     // Bump to force a highlight re-fetch after an add/trim/remove that didn't
     // change book/chapter (the verse-action sheet edits highlights in place).
     highlightEpoch: Int = 0,
@@ -122,7 +133,7 @@ fun ReaderPane(
     // Font metrics → the layout's vertical rhythm (mirrors EnsureFormats).
     val fm = remember(fontPx) { regular.fontMetrics }
     val textH = fm.descent - fm.ascent
-    val lineH = textH * 1.35f
+    val lineH = textH * lineSpacing
     // A single space's advance, measured as the desktop does ("n n" − "nn").
     val space = max(1f, regular.measureText("n n") - regular.measureText("nn"))
 
@@ -135,17 +146,19 @@ fun ReaderPane(
 
     var scrollY by remember { mutableStateOf(0f) }
     var viewportH by remember { mutableStateOf(0f) }
+    var swipeDx by remember { mutableStateOf(0f) }   // accumulated horizontal drag
 
     // Free the native display list when this pane leaves the tree.
     DisposableEffect(Unit) { onDispose { chapterHandle?.close() } }
 
     BoxWithConstraints(modifier.fillMaxSize()) {
         val widthPx = with(density) { maxWidth.toPx() }
-        val column = min(widthPx - 2 * MARGIN, MAX_COLUMN)
+        val column = min(widthPx - 2 * sideMarginPx, MAX_COLUMN)
         val originX = (widthPx - column) / 2f
 
-        // (Re)lay out the chapter whenever an input that affects it changes.
-        LaunchedEffect(book, chapter, widthPx, fontPx, versePerLine) {
+        // (Re)lay out the chapter whenever an input that affects it changes
+        // (margin/spacing change the column width + rhythm, so re-lay out too).
+        LaunchedEffect(book, chapter, widthPx, fontPx, versePerLine, sideMarginPx, lineSpacing) {
             if (widthPx < 60f) return@LaunchedEffect
             val cfg = PureLayoutConfig.ByValue().apply {
                 width = column
@@ -213,6 +226,10 @@ fun ReaderPane(
             consumed
         }
 
+        // Horizontal fling → chapter step. Distinct from the vertical scroll
+        // above; Compose routes each drag to the detector matching its axis.
+        val swipeState = rememberDraggableState { delta -> swipeDx += delta }
+
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
@@ -224,6 +241,16 @@ fun ReaderPane(
                 .clipToBounds()
                 .onSizeChanged { viewportH = it.height.toFloat() }
                 .scrollable(scrollState, Orientation.Vertical)
+                .draggable(
+                    state = swipeState,
+                    orientation = Orientation.Horizontal,
+                    onDragStopped = {
+                        val threshold = with(density) { 64.dp.toPx() }
+                        if (swipeDx <= -threshold) onSwipeChapter(1)       // swipe left → next
+                        else if (swipeDx >= threshold) onSwipeChapter(-1)  // swipe right → prev
+                        swipeDx = 0f
+                    },
+                )
                 .pointerInput(chapterHandle) {
                     detectTapGestures(
                         onTap = { pos ->

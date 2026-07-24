@@ -417,6 +417,11 @@ data class ConfigState(
     val versePerLine: Boolean = false,
     // Colour theme choice: "system" | "light" | "dark" | "night". Additive.
     val theme: String = "system",
+    // One-tap copy shape: "verse" | "verseRef" | "verseMarkdown". Additive.
+    val copyStyle: String = "verseRef",
+    // Reader spacing: px margin either side of the text; line-height multiple.
+    val sideMargin: Double = 28.0,
+    val lineSpacing: Double = 1.35,
 )
 
 @Serializable

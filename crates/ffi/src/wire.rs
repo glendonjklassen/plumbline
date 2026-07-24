@@ -1244,6 +1244,15 @@ pub struct WireConfigState {
     /// Colour theme choice (`system`/`light`/`dark`/`night`).
     #[serde(default)]
     pub theme: String,
+    /// Default one-tap copy shape (`verse`/`verseRef`/`verseMarkdown`).
+    #[serde(default)]
+    pub copy_style: String,
+    /// Reader horizontal margin in px (space either side of the text column).
+    #[serde(default)]
+    pub side_margin: f64,
+    /// Reader line-height as a multiple of the text height.
+    #[serde(default)]
+    pub line_spacing: f64,
     /// Load-only: true when no config file existed yet (guided first run).
     #[serde(default)]
     pub first_run: bool,
@@ -1269,6 +1278,9 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         active_pane: cfg.active,
         verse_per_line: cfg.verse_per_line,
         theme: cfg.theme.token().to_string(),
+        copy_style: cfg.copy_style.clone(),
+        side_margin: cfg.side_margin,
+        line_spacing: cfg.line_spacing,
         first_run,
     }
 }
@@ -1285,6 +1297,20 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         active: w.active_pane,
         verse_per_line: w.verse_per_line,
         theme: ThemeChoice::parse(&w.theme).unwrap_or_default(),
+        copy_style: match w.copy_style.as_str() {
+            "verse" | "verseRef" | "verseMarkdown" => w.copy_style.clone(),
+            _ => Config::default().copy_style,
+        },
+        side_margin: if w.side_margin.is_finite() && (0.0..=160.0).contains(&w.side_margin) {
+            w.side_margin
+        } else {
+            Config::default().side_margin
+        },
+        line_spacing: if w.line_spacing.is_finite() && (1.0..=3.0).contains(&w.line_spacing) {
+            w.line_spacing
+        } else {
+            Config::default().line_spacing
+        },
     }
 }
 

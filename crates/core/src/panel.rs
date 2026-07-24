@@ -1281,7 +1281,7 @@ pub fn about_blocks() -> Vec<Block> {
         &mut out,
         "THE TEXT",
         &[
-            "The 1769 King James text (public domain), tokenized once and frozen. Scripture is set in EB Garamond (SIL Open Font License, bundled).",
+            "The traditional 1769 King James Version, in the public domain.",
         ],
     );
     guide_section(
@@ -1295,7 +1295,7 @@ pub fn about_blocks() -> Vec<Block> {
         &mut out,
         "THE COVENANT",
         &[
-            "Yours forever: no account, no telemetry, no phoning home. Your library — weaves, threads, tags, notes — lives in plain files you own and can back up or move. The app is free; a future sync service is the only paid piece, and it never gates a local feature.",
+            "Yours forever: no account, no ads, no tracking, nothing sent anywhere. Your library — highlights, notes, tags, threads — is saved as ordinary files on your device that you can back up or move. The app is free.",
         ],
     );
     out.push(Block::Rule);

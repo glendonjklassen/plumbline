@@ -131,6 +131,9 @@ fun VerseActionSheet(
     palette: ReaderPalette,
     verseRef: String,
     tokenCount: Int = -1,
+    // The reader's chosen copy shape (config): a single "Copy" honours it instead
+    // of listing every variant. One of "verse" / "verseRef" / "verseMarkdown".
+    copyStyle: String = "verseRef",
     onHighlightsChanged: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
@@ -310,12 +313,11 @@ fun VerseActionSheet(
             )
             HorizontalDivider(color = palette.rule)
 
-            // ── copy shapes + share (Tier 0 #1) ─────────────────────────────
-            ActionRow("Copy verse", palette.ink) { copy("verse") }
-            ActionRow("Copy with reference", palette.ink) { copy("verseRef") }
-            ActionRow("Copy (markdown)", palette.ink) { copy("verseMarkdown") }
+            // ── copy + share (Tier 0 #1) — one "Copy" in the reader's chosen
+            //    shape; the format lives in Options ▸ Copy format. ─────────────
+            ActionRow("Copy", palette.ink) { copy(copyStyle) }
             ActionRow("Copy chapter", palette.ink) { copy("chapter") }
-            ActionRow("Share…", palette.ink) { copy("verseRef", share = true) }
+            ActionRow("Share…", palette.ink) { copy(copyStyle, share = true) }
             HorizontalDivider(color = palette.rule)
 
             // ── note + memorize ─────────────────────────────────────────────

@@ -299,7 +299,12 @@ Zoom **persists config on every change** (M:2117).
 
 `%APPDATA%\pure-study\config.json` (XDG / App Support elsewhere):
 `{"studyMode":"simple"|"full","bodySize":18.0,"openPanes":[{"book","chapter"}],
-"activePane":0}`. `first_run` only when the file is absent; corrupt file →
+"activePane":0,"versePerLine":false,"theme":"system","copyStyle":"verseRef",
+"sideMargin":28.0,"lineSpacing":1.35}`. All additive (default on absence); a
+save must round-trip fields it doesn't expose (each shell carries them forward).
+`copyStyle` (`verse`|`verseRef`|`verseMarkdown`) is the one-tap copy shape;
+`sideMargin` (px, 0–160) + `lineSpacing` (×text-height, 1–3) are reader spacing.
+`first_run` only when the file is absent; corrupt file →
 defaults, no re-prompt. Restore panes (≤3; default John 3) + active + zoom at
 startup; persist on close, mode toggle, first-run pick, every zoom. Scroll
 position intentionally transient. *Data*: `pure_config_load_json` /
@@ -685,3 +690,20 @@ flashcards (needs #14) are follow-ups.
   the JSON contract are identical.
 - Measure callback: back it with `android.graphics.Paint.measureText` (or
   Compose's TextMeasurer); the core does the rest.
+- **v1 phone shell (2026-07-24) — Compose delta (form-factor UX, on-device
+  feedback).** The phone drops the always-split layout + the Split/Single and
+  Bible/Study text toggles. Two layouts only (`FoldMode.UiMode`): a single
+  fullscreen reader (phone/closed/tabletop), or two side-by-side panes when the
+  fold is opened flat with a vertical hinge. On the phone the study surface
+  (word tap / library / link / search result) is a **dismissible bottom sheet**;
+  on the fold it's the right pane (Bible∥Study), toggled from the overflow menu.
+  Chrome leans on **icons over text** (search, overflow, chapter arrows). Search
+  is a full-screen overlay behind a 🔍 icon (field + result list) instead of an
+  always-on box. The reader gets a **horizontal-swipe chapter step** (left→next,
+  right→prev) and honours the new `sideMargin` / `lineSpacing` config prefs; the
+  overflow menu exposes **Text & spacing** (size + margin + line-spacing sliders)
+  and **Copy format** (the `copyStyle` chooser), so the long-press has a single
+  **Copy** action. Desktop keeps its right-click copy variants + fixed layout;
+  the desktop UI for `copyStyle`/`sideMargin`/`lineSpacing` is a pending follow-up
+  (the fields round-trip on both desktop shells regardless). Requires the
+  `material-icons-core` dependency.

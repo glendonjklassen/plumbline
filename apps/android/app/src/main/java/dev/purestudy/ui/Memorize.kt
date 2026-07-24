@@ -27,12 +27,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -127,7 +132,9 @@ private fun MemFrame(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                TextButton(onClick = onClose) { Text("‹", fontSize = 20.sp, color = palette.ink) }
+                IconButton(onClick = onClose) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = palette.ink)
+                }
                 Text(
                     title,
                     color = palette.ink,
@@ -243,8 +250,11 @@ private fun ReviewBody(
     }
 
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        // imePadding lifts the grade row above the keyboard during typed recall;
+        // the tighter vertical padding keeps the last line of a long verse from
+        // crowding the controls at the bottom on shorter windows.
+        Modifier.fillMaxSize().imePadding().padding(horizontal = 22.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text("Card ${idx + 1} of ${due.size} due", color = palette.faded, fontSize = 12.sp)
         Text(refDisplay, color = palette.ink, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)

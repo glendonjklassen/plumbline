@@ -1644,6 +1644,10 @@ fn show_constellation(state: &Shared, ui: &Ui) {
 fn persist_config(state: &Shared) {
     let cfg = {
         let st = state.borrow();
+        // Preserve reader prefs this shell doesn't expose yet (copy style, side
+        // margin, line spacing) so a GTK save doesn't reset them — the config is
+        // a frozen-additive contract shared with the other shells.
+        let prior = config::load().0;
         Config {
             mode: st.mode,
             body_size: st.font_size,
@@ -1655,6 +1659,9 @@ fn persist_config(state: &Shared) {
             active: st.active,
             verse_per_line: st.verse_per_line,
             theme: st.theme_choice,
+            copy_style: prior.copy_style,
+            side_margin: prior.side_margin,
+            line_spacing: prior.line_spacing,
         }
     };
     let _ = config::save(&cfg);

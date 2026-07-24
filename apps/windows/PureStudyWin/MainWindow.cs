@@ -53,6 +53,11 @@ public sealed class MainWindow : Window
     private readonly RadioMenuFlyoutItem _miThemeNight = new() { Text = "Night", GroupName = "theme" };
     private readonly RadioMenuFlyoutItem _miThemeSystem = new() { Text = "Follow system", GroupName = "theme" };
     private string _themeChoice = "system";
+    // Additive reader prefs, currently Android-only in the UI. Tracked here so a
+    // WinUI save round-trips them instead of resetting the shared config field.
+    private string _copyStyle = "verseRef";
+    private double _sideMargin = 28.0;
+    private double _lineSpacing = 1.35;
     private readonly TextBlock _status = new()
     {
         VerticalAlignment = VerticalAlignment.Center,
@@ -175,6 +180,9 @@ public sealed class MainWindow : Window
         _fullMode = cfg.StudyMode == "full";
         _fontSize = (float)Math.Clamp(cfg.BodySize is > 6 and < 96 ? cfg.BodySize : 18.0, 12, 48);
         _versePerLine = cfg.VersePerLine;
+        _copyStyle = string.IsNullOrEmpty(cfg.CopyStyle) ? "verseRef" : cfg.CopyStyle;
+        _sideMargin = cfg.SideMargin is >= 0 and <= 160 ? cfg.SideMargin : 28.0;
+        _lineSpacing = cfg.LineSpacing is >= 1 and <= 3 ? cfg.LineSpacing : 1.35;
 
         var home = FindHome();
         if (home is null)
@@ -236,7 +244,10 @@ public sealed class MainWindow : Window
             _active,
             false,
             _versePerLine,
-            _themeChoice);
+            _themeChoice,
+            _copyStyle,
+            _sideMargin,
+            _lineSpacing);
         StudyConfig.SaveJson(System.Text.Json.JsonSerializer.Serialize(state, Wire.Options));
     }
 

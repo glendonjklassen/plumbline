@@ -167,7 +167,12 @@ public sealed record ConfigState(
     bool VersePerLine = false,
     // Colour theme choice: "system" | "light" | "dark" | "night" (Tier 0 #5).
     // Additive; must round-trip so a save doesn't clobber the GTK preference.
-    string Theme = "system");
+    string Theme = "system",
+    // Additive reader prefs — must round-trip so a WinUI save doesn't clobber a
+    // preference set on another shell. CopyStyle: "verse"|"verseRef"|"verseMarkdown".
+    string CopyStyle = "verseRef",
+    double SideMargin = 28.0,
+    double LineSpacing = 1.35);
 public sealed record PaneRef1(string Book, ushort Chapter);
 
 // ── Tier 0: themes, personal notes, highlights ──────────────────────────────

@@ -1,13 +1,18 @@
-// The top-level shell: chrome (book/chapter nav, a mode/pane toggle, search) over
-// the fold-aware arrangement of a Bible pane and a Study pane. The Android mirror
-// of apps/windows/PureStudyWin/MainWindow.cs, reduced to a v0 reader:
+// The top-level shell: icon chrome (search + an overflow menu) over a fold-aware
+// arrangement of the reader. The Android mirror of apps/windows/PureStudyWin/
+// MainWindow.cs, adapted to a touch phone (Glendon's v1 phone shell):
 //
-//   UiMode.SplitVertical      Column: Bible over Study (stacked halves).
-//   UiMode.FullscreenVertical single pane; a Bible↔Study toggle in the bar.
-//   UiMode.FoldFullscreen     Row of two panes; the second switches Bible↔Study
-//                             (so Bible∥Bible or Bible∥Study), split at the hinge.
+//   UiMode.FullscreenVertical  a phone: ONE fullscreen reading pane. The book
+//                              nav lives inline in the top bar; study, search,
+//                              and libraries surface as a dismissible bottom
+//                              sheet / full-screen overlay on demand — never a
+//                              permanent split with a toggle button.
+//   UiMode.FoldFullscreen      device opened flat: a Row of two panes; the
+//                              second is a second Bible or the study pane
+//                              (toggled from the overflow menu), split at the hinge.
 //
-// All study logic lives across the ABI — this is orchestration only.
+// The shell leans on icons over text for chrome (search, overflow, chapter
+// arrows). All study logic lives across the ABI — this is orchestration only.
 //
 // Author D (Compose UI).
 
@@ -15,6 +20,7 @@ package dev.purestudy.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,14 +36,23 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,12 +61,15 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
@@ -74,10 +92,7 @@ import kotlinx.serialization.encodeToString
 /** What the second (right) pane shows in fold mode. */
 private enum class SecondPane { Study, Bible }
 
-/** The single-pane (mode 2) view choice. */
-private enum class SingleView { Bible, Study }
-
-/** A study "library" the ≡ menu loads into the study pane as blocks. */
+/** A study "library" the overflow menu loads into the study surface as blocks. */
 enum class Library { Threads, Tags, Weaves, Suggested, Guide, About }
 
 /** A one-field text-input authoring dialog (add tag / add thread / edit note). */
@@ -130,8 +145,6 @@ fun StudyScreen(
     var searchHits by remember { mutableStateOf<Set<String>>(emptySet()) }
     var searchText by remember { mutableStateOf("") }
 
-    var singlePane by remember { mutableStateOf(false) }       // mode 1 vs mode 2
-    var singleView by remember { mutableStateOf(SingleView.Bible) }
     var secondPane by remember { mutableStateOf(SecondPane.Study) }
 
     // Overlays / sheets layered over the reader (parity features).
@@ -142,25 +155,29 @@ fun StudyScreen(
     var showChord by remember { mutableStateOf(false) }
     var highlightEpoch by remember { mutableStateOf(0) }            // repaint after highlight edits
     var fullMode by remember { mutableStateOf(true) }               // Simple vs Full study depth
-    var wordSheet by remember { mutableStateOf(false) }             // word study as a sheet (narrow)
+    var studySheet by remember { mutableStateOf(false) }            // phone: study as a bottom sheet
+    var showSearch by remember { mutableStateOf(false) }            // full-screen search overlay
     var prompt by remember { mutableStateOf<AuthorPrompt?>(null) }   // text-input authoring dialog
 
-    // Shared body text size (config.bodySize) — scales the reader + study pane,
-    // persisted to the cross-shell config so it survives restarts.
+    // Shared reader prefs (config): body size + horizontal margin + line spacing +
+    // default copy shape. Persisted to the cross-shell config so they survive
+    // restarts and (eventually) carry across shells.
     val loadedCfg = remember { runCatching { parseWire<ConfigState>(StudyConfig.LoadJson()) }.getOrNull() }
     var bodySize by remember { mutableStateOf((loadedCfg?.bodySize ?: 18.0).coerceIn(12.0, 40.0)) }
-    var showTextSize by remember { mutableStateOf(false) }
-    fun persistBodySize() {
-        val cfg = (loadedCfg ?: ConfigState()).copy(bodySize = bodySize)
+    var sideMargin by remember { mutableStateOf((loadedCfg?.sideMargin ?: 28.0).coerceIn(8.0, 96.0)) }
+    var lineSpacing by remember { mutableStateOf((loadedCfg?.lineSpacing ?: 1.35).coerceIn(1.0, 2.2)) }
+    var copyStyle by remember { mutableStateOf(loadedCfg?.copyStyle ?: "verseRef") }
+    var showReading by remember { mutableStateOf(false) }
+    var showCopyFormat by remember { mutableStateOf(false) }
+    fun persistCfg() {
+        val cfg = (loadedCfg ?: ConfigState()).copy(
+            bodySize = bodySize, sideMargin = sideMargin, lineSpacing = lineSpacing, copyStyle = copyStyle,
+        )
         runCatching { StudyConfig.SaveJson(PureJson.encodeToString(cfg)) }
     }
+    val studyScale = (bodySize / 18.0).toFloat()
 
-    val base = rememberUiMode(fold)
-    val mode = when {
-        base == UiMode.FoldFullscreen -> UiMode.FoldFullscreen
-        singlePane -> UiMode.FullscreenVertical
-        else -> UiMode.SplitVertical
-    }
+    val mode = rememberUiMode(fold)
 
     // ── navigation: roll a (book, chapter) across book bounds, per pane.
     //    Mirrors MainWindow.StepActive. ───────────────────────────────────────
@@ -175,30 +192,21 @@ fun StudyScreen(
         }
     }
 
-    // Reveal the study surface for the current mode (deeper study / search / links).
+    // Reveal the study surface: the right pane on the fold, a bottom sheet on a phone.
     fun revealStudy() {
-        when (mode) {
-            UiMode.FullscreenVertical -> singleView = SingleView.Study
-            UiMode.FoldFullscreen -> secondPane = SecondPane.Study
-            else -> {}
-        }
+        if (mode == UiMode.FoldFullscreen) secondPane = SecondPane.Study else studySheet = true
     }
 
-    // ── word tap → word study. On a narrow single screen it's a bottom sheet (a
-    //    quick look-up that keeps the reading place); elsewhere the study pane. ─
+    // ── word tap → word study (bottom sheet on a phone, right pane on the fold) ─
     fun onWord(hit: Hit) {
         studyBlocks = runCatching {
             engine.WordStudyBlocksJson(hit.verse, hit.tokenIndex.toInt(), fullMode)
         }.getOrNull()
-        when (mode) {
-            UiMode.FullscreenVertical -> wordSheet = true
-            UiMode.FoldFullscreen -> secondPane = SecondPane.Study
-            else -> {}
-        }
+        revealStudy()
     }
 
     // Load a study library (threads / tags / weaves / suggested / guide / about)
-    // into the study pane — StudyPane renders each block list identically.
+    // into the study surface — StudyPane renders each block list identically.
     fun openLibrary(which: Library) {
         val b = when (which) {
             Library.Threads -> engine.ThreadsBlocksJson()
@@ -211,30 +219,13 @@ fun StudyScreen(
         if (b != null) { studyBlocks = b; revealStudy() }
     }
 
-    // ── search: a reference jumps; a query bands hits + shows result blocks ──
-    fun runSearch(query: String) {
-        val q = query.trim()
-        if (q.isEmpty()) { searchHits = emptySet(); studyBlocks = null; return }
-        val sj = runCatching { engine.SearchJson(q) }.getOrNull() ?: return
-        val r = runCatching { parseWire<SearchResult>(sj) }.getOrNull() ?: return
-        if (r.kind == "goto" && r.book != null && r.chapter != null) {
-            searchHits = emptySet()
-            book = r.book!!; chapter = r.chapter!!.toInt()
-            studyBlocks = null
-        } else {
-            searchHits = r.hits?.map { it.verse }?.toSet() ?: emptySet()
-            studyBlocks = runCatching { engine.SearchBlocksJson(q) }.getOrNull()
-            revealStudy()
-        }
-    }
-
-    // ── link routing: navigate, open a map, or load a study card into the pane.
+    // ── link routing: navigate, open a map, or load a study card into the surface.
     //    Authoring verbs (addTag/addThread/approve/reject/edit*) are pass 3. ────
     fun onLink(uri: String) {
         val j = runCatching { StudyEngine.RouteLinkJson(uri) }.getOrNull() ?: return
         val link = runCatching { parseWire<PanelLinkData>(j) }.getOrNull() ?: return
         fun show(blocks: String?) {
-            if (blocks != null) { studyBlocks = blocks; wordSheet = false; revealStudy() }
+            if (blocks != null) { studyBlocks = blocks; revealStudy() }
         }
         when (link.verb) {
             "go" -> if (link.book != null && link.chapter != null) {
@@ -273,39 +264,39 @@ fun StudyScreen(
         }
     }
 
-    // A Bible pane = its own compact ‹ Book Ch › header (per-pane navigation) +
-    // the reader. `isSecond` picks the primary or the second pane's state.
-    val biblePane: @Composable (Modifier, Boolean) -> Unit = { m, isSecond ->
+    // A Bible pane = an optional compact ‹ Book Ch › header (per-pane nav, used in
+    // fold mode) + the reader. `isSecond` picks the primary or the second pane's
+    // state; `showHeader` is false on the phone (the top bar carries the nav).
+    val biblePane: @Composable (Modifier, Boolean, Boolean) -> Unit = { m, isSecond, showHeader ->
         val b = if (isSecond) secondBook else book
         val c = if (isSecond) secondChapter else chapter
+        fun setPane(nb: String, nc: Int) {
+            if (isSecond) { secondBook = nb; secondChapter = nc } else { book = nb; chapter = nc }
+        }
         Column(m) {
-            PaneHeader(
-                toc = toc, book = b, chapter = c, palette = palette,
-                onPrev = {
-                    val (nb, nc) = step(b, c, -1)
-                    if (isSecond) { secondBook = nb; secondChapter = nc } else { book = nb; chapter = nc }
-                },
-                onNext = {
-                    val (nb, nc) = step(b, c, +1)
-                    if (isSecond) { secondBook = nb; secondChapter = nc } else { book = nb; chapter = nc }
-                },
-                onPick = { bk ->
-                    if (isSecond) { secondBook = bk.id; secondChapter = 1 } else { book = bk.id; chapter = 1 }
-                },
-            )
-            HorizontalDivider(color = palette.rule)
+            if (showHeader) {
+                PaneHeader(
+                    toc = toc, book = b, chapter = c, palette = palette,
+                    onPrev = { val (nb, nc) = step(b, c, -1); setPane(nb, nc) },
+                    onNext = { val (nb, nc) = step(b, c, +1); setPane(nb, nc) },
+                    onPick = { bk -> setPane(bk.id, 1) },
+                )
+                HorizontalDivider(color = palette.rule)
+            }
             ReaderPane(
                 engine = engine, book = b, chapter = c, palette = palette,
                 modifier = Modifier.weight(1f), searchHits = searchHits, fontSizeSp = bodySize.toFloat(),
+                sideMarginPx = sideMargin.toFloat(), lineSpacing = lineSpacing.toFloat(),
                 onWordTap = ::onWord,
                 onVerseLongPress = { verse -> actionVerse = verse },
+                onSwipeChapter = { dir -> val (nb, nc) = step(b, c, dir); setPane(nb, nc) },
                 highlightEpoch = highlightEpoch,
             )
         }
     }
     val study: @Composable (Modifier) -> Unit = { m ->
         Box(m.background(palette.panelBg)) {
-            StudyPane(studyBlocks, palette, onLink = ::onLink, scale = (bodySize / 18.0).toFloat())
+            StudyPane(studyBlocks, palette, onLink = ::onLink, scale = studyScale)
         }
     }
 
@@ -317,14 +308,12 @@ fun StudyScreen(
     Column(Modifier.fillMaxSize().background(palette.paper)) {
         TopBar(
             palette = palette,
-            searchText = searchText, onSearchChange = { searchText = it },
-            onSearchSubmit = { runSearch(searchText) },
             mode = mode,
-            singlePane = singlePane, onToggleSplit = { singlePane = !singlePane },
-            singleStudy = singleView == SingleView.Study,
-            onToggleSingleView = {
-                singleView = if (singleView == SingleView.Study) SingleView.Bible else SingleView.Study
-            },
+            toc = toc, book = book, chapter = chapter,
+            onPrev = { val (nb, nc) = step(book, chapter, -1); book = nb; chapter = nc },
+            onNext = { val (nb, nc) = step(book, chapter, +1); book = nb; chapter = nc },
+            onPick = { bk -> book = bk.id; chapter = 1 },
+            onSearch = { showSearch = true },
             secondStudy = secondPane == SecondPane.Study,
             onToggleSecondPane = {
                 secondPane = if (secondPane == SecondPane.Study) SecondPane.Bible else SecondPane.Study
@@ -335,63 +324,86 @@ fun StudyScreen(
             onLibrary = ::openLibrary,
             fullStudy = fullMode,
             onToggleFull = { fullMode = !fullMode },
-            onTextSize = { showTextSize = true },
+            onReading = { showReading = true },
+            onCopyFormat = { showCopyFormat = true },
             bundledOn = bundledOn,
             onToggleBundled = onToggleBundled,
         )
         HorizontalDivider(color = palette.rule)
 
         when (mode) {
-            UiMode.SplitVertical -> Column(Modifier.fillMaxSize()) {
-                biblePane(Modifier.fillMaxWidth().weight(1f), false)
-                HingeSpacerHorizontal(fold)
-                HorizontalDivider(color = palette.rule)
-                study(Modifier.fillMaxWidth().weight(1f))
-            }
-
-            UiMode.FullscreenVertical -> Box(Modifier.fillMaxSize()) {
-                if (singleView == SingleView.Study) study(Modifier.fillMaxSize())
-                else biblePane(Modifier.fillMaxSize(), false)
-            }
+            UiMode.FullscreenVertical -> biblePane(Modifier.fillMaxSize(), false, false)
 
             UiMode.FoldFullscreen -> Row(Modifier.fillMaxSize()) {
-                biblePane(Modifier.fillMaxHeight().weight(1f), false)
+                biblePane(Modifier.fillMaxHeight().weight(1f), false, true)
                 HingeSpacerVertical(fold)
                 VerticalDivider(color = palette.rule)
                 if (secondPane == SecondPane.Study) study(Modifier.fillMaxHeight().weight(1f))
-                else biblePane(Modifier.fillMaxHeight().weight(1f), true)
+                else biblePane(Modifier.fillMaxHeight().weight(1f), true, true)
             }
         }
     }
 
         // ── overlays / sheets (parity features layered over the reader) ──────
+        if (studySheet && mode == UiMode.FullscreenVertical) {
+            StudySheet(studyBlocks, palette, studyScale, ::onLink) { studySheet = false }
+        }
+        if (showSearch) {
+            SearchOverlay(
+                engine, palette, studyScale, searchText,
+                onQueryChange = { searchText = it },
+                onHits = { searchHits = it },
+                onNavigate = { b, c -> book = b; chapter = c },
+                onLink = ::onLink,
+                onClose = { showSearch = false },
+            )
+        }
         actionVerse?.let { v ->
             VerseActionSheet(
                 engine, palette, v,
+                copyStyle = copyStyle,
                 onHighlightsChanged = { highlightEpoch++ },
                 onDismiss = { actionVerse = null },
             )
         }
         memView?.let { v -> MemorizeScreen(engine, v, toc, palette, onClose = { memView = null }) }
-        if (wordSheet) WordStudySheet(studyBlocks, palette, (bodySize / 18.0).toFloat(), ::onLink) { wordSheet = false }
-        if (showTextSize) {
+        if (showReading) {
             AlertDialog(
-                onDismissRequest = { showTextSize = false; persistBodySize() },
-                title = { Text("Text size") },
+                onDismissRequest = { showReading = false; persistCfg() },
+                title = { Text("Text & spacing") },
                 text = {
                     Column {
-                        Text("Aa — reader & study", fontSize = bodySize.sp, color = palette.ink)
+                        Text("Size — reader & study", color = palette.faded, fontSize = 12.sp)
+                        Text("Aa", fontSize = bodySize.sp, color = palette.ink)
                         Slider(
                             value = bodySize.toFloat(),
                             onValueChange = { bodySize = it.toDouble() },
-                            valueRange = 12f..40f,
-                            steps = 27,
+                            valueRange = 12f..40f, steps = 27,
+                        )
+                        Text("Margin — space either side of the text", color = palette.faded, fontSize = 12.sp)
+                        Slider(
+                            value = sideMargin.toFloat(),
+                            onValueChange = { sideMargin = it.toDouble() },
+                            valueRange = 8f..96f,
+                        )
+                        Text("Line spacing", color = palette.faded, fontSize = 12.sp)
+                        Slider(
+                            value = lineSpacing.toFloat(),
+                            onValueChange = { lineSpacing = it.toDouble() },
+                            valueRange = 1.0f..2.2f,
                         )
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { showTextSize = false; persistBodySize() }) { Text("Done") }
+                    TextButton(onClick = { showReading = false; persistCfg() }) { Text("Done") }
                 },
+            )
+        }
+        if (showCopyFormat) {
+            CopyFormatDialog(
+                current = copyStyle, palette = palette,
+                onPick = { copyStyle = it; persistCfg() },
+                onDismiss = { showCopyFormat = false },
             )
         }
         prompt?.let { p ->
@@ -425,9 +437,8 @@ fun StudyScreen(
     }
 }
 
-/** A pane's own compact navigation: ‹ Book Ch › with a book picker. One per
- *  Bible pane, so the left pane and the second (fold) pane navigate
- *  independently — no shared or duplicated toolbar. */
+/** A pane's own compact navigation: ‹ Book Ch › with a book picker (fold mode,
+ *  one per Bible pane, so the two panes navigate independently). */
 @Composable
 private fun PaneHeader(
     toc: List<TocBook>,
@@ -442,10 +453,12 @@ private fun PaneHeader(
     val name = toc.firstOrNull { it.id == book }?.name ?: book
     Surface(color = palette.paneNavBg) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = onPrev) { Text("‹", fontSize = 18.sp, color = palette.ink) }
+            IconButton(onClick = onPrev) {
+                Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "Previous chapter", tint = palette.ink)
+            }
             Box {
                 TextButton(onClick = { menu = true }) { Text("$name $chapter", color = palette.ink) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -454,24 +467,26 @@ private fun PaneHeader(
                     }
                 }
             }
-            TextButton(onClick = onNext) { Text("›", fontSize = 18.sp, color = palette.ink) }
+            IconButton(onClick = onNext) {
+                Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Next chapter", tint = palette.ink)
+            }
         }
     }
 }
 
-/** Top chrome: search, the mode/pane toggle, and the ≡ menu. Book/chapter
- *  navigation lives per-pane in [PaneHeader] now. */
+/** Top chrome: on a phone, inline ‹ Book Ch › nav; then a search icon and an
+ *  overflow (⋮) menu. Icons over text (Glendon's Android direction). */
 @Composable
 private fun TopBar(
     palette: ReaderPalette,
-    searchText: String,
-    onSearchChange: (String) -> Unit,
-    onSearchSubmit: () -> Unit,
     mode: UiMode,
-    singlePane: Boolean,
-    onToggleSplit: () -> Unit,
-    singleStudy: Boolean,
-    onToggleSingleView: () -> Unit,
+    toc: List<TocBook>,
+    book: String,
+    chapter: Int,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onPick: (TocBook) -> Unit,
+    onSearch: () -> Unit,
     secondStudy: Boolean,
     onToggleSecondPane: () -> Unit,
     onMemorize: (MemorizeView) -> Unit,
@@ -480,46 +495,55 @@ private fun TopBar(
     onLibrary: (Library) -> Unit,
     fullStudy: Boolean,
     onToggleFull: () -> Unit,
-    onTextSize: () -> Unit,
+    onReading: () -> Unit,
+    onCopyFormat: () -> Unit,
     bundledOn: Boolean,
     onToggleBundled: () -> Unit,
 ) {
     Surface(color = palette.paneNavBg) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            OutlinedTextField(
-                value = searchText,
-                onValueChange = onSearchChange,
-                placeholder = { Text("search — word, phrase, or reference") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { onSearchSubmit() }),
-            )
-
-            // Mode / pane controls, adapted to the current layout.
-            when (mode) {
-                UiMode.FoldFullscreen -> TextButton(onClick = onToggleSecondPane) {
-                    Text(if (secondStudy) "Study" else "Bible", color = palette.gold)
+            // Phone: the single pane's book nav lives here (no per-pane header).
+            if (mode == UiMode.FullscreenVertical) {
+                var pick by remember { mutableStateOf(false) }
+                val name = toc.firstOrNull { it.id == book }?.name ?: book
+                IconButton(onClick = onPrev) {
+                    Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "Previous chapter", tint = palette.ink)
                 }
-                UiMode.FullscreenVertical -> {
-                    TextButton(onClick = onToggleSingleView) {
-                        Text(if (singleStudy) "Study" else "Bible", color = palette.gold)
+                Box {
+                    TextButton(onClick = { pick = true }) { Text("$name $chapter", color = palette.ink, fontSize = 16.sp) }
+                    DropdownMenu(expanded = pick, onDismissRequest = { pick = false }) {
+                        for (b in toc) {
+                            DropdownMenuItem(text = { Text(b.name) }, onClick = { onPick(b); pick = false })
+                        }
                     }
-                    TextButton(onClick = onToggleSplit) { Text("Split", color = palette.ink) }
                 }
-                UiMode.SplitVertical -> TextButton(onClick = onToggleSplit) {
-                    Text(if (singlePane) "Split" else "Single", color = palette.ink)
+                IconButton(onClick = onNext) {
+                    Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Next chapter", tint = palette.ink)
                 }
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            IconButton(onClick = onSearch) {
+                Icon(Icons.Filled.Search, contentDescription = "Search", tint = palette.ink)
             }
 
             Box {
                 var menu by remember { mutableStateOf(false) }
-                TextButton(onClick = { menu = true }) { Text("⋮", fontSize = 20.sp, color = palette.ink) }
+                IconButton(onClick = { menu = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "Menu", tint = palette.ink)
+                }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    if (mode == UiMode.FoldFullscreen) {
+                        DropdownMenuItem(
+                            text = { Text(if (secondStudy) "Right pane: Study  ✓" else "Right pane: second Bible") },
+                            onClick = { onToggleSecondPane(); menu = false },
+                        )
+                        HorizontalDivider(color = palette.rule)
+                    }
                     Text(
                         "Memorize",
                         color = palette.faded,
@@ -548,7 +572,8 @@ private fun TopBar(
                         text = { Text(if (fullStudy) "Full study  ✓" else "Full study") },
                         onClick = { onToggleFull(); menu = false },
                     )
-                    DropdownMenuItem(text = { Text("Text size…") }, onClick = { onTextSize(); menu = false })
+                    DropdownMenuItem(text = { Text("Text & spacing…") }, onClick = { onReading(); menu = false })
+                    DropdownMenuItem(text = { Text("Copy format…") }, onClick = { onCopyFormat(); menu = false })
                     DropdownMenuItem(
                         text = { Text(if (bundledOn) "Bundled study set  ✓" else "Bundled study set") },
                         onClick = { onToggleBundled(); menu = false },
@@ -559,11 +584,11 @@ private fun TopBar(
     }
 }
 
-/** Word study as a bottom sheet — the narrow-screen quick look-up (the reader
- *  stays behind it). Links inside route through [onLink] like the pane does. */
+/** Study as a bottom sheet — the phone surface for a word tap / library / link
+ *  result. Swipe down or tap the scrim to dismiss. Links route through [onLink]. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WordStudySheet(
+private fun StudySheet(
     blocksJson: String?,
     palette: ReaderPalette,
     scale: Float,
@@ -571,10 +596,120 @@ private fun WordStudySheet(
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = palette.panelBg) {
-        Box(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
+        Box(Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
             StudyPane(blocksJson, palette, onLink = onLink, scale = scale)
         }
     }
+}
+
+/** The full-screen search surface behind the top-bar 🔍: a query field over a
+ *  live result list. A reference goes straight to the passage (and closes);
+ *  a word/phrase bands the reader's hits and lists the results here. Tapping a
+ *  result routes through [onLink] and closes. System-back closes. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchOverlay(
+    engine: StudyEngine,
+    palette: ReaderPalette,
+    scale: Float,
+    initialQuery: String,
+    onQueryChange: (String) -> Unit,
+    onHits: (Set<String>) -> Unit,
+    onNavigate: (book: String, chapter: Int) -> Unit,
+    onLink: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    var q by remember { mutableStateOf(initialQuery) }
+    var blocks by remember { mutableStateOf<String?>(null) }
+    val focus = remember { FocusRequester() }
+    BackHandler(onBack = onClose)
+
+    fun run() {
+        val query = q.trim()
+        if (query.isEmpty()) { blocks = null; onHits(emptySet()); return }
+        val sj = runCatching { engine.SearchJson(query) }.getOrNull() ?: return
+        val r = runCatching { parseWire<SearchResult>(sj) }.getOrNull() ?: return
+        if (r.kind == "goto" && r.book != null && r.chapter != null) {
+            onHits(emptySet())
+            onNavigate(r.book!!, r.chapter!!.toInt())
+            onClose()
+        } else {
+            onHits(r.hits?.map { it.verse }?.toSet() ?: emptySet())
+            blocks = runCatching { engine.SearchBlocksJson(query) }.getOrNull()
+        }
+    }
+
+    Column(Modifier.fillMaxSize().background(palette.paper)) {
+        Surface(color = palette.paneNavBg) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onClose) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close search", tint = palette.ink)
+                }
+                OutlinedTextField(
+                    value = q,
+                    onValueChange = { q = it; onQueryChange(it) },
+                    placeholder = { Text("Word, phrase, or reference") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f).focusRequester(focus),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { run() }),
+                )
+            }
+        }
+        HorizontalDivider(color = palette.rule)
+        Box(Modifier.fillMaxSize()) {
+            if (blocks == null) {
+                Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        "Search the King James text — a word, a phrase, or a reference like “John 3:16”.",
+                        color = palette.faded,
+                    )
+                }
+            } else {
+                StudyPane(blocks, palette, onLink = { uri -> onLink(uri); onClose() }, scale = scale)
+            }
+        }
+    }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+}
+
+/** Choose the default one-tap copy shape (persisted to config). */
+@Composable
+private fun CopyFormatDialog(
+    current: String,
+    palette: ReaderPalette,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val options = listOf(
+        "verse" to "Verse text only",
+        "verseRef" to "Verse with reference",
+        "verseMarkdown" to "Markdown blockquote",
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Copy format") },
+        text = {
+            Column {
+                for ((token, label) in options) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(token); onDismiss() }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = current == token, onClick = { onPick(token); onDismiss() })
+                        Text(label, color = palette.ink)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+    )
 }
 
 /** A full-screen overlay frame for the map canvases: a back bar over the paper;
@@ -590,10 +725,12 @@ private fun MapOverlay(
     Column(Modifier.fillMaxSize().background(palette.paper)) {
         Surface(color = palette.paneNavBg) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = onClose) { Text("‹", fontSize = 20.sp, color = palette.ink) }
+                IconButton(onClick = onClose) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = palette.ink)
+                }
                 Text(title, color = palette.ink)
             }
         }
@@ -608,13 +745,6 @@ private fun MapOverlay(
 private fun HingeSpacerVertical(fold: FoldingFeature?) {
     val w = hingeThickness(fold, vertical = true)
     if (w > 0.dp) Spacer(Modifier.fillMaxHeight().width(w))
-}
-
-/** The stacked-layout equivalent for a separating horizontal (tabletop) hinge. */
-@Composable
-private fun HingeSpacerHorizontal(fold: FoldingFeature?) {
-    val h = hingeThickness(fold, vertical = false)
-    if (h > 0.dp) Spacer(Modifier.fillMaxWidth().height(h))
 }
 
 @Composable

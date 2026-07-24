@@ -74,7 +74,20 @@ pub struct Config {
     pub verse_per_line: bool,
     /// The reader's colour theme (Tier 0 #5). `System` follows the OS.
     pub theme: ThemeChoice,
+    /// Default one-tap copy shape, for shells whose copy is a single action
+    /// (e.g. the Android long-press). A verse `CopyKind` token:
+    /// `"verse"` / `"verseRef"` / `"verseMarkdown"`.
+    pub copy_style: String,
+    /// Reader horizontal margin in px — the space on either side of the text
+    /// column (feature-manifest MARGIN; default 28).
+    pub side_margin: f64,
+    /// Reader line-height as a multiple of the text height (feature-manifest
+    /// line_height; default 1.35).
+    pub line_spacing: f64,
 }
+
+/// A verse copy-shape token accepted for [`Config::copy_style`].
+pub const COPY_STYLES: [&str; 3] = ["verse", "verseRef", "verseMarkdown"];
 
 impl Default for Config {
     fn default() -> Config {
@@ -85,6 +98,9 @@ impl Default for Config {
             active: 0,
             verse_per_line: false,
             theme: ThemeChoice::default(),
+            copy_style: "verseRef".to_string(),
+            side_margin: 28.0,
+            line_spacing: 1.35,
         }
     }
 }
@@ -106,6 +122,12 @@ struct ConfigWire {
     verse_per_line: bool,
     #[serde(default = "default_theme_token")]
     theme: String,
+    #[serde(default = "default_copy_style")]
+    copy_style: String,
+    #[serde(default = "default_side_margin")]
+    side_margin: f64,
+    #[serde(default = "default_line_spacing")]
+    line_spacing: f64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -122,6 +144,24 @@ fn default_body_size() -> f64 {
 }
 fn default_theme_token() -> String {
     ThemeChoice::default().token().to_string()
+}
+fn default_copy_style() -> String {
+    Config::default().copy_style
+}
+fn default_side_margin() -> f64 {
+    Config::default().side_margin
+}
+fn default_line_spacing() -> f64 {
+    Config::default().line_spacing
+}
+
+/// A copy-style token, falling back to the default on an unknown value.
+fn normalize_copy_style(s: &str) -> String {
+    if COPY_STYLES.contains(&s) { s.to_string() } else { Config::default().copy_style }
+}
+/// Clamp a finite value into `[lo, hi]`, else the fallback (guards a corrupt file).
+fn clamp_or(v: f64, lo: f64, hi: f64, fallback: f64) -> f64 {
+    if v.is_finite() && v >= lo && v <= hi { v } else { fallback }
 }
 
 impl Config {
@@ -140,6 +180,9 @@ impl Config {
             active: if n_panes == 0 { 0 } else { w.active_pane.min(n_panes - 1) },
             verse_per_line: w.verse_per_line,
             theme: ThemeChoice::parse(&w.theme).unwrap_or_default(),
+            copy_style: normalize_copy_style(&w.copy_style),
+            side_margin: clamp_or(w.side_margin, 0.0, 160.0, Config::default().side_margin),
+            line_spacing: clamp_or(w.line_spacing, 1.0, 3.0, Config::default().line_spacing),
         }
     }
 
@@ -151,6 +194,9 @@ impl Config {
             active_pane: self.active,
             verse_per_line: self.verse_per_line,
             theme: self.theme.token().to_string(),
+            copy_style: self.copy_style.clone(),
+            side_margin: self.side_margin,
+            line_spacing: self.line_spacing,
         }
     }
 }
@@ -253,6 +299,9 @@ mod tests {
             active: 1,
             verse_per_line: true,
             theme: ThemeChoice::Night,
+            copy_style: "verseMarkdown".to_string(),
+            side_margin: 40.0,
+            line_spacing: 1.6,
         };
         save_to(&path, &cfg).unwrap();
 
