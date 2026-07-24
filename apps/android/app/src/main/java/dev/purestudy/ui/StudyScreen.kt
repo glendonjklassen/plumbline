@@ -37,6 +37,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -63,7 +64,11 @@ import dev.purestudy.StudyEngine
 import dev.purestudy.Toc
 import dev.purestudy.TocBook
 import dev.purestudy.UserNote
+import dev.purestudy.ConfigState
+import dev.purestudy.PureJson
+import dev.purestudy.StudyConfig
 import dev.purestudy.parseWire
+import kotlinx.serialization.encodeToString
 
 /** What the second (right) pane shows in fold mode. */
 private enum class SecondPane { Study, Bible }
@@ -127,6 +132,16 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
     var fullMode by remember { mutableStateOf(true) }               // Simple vs Full study depth
     var wordSheet by remember { mutableStateOf(false) }             // word study as a sheet (narrow)
     var prompt by remember { mutableStateOf<AuthorPrompt?>(null) }   // text-input authoring dialog
+
+    // Shared body text size (config.bodySize) — scales the reader + study pane,
+    // persisted to the cross-shell config so it survives restarts.
+    val loadedCfg = remember { runCatching { parseWire<ConfigState>(StudyConfig.LoadJson()) }.getOrNull() }
+    var bodySize by remember { mutableStateOf((loadedCfg?.bodySize ?: 18.0).coerceIn(12.0, 40.0)) }
+    var showTextSize by remember { mutableStateOf(false) }
+    fun persistBodySize() {
+        val cfg = (loadedCfg ?: ConfigState()).copy(bodySize = bodySize)
+        runCatching { StudyConfig.SaveJson(PureJson.encodeToString(cfg)) }
+    }
 
     val base = rememberUiMode(fold)
     val mode = when {
@@ -254,14 +269,16 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
     val readerFor: @Composable (Modifier, String, Int) -> Unit = { m, b, c ->
         ReaderPane(
             engine = engine, book = b, chapter = c, palette = palette,
-            modifier = m, searchHits = searchHits,
+            modifier = m, searchHits = searchHits, fontSizeSp = bodySize.toFloat(),
             onWordTap = ::onWord,
             onVerseLongPress = { verse -> actionVerse = verse },
             highlightEpoch = highlightEpoch,
         )
     }
     val study: @Composable (Modifier) -> Unit = { m ->
-        Box(m.background(palette.panelBg)) { StudyPane(studyBlocks, palette, onLink = ::onLink) }
+        Box(m.background(palette.panelBg)) {
+            StudyPane(studyBlocks, palette, onLink = ::onLink, scale = (bodySize / 18.0).toFloat())
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -288,6 +305,7 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
             onLibrary = ::openLibrary,
             fullStudy = fullMode,
             onToggleFull = { fullMode = !fullMode },
+            onTextSize = { showTextSize = true },
         )
         HorizontalDivider(color = palette.rule)
 
@@ -323,7 +341,27 @@ fun StudyScreen(engine: StudyEngine, fold: FoldingFeature?, palette: ReaderPalet
             )
         }
         memView?.let { v -> MemorizeScreen(engine, v, toc, palette, onClose = { memView = null }) }
-        if (wordSheet) WordStudySheet(studyBlocks, palette, ::onLink) { wordSheet = false }
+        if (wordSheet) WordStudySheet(studyBlocks, palette, (bodySize / 18.0).toFloat(), ::onLink) { wordSheet = false }
+        if (showTextSize) {
+            AlertDialog(
+                onDismissRequest = { showTextSize = false; persistBodySize() },
+                title = { Text("Text size") },
+                text = {
+                    Column {
+                        Text("Aa — reader & study", fontSize = bodySize.sp, color = palette.ink)
+                        Slider(
+                            value = bodySize.toFloat(),
+                            onValueChange = { bodySize = it.toDouble() },
+                            valueRange = 12f..40f,
+                            steps = 27,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showTextSize = false; persistBodySize() }) { Text("Done") }
+                },
+            )
+        }
         prompt?.let { p ->
             var text by remember(p) { mutableStateOf(p.initial) }
             AlertDialog(
@@ -381,6 +419,7 @@ private fun TopBar(
     onLibrary: (Library) -> Unit,
     fullStudy: Boolean,
     onToggleFull: () -> Unit,
+    onTextSize: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val bookName = toc.firstOrNull { it.id == book }?.name ?: book
@@ -465,6 +504,7 @@ private fun TopBar(
                         text = { Text(if (fullStudy) "Full study  ✓" else "Full study") },
                         onClick = { onToggleFull(); menu = false },
                     )
+                    DropdownMenuItem(text = { Text("Text size…") }, onClick = { onTextSize(); menu = false })
                 }
             }
         }
@@ -478,12 +518,13 @@ private fun TopBar(
 private fun WordStudySheet(
     blocksJson: String?,
     palette: ReaderPalette,
+    scale: Float,
     onLink: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = palette.panelBg) {
         Box(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
-            StudyPane(blocksJson, palette, onLink = onLink)
+            StudyPane(blocksJson, palette, onLink = onLink, scale = scale)
         }
     }
 }

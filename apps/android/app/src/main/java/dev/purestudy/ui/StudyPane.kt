@@ -48,6 +48,7 @@ fun StudyPane(
     blocksJson: String?,
     palette: ReaderPalette,
     modifier: Modifier = Modifier,
+    scale: Float = 1f,
     onLink: (String) -> Unit = {},
 ) {
     val blocks = remember(blocksJson) {
@@ -68,15 +69,15 @@ fun StudyPane(
                 "Tap a word for study.",
                 color = palette.faded,
                 fontStyle = FontStyle.Italic,
-                fontSize = 14.sp,
+                fontSize = (14 * scale).sp,
             )
             return@Column
         }
         for (b in blocks) {
             when (b.kind) {
                 "rule" -> HorizontalDivider(color = palette.rule)
-                "section" -> SectionBlock(b, palette)
-                "para" -> ParaBlock(b, palette, onLink)
+                "section" -> SectionBlock(b, palette, scale)
+                "para" -> ParaBlock(b, palette, scale, onLink)
             }
         }
     }
@@ -84,18 +85,18 @@ fun StudyPane(
 
 /** A spaced, muted-gold section header + an optional tier-mark glyph. */
 @Composable
-private fun SectionBlock(b: PanelBlock, palette: ReaderPalette) {
+private fun SectionBlock(b: PanelBlock, palette: ReaderPalette, scale: Float) {
     val text = buildAnnotatedString {
         withStyle(
             SpanStyle(
                 color = palette.sectionGold,
                 fontWeight = FontWeight.Bold,
-                fontSize = 11.sp,
+                fontSize = (11 * scale).sp,
                 letterSpacing = 1.2.sp,
             ),
         ) { append(b.title ?: "") }
         b.markGlyph?.let { glyph ->
-            withStyle(SpanStyle(color = palette.role(b.markColor), fontSize = 10.sp)) {
+            withStyle(SpanStyle(color = palette.role(b.markColor), fontSize = (10 * scale).sp)) {
                 append("  $glyph")
             }
         }
@@ -105,13 +106,13 @@ private fun SectionBlock(b: PanelBlock, palette: ReaderPalette) {
 
 /** A flowing paragraph of styled runs; link runs route through [onLink]. */
 @Composable
-private fun ParaBlock(b: PanelBlock, palette: ReaderPalette, onLink: (String) -> Unit) {
+private fun ParaBlock(b: PanelBlock, palette: ReaderPalette, scale: Float, onLink: (String) -> Unit) {
     val runs = b.runs ?: emptyList()
     val annotated = buildAnnotatedString {
         for (run in runs) {
             val style = SpanStyle(
                 color = if (run.uri != null) palette.gold else palette.role(run.color),
-                fontSize = run.size.sp,
+                fontSize = (run.size * scale).sp,
                 fontWeight = if (run.bold) FontWeight.Bold else FontWeight.Normal,
                 fontStyle = if (run.italic) FontStyle.Italic else FontStyle.Normal,
             )
