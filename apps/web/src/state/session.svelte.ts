@@ -59,6 +59,20 @@ export class Session {
   toast = $state<string | null>(null);
   showFirstRun = $state(false);
   showShortcuts = $state(false);
+  /** Active text prompt (rendered by PromptDialog); resolves null on cancel. */
+  promptReq = $state<{
+    title: string;
+    initial: string;
+    multiline: boolean;
+    resolve: (v: string | null) => void;
+  } | null>(null);
+
+  /** Ask the user for text — the web twin of the desktops' native prompts. */
+  askText(title: string, initial = "", multiline = false): Promise<string | null> {
+    return new Promise((resolve) => {
+      this.promptReq = { title, initial, multiline, resolve };
+    });
+  }
 
   get full(): boolean {
     return this.config.studyMode === "full";
