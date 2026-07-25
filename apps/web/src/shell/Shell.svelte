@@ -10,6 +10,9 @@
   import CanonStrip from "./CanonStrip.svelte";
   import ConnectorsOverlay from "./ConnectorsOverlay.svelte";
   import MapsHost from "../maps/MapsHost.svelte";
+  import ContextMenu from "../reader/ContextMenu.svelte";
+  import TagPicker from "../study/TagPicker.svelte";
+  import { nowStamp } from "../engine/StudyEngine";
   import { getSession } from "../state/session.svelte";
 
   const s = getSession();
@@ -22,10 +25,26 @@
   function openWordStudy(refKey: string, tokenIndex: number): void {
     s.panel = { kind: "wordStudy", refKey, tokenIndex };
   }
-  function pinWord(refKey: string, tokenIndex: number): void {
-    // Weave-authoring pin (Full study) — lands with the authoring pass.
-    void refKey;
-    void tokenIndex;
+
+  // ＋ link: enabled when ≥2 panes hold pins; takes the first two, prompts a
+  // weave name, writes a Quotation-kind link with both spans, clears pins.
+  const pinnedPanes = $derived(s.panes.filter((p) => p.pinned));
+  async function addLink(): Promise<void> {
+    const [a, b] = pinnedPanes;
+    if (!a?.pinned || !b?.pinned) return;
+    const name = await s.askText("Weave name");
+    if (!name?.trim()) return;
+    const err = s.engine.weaveAddLinkSpans(
+      name.trim(),
+      a.pinned.verse, b.pinned.verse,
+      a.pinned.lo, a.pinned.hi, b.pinned.lo, b.pinned.hi,
+      nowStamp(),
+    );
+    if (err) s.showToast(err);
+    else {
+      s.showToast(`Linked — ${name.trim()}`);
+      for (const p of s.panes) p.pinned = null;
+    }
   }
 
   // ── live search: per keystroke; empty query closes (manifest §Search) ──
@@ -151,6 +170,7 @@
         <button onclick={() => (s.panel = { kind: "threads" })}>Threads</button>
         <button onclick={() => (s.panel = { kind: "tags" })}>Tags</button>
         <button onclick={() => (s.panel = { kind: "weaves" })}>Weaves</button>
+        <button disabled={pinnedPanes.length < 2} onclick={addLink} title="Link the pinned spans">＋ link</button>
       </nav>
     {/if}
     <span class="spacer"></span>
@@ -201,7 +221,7 @@
     <div class="reading">
       <div class="panes">
         {#each s.panes as _, i (i)}
-          <ReaderPane paneIdx={i} onWordStudy={openWordStudy} onWordPin={pinWord} />
+          <ReaderPane paneIdx={i} onWordStudy={openWordStudy} />
         {/each}
         <ConnectorsOverlay />
       </div>
@@ -218,6 +238,8 @@
 <FirstRun />
 <Shortcuts />
 <MapsHost />
+<ContextMenu />
+<TagPicker />
 
 <style>
   .frame {

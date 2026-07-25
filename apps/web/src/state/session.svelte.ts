@@ -15,6 +15,8 @@ export interface PaneState {
   scrollY: number;
   back: { book: string; chapter: number }[];
   fwd: { book: string; chapter: number }[];
+  /** Weave-authoring pin: a word span in this pane (manifest §Weave authoring). */
+  pinned: { verse: string; anchor: number; lo: number; hi: number } | null;
 }
 
 /** Descriptor of what the study surface is showing (sidebar or sheet). */
@@ -62,6 +64,12 @@ export class Session {
   toast = $state<string | null>(null);
   showFirstRun = $state(false);
   showShortcuts = $state(false);
+  /** Last-used highlight tone — the default for drag ranges. */
+  lastTone = $state<{ name: string; hex: string } | null>(null);
+  /** Open context menu (verse actions), positioned at client coords. */
+  contextMenu = $state<{ x: number; y: number; refKey: string } | null>(null);
+  /** Tag-picker sheet target (refKey), Android TagPickerSheet parity. */
+  tagPickFor = $state<string | null>(null);
   /** Active text prompt (rendered by PromptDialog); resolves null on cancel. */
   promptReq = $state<{
     title: string;
@@ -102,6 +110,7 @@ export class Session {
         scrollY: 0,
         back: [],
         fwd: [],
+        pinned: null,
       }));
     this.activePane = Math.min(loaded.activePane ?? 0, this.panes.length - 1);
 
@@ -115,6 +124,9 @@ export class Session {
       prevAuthored();
       this.studyEpoch++;
     };
+
+    // Debug handle for the console (and the repo's headless probes).
+    (globalThis as any).__pureStudy = this;
   }
 
   resolvedTheme(): string {
@@ -219,6 +231,7 @@ export class Session {
       scrollY: 0,
       back: [],
       fwd: [],
+        pinned: null,
     });
     this.activePane = afterIdx + 1;
     this.saveConfig();

@@ -42,8 +42,8 @@ export interface PaintOverlays {
   washes?: Map<number, string>;
   /** Word-precise highlight runs (drag ranges decomposed per verse). */
   runs?: WordRun[];
-  /** Live drag preview, painted like a run in the default tone. */
-  dragPreview?: WordRun | null;
+  /** Live drag preview (per-verse runs), painted in the default tone. */
+  dragPreview?: WordRun[] | null;
   /** Pinned weave-authoring span (blue wash per word). */
   pinned?: { verse: number; lo: number; hi: number } | null;
   /** Verses with weave partners — gold gutter dot by the verse number. */
@@ -143,7 +143,7 @@ export function paintChapter(
     }
   };
   if (ov.runs) for (const r of ov.runs) paintRun(r, r.color, 0.45);
-  if (ov.dragPreview) paintRun(ov.dragPreview, ov.dragPreview.color, 0.35);
+  if (ov.dragPreview) for (const r of ov.dragPreview) paintRun(r, r.color, 0.35);
   if (ov.pinned) paintRun({ ...ov.pinned, color: "" }, p.pin ?? "#4073b8", 0.22);
 
   // ── gutter marks: weave dot + note square beside the verse number ──

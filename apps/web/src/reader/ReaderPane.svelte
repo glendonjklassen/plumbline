@@ -6,18 +6,17 @@
   // wasm layout is synchronous.
   import { getSession } from "../state/session.svelte";
   import { fontExtent, measureFor, readerFont } from "./measure";
-  import { MARGIN, paintChapter, verseExtents, type LayoutItem, type PaintOverlays } from "./paint";
-  import type { DisplayList } from "../engine/StudyEngine";
+  import { itemVerse, MARGIN, paintChapter, verseExtents, type LayoutItem, type PaintOverlays } from "./paint";
+  import { highlightTones, nowStamp, type DisplayList } from "../engine/StudyEngine";
 
   const MAX_COLUMN = 720;
 
   interface Props {
     paneIdx: number;
     onWordStudy?: (refKey: string, tokenIndex: number) => void;
-    onWordPin?: (refKey: string, tokenIndex: number) => void;
     overlays?: PaintOverlays;
   }
-  let { paneIdx, onWordStudy, onWordPin, overlays = {} }: Props = $props();
+  let { paneIdx, onWordStudy, overlays = {} }: Props = $props();
 
   const s = getSession();
   const pane = $derived(s.panes[paneIdx]);
@@ -50,6 +49,37 @@
       if (p.bBook === pane.book && p.bChapter === pane.chapter) set.add(p.bVerse);
     }
     return set;
+  });
+
+  const verseNumOf = (refKey: string) => Number(refKey.slice(refKey.lastIndexOf(":") + 1)) || 0;
+
+  // Highlight washes + word-precise runs for this chapter (Tier-0 #4).
+  const highlights = $derived.by(() => {
+    void s.studyEpoch;
+    return s.engine.chapterHighlights(pane.book, pane.chapter);
+  });
+  const washes = $derived(
+    new Map<number, string>((highlights?.verses ?? []).map((v: any) => [verseNumOf(v.verse), v.color])),
+  );
+  const runs = $derived(
+    (highlights?.runs ?? []).map((r: any) => ({ verse: verseNumOf(r.verse), lo: r.lo, hi: r.hi, color: r.color })),
+  );
+
+  // Verses with a personal note — the square gutter mark (Tier-0 #3).
+  const noteVerses = $derived.by(() => {
+    void s.studyEpoch;
+    const prefix = `${pane.book} ${pane.chapter}:`;
+    const set = new Set<number>();
+    for (const n of s.engine.userNotes()?.notes ?? [])
+      if (n.verse.startsWith(prefix)) set.add(verseNumOf(n.verse));
+    return set;
+  });
+
+  // Pinned weave-authoring span, when it belongs to this chapter.
+  const pinnedRun = $derived.by(() => {
+    const p = pane.pinned;
+    if (!p || !p.verse.startsWith(`${pane.book} ${pane.chapter}:`)) return null;
+    return { verse: verseNumOf(p.verse), lo: p.lo, hi: p.hi };
   });
 
   // ── layout: recompute when inputs change ──
@@ -104,6 +134,11 @@
     void s.palette;
     void overlays;
     void weaveDots;
+    void washes;
+    void runs;
+    void noteVerses;
+    void pinnedRun;
+    void dragPreview;
     void cssW;
     void cssH;
     void pane.targetVerse;
@@ -132,7 +167,16 @@
         viewportW: cssW,
         viewportH: cssH,
       },
-      { bandVerse: pane.targetVerse, weaveDotVerses: weaveDots, ...overlays },
+      {
+        bandVerse: pane.targetVerse,
+        weaveDotVerses: weaveDots,
+        noteVerses,
+        washes,
+        runs,
+        pinned: pinnedRun,
+        dragPreview,
+        ...overlays,
+      },
     );
   }
 
@@ -169,27 +213,100 @@
     return dl.hitTest(e.clientX - rect.left - marginX, e.clientY - rect.top - MARGIN + pane.scrollY);
   }
 
-  // Touch panning; mouse click/dblclick for study + pinning.
+  // ── verse under a point: hit word's verse, else nearest verse-number by y ──
+  function verseAt(e: MouseEvent | PointerEvent): string | null {
+    const hit = hitAt(e);
+    if (hit?.verse) return hit.verse;
+    const rect = canvas.getBoundingClientRect();
+    const ly = e.clientY - rect.top - MARGIN + pane.scrollY;
+    let best: LayoutItem | null = null;
+    for (const it of items)
+      if (it.kind === "verseNumber" && (!best || Math.abs(it.y + it.h / 2 - ly) < Math.abs(best.y + best.h / 2 - ly)))
+        best = it;
+    return best?.verseNumber != null ? `${pane.book} ${pane.chapter}:${best.verseNumber}` : null;
+  }
+
+  function openContextMenu(clientX: number, clientY: number, e: MouseEvent | PointerEvent): void {
+    const refKey = verseAt(e);
+    if (refKey) s.contextMenu = { x: clientX, y: clientY, refKey };
+  }
+
+  // ── drag highlights (mouse): press pins the start word, a 6px drag
+  //    supersedes the pin and previews the range in the last-used tone ──
+  const tones: { name: string; hex: string }[] = highlightTones(s.wasm)?.tones ?? [];
+  const defaultTone = () =>
+    s.lastTone ?? { name: tones[0]?.name.replace(/^./, (c) => c.toUpperCase()) ?? "Amber", hex: tones[0]?.hex ?? "#f6e0a0" };
+  let dragStart: { verse: number; tok: number; x: number; y: number } | null = null;
+  let dragEnd: { verse: number; tok: number } | null = null;
+  let dragPreview = $state<{ verse: number; lo: number; hi: number; color: string }[] | null>(null);
+
+  function maxTokOf(verse: number): number {
+    let max = 0;
+    for (const it of items)
+      if (it.kind === "word" && itemVerse(it) === verse && (it.tokenIndex ?? 0) > max) max = it.tokenIndex ?? 0;
+    return max;
+  }
+  function rangeRuns(a: { verse: number; tok: number }, b: { verse: number; tok: number }, color: string) {
+    let [s1, s2] = a.verse < b.verse || (a.verse === b.verse && a.tok <= b.tok) ? [a, b] : [b, a];
+    if (s1.verse === s2.verse) return [{ verse: s1.verse, lo: s1.tok, hi: s2.tok, color }];
+    const out = [{ verse: s1.verse, lo: s1.tok, hi: maxTokOf(s1.verse), color }];
+    for (let v = s1.verse + 1; v < s2.verse; v++) out.push({ verse: v, lo: 0, hi: maxTokOf(v), color });
+    out.push({ verse: s2.verse, lo: 0, hi: s2.tok, color });
+    return out;
+  }
+
+  // ── touch panning + long-press menu; mouse click/dblclick/drag ──
   let touchLastY: number | null = null;
   let moved = false;
+  let longPress: ReturnType<typeof setTimeout> | null = null;
+  let suppressClick = false;
+
   function onPointerDown(e: PointerEvent): void {
     s.activePane = paneIdx;
     moved = false;
     if (e.pointerType === "touch") {
       touchLastY = e.clientY;
       canvas.setPointerCapture(e.pointerId);
+      const { clientX, clientY } = e;
+      longPress = setTimeout(() => {
+        if (!moved) {
+          openContextMenu(clientX, clientY, e);
+          moved = true; // swallow the tap-up
+        }
+      }, 480);
+    } else if (e.button === 0) {
+      const hit = hitAt(e);
+      if (hit?.tokenIndex != null)
+        dragStart = { verse: verseNumOf(hit.verse), tok: hit.tokenIndex, x: e.clientX, y: e.clientY };
     }
   }
   function onPointerMove(e: PointerEvent): void {
     if (touchLastY !== null && e.pointerType === "touch") {
       const dy = touchLastY - e.clientY;
-      if (Math.abs(dy) > 2) moved = true;
+      if (Math.abs(dy) > 2) {
+        moved = true;
+        if (longPress) clearTimeout(longPress);
+      }
       pane.scrollY += dy;
       clampScroll();
       touchLastY = e.clientY;
+      return;
+    }
+    if (dragStart && Math.hypot(e.clientX - dragStart.x, e.clientY - dragStart.y) > 6) {
+      const hit = hitAt(e);
+      if (hit?.tokenIndex != null) {
+        dragEnd = { verse: verseNumOf(hit.verse), tok: hit.tokenIndex };
+        dragPreview = rangeRuns(dragStart, dragEnd, defaultTone().hex);
+      }
     }
   }
   function onPointerUp(e: PointerEvent): void {
+    if (longPress) clearTimeout(longPress);
+    // Mouse buttons 4/5 → per-pane history (Tier-0 #2).
+    if (e.button === 3 || e.button === 4) {
+      s.historyStep(paneIdx, e.button === 3 ? -1 : 1);
+      return;
+    }
     if (e.pointerType === "touch") {
       touchLastY = null;
       if (!moved) {
@@ -198,16 +315,57 @@
       }
       return;
     }
+    if (dragStart && dragEnd && dragPreview) {
+      // Commit the range highlight (endpoints canonicalised).
+      const [a, b] =
+        dragStart.verse < dragEnd.verse || (dragStart.verse === dragEnd.verse && dragStart.tok <= dragEnd.tok)
+          ? [dragStart, dragEnd]
+          : [dragEnd, dragStart];
+      const tone = defaultTone();
+      const mk = (v: number) => `${pane.book} ${pane.chapter}:${v}`;
+      const err = s.engine.highlightAdd(tone.name, tone.hex, mk(a.verse), a.tok, mk(b.verse), b.tok, nowStamp());
+      if (err) s.showToast(err);
+      else s.lastTone = tone;
+      suppressClick = true;
+    }
+    dragStart = null;
+    dragEnd = null;
+    dragPreview = null;
   }
   function onClick(e: MouseEvent): void {
+    if (suppressClick) {
+      suppressClick = false;
+      return;
+    }
     const hit = hitAt(e);
     if (hit?.tokenIndex == null) return;
-    if (e.ctrlKey || e.metaKey) onWordStudy?.(hit.verse, hit.tokenIndex);
-    else onWordPin?.(hit.verse, hit.tokenIndex);
+    if (e.ctrlKey || e.metaKey) {
+      onWordStudy?.(hit.verse, hit.tokenIndex);
+      return;
+    }
+    // Single click (Full study): pin a span for ＋ link — same-verse clicks
+    // re-span from the anchor, a different verse resets (manifest §Weave).
+    if (!s.full) return;
+    const p = pane.pinned;
+    if (p && p.verse === hit.verse) {
+      pane.pinned = {
+        verse: p.verse,
+        anchor: p.anchor,
+        lo: Math.min(p.anchor, hit.tokenIndex),
+        hi: Math.max(p.anchor, hit.tokenIndex),
+      };
+    } else {
+      pane.pinned = { verse: hit.verse, anchor: hit.tokenIndex, lo: hit.tokenIndex, hi: hit.tokenIndex };
+    }
   }
   function onDblClick(e: MouseEvent): void {
     const hit = hitAt(e);
     if (hit?.tokenIndex != null) onWordStudy?.(hit.verse, hit.tokenIndex);
+  }
+  function onContextMenu(e: MouseEvent): void {
+    e.preventDefault();
+    s.activePane = paneIdx;
+    openContextMenu(e.clientX, e.clientY, e);
   }
 
   // Hover gloss: native tooltip when the word carries Strong's refs.
@@ -264,6 +422,7 @@
       onwheel={onWheel}
       onclick={onClick}
       ondblclick={onDblClick}
+      oncontextmenu={onContextMenu}
       onpointerdown={onPointerDown}
       onpointermove={onPointerMove}
       onpointerup={onPointerUp}
