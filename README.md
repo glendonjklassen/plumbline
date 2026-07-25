@@ -40,18 +40,36 @@ once — `~/.local/share/pure-study` on Linux — and the binary will find it:
 cargo run --release -p pure-hydrate -- copy --from . --to ~/.local/share/pure-study
 ```
 
-## First run
+## Getting started (60 seconds)
 
-You'll be asked **Simple reader** or **Full study**:
+First launch asks which **analysis layers** you want beside the text — the
+scholars' tier (renderings, word grammar, cross-references) and the machine
+tier (similar concepts, verses-like-this, concept maps). Both are on by
+default and switchable any time in **Settings**; the text and your own notes,
+tags, and threads are always on.
 
-- **Simple** is just the text: panes, navigation, search, margin notes.
-- **Full study** adds the whole study surface — Strong's word study, the
-  analytics tiers, weave authoring, threads, tags.
+Then:
 
-The choice is saved and can be flipped any time with the button in the header.
-The reader reopens wherever you left off. See **[docs/GUIDE.md](docs/GUIDE.md)**
-for the full tour — search syntax, the study panel explained tier by tier,
-weaves, the constellation, threads and tags.
+1. **Read.** Tap the passage button (`John 3 ▾`) for the book → chapter →
+   verse navigator, swipe (or `←`/`→`) to step chapters. The reader reopens
+   exactly where you left off — mid-chapter included.
+2. **Tap a word** (double-click on desktop) — the study pane opens: your
+   note first, then the dictionary entry and whichever analysis tiers you
+   keep on. Every claim is marked with its provenance (✝ the text ·
+   † scholarship · ≈ machine).
+3. **Long-press a verse** (right-click on desktop) — copy, share, note,
+   highlight, **tag**, add to a thread, or memorize it.
+4. **Tag as you go, weave later.** Tag passages by topic ("Rapture") over
+   weeks; open the tag and hit **⇔ make weave** to chain them through the
+   canon. Point two panes at linked passages and the connectors draw
+   themselves.
+5. **≡ menu** holds the rest: Memorize (spaced repetition), Explore (all the
+   study tools, described), History, Present (hand-the-phone-across mode),
+   the guide, and Settings — including **backup to a zip** that restores on
+   any device.
+
+See **[docs/GUIDE.md](docs/GUIDE.md)** for the full tour — search syntax, the
+study panel tier by tier, weaves, the constellation, threads and tags.
 
 ## Shortcuts
 
@@ -97,25 +115,11 @@ Everything lives under one **data home** — the first of: `$PURE_STUDY_HOME` /
 counts), the executable's directory, or the per-user data dir
 (`~/.local/share/pure-study` on Linux, `%APPDATA%\pure-study` on Windows).
 
-Yours to back up: `weaves/`, `threads/`, `tags/`, `patches/` in the data home,
-plus the config (`~/.config/pure-study/config.json`). The rest (`data/`,
-`bridge/`, `*.idxcache`) is the shipped/regenerable pack. All writes are
-atomic (temp → fsync → rename), on every platform.
-
-## Limitations, honestly
-
-- **KJV-only, by design.** The analytics ride the 1769 tokenization end to end.
-- **Android + web today.** The Compose (Android) shell and the PWA (web)
-  share the same Rust core at feature parity
-  ([docs/FEATURE-MANIFEST.md](docs/FEATURE-MANIFEST.md) is the parity
-  contract). The GTK/WinUI desktop shells were retired 2026-07-25 — the PWA
-  covers desktops now; git history has the old shells.
-- **No sync.** One machine, one home; copy the authored dirs to move.
-- **Grammar search** (`tense:aorist`-style form predicates) is a placeholder —
-  word/phrase/reference/Strong's-code search all work (see the guide).
-- Cross-testament **quotation detection** is not ported (its curated output
-  ships in the bridge data); the suggested-parallels *generator* is offline
-  tooling — the reader consumes its results.
+Yours to back up: `weaves/`, `threads/`, `tags/`, `notes/`, `memory/`, and
+the config. **Settings → Back up (.zip)** exports exactly that from either
+app, and **Restore from backup…** loads it on any device — the archive layout
+is shared, so a phone backup restores in the browser and vice versa. All
+writes are atomic (temp → fsync → rename), on every platform.
 
 ## Data provenance
 

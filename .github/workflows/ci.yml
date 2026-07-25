@@ -115,6 +115,43 @@ jobs:
           fi
 
   # portable-only build surface is caught, matching what we cross-build locally.
+  # Build the web shell end to end and run its Playwright suite — boots the
+  # real engine (wasm) in a real browser: boot, stock seeding, menu
+  # responsiveness (freeze regression), word study, search, themes, the
+  # navigator, and the backup round-trip.
+  web:
+    runs-on: ubuntu-latest
+    # fork-guard: see `test`.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: apps/web
+      - name: Build the data pack
+        run: node scripts/build-web-pack.mjs
+      - name: Build the engine (wasm32-wasip1)
+        run: cargo build --locked -p pure-ffi --release --target wasm32-wasip1
+      - name: Build the app
+        run: |
+          node scripts/copy-wasm.mjs
+          npm run check
+          npm run build
+        working-directory: apps/web
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+      - name: Playwright e2e
+        run: npx playwright test
+        working-directory: apps/web
+
   # Build the Android APK (debug) on every push/PR. Like winui, the APK was
   # previously only assembled on a v* tag by the release workflow, so a
   # Kotlin/JNA break or a .so cross-compile break wouldn't surface until

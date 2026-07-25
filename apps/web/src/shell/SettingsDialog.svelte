@@ -2,8 +2,57 @@
   // One Settings dialog (Android IA): analysis switches, theme, text size /
   // margin / line-spacing sliders, copy format, bundled stock set.
   import { getSession } from "../state/session.svelte";
+  import { zipRead, zipWrite } from "../engine/zip";
+  import { idbApply } from "../engine/idb";
+  import { nowStamp } from "../engine/StudyEngine";
 
   const s = getSession();
+
+  // ── backup / restore: the authored home dirs as a zip, the same layout the
+  //    Android backup writes — one archive restores across devices. ──────────
+  const BACKUP_DIRS = ["tags/", "threads/", "weaves/", "notes/", "memory/", ".config/"];
+
+  function backup(): void {
+    const files = s.home.exportUserData();
+    files.set(
+      "purestudy-backup.json",
+      new TextEncoder().encode(JSON.stringify({ format: 1, app: "web", exported: nowStamp() })),
+    );
+    const blob = new Blob([zipWrite(files) as unknown as BlobPart], { type: "application/zip" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `pure-study-backup-${nowStamp().slice(0, 10)}.zip`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    s.showToast(`Backed up ${files.size - 1} files`);
+  }
+
+  async function restore(e: Event): Promise<void> {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    try {
+      const entries = await zipRead(new Uint8Array(await file.arrayBuffer()));
+      // Only home-relative authored paths — no traversal, nothing else.
+      const safe = new Map<string, Uint8Array>();
+      for (const [path, bytes] of entries)
+        if (BACKUP_DIRS.some((d) => path.startsWith(d)) && !path.includes(".."))
+          safe.set(path, bytes);
+      if (safe.size === 0) {
+        s.showToast("No study data found in that zip");
+        return;
+      }
+      // The restored files are now the truth — nothing (incl. the pagehide
+      // flush) may persist the current session over them; just reload.
+      s.restoring = true;
+      s.home.freeze(); // the debounced authoring persist must not fire either
+      await idbApply("user", safe);
+      location.reload(); // the engine re-opens over the restored home
+    } catch (err) {
+      s.showToast(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   function toggleGate(key: "humanAnalysis" | "machineAnalysis"): void {
     s.config[key] = s.config[key] === false;
@@ -143,6 +192,19 @@
         </span>
         <input type="checkbox" checked={s.home.bundledOn} onchange={toggleBundled} />
       </label>
+      <hr />
+      <p class="label">Your study data — notes, tags, threads, weaves, memorization</p>
+      <div class="row">
+        <button class="action" onclick={backup}>Back up (.zip)</button>
+        <label class="action">
+          Restore from backup…
+          <input type="file" accept=".zip,application/zip" onchange={restore} hidden />
+        </label>
+      </div>
+      <p class="desc-note">
+        The same zip restores on Android and the web. Restoring replaces items with the same
+        name; everything else is kept.
+      </p>
     </div>
     <button class="done" onclick={() => (s.showSettings = false)}>Done</button>
   </div>
@@ -235,5 +297,25 @@
     border: 1px solid var(--gold, #9e7d38);
     color: var(--gold, #9e7d38);
     border-radius: 7px;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .action {
+    padding: 5px 12px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .action:hover {
+    border-color: var(--gold, #9e7d38);
+    color: var(--gold, #9e7d38);
+  }
+  .desc-note {
+    font-size: 11.5px;
+    color: var(--faded, #8a8276);
   }
 </style>

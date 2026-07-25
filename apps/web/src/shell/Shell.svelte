@@ -63,6 +63,12 @@
   function menu(action: () => void): () => void {
     return () => {
       menuOpen = false;
+      // Surfaces are exclusive: picking a destination closes the others
+      // (Memorize left open over Explore was disorienting).
+      s.memorize = null;
+      s.showHistory = false;
+      s.showSettings = false;
+      s.bookNavFor = null;
       action();
     };
   }
@@ -242,6 +248,11 @@
     background: var(--paneNavBg, #efeae1);
     border-bottom: 1px solid var(--rule, #d8cba8);
     flex-wrap: wrap;
+    /* Above every surface backdrop (memorize 38, settings 40, tag sheets 44):
+       the chrome must stay reachable — switching destinations from the menu
+       closes whatever is open. Present (60) deliberately covers it. */
+    position: relative;
+    z-index: 46;
   }
   .title {
     font-weight: 600;
@@ -292,13 +303,13 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    z-index: 29;
+    z-index: 47;
   }
   .menu {
     position: absolute;
     right: 0;
     top: 100%;
-    z-index: 30;
+    z-index: 48;
     min-width: 190px;
     background: var(--popupPaper, #f2eee6);
     border: 1px solid var(--rule, #d8cba8);

@@ -19,6 +19,10 @@ export interface VirtualHome {
   persistUserData(): Promise<void>;
   /** Persist the engine-built idxcache once, after a successful open. */
   persistIdxcache(): Promise<void>;
+  /** Snapshot of the authored files (for the backup zip). */
+  exportUserData(): Map<string, Uint8Array>;
+  /** Stop ALL persistence (a restore is pending reload — nothing may write). */
+  freeze(): void;
   /** Whether the bundled stock study set is enabled. */
   bundledOn: boolean;
   /** Flip the bundled set (removes/reseeds the stock files); reload after. */
@@ -94,6 +98,7 @@ export async function buildHome(
 
   // Snapshot of what IndexedDB currently holds, for cheap diffs on persist.
   let synced = new Set(userFiles.keys());
+  let frozen = false;
 
   if (seedStock) {
     // Persist the seeded stock as the user's own files + set the marker.
@@ -109,6 +114,14 @@ export async function buildHome(
 
   return {
     root,
+    exportUserData() {
+      const out = new Map<string, Uint8Array>();
+      for (const d of USER_DIRS) {
+        const dir = root.get(d);
+        if (dir instanceof Directory) collectFiles(d, dir, out);
+      }
+      return out;
+    },
     bundledOn,
     async setBundled(on: boolean) {
       await idbApply("cache", new Map([[BUNDLED, enc.encode(on ? "on" : "off")]]));
@@ -121,7 +134,11 @@ export async function buildHome(
         await idbApply("user", new Map(), [...stockPaths]);
       }
     },
+    freeze() {
+      frozen = true;
+    },
     async persistUserData() {
+      if (frozen) return;
       const current = new Map<string, Uint8Array>();
       for (const d of USER_DIRS) {
         const dir = root.get(d);

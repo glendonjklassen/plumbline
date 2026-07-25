@@ -153,8 +153,12 @@ export class Session {
     addEventListener("pagehide", () => this.flushConfig());
   }
 
+  /** A restore is pending reload — nothing may persist over it. */
+  restoring = false;
+
   /** Save immediately (tab hide/close) — no debounce. */
   flushConfig(): void {
+    if (this.restoring) return;
     if (this.#saveTimer) clearTimeout(this.#saveTimer);
     this.config.openPanes = this.panes.map((p, i) => ({
       book: p.book,

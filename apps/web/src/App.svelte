@@ -18,10 +18,16 @@
         document.fonts.load('bold 18px "EB Garamond"'),
       ]);
       const result = await boot((p) => (phase = p));
-      session = initSession(result);
-      // Kill the first-study-click pause off the critical path (Tier-0 #6),
-      // GTK-style: proactive, after first paint.
-      if (session.gates & 2) setTimeout(() => session!.engine.warmIndexes(), 400);
+      const s = initSession(result);
+      // Warm the lazy analytics DURING the splash: the engine runs on the
+      // main thread, so warming after first paint froze the UI for seconds
+      // (menus wouldn't open). Behind the splash the block is invisible.
+      if (s.gates & 2) {
+        phase = { phase: "warm" };
+        await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30)));
+        s.engine.warmIndexes();
+      }
+      session = s;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -33,7 +39,9 @@
       ? `Fetching scripture data — ${Math.round((phase.fraction ?? 0) * 100)}%`
       : phase.phase === "prepare"
         ? "Preparing the study engine…"
-        : "Opening the text…",
+        : phase.phase === "warm"
+          ? "Building the analytics…"
+          : "Opening the text…",
   );
 </script>
 

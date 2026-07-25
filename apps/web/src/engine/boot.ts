@@ -9,7 +9,7 @@ import { fetchManifest, fetchPack } from "./pack";
 import { StudyEngine } from "./StudyEngine";
 
 export interface BootPhase {
-  phase: "download" | "prepare" | "open";
+  phase: "download" | "prepare" | "open" | "warm";
   /** 0..1 within the download phase; indeterminate elsewhere. */
   fraction?: number;
   detail?: string;
