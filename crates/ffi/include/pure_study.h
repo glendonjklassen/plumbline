@@ -376,6 +376,26 @@ char *pure_engine_weave_add_link(struct PureEngine *engine,
                                  const char *b_ref,
                                  const char *added);
 
+// Weave a tag's passages into a canon-ordered **chain** of links — the
+// accumulate-then-organize flow: the reader tags a topic over time (e.g.
+// "Rapture"), then turns the tag — or a chosen subset of its members — into a
+// weave to read as one thread through the canon. Re-running after the tag
+// grows just adds the new edges (find-or-create + link dedup).
+//
+// `refs_json` is null to take every verse member, else a JSON array of
+// refKeys selecting a subset (non-members are ignored). `weave_name` is null
+// to reuse the tag's name. Returns null on success, else a caller-freed
+// error string.
+//
+// # Safety
+// `engine` is a valid engine from `pure_engine_open*`; string params are null
+// or valid NUL-terminated UTF-8 for the duration of the call.
+char *pure_engine_weave_from_tag(struct PureEngine *engine,
+                                 const char *tag_name,
+                                 const char *refs_json,
+                                 const char *weave_name,
+                                 const char *added);
+
 // **Approve** the `index`-th suggested weave: promote it into `home/weaves`
 // with all links approved (merging into a same-named weave there if present)
 // and remove the suggestion. `index` is the ordinal from

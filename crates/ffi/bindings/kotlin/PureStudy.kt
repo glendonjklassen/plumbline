@@ -96,6 +96,9 @@ internal interface PureStudyNative : Library {
     fun pure_engine_weave_add_link(
         engine: Pointer, name: String, aRef: String, bRef: String, added: String,
     ): Pointer?
+    fun pure_engine_weave_from_tag(
+        engine: Pointer, tagName: String, refsJson: String?, weaveName: String?, added: String,
+    ): Pointer?
     fun pure_engine_weave_approve(engine: Pointer, index: Int): Pointer?
     fun pure_engine_weave_reject(engine: Pointer, index: Int): Pointer?
     fun pure_engine_thread_set_notes(engine: Pointer, name: String, notes: String): Pointer?

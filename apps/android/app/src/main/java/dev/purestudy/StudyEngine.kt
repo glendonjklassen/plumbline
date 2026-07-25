@@ -216,6 +216,12 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
     fun WeaveAddLink(name: String, aRef: String, bRef: String, addedUtc: String): String? =
         take(ffi.pure_engine_weave_add_link(h, name, aRef, bRef, addedUtc))
 
+    /** Weave a tag's passages (or a subset — a JSON array of refKeys) into a
+     *  canon-ordered chain; null weaveName reuses the tag's name. Re-running
+     *  after the tag grows just adds the new edges. Null = success. */
+    fun WeaveFromTag(tagName: String, refsJson: String?, weaveName: String?, addedUtc: String): String? =
+        take(ffi.pure_engine_weave_from_tag(h, tagName, refsJson, weaveName, addedUtc))
+
     /** Author a weave link carrying word spans (inclusive token-index ranges);
      *  pass null for a span-less side. Null = success, else an error message. */
     fun WeaveAddLinkSpans(

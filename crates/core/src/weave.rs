@@ -848,6 +848,59 @@ pub fn add_link(
     }
 }
 
+/// Weave a set of passages together as a **canon-ordered chain** — the
+/// tag→weave conversion: a reader accumulates a topic tag over time (Rapture,
+/// New Birth, …) and later turns it (or a chosen subset) into a weave they can
+/// read as one thread through the canon. Refs are reading-order sorted and
+/// deduped; consecutive pairs become links. Find-or-creates `name` like
+/// [`add_link`], so re-running after the tag grows just adds the new edges.
+/// Fewer than two distinct refs is an error — a weave is made of links.
+pub fn add_chain(
+    home: impl AsRef<Path>,
+    loaded: &[LoadedWeave],
+    name: &str,
+    kind: WeaveKind,
+    tok_version: &str,
+    created: &str,
+    refs: &[VRef],
+) -> Result<std::path::PathBuf, Error> {
+    let mut ordered: Vec<VRef> = refs.to_vec();
+    ordered.sort_by_key(|r| r.reading_key());
+    ordered.dedup();
+    if ordered.len() < 2 {
+        return Err(Error::Corpus(
+            "a weave needs at least two distinct passages".into(),
+        ));
+    }
+    let links: Vec<Link> = ordered
+        .windows(2)
+        .map(|w| Link::canon(w[0].clone(), w[1].clone()))
+        .collect();
+
+    let wanted = name.trim().to_lowercase();
+    if let Some(lw) = loaded
+        .iter()
+        .find(|lw| !is_suggested(lw) && lw.weave.name.to_lowercase() == wanted)
+    {
+        let mut weave = lw.weave.clone();
+        weave.add_links(links);
+        write_weave(&lw.file, &weave)?;
+        Ok(lw.file.clone())
+    } else {
+        let path = weave_file_in(home.as_ref().join("weaves"), name);
+        if path.exists() {
+            return Err(Error::Corpus(format!(
+                "{} exists but could not be read — refusing to overwrite",
+                path.display()
+            )));
+        }
+        let mut weave = Weave::empty(name.trim(), kind, tok_version, created);
+        weave.add_links(links);
+        write_weave(&path, &weave)?;
+        Ok(path)
+    }
+}
+
 /// Is this loaded weave a *suggestion* — i.e. it lives under
 /// `home/weaves/suggested` rather than `home/weaves`? Suggestions are proposed
 /// (often machine-generated) weaves awaiting the reader's review. Checked by
@@ -1034,6 +1087,43 @@ mod tests {
         assert!(errs.is_empty());
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].weave.links.len(), 2);
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn add_chain_weaves_refs_in_reading_order() {
+        let home = std::env::temp_dir().join(format!("pure-chain-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+
+        // Unordered, with a duplicate — the chain must come out canon-ordered
+        // and deduped: Gen 15:6 → Rom 4:3 → Gal 3:6 as two links.
+        let refs = [r("Rom", 4, 3), r("Gen", 15, 6), r("Gal", 3, 6), r("Gen", 15, 6)];
+        let (loaded, _) = load_weaves(&home);
+        add_chain(&home, &loaded, "Faith Counted", WeaveKind::Typological, "kjv1769-tok2", "2026-07-25T00:00:00Z", &refs)
+            .unwrap();
+
+        let (loaded, errs) = load_weaves(&home);
+        assert!(errs.is_empty());
+        assert_eq!(loaded.len(), 1);
+        let links = &loaded[0].weave.links;
+        assert_eq!(links.len(), 2);
+        assert_eq!(links[0].a, r("Gen", 15, 6));
+        assert_eq!(links[0].b, r("Rom", 4, 3));
+        assert_eq!(links[1].a, r("Rom", 4, 3));
+        assert_eq!(links[1].b, r("Gal", 3, 6));
+
+        // Re-running after the tag grew adds only the new edge (find-or-create
+        // + link dedup), so accumulate-then-weave is idempotent.
+        let refs2 = [r("Gen", 15, 6), r("Rom", 4, 3), r("Gal", 3, 6), r("Jas", 2, 23)];
+        add_chain(&home, &loaded, "faith counted", WeaveKind::Typological, "kjv1769-tok2", "x", &refs2).unwrap();
+        let (loaded, _) = load_weaves(&home);
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].weave.links.len(), 3);
+
+        // One ref is not a weave.
+        let (loaded, _) = load_weaves(&home);
+        assert!(add_chain(&home, &loaded, "too small", WeaveKind::Typological, "kjv1769-tok2", "x", &[r("Gen", 1, 1)]).is_err());
 
         let _ = std::fs::remove_dir_all(&home);
     }

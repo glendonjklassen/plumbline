@@ -1287,6 +1287,84 @@ pub unsafe extern "C" fn pure_engine_weave_add_link(
     })
 }
 
+/// Weave a tag's passages into a canon-ordered **chain** of links — the
+/// accumulate-then-organize flow: the reader tags a topic over time (e.g.
+/// "Rapture"), then turns the tag — or a chosen subset of its members — into a
+/// weave to read as one thread through the canon. Re-running after the tag
+/// grows just adds the new edges (find-or-create + link dedup).
+///
+/// `refs_json` is null to take every verse member, else a JSON array of
+/// refKeys selecting a subset (non-members are ignored). `weave_name` is null
+/// to reuse the tag's name. Returns null on success, else a caller-freed
+/// error string.
+///
+/// # Safety
+/// `engine` is a valid engine from `pure_engine_open*`; string params are null
+/// or valid NUL-terminated UTF-8 for the duration of the call.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_weave_from_tag(
+    engine: *mut PureEngine,
+    tag_name: *const c_char,
+    refs_json: *const c_char,
+    weave_name: *const c_char,
+    added: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        };
+        let (Some(tag_name), Some(added)) = (opt_str(tag_name), opt_str(added)) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let mut study = engine.study_write();
+        let wanted = tag_name.trim().to_lowercase();
+        let Some(lt) = study.tags.iter().find(|lt| lt.tag.name.to_lowercase() == wanted) else {
+            return out_string(format!("no tag named \"{tag_name}\""));
+        };
+        // Verse members only — a concept member has no place in a chain.
+        let mut refs: Vec<VRef> = lt
+            .tag
+            .members
+            .iter()
+            .filter_map(|m| match &m.target {
+                tag::TagTarget::Verse(v) => Some(v.clone()),
+                _ => None,
+            })
+            .collect();
+        if let Some(subset) = opt_str(refs_json) {
+            let keys: Vec<String> = match serde_json::from_str(subset) {
+                Ok(k) => k,
+                Err(e) => return out_string(format!("bad refs JSON: {e}")),
+            };
+            let set: std::collections::BTreeSet<String> = keys.into_iter().collect();
+            refs.retain(|v| set.contains(&v.ref_key()));
+        }
+        let name = opt_str(weave_name)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or(&lt.tag.name)
+            .to_string();
+        match weave::add_chain(
+            &home,
+            &study.weaves,
+            &name,
+            WeaveKind::Typological,
+            canon::TOKENIZATION_VERSION,
+            added,
+            &refs,
+        ) {
+            Ok(_) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
 /// The `index`-th suggested weave (as ordered by
 /// `pure_engine_suggested_weaves_json`) into the engine's flat weave list.
 fn nth_suggested(weaves: &[LoadedWeave], index: usize) -> Option<usize> {

@@ -386,6 +386,25 @@ namespace PureStudy.Native
         public static extern byte* pure_engine_weave_add_link(PureEngine* engine, byte* name, byte* a_ref, byte* b_ref, byte* added);
 
         /// <summary>
+        ///  Weave a tag's passages into a canon-ordered **chain** of links — the
+        ///  accumulate-then-organize flow: the reader tags a topic over time (e.g.
+        ///  "Rapture"), then turns the tag — or a chosen subset of its members — into a
+        ///  weave to read as one thread through the canon. Re-running after the tag
+        ///  grows just adds the new edges (find-or-create + link dedup).
+        ///
+        ///  `refs_json` is null to take every verse member, else a JSON array of
+        ///  refKeys selecting a subset (non-members are ignored). `weave_name` is null
+        ///  to reuse the tag's name. Returns null on success, else a caller-freed
+        ///  error string.
+        ///
+        ///  # Safety
+        ///  `engine` is a valid engine from `pure_engine_open*`; string params are null
+        ///  or valid NUL-terminated UTF-8 for the duration of the call.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "pure_engine_weave_from_tag", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern byte* pure_engine_weave_from_tag(PureEngine* engine, byte* tag_name, byte* refs_json, byte* weave_name, byte* added);
+
+        /// <summary>
         ///  **Approve** the `index`-th suggested weave: promote it into `home/weaves`
         ///  with all links approved (merging into a same-named weave there if present)
         ///  and remove the suggestion. `index` is the ordinal from

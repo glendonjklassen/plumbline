@@ -438,6 +438,49 @@ fn authoring_round_trip_via_abi() {
 }
 
 #[test]
+fn weave_from_tag_via_abi() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("pure-ffi-tagweave-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let e = pure_engine_open(home_c.as_ptr(), ptr::null_mut());
+        assert!(!e.is_null());
+        let c = |s: &str| CString::new(s).unwrap();
+        let stamp = c("2026-07-25T00:00:00Z");
+
+        // Accumulate a topic tag over time (a concept member rides along and
+        // must be ignored by the conversion), then weave it.
+        for (kind, value) in [("verse", "John 3:18"), ("verse", "John 3:16"), ("concept", "G4100")] {
+            assert!(pure_engine_tag_add(e, c("Belief").as_ptr(), c(kind).as_ptr(), c(value).as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
+        }
+        assert!(pure_engine_weave_from_tag(e, c("belief").as_ptr(), ptr::null(), ptr::null(), stamp.as_ptr()).is_null());
+
+        let weaves: Value = serde_json::from_str(&take(pure_engine_weaves_json(e)).unwrap()).unwrap();
+        assert_eq!(weaves["weaves"][0]["name"], "Belief"); // null name → the tag's
+        let links = weaves["weaves"][0]["links"].as_array().unwrap();
+        assert_eq!(links.len(), 1); // canon-ordered chain of the two verses
+        assert_eq!(links[0]["a"], "John 3:16");
+        assert_eq!(links[0]["b"], "John 3:18");
+
+        // A named subset with one ref is not a weave; an unknown tag errors.
+        assert!(take(pure_engine_weave_from_tag(e, c("Belief").as_ptr(), c(r#"["John 3:16"]"#).as_ptr(), c("Solo").as_ptr(), stamp.as_ptr()))
+            .unwrap()
+            .contains("two distinct"));
+        assert!(take(pure_engine_weave_from_tag(e, c("Nope").as_ptr(), ptr::null(), ptr::null(), stamp.as_ptr()))
+            .unwrap()
+            .contains("no tag"));
+
+        pure_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
+#[test]
 fn suggested_weave_review_via_abi() {
     use std::ffi::CString;
     unsafe {
