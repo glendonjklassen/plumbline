@@ -7,13 +7,13 @@
 //! checkout; a stranger running an installed binary got an empty reader. The
 //! home now resolves once, in order:
 //!
-//!   1. `$PURE_STUDY_HOME` / `$OVERLAY_HOME` — explicit override (also how the
+//!   1. `$PLUMBLINE_HOME` / `$OVERLAY_HOME` — explicit override (also how the
 //!      test suite and tooling point the loaders somewhere specific);
 //!   2. the CWD, when it looks like a working tree (has `data/kjv.jsonl`) — the
 //!      run-in-place case, preserving the existing dev workflow;
 //!   3. a data directory next to the executable (`<exe_dir>[/..]/data`), so a
 //!      packaged app that ships its corpus beside the binary just works;
-//!   4. `$XDG_DATA_HOME/pure-study` (Windows `%APPDATA%`, macOS Application
+//!   4. `$XDG_DATA_HOME/plumbline` (Windows `%APPDATA%`, macOS Application
 //!      Support) — the installed case.
 //!
 //! All paths are composed with [`Path::join`], never a hardcoded separator, so
@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 /// Where a resolved home came from — for a friendly status line / diagnostics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HomeKind {
-    /// `$PURE_STUDY_HOME` / `$OVERLAY_HOME`.
+    /// `$PLUMBLINE_HOME` / `$OVERLAY_HOME`.
     Env,
     /// The CWD is a working tree; run in place.
     Tree,
@@ -50,18 +50,18 @@ pub fn corpus_marker(home: impl AsRef<Path>) -> PathBuf {
     home.as_ref().join("data").join("kjv.jsonl")
 }
 
-/// Does this directory look like a pure-study/overlay home — i.e. does it hold
+/// Does this directory look like a Plumbline/overlay home — i.e. does it hold
 /// a hydrated `data/kjv.jsonl`?
 pub fn looks_like_home(path: impl AsRef<Path>) -> bool {
     corpus_marker(path).is_file()
 }
 
 /// The per-user data directory for this app, per platform:
-/// - Windows: `%APPDATA%\pure-study`
-/// - macOS: `$HOME/Library/Application Support/pure-study`
-/// - other Unix: `$XDG_DATA_HOME/pure-study` (else `$HOME/.local/share/pure-study`)
+/// - Windows: `%APPDATA%\plumbline`
+/// - macOS: `$HOME/Library/Application Support/plumbline`
+/// - other Unix: `$XDG_DATA_HOME/plumbline` (else `$HOME/.local/share/plumbline`)
 pub fn data_dir() -> Option<PathBuf> {
-    let app = "pure-study";
+    let app = "plumbline";
     #[cfg(target_os = "windows")]
     {
         std::env::var_os("APPDATA").map(|b| Path::new(&b).join(app))
@@ -103,7 +103,7 @@ fn exe_dir_homes() -> Vec<PathBuf> {
 /// caller should show first-run / hydration guidance.
 pub fn resolve_home() -> Option<(PathBuf, HomeKind)> {
     // 1. Explicit override (either spelling).
-    for var in ["PURE_STUDY_HOME", "OVERLAY_HOME"] {
+    for var in ["PLUMBLINE_HOME", "OVERLAY_HOME"] {
         if let Some(v) = std::env::var_os(var).filter(|s| !s.is_empty()) {
             return Some((PathBuf::from(v), HomeKind::Env));
         }
@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn recognizes_a_home_by_its_corpus_marker() {
-        let home = std::env::temp_dir().join(format!("pure-home-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-home-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         assert!(!looks_like_home(&home));
         std::fs::create_dir_all(home.join("data")).unwrap();
@@ -148,7 +148,7 @@ mod tests {
     fn data_dir_is_named_for_the_app() {
         // Whatever the platform resolves to, it should end in the app folder.
         if let Some(d) = data_dir() {
-            assert!(d.ends_with("pure-study"));
+            assert!(d.ends_with("plumbline"));
         }
     }
 }

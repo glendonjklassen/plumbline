@@ -1,10 +1,10 @@
-//! `pure-rnd` — the optional, feature-gated "R&D" layer for pure-study.
+//! `plumbline-rnd` — the optional, feature-gated "R&D" layer for Plumbline.
 //!
 //! Everything a casual reader should never be forced to see lives here, behind
 //! cargo features: the OT↔NT etymology bridge (`bridge`), concept embeddings +
 //! neighbourhoods (`embeddings`), the morphology layer (`morphology`), and the
 //! symbolic concept engine (`concept`). A simple-reader build depends on
-//! `pure-rnd` with no features and compiles none of it.
+//! `plumbline-rnd` with no features and compiles none of it.
 //!
 //! Ported from overlay `Concept*`, `Embed`, `Morph`, `Burst`, `Witness`,
 //! `Bridge`. The **etymology bridge** (`bridge` feature) is ported and pure
@@ -64,7 +64,7 @@ pub const fn capabilities() -> Capabilities {
 }
 
 /// Whether any R&D capability is compiled in at all. When false, the UI stays
-/// in pure-reader mode with no "Full study" affordances.
+/// in reader-only mode with no "Full study" affordances.
 pub const fn any_enabled() -> bool {
     let c = capabilities();
     c.bridge || c.embeddings || c.morphology || c.concept

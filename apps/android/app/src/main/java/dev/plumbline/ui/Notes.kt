@@ -1,11 +1,11 @@
-// The personal-notes browser (Glendon's feedback, 2026-07-24): every note the
+// The personal-notes browser (product feedback, 2026-07-24): every note the
 // reader has written, browsable from Explore — verse + note text, canonical
 // order (UserNotesJson). Tap a row to open the passage in the reader; Edit
 // rewrites (or clears) the note in place.
 //
 // Author D (Compose UI).
 
-package dev.purestudy.ui
+package dev.plumbline.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -41,10 +41,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.purestudy.StudyEngine
-import dev.purestudy.UserNote
-import dev.purestudy.UserNotes
-import dev.purestudy.parseWire
+import dev.plumbline.StudyEngine
+import dev.plumbline.UserNote
+import dev.plumbline.UserNotes
+import dev.plumbline.parseWire
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

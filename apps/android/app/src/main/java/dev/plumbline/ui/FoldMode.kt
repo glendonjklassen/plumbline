@@ -1,17 +1,17 @@
 // The fold-aware layout decision. One derived [UiMode] from
 // (window width breakpoint + FoldingFeature present? + posture). Per
-// docs/ANDROID-BOOTSTRAP.md we NEVER gate two-pane on width alone — the Pixel 9
-// Pro Fold's inner display is ~1:1 and may not clear the 840dp "Expanded"
+// docs/ANDROID-BOOTSTRAP.md we NEVER gate two-pane on width alone — the target
+// foldable's inner display is ~1:1 and may not clear the 840dp "Expanded"
 // breakpoint, so a present (vertical, opened) FoldingFeature is the signal.
 //
-// v1 phone shell (Glendon's call): the phone is always a single fullscreen
+// v1 phone shell (product call): the phone is always a single fullscreen
 // reader — study/search/library surface on demand as a dismissible bottom sheet,
 // never a permanent split with a toggle button. Two side-by-side panes appear
 // only when the fold is opened flat with a vertical hinge.
 //
 // Author D (Compose UI). Depends only on androidx.window + material3-adaptive.
 
-package dev.purestudy.ui
+package dev.plumbline.ui
 
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
@@ -20,8 +20,8 @@ import androidx.compose.runtime.remember
 import androidx.window.core.layout.WindowWidthSizeClass
 import androidx.window.layout.FoldingFeature
 
-// Wire JSON is decoded through Author B's shared `parseWire` / `PureJson`
-// (package dev.purestudy) — this shell adds no second codec.
+// Wire JSON is decoded through Author B's shared `parseWire` / `PlumblineJson`
+// (package dev.plumbline) — this shell adds no second codec.
 
 /** The two fold-aware layouts.
  *  - [FullscreenVertical] a plain phone / closed cover / tabletop posture: one

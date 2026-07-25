@@ -17,7 +17,7 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use pure_core::reference::VRef;
+use plumbline_core::reference::VRef;
 
 /// The language of a parsing code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

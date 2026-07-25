@@ -1,6 +1,6 @@
 //! The wire schemas: the JSON contract every binding decodes.
 //!
-//! These DTOs are deliberately **separate** from `pure_core` / `pure_layout`
+//! These DTOs are deliberately **separate** from `plumbline_core` / `plumbline_layout`
 //! internals. The core's own serde impls serve its frozen on-disk formats (the
 //! positional token array, OSIS-keyed verses); this ABI instead speaks a
 //! flat, self-describing, `camelCase` JSON that is pleasant to bind from C#,
@@ -10,19 +10,19 @@
 
 use serde::{Deserialize, Serialize};
 
-use pure_core::config::{Config, PaneRef, StudyMode};
-use pure_core::panel::{Block, Color, PanelLink, Run};
-use pure_core::theme::ThemeChoice;
-use pure_core::corpus::{Corpus, Token, Verse};
-use pure_core::crossref::CrossRef;
-use pure_core::memory;
-use pure_core::reference::VRef;
-use pure_core::search::{SearchAnswer, SearchHit};
-use pure_core::strongs::StrongsEntry;
-use pure_core::tag::{LoadedTag, TagTarget};
-use pure_core::thread::LoadedThread;
-use pure_core::weave::LoadedWeave;
-use pure_layout::{DisplayList, Hit, ItemKind};
+use plumbline_core::config::{Config, PaneRef, StudyMode};
+use plumbline_core::panel::{Block, Color, PanelLink, Run};
+use plumbline_core::theme::ThemeChoice;
+use plumbline_core::corpus::{Corpus, Token, Verse};
+use plumbline_core::crossref::CrossRef;
+use plumbline_core::memory;
+use plumbline_core::reference::VRef;
+use plumbline_core::search::{SearchAnswer, SearchHit};
+use plumbline_core::strongs::StrongsEntry;
+use plumbline_core::tag::{LoadedTag, TagTarget};
+use plumbline_core::thread::LoadedThread;
+use plumbline_core::weave::LoadedWeave;
+use plumbline_layout::{DisplayList, Hit, ItemKind};
 
 // ── table of contents ──────────────────────────────────────────────────────────
 
@@ -122,7 +122,7 @@ pub struct WireItem {
     pub token_index: Option<u32>,
     /// For verse numbers: the verse number; `null` for words.
     pub verse_number: Option<u16>,
-    /// Token flag bits (see the `PURE_FLAG_*` constants); 0 for verse numbers.
+    /// Token flag bits (see the `PLUMBLINE_FLAG_*` constants); 0 for verse numbers.
     pub flags: u32,
     /// Strong's codes on this word (empty otherwise).
     pub strongs: Vec<String>,
@@ -512,7 +512,7 @@ pub struct WireSuggestedLink {
 pub fn suggested_weaves_to_wire(loaded: &[LoadedWeave]) -> WireSuggestedWeaves {
     let suggested = loaded
         .iter()
-        .filter(|lw| pure_core::weave::is_suggested(lw))
+        .filter(|lw| plumbline_core::weave::is_suggested(lw))
         .enumerate()
         .map(|(index, lw)| WireSuggestedWeave {
             index,
@@ -727,7 +727,7 @@ pub fn weaves_to_wire(loaded: &[LoadedWeave], corpus: &Corpus) -> WireWeaves {
                     notes_source: w.notes_source.token(),
                     created: w.created.clone(),
                     approved: w.approved,
-                    suggested: pure_core::weave::is_suggested(lw),
+                    suggested: plumbline_core::weave::is_suggested(lw),
                     links: w
                         .links
                         .iter()
@@ -780,7 +780,7 @@ pub struct WireLinkPair {
 
 pub fn link_pairs_to_wire(loaded: &[LoadedWeave], corpus: &Corpus) -> WireLinkPairs {
     WireLinkPairs {
-        pairs: pure_core::weave::link_pairs(loaded)
+        pairs: plumbline_core::weave::link_pairs(loaded)
             .into_iter()
             .map(|(a, b)| {
                 let resolved = corpus.verse(&a).is_some() && corpus.verse(&b).is_some();
@@ -823,11 +823,11 @@ pub struct WireCanonSegment {
 
 pub fn canon_segments_to_wire() -> WireCanonSegments {
     WireCanonSegments {
-        segments: pure_core::reference::CANON_SEGMENTS
+        segments: plumbline_core::reference::CANON_SEGMENTS
             .iter()
             .map(|&(label, first, last)| WireCanonSegment { label, first, last })
             .collect(),
-        ot_nt_divide: pure_core::reference::OT_NT_DIVIDE,
+        ot_nt_divide: plumbline_core::reference::OT_NT_DIVIDE,
     }
 }
 
@@ -860,12 +860,12 @@ pub struct WireChordPair {
 }
 
 pub fn chord_map_to_wire(loaded: &[LoadedWeave]) -> WireChordMap {
-    let (pairs, max) = pure_core::weave::chord_pairs(loaded);
+    let (pairs, max) = plumbline_core::weave::chord_pairs(loaded);
     WireChordMap {
         pairs: pairs.into_iter().map(|(a, b, count)| WireChordPair { a, b, count }).collect(),
         max,
-        ot_nt_divide: pure_core::reference::OT_NT_DIVIDE,
-        book_count: pure_core::canon::BOOKS.len(),
+        ot_nt_divide: plumbline_core::reference::OT_NT_DIVIDE,
+        book_count: plumbline_core::canon::BOOKS.len(),
     }
 }
 
@@ -934,7 +934,7 @@ pub fn constellation_to_wire(
     page: usize,
     pins: &[usize],
 ) -> WireConstellation {
-    let c = pure_core::weave::constellation(loaded, corpus, page, pins);
+    let c = plumbline_core::weave::constellation(loaded, corpus, page, pins);
     WireConstellation {
         lanes: c
             .lanes
@@ -1086,7 +1086,7 @@ pub struct WireBridgeNode {
 
 // ── study-panel content model (the typed block list) ──────────────────────────
 
-/// A panel view as a list of typed blocks (see `pure_core::panel`). The shell
+/// A panel view as a list of typed blocks (see `plumbline_core::panel`). The shell
 /// walks these with a small per-block renderer; it derives nothing.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1140,7 +1140,7 @@ fn run_to_wire(r: Run) -> WireRun {
     WireRun { text: r.text, size: r.size, color: color_token(r.color), bold: r.bold, italic: r.italic, uri: r.uri }
 }
 
-/// A parsed panel link (`pure_core::panel::parse_link`) — the one verb
+/// A parsed panel link (`plumbline_core::panel::parse_link`) — the one verb
 /// vocabulary, tagged by `verb` so a shell dispatches on the typed shape
 /// instead of re-splitting the URI string.
 #[derive(Serialize)]
@@ -1352,8 +1352,8 @@ pub fn search_to_wire(a: &SearchAnswer) -> WireSearch {
     match a {
         SearchAnswer::GoTo { book, chapter, verse } => {
             let display = match verse {
-                Some(v) => pure_core::VRef::new(book.clone(), *chapter, *v).display(),
-                None => format!("{} {}", pure_core::canon::display_name(book), chapter),
+                Some(v) => plumbline_core::VRef::new(book.clone(), *chapter, *v).display(),
+                None => format!("{} {}", plumbline_core::canon::display_name(book), chapter),
             };
             WireSearch::Goto {
                 book: book.clone(),
@@ -1440,7 +1440,7 @@ pub struct WireHighlightTones {
 
 pub fn highlight_tones_to_wire() -> WireHighlightTones {
     WireHighlightTones {
-        tones: pure_core::theme::HIGHLIGHT_TONES
+        tones: plumbline_core::theme::HIGHLIGHT_TONES
             .iter()
             .map(|&(name, hex)| WireHighlightTone { name, hex })
             .collect(),

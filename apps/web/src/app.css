@@ -1,5 +1,5 @@
 /* Global styles: the bundled scripture font, resets, and the palette exposed
-   as CSS variables (set from pure_theme_palette_json at boot / theme switch —
+   as CSS variables (set from plumbline_theme_palette_json at boot / theme switch —
    the core is the single palette source, same as GTK/WinUI). */
 
 @font-face {

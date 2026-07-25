@@ -108,7 +108,7 @@ mod tests {
 
     fn scratch(tag: &str) -> PathBuf {
         // A unique-per-process scratch dir under the OS temp dir (portable).
-        std::env::temp_dir().join(format!("pure-store-{}-{tag}", std::process::id()))
+        std::env::temp_dir().join(format!("plumbline-store-{}-{tag}", std::process::id()))
     }
 
     #[test]

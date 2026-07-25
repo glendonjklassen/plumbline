@@ -50,7 +50,7 @@
 {:else}
   <div class="splash">
     <div class="mark">✦</div>
-    <h1>pure study</h1>
+    <h1>Plumbline</h1>
     <p class="sub">1769 King James Version</p>
     {#if error}
       <p class="error">{error}</p>

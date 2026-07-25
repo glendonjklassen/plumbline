@@ -5,14 +5,14 @@
 //! A [`Palette`] carries a hex string per semantic role. The reader, chrome, and
 //! the study-panel's [`crate::panel::Color`] roles all resolve through it. GTK
 //! reads the struct directly; the non-Rust shells fetch it as JSON
-//! (`pure_theme_palette_json`) and apply it. Shells own translucency: a search
+//! (`plumbline_theme_palette_json`) and apply it. Shells own translucency: a search
 //! band, a Strong's underline, a weave connector, a highlight wash are all drawn
 //! by applying alpha to `gold` / `pin` / a highlight tone, so those follow the
 //! theme for free.
 //!
 //! The light values are exactly the ones the shells shipped with, so switching
 //! to the palette does not change the light look. Dark and night are new and
-//! meant to be tuned in the reader (Glendon owns the final values).
+//! meant to be tuned in the reader (the maintainer owns the final values).
 
 use serde::{Deserialize, Serialize};
 

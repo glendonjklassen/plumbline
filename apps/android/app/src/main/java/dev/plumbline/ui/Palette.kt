@@ -7,12 +7,12 @@
 //
 // Author D (Compose UI).
 
-package dev.purestudy.ui
+package dev.plumbline.ui
 
 import androidx.compose.ui.graphics.Color
-import dev.purestudy.PaletteData
-import dev.purestudy.StudyEngine
-import dev.purestudy.parseWire
+import dev.plumbline.PaletteData
+import dev.plumbline.StudyEngine
+import dev.plumbline.parseWire
 
 /** A fully-resolved reader palette as Compose [Color]s. Immutable; rebuild on a
  *  theme change (`ReaderPalette.forTheme("dark")`). */

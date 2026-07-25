@@ -1,4 +1,4 @@
-// The passage navigator (Glendon's feedback, 2026-07-24): the book dropdown
+// The passage navigator (product feedback, 2026-07-24): the book dropdown
 // replaced by tap stages — Testament (OT | NT) → book grid → chapter grid →
 // verse grid — every step a big touch target. Tapping a verse jumps the reader
 // straight to it (ReaderPane scrolls the verse into view); "Whole chapter"
@@ -10,7 +10,7 @@
 //
 // Author D (Compose UI).
 
-package dev.purestudy.ui
+package dev.plumbline.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -48,8 +48,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.purestudy.StudyEngine
-import dev.purestudy.TocBook
+import dev.plumbline.StudyEngine
+import dev.plumbline.TocBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

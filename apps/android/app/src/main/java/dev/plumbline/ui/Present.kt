@@ -1,6 +1,6 @@
-// Thread presentation mode (Glendon's #1, 2026-07-24): hand-the-phone-out
-// Gospel sharing. A thread (e.g. "Romans Road") becomes a clean, fullscreen,
-// large-type presentation:
+// Thread presentation mode (the top-priority request, 2026-07-24):
+// hand-the-phone-out Gospel sharing. A thread (e.g. "Romans Road") becomes a
+// clean, fullscreen, large-type presentation:
 //
 //   picker    pick which thread to present (big rows, no chrome clutter).
 //   overview  the whole thread as one scrollable column of large verses — the
@@ -18,7 +18,7 @@
 //
 // Author D (Compose UI).
 
-package dev.purestudy.ui
+package dev.plumbline.ui
 
 import android.content.Intent
 import androidx.activity.compose.BackHandler
@@ -71,11 +71,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.purestudy.StudyEngine
-import dev.purestudy.Thread1
-import dev.purestudy.Threads
-import dev.purestudy.VerseData
-import dev.purestudy.parseWire
+import dev.plumbline.StudyEngine
+import dev.plumbline.Thread1
+import dev.plumbline.Threads
+import dev.plumbline.VerseData
+import dev.plumbline.parseWire
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

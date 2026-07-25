@@ -2,6 +2,6 @@
 node_modules/
 dist/
 public/pack/
-public/pure_ffi.wasm
+public/plumbline_ffi.wasm
 test-results/
 playwright-report/

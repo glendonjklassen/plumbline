@@ -23,8 +23,8 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use pure_core::corpus::Corpus;
-use pure_core::reference::VRef;
+use plumbline_core::corpus::Corpus;
+use plumbline_core::reference::VRef;
 
 /// A loaded embedding: unit-normalised vectors (so cosine is a plain dot
 /// product) packed row-major into one flat array (row `i` is the `dim`-slice at
@@ -556,7 +556,7 @@ mod tests {
             "{\"b\":\"John\",\"c\":1,\"v\":2,\"t\":[[\"\",\"b\",\"\",[\"G2\"],0]]}\n",
             "{\"b\":\"John\",\"c\":1,\"v\":3,\"t\":[[\"\",\"c\",\"\",[\"G3\"],0]]}\n",
         );
-        let corpus = pure_core::corpus::from_str(jsonl).unwrap();
+        let corpus = plumbline_core::corpus::from_str(jsonl).unwrap();
         let e = parse_embedding("kjv1769-tok2", None, TIE, None).unwrap();
         let vs = VerseSim::build(&e, &corpus);
         assert_eq!(vs.count(), 3);

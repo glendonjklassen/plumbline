@@ -6,25 +6,28 @@ plugins {
 }
 
 android {
-    namespace = "dev.purestudy"
+    namespace = "dev.plumbline"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "dev.purestudy"
+        applicationId = "dev.plumbline"
         minSdk = 26
         targetSdk = 35
         // Version identity comes from the release workflow, derived from the git
-        // tag (-PpureVersionName / -PpureVersionCode). versionCode MUST increase
-        // per release or Android won't treat a new APK as an in-place upgrade.
+        // tag (-PplumblineVersionName / -PplumblineVersionCode). Both spellings
+        // must match .github/workflows/release.yml exactly — a mismatch makes
+        // findProperty return null and silently ships the dev stamp below.
+        // versionCode MUST increase per release or Android won't treat a new
+        // APK as an in-place upgrade.
         // Local + CI-debug builds fall back to a dev stamp.
-        versionCode = (project.findProperty("pureVersionCode") as String?)?.toInt() ?: 1
-        versionName = (project.findProperty("pureVersionName") as String?) ?: "0.0.0-dev"
+        versionCode = (project.findProperty("plumblineVersionCode") as String?)?.toInt() ?: 1
+        versionName = (project.findProperty("plumblineVersionName") as String?) ?: "0.0.0-dev"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Only the ABIs we cross-compile the core for: device (arm64-v8a) and
         // the AOSP emulator (x86_64). cargo-ndk drops the .so into
-        // src/main/jniLibs/<abi>/libpure_ffi.so; JNA's @aar carries its own.
+        // src/main/jniLibs/<abi>/libplumbline_ffi.so; JNA's @aar carries its own.
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
@@ -85,7 +88,7 @@ android {
         abortOnError = false
     }
 
-    // Compile the shared Kotlin/JNA binding (package dev.purestudy.core) straight
+    // Compile the shared Kotlin/JNA binding (package dev.plumbline.core) straight
     // out of the FFI crate — it is the single source of truth for the ABI and is
     // NOT copied into this module.
     sourceSets {
@@ -151,7 +154,7 @@ dependencies {
 // OpenFromBytes (no writable home needed for reading). Runs before every build.
 tasks.register<Copy>("syncData") {
     description = "Copy data/*.jsonl + strongs.json into app assets for OpenFromBytes."
-    group = "pure-study"
+    group = "plumbline"
     from(rootProject.file("../../data")) {
         include("kjv.jsonl", "strongs.json", "kjv-notes.jsonl", "cross-references.tsv")
     }
@@ -162,7 +165,7 @@ tasks.register<Copy>("syncData") {
 // dispersion "bridge row") has data on-device once the engine opens from a home.
 tasks.register<Copy>("syncBridge") {
     description = "Copy bridge/*.json into app assets."
-    group = "pure-study"
+    group = "plumbline"
     from(rootProject.file("../../bridge")) { include("*.json") }
     into(layout.projectDirectory.dir("src/main/assets/bridge"))
 }

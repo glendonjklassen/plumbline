@@ -7,14 +7,14 @@
 // property's own name as its JSON key, and every property here is already named
 // in the camelCase the wire emits (`verseDisplay`, `tokenIndex`, `otNtDivide`,
 // `aLaneFrac`, …), so no per-field @SerialName is needed except the one field
-// serde renames to a Kotlin keyword (`in`). Decode through [PureJson], which
+// serde renames to a Kotlin keyword (`in`). Decode through [PlumblineJson], which
 // ignores unknown keys so additive wire evolution never breaks an older shell.
 //
 // The tagged unions (search answer, panel block, panel link) arrive as a single
 // flat object with a discriminator (`kind` / `verb`); we mirror Wire.cs and read
 // each as one flat class whose non-applicable fields stay null.
 
-package dev.purestudy
+package dev.plumbline
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -22,15 +22,15 @@ import kotlinx.serialization.json.Json
 
 /** The shared decoder. Lenient + tolerant of unknown/absent fields so a shell
  *  built against an older or newer DLL still reads the payloads it understands. */
-val PureJson: Json = Json {
+val PlumblineJson: Json = Json {
     ignoreUnknownKeys = true
     isLenient = true
     coerceInputValues = true
     explicitNulls = false
 }
 
-/** Decode a wire payload with [PureJson]. */
-inline fun <reified T> parseWire(json: String): T = PureJson.decodeFromString(json)
+/** Decode a wire payload with [PlumblineJson]. */
+inline fun <reified T> parseWire(json: String): T = PlumblineJson.decodeFromString(json)
 
 // ── table of contents ──────────────────────────────────────────────────────
 

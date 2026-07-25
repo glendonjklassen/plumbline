@@ -1,14 +1,14 @@
 // The study sidebar: it renders the core's typed block list (the
-// pure_engine_*_blocks_json endpoints) as Compose text/cards — the Android
+// plumbline_engine_*_blocks_json endpoints) as Compose text/cards — the Android
 // mirror of apps/windows/PureStudyWin/StudyPanel.RenderBlocks. One Rust producer
 // builds the blocks (word study, concordance, search results, guide/about); this
 // pane only walks them and paints. Link runs route back through [onLink] (the
-// URI vocabulary parsed by pure_route_link_json). v0 renders text + links; full
+// URI vocabulary parsed by plumbline_route_link_json). v0 renders text + links; full
 // interactive routing (tag/thread authoring, dialogs) is a TODO.
 //
 // Author D (Compose UI).
 
-package dev.purestudy.ui
+package dev.plumbline.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,17 +30,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.purestudy.PanelBlock
-import dev.purestudy.PanelData
-import dev.purestudy.PanelRun
-import dev.purestudy.parseWire
+import dev.plumbline.PanelBlock
+import dev.plumbline.PanelData
+import dev.plumbline.PanelRun
+import dev.plumbline.parseWire
 
 private const val LINK_TAG = "link"
 
 /**
  * Renders a panel block-list JSON payload. Pass `null` for the idle placeholder.
  *
- * @param blocksJson a pure_engine_*_blocks_json payload (or null).
+ * @param blocksJson a plumbline_engine_*_blocks_json payload (or null).
  * @param onLink invoked with a run's URI when a link is tapped.
  * @param embed an optional composable (the concept map + canon heatmap cards)
  *   slotted into the block flow just before the first titled section — after

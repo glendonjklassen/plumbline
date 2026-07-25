@@ -1,9 +1,16 @@
-# pure-study
+# Plumbline
 
-A KJV-only Bible-study tool: a clean parallel-passage reader with an optional
-"Full study" tier of Strong's, morphology, cross-references, and corpus
-analytics. Built in Rust; successor to *overlay*. Everything runs locally and
-offline — the repo ships the complete data pack, so a clone is a working app.
+> And the LORD said unto me, Amos, what seest thou? And I said, A plumbline.
+> Then said the Lord, Behold, I will set a plumbline in the midst of my people
+> Israel…
+>
+> — **Amos 7:8**
+
+**Plumbline** is a KJV-only Bible-study tool: a clean parallel-passage reader
+with an optional "Full study" tier of Strong's, morphology, cross-references,
+and corpus analytics. Built in Rust; successor to *overlay*. Everything runs
+locally and offline — the repo ships the complete data pack, so a clone is a
+working app.
 
 ![Genesis 15 and Romans 4 side by side, joined by the "Abraham believed God"
 weave's connector lines](assets/readme/reader-weaves.png)
@@ -15,11 +22,11 @@ weave's connector lines](assets/readme/reader-weaves.png)
 The app is a PWA — a hosted link is coming; until then, run it locally:
 
 ```sh
-git clone https://github.com/glendonjklassen/pure-study.git
-cd pure-study/apps/web
+git clone https://github.com/glendonjklassen/plumbline.git
+cd plumbline/apps/web
 npm install && npm run pack:data
 rustup target add wasm32-wasip1
-cargo build -p pure-ffi --release --target wasm32-wasip1 && npm run pack:wasm
+cargo build -p plumbline-ffi --release --target wasm32-wasip1 && npm run pack:wasm
 npm run build && npm run preview   # → http://localhost:4173
 ```
 
@@ -30,14 +37,14 @@ offline after the first visit (installable as an app from the address bar).
 ### Android
 
 Download the APK from the
-[Releases page](https://github.com/glendonjklassen/pure-study/releases)
+[Releases page](https://github.com/glendonjklassen/plumbline/releases)
 (arm64-v8a + x86_64, signed; no Play Store, no Google services required).
 
 To run the app from anywhere (not just the checkout), seed a per-user home
-once — `~/.local/share/pure-study` on Linux — and the binary will find it:
+once — `~/.local/share/plumbline` on Linux — and the binary will find it:
 
 ```sh
-cargo run --release -p pure-hydrate -- copy --from . --to ~/.local/share/pure-study
+cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/plumbline
 ```
 
 ## Getting started (60 seconds)
@@ -110,10 +117,10 @@ leaves its connector pinned at the pane edge as a hint.
 
 ## Your data
 
-Everything lives under one **data home** — the first of: `$PURE_STUDY_HOME` /
+Everything lives under one **data home** — the first of: `$PLUMBLINE_HOME` /
 `$OVERLAY_HOME`, a directory tree containing `data/kjv.jsonl` (this checkout
 counts), the executable's directory, or the per-user data dir
-(`~/.local/share/pure-study` on Linux, `%APPDATA%\pure-study` on Windows).
+(`~/.local/share/plumbline` on Linux, `%APPDATA%\plumbline` on Windows).
 
 Yours to back up: `weaves/`, `threads/`, `tags/`, `notes/`, `memory/`, and
 the config. **Settings → Back up (.zip)** exports exactly that from either
@@ -131,27 +138,29 @@ Scripture renders in EB Garamond (OFL, bundled).
 
 ## For developers
 
-| Crate | What it is |
-|-------|------------|
-| `crates/core` | Pure domain: corpus, Strong's, search, weaves, tags, config, atomic store |
-| `crates/layout` | Greedy line-breaker + hit regions (measures via callback) |
-| `crates/rnd` | Feature-gated analytics: bridge, embeddings, morphology, keyness, witness, concept |
-| `crates/ffi` | The single flat C ABI for native shells (cdylib) — see [crates/ffi/README.md](crates/ffi/README.md) |
-| `crates/hydrate` | `pure-hydrate` CLI: copy/verify the data pack into a home |
+| Crate (package) | What it is |
+|-----------------|------------|
+| `crates/core` (`plumbline-core`) | Pure domain: corpus, Strong's, search, weaves, tags, config, atomic store |
+| `crates/layout` (`plumbline-layout`) | Greedy line-breaker + hit regions (measures via callback) |
+| `crates/rnd` (`plumbline-rnd`) | Feature-gated analytics: bridge, embeddings, morphology, keyness, witness, concept |
+| `crates/ffi` (`plumbline-ffi`) | The single flat C ABI for native shells (cdylib) — see [crates/ffi/README.md](crates/ffi/README.md) |
+| `crates/hydrate` (`plumbline-hydrate`) | CLI: copy/verify the data pack into a home |
 | `apps/android` | The Compose shell (Android) — the UX gold standard |
 | `apps/web` | The PWA shell (Svelte + the core compiled to wasm32-wasip1) |
 
 ```sh
-cargo test -p pure-core -p pure-layout -p pure-rnd -p pure-ffi -p pure-hydrate
-cargo test -p pure-rnd --features "bridge embeddings morphology concept"
+cargo test -p plumbline-core -p plumbline-layout -p plumbline-rnd -p plumbline-ffi -p plumbline-hydrate
+cargo test -p plumbline-rnd --features "bridge embeddings morphology concept"
 ```
 
 The five portable crates are dependency-light pure Rust and build anywhere,
 including `wasm32-wasip1` (the web shell) and the Android NDK targets. CI runs
-the portable tests, the R&D-feature tests, an FFI binding-drift guard, and
-cross-builds of the C ABI on every push. The offline pipeline that produced
-the data pack is documented in [data-prep/README.md](data-prep/README.md); the
-porting history (from the Haskell *overlay*, 2026-07) lives in the git log.
+the portable tests, the R&D-feature tests, an MSRV check, an FFI
+binding-drift guard, the web shell's Playwright suite, and the Android APK
+build — engine cross-compiled for both shipped ABIs — on every push. The
+offline pipeline that produced the data pack is documented in
+[data-prep/README.md](data-prep/README.md); the porting history (from the
+Haskell *overlay*, 2026-07) lives in the git log.
 
 ### Architecture
 

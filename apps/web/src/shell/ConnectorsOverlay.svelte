@@ -1,7 +1,7 @@
 <script lang="ts">
   // Ambient weave connectors (manifest §Ambient weave connectors): an
   // input-transparent canvas over the pane row. Pairs come deduped from the
-  // core (pure_engine_link_pairs_json); the shell only maps endpoints to
+  // core (plumbline_engine_link_pairs_json); the shell only maps endpoints to
   // showing panes and draws the Béziers riding the gutters.
   import { getSession } from "../state/session.svelte";
   import { MARGIN } from "../reader/paint";

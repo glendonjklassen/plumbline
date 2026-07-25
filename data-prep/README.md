@@ -14,7 +14,7 @@ texts. It is a **build-once → ship-the-files** proposition — no GPU, no
 foundation model, no ongoing training, and the outputs are stable as long as the
 tokenization stays frozen (`kjv1769-tok2`).
 
-## What pure-study consumes
+## What Plumbline consumes
 
 All under the resolved data home (`core::home`) at `<home>/data/`:
 
@@ -35,7 +35,7 @@ doesn't render. The reader runs with only the three core files.
 ## How each artifact is produced
 
 The generators are the existing offline Python in the reference `overlay`
-checkout (`ml/` and `pipelines/`, each with its own README). pure-study does
+checkout (`ml/` and `pipelines/`, each with its own README). Plumbline does
 **not** reimplement them — the runtime only reads their outputs, exactly as it
 reads `kjv.jsonl`. Run them once against a hydrated home:
 
@@ -45,7 +45,7 @@ reads `kjv.jsonl`. Run them once against a hydrated home:
   Hebrew subspace onto the Greek (orthogonal Procrustes, one SVD) so
   cross-testament neighbours become meaningful. Output is "wholly owned and
   free to relicense" (it never sees English). The `.meta` stamps the
-  tokenization (pure-study refuses a mismatch) and records the alignment + the
+  tokenization (Plumbline refuses a mismatch) and records the alignment + the
   Greek root-alias map; `.freq` carries the training counts the SIF weights use.
 - **`morphology.jsonl`** — `python3 pipelines/morph_oshb.py` +
   `pipelines/morph_tr.py`, then the overlay `--project-morph` step. A
@@ -85,25 +85,25 @@ SDBH semantic-domains source is CC-BY-**SA** (copyleft) and was deliberately
 
 ## Hosting the pack
 
-Because pure-study resolves its data home (env → working tree → next to the
+Because Plumbline resolves its data home (env → working tree → next to the
 executable → per-user data dir) and reads these files by name, "shipping the R&D
 pack" is just placing the files under `<home>/data/`. A downloadable pack is a
 tarball of the R&D rows above, extracted there; the app picks them up on next
-launch with no code change. (The C ABI's `pure_engine_open_from_bytes` can also
+launch with no code change. (The C ABI's `plumbline_engine_open_from_bytes` can also
 load core data from asset bytes for a bundled build.)
 
-## The `pure-hydrate` tool
+## The `plumbline-hydrate` tool
 
 `crates/hydrate` is a small cross-platform CLI that places the pack into a home
 and **verifies** each artifact by loading it through the same code the app uses:
 
 ```sh
 # Inspect a home — which tiers will light up?
-cargo run -p pure-hydrate -- check --home ~/.local/share/pure-study
+cargo run -p plumbline-hydrate -- check --home ~/.local/share/plumbline
 
 # Copy the pack from a source (e.g. an overlay checkout that already has the
 # artifacts) into a home, then verify.
-cargo run -p pure-hydrate -- copy --from ../overlay --to ~/.local/share/pure-study
+cargo run -p plumbline-hydrate -- copy --from ../overlay --to ~/.local/share/plumbline
 ```
 
 `check` reports verse/entry counts, TSK coverage, embedding dim/alignment, and

@@ -1,4 +1,4 @@
-# Using pure-study
+# Using Plumbline
 
 The daily-driver manual: getting around, search, the study panel tier by tier,
 weaves, and where your work is kept. Install and shortcuts live in the
@@ -123,16 +123,16 @@ others is just two links, and combining weaves is a union.
 
 ## Where everything lives
 
-The data home resolves in this order: `$PURE_STUDY_HOME` / `$OVERLAY_HOME` →
+The data home resolves in this order: `$PLUMBLINE_HOME` / `$OVERLAY_HOME` →
 the working directory tree (a checkout counts) → the executable's directory →
-the per-user data dir (`~/.local/share/pure-study` on Linux,
-`%APPDATA%\pure-study` on Windows, `~/Library/Application Support/pure-study`
-on macOS). The window title's tooltip and the first line of `pure-hydrate
+the per-user data dir (`~/.local/share/plumbline` on Linux,
+`%APPDATA%\plumbline` on Windows, `~/Library/Application Support/plumbline`
+on macOS). The window title's tooltip and the first line of `plumbline-hydrate
 check` both print the resolved home.
 
 Inside it, **yours** (back these up): `weaves/`, `threads/`, `tags/`,
 `patches/`. Shipped/regenerable: `data/`, `bridge/`, and the `*.idxcache`
 startup cache. Config (mode, text size, open panes) is separate, in the
-platform config dir (`~/.config/pure-study/config.json` on Linux). Every write
+platform config dir (`~/.config/plumbline/config.json` on Linux). Every write
 is atomic; a corrupt or missing optional file degrades its feature, never the
 reader.

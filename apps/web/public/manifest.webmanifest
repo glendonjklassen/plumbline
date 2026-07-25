@@ -1,7 +1,7 @@
 {
-  "name": "pure study — 1769 KJV",
-  "short_name": "pure study",
-  "description": "A pure, offline King James Bible study: text, Strong's, weaves, memorization.",
+  "name": "Plumbline — 1769 KJV",
+  "short_name": "Plumbline",
+  "description": "An offline 1769 King James Bible study — the text as the standard, with Strong's, weaves, and memorization.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -15,7 +15,7 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use pure_core::strongs::StrongsDict;
+use plumbline_core::strongs::StrongsDict;
 
 /// One directed etymology link: a Greek Strong's code that Strong recorded as
 /// being of the given Hebrew code's origin.
@@ -383,7 +383,7 @@ impl FusedBridge {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pure_core::strongs::StrongsEntry;
+    use plumbline_core::strongs::StrongsEntry;
 
     fn entry(deriv: Option<&str>) -> StrongsEntry {
         StrongsEntry {
@@ -459,7 +459,7 @@ mod tests {
 
     #[test]
     fn fused_bridge_merges_etymology_and_sources_by_prior() {
-        let home = std::env::temp_dir().join(format!("pure-fused-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-fused-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(home.join("bridge")).unwrap();
         std::fs::create_dir_all(home.join("data")).unwrap();

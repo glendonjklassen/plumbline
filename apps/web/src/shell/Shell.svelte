@@ -168,7 +168,7 @@
 
 <div class="frame">
   <header>
-    <span class="title">pure study</span>
+    <span class="title">Plumbline</span>
     <span class="subtitle">{subtitle}</span>
     <nav class="browse">
         <button onclick={() => (s.panel = { kind: "threads" })}>Threads</button>

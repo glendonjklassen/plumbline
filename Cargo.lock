@@ -264,16 +264,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "proc-macro2"
-version = "1.0.106"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
-dependencies = [
- "unicode-ident",
-]
-
-[[package]]
-name = "pure-core"
+name = "plumbline-core"
 version = "0.1.0"
 dependencies = [
  "bincode",
@@ -284,40 +275,49 @@ dependencies = [
 ]
 
 [[package]]
-name = "pure-ffi"
+name = "plumbline-ffi"
 version = "0.1.0"
 dependencies = [
  "cbindgen",
- "pure-core",
- "pure-layout",
- "pure-rnd",
+ "plumbline-core",
+ "plumbline-layout",
+ "plumbline-rnd",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "pure-hydrate"
+name = "plumbline-hydrate"
 version = "0.1.0"
 dependencies = [
- "pure-core",
- "pure-rnd",
+ "plumbline-core",
+ "plumbline-rnd",
 ]
 
 [[package]]
-name = "pure-layout"
+name = "plumbline-layout"
 version = "0.1.0"
 dependencies = [
- "pure-core",
+ "plumbline-core",
 ]
 
 [[package]]
-name = "pure-rnd"
+name = "plumbline-rnd"
 version = "0.1.0"
 dependencies = [
- "pure-core",
+ "plumbline-core",
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "proc-macro2"
+version = "1.0.106"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
+dependencies = [
+ "unicode-ident",
 ]
 
 [[package]]

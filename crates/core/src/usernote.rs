@@ -151,7 +151,7 @@ mod tests {
     use super::*;
 
     fn scratch(tag: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("pure-usernote-{}-{tag}", std::process::id()))
+        std::env::temp_dir().join(format!("plumbline-usernote-{}-{tag}", std::process::id()))
     }
 
     #[test]

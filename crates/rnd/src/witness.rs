@@ -125,7 +125,7 @@ mod tests {
     }"#;
 
     fn write(tmp: &str, body: &str) -> std::path::PathBuf {
-        let p = std::env::temp_dir().join(format!("pure-witness-{}-{tmp}.json", std::process::id()));
+        let p = std::env::temp_dir().join(format!("plumbline-witness-{}-{tmp}.json", std::process::id()));
         std::fs::write(&p, body).unwrap();
         p
     }

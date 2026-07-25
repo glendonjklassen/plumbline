@@ -1,4 +1,4 @@
-# pure-study — TODO
+# Plumbline — TODO
 
 The backlog — the only planning doc. PLAN.md and PROGRESS.md were retired
 2026-07-22: the architecture, locked decisions, and frozen data formats now
@@ -23,9 +23,9 @@ Item numbers are stable IDs — new items append, nothing renumbers.
 
 All eight shipped 2026-07-22 (the Tier-0 commit on `tier0-daily-driver`,
 still being amended in place as of this writing): shared logic in
-`pure-core`, GTK direct, WinUI over new additive FFI endpoints, deltas logged
-in the manifest. GTK was validated by CI only — **awaiting Glendon's hands-on
-pass on both shells** (tracked as the first item below).
+`plumbline-core`, GTK direct, WinUI over new additive FFI endpoints, deltas logged
+in the manifest. GTK was validated by CI only — **awaiting the maintainer's
+hands-on pass on both shells** (tracked as the first item below).
 
 - [x] **1. Copy & context menu** — right-click verse menu (copy plain /
       ref-suffixed / markdown / chapter · tag · thread · note) + panel-card
@@ -38,7 +38,7 @@ pass on both shells** (tracked as the first item below).
       browser.
 - [x] **5. Dark + night themes** — `core::theme::Palette` tokens (light
       unchanged), follow-system + manual toggle, persisted in config.
-- [x] **6. First-study-click pause killed** — `pure_engine_warm_indexes`
+- [x] **6. First-study-click pause killed** — `plumbline_engine_warm_indexes`
       (WinUI off-thread; GTK on-idle).
 - [x] **7. In-app guide, shortcuts overlay (`?`/F1), About** — shared panel
       blocks + `guide:`/`about:` link verbs.
@@ -48,12 +48,12 @@ pass on both shells** (tracked as the first item below).
 
 ## Now — daily-driver QoL & features
 
-- [ ] **Tier-0 hands-on pass.** Glendon drives the eight landed items on GTK
-      and WinUI; bug reports and polish notes land back in this section.
+- [ ] **Tier-0 hands-on pass.** The maintainer drives the eight landed items on
+      GTK and WinUI; bug reports and polish notes land back in this section.
 - [ ] **9. Android (Compose).** Part of daily-driverification: the target
-      device is Glendon's Pixel 9 Pro Fold (GrapheneOS, rooted), so the first
+      device is a large foldable on GrapheneOS (rooted), so the first
       deliverable is a **sideloaded APK with no Play-services assumptions** —
-      the ~48 MB pack ships in APK assets (`pure_engine_open_from_bytes`) or
+      the ~48 MB pack ships in APK assets (`plumbline_engine_open_from_bytes`) or
       hydrates into app storage on first run. Play Store listing / asset packs
       move to the publishing wave (Later). Build: NDK + `cargo-ndk` → per-ABI
       `.so` into `jniLibs/` (arm64 first); the Kotlin/JNA wrapper is already
@@ -161,7 +161,7 @@ differentiators, 2026-07-18*), the rest in the order below:
       out as #27, in Now.)
 - [ ] **13. macOS shell** — way later, by decision (2026-07-22). The portable
       crates already build on macOS and the data home already resolves
-      `~/Library/Application Support/pure-study`
+      `~/Library/Application Support/plumbline`
       ([GUIDE.md:127-131](docs/GUIDE.md#L127-L131)) — only the shell is
       missing. SwiftUI/AppKit over the same C ABI with a CoreText-backed
       measure callback; the view-model consolidation has landed, so shell #4
@@ -170,7 +170,7 @@ differentiators, 2026-07-18*), the rest in the order below:
       sandbox containerizes the file-based data home). Add a macos CI runner
       for the portable crates and a macOS delta section to the manifest.
 - [ ] **25. Weave commons.** Weaves/threads are already portable JSON. Add
-      export/import affordances + a `pure-study-commons` community repo where
+      export/import affordances + a `plumbline-commons` community repo where
       PR review mirrors the in-app `approved` ethic. Ship more curated content
       in-box: 29 approved weaves and one thread (`romans-road`) today; a dozen
       excellent threads (Messianic prophecies, the Tabernacle, prayers of the
@@ -206,7 +206,7 @@ progress, config, reading position.
 
 1. **Tier-0 hands-on pass** — feedback and fixes from real daily use.
 2. **Android (9)** — the daily-driver platform; sideloaded APK for the
-   GrapheneOS Fold first. Linux packaging prep (10) and the update check (27)
+   GrapheneOS foldable first. Linux packaging prep (10) and the update check (27)
    ride along as small parallel work.
 3. Features: **memorization (15) first**, then allusion coverage (21) →
    power search (16) → harmony mode (18) → print/PDF (14, which also unlocks
@@ -262,7 +262,7 @@ modules.*
 > **Reminder — first moves, before any bulk spend:**
 > 1. *Afternoon spike:* hand-build a ~10-verse Luther jsonl (same header
 >    schema, stamp `lut1912-tok1`) and load it through
->    `pure_engine_open_from_bytes` — the loader ignores `format` and accepts
+>    `plumbline_engine_open_from_bytes` — the loader ignores `format` and accepts
 >    any tokenization stamp, so German text renders in the reader today. This
 >    proves the display path end to end.
 > 2. *Pilot before corpus:* run Ruth + 1 John (~190 verses) through the full

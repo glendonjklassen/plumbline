@@ -14,12 +14,12 @@
 //
 // Interaction that is a mouse affordance on the desktop (hover tooltips) is
 // dropped on touch; taps navigate directly. The whole canvas zooms/pans as one
-// (Glendon's decision) via Modifier.zoomable — a detectTransformGestures +
+// (a product decision) via Modifier.zoomable — a detectTransformGestures +
 // graphicsLayer transform reused by all three.
 //
 // Author D (Compose UI).
 
-package dev.purestudy.ui
+package dev.plumbline.ui
 
 import android.content.Context
 import android.graphics.Paint
@@ -62,13 +62,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.purestudy.CanonSegments
-import dev.purestudy.ChordMapData
-import dev.purestudy.ConceptMapData
-import dev.purestudy.ConstellationData
-import dev.purestudy.StudyEngine
-import dev.purestudy.TocBook
-import dev.purestudy.parseWire
+import dev.plumbline.CanonSegments
+import dev.plumbline.ChordMapData
+import dev.plumbline.ConceptMapData
+import dev.plumbline.ConstellationData
+import dev.plumbline.StudyEngine
+import dev.plumbline.TocBook
+import dev.plumbline.parseWire
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.PI

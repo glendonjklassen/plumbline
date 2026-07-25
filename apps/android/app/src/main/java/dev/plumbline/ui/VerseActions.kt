@@ -3,7 +3,7 @@
 // (apps/desktop/src/main.rs show_context_menu) and the WinUI flyout
 // (apps/windows/PureStudyWin/MainWindow.cs ShowContextMenu), reduced to a touch
 // sheet: copy shapes (+ an Android share), a personal note, a highlight tone with
-// Glendon's verse-then-trim mechanic, and "Memorize this verse".
+// the verse-then-trim mechanic, and "Memorize this verse".
 //
 // All study logic stays across the ABI — this composable only orchestrates
 // StudyEngine calls and paints their affordances. Every mutating call runs off the
@@ -24,7 +24,7 @@
 //
 // Author D (Compose UI).
 
-package dev.purestudy.ui
+package dev.plumbline.ui
 
 import android.content.Intent
 import android.widget.Toast
@@ -72,15 +72,15 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.purestudy.ChapterHighlights
-import dev.purestudy.HighlightTone
-import dev.purestudy.HighlightTones
-import dev.purestudy.StudyEngine
-import dev.purestudy.Tag1
-import dev.purestudy.Tags
-import dev.purestudy.UserNote
-import dev.purestudy.VerseData
-import dev.purestudy.parseWire
+import dev.plumbline.ChapterHighlights
+import dev.plumbline.HighlightTone
+import dev.plumbline.HighlightTones
+import dev.plumbline.StudyEngine
+import dev.plumbline.Tag1
+import dev.plumbline.Tags
+import dev.plumbline.UserNote
+import dev.plumbline.VerseData
+import dev.plumbline.parseWire
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -427,7 +427,7 @@ private fun ActionRow(label: String, color: Color, onClick: () -> Unit) {
 }
 
 /**
- * The tag picker (Glendon's feedback, 2026-07-24): tagging a verse offers the
+ * The tag picker (product feedback, 2026-07-24): tagging a verse offers the
  * EXISTING tags first — plain tags before the coloured highlight-tone ones — and
  * "New tag…" is the secondary, freetext path. New tags are created colourless
  * (colour stays an explicit, optional choice; core never assigns one).

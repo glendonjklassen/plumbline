@@ -11,7 +11,7 @@
 //!
 //! The morphology *form-predicate* path (`tense:aorist voice:passive`) needs
 //! the optional morphology layer and so is answered here only with a "needs
-//! the morphology layer" placeholder; `pure-rnd` will extend it.
+//! the morphology layer" placeholder; `plumbline-rnd` will extend it.
 
 use crate::canon;
 use crate::corpus::Corpus;
@@ -630,9 +630,9 @@ pub fn parse_form_query(q: &str) -> Option<FormQuery> {
 
 /// Execute a form query. A bare Strong's code answers straight from the lemma
 /// index (query-by-Strong's). Predicate queries need the morphology layer,
-/// which lives in the optional `pure-rnd` crate — here they return a
+/// which lives in the optional `plumbline-rnd` crate — here they return a
 /// placeholder telling the reader to hydrate it. Ported from `formSearch`
-/// (bare-code path; predicate path stubbed pending `pure-rnd`).
+/// (bare-code path; predicate path stubbed pending `plumbline-rnd`).
 pub fn form_search(corpus: &Corpus, ix: &SearchIx, fq: &FormQuery) -> SearchAnswer {
     if fq.preds.is_empty() {
         if let Some(s) = &fq.strong {

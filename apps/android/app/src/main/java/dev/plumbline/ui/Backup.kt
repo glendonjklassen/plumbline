@@ -1,4 +1,4 @@
-package dev.purestudy.ui
+package dev.plumbline.ui
 
 // Study-data backup/restore (2026-07-25): the authored home dirs as a zip via
 // SAF. The archive layout is shared with the web shell's Settings backup —
@@ -30,6 +30,14 @@ import java.util.zip.ZipOutputStream
 /** Authored dirs, home-relative — what a backup carries. */
 private val BACKUP_DIRS = listOf("tags", "threads", "weaves", "notes", "memory")
 
+/** Archives written before the Plumbline rename carry the config under
+ *  "pure-study/"; the live home uses "plumbline/". Restore-side only — nothing
+ *  writes the old name back, so this is a read shim for old zips, not a
+ *  second identity. Without it an older backup silently drops the user's
+ *  settings (the authored dirs above are unaffected: their names never moved). */
+private fun String.currentConfigDir(): String =
+    if (startsWith("pure-study/")) "plumbline/" + removePrefix("pure-study/") else this
+
 /** Zip the authored dirs + config to [uri]. Returns the file count. */
 fun writeBackupZip(context: Context, home: File, uri: Uri): Int {
     var count = 0
@@ -48,11 +56,11 @@ fun writeBackupZip(context: Context, home: File, uri: Uri): Int {
                     add(f, f.relativeTo(home).invariantSeparatorsPath)
                 }
             }
-            // Config lives at $XDG_CONFIG_HOME/pure-study (= home on Android);
+            // Config lives at $XDG_CONFIG_HOME/plumbline (= home on Android);
             // it travels under ".config/" (the web home's layout).
-            val cfg = File(home, "pure-study/config.json")
-            if (cfg.isFile) add(cfg, ".config/pure-study/config.json")
-            zip.putNextEntry(ZipEntry("purestudy-backup.json"))
+            val cfg = File(home, "plumbline/config.json")
+            if (cfg.isFile) add(cfg, ".config/plumbline/config.json")
+            zip.putNextEntry(ZipEntry("plumbline-backup.json"))
             zip.write("""{"format":1,"app":"android","exported":"${Instant.now()}"}""".toByteArray())
             zip.closeEntry()
         }
@@ -61,7 +69,7 @@ fun writeBackupZip(context: Context, home: File, uri: Uri): Int {
 }
 
 /** Restore a backup zip into the home. Returns the file count (0 = not a
- *  pure-study backup). Entries are path-filtered to the authored dirs. */
+ *  plumbline backup). Entries are path-filtered to the authored dirs. */
 fun restoreBackupZip(context: Context, home: File, uri: Uri): Int {
     var count = 0
     val homeCanon = home.canonicalPath + File.separator
@@ -73,8 +81,9 @@ fun restoreBackupZip(context: Context, home: File, uri: Uri): Int {
                 val target: File? = when {
                     e.isDirectory || name.contains("..") -> null
                     BACKUP_DIRS.any { name.startsWith("$it/") } -> File(home, name)
-                    // ".config/pure-study/…" → the XDG config dir (= home here).
-                    name.startsWith(".config/") -> File(home, name.removePrefix(".config/"))
+                    // ".config/plumbline/…" → the XDG config dir (= home here).
+                    name.startsWith(".config/") ->
+                        File(home, name.removePrefix(".config/").currentConfigDir())
                     else -> null
                 }
                 if (target != null && target.canonicalPath.startsWith(homeCanon)) {
@@ -128,7 +137,7 @@ fun BackupRestoreRows(palette: ReaderPalette) {
         )
         Column(
             Modifier.fillMaxWidth().clickable {
-                backupLauncher.launch("pure-study-backup-${Instant.now().toString().take(10)}.zip")
+                backupLauncher.launch("plumbline-backup-${Instant.now().toString().take(10)}.zip")
             }.padding(vertical = 6.dp),
         ) {
             Text("Back up (.zip)…", color = palette.ink, fontSize = 15.sp)

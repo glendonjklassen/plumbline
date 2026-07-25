@@ -8,7 +8,7 @@
 //! Weaves are personal study data: plain unsigned JSON, one file per weave.
 //!
 //! **Not yet ported:** the `overlay-weave-v1` (grid) → v2 migration. New
-//! pure-study data is v2; a v1 file currently surfaces as a parse error rather
+//! Plumbline data is v2; a v1 file currently surfaces as a parse error rather
 //! than being silently migrated. Port `migrateV1` when older data must load.
 
 use crate::corpus::Corpus;
@@ -488,7 +488,7 @@ pub struct LoadedWeave {
 /// This is the one derivation behind the ambient connector lines and the chord
 /// map, shared by every shell: GTK calls it directly; the non-Rust shells
 /// receive the same pairs (with each endpoint resolved and located) through
-/// `pure_engine_link_pairs_json`. Resolvability against the corpus is a
+/// `plumbline_engine_link_pairs_json`. Resolvability against the corpus is a
 /// separate, drawing-time concern and is not filtered here.
 pub fn link_pairs(weaves: &[LoadedWeave]) -> Vec<(VRef, VRef)> {
     let mut seen = HashSet::new();
@@ -512,7 +512,7 @@ pub fn link_pairs(weaves: &[LoadedWeave]) -> Vec<(VRef, VRef)> {
 ///
 /// The one derivation behind the chord/arc "Weave map": GTK calls it directly;
 /// the non-Rust shells receive the same folded counts through
-/// `pure_engine_chord_map_json`, so no shell re-folds the pairs or re-derives
+/// `plumbline_engine_chord_map_json`, so no shell re-folds the pairs or re-derives
 /// the max.
 pub fn chord_pairs(weaves: &[LoadedWeave]) -> (Vec<(usize, usize, u32)>, u32) {
     let mut counts: HashMap<(usize, usize), u32> = HashMap::new();
@@ -540,7 +540,7 @@ pub fn chord_pairs(weaves: &[LoadedWeave]) -> (Vec<(usize, usize, u32)>, u32) {
 // backbone, links as gentle curves. Pinned lanes stay put while paging cycles
 // the free lanes past them. This is the one derivation behind the popup (review
 // item 3): GTK calls it directly; the non-Rust shells get the same laid-out
-// page (as camelCase JSON) via `pure_engine_constellation_json`.
+// page (as camelCase JSON) via `plumbline_engine_constellation_json`.
 //
 // Everything here is **fractions / logical units** — the shell maps them to
 // pixels, picks colours, and paints. `x` is a canon fraction 0..1 across the
@@ -985,7 +985,7 @@ mod tests {
 
     #[test]
     fn sets_weave_notes_as_hand_written() {
-        let home = std::env::temp_dir().join(format!("pure-weave-notes-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-weave-notes-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         let (loaded, _) = load_weaves(&home);
         add_link(&home, &loaded, "Lamb", WeaveKind::Typological, "kjv1769-tok2", "c", Link::canon(r("Gen", 22, 8), r("John", 1, 29))).unwrap();
@@ -1003,7 +1003,7 @@ mod tests {
 
     #[test]
     fn approve_promotes_suggestion_and_reject_deletes() {
-        let home = std::env::temp_dir().join(format!("pure-weave-approve-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-weave-approve-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
 
         // Seed a suggestion under weaves/suggested.
@@ -1041,7 +1041,7 @@ mod tests {
 
     #[test]
     fn approve_merges_into_existing_canonical_weave() {
-        let home = std::env::temp_dir().join(format!("pure-weave-merge-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-weave-merge-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
 
         // Canonical weave with one (approved) link.
@@ -1069,7 +1069,7 @@ mod tests {
 
     #[test]
     fn add_link_creates_appends_and_dedupes() {
-        let home = std::env::temp_dir().join(format!("pure-weave-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-weave-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
 
         let (loaded, _) = load_weaves(&home);
@@ -1093,7 +1093,7 @@ mod tests {
 
     #[test]
     fn add_chain_weaves_refs_in_reading_order() {
-        let home = std::env::temp_dir().join(format!("pure-chain-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-chain-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
 
         // Unordered, with a duplicate — the chain must come out canon-ordered
@@ -1348,7 +1348,7 @@ mod review_tests {
     /// delete it. add_link creates/extends a canonical weave instead.
     #[test]
     fn add_link_never_appends_to_a_suggestion() {
-        let home = std::env::temp_dir().join(format!("pure-weave-sugg-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-weave-sugg-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         let sug_dir = home.join("weaves").join("suggested");
         std::fs::create_dir_all(&sug_dir).unwrap();

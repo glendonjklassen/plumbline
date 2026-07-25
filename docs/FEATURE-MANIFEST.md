@@ -8,7 +8,7 @@
 > "deltas owed to GTK/WinUI" are void. Treat the Android shell as the living
 > reference implementation.
 
-The canonical inventory of everything a pure-study shell does, written so a
+The canonical inventory of everything a Plumbline shell does, written so a
 shell can be built **without re-surveying the repo**. Historically the GTK
 shell was the reference implementation; line refs below (`M:<line>`) pointed
 at its `main.rs`. Non-Rust shells reach everything through the C ABI
@@ -46,15 +46,15 @@ Palette: paper `#fcf9f4`; body `rgb(0.13,0.12,0.10)`; gold accent
 
 ## App / window icon
 
-The woven-cross icon (`apps/desktop/assets/icons/pure-study.svg` + PNGs, shared
+The woven-cross icon (`apps/desktop/assets/icons/plumbline.svg` + PNGs, shared
 by both desktop shells). Each shell wires it to the window/taskbar:
 - **GTK** — `install_app_icon` (M:4078, called after `install_css`) adds
   `assets/icons` to the display's `IconTheme` search path and calls
   `Window::set_default_icon_name(APP_ID)`. The icon is installed under the app
   id as a scalable SVG: `assets/icons/hicolor/scalable/apps/
-  dev.purestudy.app.svg`. Compile-time manifest path (like the bundled fonts)
-  → CI-validated, not run on the ARM64 box.
-- **WinUI** — the multi-res `pure-study.ico` (window + taskbar).
+  dev.plumbline.app.svg`. Compile-time manifest path (like the bundled fonts)
+  → CI-validated, never exercised on the dev machine.
+- **WinUI** — the multi-res `plumbline.ico` (window + taskbar).
 - **Compose** — pending (see Android notes).
 
 ## Reader core
@@ -71,7 +71,7 @@ by both desktop shells). Each shell wires it to the window/taskbar:
 - **Highlight band** (search/goto target): gold α0.12 rect over the verse's
   lines, x from `margin−6`, width `col+12`; persists until that pane next
   navigates (M:2720–2740).
-- *Data*: `pure_engine_layout_chapter` (+ `pure_layout_*`), `pure_engine_toc_json`.
+- *Data*: `plumbline_engine_layout_chapter` (+ `plumbline_layout_*`), `plumbline_engine_toc_json`.
 
 ## Multi-pane (M:1649–2113)
 
@@ -89,9 +89,9 @@ header ‹› in WinUI added cross-book — GTK does not).
 
 Transparent overlay above the pane row, input-transparent, redrawn on scroll /
 navigate / zoom / rebuild (60 ms delay) / authoring. The deduped canonical
-link pairs come from the **core view-model** `pure_engine_link_pairs_json`
+link pairs come from the **core view-model** `plumbline_engine_link_pairs_json`
 (each endpoint located + a `resolved` flag) — no shell re-derives the dedup:
-GTK calls `pure_core::weave::link_pairs` directly; WinUI parses the endpoint
+GTK calls `plumbline_core::weave::link_pairs` directly; WinUI parses the endpoint
 (filtering `resolved`), Compose consumes the same JSON. For each pair: map both
 endpoints' `(book, chapter)` to showing panes
 (later pane wins duplicates); skip unless both shown in *different* panes.
@@ -102,13 +102,13 @@ edge + 14 (connectors ride the gutter). Clamp y into the pane's visible band
 `(x1+dx·0.4, y1)`/`(x2−dx·0.4, y2)`, stroke gold α0.35 width 1.5; dots r2
 gold α0.7. **In-pane gutter dots**: any verse with weave partners gets a gold
 dot α0.75 r2.3 at `x=margin−9`, next to the verse number (M:2712).
-*Data*: `pure_engine_weaves_json` (client folds into pair/xref indexes).
+*Data*: `plumbline_engine_weaves_json` (client folds into pair/xref indexes).
 
 ## Hover gloss (M:1744, 3582)
 
 Native tooltip timing; hit-test under pointer; only when the word has Strong's
 refs. Per code: bold code, lemma, italic xlit, then `kjv` (fallback `def`)
-trimmed to 80 chars. *Data*: `pure_layout_hit_test_json` + `pure_engine_strongs_json`.
+trimmed to 80 chars. *Data*: `plumbline_layout_hit_test_json` + `plumbline_engine_strongs_json`.
 
 ## Word study panel (double-click **or Ctrl+click**; M:3168–3515)
 
@@ -116,8 +116,8 @@ Sidebar 380 px, on-demand; Esc hides; clearing search hides. Content order —
 (F) = Full mode only.
 
 **Structure — one core producer, thin per-block renderers (P0.1).** The whole
-panel is now a **typed block list** built once in `pure_core::panel` and served
-over `pure_engine_word_study_blocks_json` (+ the sibling `*_blocks_json`
+panel is now a **typed block list** built once in `plumbline_core::panel` and served
+over `plumbline_engine_word_study_blocks_json` (+ the sibling `*_blocks_json`
 endpoints below). A block is `Section{title, mark?}` / `Para{runs, indent,
 topGap}` / `Rule`; a run carries text + a **semantic colour role** + a logical
 point size + bold/italic + an optional `uri`. The producer owns *everything*
@@ -146,7 +146,7 @@ producer emits*, not shell code.
      **`code:CODE:word`** → that code's study card (its entry + its own tiers),
      **not** `occ:` — the reader arrives at a code they don't know understanding
      it, not a verse list. New feature — no overlay antecedent. *Data*:
-     `pure_engine_renderings_json` + `pure_engine_word_codes_json`.
+     `plumbline_engine_renderings_json` + `plumbline_engine_word_codes_json`.
    - **SAME ROOT ACROSS TESTAMENTS** *(per-chip marks)* — bridge partners (≤6)
      as gloss chips → concordance links; sources humanized (`bridge::source_label`
      / WinUI `Humanize`: `lxx`→Septuagint, `quotation`→NT quotation, `abbott-smith`→
@@ -180,7 +180,7 @@ gloss is the modal KJV rendering across ≤80 occurrences (skip FLAG_ADDED token
 strip edge punctuation, ties lexicographic; fallback: distilled def/kjv clause
 ≤30 chars). All of this is inside the producer; the shell only paints the runs.
 The `PanelSource` trait (implemented by both the GTK `State` and the FFI
-`PureEngine`) is the producer's only input — a thin set of projected accessors
+`PlumblineEngine`) is the producer's only input — a thin set of projected accessors
 (`strongs`/`occurrences`/`renderings`/`bridge_partners`/`concept`/
 `similar_verses`/`verse_xrefs`/`verse_notes`/…), so the same producer runs
 Rust→Rust for GTK and behind the endpoints for WinUI/Compose.
@@ -189,7 +189,7 @@ Rust→Rust for GTK and behind the endpoints for WinUI/Compose.
 
 Ported from overlay `Bridge.hs` `Tier` + `Panels.hs` `provIcon`/`tierMarks`.
 Every piece of study evidence shows where it comes from, so the reader always
-knows its provenance. The model is `pure_rnd::bridge` (`crates/rnd/src/bridge.rs`):
+knows its provenance. The model is `plumbline_rnd::bridge` (`crates/rnd/src/bridge.rs`):
 
 - `Tier = God | Human | Machine`. **God** = the text itself (TR/Masoretic words,
   and scripture-quotes-scripture, "the words read twice"). **Human** = curated
@@ -209,7 +209,7 @@ knows its provenance. The model is `pure_rnd::bridge` (`crates/rnd/src/bridge.rs
   `Run`s. **Per-chip** on SAME ROOT partners (real per-source provenance);
   **per-section** on the headers above; a **legend** at the foot. Human-baseline
   blocks (the dictionary entry) and user data (weaves, tags) are unmarked.
-- **Wire**: `pure_engine_bridge_partners_json` gained additive `tiers`
+- **Wire**: `plumbline_engine_bridge_partners_json` gained additive `tiers`
   (`["god","human","machine"]`) + `researchGrade` per partner, so non-Rust
   shells consume the classification instead of reimplementing it. GTK, being
   Rust, calls `bridge::tiers_of`/`research_grade` directly. Fixed-by-block
@@ -218,10 +218,10 @@ knows its provenance. The model is `pure_rnd::bridge` (`crates/rnd/src/bridge.rs
 ## Link routing — one verb vocabulary (P1.4)
 
 All panel interactivity funnels through one URI dispatcher, and the verb
-vocabulary is **parsed once in the core**: `pure_core::panel::parse_link(uri) ->
+vocabulary is **parsed once in the core**: `plumbline_core::panel::parse_link(uri) ->
 PanelLink` — co-located with the producers that *emit* the URIs, so a verb can't
 drift between what the panel bakes and what a shell handles. GTK matches on
-`PanelLink` directly; WinUI/Compose route through `pure_route_link_json(uri)`
+`PanelLink` directly; WinUI/Compose route through `plumbline_route_link_json(uri)`
 (`{verb, …}`, tagged) — neither re-splits the string. The 16 verbs:
 `go:Book:ch[:v]` · `occ:CODE` · `rend:CODE:rendering` · `code:CODE[:word]` ·
 `thread:i` · `tag:i` · `weave:i` · `conceptmap:CODE` · `addtag:refkey` ·
@@ -237,7 +237,7 @@ reload → refetch) stay shell-side. `parse_link` handles multi-word books
 ## Concordance (`occ:`; M:3783)
 
 Code + lemma large + count; verse links capped at 300, "… N more".
-*Data*: `pure_engine_strongs_occurrences_json` (cap 500 engine-side).
+*Data*: `plumbline_engine_strongs_occurrences_json` (cap 500 engine-side).
 
 ## Threads / Tags browsers (M:3380–3471)
 
@@ -270,7 +270,7 @@ weave name, writes a Quotation-kind link with both spans (canon-ordered), then
 clears pins + redraws connectors. **Compare card** (`weave:i`): name + kind +
 "(suggested)"; "N link(s)" + (F) `✎ note`; per link ≤40: label `"…"` gold,
 each side verse link + verse text small with **span words bold** and added
-words italic gray. *Data*: `pure_engine_weave_add_link_spans`, `weaves_json`,
+words italic gray. *Data*: `plumbline_engine_weave_add_link_spans`, `weaves_json`,
 `verse_json` (tokens for span rendering).
 
 ## Canon strip (M:2938–2989)
@@ -282,7 +282,7 @@ line at index 39. Pin per pane at `x=(order+0.5)/66·w` (active gold, others
 gray). Click: `idx = x/w·66` → active pane to that book ch 1.
 
 The segments + divide are the **single source** `core::reference::CANON_SEGMENTS`
-/ `OT_NT_DIVIDE`, served over the wire by `pure_engine_canon_segments_json`.
+/ `OT_NT_DIVIDE`, served over the wire by `plumbline_engine_canon_segments_json`.
 GTK reads the const directly; WinUI loads the endpoint once into a shared
 `Canon` holder that both the strip and the map popups (chord / constellation)
 read — no shell hardcodes the bands anymore (the WinUI copies had drifted).
@@ -304,7 +304,7 @@ Zoom **persists config on every change** (M:2117).
 
 ## Config / session (`core::config`)
 
-`%APPDATA%\pure-study\config.json` (XDG / App Support elsewhere):
+`%APPDATA%\plumbline\config.json` (XDG / App Support elsewhere):
 `{"studyMode":"simple"|"full","bodySize":18.0,"openPanes":[{"book","chapter"}],
 "activePane":0,"versePerLine":false,"theme":"system","copyStyle":"verseRef",
 "sideMargin":28.0,"lineSpacing":1.35,"history":[{"book":"John","chapter":3}]}`.
@@ -317,12 +317,12 @@ is recent (book, chapter), most-recent-first, deduped, core-capped at 50
 `first_run` only when the file is absent; corrupt file →
 defaults, no re-prompt. Restore panes (≤3; default John 3) + active + zoom at
 startup; persist on close, mode toggle, first-run pick, every zoom. Scroll
-position intentionally transient. *Data*: `pure_config_load_json` /
-`pure_config_save_json` (shared file with GTK — keep the shape).
+position intentionally transient. *Data*: `plumbline_config_load_json` /
+`plumbline_config_save_json` (shared file with GTK — keep the shape).
 
 ## Simple/Full mode (M:462–488, 1564–1644)
 
-First run: modal "Welcome to pure-study" with two cards — "Simple reader"
+First run: modal "Welcome to Plumbline" with two cards — "Simple reader"
 ("Just the text…") / "Full study" ("Everything…"); closing without choosing
 keeps Simple. Reading mode is now a radio in the primary ≡ menu (Reading ▸
 Simple reader / Full study), not a header button; leaving Full collapses the
@@ -346,8 +346,8 @@ with `RadioMenuFlyoutItem` / `ToggleMenuFlyoutItem`.
 ## Chord/arc "Map" popup (M:887–935, 2994–3087)
 
 1000×360, Esc or the close button closes. **The book-pair fold lives in the core
-view-model** `pure_engine_chord_map_json` → `{pairs:[{a,b,count}] (canon book
-indices, a≤b), max, otNtDivide, bookCount}` (GTK calls `pure_core::weave::chord_pairs`
+view-model** `plumbline_engine_chord_map_json` → `{pairs:[{a,b,count}] (canon book
+indices, a≤b), max, otNtDivide, bookCount}` (GTK calls `plumbline_core::weave::chord_pairs`
 directly). The shell only paints: canon axis with section bands + labels (from
 the `Canon` holder), gold baseline, OT/NT seam; ribbons heaviest-first, alpha
 `0.12+0.30·(cnt/max)`, foot width `2+8·(cnt/max)`; colours OT `(0.82,0.70,0.43)`
@@ -361,11 +361,11 @@ reference.
 ## Constellation popup (M:937–1529)
 
 1200×640; ‹prev/next› + caption; Esc or the close button closes; Left/Right page.
-**The whole layout is the core view-model** `pure_engine_constellation_json(page,
+**The whole layout is the core view-model** `plumbline_engine_constellation_json(page,
 pins_json)` (pins = a JSON array of weave indices) → lanes of nodes + edges as
 **fractions** (`x` a canon fraction, `laneFrac` 0..1 within a lane, `size` a
 0..1 witness degree) plus `nPins/freeTotal/page/maxPage/caption/laneCapacity`;
-GTK calls `pure_core::weave::constellation` directly. Usable = weaves with ≥1
+GTK calls `plumbline_core::weave::constellation` directly. Usable = weaves with ≥1
 resolvable link, largest-first; `laneCapacity` (18) lanes, pinned (by weave
 **index**) first. The shell maps fractions to pixels + paints: `laneH =
 (h−topPad−10)/laneCapacity`, node `(plotLeft + x·(w−plotLeft), topPad +
@@ -382,10 +382,10 @@ and one caption (they had drifted on all three).
 ## Concept map popup (`conceptmap:`; M:724–883)
 
 720×560: radial graph + 40-px dispersion strip. **The whole popup is the core
-view-model** `pure_engine_concept_map_json(code)` → `{code, centerLabel,
+view-model** `plumbline_engine_concept_map_json(code)` → `{code, centerLabel,
 spokes:[{code, label, semantic}], byBook (canon-ordered counts), otNtDivide,
 bookCount}`. The spoke union (embedding-near ∪ community, deduped, 6 each) lives
-in `pure_rnd::concept::radial_spokes` (GTK calls it directly); labels
+in `plumbline_rnd::concept::radial_spokes` (GTK calls it directly); labels
 ("gloss\nlemma") are baked by the endpoint. Paint only: radius `min(w,h)/2−95`;
 semantic spokes gold, community green; centre node gold; dispersion cells gold α
 `0.15+0.75·(cnt/max)` at `bi/bookCount`, OT/NT seam. No shell book-order table.
@@ -419,22 +419,22 @@ Added for shell parity (2026-07-14):
 
 | endpoint | returns | for |
 |---|---|---|
-| `pure_engine_verse_notes_json(ref)` | `{verse, notes[]}` or null | margin notes |
-| `pure_engine_study_xrefs_json(ref)` | `{verse, refs:[{to, toDisplay, end?, votes}]}` | TSK tier |
-| `pure_engine_weaves_json()` | full library: weaves + links incl. `approved`, `spanA/B`, `resolved`, `suggested` | compare card, weaves list, panel xrefs (chord map + constellation now have their own view-model endpoints) |
-| `pure_engine_concept_json(code)` | `{total, ot, nt, topBooks, byBook, collocates, community, leitwort?}` | ALONGSIDE / CONCENTRATES / LEITWORT / dispersion |
-| `pure_engine_gloss(code)` | plain english gloss or null | concept chips |
-| `pure_engine_weave_add_link_spans(name, a, b, aLo, aHi, bLo, bHi, added)` | null/error (negative span = none) | word-span links |
-| `pure_config_load_json()` / `pure_config_save_json(json)` | config wire above (+`firstRun` on load) | session/mode/zoom |
+| `plumbline_engine_verse_notes_json(ref)` | `{verse, notes[]}` or null | margin notes |
+| `plumbline_engine_study_xrefs_json(ref)` | `{verse, refs:[{to, toDisplay, end?, votes}]}` | TSK tier |
+| `plumbline_engine_weaves_json()` | full library: weaves + links incl. `approved`, `spanA/B`, `resolved`, `suggested` | compare card, weaves list, panel xrefs (chord map + constellation now have their own view-model endpoints) |
+| `plumbline_engine_concept_json(code)` | `{total, ot, nt, topBooks, byBook, collocates, community, leitwort?}` | ALONGSIDE / CONCENTRATES / LEITWORT / dispersion |
+| `plumbline_engine_gloss(code)` | plain english gloss or null | concept chips |
+| `plumbline_engine_weave_add_link_spans(name, a, b, aLo, aHi, bLo, bHi, added)` | null/error (negative span = none) | word-span links |
+| `plumbline_config_load_json()` / `plumbline_config_save_json(json)` | config wire above (+`firstRun` on load) | session/mode/zoom |
 
 Added for the rendering lens (2026-07-16):
 
 | endpoint | returns | for |
 |---|---|---|
-| `pure_engine_renderings_json(code)` | `{code, renderings:[{rendering, total, capped, refs:[{verse, display, span:[s,e]}]}]}` (refs cap 500) | RENDERINGS tier + filtered concordance |
-| `pure_engine_word_codes_json(word)` | `{word, codes:[{code, count}]}` | "also translates" reverse line |
+| `plumbline_engine_renderings_json(code)` | `{code, renderings:[{rendering, total, capped, refs:[{verse, display, span:[s,e]}]}]}` (refs cap 500) | RENDERINGS tier + filtered concordance |
+| `plumbline_engine_word_codes_json(word)` | `{word, codes:[{code, count}]}` | "also translates" reverse line |
 
-Extended for authority tiers (2026-07-16): `pure_engine_bridge_partners_json`
+Extended for authority tiers (2026-07-16): `plumbline_engine_bridge_partners_json`
 partners gained **additive** fields `tiers` (`["god"\|"human"\|"machine"]`,
 deduped, ordered God→Human→Machine) and `researchGrade` (bool). Existing
 `code`/`sources`/`prior` unchanged; a consumer that ignores the new fields sees
@@ -445,11 +445,11 @@ the warm-up that moves shared derivation out of the shells into the core):
 
 | endpoint | returns | for |
 |---|---|---|
-| `pure_engine_link_pairs_json()` | `{pairs:[{a, aBook, aChapter, aVerse, b, bBook, bChapter, bVerse, resolved}]}` | ambient connectors + chord map (retires the shell dedup) |
-| `pure_engine_canon_segments_json()` | `{segments:[{label, first, last}], otNtDivide}` | canon strip + map ruler bands (retires the WinUI hardcode) |
+| `plumbline_engine_link_pairs_json()` | `{pairs:[{a, aBook, aChapter, aVerse, b, bBook, bChapter, bVerse, resolved}]}` | ambient connectors + chord map (retires the shell dedup) |
+| `plumbline_engine_canon_segments_json()` | `{segments:[{label, first, last}], otNtDivide}` | canon strip + map ruler bands (retires the WinUI hardcode) |
 
 Both are thin wrappers over the one core source: `link_pairs` wraps
-`pure_core::weave::link_pairs`; `canon_segments` wraps
+`plumbline_core::weave::link_pairs`; `canon_segments` wraps
 `core::reference::CANON_SEGMENTS` / `OT_NT_DIVIDE`. GTK (being Rust) calls those
 directly rather than round-tripping JSON.
 
@@ -459,13 +459,13 @@ three map popups' derivation moved into the core; positions cross the wire as
 
 | endpoint | returns | for |
 |---|---|---|
-| `pure_engine_chord_map_json()` | `{pairs:[{a, b, count}] (canon book indices, a≤b), max, otNtDivide, bookCount}` | chord/arc "Weave map" (retires the shell fold + max) |
-| `pure_engine_concept_map_json(code)` | `{code, centerLabel, spokes:[{code, label, semantic}], byBook[] (canon order), otNtDivide, bookCount}` | concept map (retires the spoke assembly + gloss/lemma lookups + book table) |
-| `pure_engine_constellation_json(page, pins_json)` | `{lanes:[{weaveIndex, name, pinned, nodes:[{x, laneFrac, size, refKey, book, chapter, verse, display}], edges:[{aX, aLaneFrac, bX, bLaneFrac}]}], nPins, freeTotal, page, maxPage, caption, laneCapacity}` (pins = JSON array of weave indices) | constellation (retires the usable/degree/jitter/paging/pin derivation) |
+| `plumbline_engine_chord_map_json()` | `{pairs:[{a, b, count}] (canon book indices, a≤b), max, otNtDivide, bookCount}` | chord/arc "Weave map" (retires the shell fold + max) |
+| `plumbline_engine_concept_map_json(code)` | `{code, centerLabel, spokes:[{code, label, semantic}], byBook[] (canon order), otNtDivide, bookCount}` | concept map (retires the spoke assembly + gloss/lemma lookups + book table) |
+| `plumbline_engine_constellation_json(page, pins_json)` | `{lanes:[{weaveIndex, name, pinned, nodes:[{x, laneFrac, size, refKey, book, chapter, verse, display}], edges:[{aX, aLaneFrac, bX, bLaneFrac}]}], nPins, freeTotal, page, maxPage, caption, laneCapacity}` (pins = JSON array of weave indices) | constellation (retires the usable/degree/jitter/paging/pin derivation) |
 
-Producers: `chord_map` wraps `pure_core::weave::chord_pairs`; `constellation`
-wraps `pure_core::weave::constellation`; `concept_map` bakes labels over
-`pure_rnd::concept::radial_spokes` + `concept.stat`. GTK calls the core fns
+Producers: `chord_map` wraps `plumbline_core::weave::chord_pairs`; `constellation`
+wraps `plumbline_core::weave::constellation`; `concept_map` bakes labels over
+`plumbline_rnd::concept::radial_spokes` + `concept.stat`. GTK calls the core fns
 directly; the non-Rust shells consume the JSON and map fractions → pixels.
 
 Added for the panel content-model + link router (2026-07-18, P0.1 + P1.4 — the
@@ -475,19 +475,19 @@ role + logical size + optional uri); `full` gates the R&D tiers + author actions
 
 | endpoint | returns / for |
 |---|---|
-| `pure_engine_word_study_blocks_json(ref, tok, full)` | the tapped word's dictionary + Full tiers + this verse's xrefs/notes |
-| `pure_engine_code_study_blocks_json(code, word?, full)` | the standalone `code:` card |
-| `pure_engine_concordance_blocks_json(code)` / `pure_engine_rendering_concordance_blocks_json(code, rendering)` | full / rendering-filtered concordance |
-| `pure_engine_threads_blocks_json()` / `pure_engine_thread_blocks_json(i)` | threads list / detail |
-| `pure_engine_tags_blocks_json()` / `pure_engine_tag_blocks_json(i)` | tags list / detail |
-| `pure_engine_weaves_blocks_json()` / `pure_engine_suggested_blocks_json()` | weaves list / review queue |
-| `pure_engine_compare_blocks_json(i, full)` | weave compare card |
-| `pure_engine_search_blocks_json(query)` | search results (goto link or ranked hits + snippets); null on blank |
-| `pure_route_link_json(uri)` | parse a panel link into `{verb, …}` (engine-independent) |
+| `plumbline_engine_word_study_blocks_json(ref, tok, full)` | the tapped word's dictionary + Full tiers + this verse's xrefs/notes |
+| `plumbline_engine_code_study_blocks_json(code, word?, full)` | the standalone `code:` card |
+| `plumbline_engine_concordance_blocks_json(code)` / `plumbline_engine_rendering_concordance_blocks_json(code, rendering)` | full / rendering-filtered concordance |
+| `plumbline_engine_threads_blocks_json()` / `plumbline_engine_thread_blocks_json(i)` | threads list / detail |
+| `plumbline_engine_tags_blocks_json()` / `plumbline_engine_tag_blocks_json(i)` | tags list / detail |
+| `plumbline_engine_weaves_blocks_json()` / `plumbline_engine_suggested_blocks_json()` | weaves list / review queue |
+| `plumbline_engine_compare_blocks_json(i, full)` | weave compare card |
+| `plumbline_engine_search_blocks_json(query)` | search results (goto link or ranked hits + snippets); null on blank |
+| `plumbline_route_link_json(uri)` | parse a panel link into `{verb, …}` (engine-independent) |
 
-One producer (`pure_core::panel`) over the `PanelSource` trait feeds all of
+One producer (`plumbline_core::panel`) over the `PanelSource` trait feeds all of
 these; GTK implements the trait on `State` and calls the producer directly, the
-FFI implements it on `PureEngine`. **Golden coverage (P2.6):** `panel_blocks_via_abi`
+FFI implements it on `PlumblineEngine`. **Golden coverage (P2.6):** `panel_blocks_via_abi`
 and `route_link_via_abi` exercise the block payloads + parser over the ABI, and
 the producer itself has 15 unit tests over a fake source; the block kinds are a
 Rust enum (a shell that meets an unknown kind renders nothing — forward-compat).
@@ -499,15 +499,15 @@ stays silent); quotation detection (awaits hydrated inputs).
 ## Tier 0 daily-driver features (2026-07-19)
 
 The eight small, additive daily-driver features from [TODO.md](../TODO.md) Tier
-0. Shared logic lives in `pure-core`; GTK calls it directly, WinUI/Compose
+0. Shared logic lives in `plumbline-core`; GTK calls it directly, WinUI/Compose
 through new FFI endpoints. New endpoints (all additive; bindings regenerated):
-`pure_engine_copy_text`, `pure_engine_user_note_json` / `_notes_json` / `_set`,
-`pure_engine_tag_set_color`, `pure_engine_chapter_highlights_json`,
-`pure_theme_palette_json`, `pure_theme_highlight_tones_json`,
-`pure_engine_warm_indexes`, `pure_panel_guide_blocks_json` / `_about_blocks_json`.
+`plumbline_engine_copy_text`, `plumbline_engine_user_note_json` / `_notes_json` / `_set`,
+`plumbline_engine_tag_set_color`, `plumbline_engine_chapter_highlights_json`,
+`plumbline_theme_palette_json`, `plumbline_theme_highlight_tones_json`,
+`plumbline_engine_warm_indexes`, `plumbline_panel_guide_blocks_json` / `_about_blocks_json`.
 New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
 
-- **1. Copy & context menu.** Formatting is `pure_core::export::copy_text`
+- **1. Copy & context menu.** Formatting is `plumbline_core::export::copy_text`
   (verse / verse+ref / markdown / chapter). Right-click a verse → menu: copy
   shapes, Note…, highlight tones, and (Full) Tag… / Add to thread… (the last
   three route through the panel dispatcher). GTK: a `gtk::Popover` of buttons +
@@ -518,7 +518,7 @@ New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
   forward entries drop on a new jump. Alt+←/→ and mouse buttons 4/5 (GTK
   buttons 8/9; WinUI `XButton1/2`). Lives in the pane (GTK `Pane`, WinUI
   `ReaderView`), fed by `navigate_pane` / `ShowChapter`.
-- **3. Personal margin notes.** `pure_core::usernote`: one JSON file per verse
+- **3. Personal margin notes.** `plumbline_core::usernote`: one JSON file per verse
   under `home/notes/`, refKey-keyed, atomic store; empty text deletes. A new
   `PanelSource::user_note` surfaces the "your note" block (both modes) via the
   content model; the `editnote:` verb prompts (multi-line). A square gutter mark
@@ -539,16 +539,16 @@ New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
   would break its parse). `tag::add_highlight` / `remove_highlight`;
   `tag::verse_highlight_runs` decomposes a range into per-verse `[lo,hi]` runs
   (partial first/last verse, whole interior). FFI (all additive):
-  `pure_engine_highlight_add` / `_remove` / `_clear_verse`, and
-  `pure_engine_chapter_highlights_json` gains a `runs` array beside `verses`.
+  `plumbline_engine_highlight_add` / `_remove` / `_clear_verse`, and
+  `plumbline_engine_chapter_highlights_json` gains a `runs` array beside `verses`.
   Both shells paint the runs as per-word rects (like the pinned-span band) and
   preview the live drag in the default tone; a press still pins the start word,
   a drag past a 6px threshold supersedes the pin, and endpoints are canonicalised
   (a backwards drag stores the same range). "Remove highlight" also drops any
   range covering the verse (GTK removes inline; WinUI via `_clear_verse`). GTK
   uses a `gtk::GestureDrag`; WinUI a pointer-capture drag on the `CanvasControl`.
-- **5. Dark + night themes.** `pure_core::theme::Palette` is the one source
-  (`palette(theme)`), served as `pure_theme_palette_json`; light values are the
+- **5. Dark + night themes.** `plumbline_core::theme::Palette` is the one source
+  (`palette(theme)`), served as `plumbline_theme_palette_json`; light values are the
   shipped ones (no regression), dark (candlelight-warm) + night (true-black) are
   new. Config gains `theme` (`system`/`light`/`dark`/`night`, additive). The
   reader canvas + chrome paint from the palette; the ≡ menu's Theme radio
@@ -560,7 +560,7 @@ New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
   element theme (accents are palette-driven via `ColorOf`). **Delta (both shells): the analytical popups (chord / constellation /
   concept map) stay on their light popup paper in dark/night** — reading + panel
   + chrome are themed; the transient map overlays are not (a follow-up).
-- **6. Kill the first-study-click pause.** `pure_engine_warm_indexes` forces the
+- **6. Kill the first-study-click pause.** `plumbline_engine_warm_indexes` forces the
   lazy analytics (concept / leitwort / SIF) to build. **Delta:** WinUI warms on
   a background thread (`Task.Run`) at startup in Full mode; GTK, whose engine
   state is single-threaded `Rc<RefCell>`, warms on the main loop via a
@@ -581,13 +581,13 @@ New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
 
 ## Per-tier analysis gates + tag→weave (2026-07-25, product round 4)
 
-Glendon's street-use feedback retired two ideas at once: the all-or-nothing
+Street-use feedback retired two ideas at once: the all-or-nothing
 Simple/Full switch ("weirdly selective") and highlight-tones-as-annotation.
 **Tags are the primary annotation** (topic study accumulates over time); the
 **weave comes later** from the tag. Landed core-first; Android consumes it now,
 the other shells owe the UI (deltas below).
 
-- **Gates.** `pure_core::panel::Gates { human, machine }` replaces the
+- **Gates.** `plumbline_core::panel::Gates { human, machine }` replaces the
   producer-level `full: bool`: *human* gates curated scholarship (RENDERINGS +
   reverse lens, morphology gloss, SAME ROOT, TSK), *machine* gates the
   learned/statistical tiers (SIMILAR CONCEPTS, ALONGSIDE, CONCENTRATES,
@@ -598,9 +598,9 @@ the other shells owe the UI (deltas below).
   remain as exact wrappers (Full = all on), so GTK compiles unchanged.
 - **Note-first panel.** The reader's own note block moved to the **top** of
   the word study (right under the tapped word), in every mode.
-- **ABI (additive).** `pure_engine_word_study_blocks2_json(ref, tok, gates)`
-  and `pure_engine_code_study_blocks2_json(code, word?, gates)` — `gates`
-  bitmask: bit 0 human, bit 1 machine. `pure_engine_weave_from_tag(tag,
+- **ABI (additive).** `plumbline_engine_word_study_blocks2_json(ref, tok, gates)`
+  and `plumbline_engine_code_study_blocks2_json(code, word?, gates)` — `gates`
+  bitmask: bit 0 human, bit 1 machine. `plumbline_engine_weave_from_tag(tag,
   refsJson|null=all verse members, weaveName|null=tag name, added)` chains
   the tag's passages canon-ordered (`weave::add_chain`: sorted, deduped,
   consecutive pairs; find-or-create + link-dedup make re-runs additive).
@@ -634,7 +634,7 @@ the other shells owe the UI (deltas below).
 ## Backup / restore (2026-07-25, both shells)
 
 Settings exports the authored home — `tags/ threads/ weaves/ notes/ memory/`
-+ the config as `.config/pure-study/config.json` + a `purestudy-backup.json`
++ the config as `.config/plumbline/config.json` + a `plumbline-backup.json`
 marker — as a **zip with a shared layout**, so one archive restores across
 devices (phone ↔ browser). Restore is merge-by-overwrite (same-name items
 replaced), path-filtered to the authored dirs (no traversal), then the engine
@@ -646,7 +646,7 @@ Create/OpenDocument + java.util.zip; restore recreates the activity.
 
 ## Memorization — spaced repetition (Tier 2 #15)
 
-`pure_core::memory`: one SM-2 SRS card per verse (VRef-keyed) — ease / interval /
+`plumbline_core::memory`: one SM-2 SRS card per verse (VRef-keyed) — ease / interval /
 reps / lapses / due + a full **review log** — one JSON file per verse under
 `home/memory/` (`overlay-memory-v1`, refKey + `kjv1769-tok2`). `review()` (SM-2),
 `is_due`, `due_queue`, `mastery` (new/learning/young/mature), `grade_verse` +
@@ -657,12 +657,12 @@ the log "by construction": `coverage`/`coverage_by_section` (per-verse mastery +
 recency + the 8-section rollup — the coverage map) and `activity_by_day` (the
 activity heatmap). Tiny civil-date math, no time dep.
 
-**C ABI** (`pure_engine_memory_*`, 9 fns): add / grade / remove / card_json /
+**C ABI** (`plumbline_engine_memory_*`, 9 fns): add / grade / remove / card_json /
 due_json / coverage_json / activity_json / drill_json / score_json. Grades cross
 as `again`/`hard`/`good`/`easy`; timestamps caller-supplied UTC. Cards load fresh
 per call from `home/memory` (small set); no home → read-empty / author-error.
 
-**GTK** drives `pure_core::memory` directly: `≡` → Memorize (Review due / Coverage
+**GTK** drives `plumbline_core::memory` directly: `≡` → Memorize (Review due / Coverage
 map / Activity); context menu "Memorize this verse". The review window steps the
 due queue with a first-letter / blank-out-slider / typed-recall drill + the four
 grade buttons; the coverage map reuses the canon-strip dispersion language shaded
@@ -678,12 +678,12 @@ The fourth shell: Svelte 5 + TS over the **same C ABI**, compiled unchanged to
 an in-memory home (data pack fetched + gunzipped into it; authored files
 mirrored to IndexedDB after every write; the corpus idxcache persisted for
 fast reopens). `apps/web/src/engine/StudyEngine.ts` is the method-for-method
-TS sibling of StudyEngine.kt / PureStudy.cs. Build:
-`npm run pack:data && cargo build -p pure-ffi --release --target
+TS sibling of StudyEngine.kt / Plumbline.cs. Build:
+`npm run pack:data && cargo build -p plumbline-ffi --release --target
 wasm32-wasip1 && npm run pack:wasm && npm run build` (in apps/web). Two
-wasm-only ABI shims live in `crates/ffi/src/wasm.rs` (`pure_web_alloc/free`,
-the `purestudy.pure_js_measure` import surfaced as a `PureMeasureFn`);
-pure-bindgen excludes them from the native bindings by name.
+wasm-only ABI shims live in `crates/ffi/src/wasm.rs` (`plumbline_web_alloc/free`,
+the `plumbline.plumbline_js_measure` import surfaced as a `PlumblineMeasureFn`);
+plumbline-bindgen excludes them from the native bindings by name.
 
 Feature state (per this manifest): reader core (canvas painter, measure via
 canvas `measureText`, all flags/bands/washes/runs/gutter marks), multi-pane
@@ -709,7 +709,7 @@ base "./").
 ## Android notes
 
 - **On-device feedback round 3 (2026-07-24/25, v0.4.0–v0.5.0).** Landed
-  Android-first from Glendon's street-use feedback; the product features among
+  Android-first from on-device street-use feedback; the product features among
   them are **GTK/WinUI deltas** owed to the desktop shells:
   - **Present mode** (`ui/Present.kt`, #1 priority): a thread as a fullscreen,
     high-contrast ("sunlight") large-type presentation for showing someone in
@@ -754,7 +754,7 @@ base "./").
   toggle (surfacing the morphology / similar / bridge-partner + authority-tier
   blocks); a **word-study bottom sheet** on narrow screens; and **authoring**
   (add tag/thread, edit note, approve/reject suggested weaves). Form-factor
-  calls (see memory `android-formfactor-ux`): zoomable canvases, study bottom
+  calls (product decisions, 2026-07-24): zoomable canvases, study bottom
   sheet, verse-then-trim highlighting. So the per-feature "Compose delta" notes
   below are **resolved** except: `editThreadNotes` / `editWeaveNotes` /
   `editEntryNote` / `untag` (need an index→name lookup); the cross-testament
@@ -762,14 +762,14 @@ base "./").
   so `bridge/*.json` isn't read; the bridge row is wired but empty until asset
   or extract-to-home wiring lands; and posture-driven fold-mode switching is
   untested on hardware.
-- The Kotlin/JNA binding (`crates/ffi/bindings/kotlin/PureStudy.kt`, package
-  `dev.purestudy.core`) is now current with the 87-fn C ABI (incl. the 9
-  `pure_engine_memory_*`). It is the low-level `PureStudyNative` interface +
-  JNA types (`PureLayoutConfig`, `MeasureCallback`) **only** — the earlier
+- The Kotlin/JNA binding (`crates/ffi/bindings/kotlin/Plumbline.kt`, package
+  `dev.plumbline.core`) is now current with the 87-fn C ABI (incl. the 9
+  `plumbline_engine_memory_*`). It is the low-level `PlumblineNative` interface +
+  JNA types (`PlumblineLayoutConfig`, `MeasureCallback`) **only** — the earlier
   duplicate camelCase wrapper was removed (and the interface renamed from
-  `PureFfi`); the single PascalCase wrapper is `app/.../StudyEngine.kt`,
+  `PlumblineFfi`); the single PascalCase wrapper is `app/.../StudyEngine.kt`,
   method-for-method with `bindings/csharp/PureStudy.cs`. The native lib
-  cross-builds with cargo-ndk into `jniLibs/{arm64-v8a,x86_64}/libpure_ffi.so`
+  cross-builds with cargo-ndk into `jniLibs/{arm64-v8a,x86_64}/libplumbline_ffi.so`
   (NDK r29, `--platform 26`), verified independently of the emulator/SDK.
 - **Memorization (Tier 2 #15) — Compose delta:** the binding + `StudyEngine`
   (`Memory*`) + `Wire.kt` records are in place, but the Memorize UI (review
@@ -782,9 +782,9 @@ base "./").
   shell lands, including the reusable code-study view (`code_study_markup` /
   `CodeStudy`) that both the per-code block and the `code:` verb share.
 - **App/window icon — Compose delta:** GTK (`install_app_icon`, scalable SVG at
-  `apps/desktop/assets/icons/hicolor/scalable/apps/dev.purestudy.app.svg`) and
+  `apps/desktop/assets/icons/hicolor/scalable/apps/dev.plumbline.app.svg`) and
   WinUI (`.ico`) both wire the woven cross; Android needs its own launcher
-  icon (adaptive-icon / mipmap) generated from `pure-study.svg` — not the
+  icon (adaptive-icon / mipmap) generated from `plumbline.svg` — not the
   hicolor tree.
 - **Authority tiers (2026-07-16) — Compose delta:** the classification lives in
   Rust (`bridge::source_tiers`/`research_grade`/`tiers_of`) and rides the wire
@@ -793,16 +793,16 @@ base "./").
   Machine, TSK = Human, …) like GTK/WinUI. The mark glyphs (✝ † ≈ ⚗), their
   colors, and the legend are **not yet in a Compose shell** — build from the
   GTK/WinUI reference (see **Authority tiers** above). The Kotlin binding must
-  also gain `bridgePartnersJson` (its `PureFfi` interface omits the R&D tier).
+  also gain `bridgePartnersJson` (its `PlumblineFfi` interface omits the R&D tier).
 - **View-model consolidation (2026-07-16, P0.3) — Compose delta:** the two new
-  endpoints (`pure_engine_link_pairs_json` / `pure_engine_canon_segments_json`)
-  are **not yet in the Kotlin `PureFfi` interface** (kept minimal like the other
+  endpoints (`plumbline_engine_link_pairs_json` / `plumbline_engine_canon_segments_json`)
+  are **not yet in the Kotlin `PlumblineFfi` interface** (kept minimal like the other
   study-tier endpoints). A Compose shell adds the two JNA decls + wrappers, then
   consumes them for its connectors and canon strip instead of re-deriving —
   exactly what this phase removed from GTK/WinUI.
 - **Panel content-model + link router (2026-07-18, P0.1 + P1.4) — Compose
   delta:** the whole study panel is a typed block list from the
-  `pure_engine_*_blocks_json` family, and links parse via `pure_route_link_json`
+  `plumbline_engine_*_blocks_json` family, and links parse via `plumbline_route_link_json`
   — none are in the Kotlin interface yet. A Compose shell adds those JNA decls +
   wrappers, then walks the blocks with a small per-block composable
   (`Section`/`Para`/`Rule`, runs → `AnnotatedString` with the colour-role map +
@@ -810,8 +810,8 @@ base "./").
   **no** panel derivation — the producer owns tier order, caps, gloss/lemma,
   snippets, and the verb vocabulary. Colour roles map identically to GTK/WinUI.
 - **Popup view-models (2026-07-18, P0.2) — Compose delta:** the three map
-  popups now come from `pure_engine_chord_map_json` / `pure_engine_concept_map_json`
-  / `pure_engine_constellation_json` (all **not yet in the Kotlin interface**).
+  popups now come from `plumbline_engine_chord_map_json` / `plumbline_engine_concept_map_json`
+  / `plumbline_engine_constellation_json` (all **not yet in the Kotlin interface**).
   A Compose shell adds the three JNA decls + wrappers and paints the returned
   fractions — it never re-derives the fold / spoke assembly / lane layout.
   Positions are fractions/logical units, so the Compose mapping is the SAME
@@ -820,7 +820,7 @@ base "./").
   the `1.4+2.4·size` radius identical so all three shells place a node alike.
 - **Tier 0 (2026-07-19) — Compose delta:** the new endpoints (copy text,
   user-note read/write, chapter highlights, palette, highlight tones, warm,
-  guide/about blocks) are **not yet in the Kotlin `PureFfi` interface**. A
+  guide/about blocks) are **not yet in the Kotlin `PlumblineFfi` interface**. A
   Compose shell adds the JNA decls + wrappers, then: a long-press/overflow
   context menu (copy via `ClipboardManager`, note, highlight tones, tag/thread);
   per-pane history (system back + gesture); a note gutter mark + the "your note"

@@ -33,9 +33,9 @@ bincode = "1"
 flate2 = "1"
 
 # Internal crates
-pure-core = { path = "crates/core" }
-pure-layout = { path = "crates/layout" }
-pure-rnd = { path = "crates/rnd" }
+plumbline-core = { path = "crates/core" }
+plumbline-layout = { path = "crates/layout" }
+plumbline-rnd = { path = "crates/rnd" }
 
 [profile.release]
 lto = "thin"

@@ -6,7 +6,7 @@
 //
 // Author D (Compose UI).
 
-package dev.purestudy
+package dev.plumbline
 
 import android.os.Bundle
 import android.widget.Toast
@@ -28,7 +28,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
-import dev.purestudy.ui.PureStudyApp
+import dev.plumbline.ui.PlumblineApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -49,14 +49,14 @@ class MainActivity : ComponentActivity() {
         // writable path, so the core's config save silently failed and every
         // launch loaded defaults — the reader always reopened John 3 and no
         // preference (text size, theme, last passage, history) persisted. Point
-        // it at our private filesDir BEFORE any pure_config_* call. Os.setenv
+        // it at our private filesDir BEFORE any plumbline_config_* call. Os.setenv
         // writes the libc environ that the Rust core's std::env reads.
         runCatching { android.system.Os.setenv("XDG_CONFIG_HOME", filesDir.absolutePath, true) }
 
         // Make sure the cdylib is present before the first JNA call. JNA's
         // Native.load would also resolve it, but loading here surfaces a missing
         // .so as a clear crash rather than a lazy failure deep in the binding.
-        runCatching { System.loadLibrary("pure_ffi") }
+        runCatching { System.loadLibrary("plumbline_ffi") }
         bundledOn = !File(filesDir, ".no-bundle").exists()
 
         // Open from a WRITABLE home so authored study data — notes, highlights,
@@ -110,7 +110,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val e = engine
             when {
-                e != null -> PureStudyApp(e, fold, bundledOn, ::toggleBundled)
+                e != null -> PlumblineApp(e, fold, bundledOn, ::toggleBundled)
                 loadError != null -> ErrorScreen(loadError!!)
                 else -> LoadingScreen()
             }

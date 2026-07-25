@@ -1,5 +1,7 @@
-// pure-study Android shell — Gradle settings.
-// The third shell (GTK / WinUI / Compose) over the same pure-core C ABI.
+// Plumbline Android shell — Gradle settings.
+// One of the product's two shells (this Compose app + the web PWA) over the same
+// plumbline-core C ABI. The GTK and WinUI desktop shells were retired, so parity
+// now means Compose ↔ web.
 
 pluginManagement {
     repositories {
@@ -24,5 +26,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "pure-study-android"
+rootProject.name = "plumbline-android"
 include(":app")

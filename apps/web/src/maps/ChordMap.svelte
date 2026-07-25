@@ -1,6 +1,6 @@
 <script lang="ts">
   // Chord/arc "Weave map" (manifest §Chord/arc): the fold comes from the core
-  // (pure_engine_chord_map_json); the shell paints the canon axis, ribbons
+  // (plumbline_engine_chord_map_json); the shell paints the canon axis, ribbons
   // heaviest-first, and routes clicks x→book → active pane.
   import MapFrame from "./MapFrame.svelte";
   import { getSession } from "../state/session.svelte";

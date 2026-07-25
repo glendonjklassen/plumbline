@@ -1,6 +1,6 @@
 <script lang="ts">
   // Constellation (manifest §Constellation popup): lanes/nodes/edges arrive
-  // as fractions from pure_engine_constellation_json; the shell maps to the
+  // as fractions from plumbline_engine_constellation_json; the shell maps to the
   // same pixel constants as GTK/WinUI (plotLeft 162, topPad 18, gutter 150,
   // node 1.4+2.4·size) so all shells place a node alike. Hit priority
   // node > edge > pin-gutter; node navigates (stays open), edge opens the

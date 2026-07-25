@@ -1,4 +1,4 @@
-//! `pure-core` — the pure, headless domain core for pure-study.
+//! `plumbline-core` — Plumbline's pure, headless domain core.
 //!
 //! A ground-up Rust port of the study logic in the Haskell `overlay` app: the
 //! canon, verse references, the tokenized KJV corpus, Strong's dictionary +
@@ -8,7 +8,7 @@
 //! can sit on top without duplicating any study logic.
 //!
 //! Optional "R&D" features (embeddings, morphology, concept, bridge) live in
-//! the separate, feature-gated `pure-rnd` crate so a simple-reader build can
+//! the separate, feature-gated `plumbline-rnd` crate so a simple-reader build can
 //! omit them entirely.
 
 pub mod canon;

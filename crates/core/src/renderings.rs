@@ -5,7 +5,7 @@
 //! A lens for readers who don't read Greek/Hebrew on *where the translators
 //! made a choice*: selecting "charity" shows that G26 (agape) is elsewhere
 //! rendered "love"; selecting "love" reveals it can stand for either G25
-//! (agape) or G5368 (phileo). New in pure-study — there is no overlay
+//! (agape) or G5368 (phileo). New in Plumbline — there is no overlay
 //! antecedent to port from.
 //!
 //! A **rendering** is a contiguous run of same-code tokens within one verse, so

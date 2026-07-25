@@ -5,14 +5,14 @@
 // the ABI (StudyEngine.Memory*); this file is orchestration + paint only.
 //
 // The hub [MemorizeList] carries the coverage strip INLINE above the verse list
-// (Glendon's 2026-07-24 call — coverage is a section, not a screen), with
+// (product call, 2026-07-24 — coverage is a section, not a screen), with
 // ReviewDue and Activity as the two full-screen destinations, dismissed back to
 // the hub via [MemFrame]'s BackHandler + onClose. Activity is a half/half split:
 // calendar heatmap over a most-recent-first history log.
 //
 // Author D (Compose UI).
 
-package dev.purestudy.ui
+package dev.plumbline.ui
 
 import android.graphics.Paint
 import androidx.activity.compose.BackHandler
@@ -64,17 +64,17 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.purestudy.CanonSegments
-import dev.purestudy.DayActivity
-import dev.purestudy.MemoryActivity
-import dev.purestudy.MemoryCoverage
-import dev.purestudy.MemoryDrill
-import dev.purestudy.MemoryDue
-import dev.purestudy.RecallScore
-import dev.purestudy.StudyEngine
-import dev.purestudy.TocBook
-import dev.purestudy.VerseData
-import dev.purestudy.parseWire
+import dev.plumbline.CanonSegments
+import dev.plumbline.DayActivity
+import dev.plumbline.MemoryActivity
+import dev.plumbline.MemoryCoverage
+import dev.plumbline.MemoryDrill
+import dev.plumbline.MemoryDue
+import dev.plumbline.RecallScore
+import dev.plumbline.StudyEngine
+import dev.plumbline.TocBook
+import dev.plumbline.VerseData
+import dev.plumbline.parseWire
 import java.time.Instant
 import java.time.LocalDate
 import java.time.format.TextStyle
@@ -94,7 +94,7 @@ fun memorizeVerse(engine: StudyEngine, verseRef: String): String? =
     synchronized(engine) { engine.MemoryAdd(verseRef, nowUtc()) }
 
 /** The memorization destinations: the hub [List] (verse list + inline coverage
- *  strip — Glendon's 2026-07-24 call: coverage is a section of the hub, not a
+ *  strip — product call, 2026-07-24: coverage is a section of the hub, not a
  *  screen that replaces it), the [ReviewDue] drill, and [Activity]. */
 enum class MemorizeView { ReviewDue, List, Activity }
 
@@ -561,9 +561,9 @@ private fun bookOf(refKey: String): String? {
 // ── (c) memory activity: calendar heatmap over a history log ──────────────────
 
 /**
- * When the memory work happened, split half-and-half (Glendon's 2026-07-24
- * call): the top half is a calendar heatmap (weeks as columns, GitHub-style,
- * shaded by reviews that day), the bottom half a most-recent-first history log.
+ * When the memory work happened, split half-and-half (product call, 2026-07-24):
+ * the top half is a calendar heatmap (weeks as columns, GitHub-style, shaded by
+ * reviews that day), the bottom half a most-recent-first history log.
  */
 @Composable
 fun MemorizeActivity(engine: StudyEngine, palette: ReaderPalette, onClose: () -> Unit) {

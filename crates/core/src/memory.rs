@@ -642,7 +642,7 @@ mod tests {
 
     #[test]
     fn store_roundtrip_and_queue() {
-        let home = std::env::temp_dir().join(format!("pure-mem-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-mem-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         let (loaded, _) = load_cards(&home);
         assert!(loaded.is_empty());

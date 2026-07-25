@@ -1,6 +1,6 @@
 // The top-level shell: icon chrome (search + an overflow menu) over a fold-aware
 // arrangement of the reader. The Android mirror of apps/windows/PureStudyWin/
-// MainWindow.cs, adapted to a touch phone (Glendon's v1 phone shell):
+// MainWindow.cs, adapted to a touch phone (the v1 phone shell):
 //
 //   UiMode.FullscreenVertical  a phone: ONE fullscreen reading pane. The book
 //                              nav lives inline in the top bar; study, search,
@@ -16,7 +16,7 @@
 //
 // Author D (Compose UI).
 
-package dev.purestudy.ui
+package dev.plumbline.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -91,19 +91,19 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.window.layout.FoldingFeature
-import dev.purestudy.Hit
-import dev.purestudy.PaneRef1
-import dev.purestudy.Thread1
-import dev.purestudy.PanelLinkData
-import dev.purestudy.SearchResult
-import dev.purestudy.StudyEngine
-import dev.purestudy.Toc
-import dev.purestudy.TocBook
-import dev.purestudy.UserNote
-import dev.purestudy.ConfigState
-import dev.purestudy.PureJson
-import dev.purestudy.StudyConfig
-import dev.purestudy.parseWire
+import dev.plumbline.Hit
+import dev.plumbline.PaneRef1
+import dev.plumbline.Thread1
+import dev.plumbline.PanelLinkData
+import dev.plumbline.SearchResult
+import dev.plumbline.StudyEngine
+import dev.plumbline.Toc
+import dev.plumbline.TocBook
+import dev.plumbline.UserNote
+import dev.plumbline.ConfigState
+import dev.plumbline.PlumblineJson
+import dev.plumbline.StudyConfig
+import dev.plumbline.parseWire
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -112,7 +112,7 @@ import kotlinx.serialization.encodeToString
 /** What the second (right) pane shows in fold mode. */
 private enum class SecondPane { Study, Bible }
 
-/** The bottom-nav destinations (one-handed reach — Glendon's 2026-07-24 call).
+/** The bottom-nav destinations (one-handed reach — product call, 2026-07-24).
  *  Present is a launcher on the same bar but renders as a fullscreen overlay. */
 private enum class Dest { Read, Explore, Memorize }
 
@@ -127,7 +127,7 @@ private data class AuthorPrompt(val title: String, val initial: String, val onCo
  * [fold] is the live FoldingFeature (null when the device is not opened flat).
  */
 @Composable
-fun PureStudyApp(
+fun PlumblineApp(
     engine: StudyEngine,
     fold: FoldingFeature?,
     bundledOn: Boolean = true,
@@ -236,7 +236,7 @@ fun StudyScreen(
             openPanes = listOf(PaneRef1(book, chapter, firstVisibleVerse)), activePane = 0, history = history,
             theme = themeChoice, humanAnalysis = humanAnalysis, machineAnalysis = machineAnalysis,
         )
-        scope.launch { withContext(Dispatchers.Default) { runCatching { StudyConfig.SaveJson(PureJson.encodeToString(cfg)) } } }
+        scope.launch { withContext(Dispatchers.Default) { runCatching { StudyConfig.SaveJson(PlumblineJson.encodeToString(cfg)) } } }
     }
     val studyScale = (bodySize / 18.0).toFloat()
 
@@ -372,7 +372,7 @@ fun StudyScreen(
             "guide" -> { studyCode = null; show(StudyEngine.GuideBlocksJson()) }
             "about" -> { studyCode = null; show(StudyEngine.AboutBlocksJson()) }
             // Tagging offers the existing tags first; freetext is the secondary
-            // path inside the picker (Glendon's 2026-07-24 call).
+            // path inside the picker (product call, 2026-07-24).
             "addTag" -> link.refKey?.let { ref -> tagPickRef = ref }
             "addThread" -> link.refKey?.let { ref ->
                 prompt = AuthorPrompt("New thread on $ref", "") { name ->
@@ -428,7 +428,7 @@ fun StudyScreen(
 
     // The concept map + canon heatmap cards embedded in the study pane whenever
     // the study has a Strong's code behind it (first-class, scaled down —
-    // Glendon's 2026-07-24 call). Tap-through: fullscreen map / book jump.
+    // product call, 2026-07-24). Tap-through: fullscreen map / book jump.
     val studyEmbed: (@Composable () -> Unit)? = studyCode?.let { code ->
         {
             StudyMapCards(
@@ -688,10 +688,10 @@ fun StudyScreen(
                 dismissButton = { TextButton(onClick = { prompt = null }) { Text("Cancel") } },
             )
         }
-        // Presentation mode (Glendon's #1): once a thread is chosen it goes
-        // fullscreen, over everything — the reader hands the phone across, so
-        // no study chrome bleeds through. (The picker lives in-content above,
-        // with the bottom nav.)
+        // Presentation mode (the top-priority request): once a thread is chosen
+        // it goes fullscreen, over everything — the reader hands the phone
+        // across, so no study chrome bleeds through. (The picker lives
+        // in-content above, with the bottom nav.)
         if (showPresent && presentThread != null) {
             PresentOverlay(
                 engine, palette,
@@ -806,7 +806,7 @@ private fun TopBar(
 
 /** Study as a bottom sheet — the phone surface for a word tap / library / link
  *  result. Opens half-height; drag the handle up to fill (nearly) the whole
- *  screen (Glendon's 2026-07-24 call). Swipe down or tap the scrim to dismiss.
+ *  screen (product call, 2026-07-24). Swipe down or tap the scrim to dismiss.
  *  Links route through [onLink]; [embed] slots the concept map + heatmap cards. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

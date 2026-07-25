@@ -143,7 +143,7 @@ export class Session {
     };
 
     // Debug handle for the console (and the repo's headless probes).
-    (globalThis as any).__pureStudy = this;
+    (globalThis as any).__plumbline = this;
 
     // The web twin of Android's ON_PAUSE persist: flush the session (incl.
     // the scroll verse) when the tab hides or unloads.

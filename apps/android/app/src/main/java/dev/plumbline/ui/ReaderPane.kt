@@ -8,7 +8,7 @@
 //
 // Author D (Compose UI).
 
-package dev.purestudy.ui
+package dev.plumbline.ui
 
 import android.content.Context
 import android.graphics.Paint
@@ -43,16 +43,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.purestudy.Chapter
-import dev.purestudy.ChapterHighlights
-import dev.purestudy.DisplayItem
-import dev.purestudy.DisplayList
-import dev.purestudy.Hit
-import dev.purestudy.PureFlags
-import dev.purestudy.StudyEngine
-import dev.purestudy.UserNotes
-import dev.purestudy.core.PureLayoutConfig
-import dev.purestudy.parseWire
+import dev.plumbline.Chapter
+import dev.plumbline.ChapterHighlights
+import dev.plumbline.DisplayItem
+import dev.plumbline.DisplayList
+import dev.plumbline.Hit
+import dev.plumbline.PlumblineFlags
+import dev.plumbline.StudyEngine
+import dev.plumbline.UserNotes
+import dev.plumbline.core.PlumblineLayoutConfig
+import dev.plumbline.parseWire
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
@@ -61,7 +61,7 @@ import kotlin.math.min
 
 // The manifest constants are LOGICAL units (the desktop shells run ~1 device px
 // per logical px). On a phone (density ~2.6) treating them as raw device px
-// capped the text column at ~277dp and left wide empty gutters — Glendon's
+// capped the text column at ~277dp and left wide empty gutters — the
 // "lots of whitespace" feedback (2026-07-24) — so both scale by density here.
 private const val MARGIN_DP = 28f      // GTK MARGIN — all sides
 private const val MAX_COLUMN_DP = 720f // GTK MAX_COLUMN
@@ -183,7 +183,7 @@ fun ReaderPane(
         // (margin/spacing change the column width + rhythm, so re-lay out too).
         LaunchedEffect(book, chapter, widthPx, fontPx, versePerLine, sideMargin, lineSpacing) {
             if (widthPx < 60f) return@LaunchedEffect
-            val cfg = PureLayoutConfig.ByValue().apply {
+            val cfg = PlumblineLayoutConfig.ByValue().apply {
                 width = column
                 lineHeight = lineH
                 spaceWidth = space
@@ -423,9 +423,9 @@ fun ReaderPane(
                         continue
                     }
                     val flags = it.flags.toInt()
-                    val added = flags and PureFlags.ADDED != 0
-                    val divine = flags and PureFlags.DIVINE != 0
-                    val title = flags and PureFlags.TITLE != 0
+                    val added = flags and PlumblineFlags.ADDED != 0
+                    val divine = flags and PlumblineFlags.DIVINE != 0
+                    val title = flags and PlumblineFlags.TITLE != 0
                     val color = when {
                         added -> palette.inkFaded
                         divine -> palette.divine

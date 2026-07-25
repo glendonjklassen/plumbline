@@ -2,7 +2,7 @@
   // Concept map (manifest §Concept map popup): radial spokes + canon
   // dispersion strip, with the optional cross-testament bridge row (indigo)
   // beneath the gold one. The whole model comes from
-  // pure_engine_concept_map_json; spoke clicks recenter, centre opens the
+  // plumbline_engine_concept_map_json; spoke clicks recenter, centre opens the
   // code's study card.
   import MapFrame from "./MapFrame.svelte";
   import { getSession } from "../state/session.svelte";

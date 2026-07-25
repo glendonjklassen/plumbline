@@ -302,7 +302,7 @@ mod tests {
 
     #[test]
     fn add_creates_then_appends_and_reloads() {
-        let home = std::env::temp_dir().join(format!("pure-thread-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-thread-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         let entry = |v, note: Option<&str>| ThreadEntry {
             vref: v,
@@ -335,7 +335,7 @@ mod tests {
 
     #[test]
     fn edits_thread_and_entry_notes() {
-        let home = std::env::temp_dir().join(format!("pure-thread-notes-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-thread-notes-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         let entry = ThreadEntry {
             vref: VRef::new("Rom", 3, 23),

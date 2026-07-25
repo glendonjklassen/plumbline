@@ -260,13 +260,13 @@ impl Config {
 }
 
 /// The per-user config directory for this app, per platform:
-/// - Windows: `%APPDATA%\pure-study`
-/// - macOS: `$HOME/Library/Application Support/pure-study`
-/// - other Unix: `$XDG_CONFIG_HOME/pure-study` (else `$HOME/.config/pure-study`)
+/// - Windows: `%APPDATA%\plumbline`
+/// - macOS: `$HOME/Library/Application Support/plumbline`
+/// - other Unix: `$XDG_CONFIG_HOME/plumbline` (else `$HOME/.config/plumbline`)
 ///
 /// Returns `None` only when the environment gives us nothing to build on.
 pub fn config_dir() -> Option<PathBuf> {
-    let app = "pure-study";
+    let app = "plumbline";
     #[cfg(target_os = "windows")]
     {
         std::env::var_os("APPDATA").map(|base| Path::new(&base).join(app))
@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn missing_is_first_run_default() {
-        let path = std::env::temp_dir().join(format!("pure-cfg-missing-{}.json", std::process::id()));
+        let path = std::env::temp_dir().join(format!("plumbline-cfg-missing-{}.json", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let (cfg, first) = load_from(&path);
         assert!(first);
@@ -348,7 +348,7 @@ mod tests {
 
     #[test]
     fn roundtrips_and_reload_is_not_first_run() {
-        let path = std::env::temp_dir().join(format!("pure-cfg-rt-{}.json", std::process::id()));
+        let path = std::env::temp_dir().join(format!("plumbline-cfg-rt-{}.json", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let cfg = Config {
             mode: StudyMode::Full,
@@ -374,7 +374,7 @@ mod tests {
 
     #[test]
     fn absurd_size_and_bad_mode_fall_back() {
-        let path = std::env::temp_dir().join(format!("pure-cfg-bad-{}.json", std::process::id()));
+        let path = std::env::temp_dir().join(format!("plumbline-cfg-bad-{}.json", std::process::id()));
         std::fs::write(&path, r#"{"studyMode":"wat","bodySize":9000}"#).unwrap();
         let (cfg, first) = load_from(&path);
         assert!(!first); // a damaged file is not a fresh first run
@@ -392,7 +392,7 @@ mod review_tests {
     /// a corrupt/stale value must come back clamped.
     #[test]
     fn active_pane_is_clamped_to_the_pane_list() {
-        let dir = std::env::temp_dir().join(format!("pure-config-clamp-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("plumbline-config-clamp-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.json");

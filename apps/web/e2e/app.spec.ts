@@ -1,9 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 
 // Boot the app and wait for the reader. First-run modal is dismissed via
-// "Start reading" (fresh storage per test).
+// "Start reading" (fresh storage per test). The title check also pins the
+// product branding — index.html, the manifest and the shell header must agree.
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
+  await expect(page).toHaveTitle("Plumbline — 1769 KJV");
   await expect(page.locator(".subtitle")).toContainText("1769 KJV", { timeout: 90_000 });
   const start = page.getByRole("button", { name: "Start reading" });
   if (await start.isVisible().catch(() => false)) await start.click();
@@ -13,7 +15,7 @@ test("boots to the reader with the stock set seeded", async ({ page }) => {
   await boot(page);
   await expect(page.locator("canvas").first()).toBeVisible();
   const counts = await page.evaluate(() => {
-    const s = (window as any).__pureStudy;
+    const s = (window as any).__plumbline;
     return {
       weaves: s.engine.weaves()?.weaves?.length ?? 0,
       threads: s.engine.threads()?.threads?.length ?? 0,
@@ -90,7 +92,7 @@ test("passage navigator jumps to a verse", async ({ page }) => {
 test("backup round-trips through a zip", async ({ page }, testInfo) => {
   await boot(page);
   await page.evaluate(() => {
-    const s = (window as any).__pureStudy;
+    const s = (window as any).__plumbline;
     s.engine.userNoteSet("John 3:16", "backup probe", "2026-07-25T00:00:00Z");
   });
   await page.getByLabel("Menu").click();
@@ -104,7 +106,7 @@ test("backup round-trips through a zip", async ({ page }, testInfo) => {
 
   // Damage the note, then restore the backup over it.
   await page.evaluate(() => {
-    const s = (window as any).__pureStudy;
+    const s = (window as any).__plumbline;
     s.engine.userNoteSet("John 3:16", "damaged", "2026-07-25T01:00:00Z");
   });
   // Mark the current document, then wait until the restore's reload has
@@ -118,7 +120,7 @@ test("backup round-trips through a zip", async ({ page }, testInfo) => {
     .toBeNull();
   await expect(page.locator(".subtitle")).toContainText("1769 KJV", { timeout: 90_000 });
   const text = await page.evaluate(
-    () => (window as any).__pureStudy.engine.userNote("John 3:16")?.text,
+    () => (window as any).__plumbline.engine.userNote("John 3:16")?.text,
   );
   expect(text).toBe("backup probe");
 });

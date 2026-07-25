@@ -4,7 +4,7 @@
 // "cache" — rebuildable artifacts (the corpus idxcache), same keying.
 // No dependency: the app's storage needs are a flat key→bytes map.
 
-const DB_NAME = "pure-study";
+const DB_NAME = "plumbline";
 const DB_VERSION = 1;
 export type StoreName = "user" | "cache";
 

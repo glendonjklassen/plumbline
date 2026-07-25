@@ -1,6 +1,6 @@
 # Bibliography — data sources & licensing
 
-What pure-study ships, where each piece comes from, and under what license.
+What Plumbline ships, where each piece comes from, and under what license.
 Everything is freely licensed or public domain; per the project's stance, every
 analysis layer is a tool for studying the text, never an authority over it.
 
@@ -52,5 +52,6 @@ library until a human blesses them.
 
 ## Type
 
-Scripture renders in **EB Garamond** (SIL Open Font License, bundled under
-`apps/desktop/assets/fonts/`).
+Scripture renders in **EB Garamond** (SIL Open Font License), bundled with the
+web shell under `apps/web/public/fonts/`; the Compose shell asks for the same
+family from `assets/fonts/` and falls back to the platform serif.

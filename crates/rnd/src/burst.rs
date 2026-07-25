@@ -12,9 +12,9 @@
 
 use std::collections::HashMap;
 
-use pure_core::canon;
-use pure_core::corpus::Corpus;
-use pure_core::reference::{VRef, OT_NT_DIVIDE};
+use plumbline_core::canon;
+use plumbline_core::corpus::Corpus;
+use plumbline_core::reference::{VRef, OT_NT_DIVIDE};
 
 /// Discovery parameters. Defaults chosen against the real corpus (see the
 /// overlay concept-engine notes): occur in ≥8 verses but ≤10% of the testament,

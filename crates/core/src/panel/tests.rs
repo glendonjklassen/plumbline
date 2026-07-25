@@ -646,7 +646,7 @@ fn guide_and_about_render_combined() {
     // Guide & About are now one combined card: the guide opens with its tour and
     // inlines the About content (edition + covenant) at the end.
     let guide = guide_blocks();
-    assert!(guide.iter().any(|b| text_of(b).contains("Using pure-study")));
+    assert!(guide.iter().any(|b| text_of(b).contains("Using Plumbline")));
     assert!(guide.iter().any(|b| text_of(b).contains("COVENANT")));
     // The standalone About card (the `about` link verb) still renders on its own.
     let about = about_blocks();

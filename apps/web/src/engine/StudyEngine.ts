@@ -1,5 +1,5 @@
 // The web shell's engine binding — the TS sibling of StudyEngine.kt (Kotlin)
-// and PureStudy.cs (C#), method-for-method over the same C ABI and camelCase
+// and Plumbline.cs (C#), method-for-method over the same C ABI and camelCase
 // wire JSON. Returned JSON is parsed; authoring calls follow the shared
 // choreography (write → engine reloads from its home → shell re-fetches) and
 // additionally mirror the virtual home to IndexedDB.
@@ -34,24 +34,24 @@ export class DisplayList {
     this.#ptr = ptr;
   }
   get raw(): unknown {
-    this.#json ??= JSON.parse(this.#w.takeStr((this.#w.exports.pure_layout_to_json as Function)(this.#ptr) as number)!);
+    this.#json ??= JSON.parse(this.#w.takeStr((this.#w.exports.plumbline_layout_to_json as Function)(this.#ptr) as number)!);
     return this.#json;
   }
   get height(): number {
-    return (this.#w.exports.pure_layout_height as Function)(this.#ptr) as number;
+    return (this.#w.exports.plumbline_layout_height as Function)(this.#ptr) as number;
   }
   get width(): number {
-    return (this.#w.exports.pure_layout_width as Function)(this.#ptr) as number;
+    return (this.#w.exports.plumbline_layout_width as Function)(this.#ptr) as number;
   }
   get itemCount(): number {
-    return (this.#w.exports.pure_layout_item_count as Function)(this.#ptr) as number;
+    return (this.#w.exports.plumbline_layout_item_count as Function)(this.#ptr) as number;
   }
   hitTest(x: number, y: number): any {
-    const s = this.#w.takeStr((this.#w.exports.pure_layout_hit_test_json as Function)(this.#ptr, x, y) as number);
+    const s = this.#w.takeStr((this.#w.exports.plumbline_layout_hit_test_json as Function)(this.#ptr, x, y) as number);
     return s ? JSON.parse(s) : null;
   }
   free(): void {
-    if (this.#ptr) (this.#w.exports.pure_layout_free as Function)(this.#ptr);
+    if (this.#ptr) (this.#w.exports.plumbline_layout_free as Function)(this.#ptr);
     this.#ptr = 0;
   }
 }
@@ -70,7 +70,7 @@ export class StudyEngine {
   static open(w: WasmEngine, home: string): StudyEngine {
     const homePtr = w.inStr(home);
     const [engine, err] = w.withErrSlot((slot) =>
-      (w.exports.pure_engine_open as Function)(homePtr, slot) as number,
+      (w.exports.plumbline_engine_open as Function)(homePtr, slot) as number,
     );
     w.freeStr(homePtr);
     if (!engine) throw new Error(err ?? "engine open failed");
@@ -115,31 +115,31 @@ export class StudyEngine {
   // ── lifecycle ───────────────────────────────────────────────────────────────
 
   free(): void {
-    if (this.#engine) (this.#w.exports.pure_engine_free as Function)(this.#engine);
+    if (this.#engine) (this.#w.exports.plumbline_engine_free as Function)(this.#engine);
     this.#engine = 0;
   }
 
   // ── reader core ─────────────────────────────────────────────────────────────
 
   toc(): any {
-    return this.#json("pure_engine_toc_json");
+    return this.#json("plumbline_engine_toc_json");
   }
   chapterCount(book: string): number {
-    return this.#call((b) => (this.#w.exports.pure_engine_chapter_count as Function)(this.#engine, b) as number, [book]);
+    return this.#call((b) => (this.#w.exports.plumbline_engine_chapter_count as Function)(this.#engine, b) as number, [book]);
   }
   verse(refKey: string): any {
-    return this.#json("pure_engine_verse_json", refKey);
+    return this.#json("plumbline_engine_verse_json", refKey);
   }
   token(refKey: string, tokenIndex: number): any {
     const s = this.#call(
-      (r) => this.#w.takeStr((this.#w.exports.pure_engine_token_json as Function)(this.#engine, r, tokenIndex) as number),
+      (r) => this.#w.takeStr((this.#w.exports.plumbline_engine_token_json as Function)(this.#engine, r, tokenIndex) as number),
       [refKey],
     );
     return s === null ? null : JSON.parse(s);
   }
 
   layoutChapter(book: string, chapter: number, cfg: LayoutCfg): DisplayList | null {
-    const cfgPtr = (this.#w.exports.pure_web_alloc as Function)(28) as number;
+    const cfgPtr = (this.#w.exports.plumbline_web_alloc as Function)(28) as number;
     const dv = new DataView(this.#w.exports.memory.buffer);
     [cfg.width, cfg.lineHeight, cfg.spaceWidth, cfg.verseNumGap, cfg.paraIndent, cfg.paraSpacing].forEach(
       (v, i) => dv.setFloat32(cfgPtr + i * 4, v, true),
@@ -147,107 +147,107 @@ export class StudyEngine {
     dv.setUint32(cfgPtr + 24, cfg.versePerLine ? 1 : 0, true);
     const dl = this.#call(
       (b) =>
-        (this.#w.exports.pure_engine_layout_chapter as Function)(
+        (this.#w.exports.plumbline_engine_layout_chapter as Function)(
           this.#engine, b, chapter, cfgPtr, this.#w.measureFnptr, 0,
         ) as number,
       [book],
     );
-    (this.#w.exports.pure_web_free as Function)(cfgPtr, 28);
+    (this.#w.exports.plumbline_web_free as Function)(cfgPtr, 28);
     return dl ? new DisplayList(this.#w, dl) : null;
   }
 
   // ── study data ──────────────────────────────────────────────────────────────
 
   strongs(code: string): any {
-    return this.#json("pure_engine_strongs_json", code);
+    return this.#json("plumbline_engine_strongs_json", code);
   }
   strongsOccurrences(code: string): any {
-    return this.#json("pure_engine_strongs_occurrences_json", code);
+    return this.#json("plumbline_engine_strongs_occurrences_json", code);
   }
   renderings(code: string): any {
-    return this.#json("pure_engine_renderings_json", code);
+    return this.#json("plumbline_engine_renderings_json", code);
   }
   wordCodes(word: string): any {
-    return this.#json("pure_engine_word_codes_json", word);
+    return this.#json("plumbline_engine_word_codes_json", word);
   }
   search(query: string): any {
-    return this.#json("pure_engine_search_json", query);
+    return this.#json("plumbline_engine_search_json", query);
   }
   threads(): any {
-    return this.#json("pure_engine_threads_json");
+    return this.#json("plumbline_engine_threads_json");
   }
   tags(): any {
-    return this.#json("pure_engine_tags_json");
+    return this.#json("plumbline_engine_tags_json");
   }
   verseXrefs(refKey: string): any {
-    return this.#json("pure_engine_verse_xrefs_json", refKey);
+    return this.#json("plumbline_engine_verse_xrefs_json", refKey);
   }
   suggestedWeaves(): any {
-    return this.#json("pure_engine_suggested_weaves_json");
+    return this.#json("plumbline_engine_suggested_weaves_json");
   }
   verseNotes(refKey: string): any {
-    return this.#json("pure_engine_verse_notes_json", refKey);
+    return this.#json("plumbline_engine_verse_notes_json", refKey);
   }
   studyXrefs(refKey: string): any {
-    return this.#json("pure_engine_study_xrefs_json", refKey);
+    return this.#json("plumbline_engine_study_xrefs_json", refKey);
   }
   weaves(): any {
-    return this.#json("pure_engine_weaves_json");
+    return this.#json("plumbline_engine_weaves_json");
   }
   linkPairs(): any {
-    return this.#json("pure_engine_link_pairs_json");
+    return this.#json("plumbline_engine_link_pairs_json");
   }
   canonSegments(): any {
-    return this.#json("pure_engine_canon_segments_json");
+    return this.#json("plumbline_engine_canon_segments_json");
   }
 
   // ── R&D tier ────────────────────────────────────────────────────────────────
 
   conceptNeighbours(code: string, k: number): any {
     const s = this.#call(
-      (c) => this.#w.takeStr((this.#w.exports.pure_engine_concept_neighbours_json as Function)(this.#engine, c, k) as number),
+      (c) => this.#w.takeStr((this.#w.exports.plumbline_engine_concept_neighbours_json as Function)(this.#engine, c, k) as number),
       [code],
     );
     return s === null ? null : JSON.parse(s);
   }
   bridgePartners(code: string): any {
-    return this.#json("pure_engine_bridge_partners_json", code);
+    return this.#json("plumbline_engine_bridge_partners_json", code);
   }
   morph(refKey: string, tokenIndex: number): any {
     const s = this.#call(
-      (r) => this.#w.takeStr((this.#w.exports.pure_engine_morph_json as Function)(this.#engine, r, tokenIndex) as number),
+      (r) => this.#w.takeStr((this.#w.exports.plumbline_engine_morph_json as Function)(this.#engine, r, tokenIndex) as number),
       [refKey],
     );
     return s === null ? null : JSON.parse(s);
   }
   similarVerses(refKey: string, k: number): any {
     const s = this.#call(
-      (r) => this.#w.takeStr((this.#w.exports.pure_engine_similar_verses_json as Function)(this.#engine, r, k) as number),
+      (r) => this.#w.takeStr((this.#w.exports.plumbline_engine_similar_verses_json as Function)(this.#engine, r, k) as number),
       [refKey],
     );
     return s === null ? null : JSON.parse(s);
   }
   concept(code: string): any {
-    return this.#json("pure_engine_concept_json", code);
+    return this.#json("plumbline_engine_concept_json", code);
   }
   gloss(code: string): string | null {
-    return this.#text("pure_engine_gloss", code);
+    return this.#text("plumbline_engine_gloss", code);
   }
   warmIndexes(): string | null {
-    return this.#text("pure_engine_warm_indexes");
+    return this.#text("plumbline_engine_warm_indexes");
   }
 
   // ── view-models (maps) ──────────────────────────────────────────────────────
 
   chordMap(): any {
-    return this.#json("pure_engine_chord_map_json");
+    return this.#json("plumbline_engine_chord_map_json");
   }
   conceptMap(code: string): any {
-    return this.#json("pure_engine_concept_map_json", code);
+    return this.#json("plumbline_engine_concept_map_json", code);
   }
   constellation(page: number, pins: number[]): any {
     const s = this.#call(
-      (p) => this.#w.takeStr((this.#w.exports.pure_engine_constellation_json as Function)(this.#engine, page, p) as number),
+      (p) => this.#w.takeStr((this.#w.exports.plumbline_engine_constellation_json as Function)(this.#engine, page, p) as number),
       [JSON.stringify(pins)],
     );
     return s === null ? null : JSON.parse(s);
@@ -260,7 +260,7 @@ export class StudyEngine {
     const s = this.#call(
       (r) =>
         this.#w.takeStr(
-          (this.#w.exports.pure_engine_word_study_blocks2_json as Function)(this.#engine, r, tokenIndex, gates) as number,
+          (this.#w.exports.plumbline_engine_word_study_blocks2_json as Function)(this.#engine, r, tokenIndex, gates) as number,
         ),
       [refKey],
     );
@@ -271,68 +271,68 @@ export class StudyEngine {
     const s = this.#call(
       (c, wd) =>
         this.#w.takeStr(
-          (this.#w.exports.pure_engine_code_study_blocks2_json as Function)(this.#engine, c, wd, gates) as number,
+          (this.#w.exports.plumbline_engine_code_study_blocks2_json as Function)(this.#engine, c, wd, gates) as number,
         ),
       [code, word],
     );
     return s === null ? null : JSON.parse(s);
   }
   concordanceBlocks(code: string): any {
-    return this.#json("pure_engine_concordance_blocks_json", code);
+    return this.#json("plumbline_engine_concordance_blocks_json", code);
   }
   renderingConcordanceBlocks(code: string, rendering: string): any {
-    return this.#json("pure_engine_rendering_concordance_blocks_json", code, rendering);
+    return this.#json("plumbline_engine_rendering_concordance_blocks_json", code, rendering);
   }
   threadsBlocks(): any {
-    return this.#json("pure_engine_threads_blocks_json");
+    return this.#json("plumbline_engine_threads_blocks_json");
   }
   threadBlocks(index: number): any {
-    const s = this.#w.takeStr((this.#w.exports.pure_engine_thread_blocks_json as Function)(this.#engine, index) as number);
+    const s = this.#w.takeStr((this.#w.exports.plumbline_engine_thread_blocks_json as Function)(this.#engine, index) as number);
     return s === null ? null : JSON.parse(s);
   }
   tagsBlocks(): any {
-    return this.#json("pure_engine_tags_blocks_json");
+    return this.#json("plumbline_engine_tags_blocks_json");
   }
   tagBlocks(index: number): any {
-    const s = this.#w.takeStr((this.#w.exports.pure_engine_tag_blocks_json as Function)(this.#engine, index) as number);
+    const s = this.#w.takeStr((this.#w.exports.plumbline_engine_tag_blocks_json as Function)(this.#engine, index) as number);
     return s === null ? null : JSON.parse(s);
   }
   weavesBlocks(): any {
-    return this.#json("pure_engine_weaves_blocks_json");
+    return this.#json("plumbline_engine_weaves_blocks_json");
   }
   suggestedBlocks(): any {
-    return this.#json("pure_engine_suggested_blocks_json");
+    return this.#json("plumbline_engine_suggested_blocks_json");
   }
   compareBlocks(index: number, full: boolean): any {
     const s = this.#w.takeStr(
-      (this.#w.exports.pure_engine_compare_blocks_json as Function)(this.#engine, index, full ? 1 : 0) as number,
+      (this.#w.exports.plumbline_engine_compare_blocks_json as Function)(this.#engine, index, full ? 1 : 0) as number,
     );
     return s === null ? null : JSON.parse(s);
   }
   searchBlocks(query: string): any {
-    return this.#json("pure_engine_search_blocks_json", query);
+    return this.#json("plumbline_engine_search_blocks_json", query);
   }
 
   // ── authoring (null = success, else error string; home syncs after) ────────
 
   threadAdd(name: string, refKey: string, note: string | null, added: string): string | null {
-    return this.#author("pure_engine_thread_add", (f, ...p) => f(this.#engine, ...p), [name, refKey, note, added]);
+    return this.#author("plumbline_engine_thread_add", (f, ...p) => f(this.#engine, ...p), [name, refKey, note, added]);
   }
   tagAdd(name: string, kind: string, value: string, note: string | null, added: string): string | null {
-    return this.#author("pure_engine_tag_add", (f, ...p) => f(this.#engine, ...p), [name, kind, value, note, added]);
+    return this.#author("plumbline_engine_tag_add", (f, ...p) => f(this.#engine, ...p), [name, kind, value, note, added]);
   }
   tagRemove(name: string, kind: string, value: string): string | null {
-    return this.#author("pure_engine_tag_remove", (f, ...p) => f(this.#engine, ...p), [name, kind, value]);
+    return this.#author("plumbline_engine_tag_remove", (f, ...p) => f(this.#engine, ...p), [name, kind, value]);
   }
   weaveAddLink(name: string, aRef: string, bRef: string, added: string): string | null {
-    return this.#author("pure_engine_weave_add_link", (f, ...p) => f(this.#engine, ...p), [name, aRef, bRef, added]);
+    return this.#author("plumbline_engine_weave_add_link", (f, ...p) => f(this.#engine, ...p), [name, aRef, bRef, added]);
   }
   weaveAddLinkSpans(
     name: string, aRef: string, bRef: string,
     aLo: number, aHi: number, bLo: number, bHi: number, added: string,
   ): string | null {
     return this.#author(
-      "pure_engine_weave_add_link_spans",
+      "plumbline_engine_weave_add_link_spans",
       (f, n, a, b, ad) => f(this.#engine, n, a, b, aLo, aHi, bLo, bHi, ad),
       [name, aRef, bRef, added],
     );
@@ -340,7 +340,7 @@ export class StudyEngine {
   /** Weave a tag's passages (or a refKey subset) into a canon-ordered chain;
    *  null weaveName reuses the tag's name. Re-runs only add new edges. */
   weaveFromTag(tagName: string, refsJson: string | null, weaveName: string | null, added: string): string | null {
-    return this.#author("pure_engine_weave_from_tag", (f, ...p) => f(this.#engine, ...p), [
+    return this.#author("plumbline_engine_weave_from_tag", (f, ...p) => f(this.#engine, ...p), [
       tagName,
       refsJson,
       weaveName,
@@ -348,69 +348,69 @@ export class StudyEngine {
     ]);
   }
   weaveApprove(index: number): string | null {
-    const err = this.#w.takeStr((this.#w.exports.pure_engine_weave_approve as Function)(this.#engine, index) as number);
+    const err = this.#w.takeStr((this.#w.exports.plumbline_engine_weave_approve as Function)(this.#engine, index) as number);
     if (err === null) this.onAuthored();
     return err;
   }
   weaveReject(index: number): string | null {
-    const err = this.#w.takeStr((this.#w.exports.pure_engine_weave_reject as Function)(this.#engine, index) as number);
+    const err = this.#w.takeStr((this.#w.exports.plumbline_engine_weave_reject as Function)(this.#engine, index) as number);
     if (err === null) this.onAuthored();
     return err;
   }
   threadSetNotes(name: string, notes: string): string | null {
-    return this.#author("pure_engine_thread_set_notes", (f, ...p) => f(this.#engine, ...p), [name, notes]);
+    return this.#author("plumbline_engine_thread_set_notes", (f, ...p) => f(this.#engine, ...p), [name, notes]);
   }
   threadEntrySetNote(name: string, index: number, note: string): string | null {
     return this.#author(
-      "pure_engine_thread_entry_set_note",
+      "plumbline_engine_thread_entry_set_note",
       (f, n, no) => f(this.#engine, n, index, no),
       [name, note],
     );
   }
   weaveSetNotes(name: string, notes: string): string | null {
-    return this.#author("pure_engine_weave_set_notes", (f, ...p) => f(this.#engine, ...p), [name, notes]);
+    return this.#author("plumbline_engine_weave_set_notes", (f, ...p) => f(this.#engine, ...p), [name, notes]);
   }
   userNoteSet(refKey: string, text: string, stamp: string): string | null {
-    return this.#author("pure_engine_user_note_set", (f, ...p) => f(this.#engine, ...p), [refKey, text, stamp]);
+    return this.#author("plumbline_engine_user_note_set", (f, ...p) => f(this.#engine, ...p), [refKey, text, stamp]);
   }
   tagSetColor(name: string, color: string): string | null {
-    return this.#author("pure_engine_tag_set_color", (f, ...p) => f(this.#engine, ...p), [name, color]);
+    return this.#author("plumbline_engine_tag_set_color", (f, ...p) => f(this.#engine, ...p), [name, color]);
   }
   highlightAdd(
     name: string, color: string,
     startRef: string, startTok: number, endRef: string, endTok: number, added: string,
   ): string | null {
     return this.#author(
-      "pure_engine_highlight_add",
+      "plumbline_engine_highlight_add",
       (f, n, c, s, e, a) => f(this.#engine, n, c, s, startTok, e, endTok, a),
       [name, color, startRef, endRef, added],
     );
   }
   highlightRemove(name: string, startRef: string, startTok: number, endRef: string, endTok: number): string | null {
     return this.#author(
-      "pure_engine_highlight_remove",
+      "plumbline_engine_highlight_remove",
       (f, n, s, e) => f(this.#engine, n, s, startTok, e, endTok),
       [name, startRef, endRef],
     );
   }
   highlightClearVerse(verseRef: string): string | null {
-    return this.#author("pure_engine_highlight_clear_verse", (f, ...p) => f(this.#engine, ...p), [verseRef]);
+    return this.#author("plumbline_engine_highlight_clear_verse", (f, ...p) => f(this.#engine, ...p), [verseRef]);
   }
 
   // ── user notes / highlights / copy ─────────────────────────────────────────
 
   copyText(refKey: string, kind: string): string | null {
-    return this.#text("pure_engine_copy_text", refKey, kind);
+    return this.#text("plumbline_engine_copy_text", refKey, kind);
   }
   userNote(refKey: string): any {
-    return this.#json("pure_engine_user_note_json", refKey);
+    return this.#json("plumbline_engine_user_note_json", refKey);
   }
   userNotes(): any {
-    return this.#json("pure_engine_user_notes_json");
+    return this.#json("plumbline_engine_user_notes_json");
   }
   chapterHighlights(book: string, chapter: number): any {
     const s = this.#call(
-      (b) => this.#w.takeStr((this.#w.exports.pure_engine_chapter_highlights_json as Function)(this.#engine, b, chapter) as number),
+      (b) => this.#w.takeStr((this.#w.exports.plumbline_engine_chapter_highlights_json as Function)(this.#engine, b, chapter) as number),
       [book],
     );
     return s === null ? null : JSON.parse(s);
@@ -419,35 +419,35 @@ export class StudyEngine {
   // ── memorization ────────────────────────────────────────────────────────────
 
   memoryAdd(verseRef: string, now: string): string | null {
-    return this.#author("pure_engine_memory_add", (f, ...p) => f(this.#engine, ...p), [verseRef, now]);
+    return this.#author("plumbline_engine_memory_add", (f, ...p) => f(this.#engine, ...p), [verseRef, now]);
   }
   memoryGrade(verseRef: string, grade: Grade, now: string): string | null {
-    return this.#author("pure_engine_memory_grade", (f, ...p) => f(this.#engine, ...p), [verseRef, grade, now]);
+    return this.#author("plumbline_engine_memory_grade", (f, ...p) => f(this.#engine, ...p), [verseRef, grade, now]);
   }
   memoryRemove(verseRef: string): string | null {
-    return this.#author("pure_engine_memory_remove", (f, ...p) => f(this.#engine, ...p), [verseRef]);
+    return this.#author("plumbline_engine_memory_remove", (f, ...p) => f(this.#engine, ...p), [verseRef]);
   }
   memoryCard(verseRef: string): any {
-    return this.#json("pure_engine_memory_card_json", verseRef);
+    return this.#json("plumbline_engine_memory_card_json", verseRef);
   }
   memoryDue(now: string): any {
-    return this.#json("pure_engine_memory_due_json", now);
+    return this.#json("plumbline_engine_memory_due_json", now);
   }
   memoryCoverage(now: string): any {
-    return this.#json("pure_engine_memory_coverage_json", now);
+    return this.#json("plumbline_engine_memory_coverage_json", now);
   }
   memoryActivity(): any {
-    return this.#json("pure_engine_memory_activity_json");
+    return this.#json("plumbline_engine_memory_activity_json");
   }
   memoryDrill(verseRef: string, level: number): any {
     const s = this.#call(
-      (r) => this.#w.takeStr((this.#w.exports.pure_engine_memory_drill_json as Function)(this.#engine, r, level) as number),
+      (r) => this.#w.takeStr((this.#w.exports.plumbline_engine_memory_drill_json as Function)(this.#engine, r, level) as number),
       [verseRef],
     );
     return s === null ? null : JSON.parse(s);
   }
   memoryScore(verseRef: string, typed: string): any {
-    return this.#json("pure_engine_memory_score_json", verseRef, typed);
+    return this.#json("plumbline_engine_memory_score_json", verseRef, typed);
   }
 }
 
@@ -455,45 +455,45 @@ export class StudyEngine {
 
 export function routeLink(w: WasmEngine, uri: string): any {
   const p = w.inStr(uri);
-  const s = w.takeStr((w.exports.pure_route_link_json as Function)(p) as number);
+  const s = w.takeStr((w.exports.plumbline_route_link_json as Function)(p) as number);
   w.freeStr(p);
   return s === null ? null : JSON.parse(s);
 }
 
 export function configLoad(w: WasmEngine): any {
-  const s = w.takeStr((w.exports.pure_config_load_json as Function)() as number);
+  const s = w.takeStr((w.exports.plumbline_config_load_json as Function)() as number);
   return s === null ? null : JSON.parse(s);
 }
 
 export function configSave(w: WasmEngine, config: unknown): string | null {
   const p = w.inStr(JSON.stringify(config));
-  const err = w.takeStr((w.exports.pure_config_save_json as Function)(p) as number);
+  const err = w.takeStr((w.exports.plumbline_config_save_json as Function)(p) as number);
   w.freeStr(p);
   return err;
 }
 
 export function themePalette(w: WasmEngine, theme: string): any {
   const p = w.inStr(theme);
-  const s = w.takeStr((w.exports.pure_theme_palette_json as Function)(p) as number);
+  const s = w.takeStr((w.exports.plumbline_theme_palette_json as Function)(p) as number);
   w.freeStr(p);
   return s === null ? null : JSON.parse(s);
 }
 
 export function highlightTones(w: WasmEngine): any {
-  const s = w.takeStr((w.exports.pure_theme_highlight_tones_json as Function)() as number);
+  const s = w.takeStr((w.exports.plumbline_theme_highlight_tones_json as Function)() as number);
   return s === null ? null : JSON.parse(s);
 }
 
 export function guideBlocks(w: WasmEngine): any {
-  const s = w.takeStr((w.exports.pure_panel_guide_blocks_json as Function)() as number);
+  const s = w.takeStr((w.exports.plumbline_panel_guide_blocks_json as Function)() as number);
   return s === null ? null : JSON.parse(s);
 }
 
 export function aboutBlocks(w: WasmEngine): any {
-  const s = w.takeStr((w.exports.pure_panel_about_blocks_json as Function)() as number);
+  const s = w.takeStr((w.exports.plumbline_panel_about_blocks_json as Function)() as number);
   return s === null ? null : JSON.parse(s);
 }
 
 export function engineVersion(w: WasmEngine): string {
-  return w.takeStr((w.exports.pure_study_version as Function)() as number) ?? "?";
+  return w.takeStr((w.exports.plumbline_version as Function)() as number) ?? "?";
 }

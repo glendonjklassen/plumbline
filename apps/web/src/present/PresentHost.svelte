@@ -1,9 +1,9 @@
 <script lang="ts">
-  // Present mode (Android parity, Glendon's #1): a thread as a fullscreen,
-  // high-contrast ("sunlight") large-type presentation for showing someone in
-  // person. Picker → scrollable overview → tap-to-focus huge → end card with
-  // plain-text share + BibleGateway link. Deliberately hard-coded light — the
-  // phone/laptop gets handed across in daylight.
+  // Present mode (Android parity, the top-priority request): a thread as a
+  // fullscreen, high-contrast ("sunlight") large-type presentation for showing
+  // someone in person. Picker → scrollable overview → tap-to-focus huge → end
+  // card with plain-text share + BibleGateway link. Deliberately hard-coded
+  // light — the phone/laptop gets handed across in daylight.
   import { getSession } from "../state/session.svelte";
 
   const s = getSession();

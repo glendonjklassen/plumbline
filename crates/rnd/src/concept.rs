@@ -14,9 +14,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use pure_core::corpus::Corpus;
-use pure_core::reference::OT_NT_DIVIDE;
-use pure_core::canon;
+use plumbline_core::corpus::Corpus;
+use plumbline_core::reference::OT_NT_DIVIDE;
+use plumbline_core::canon;
 
 /// How many of a concept's strongest cross-testament partners feed the
 /// dispersion strip's "bridge" row — kept small so the row shows the
@@ -350,7 +350,7 @@ impl Concept {
 ///
 /// The one spoke assembly behind the concept-map popup (review item 4): GTK
 /// calls it directly; the non-Rust shells get the same spokes (with labels
-/// pre-baked) through `pure_engine_concept_map_json`.
+/// pre-baked) through `plumbline_engine_concept_map_json`.
 pub fn radial_spokes(near: &[String], community: &[String], n: usize) -> Vec<(String, bool)> {
     let mut spokes: Vec<(String, bool)> = Vec::new();
     for c in near.iter().take(n) {
@@ -418,7 +418,7 @@ mod tests {
             "{\"b\":\"Gen\",\"c\":1,\"v\":2,\"t\":[[\"\",\"w\",\"\",[\"H5\"],0],[\"\",\"w\",\"\",[\"H1\",\"H5\"],0]]}\n",
             "{\"b\":\"Gen\",\"c\":1,\"v\":3,\"t\":[[\"\",\"w\",\"\",[\"H1\"],0],[\"\",\"w\",\"\",[\"H5\"],0]]}\n",
         );
-        let corpus = pure_core::corpus::from_str(jsonl).unwrap();
+        let corpus = plumbline_core::corpus::from_str(jsonl).unwrap();
         let co = co_occurrence(&corpus);
         let key = |a: &str, b: &str| (a.to_string(), b.to_string());
         assert_eq!(co.get(&key("H5", "H9")).copied(), Some(1));

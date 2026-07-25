@@ -1,4 +1,4 @@
-//! `pure-ffi` — the single, flat C ABI over `pure-core` + `pure-layout`.
+//! `plumbline-ffi` — the single, flat C ABI over `plumbline-core` + `plumbline-layout`.
 //!
 //! Decision #1 (native-per-platform) says: define the app's data surface
 //! **once** here as a C ABI, then let each native UI bind to it — csbindgen /
@@ -8,8 +8,8 @@
 //!
 //! ## Shape of the ABI
 //!
-//! * Two **opaque handles**: [`PureEngine`] (the loaded corpus + Strong's +
-//!   search/occurrence indices) and [`PureDisplayList`] (one laid-out chapter).
+//! * Two **opaque handles**: [`PlumblineEngine`] (the loaded corpus + Strong's +
+//!   search/occurrence indices) and [`PlumblineDisplayList`] (one laid-out chapter).
 //!   C sees them as forward-declared structs; only these functions touch them.
 //! * **Primitives** for scalar params (chapter numbers, coordinates).
 //! * **JSON** (NUL-terminated UTF-8) for every structured return value. JSON is
@@ -17,31 +17,31 @@
 //!   ABI tiny and stable (a future field is additive, not a struct-layout
 //!   break), and it is exactly what a cross-device sync SaaS will speak later.
 //!   The wire schemas live in the [`wire`] module and are the frozen contract.
-//! * Layout keeps living in Rust: the caller passes a [`PureMeasureFn`] callback
-//!   so `pure_layout::layout_chapter` measures text with the platform's own
+//! * Layout keeps living in Rust: the caller passes a [`PlumblineMeasureFn`] callback
+//!   so `plumbline_layout::layout_chapter` measures text with the platform's own
 //!   engine (Pango/DirectWrite/Android) while the hard line-breaking + per-word
 //!   hit-region bookkeeping stays written once, here.
 //!
 //! ## Memory & safety contract (read before binding)
 //!
-//! * Every `*mut c_char` returned by a `pure_*` function is owned by the caller
-//!   and must be released with [`pure_study_string_free`]. A null return means
+//! * Every `*mut c_char` returned by a `plumbline_*` function is owned by the caller
+//!   and must be released with [`plumbline_string_free`]. A null return means
 //!   "no value" (blank query, unknown code) or an error (see per-fn docs).
-//! * Every handle (`*mut PureEngine`, `*mut PureDisplayList`) must be released
+//! * Every handle (`*mut PlumblineEngine`, `*mut PlumblineDisplayList`) must be released
 //!   with its matching `*_free`. Freeing null is a no-op; double-free is UB.
 //! * Input `*const c_char` / byte pointers are **borrowed for the call only**;
 //!   the caller keeps ownership. Strings must be valid UTF-8.
 //! * Every entry point is wrapped in `catch_unwind`: a Rust panic can never
 //!   unwind across the C boundary (that would be UB). A panic surfaces as a
 //!   null / `0` / `0.0` return instead.
-//! * A `*const PureEngine` may be shared across threads for these read-only
-//!   calls; a `*mut PureDisplayList` is single-owner (do not hit-test one from
+//! * A `*const PlumblineEngine` may be shared across threads for these read-only
+//!   calls; a `*mut PlumblineDisplayList` is single-owner (do not hit-test one from
 //!   two threads at once — though all calls here are `&`-only, so it is in
 //!   practice also safe to read concurrently).
 
 // Wasm-only shims for the web shell's TS binding — not part of the native C
 // ABI surface (header / C# / Kotlin). cbindgen doesn't evaluate `cfg`, so
-// pure-bindgen excludes this module's items by name; keep its exclude list in
+// plumbline-bindgen excludes this module's items by name; keep its exclude list in
 // step with the exports here.
 #[cfg(target_arch = "wasm32")]
 mod wasm;
@@ -52,24 +52,24 @@ use std::path::PathBuf;
 use std::ptr;
 use std::sync::OnceLock;
 
-use pure_core::config;
-use pure_core::corpus::{self, Corpus};
-use pure_core::crossref::{self, XRefIx};
-use pure_core::renderings::Renderings;
-use pure_core::search::{self, Notes, SearchIx};
-use pure_core::strongs::{self, OccurrenceIx, StrongsDict};
-use pure_core::memory;
-use pure_core::tag::{self, LoadedTag, TagTarget};
-use pure_core::thread::{self, LoadedThread, ThreadEntry};
-use pure_core::weave::{self, Link, LoadedWeave, WeaveKind};
-use pure_core::panel::{self, PanelSource};
-use pure_core::{canon, export, notes, theme, usernote, VRef};
-use pure_layout::{layout_chapter, DisplayList, LayoutConfig, Measure};
-use pure_rnd::{bridge, burst, concept, embed, morph};
+use plumbline_core::config;
+use plumbline_core::corpus::{self, Corpus};
+use plumbline_core::crossref::{self, XRefIx};
+use plumbline_core::renderings::Renderings;
+use plumbline_core::search::{self, Notes, SearchIx};
+use plumbline_core::strongs::{self, OccurrenceIx, StrongsDict};
+use plumbline_core::memory;
+use plumbline_core::tag::{self, LoadedTag, TagTarget};
+use plumbline_core::thread::{self, LoadedThread, ThreadEntry};
+use plumbline_core::weave::{self, Link, LoadedWeave, WeaveKind};
+use plumbline_core::panel::{self, PanelSource};
+use plumbline_core::{canon, export, notes, theme, usernote, VRef};
+use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure};
+use plumbline_rnd::{bridge, burst, concept, embed, morph};
 
 mod wire;
 
-// ── token flag bits (mirror `pure_core::corpus::FLAG_*`; exported to bindings)──
+// ── token flag bits (mirror `plumbline_core::corpus::FLAG_*`; exported to bindings)──
 //
 // Written as bare literals (not `= corpus::FLAG_*`) so cbindgen can const-fold
 // them into `#define`s in the C header. The `const _` assertions below fail the
@@ -77,18 +77,18 @@ mod wire;
 // stays honest without costing the bindings.
 
 /// Word supplied by the KJV translators (rendered in italics).
-pub const PURE_FLAG_ADDED: u32 = 1;
+pub const PLUMBLINE_FLAG_ADDED: u32 = 1;
 /// The divine name.
-pub const PURE_FLAG_DIVINE: u32 = 2;
+pub const PLUMBLINE_FLAG_DIVINE: u32 = 2;
 /// Psalm superscription / title text.
-pub const PURE_FLAG_TITLE: u32 = 4;
+pub const PLUMBLINE_FLAG_TITLE: u32 = 4;
 /// A paragraph mark (¶) precedes this word.
-pub const PURE_FLAG_PARA: u32 = 8;
+pub const PLUMBLINE_FLAG_PARA: u32 = 8;
 
-const _: () = assert!(PURE_FLAG_ADDED == corpus::FLAG_ADDED);
-const _: () = assert!(PURE_FLAG_DIVINE == corpus::FLAG_DIVINE);
-const _: () = assert!(PURE_FLAG_TITLE == corpus::FLAG_TITLE);
-const _: () = assert!(PURE_FLAG_PARA == corpus::FLAG_PARA);
+const _: () = assert!(PLUMBLINE_FLAG_ADDED == corpus::FLAG_ADDED);
+const _: () = assert!(PLUMBLINE_FLAG_DIVINE == corpus::FLAG_DIVINE);
+const _: () = assert!(PLUMBLINE_FLAG_TITLE == corpus::FLAG_TITLE);
+const _: () = assert!(PLUMBLINE_FLAG_PARA == corpus::FLAG_PARA);
 
 /// How many verse references an occurrence list returns before it is capped
 /// (`total` in the JSON stays honest above this).
@@ -99,15 +99,15 @@ pub const OCCURRENCE_CAP: usize = 500;
 /// can fail loudly instead of silently reading nulls; purely additive fields
 /// do not bump it. Exported to the C header; golden samples are pinned in
 /// `tests.rs`.
-pub const PURE_WIRE_VERSION: u32 = 1;
+pub const PLUMBLINE_WIRE_VERSION: u32 = 1;
 
 // ── opaque handles ────────────────────────────────────────────────────────────
 
 /// The loaded, immutable study core: corpus + Strong's dictionary + the search
 /// and occurrence indices every lookup rides on. Opaque to C; construct with
-/// [`pure_engine_open`] / [`pure_engine_open_from_bytes`], release with
-/// [`pure_engine_free`].
-pub struct PureEngine {
+/// [`plumbline_engine_open`] / [`plumbline_engine_open_from_bytes`], release with
+/// [`plumbline_engine_free`].
+pub struct PlumblineEngine {
     corpus: Corpus,
     strongs: StrongsDict,
     search_ix: SearchIx,
@@ -120,7 +120,7 @@ pub struct PureEngine {
     home: Option<PathBuf>,
     /// Personal study data (margin notes, threads, tags, the weave graph),
     /// loaded from `home` and **reloaded after any authoring write** — so it
-    /// sits behind an RwLock: the README promises `*const PureEngine` is safe
+    /// sits behind an RwLock: the README promises `*const PlumblineEngine` is safe
     /// to share across threads for reads, and a C# shell may author off its UI
     /// thread while another thread reads.
     study: std::sync::RwLock<StudyData>,
@@ -143,8 +143,8 @@ pub struct PureEngine {
     leitwort: OnceLock<std::collections::HashMap<String, burst::Burst>>,
 }
 
-impl PureEngine {
-    fn new(corpus: Corpus, strongs: StrongsDict, home: Option<PathBuf>) -> PureEngine {
+impl PlumblineEngine {
+    fn new(corpus: Corpus, strongs: StrongsDict, home: Option<PathBuf>) -> PlumblineEngine {
         let search_ix = SearchIx::build(&corpus);
         let occ_ix = OccurrenceIx::build(&corpus);
         let renderings = Renderings::build(&corpus);
@@ -176,7 +176,7 @@ impl PureEngine {
         // threads/tags/weaves only), so attach them to the search index once.
         let mut search_ix = search_ix;
         search_ix.attach_notes(&corpus, &study.notes);
-        PureEngine {
+        PlumblineEngine {
             corpus,
             strongs,
             search_ix,
@@ -229,7 +229,7 @@ impl PureEngine {
 
 }
 
-/// The reloadable personal study state (see [`PureEngine::study`]).
+/// The reloadable personal study state (see [`PlumblineEngine::study`]).
 #[derive(Default)]
 struct StudyData {
     notes: Notes,
@@ -256,28 +256,28 @@ fn load_study(home: &Option<PathBuf>) -> StudyData {
     }
 }
 
-// The ABI promises `*const PureEngine` is safe to share across threads for
+// The ABI promises `*const PlumblineEngine` is safe to share across threads for
 // reads while authoring may happen on another thread — which is exactly
 // `Send + Sync`. Fails to compile if a field ever loses that property.
 fn _assert_engine_is_send_sync() {
     fn assert<T: Send + Sync>() {}
-    assert::<PureEngine>();
+    assert::<PlumblineEngine>();
 }
 
 /// One laid-out chapter: the positioned display list a shell paints and
-/// hit-tests. Opaque to C; produced by [`pure_engine_layout_chapter`], released
-/// with [`pure_layout_free`].
-pub struct PureDisplayList {
+/// hit-tests. Opaque to C; produced by [`plumbline_engine_layout_chapter`], released
+/// with [`plumbline_layout_free`].
+pub struct PlumblineDisplayList {
     inner: DisplayList,
 }
 
 // ── layout config + measurement callback ──────────────────────────────────────
 
 /// Layout parameters, all in device pixels — the C-ABI mirror of
-/// `pure_layout::LayoutConfig` (passed by value, so it is `#[repr(C)]`).
+/// `plumbline_layout::LayoutConfig` (passed by value, so it is `#[repr(C)]`).
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct PureLayoutConfig {
+pub struct PlumblineLayoutConfig {
     pub width: f32,
     pub line_height: f32,
     pub space_width: f32,
@@ -288,8 +288,8 @@ pub struct PureLayoutConfig {
     pub verse_break: u32,
 }
 
-impl From<PureLayoutConfig> for LayoutConfig {
-    fn from(c: PureLayoutConfig) -> LayoutConfig {
+impl From<PlumblineLayoutConfig> for LayoutConfig {
+    fn from(c: PlumblineLayoutConfig) -> LayoutConfig {
         LayoutConfig {
             width: c.width,
             line_height: c.line_height,
@@ -316,7 +316,7 @@ impl From<PureLayoutConfig> for LayoutConfig {
 /// undefined behaviour — on .NET it fast-fails the process, on JNA it is
 /// swallowed and reported as `0.0`. A returned `NaN`/negative is clamped to
 /// `0.0` here (a degraded but safe layout) rather than corrupting line-breaking.
-pub type PureMeasureFn = Option<extern "C" fn(ctx: *mut c_void, text: *const c_char) -> f32>;
+pub type PlumblineMeasureFn = Option<extern "C" fn(ctx: *mut c_void, text: *const c_char) -> f32>;
 
 /// Adapts a C measurement callback to the [`Measure`] trait the layout wants.
 struct FfiMeasure {
@@ -399,19 +399,19 @@ unsafe fn set_err(out_err: *mut *mut c_char, msg: String) {
 
 // ── version probe (kept from the stub) ─────────────────────────────────────────
 
-/// The pure-study core version as a caller-freed NUL-terminated UTF-8 string.
+/// The Plumbline core version as a caller-freed NUL-terminated UTF-8 string.
 /// Never null.
 #[no_mangle]
-pub extern "C" fn pure_study_version() -> *mut c_char {
+pub extern "C" fn plumbline_version() -> *mut c_char {
     out_string(env!("CARGO_PKG_VERSION").to_string())
 }
 
-/// Free a string previously returned by any `pure_*` function. Null is a no-op.
+/// Free a string previously returned by any `plumbline_*` function. Null is a no-op.
 ///
 /// # Safety
 /// `ptr` must be a pointer returned by this library and not already freed.
 #[no_mangle]
-pub unsafe extern "C" fn pure_study_string_free(ptr: *mut c_char) {
+pub unsafe extern "C" fn plumbline_string_free(ptr: *mut c_char) {
     if !ptr.is_null() {
         drop(CString::from_raw(ptr));
     }
@@ -429,10 +429,10 @@ pub unsafe extern "C" fn pure_study_string_free(ptr: *mut c_char) {
 /// `home` is a valid NUL-terminated UTF-8 path; `out_err` is null or a writable
 /// slot for one `*mut c_char`.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_open(
+pub unsafe extern "C" fn plumbline_engine_open(
     home: *const c_char,
     out_err: *mut *mut c_char,
-) -> *mut PureEngine {
+) -> *mut PlumblineEngine {
     guard(ptr::null_mut(), || {
         if !out_err.is_null() {
             *out_err = ptr::null_mut();
@@ -455,7 +455,7 @@ pub unsafe extern "C" fn pure_engine_open(
                 return ptr::null_mut();
             }
         };
-        Box::into_raw(Box::new(PureEngine::new(corpus, strongs, Some(PathBuf::from(home)))))
+        Box::into_raw(Box::new(PlumblineEngine::new(corpus, strongs, Some(PathBuf::from(home)))))
     })
 }
 
@@ -463,20 +463,20 @@ pub unsafe extern "C" fn pure_engine_open(
 /// assets/resources (decision #3): the `kjv.jsonl` text and the `strongs.json`
 /// object, each as a length-delimited byte buffer (need not be NUL-terminated).
 ///
-/// Returns null on failure; `out_err` behaves as in [`pure_engine_open`].
+/// Returns null on failure; `out_err` behaves as in [`plumbline_engine_open`].
 ///
 /// # Safety
 /// Each `*_ptr`/`*_len` pair describes a readable buffer of that length (a null
 /// pointer with length 0 is treated as empty and will error); `out_err` is null
 /// or a writable slot.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_open_from_bytes(
+pub unsafe extern "C" fn plumbline_engine_open_from_bytes(
     kjv_ptr: *const u8,
     kjv_len: usize,
     strongs_ptr: *const u8,
     strongs_len: usize,
     out_err: *mut *mut c_char,
-) -> *mut PureEngine {
+) -> *mut PlumblineEngine {
     guard(ptr::null_mut(), || {
         if !out_err.is_null() {
             *out_err = ptr::null_mut();
@@ -514,16 +514,16 @@ pub unsafe extern "C" fn pure_engine_open_from_bytes(
             }
         };
         // No home when opened from bytes: study data is empty and read-only.
-        Box::into_raw(Box::new(PureEngine::new(corpus, strongs, None)))
+        Box::into_raw(Box::new(PlumblineEngine::new(corpus, strongs, None)))
     })
 }
 
 /// Release an engine. Null is a no-op.
 ///
 /// # Safety
-/// `engine` must be a pointer from `pure_engine_open*` and not already freed.
+/// `engine` must be a pointer from `plumbline_engine_open*` and not already freed.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_free(engine: *mut PureEngine) {
+pub unsafe extern "C" fn plumbline_engine_free(engine: *mut PlumblineEngine) {
     if !engine.is_null() {
         drop(Box::from_raw(engine));
     }
@@ -539,7 +539,7 @@ pub unsafe extern "C" fn pure_engine_free(engine: *mut PureEngine) {
 /// # Safety
 /// `engine` is a valid engine pointer.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_toc_json(engine: *const PureEngine) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_toc_json(engine: *const PlumblineEngine) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let Some(engine) = engine.as_ref() else {
             return ptr::null_mut();
@@ -563,8 +563,8 @@ pub unsafe extern "C" fn pure_engine_toc_json(engine: *const PureEngine) -> *mut
 /// # Safety
 /// `engine` is valid; `book` is a valid NUL-terminated UTF-8 string.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_chapter_count(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_chapter_count(
+    engine: *const PlumblineEngine,
     book: *const c_char,
 ) -> u32 {
     guard(0, || {
@@ -583,8 +583,8 @@ pub unsafe extern "C" fn pure_engine_chapter_count(
 /// # Safety
 /// `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_verse_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_verse_json(
+    engine: *const PlumblineEngine,
     ref_key: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -607,8 +607,8 @@ pub unsafe extern "C" fn pure_engine_verse_json(
 /// # Safety
 /// `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_token_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_token_json(
+    engine: *const PlumblineEngine,
     ref_key: *const c_char,
     token_index: u32,
 ) -> *mut c_char {
@@ -634,7 +634,7 @@ pub unsafe extern "C" fn pure_engine_token_json(
 
 /// Lay out a chapter into a display list, measuring text through `measure`
 /// (called with `measure_ctx`). Returns an opaque handle to release with
-/// [`pure_layout_free`], or null on a null engine, a null callback, or an
+/// [`plumbline_layout_free`], or null on a null engine, a null callback, or an
 /// unknown/out-of-range book+chapter (no such verses). Because the KJV has no
 /// empty chapters, a null return reliably means "past the end" — a shell can
 /// page by advancing until it gets null.
@@ -644,14 +644,14 @@ pub unsafe extern "C" fn pure_engine_token_json(
 /// is a valid function pointer for the call and `measure_ctx` is whatever it
 /// expects (it is passed back verbatim).
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_layout_chapter(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_layout_chapter(
+    engine: *const PlumblineEngine,
     book: *const c_char,
     chapter: u32,
-    cfg: PureLayoutConfig,
-    measure: PureMeasureFn,
+    cfg: PlumblineLayoutConfig,
+    measure: PlumblineMeasureFn,
     measure_ctx: *mut c_void,
-) -> *mut PureDisplayList {
+) -> *mut PlumblineDisplayList {
     guard(ptr::null_mut(), || {
         let (Some(engine), Some(book), Some(measure)) =
             (engine.as_ref(), opt_str(book), measure)
@@ -670,7 +670,7 @@ pub unsafe extern "C" fn pure_engine_layout_chapter(
         }
         let m = FfiMeasure { f: measure, ctx: measure_ctx };
         let dl = layout_chapter(verses, &m, &cfg.into());
-        Box::into_raw(Box::new(PureDisplayList { inner: dl }))
+        Box::into_raw(Box::new(PlumblineDisplayList { inner: dl }))
     })
 }
 
@@ -681,7 +681,7 @@ pub unsafe extern "C" fn pure_engine_layout_chapter(
 /// # Safety
 /// `dl` is a valid display-list pointer.
 #[no_mangle]
-pub unsafe extern "C" fn pure_layout_to_json(dl: *const PureDisplayList) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_layout_to_json(dl: *const PlumblineDisplayList) -> *mut c_char {
     guard(ptr::null_mut(), || match dl.as_ref() {
         Some(dl) => out_json(&wire::display_list_to_wire(&dl.inner)),
         None => ptr::null_mut(),
@@ -693,7 +693,7 @@ pub unsafe extern "C" fn pure_layout_to_json(dl: *const PureDisplayList) -> *mut
 /// # Safety
 /// `dl` is a valid display-list pointer.
 #[no_mangle]
-pub unsafe extern "C" fn pure_layout_height(dl: *const PureDisplayList) -> f32 {
+pub unsafe extern "C" fn plumbline_layout_height(dl: *const PlumblineDisplayList) -> f32 {
     guard(0.0, || dl.as_ref().map(|d| d.inner.height).unwrap_or(0.0))
 }
 
@@ -702,7 +702,7 @@ pub unsafe extern "C" fn pure_layout_height(dl: *const PureDisplayList) -> f32 {
 /// # Safety
 /// `dl` is a valid display-list pointer.
 #[no_mangle]
-pub unsafe extern "C" fn pure_layout_width(dl: *const PureDisplayList) -> f32 {
+pub unsafe extern "C" fn plumbline_layout_width(dl: *const PlumblineDisplayList) -> f32 {
     guard(0.0, || dl.as_ref().map(|d| d.inner.width).unwrap_or(0.0))
 }
 
@@ -711,7 +711,7 @@ pub unsafe extern "C" fn pure_layout_width(dl: *const PureDisplayList) -> f32 {
 /// # Safety
 /// `dl` is a valid display-list pointer.
 #[no_mangle]
-pub unsafe extern "C" fn pure_layout_item_count(dl: *const PureDisplayList) -> u32 {
+pub unsafe extern "C" fn plumbline_layout_item_count(dl: *const PlumblineDisplayList) -> u32 {
     guard(0, || dl.as_ref().map(|d| d.inner.items.len() as u32).unwrap_or(0))
 }
 
@@ -722,8 +722,8 @@ pub unsafe extern "C" fn pure_layout_item_count(dl: *const PureDisplayList) -> u
 /// # Safety
 /// `dl` is a valid display-list pointer.
 #[no_mangle]
-pub unsafe extern "C" fn pure_layout_hit_test_json(
-    dl: *const PureDisplayList,
+pub unsafe extern "C" fn plumbline_layout_hit_test_json(
+    dl: *const PlumblineDisplayList,
     x: f32,
     y: f32,
 ) -> *mut c_char {
@@ -741,10 +741,10 @@ pub unsafe extern "C" fn pure_layout_hit_test_json(
 /// Release a display list. Null is a no-op.
 ///
 /// # Safety
-/// `dl` must be a pointer from [`pure_engine_layout_chapter`] and not already
+/// `dl` must be a pointer from [`plumbline_engine_layout_chapter`] and not already
 /// freed.
 #[no_mangle]
-pub unsafe extern "C" fn pure_layout_free(dl: *mut PureDisplayList) {
+pub unsafe extern "C" fn plumbline_layout_free(dl: *mut PlumblineDisplayList) {
     if !dl.is_null() {
         drop(Box::from_raw(dl));
     }
@@ -758,8 +758,8 @@ pub unsafe extern "C" fn pure_layout_free(dl: *mut PureDisplayList) {
 /// # Safety
 /// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_strongs_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_strongs_json(
+    engine: *const PlumblineEngine,
     code: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -781,8 +781,8 @@ pub unsafe extern "C" fn pure_engine_strongs_json(
 /// # Safety
 /// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_strongs_occurrences_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_strongs_occurrences_json(
+    engine: *const PlumblineEngine,
     code: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -811,8 +811,8 @@ pub unsafe extern "C" fn pure_engine_strongs_occurrences_json(
 /// # Safety
 /// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_renderings_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_renderings_json(
+    engine: *const PlumblineEngine,
     code: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -856,8 +856,8 @@ pub unsafe extern "C" fn pure_engine_renderings_json(
 /// # Safety
 /// `engine` is valid; `word` is a valid NUL-terminated UTF-8 string.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_word_codes_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_word_codes_json(
+    engine: *const PlumblineEngine,
     word: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -882,8 +882,8 @@ pub unsafe extern "C" fn pure_engine_word_codes_json(
 /// # Safety
 /// `engine` is valid; `query` is a valid NUL-terminated UTF-8 string.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_search_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_search_json(
+    engine: *const PlumblineEngine,
     query: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -906,7 +906,7 @@ pub unsafe extern "C" fn pure_engine_search_json(
 /// # Safety
 /// `engine` is a valid engine pointer.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_threads_json(engine: *const PureEngine) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_threads_json(engine: *const PlumblineEngine) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(e) => out_json(&wire::threads_to_wire(&e.study_read().threads)),
         None => ptr::null_mut(),
@@ -919,7 +919,7 @@ pub unsafe extern "C" fn pure_engine_threads_json(engine: *const PureEngine) -> 
 /// # Safety
 /// `engine` is a valid engine pointer.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_tags_json(engine: *const PureEngine) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_tags_json(engine: *const PlumblineEngine) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(e) => out_json(&wire::tags_to_wire(&e.study_read().tags)),
         None => ptr::null_mut(),
@@ -933,8 +933,8 @@ pub unsafe extern "C" fn pure_engine_tags_json(engine: *const PureEngine) -> *mu
 /// # Safety
 /// `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_verse_xrefs_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_verse_xrefs_json(
+    engine: *const PlumblineEngine,
     ref_key: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -956,7 +956,7 @@ pub unsafe extern "C" fn pure_engine_verse_xrefs_json(
 /// # Safety
 /// `engine` is a valid engine pointer.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_suggested_weaves_json(engine: *const PureEngine) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_suggested_weaves_json(engine: *const PlumblineEngine) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(e) => out_json(&wire::suggested_weaves_to_wire(&e.study_read().weaves)),
         None => ptr::null_mut(),
@@ -977,8 +977,8 @@ pub unsafe extern "C" fn pure_engine_suggested_weaves_json(engine: *const PureEn
 /// # Safety
 /// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_concept_neighbours_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_concept_neighbours_json(
+    engine: *const PlumblineEngine,
     code: *const c_char,
     k: u32,
 ) -> *mut c_char {
@@ -1005,8 +1005,8 @@ pub unsafe extern "C" fn pure_engine_concept_neighbours_json(
 /// # Safety
 /// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_bridge_partners_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_bridge_partners_json(
+    engine: *const PlumblineEngine,
     code: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -1046,8 +1046,8 @@ pub unsafe extern "C" fn pure_engine_bridge_partners_json(
 /// # Safety
 /// `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_morph_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_morph_json(
+    engine: *const PlumblineEngine,
     ref_key: *const c_char,
     token_index: u32,
 ) -> *mut c_char {
@@ -1079,8 +1079,8 @@ pub unsafe extern "C" fn pure_engine_morph_json(
 /// # Safety
 /// `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_similar_verses_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_similar_verses_json(
+    engine: *const PlumblineEngine,
     ref_key: *const c_char,
     k: u32,
 ) -> *mut c_char {
@@ -1105,8 +1105,8 @@ pub unsafe extern "C" fn pure_engine_similar_verses_json(
 // These mutate on-disk study data through the cross-platform `core::store`
 // atomic writer, then reload the engine's in-memory copies. Each returns **null
 // on success** and an owned error string on failure (free it with
-// `pure_study_string_free`). All require an engine opened from a home directory
-// (`pure_engine_open`); an engine opened from bytes returns an error.
+// `plumbline_string_free`). All require an engine opened from a home directory
+// (`plumbline_engine_open`); an engine opened from bytes returns an error.
 
 /// Add the whole verse `ref_key` to the thread named `name` (created on first
 /// use). `note` may be null; `added` is a caller-supplied UTC timestamp.
@@ -1114,8 +1114,8 @@ pub unsafe extern "C" fn pure_engine_similar_verses_json(
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_thread_add(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_thread_add(
+    engine: *mut PlumblineEngine,
     name: *const c_char,
     ref_key: *const c_char,
     note: *const c_char,
@@ -1167,8 +1167,8 @@ pub unsafe extern "C" fn pure_engine_thread_add(
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_tag_add(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_tag_add(
+    engine: *mut PlumblineEngine,
     name: *const c_char,
     kind: *const c_char,
     value: *const c_char,
@@ -1208,14 +1208,14 @@ pub unsafe extern "C" fn pure_engine_tag_add(
     })
 }
 
-/// Remove a target (see [`pure_engine_tag_add`] for `kind`/`value`) from the tag
+/// Remove a target (see [`plumbline_engine_tag_add`] for `kind`/`value`) from the tag
 /// named `name`. A missing target is a no-op; a missing tag is an error.
 ///
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_tag_remove(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_tag_remove(
+    engine: *mut PlumblineEngine,
     name: *const c_char,
     kind: *const c_char,
     value: *const c_char,
@@ -1253,8 +1253,8 @@ pub unsafe extern "C" fn pure_engine_tag_remove(
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_weave_add_link(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_weave_add_link(
+    engine: *mut PlumblineEngine,
     name: *const c_char,
     a_ref: *const c_char,
     b_ref: *const c_char,
@@ -1306,11 +1306,11 @@ pub unsafe extern "C" fn pure_engine_weave_add_link(
 /// error string.
 ///
 /// # Safety
-/// `engine` is a valid engine from `pure_engine_open*`; string params are null
+/// `engine` is a valid engine from `plumbline_engine_open*`; string params are null
 /// or valid NUL-terminated UTF-8 for the duration of the call.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_weave_from_tag(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_weave_from_tag(
+    engine: *mut PlumblineEngine,
     tag_name: *const c_char,
     refs_json: *const c_char,
     weave_name: *const c_char,
@@ -1373,7 +1373,7 @@ pub unsafe extern "C" fn pure_engine_weave_from_tag(
 }
 
 /// The `index`-th suggested weave (as ordered by
-/// `pure_engine_suggested_weaves_json`) into the engine's flat weave list.
+/// `plumbline_engine_suggested_weaves_json`) into the engine's flat weave list.
 fn nth_suggested(weaves: &[LoadedWeave], index: usize) -> Option<usize> {
     weaves
         .iter()
@@ -1386,12 +1386,12 @@ fn nth_suggested(weaves: &[LoadedWeave], index: usize) -> Option<usize> {
 /// **Approve** the `index`-th suggested weave: promote it into `home/weaves`
 /// with all links approved (merging into a same-named weave there if present)
 /// and remove the suggestion. `index` is the ordinal from
-/// `pure_engine_suggested_weaves_json`. Null on success, else an owned error.
+/// `plumbline_engine_suggested_weaves_json`. Null on success, else an owned error.
 ///
 /// # Safety
 /// `engine` is a valid engine pointer.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_weave_approve(engine: *mut PureEngine, index: u32) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_weave_approve(engine: *mut PlumblineEngine, index: u32) -> *mut c_char {
     guard_err(|| {
         let Some(engine) = engine.as_mut() else {
             return out_string("null engine".to_string());
@@ -1414,13 +1414,13 @@ pub unsafe extern "C" fn pure_engine_weave_approve(engine: *mut PureEngine, inde
 }
 
 /// **Reject** the `index`-th suggested weave: delete its file. `index` is the
-/// ordinal from `pure_engine_suggested_weaves_json`. Null on success, else an
+/// ordinal from `plumbline_engine_suggested_weaves_json`. Null on success, else an
 /// owned error.
 ///
 /// # Safety
 /// `engine` is a valid engine pointer.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_weave_reject(engine: *mut PureEngine, index: u32) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_weave_reject(engine: *mut PlumblineEngine, index: u32) -> *mut c_char {
     guard_err(|| {
         let Some(engine) = engine.as_mut() else {
             return out_string("null engine".to_string());
@@ -1448,8 +1448,8 @@ pub unsafe extern "C" fn pure_engine_weave_reject(engine: *mut PureEngine, index
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_thread_set_notes(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_thread_set_notes(
+    engine: *mut PlumblineEngine,
     name: *const c_char,
     notes: *const c_char,
 ) -> *mut c_char {
@@ -1480,8 +1480,8 @@ pub unsafe extern "C" fn pure_engine_thread_set_notes(
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_thread_entry_set_note(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_thread_entry_set_note(
+    engine: *mut PlumblineEngine,
     name: *const c_char,
     index: u32,
     note: *const c_char,
@@ -1513,8 +1513,8 @@ pub unsafe extern "C" fn pure_engine_thread_entry_set_note(
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_weave_set_notes(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_weave_set_notes(
+    engine: *mut PlumblineEngine,
     name: *const c_char,
     notes: *const c_char,
 ) -> *mut c_char {
@@ -1548,8 +1548,8 @@ pub unsafe extern "C" fn pure_engine_weave_set_notes(
 /// # Safety
 /// `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_verse_notes_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_verse_notes_json(
+    engine: *const PlumblineEngine,
     ref_key: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -1576,8 +1576,8 @@ pub unsafe extern "C" fn pure_engine_verse_notes_json(
 /// # Safety
 /// `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_study_xrefs_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_study_xrefs_json(
+    engine: *const PlumblineEngine,
     ref_key: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -1601,7 +1601,7 @@ pub unsafe extern "C" fn pure_engine_study_xrefs_json(
 /// # Safety
 /// `engine` is a live engine (or null → null).
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_weaves_json(engine: *const PureEngine) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_weaves_json(engine: *const PlumblineEngine) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(e) => out_json(&wire::weaves_to_wire(&e.study_read().weaves, &e.corpus)),
         None => ptr::null_mut(),
@@ -1617,7 +1617,7 @@ pub unsafe extern "C" fn pure_engine_weaves_json(engine: *const PureEngine) -> *
 /// # Safety
 /// `engine` is a live engine (or null → null).
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_link_pairs_json(engine: *const PureEngine) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_link_pairs_json(engine: *const PlumblineEngine) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(e) => out_json(&wire::link_pairs_to_wire(&e.study_read().weaves, &e.corpus)),
         None => ptr::null_mut(),
@@ -1633,7 +1633,7 @@ pub unsafe extern "C" fn pure_engine_link_pairs_json(engine: *const PureEngine) 
 /// `engine` is a live engine (or null → null); the payload does not depend on
 /// engine state, but the arg keeps the call shape uniform.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_canon_segments_json(engine: *const PureEngine) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_canon_segments_json(engine: *const PlumblineEngine) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(_) => out_json(&wire::canon_segments_to_wire()),
         None => ptr::null_mut(),
@@ -1649,7 +1649,7 @@ pub unsafe extern "C" fn pure_engine_canon_segments_json(engine: *const PureEngi
 /// # Safety
 /// `engine` is a live engine (or null → null).
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_chord_map_json(engine: *const PureEngine) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_chord_map_json(engine: *const PlumblineEngine) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(e) => out_json(&wire::chord_map_to_wire(&e.study_read().weaves)),
         None => ptr::null_mut(),
@@ -1669,8 +1669,8 @@ pub unsafe extern "C" fn pure_engine_chord_map_json(engine: *const PureEngine) -
 /// `engine` is a live engine (or null → null); `pins_json` is null or valid
 /// NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_constellation_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_constellation_json(
+    engine: *const PlumblineEngine,
     page: u32,
     pins_json: *const c_char,
 ) -> *mut c_char {
@@ -1696,8 +1696,8 @@ pub unsafe extern "C" fn pure_engine_constellation_json(
 /// # Safety
 /// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_concept_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_concept_json(
+    engine: *const PlumblineEngine,
     code: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -1747,7 +1747,7 @@ const CONCEPT_MAP_SPOKES: usize = 6;
 /// A concept-map node label: the English gloss over the lemma (`\n`-separated),
 /// falling back to whichever exists, then the bare code. Mirrors the GTK
 /// `label_of` closure so every shell labels the radial nodes identically.
-fn concept_label(e: &PureEngine, code: &str) -> String {
+fn concept_label(e: &PlumblineEngine, code: &str) -> String {
     let gloss = english_gloss(e, code);
     let lemma = e.strongs.get(code).and_then(|s| s.lemma.clone());
     match (gloss, lemma) {
@@ -1768,8 +1768,8 @@ fn concept_label(e: &PureEngine, code: &str) -> String {
 /// # Safety
 /// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_concept_map_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_concept_map_json(
+    engine: *const PlumblineEngine,
     code: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -1829,7 +1829,7 @@ pub unsafe extern "C" fn pure_engine_concept_map_json(
             code: code.to_string(),
             spokes,
             by_book,
-            ot_nt_divide: pure_core::reference::OT_NT_DIVIDE,
+            ot_nt_divide: plumbline_core::reference::OT_NT_DIVIDE,
             book_count: canon::BOOKS.len(),
             bridge,
         })
@@ -1843,8 +1843,8 @@ pub unsafe extern "C" fn pure_engine_concept_map_json(
 /// # Safety
 /// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_gloss(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_gloss(
+    engine: *const PlumblineEngine,
     code: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -1860,7 +1860,7 @@ pub unsafe extern "C" fn pure_engine_gloss(
 
 // ── the study-panel content model ─────────────────────────────────────────────
 //
-// One Rust producer (`pure_core::panel`) builds the typed block list for every
+// One Rust producer (`plumbline_core::panel`) builds the typed block list for every
 // panel view; this projects the engine's data into it and serves the blocks as
 // JSON. `full` (Full study vs simple reader) is a shell setting, so the endpoints
 // that gate on it take a `full` flag — the FFI itself is mode-agnostic.
@@ -1869,7 +1869,7 @@ pub unsafe extern "C" fn pure_engine_gloss(
 /// (matches the shells' prior cap).
 const PANEL_OCC_CAP: usize = 300;
 
-impl PanelSource for PureEngine {
+impl PanelSource for PlumblineEngine {
     fn token_word(&self, verse: &str, token: u32) -> Option<String> {
         let v = VRef::parse_ref_key(verse)?;
         self.corpus.verse(&v)?.tokens.get(token as usize).map(|t| t.word.clone())
@@ -1913,12 +1913,12 @@ impl PanelSource for PureEngine {
             .collect()
     }
     fn rendering_refs(&self, code: &str, rendering: &str) -> Option<panel::RenderingRefsView> {
-        let key = pure_core::renderings::normalize(rendering);
+        let key = plumbline_core::renderings::normalize(rendering);
         let r = self
             .renderings
             .renderings(code)
             .into_iter()
-            .find(|r| pure_core::renderings::normalize(r.label) == key)?;
+            .find(|r| plumbline_core::renderings::normalize(r.label) == key)?;
         Some(panel::RenderingRefsView {
             rendering: r.label.to_string(),
             total: r.count as u32,
@@ -2020,7 +2020,7 @@ impl PanelSource for PureEngine {
                     .tag
                     .members
                     .iter()
-                    .any(|m| matches!(&m.target, pure_core::tag::TagTarget::Verse(v) if v.ref_key() == verse));
+                    .any(|m| matches!(&m.target, plumbline_core::tag::TagTarget::Verse(v) if v.ref_key() == verse));
                 holds.then(|| (i, lt.tag.name.clone()))
             })
             .collect()
@@ -2065,14 +2065,14 @@ impl PanelSource for PureEngine {
                     .members
                     .iter()
                     .map(|m| match &m.target {
-                        pure_core::tag::TagTarget::Verse(v) => panel::TagMemberView {
+                        plumbline_core::tag::TagTarget::Verse(v) => panel::TagMemberView {
                             kind: "verse".into(),
                             verse: Some(v.ref_key()),
                             display: Some(v.display()),
                             strongs: None,
                             note: m.note.clone(),
                         },
-                        pure_core::tag::TagTarget::Concept(c) => panel::TagMemberView {
+                        plumbline_core::tag::TagTarget::Concept(c) => panel::TagMemberView {
                             kind: "concept".into(),
                             verse: None,
                             display: None,
@@ -2094,7 +2094,7 @@ impl PanelSource for PureEngine {
                 name: lw.weave.name.clone(),
                 kind_label: lw.weave.kind.label().to_string(),
                 notes: lw.weave.notes.clone(),
-                suggested: pure_core::weave::is_suggested(lw),
+                suggested: plumbline_core::weave::is_suggested(lw),
                 links: lw
                     .weave
                     .links
@@ -2117,13 +2117,13 @@ impl PanelSource for PureEngine {
         study
             .weaves
             .iter()
-            .filter(|lw| pure_core::weave::is_suggested(lw))
+            .filter(|lw| plumbline_core::weave::is_suggested(lw))
             .enumerate()
             .map(|(index, lw)| {
                 let lib_index = study
                     .weaves
                     .iter()
-                    .position(|x| pure_core::weave::is_suggested(x) && x.weave.name == lw.weave.name);
+                    .position(|x| plumbline_core::weave::is_suggested(x) && x.weave.name == lw.weave.name);
                 panel::SuggestedView {
                     index,
                     name: lw.weave.name.clone(),
@@ -2195,8 +2195,8 @@ impl PanelSource for PureEngine {
 /// # Safety
 /// `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_word_study_blocks_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_word_study_blocks_json(
+    engine: *const PlumblineEngine,
     ref_key: *const c_char,
     token_index: u32,
     full: bool,
@@ -2213,7 +2213,7 @@ pub unsafe extern "C" fn pure_engine_word_study_blocks_json(
     })
 }
 
-/// [`pure_engine_word_study_blocks_json`] with per-tier gates instead of the
+/// [`plumbline_engine_word_study_blocks_json`] with per-tier gates instead of the
 /// legacy Simple/Full flag: `gates` bit 0 = curated-scholarship (human)
 /// analysis, bit 1 = learned/statistical (machine) analysis. The text and the
 /// reader's own data are always on.
@@ -2221,8 +2221,8 @@ pub unsafe extern "C" fn pure_engine_word_study_blocks_json(
 /// # Safety
 /// `engine` is a live engine; `ref_key` is a valid NUL-terminated UTF-8 string.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_word_study_blocks2_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_word_study_blocks2_json(
+    engine: *const PlumblineEngine,
     ref_key: *const c_char,
     token_index: u32,
     gates: u32,
@@ -2251,8 +2251,8 @@ pub unsafe extern "C" fn pure_engine_word_study_blocks2_json(
 /// # Safety
 /// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_code_study_blocks_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_code_study_blocks_json(
+    engine: *const PlumblineEngine,
     code: *const c_char,
     word: *const c_char,
     full: bool,
@@ -2265,15 +2265,15 @@ pub unsafe extern "C" fn pure_engine_code_study_blocks_json(
     })
 }
 
-/// [`pure_engine_code_study_blocks_json`] with per-tier gates (bit 0 = human
+/// [`plumbline_engine_code_study_blocks_json`] with per-tier gates (bit 0 = human
 /// analysis, bit 1 = machine analysis).
 ///
 /// # Safety
 /// `engine` is a live engine; `code` is valid NUL-terminated UTF-8; `word` is
 /// null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_code_study_blocks2_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_code_study_blocks2_json(
+    engine: *const PlumblineEngine,
     code: *const c_char,
     word: *const c_char,
     gates: u32,
@@ -2296,8 +2296,8 @@ pub unsafe extern "C" fn pure_engine_code_study_blocks2_json(
 /// # Safety
 /// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_concordance_blocks_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_concordance_blocks_json(
+    engine: *const PlumblineEngine,
     code: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -2314,8 +2314,8 @@ pub unsafe extern "C" fn pure_engine_concordance_blocks_json(
 /// # Safety
 /// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_rendering_concordance_blocks_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_rendering_concordance_blocks_json(
+    engine: *const PlumblineEngine,
     code: *const c_char,
     rendering: *const c_char,
 ) -> *mut c_char {
@@ -2332,7 +2332,7 @@ pub unsafe extern "C" fn pure_engine_rendering_concordance_blocks_json(
 /// # Safety
 /// `engine` is a live engine (or null → null).
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_threads_blocks_json(engine: *const PureEngine) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_threads_blocks_json(engine: *const PlumblineEngine) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(e) => out_json(&wire::blocks_to_wire(panel::threads_list(e))),
         None => ptr::null_mut(),
@@ -2345,7 +2345,7 @@ pub unsafe extern "C" fn pure_engine_threads_blocks_json(engine: *const PureEngi
 /// # Safety
 /// `engine` is a live engine (or null → null).
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_thread_blocks_json(engine: *const PureEngine, index: u32) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_thread_blocks_json(engine: *const PlumblineEngine, index: u32) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(e) => out_json(&wire::blocks_to_wire(panel::thread_detail(e, index as usize))),
         None => ptr::null_mut(),
@@ -2357,7 +2357,7 @@ pub unsafe extern "C" fn pure_engine_thread_blocks_json(engine: *const PureEngin
 /// # Safety
 /// `engine` is a live engine (or null → null).
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_tags_blocks_json(engine: *const PureEngine) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_tags_blocks_json(engine: *const PlumblineEngine) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(e) => out_json(&wire::blocks_to_wire(panel::tags_list(e))),
         None => ptr::null_mut(),
@@ -2370,7 +2370,7 @@ pub unsafe extern "C" fn pure_engine_tags_blocks_json(engine: *const PureEngine)
 /// # Safety
 /// `engine` is a live engine (or null → null).
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_tag_blocks_json(engine: *const PureEngine, index: u32) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_tag_blocks_json(engine: *const PlumblineEngine, index: u32) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(e) => out_json(&wire::blocks_to_wire(panel::tag_detail(e, index as usize))),
         None => ptr::null_mut(),
@@ -2382,7 +2382,7 @@ pub unsafe extern "C" fn pure_engine_tag_blocks_json(engine: *const PureEngine, 
 /// # Safety
 /// `engine` is a live engine (or null → null).
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_weaves_blocks_json(engine: *const PureEngine) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_weaves_blocks_json(engine: *const PlumblineEngine) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(e) => out_json(&wire::blocks_to_wire(panel::weaves_list(e))),
         None => ptr::null_mut(),
@@ -2394,7 +2394,7 @@ pub unsafe extern "C" fn pure_engine_weaves_blocks_json(engine: *const PureEngin
 /// # Safety
 /// `engine` is a live engine (or null → null).
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_suggested_blocks_json(engine: *const PureEngine) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_suggested_blocks_json(engine: *const PlumblineEngine) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(e) => out_json(&wire::blocks_to_wire(panel::suggested(e))),
         None => ptr::null_mut(),
@@ -2407,8 +2407,8 @@ pub unsafe extern "C" fn pure_engine_suggested_blocks_json(engine: *const PureEn
 /// # Safety
 /// `engine` is a live engine (or null → null).
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_compare_blocks_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_compare_blocks_json(
+    engine: *const PlumblineEngine,
     index: u32,
     full: bool,
 ) -> *mut c_char {
@@ -2424,8 +2424,8 @@ pub unsafe extern "C" fn pure_engine_compare_blocks_json(
 /// # Safety
 /// `engine` is a live engine; `query` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_search_blocks_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_search_blocks_json(
+    engine: *const PlumblineEngine,
     query: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -2445,7 +2445,7 @@ const GLOSS_SAMPLE: usize = 80;
 /// The modal KJV rendering of a code — what an English reader recognises
 /// ("world" for κόσμος) rather than Strong's etymological headword. Ported
 /// verbatim from the GTK shell so every shell shows the same chips.
-fn english_gloss(e: &PureEngine, code: &str) -> Option<String> {
+fn english_gloss(e: &PlumblineEngine, code: &str) -> Option<String> {
     let mut tally: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
     for r in e.occ_ix.verses(code).iter().take(GLOSS_SAMPLE) {
         if let Some(v) = e.corpus.verse(r) {
@@ -2513,8 +2513,8 @@ fn distil_gloss(raw: &str) -> Option<String> {
 /// `engine` is a live engine; string params are null or valid NUL-terminated
 /// UTF-8 for the call.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_weave_add_link_spans(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_weave_add_link_spans(
+    engine: *mut PlumblineEngine,
     name: *const c_char,
     a_ref: *const c_char,
     b_ref: *const c_char,
@@ -2568,7 +2568,7 @@ pub unsafe extern "C" fn pure_engine_weave_add_link_spans(
 }
 
 /// Parse a panel link URI into the typed verb the shell dispatches on
-/// (`{verb, …}`; see `pure_core::panel::parse_link`) — the one verb vocabulary,
+/// (`{verb, …}`; see `plumbline_core::panel::parse_link`) — the one verb vocabulary,
 /// so a non-Rust shell routes clicks through the core instead of re-splitting
 /// the URI string and risking drift from what the panel emits. Engine-
 /// independent. Null for an unknown verb or malformed payload (a shell then
@@ -2577,7 +2577,7 @@ pub unsafe extern "C" fn pure_engine_weave_add_link_spans(
 /// # Safety
 /// `uri` is null or valid NUL-terminated UTF-8 for the call.
 #[no_mangle]
-pub unsafe extern "C" fn pure_route_link_json(uri: *const c_char) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_route_link_json(uri: *const c_char) -> *mut c_char {
     guard(ptr::null_mut(), || match opt_str(uri).and_then(panel::parse_link) {
         Some(link) => out_json(&wire::link_to_wire(link)),
         None => ptr::null_mut(),
@@ -2586,11 +2586,11 @@ pub unsafe extern "C" fn pure_route_link_json(uri: *const c_char) -> *mut c_char
 
 // ── config / session (engine-independent; shared with the GTK shell) ──────────
 
-/// Load the cross-platform shell config (`%APPDATA%\pure-study\config.json` on
+/// Load the cross-platform shell config (`%APPDATA%\plumbline\config.json` on
 /// Windows) as JSON: `{studyMode, bodySize, openPanes, activePane, firstRun}`.
 /// `firstRun` is true only when no config file existed. Never null.
 #[no_mangle]
-pub extern "C" fn pure_config_load_json() -> *mut c_char {
+pub extern "C" fn plumbline_config_load_json() -> *mut c_char {
     guard(ptr::null_mut(), || {
         let (cfg, first_run) = config::load();
         out_json(&wire::config_to_wire(&cfg, first_run))
@@ -2603,7 +2603,7 @@ pub extern "C" fn pure_config_load_json() -> *mut c_char {
 /// # Safety
 /// `json` is null or valid NUL-terminated UTF-8 for the call.
 #[no_mangle]
-pub unsafe extern "C" fn pure_config_save_json(json: *const c_char) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_config_save_json(json: *const c_char) -> *mut c_char {
     guard_err(|| {
         let Some(s) = opt_str(json) else {
             return out_string("null or invalid argument".to_string());
@@ -2622,7 +2622,7 @@ pub unsafe extern "C" fn pure_config_save_json(json: *const c_char) -> *mut c_ch
 // ── Tier 0: copy, personal notes, highlights, themes, warming, guide ──────────
 
 /// Clipboard text for a verse (or its chapter, for the `chapter*` kinds) in one
-/// of the shapes `pure_core::export::CopyKind` names (`verse` / `verseRef` /
+/// of the shapes `plumbline_core::export::CopyKind` names (`verse` / `verseRef` /
 /// `verseMarkdown` / `chapter` / `chapterMarkdown`). Plain text, not JSON; null
 /// on a bad ref, an unknown kind, or a verse the corpus lacks. Caller-freed.
 ///
@@ -2630,8 +2630,8 @@ pub unsafe extern "C" fn pure_config_save_json(json: *const c_char) -> *mut c_ch
 /// `engine` is a live engine; the string args are null or valid NUL-terminated
 /// UTF-8 for the call.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_copy_text(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_copy_text(
+    engine: *const PlumblineEngine,
     ref_key: *const c_char,
     kind: *const c_char,
 ) -> *mut c_char {
@@ -2656,8 +2656,8 @@ pub unsafe extern "C" fn pure_engine_copy_text(
 /// # Safety
 /// `engine` is a live engine; `ref_key` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_user_note_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_user_note_json(
+    engine: *const PlumblineEngine,
     ref_key: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -2685,7 +2685,7 @@ pub unsafe extern "C" fn pure_engine_user_note_json(
 /// # Safety
 /// `engine` is a live engine (or null → null).
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_user_notes_json(engine: *const PureEngine) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_user_notes_json(engine: *const PlumblineEngine) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let Some(e) = engine.as_ref() else { return ptr::null_mut() };
         let study = e.study_read();
@@ -2713,8 +2713,8 @@ pub unsafe extern "C" fn pure_engine_user_notes_json(engine: *const PureEngine) 
 /// `engine` is a live engine; the string args are null or valid NUL-terminated
 /// UTF-8 for the call.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_user_note_set(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_user_note_set(
+    engine: *mut PlumblineEngine,
     ref_key: *const c_char,
     text: *const c_char,
     stamp: *const c_char,
@@ -2754,8 +2754,8 @@ pub unsafe extern "C" fn pure_engine_user_note_set(
 /// `engine` is a live engine; the string args are null or valid NUL-terminated
 /// UTF-8 for the call.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_tag_set_color(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_tag_set_color(
+    engine: *mut PlumblineEngine,
     name: *const c_char,
     color: *const c_char,
 ) -> *mut c_char {
@@ -2792,8 +2792,8 @@ pub unsafe extern "C" fn pure_engine_tag_set_color(
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_highlight_add(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_highlight_add(
+    engine: *mut PlumblineEngine,
     name: *const c_char,
     color: *const c_char,
     start_ref: *const c_char,
@@ -2851,8 +2851,8 @@ pub unsafe extern "C" fn pure_engine_highlight_add(
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_highlight_remove(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_highlight_remove(
+    engine: *mut PlumblineEngine,
     name: *const c_char,
     start_ref: *const c_char,
     start_tok: u32,
@@ -2909,8 +2909,8 @@ pub unsafe extern "C" fn pure_engine_highlight_remove(
 /// # Safety
 /// `engine` is valid; `verse_ref` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_highlight_clear_verse(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_highlight_clear_verse(
+    engine: *mut PlumblineEngine,
     verse_ref: *const c_char,
 ) -> *mut c_char {
     guard_err(|| {
@@ -2950,8 +2950,8 @@ pub unsafe extern "C" fn pure_engine_highlight_clear_verse(
 /// # Safety
 /// `engine` is a live engine; `book` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_chapter_highlights_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_chapter_highlights_json(
+    engine: *const PlumblineEngine,
     book: *const c_char,
     chapter: u32,
 ) -> *mut c_char {
@@ -2994,7 +2994,7 @@ pub unsafe extern "C" fn pure_engine_chapter_highlights_json(
 /// # Safety
 /// `theme` is null or valid NUL-terminated UTF-8 for the call.
 #[no_mangle]
-pub unsafe extern "C" fn pure_theme_palette_json(theme: *const c_char) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_theme_palette_json(theme: *const c_char) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let t = opt_str(theme).and_then(theme::Theme::parse).unwrap_or(theme::Theme::Light);
         out_json(&theme::palette(t))
@@ -3004,7 +3004,7 @@ pub unsafe extern "C" fn pure_theme_palette_json(theme: *const c_char) -> *mut c
 /// The fixed highlight tones (`{tones:[{name,hex}]}`) — the shell's swatch menu.
 /// Engine-independent. Never null.
 #[no_mangle]
-pub extern "C" fn pure_theme_highlight_tones_json() -> *mut c_char {
+pub extern "C" fn plumbline_theme_highlight_tones_json() -> *mut c_char {
     guard(ptr::null_mut(), || out_json(&wire::highlight_tones_to_wire()))
 }
 
@@ -3017,7 +3017,7 @@ pub extern "C" fn pure_theme_highlight_tones_json() -> *mut c_char {
 /// # Safety
 /// `engine` is a live engine (or null → an error string).
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_warm_indexes(engine: *const PureEngine) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_warm_indexes(engine: *const PlumblineEngine) -> *mut c_char {
     guard_err(|| {
         let Some(e) = engine.as_ref() else {
             return out_string("null engine".to_string());
@@ -3038,8 +3038,8 @@ pub unsafe extern "C" fn pure_engine_warm_indexes(engine: *const PureEngine) -> 
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_memory_grade(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_memory_grade(
+    engine: *mut PlumblineEngine,
     verse_ref: *const c_char,
     grade: *const c_char,
     now: *const c_char,
@@ -3075,8 +3075,8 @@ pub unsafe extern "C" fn pure_engine_memory_grade(
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_memory_add(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_memory_add(
+    engine: *mut PlumblineEngine,
     verse_ref: *const c_char,
     now: *const c_char,
 ) -> *mut c_char {
@@ -3111,8 +3111,8 @@ pub unsafe extern "C" fn pure_engine_memory_add(
 /// # Safety
 /// `engine` is valid; `verse_ref` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_memory_remove(
-    engine: *mut PureEngine,
+pub unsafe extern "C" fn plumbline_engine_memory_remove(
+    engine: *mut PlumblineEngine,
     verse_ref: *const c_char,
 ) -> *mut c_char {
     guard_err(|| {
@@ -3138,8 +3138,8 @@ pub unsafe extern "C" fn pure_engine_memory_remove(
 /// # Safety
 /// `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_memory_card_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_memory_card_json(
+    engine: *const PlumblineEngine,
     verse_ref: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -3163,8 +3163,8 @@ pub unsafe extern "C" fn pure_engine_memory_card_json(
 /// # Safety
 /// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_memory_due_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_memory_due_json(
+    engine: *const PlumblineEngine,
     now: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -3183,8 +3183,8 @@ pub unsafe extern "C" fn pure_engine_memory_due_json(
 /// # Safety
 /// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_memory_coverage_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_memory_coverage_json(
+    engine: *const PlumblineEngine,
     now: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
@@ -3205,7 +3205,7 @@ pub unsafe extern "C" fn pure_engine_memory_coverage_json(
 /// # Safety
 /// `engine` is a live engine (or null → null).
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_memory_activity_json(engine: *const PureEngine) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_memory_activity_json(engine: *const PlumblineEngine) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let Some(e) = engine.as_ref() else { return ptr::null_mut() };
         let cards = e.home.as_ref().map(|h| memory::load_cards(h).0).unwrap_or_default();
@@ -3220,8 +3220,8 @@ pub unsafe extern "C" fn pure_engine_memory_activity_json(engine: *const PureEng
 /// # Safety
 /// `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_memory_drill_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_memory_drill_json(
+    engine: *const PlumblineEngine,
     verse_ref: *const c_char,
     level: u32,
 ) -> *mut c_char {
@@ -3251,8 +3251,8 @@ pub unsafe extern "C" fn pure_engine_memory_drill_json(
 /// # Safety
 /// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn pure_engine_memory_score_json(
-    engine: *const PureEngine,
+pub unsafe extern "C" fn plumbline_engine_memory_score_json(
+    engine: *const PlumblineEngine,
     verse_ref: *const c_char,
     typed: *const c_char,
 ) -> *mut c_char {
@@ -3270,14 +3270,14 @@ pub unsafe extern "C" fn pure_engine_memory_score_json(
 /// The in-app guide as panel blocks. Engine-independent (static content). Never
 /// null.
 #[no_mangle]
-pub extern "C" fn pure_panel_guide_blocks_json() -> *mut c_char {
+pub extern "C" fn plumbline_panel_guide_blocks_json() -> *mut c_char {
     guard(ptr::null_mut(), || out_json(&wire::blocks_to_wire(panel::guide_blocks())))
 }
 
 /// The About card as panel blocks. Engine-independent (static content). Never
 /// null.
 #[no_mangle]
-pub extern "C" fn pure_panel_about_blocks_json() -> *mut c_char {
+pub extern "C" fn plumbline_panel_about_blocks_json() -> *mut c_char {
     guard(ptr::null_mut(), || out_json(&wire::blocks_to_wire(panel::about_blocks())))
 }
 

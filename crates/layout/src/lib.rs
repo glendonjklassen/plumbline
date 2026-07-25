@@ -15,8 +15,8 @@
 //! platform actually painted (same engine measured and drew them); and native
 //! text quality is preserved per platform.
 
-use pure_core::corpus::{Verse, FLAG_PARA, FLAG_TITLE};
-use pure_core::VRef;
+use plumbline_core::corpus::{Verse, FLAG_PARA, FLAG_TITLE};
+use plumbline_core::VRef;
 
 /// Something that can measure the advance width of a run of text in the
 /// reader's scripture font at the current size. Implemented by each UI over
@@ -81,7 +81,7 @@ pub struct PlacedItem {
     pub text: String,
     pub kind: ItemKind,
     /// Token flag bits (added / divine / title / paragraph) for styling; 0 for
-    /// verse numbers. See `pure_core::corpus::FLAG_*`.
+    /// verse numbers. See `plumbline_core::corpus::FLAG_*`.
     pub flags: u32,
     /// Strong's refs on this word (empty for untagged words / verse numbers).
     pub strongs: Vec<String>,
@@ -250,7 +250,7 @@ pub fn layout_chapter<M: Measure>(verses: &[Verse], m: &M, cfg: &LayoutConfig) -
 
 /// A convenience: does a token carry a superscription flag? (Psalm titles are
 /// often styled differently by the UI.) Re-exported so shells don't reach into
-/// `pure_core` just for the constant.
+/// `plumbline_core` just for the constant.
 pub fn is_title_flag(flags: u32) -> bool {
     flags & FLAG_TITLE != 0
 }
@@ -258,7 +258,7 @@ pub fn is_title_flag(flags: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pure_core::corpus;
+    use plumbline_core::corpus;
 
     /// Monospace measurement: every character is `char_w` wide. Deterministic,
     /// so layout is exactly predictable in tests.
@@ -357,7 +357,7 @@ mod tests {
 #[cfg(test)]
 mod para_tests {
     use super::*;
-    use pure_core::corpus;
+    use plumbline_core::corpus;
 
     struct Mono;
     impl Measure for Mono {

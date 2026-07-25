@@ -1,8 +1,9 @@
-# pure-study — Android shell (Jetpack Compose)
+# Plumbline — Android shell (Jetpack Compose)
 
-The third shell over the same `pure-core`, alongside GTK (Linux) and WinUI
-(Windows). No study logic lives in Kotlin: the app calls the frozen 78-fn C ABI
-(`crates/ffi/include/pure_study.h`) through **JNA**. See
+One of the product's two shells over the same `plumbline-core`, alongside the web
+PWA (`apps/web`); the GTK and WinUI desktop shells were retired. No study logic
+lives in Kotlin: the app calls the frozen 78-fn C ABI
+(`crates/ffi/include/plumbline.h`) through **JNA**. See
 [`docs/ANDROID-BOOTSTRAP.md`](../../docs/ANDROID-BOOTSTRAP.md) for the full plan
 (fold modes, JNA-not-UniFFI decision, phasing).
 
@@ -30,16 +31,16 @@ The C ABI is cross-compiled with `cargo-ndk` into `app/src/main/jniLibs/<abi>/`
 ```bash
 export ANDROID_NDK_HOME=/opt/android-ndk
 cargo ndk -t arm64-v8a -t x86_64 -p 24 \
-  -o apps/android/app/src/main/jniLibs build -p pure-ffi --release
+  -o apps/android/app/src/main/jniLibs build -p plumbline-ffi --release
 ```
 
-- `arm64-v8a` is the physical device (Pixel 9 Pro Fold); `x86_64` is the AOSP
+- `arm64-v8a` is the physical device (the target foldable); `x86_64` is the AOSP
   emulator. These match the `ndk.abiFilters` in `app/build.gradle.kts`.
-- The library loads via `System.loadLibrary("pure_ffi")` (JNA `Native.load`).
+- The library loads via `System.loadLibrary("plumbline_ffi")` (JNA `Native.load`).
 - JNA's own `libjnidispatch.so` comes from the `net.java.dev.jna:jna:5.17.0@aar`
   dependency — the `@aar` classifier is required (5.17+ also fixes a 16 KB
   page-size crash). `cargo-ndk` 4.x injects the mandatory 16 KB page alignment;
-  verify with `llvm-readelf -l …/libpure_ffi.so`.
+  verify with `llvm-readelf -l …/libplumbline_ffi.so`.
 
 ## Data (bundled as assets)
 
@@ -60,13 +61,14 @@ writes, when added, go to the app's private files dir.
 ## The shared JNA binding
 
 `app/build.gradle.kts` adds `crates/ffi/bindings/kotlin` as a source directory,
-so `PureStudy.kt` (package `dev.purestudy.core`: the raw `PureStudyNative`
-interface + the `PureLayoutConfig` / `MeasureCallback` JNA types) compiles
+so `Plumbline.kt` (package `dev.plumbline.core`: the raw `PlumblineNative`
+interface + the `PlumblineLayoutConfig` / `MeasureCallback` JNA types) compiles
 straight into the app. That file is the single source of truth for the ABI and
 is **not copied** here — edits belong in the FFI crate. The safe PascalCase
 wrappers (`StudyEngine` / `Chapter` / `StudyConfig`) live in
-`app/src/main/java/dev/purestudy/StudyEngine.kt`, method-for-method with
-`bindings/csharp/PureStudy.cs`.
+`app/src/main/java/dev/plumbline/StudyEngine.kt`, one method per ABI entry point;
+the web shell's `apps/web/src/engine/StudyEngine.ts` is its sibling over the same
+surface, so a call added for one shell has an obvious twin in the other.
 
 ## Run
 

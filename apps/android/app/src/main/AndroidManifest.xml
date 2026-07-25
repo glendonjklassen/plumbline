@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- pure-study is fully offline: no INTERNET permission is declared. -->
+<!-- Plumbline is fully offline: no INTERNET permission is declared. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="pure-study"
+        android:label="Plumbline"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.PureStudy">
+        android:theme="@style/Theme.Plumbline">
 
         <activity
-            android:name="dev.purestudy.MainActivity"
+            android:name="dev.plumbline.MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize|keyboardHidden|density"
-            android:label="pure-study"
-            android:theme="@style/Theme.PureStudy">
+            android:label="Plumbline"
+            android:theme="@style/Theme.Plumbline">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

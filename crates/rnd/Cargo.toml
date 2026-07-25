@@ -1,14 +1,14 @@
 [package]
-name = "pure-rnd"
+name = "plumbline-rnd"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Optional, feature-gated R&D layer for pure-study: bridge, embeddings, morphology, concept."
+description = "Optional, feature-gated R&D layer for Plumbline: bridge, embeddings, morphology, concept."
 
 [dependencies]
-pure-core = { workspace = true }
+plumbline-core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

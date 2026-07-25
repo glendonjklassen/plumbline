@@ -37,13 +37,13 @@ unsafe fn take(p: *mut c_char) -> Option<String> {
         return None;
     }
     let s = CStr::from_ptr(p).to_str().unwrap().to_owned();
-    pure_study_string_free(p);
+    plumbline_string_free(p);
     Some(s)
 }
 
-unsafe fn open() -> *mut PureEngine {
+unsafe fn open() -> *mut PlumblineEngine {
     let mut err: *mut c_char = ptr::null_mut();
-    let e = pure_engine_open_from_bytes(
+    let e = plumbline_engine_open_from_bytes(
         KJV.as_ptr(),
         KJV.len(),
         STRONGS.as_ptr(),
@@ -55,8 +55,8 @@ unsafe fn open() -> *mut PureEngine {
     e
 }
 
-fn cfg() -> PureLayoutConfig {
-    PureLayoutConfig {
+fn cfg() -> PlumblineLayoutConfig {
+    PlumblineLayoutConfig {
         width: 10_000.0, // wide: everything on one line
         line_height: 20.0,
         space_width: 5.0,
@@ -69,7 +69,7 @@ fn cfg() -> PureLayoutConfig {
 
 #[test]
 fn version_roundtrips_through_c_abi() {
-    let s = unsafe { take(pure_study_version()) }.unwrap();
+    let s = unsafe { take(plumbline_version()) }.unwrap();
     assert_eq!(s, env!("CARGO_PKG_VERSION"));
 }
 
@@ -78,7 +78,7 @@ fn open_from_bytes_reports_errors() {
     unsafe {
         // Bad UTF-8 in the corpus bytes.
         let mut err: *mut c_char = ptr::null_mut();
-        let e = pure_engine_open_from_bytes(
+        let e = plumbline_engine_open_from_bytes(
             [0xff, 0xfe].as_ptr(),
             2,
             STRONGS.as_ptr(),
@@ -90,7 +90,7 @@ fn open_from_bytes_reports_errors() {
 
         // Malformed strongs JSON.
         let mut err2: *mut c_char = ptr::null_mut();
-        let e2 = pure_engine_open_from_bytes(
+        let e2 = plumbline_engine_open_from_bytes(
             KJV.as_ptr(),
             KJV.len(),
             b"{not json".as_ptr(),
@@ -106,19 +106,19 @@ fn open_from_bytes_reports_errors() {
 fn toc_and_chapter_count() {
     unsafe {
         let e = open();
-        let toc: Value = serde_json::from_str(&take(pure_engine_toc_json(e)).unwrap()).unwrap();
+        let toc: Value = serde_json::from_str(&take(plumbline_engine_toc_json(e)).unwrap()).unwrap();
         let books = toc["books"].as_array().unwrap();
         assert_eq!(books.len(), 66, "canon has 66 books");
         let john = books.iter().find(|b| b["id"] == "John").unwrap();
         assert_eq!(john["name"], "John");
         assert_eq!(john["chapters"], 3, "our corpus has John up to chapter 3");
 
-        let c = pure_engine_chapter_count(e, c"John".as_ptr());
+        let c = plumbline_engine_chapter_count(e, c"John".as_ptr());
         assert_eq!(c, 3);
         // Unknown book on a valid engine floors at 1 (a safe UI range floor);
         // only a null engine yields 0 (see `null_and_freed_handles_are_safe`).
-        assert_eq!(pure_engine_chapter_count(e, c"Nope".as_ptr()), 1);
-        pure_engine_free(e);
+        assert_eq!(plumbline_engine_chapter_count(e, c"Nope".as_ptr()), 1);
+        plumbline_engine_free(e);
     }
 }
 
@@ -126,7 +126,7 @@ fn toc_and_chapter_count() {
 fn layout_then_hit_test_a_word() {
     unsafe {
         let e = open();
-        let dl = pure_engine_layout_chapter(
+        let dl = plumbline_engine_layout_chapter(
             e,
             c"John".as_ptr(),
             3,
@@ -135,11 +135,11 @@ fn layout_then_hit_test_a_word() {
             ptr::null_mut(),
         );
         assert!(!dl.is_null());
-        assert!(pure_layout_item_count(dl) > 0);
-        assert!(pure_layout_height(dl) >= 20.0);
+        assert!(plumbline_layout_item_count(dl) > 0);
+        assert!(plumbline_layout_height(dl) >= 20.0);
 
         // Parse the JSON to locate the word "God" (John 3:16, token index 1).
-        let list: Value = serde_json::from_str(&take(pure_layout_to_json(dl)).unwrap()).unwrap();
+        let list: Value = serde_json::from_str(&take(plumbline_layout_to_json(dl)).unwrap()).unwrap();
         let items = list["items"].as_array().unwrap();
         let god = items
             .iter()
@@ -157,7 +157,7 @@ fn layout_then_hit_test_a_word() {
         let cx = god["x"].as_f64().unwrap() as f32 + god["w"].as_f64().unwrap() as f32 / 2.0;
         let cy = god["y"].as_f64().unwrap() as f32 + god["h"].as_f64().unwrap() as f32 / 2.0;
         let hit: Value =
-            serde_json::from_str(&take(pure_layout_hit_test_json(dl, cx, cy)).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_layout_hit_test_json(dl, cx, cy)).unwrap()).unwrap();
         assert_eq!(hit["verse"], "John 3:16");
         assert_eq!(hit["tokenIndex"], 1);
         assert_eq!(hit["strongs"][0], "G2316");
@@ -169,15 +169,15 @@ fn layout_then_hit_test_a_word() {
         assert!(num["verse"].is_null());
         let nx = num["x"].as_f64().unwrap() as f32 + 1.0;
         let ny = num["y"].as_f64().unwrap() as f32 + 1.0;
-        assert!(pure_layout_hit_test_json(dl, nx, ny).is_null());
+        assert!(plumbline_layout_hit_test_json(dl, nx, ny).is_null());
 
         // The paragraph flag on John 3:18's first word puts it on a new line.
         let ys: std::collections::BTreeSet<i64> =
             items.iter().map(|it| it["y"].as_f64().unwrap() as i64).collect();
         assert!(ys.len() > 1, "paragraph break should add a line");
 
-        pure_layout_free(dl);
-        pure_engine_free(e);
+        plumbline_layout_free(dl);
+        plumbline_engine_free(e);
     }
 }
 
@@ -185,18 +185,18 @@ fn layout_then_hit_test_a_word() {
 fn layout_absent_or_out_of_range_chapter_is_null() {
     unsafe {
         let e = open();
-        let m: PureMeasureFn = Some(mono_measure);
+        let m: PlumblineMeasureFn = Some(mono_measure);
         // A chapter not present in this corpus (only John 3 exists here).
-        assert!(pure_engine_layout_chapter(e, c"John".as_ptr(), 1, cfg(), m, ptr::null_mut())
+        assert!(plumbline_engine_layout_chapter(e, c"John".as_ptr(), 1, cfg(), m, ptr::null_mut())
             .is_null());
         // An unknown book.
-        assert!(pure_engine_layout_chapter(e, c"Nope".as_ptr(), 3, cfg(), m, ptr::null_mut())
+        assert!(plumbline_engine_layout_chapter(e, c"Nope".as_ptr(), 3, cfg(), m, ptr::null_mut())
             .is_null());
         // A chapter outside the u16 domain must NOT wrap into a real chapter
         // (65539 as u16 == 3, which does exist — regression guard).
-        assert!(pure_engine_layout_chapter(e, c"John".as_ptr(), 65539, cfg(), m, ptr::null_mut())
+        assert!(plumbline_engine_layout_chapter(e, c"John".as_ptr(), 65539, cfg(), m, ptr::null_mut())
             .is_null());
-        pure_engine_free(e);
+        plumbline_engine_free(e);
     }
 }
 
@@ -205,9 +205,9 @@ fn null_measure_yields_null_layout() {
     unsafe {
         let e = open();
         let dl =
-            pure_engine_layout_chapter(e, c"John".as_ptr(), 3, cfg(), None, ptr::null_mut());
+            plumbline_engine_layout_chapter(e, c"John".as_ptr(), 3, cfg(), None, ptr::null_mut());
         assert!(dl.is_null(), "a null measure callback must fail cleanly");
-        pure_engine_free(e);
+        plumbline_engine_free(e);
     }
 }
 
@@ -217,7 +217,7 @@ fn strongs_entry_and_occurrences() {
         let e = open();
 
         let entry: Value =
-            serde_json::from_str(&take(pure_engine_strongs_json(e, c"G2316".as_ptr())).unwrap())
+            serde_json::from_str(&take(plumbline_engine_strongs_json(e, c"G2316".as_ptr())).unwrap())
                 .unwrap();
         assert_eq!(entry["code"], "G2316");
         assert_eq!(entry["lemma"], "θεός");
@@ -226,10 +226,10 @@ fn strongs_entry_and_occurrences() {
         assert_eq!(entry["deriv"], Value::Null);
 
         // Unknown code → null.
-        assert!(pure_engine_strongs_json(e, c"H9999".as_ptr()).is_null());
+        assert!(plumbline_engine_strongs_json(e, c"H9999".as_ptr()).is_null());
 
         let occ: Value = serde_json::from_str(
-            &take(pure_engine_strongs_occurrences_json(e, c"G2316".as_ptr())).unwrap(),
+            &take(plumbline_engine_strongs_occurrences_json(e, c"G2316".as_ptr())).unwrap(),
         )
         .unwrap();
         assert_eq!(occ["code"], "G2316");
@@ -237,7 +237,7 @@ fn strongs_entry_and_occurrences() {
         assert_eq!(occ["capped"], false);
         assert_eq!(occ["verses"][0], "John 3:16");
 
-        pure_engine_free(e);
+        plumbline_engine_free(e);
     }
 }
 
@@ -248,7 +248,7 @@ fn renderings_and_word_codes() {
 
         // Forward lens: G25 (agapao) is rendered "loved" in John 3:16, token 3.
         let r: Value =
-            serde_json::from_str(&take(pure_engine_renderings_json(e, c"G25".as_ptr())).unwrap())
+            serde_json::from_str(&take(plumbline_engine_renderings_json(e, c"G25".as_ptr())).unwrap())
                 .unwrap();
         assert_eq!(r["code"], "G25");
         let rs = r["renderings"].as_array().unwrap();
@@ -262,14 +262,14 @@ fn renderings_and_word_codes() {
 
         // Unknown/untagged code → empty renderings, not null.
         let empty: Value = serde_json::from_str(
-            &take(pure_engine_renderings_json(e, c"H9999".as_ptr())).unwrap(),
+            &take(plumbline_engine_renderings_json(e, c"H9999".as_ptr())).unwrap(),
         )
         .unwrap();
         assert_eq!(empty["renderings"].as_array().unwrap().len(), 0);
 
         // Reverse lens: the surface word "God" (normalized) maps to G2316.
         let w: Value =
-            serde_json::from_str(&take(pure_engine_word_codes_json(e, c"God".as_ptr())).unwrap())
+            serde_json::from_str(&take(plumbline_engine_word_codes_json(e, c"God".as_ptr())).unwrap())
                 .unwrap();
         assert_eq!(w["word"], "God");
         let codes = w["codes"].as_array().unwrap();
@@ -279,11 +279,11 @@ fn renderings_and_word_codes() {
 
         // A translator-supplied (added) word carries no codes.
         let the: Value =
-            serde_json::from_str(&take(pure_engine_word_codes_json(e, c"the".as_ptr())).unwrap())
+            serde_json::from_str(&take(plumbline_engine_word_codes_json(e, c"the".as_ptr())).unwrap())
                 .unwrap();
         assert_eq!(the["codes"].as_array().unwrap().len(), 0);
 
-        pure_engine_free(e);
+        plumbline_engine_free(e);
     }
 }
 
@@ -292,7 +292,7 @@ fn verse_and_token_lookup() {
     unsafe {
         let e = open();
         let verse: Value =
-            serde_json::from_str(&take(pure_engine_verse_json(e, c"John 3:16".as_ptr())).unwrap())
+            serde_json::from_str(&take(plumbline_engine_verse_json(e, c"John 3:16".as_ptr())).unwrap())
                 .unwrap();
         assert_eq!(verse["reference"], "John 3:16");
         assert!(verse["body"].as_str().unwrap().contains("God"));
@@ -300,18 +300,18 @@ fn verse_and_token_lookup() {
 
         // Token index 4 ("the") carries the KJV-added flag in our sample.
         let tok: Value = serde_json::from_str(
-            &take(pure_engine_token_json(e, c"John 3:16".as_ptr(), 4)).unwrap(),
+            &take(plumbline_engine_token_json(e, c"John 3:16".as_ptr(), 4)).unwrap(),
         )
         .unwrap();
         assert_eq!(tok["word"], "the");
-        assert_eq!(tok["flags"], PURE_FLAG_ADDED);
+        assert_eq!(tok["flags"], PLUMBLINE_FLAG_ADDED);
 
         // Out-of-range token / bad ref → null.
-        assert!(pure_engine_token_json(e, c"John 3:16".as_ptr(), 99).is_null());
-        assert!(pure_engine_verse_json(e, c"garbage".as_ptr()).is_null());
-        assert!(pure_engine_verse_json(e, c"John 9:9".as_ptr()).is_null());
+        assert!(plumbline_engine_token_json(e, c"John 3:16".as_ptr(), 99).is_null());
+        assert!(plumbline_engine_verse_json(e, c"garbage".as_ptr()).is_null());
+        assert!(plumbline_engine_verse_json(e, c"John 9:9".as_ptr()).is_null());
 
-        pure_engine_free(e);
+        plumbline_engine_free(e);
     }
 }
 
@@ -322,7 +322,7 @@ fn search_word_reference_and_bare_strongs() {
 
         // Word search.
         let hits: Value =
-            serde_json::from_str(&take(pure_engine_search_json(e, c"loved".as_ptr())).unwrap())
+            serde_json::from_str(&take(plumbline_engine_search_json(e, c"loved".as_ptr())).unwrap())
                 .unwrap();
         assert_eq!(hits["kind"], "hits");
         assert!(hits["total"].as_u64().unwrap() >= 1);
@@ -330,7 +330,7 @@ fn search_word_reference_and_bare_strongs() {
 
         // Reference query → goto.
         let goto: Value =
-            serde_json::from_str(&take(pure_engine_search_json(e, c"John 3".as_ptr())).unwrap())
+            serde_json::from_str(&take(plumbline_engine_search_json(e, c"John 3".as_ptr())).unwrap())
                 .unwrap();
         assert_eq!(goto["kind"], "goto");
         assert_eq!(goto["book"], "John");
@@ -339,15 +339,15 @@ fn search_word_reference_and_bare_strongs() {
 
         // Bare Strong's code → verses tagged with it.
         let tagged: Value =
-            serde_json::from_str(&take(pure_engine_search_json(e, c"G2316".as_ptr())).unwrap())
+            serde_json::from_str(&take(plumbline_engine_search_json(e, c"G2316".as_ptr())).unwrap())
                 .unwrap();
         assert_eq!(tagged["kind"], "hits");
         assert_eq!(tagged["hits"][0]["verse"], "John 3:16");
 
         // Blank query → null.
-        assert!(pure_engine_search_json(e, c"   ".as_ptr()).is_null());
+        assert!(plumbline_engine_search_json(e, c"   ".as_ptr()).is_null());
 
-        pure_engine_free(e);
+        plumbline_engine_free(e);
     }
 }
 
@@ -355,15 +355,15 @@ fn search_word_reference_and_bare_strongs() {
 fn null_and_freed_handles_are_safe() {
     unsafe {
         // Null handles never crash.
-        assert!(pure_engine_toc_json(ptr::null()).is_null());
-        assert_eq!(pure_engine_chapter_count(ptr::null(), c"John".as_ptr()), 0);
-        assert!(pure_layout_to_json(ptr::null()).is_null());
-        assert_eq!(pure_layout_height(ptr::null()), 0.0);
-        assert!(pure_layout_hit_test_json(ptr::null(), 0.0, 0.0).is_null());
+        assert!(plumbline_engine_toc_json(ptr::null()).is_null());
+        assert_eq!(plumbline_engine_chapter_count(ptr::null(), c"John".as_ptr()), 0);
+        assert!(plumbline_layout_to_json(ptr::null()).is_null());
+        assert_eq!(plumbline_layout_height(ptr::null()), 0.0);
+        assert!(plumbline_layout_hit_test_json(ptr::null(), 0.0, 0.0).is_null());
         // Freeing null is a no-op.
-        pure_engine_free(ptr::null_mut());
-        pure_layout_free(ptr::null_mut());
-        pure_study_string_free(ptr::null_mut());
+        plumbline_engine_free(ptr::null_mut());
+        plumbline_layout_free(ptr::null_mut());
+        plumbline_string_free(ptr::null_mut());
     }
 }
 
@@ -371,8 +371,8 @@ fn null_and_freed_handles_are_safe() {
 fn authoring_round_trip_via_abi() {
     use std::ffi::CString;
     unsafe {
-        // A temp home with the two data files pure_engine_open expects.
-        let home = std::env::temp_dir().join(format!("pure-ffi-author-{}", std::process::id()));
+        // A temp home with the two data files plumbline_engine_open expects.
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-author-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(home.join("data")).unwrap();
         std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
@@ -380,7 +380,7 @@ fn authoring_round_trip_via_abi() {
 
         let home_c = CString::new(home.to_str().unwrap()).unwrap();
         let mut err: *mut c_char = ptr::null_mut();
-        let e = pure_engine_open(home_c.as_ptr(), &mut err);
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
         assert!(err.is_null());
         assert!(!e.is_null());
 
@@ -389,50 +389,50 @@ fn authoring_round_trip_via_abi() {
 
         // Author: tag a verse, add a verse to a thread, weave two verses.
         // A null return means success.
-        assert!(pure_engine_tag_add(e, c("Messianic").as_ptr(), c("verse").as_ptr(), c("John 3:16").as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
-        assert!(pure_engine_tag_add(e, c("Messianic").as_ptr(), c("concept").as_ptr(), c("G2316").as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
-        assert!(pure_engine_thread_add(e, c("Road").as_ptr(), c("John 3:16").as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
-        assert!(pure_engine_weave_add_link(e, c("Links").as_ptr(), c("John 3:16").as_ptr(), c("John 3:18").as_ptr(), stamp.as_ptr()).is_null());
+        assert!(plumbline_engine_tag_add(e, c("Messianic").as_ptr(), c("verse").as_ptr(), c("John 3:16").as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
+        assert!(plumbline_engine_tag_add(e, c("Messianic").as_ptr(), c("concept").as_ptr(), c("G2316").as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
+        assert!(plumbline_engine_thread_add(e, c("Road").as_ptr(), c("John 3:16").as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
+        assert!(plumbline_engine_weave_add_link(e, c("Links").as_ptr(), c("John 3:16").as_ptr(), c("John 3:18").as_ptr(), stamp.as_ptr()).is_null());
 
         // Read back through the ABI (the engine reloaded after each write).
-        let tags: Value = serde_json::from_str(&take(pure_engine_tags_json(e)).unwrap()).unwrap();
+        let tags: Value = serde_json::from_str(&take(plumbline_engine_tags_json(e)).unwrap()).unwrap();
         assert_eq!(tags["tags"][0]["name"], "Messianic");
         assert_eq!(tags["tags"][0]["members"].as_array().unwrap().len(), 2);
         assert_eq!(tags["tags"][0]["members"][0]["verse"], "John 3:16");
         assert_eq!(tags["tags"][0]["members"][1]["strongs"], "G2316");
 
-        let threads: Value = serde_json::from_str(&take(pure_engine_threads_json(e)).unwrap()).unwrap();
+        let threads: Value = serde_json::from_str(&take(plumbline_engine_threads_json(e)).unwrap()).unwrap();
         assert_eq!(threads["threads"][0]["name"], "Road");
         assert_eq!(threads["threads"][0]["entries"][0]["verse"], "John 3:16");
 
         let xrefs: Value =
-            serde_json::from_str(&take(pure_engine_verse_xrefs_json(e, c("John 3:16").as_ptr())).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_engine_verse_xrefs_json(e, c("John 3:16").as_ptr())).unwrap()).unwrap();
         assert_eq!(xrefs["partners"][0]["verse"], "John 3:18");
         assert_eq!(xrefs["partners"][0]["weave"], "Links");
 
         // Edit notes: thread doc, an entry note, and the weave doc.
-        assert!(pure_engine_thread_set_notes(e, c("Road").as_ptr(), c("the gospel road").as_ptr()).is_null());
-        assert!(pure_engine_thread_entry_set_note(e, c("Road").as_ptr(), 0, c("start here").as_ptr()).is_null());
-        assert!(pure_engine_weave_set_notes(e, c("Links").as_ptr(), c("belief and judgment").as_ptr()).is_null());
-        let threads: Value = serde_json::from_str(&take(pure_engine_threads_json(e)).unwrap()).unwrap();
+        assert!(plumbline_engine_thread_set_notes(e, c("Road").as_ptr(), c("the gospel road").as_ptr()).is_null());
+        assert!(plumbline_engine_thread_entry_set_note(e, c("Road").as_ptr(), 0, c("start here").as_ptr()).is_null());
+        assert!(plumbline_engine_weave_set_notes(e, c("Links").as_ptr(), c("belief and judgment").as_ptr()).is_null());
+        let threads: Value = serde_json::from_str(&take(plumbline_engine_threads_json(e)).unwrap()).unwrap();
         assert_eq!(threads["threads"][0]["notes"], "the gospel road");
         assert_eq!(threads["threads"][0]["entries"][0]["note"], "start here");
         // Clearing an entry note (null) and error paths.
-        assert!(pure_engine_thread_entry_set_note(e, c("Road").as_ptr(), 0, ptr::null()).is_null());
-        assert!(take(pure_engine_weave_set_notes(e, c("Nope").as_ptr(), c("x").as_ptr())).unwrap().contains("weave"));
-        assert!(take(pure_engine_thread_entry_set_note(e, c("Road").as_ptr(), 9, ptr::null())).unwrap().contains("entry"));
+        assert!(plumbline_engine_thread_entry_set_note(e, c("Road").as_ptr(), 0, ptr::null()).is_null());
+        assert!(take(plumbline_engine_weave_set_notes(e, c("Nope").as_ptr(), c("x").as_ptr())).unwrap().contains("weave"));
+        assert!(take(plumbline_engine_thread_entry_set_note(e, c("Road").as_ptr(), 9, ptr::null())).unwrap().contains("entry"));
 
         // Error paths: a bad target kind, and a bytes-opened engine has no home.
-        assert!(take(pure_engine_tag_add(e, c("X").as_ptr(), c("bogus").as_ptr(), c("v").as_ptr(), ptr::null(), stamp.as_ptr()))
+        assert!(take(plumbline_engine_tag_add(e, c("X").as_ptr(), c("bogus").as_ptr(), c("v").as_ptr(), ptr::null(), stamp.as_ptr()))
             .unwrap()
             .contains("kind"));
         let bytes_engine = open();
-        assert!(take(pure_engine_tag_add(bytes_engine, c("X").as_ptr(), c("verse").as_ptr(), c("John 3:16").as_ptr(), ptr::null(), stamp.as_ptr()))
+        assert!(take(plumbline_engine_tag_add(bytes_engine, c("X").as_ptr(), c("verse").as_ptr(), c("John 3:16").as_ptr(), ptr::null(), stamp.as_ptr()))
             .unwrap()
             .contains("home"));
-        pure_engine_free(bytes_engine);
+        plumbline_engine_free(bytes_engine);
 
-        pure_engine_free(e);
+        plumbline_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
     }
 }
@@ -441,14 +441,14 @@ fn authoring_round_trip_via_abi() {
 fn weave_from_tag_via_abi() {
     use std::ffi::CString;
     unsafe {
-        let home = std::env::temp_dir().join(format!("pure-ffi-tagweave-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-tagweave-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(home.join("data")).unwrap();
         std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
         std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
 
         let home_c = CString::new(home.to_str().unwrap()).unwrap();
-        let e = pure_engine_open(home_c.as_ptr(), ptr::null_mut());
+        let e = plumbline_engine_open(home_c.as_ptr(), ptr::null_mut());
         assert!(!e.is_null());
         let c = |s: &str| CString::new(s).unwrap();
         let stamp = c("2026-07-25T00:00:00Z");
@@ -456,11 +456,11 @@ fn weave_from_tag_via_abi() {
         // Accumulate a topic tag over time (a concept member rides along and
         // must be ignored by the conversion), then weave it.
         for (kind, value) in [("verse", "John 3:18"), ("verse", "John 3:16"), ("concept", "G4100")] {
-            assert!(pure_engine_tag_add(e, c("Belief").as_ptr(), c(kind).as_ptr(), c(value).as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
+            assert!(plumbline_engine_tag_add(e, c("Belief").as_ptr(), c(kind).as_ptr(), c(value).as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
         }
-        assert!(pure_engine_weave_from_tag(e, c("belief").as_ptr(), ptr::null(), ptr::null(), stamp.as_ptr()).is_null());
+        assert!(plumbline_engine_weave_from_tag(e, c("belief").as_ptr(), ptr::null(), ptr::null(), stamp.as_ptr()).is_null());
 
-        let weaves: Value = serde_json::from_str(&take(pure_engine_weaves_json(e)).unwrap()).unwrap();
+        let weaves: Value = serde_json::from_str(&take(plumbline_engine_weaves_json(e)).unwrap()).unwrap();
         assert_eq!(weaves["weaves"][0]["name"], "Belief"); // null name → the tag's
         let links = weaves["weaves"][0]["links"].as_array().unwrap();
         assert_eq!(links.len(), 1); // canon-ordered chain of the two verses
@@ -468,14 +468,14 @@ fn weave_from_tag_via_abi() {
         assert_eq!(links[0]["b"], "John 3:18");
 
         // A named subset with one ref is not a weave; an unknown tag errors.
-        assert!(take(pure_engine_weave_from_tag(e, c("Belief").as_ptr(), c(r#"["John 3:16"]"#).as_ptr(), c("Solo").as_ptr(), stamp.as_ptr()))
+        assert!(take(plumbline_engine_weave_from_tag(e, c("Belief").as_ptr(), c(r#"["John 3:16"]"#).as_ptr(), c("Solo").as_ptr(), stamp.as_ptr()))
             .unwrap()
             .contains("two distinct"));
-        assert!(take(pure_engine_weave_from_tag(e, c("Nope").as_ptr(), ptr::null(), ptr::null(), stamp.as_ptr()))
+        assert!(take(plumbline_engine_weave_from_tag(e, c("Nope").as_ptr(), ptr::null(), ptr::null(), stamp.as_ptr()))
             .unwrap()
             .contains("no tag"));
 
-        pure_engine_free(e);
+        plumbline_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
     }
 }
@@ -484,7 +484,7 @@ fn weave_from_tag_via_abi() {
 fn suggested_weave_review_via_abi() {
     use std::ffi::CString;
     unsafe {
-        let home = std::env::temp_dir().join(format!("pure-ffi-review-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-review-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(home.join("data")).unwrap();
         std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
@@ -500,41 +500,41 @@ fn suggested_weave_review_via_abi() {
 
         let home_c = CString::new(home.to_str().unwrap()).unwrap();
         let mut err: *mut c_char = ptr::null_mut();
-        let e = pure_engine_open(home_c.as_ptr(), &mut err);
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
         assert!(err.is_null() && !e.is_null());
         let c = |s: &str| CString::new(s).unwrap();
 
         // List: both show up, ordered, each with its ordinal index.
         let listed: Value =
-            serde_json::from_str(&take(pure_engine_suggested_weaves_json(e)).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_engine_suggested_weaves_json(e)).unwrap()).unwrap();
         let items = listed["suggested"].as_array().unwrap();
         assert_eq!(items.len(), 2);
         assert_eq!(items[0]["index"], 0);
         assert_eq!(items[0]["links"][0]["aDisplay"], "John 3:16");
 
         // Approve index 0 → it leaves the suggested queue (one left).
-        assert!(pure_engine_weave_approve(e, 0).is_null());
+        assert!(plumbline_engine_weave_approve(e, 0).is_null());
         let after: Value =
-            serde_json::from_str(&take(pure_engine_suggested_weaves_json(e)).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_engine_suggested_weaves_json(e)).unwrap()).unwrap();
         assert_eq!(after["suggested"].as_array().unwrap().len(), 1);
         // The approved weave now asserts its cross-reference from weaves/.
         let xrefs: Value =
-            serde_json::from_str(&take(pure_engine_verse_xrefs_json(e, c("John 3:16").as_ptr())).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_engine_verse_xrefs_json(e, c("John 3:16").as_ptr())).unwrap()).unwrap();
         assert!(xrefs["partners"].as_array().unwrap().iter().any(|p| p["verse"] == "John 3:18"));
 
         // Reject the remaining one (now index 0) → queue empties.
-        assert!(pure_engine_weave_reject(e, 0).is_null());
+        assert!(plumbline_engine_weave_reject(e, 0).is_null());
         let empty: Value =
-            serde_json::from_str(&take(pure_engine_suggested_weaves_json(e)).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_engine_suggested_weaves_json(e)).unwrap()).unwrap();
         assert!(empty["suggested"].as_array().unwrap().is_empty());
 
         // Error paths: out-of-range index, and a bytes-opened engine has no home.
-        assert!(take(pure_engine_weave_approve(e, 9)).unwrap().contains("index"));
+        assert!(take(plumbline_engine_weave_approve(e, 9)).unwrap().contains("index"));
         let bytes_engine = open();
-        assert!(take(pure_engine_weave_reject(bytes_engine, 0)).unwrap().contains("home"));
-        pure_engine_free(bytes_engine);
+        assert!(take(plumbline_engine_weave_reject(bytes_engine, 0)).unwrap().contains("home"));
+        plumbline_engine_free(bytes_engine);
 
-        pure_engine_free(e);
+        plumbline_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
     }
 }
@@ -543,7 +543,7 @@ fn suggested_weave_review_via_abi() {
 fn rnd_tier_via_abi() {
     use std::ffi::CString;
     unsafe {
-        let home = std::env::temp_dir().join(format!("pure-ffi-rnd-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-rnd-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(home.join("data")).unwrap();
         std::fs::create_dir_all(home.join("bridge")).unwrap();
@@ -580,18 +580,18 @@ fn rnd_tier_via_abi() {
 
         let home_c = CString::new(home.to_str().unwrap()).unwrap();
         let mut err: *mut c_char = ptr::null_mut();
-        let e = pure_engine_open(home_c.as_ptr(), &mut err);
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
         assert!(err.is_null() && !e.is_null());
         let c = |s: &str| CString::new(s).unwrap();
 
         // Concept neighbours: same-testament near, Hebrew cross (aligned).
-        let n: Value = serde_json::from_str(&take(pure_engine_concept_neighbours_json(e, c("G25").as_ptr(), 5)).unwrap()).unwrap();
+        let n: Value = serde_json::from_str(&take(plumbline_engine_concept_neighbours_json(e, c("G25").as_ptr(), 5)).unwrap()).unwrap();
         assert_eq!(n["code"], "G25");
         assert!(n["near"].as_array().unwrap().iter().all(|x| x["code"].as_str().unwrap().starts_with('G')));
         assert!(n["cross"].as_array().unwrap().iter().any(|x| x["code"] == "H7225"));
 
         // Fused bridge partner from the external witness.
-        let b: Value = serde_json::from_str(&take(pure_engine_bridge_partners_json(e, c("G25").as_ptr())).unwrap()).unwrap();
+        let b: Value = serde_json::from_str(&take(plumbline_engine_bridge_partners_json(e, c("G25").as_ptr())).unwrap()).unwrap();
         let p = b["partners"].as_array().unwrap().iter().find(|x| x["code"] == "H7225").unwrap();
         assert_eq!(p["sources"][0], "lxx");
         assert!((p["prior"].as_f64().unwrap() - 0.85).abs() < 1e-6);
@@ -606,24 +606,24 @@ fn rnd_tier_via_abi() {
         assert_eq!(q["researchGrade"], serde_json::json!(true));
 
         // Morphology of "loved".
-        let m: Value = serde_json::from_str(&take(pure_engine_morph_json(e, c("John 3:16").as_ptr(), 3)).unwrap()).unwrap();
+        let m: Value = serde_json::from_str(&take(plumbline_engine_morph_json(e, c("John 3:16").as_ptr(), 3)).unwrap()).unwrap();
         assert_eq!(m["code"], "V-AAI-3S");
         assert_eq!(m["gloss"], "aorist active indicative, 3rd singular");
         // A token with no annotation → null.
-        assert!(pure_engine_morph_json(e, c("John 3:16").as_ptr(), 1).is_null());
+        assert!(plumbline_engine_morph_json(e, c("John 3:16").as_ptr(), 1).is_null());
 
         // "Verses like this" (lazy SIF build) → the other Greek verse.
-        let s: Value = serde_json::from_str(&take(pure_engine_similar_verses_json(e, c("John 3:16").as_ptr(), 5)).unwrap()).unwrap();
+        let s: Value = serde_json::from_str(&take(plumbline_engine_similar_verses_json(e, c("John 3:16").as_ptr(), 5)).unwrap()).unwrap();
         assert_eq!(s["verse"], "John 3:16");
         assert!(s["in"].as_array().unwrap().iter().any(|x| x["verse"] == "John 3:18"));
 
         // A bytes-opened engine has no embedding/morph → those return null.
         let bytes_engine = open();
-        assert!(pure_engine_concept_neighbours_json(bytes_engine, c("G25").as_ptr(), 5).is_null());
-        assert!(pure_engine_morph_json(bytes_engine, c("John 3:16").as_ptr(), 3).is_null());
-        pure_engine_free(bytes_engine);
+        assert!(plumbline_engine_concept_neighbours_json(bytes_engine, c("G25").as_ptr(), 5).is_null());
+        assert!(plumbline_engine_morph_json(bytes_engine, c("John 3:16").as_ptr(), 3).is_null());
+        plumbline_engine_free(bytes_engine);
 
-        pure_engine_free(e);
+        plumbline_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
     }
 }
@@ -632,7 +632,7 @@ fn rnd_tier_via_abi() {
 fn concept_map_bridge_row_lights_up_the_other_testament() {
     use std::ffi::CString;
     unsafe {
-        let home = std::env::temp_dir().join(format!("pure-ffi-bridgemap-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-bridgemap-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(home.join("data")).unwrap();
         std::fs::create_dir_all(home.join("bridge")).unwrap();
@@ -660,7 +660,7 @@ fn concept_map_bridge_row_lights_up_the_other_testament() {
 
         let home_c = CString::new(home.to_str().unwrap()).unwrap();
         let mut err: *mut c_char = ptr::null_mut();
-        let e = pure_engine_open(home_c.as_ptr(), &mut err);
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
         assert!(err.is_null() && !e.is_null());
         let c = |s: &str| CString::new(s).unwrap();
 
@@ -668,7 +668,7 @@ fn concept_map_bridge_row_lights_up_the_other_testament() {
         // dispersion lights up Genesis (canon index 0) — even though G25 itself
         // occurs only in the NT (its own by_book is 0 at Genesis).
         let m: Value =
-            serde_json::from_str(&take(pure_engine_concept_map_json(e, c("G25").as_ptr())).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_engine_concept_map_json(e, c("G25").as_ptr())).unwrap()).unwrap();
         assert_eq!(m["byBook"][0].as_u64().unwrap(), 0, "G25 itself is not in Genesis");
         let bridge = &m["bridge"];
         assert!(bridge.is_object(), "a bridge row exists when a partner does");
@@ -686,10 +686,10 @@ fn concept_map_bridge_row_lights_up_the_other_testament() {
         // A code with no cross-testament partner omits the bridge row entirely
         // (serde skips the None), so shells draw a single dispersion band.
         let m2: Value =
-            serde_json::from_str(&take(pure_engine_concept_map_json(e, c("G2316").as_ptr())).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_engine_concept_map_json(e, c("G2316").as_ptr())).unwrap()).unwrap();
         assert!(m2["bridge"].is_null(), "no bridge row without a cross-testament partner");
 
-        pure_engine_free(e);
+        plumbline_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
     }
 }
@@ -698,7 +698,7 @@ fn concept_map_bridge_row_lights_up_the_other_testament() {
 fn parity_endpoints_via_abi() {
     use std::ffi::CString;
     unsafe {
-        let home = std::env::temp_dir().join(format!("pure-ffi-parity-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-parity-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(home.join("data")).unwrap();
         std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
@@ -723,21 +723,21 @@ fn parity_endpoints_via_abi() {
 
         let home_c = CString::new(home.to_str().unwrap()).unwrap();
         let mut err: *mut c_char = ptr::null_mut();
-        let e = pure_engine_open(home_c.as_ptr(), &mut err);
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
         assert!(err.is_null() && !e.is_null());
         let c = |s: &str| CString::new(s).unwrap();
 
         // Margin notes: present verse → notes; absent verse → null.
         let notes: Value = serde_json::from_str(
-            &take(pure_engine_verse_notes_json(e, c("John 3:16").as_ptr())).unwrap(),
+            &take(plumbline_engine_verse_notes_json(e, c("John 3:16").as_ptr())).unwrap(),
         )
         .unwrap();
         assert_eq!(notes["notes"][0], "Or, begotten");
-        assert!(pure_engine_verse_notes_json(e, c("John 3:18").as_ptr()).is_null());
+        assert!(plumbline_engine_verse_notes_json(e, c("John 3:18").as_ptr()).is_null());
 
         // TSK: best-voted first, range end carried.
         let xr: Value = serde_json::from_str(
-            &take(pure_engine_study_xrefs_json(e, c("John 3:16").as_ptr())).unwrap(),
+            &take(plumbline_engine_study_xrefs_json(e, c("John 3:16").as_ptr())).unwrap(),
         )
         .unwrap();
         let refs = xr["refs"].as_array().unwrap();
@@ -748,7 +748,7 @@ fn parity_endpoints_via_abi() {
 
         // Weave library: spans, approval, kind label, resolvability.
         let ws: Value =
-            serde_json::from_str(&take(pure_engine_weaves_json(e)).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_engine_weaves_json(e)).unwrap()).unwrap();
         let w = &ws["weaves"][0];
         assert_eq!(w["name"], "Spanned");
         assert_eq!(w["kind"], "type");
@@ -766,7 +766,7 @@ fn parity_endpoints_via_abi() {
         assert_eq!(dangling["resolved"], false);
 
         // Author a spanned link through the ABI and read it back.
-        assert!(pure_engine_weave_add_link_spans(
+        assert!(plumbline_engine_weave_add_link_spans(
             e,
             c("Pinned").as_ptr(),
             c("John 3:16").as_ptr(),
@@ -779,7 +779,7 @@ fn parity_endpoints_via_abi() {
         )
         .is_null());
         let ws: Value =
-            serde_json::from_str(&take(pure_engine_weaves_json(e)).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_engine_weaves_json(e)).unwrap()).unwrap();
         let pinned = ws["weaves"]
             .as_array()
             .unwrap()
@@ -794,7 +794,7 @@ fn parity_endpoints_via_abi() {
         // Link pairs: deduped canonical pairs, each endpoint located, with the
         // resolvability flag (the Gen 1:1 endpoint is outside this corpus).
         let lp: Value =
-            serde_json::from_str(&take(pure_engine_link_pairs_json(e)).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_engine_link_pairs_json(e)).unwrap()).unwrap();
         let pairs = lp["pairs"].as_array().unwrap();
         let resolved = pairs.iter().find(|p| p["resolved"] == true).unwrap();
         assert_eq!(resolved["a"], "John 3:16");
@@ -810,7 +810,7 @@ fn parity_endpoints_via_abi() {
         // Canon segments: the 8 frozen bands + the OT/NT divide, straight from
         // core::reference (no shell hardcode).
         let cs: Value =
-            serde_json::from_str(&take(pure_engine_canon_segments_json(e)).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_engine_canon_segments_json(e)).unwrap()).unwrap();
         assert_eq!(cs["otNtDivide"], 39);
         let segs = cs["segments"].as_array().unwrap();
         assert_eq!(segs.len(), 8);
@@ -826,7 +826,7 @@ fn parity_endpoints_via_abi() {
         // Unresolved endpoints (Gen 1:1 is outside the corpus) still count, so
         // the map reflects authored density, not drawability.
         let cm: Value =
-            serde_json::from_str(&take(pure_engine_chord_map_json(e)).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_engine_chord_map_json(e)).unwrap()).unwrap();
         assert_eq!(cm["otNtDivide"], 39);
         assert_eq!(cm["bookCount"], 66);
         assert_eq!(cm["max"], 1);
@@ -851,7 +851,7 @@ fn parity_endpoints_via_abi() {
         // Concept map: centre label (gloss over lemma), spokes, and the
         // canon-ordered dispersion. G2316 (θεός / "God") occurs once, in John.
         let cmap: Value = serde_json::from_str(
-            &take(pure_engine_concept_map_json(e, c("G2316").as_ptr())).unwrap(),
+            &take(plumbline_engine_concept_map_json(e, c("G2316").as_ptr())).unwrap(),
         )
         .unwrap();
         assert_eq!(cmap["code"], "G2316");
@@ -872,7 +872,7 @@ fn parity_endpoints_via_abi() {
         // 3:16↔John 3:18); its Gen 1:1↔John 3:16 link is unresolved, so it never
         // becomes a lane. The "Pinned" weave (authored above) also resolves.
         let con: Value = serde_json::from_str(
-            &take(pure_engine_constellation_json(e, 0, ptr::null())).unwrap(),
+            &take(plumbline_engine_constellation_json(e, 0, ptr::null())).unwrap(),
         )
         .unwrap();
         assert_eq!(con["nPins"], 0);
@@ -895,7 +895,7 @@ fn parity_endpoints_via_abi() {
         let sidx = spanned["weaveIndex"].as_u64().unwrap();
         let pins = CString::new(format!("[{sidx}]")).unwrap();
         let con2: Value = serde_json::from_str(
-            &take(pure_engine_constellation_json(e, 0, pins.as_ptr())).unwrap(),
+            &take(plumbline_engine_constellation_json(e, 0, pins.as_ptr())).unwrap(),
         )
         .unwrap();
         assert_eq!(con2["nPins"], 1);
@@ -903,7 +903,7 @@ fn parity_endpoints_via_abi() {
         assert_eq!(con2["lanes"][0]["pinned"], true);
         assert!(con2["caption"].as_str().unwrap().starts_with("1 pinned · "));
 
-        pure_engine_free(e);
+        plumbline_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
     }
 }
@@ -917,7 +917,7 @@ fn concept_and_gloss_via_abi() {
 
         // Concept stats for a code that occurs once, in the NT.
         let cj: Value = serde_json::from_str(
-            &take(pure_engine_concept_json(e, c("G2316").as_ptr())).unwrap(),
+            &take(plumbline_engine_concept_json(e, c("G2316").as_ptr())).unwrap(),
         )
         .unwrap();
         assert_eq!(cj["total"], 1);
@@ -928,15 +928,15 @@ fn concept_and_gloss_via_abi() {
         // Too few occurrences for a leitwort (min 8).
         assert!(cj["leitwort"].is_null());
         // Unknown code → null.
-        assert!(pure_engine_concept_json(e, c("H9999").as_ptr()).is_null());
+        assert!(plumbline_engine_concept_json(e, c("H9999").as_ptr()).is_null());
 
         // English gloss: the modal KJV rendering carrying the code.
-        assert_eq!(take(pure_engine_gloss(e, c("G2316").as_ptr())).unwrap(), "God");
-        assert_eq!(take(pure_engine_gloss(e, c("G25").as_ptr())).unwrap(), "loved");
+        assert_eq!(take(plumbline_engine_gloss(e, c("G2316").as_ptr())).unwrap(), "God");
+        assert_eq!(take(plumbline_engine_gloss(e, c("G25").as_ptr())).unwrap(), "loved");
         // Untagged code distils the dictionary; unknown → null.
-        assert!(pure_engine_gloss(e, c("H9999").as_ptr()).is_null());
+        assert!(plumbline_engine_gloss(e, c("H9999").as_ptr()).is_null());
 
-        pure_engine_free(e);
+        plumbline_engine_free(e);
     }
 }
 
@@ -945,7 +945,7 @@ fn config_round_trip_via_abi() {
     use std::ffi::CString;
     unsafe {
         // Redirect the per-user config dir into a temp sandbox.
-        let dir = std::env::temp_dir().join(format!("pure-ffi-config-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("plumbline-ffi-config-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         if cfg!(target_os = "windows") {
@@ -956,16 +956,16 @@ fn config_round_trip_via_abi() {
 
         // No file yet → defaults + firstRun.
         let loaded: Value =
-            serde_json::from_str(&take(pure_config_load_json()).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_config_load_json()).unwrap()).unwrap();
         assert_eq!(loaded["firstRun"], true);
         assert_eq!(loaded["studyMode"], "simple");
 
         // Save a full-study, two-pane session and read it back.
         let saved = r#"{"studyMode":"full","bodySize":21.0,"openPanes":[{"book":"Gen","chapter":15},{"book":"Rom","chapter":4}],"activePane":1}"#;
         let sc = CString::new(saved).unwrap();
-        assert!(pure_config_save_json(sc.as_ptr()).is_null());
+        assert!(plumbline_config_save_json(sc.as_ptr()).is_null());
         let loaded: Value =
-            serde_json::from_str(&take(pure_config_load_json()).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_config_load_json()).unwrap()).unwrap();
         assert_eq!(loaded["firstRun"], false);
         assert_eq!(loaded["studyMode"], "full");
         assert_eq!(loaded["bodySize"], 21.0);
@@ -974,7 +974,7 @@ fn config_round_trip_via_abi() {
 
         // Garbage json is an error, not a panic.
         let bad = CString::new("{nope").unwrap();
-        assert!(take(pure_config_save_json(bad.as_ptr())).unwrap().contains("bad config json"));
+        assert!(take(plumbline_config_save_json(bad.as_ptr())).unwrap().contains("bad config json"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1003,7 +1003,7 @@ fn panel_blocks_via_abi() {
 
         // Word study on "God" (John 3:16 token 1 → G2316), Full study.
         let ws: Value = serde_json::from_str(
-            &take(pure_engine_word_study_blocks_json(e, c("John 3:16").as_ptr(), 1, true)).unwrap(),
+            &take(plumbline_engine_word_study_blocks_json(e, c("John 3:16").as_ptr(), 1, true)).unwrap(),
         )
         .unwrap();
         // Opens with the verse display, then the big word.
@@ -1017,25 +1017,25 @@ fn panel_blocks_via_abi() {
 
         // Simple mode drops the R&D sections.
         let simple: Value = serde_json::from_str(
-            &take(pure_engine_word_study_blocks_json(e, c("John 3:16").as_ptr(), 1, false)).unwrap(),
+            &take(plumbline_engine_word_study_blocks_json(e, c("John 3:16").as_ptr(), 1, false)).unwrap(),
         )
         .unwrap();
         assert!(!simple["blocks"].as_array().unwrap().iter().any(|b| b["kind"] == "section"));
 
         // Concordance: the go: link for the one occurrence verse.
         let cc: Value =
-            serde_json::from_str(&take(pure_engine_concordance_blocks_json(e, c("G2316").as_ptr())).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_engine_concordance_blocks_json(e, c("G2316").as_ptr())).unwrap()).unwrap();
         assert!(uris(&cc).contains(&"go:John:3:16".to_string()));
 
         // A word search → ranked hits, each a go: link (John 3:16 has "God").
         let sr: Value =
-            serde_json::from_str(&take(pure_engine_search_blocks_json(e, c("God").as_ptr())).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_engine_search_blocks_json(e, c("God").as_ptr())).unwrap()).unwrap();
         assert!(uris(&sr).contains(&"go:John:3:16".to_string()));
 
         // A blank query is null (not an empty payload).
-        assert!(pure_engine_search_blocks_json(e, c("   ").as_ptr()).is_null());
+        assert!(plumbline_engine_search_blocks_json(e, c("   ").as_ptr()).is_null());
 
-        pure_engine_free(e);
+        plumbline_engine_free(e);
     }
 }
 
@@ -1047,7 +1047,7 @@ fn route_link_via_abi() {
     unsafe {
         let c = |s: &str| CString::new(s).unwrap();
         let route = |s: &str| -> Option<Value> {
-            take(pure_route_link_json(c(s).as_ptr())).map(|j| serde_json::from_str(&j).unwrap())
+            take(plumbline_route_link_json(c(s).as_ptr())).map(|j| serde_json::from_str(&j).unwrap())
         };
 
         let go = route("go:1 John:3:16").unwrap();
@@ -1079,8 +1079,8 @@ fn route_link_via_abi() {
         assert_eq!(route("about").unwrap()["verb"], "about");
 
         // Unknown verb / malformed → null.
-        assert!(pure_route_link_json(c("bogus:x").as_ptr()).is_null());
-        assert!(pure_route_link_json(c("thread:nan").as_ptr()).is_null());
+        assert!(plumbline_route_link_json(c("bogus:x").as_ptr()).is_null());
+        assert!(plumbline_route_link_json(c("thread:nan").as_ptr()).is_null());
     }
 }
 
@@ -1095,71 +1095,71 @@ fn tier0_endpoints_via_abi() {
         let c = |s: &str| CString::new(s).unwrap();
         // A null / unknown theme falls back to light; "night" is true-black.
         let light: Value =
-            serde_json::from_str(&take(pure_theme_palette_json(ptr::null())).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_theme_palette_json(ptr::null())).unwrap()).unwrap();
         assert_eq!(light["paper"], "#fcf9f4");
         assert_eq!(light["dark"], false);
         let palette: Value =
-            serde_json::from_str(&take(pure_theme_palette_json(c("night").as_ptr())).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_theme_palette_json(c("night").as_ptr())).unwrap()).unwrap();
         assert_eq!(palette["paper"], "#000000");
         assert_eq!(palette["dark"], true);
         let tones: Value =
-            serde_json::from_str(&take(pure_theme_highlight_tones_json()).unwrap()).unwrap();
+            serde_json::from_str(&take(plumbline_theme_highlight_tones_json()).unwrap()).unwrap();
         assert!(tones["tones"].as_array().unwrap().len() >= 5);
-        let guide: Value = serde_json::from_str(&take(pure_panel_guide_blocks_json()).unwrap()).unwrap();
+        let guide: Value = serde_json::from_str(&take(plumbline_panel_guide_blocks_json()).unwrap()).unwrap();
         assert!(!guide["blocks"].as_array().unwrap().is_empty());
-        assert!(!take(pure_panel_about_blocks_json()).unwrap().is_empty());
+        assert!(!take(plumbline_panel_about_blocks_json()).unwrap().is_empty());
 
         // A temp home for the authoring endpoints.
-        let home = std::env::temp_dir().join(format!("pure-ffi-tier0-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-tier0-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(home.join("data")).unwrap();
         std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
         std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
         let home_c = CString::new(home.to_str().unwrap()).unwrap();
         let mut err: *mut c_char = ptr::null_mut();
-        let e = pure_engine_open(home_c.as_ptr(), &mut err);
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
         assert!(err.is_null());
         assert!(!e.is_null());
         let stamp = c("2026-01-01T00:00:00Z");
 
         // Copy: plain, ref-suffixed, markdown.
-        let plain = take(pure_engine_copy_text(e, c("John 3:16").as_ptr(), c("verse").as_ptr())).unwrap();
+        let plain = take(plumbline_engine_copy_text(e, c("John 3:16").as_ptr(), c("verse").as_ptr())).unwrap();
         assert!(plain.starts_with("For God so loved"));
-        let refd = take(pure_engine_copy_text(e, c("John 3:16").as_ptr(), c("verseRef").as_ptr())).unwrap();
+        let refd = take(plumbline_engine_copy_text(e, c("John 3:16").as_ptr(), c("verseRef").as_ptr())).unwrap();
         assert!(refd.ends_with("— John 3:16 (KJV)"));
-        assert!(pure_engine_copy_text(e, c("John 3:16").as_ptr(), c("bogus").as_ptr()).is_null());
+        assert!(plumbline_engine_copy_text(e, c("John 3:16").as_ptr(), c("bogus").as_ptr()).is_null());
 
         // Personal note: absent → null, set → readable, cleared → null again.
-        assert!(pure_engine_user_note_json(e, c("John 3:16").as_ptr()).is_null());
-        assert!(pure_engine_user_note_set(e, c("John 3:16").as_ptr(), c("golden text").as_ptr(), stamp.as_ptr()).is_null());
-        let note: Value = serde_json::from_str(&take(pure_engine_user_note_json(e, c("John 3:16").as_ptr())).unwrap()).unwrap();
+        assert!(plumbline_engine_user_note_json(e, c("John 3:16").as_ptr()).is_null());
+        assert!(plumbline_engine_user_note_set(e, c("John 3:16").as_ptr(), c("golden text").as_ptr(), stamp.as_ptr()).is_null());
+        let note: Value = serde_json::from_str(&take(plumbline_engine_user_note_json(e, c("John 3:16").as_ptr())).unwrap()).unwrap();
         assert_eq!(note["text"], "golden text");
-        let all: Value = serde_json::from_str(&take(pure_engine_user_notes_json(e)).unwrap()).unwrap();
+        let all: Value = serde_json::from_str(&take(plumbline_engine_user_notes_json(e)).unwrap()).unwrap();
         assert_eq!(all["notes"].as_array().unwrap().len(), 1);
-        assert!(pure_engine_user_note_set(e, c("John 3:16").as_ptr(), c("").as_ptr(), stamp.as_ptr()).is_null());
-        assert!(pure_engine_user_note_json(e, c("John 3:16").as_ptr()).is_null());
+        assert!(plumbline_engine_user_note_set(e, c("John 3:16").as_ptr(), c("").as_ptr(), stamp.as_ptr()).is_null());
+        assert!(plumbline_engine_user_note_json(e, c("John 3:16").as_ptr()).is_null());
 
         // Highlight: tag a verse, colour the tag, then the chapter reports the wash.
-        assert!(pure_engine_tag_add(e, c("amber").as_ptr(), c("verse").as_ptr(), c("John 3:16").as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
-        assert!(pure_engine_tag_set_color(e, c("amber").as_ptr(), c("#f6e0a0").as_ptr()).is_null());
-        let hl: Value = serde_json::from_str(&take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+        assert!(plumbline_engine_tag_add(e, c("amber").as_ptr(), c("verse").as_ptr(), c("John 3:16").as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
+        assert!(plumbline_engine_tag_set_color(e, c("amber").as_ptr(), c("#f6e0a0").as_ptr()).is_null());
+        let hl: Value = serde_json::from_str(&take(plumbline_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
         assert_eq!(hl["verses"][0]["verse"], "John 3:16");
         assert_eq!(hl["verses"][0]["color"], "#f6e0a0");
         // Clearing the colour clears the wash.
-        assert!(pure_engine_tag_set_color(e, c("amber").as_ptr(), ptr::null()).is_null());
-        let hl2: Value = serde_json::from_str(&take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+        assert!(plumbline_engine_tag_set_color(e, c("amber").as_ptr(), ptr::null()).is_null());
+        let hl2: Value = serde_json::from_str(&take(plumbline_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
         assert!(hl2["verses"].as_array().unwrap().is_empty());
 
         // Word-precise cross-verse highlight: "drag" John 3:16 tok2 → 3:18 tok1
         // with a tone. The fixture has 3:16 (6 tokens) and 3:18 (3 tokens), so
         // the range lands as a start-partial run (tok 2..last=5) plus an
         // end-partial run (0..1).
-        assert!(pure_engine_highlight_add(
+        assert!(plumbline_engine_highlight_add(
             e, c("dragged").as_ptr(), c("#c8b0e0").as_ptr(),
             c("John 3:16").as_ptr(), 2, c("John 3:18").as_ptr(), 1, stamp.as_ptr(),
         ).is_null());
         let hr: Value = serde_json::from_str(
-            &take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+            &take(plumbline_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
         let runs = hr["runs"].as_array().unwrap();
         assert_eq!(runs.len(), 2, "runs: {runs:?}");
         assert_eq!(runs[0]["verse"], "John 3:16");
@@ -1170,84 +1170,84 @@ fn tier0_endpoints_via_abi() {
         assert_eq!(runs[1]["lo"], 0);
         assert_eq!(runs[1]["hi"], 1);
         // A backwards drag (end→start) is ordered the same and dedupes.
-        assert!(pure_engine_highlight_add(
+        assert!(plumbline_engine_highlight_add(
             e, c("dragged").as_ptr(), c("#c8b0e0").as_ptr(),
             c("John 3:18").as_ptr(), 1, c("John 3:16").as_ptr(), 2, stamp.as_ptr(),
         ).is_null());
         let hr_dup: Value = serde_json::from_str(
-            &take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+            &take(plumbline_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
         assert_eq!(hr_dup["runs"].as_array().unwrap().len(), 2, "backwards drag must dedupe");
         // Remove it → runs gone.
-        assert!(pure_engine_highlight_remove(
+        assert!(plumbline_engine_highlight_remove(
             e, c("dragged").as_ptr(), c("John 3:16").as_ptr(), 2, c("John 3:18").as_ptr(), 1,
         ).is_null());
         let hr2: Value = serde_json::from_str(
-            &take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+            &take(plumbline_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
         assert!(hr2["runs"].as_array().map(|a| a.is_empty()).unwrap_or(true));
 
         // Clear-by-verse (WinUI's "Remove highlight"): re-add, then clear on any
         // covered verse drops the whole range.
-        assert!(pure_engine_highlight_add(
+        assert!(plumbline_engine_highlight_add(
             e, c("dragged").as_ptr(), c("#c8b0e0").as_ptr(),
             c("John 3:16").as_ptr(), 2, c("John 3:18").as_ptr(), 1, stamp.as_ptr(),
         ).is_null());
-        assert!(pure_engine_highlight_clear_verse(e, c("John 3:16").as_ptr()).is_null());
+        assert!(plumbline_engine_highlight_clear_verse(e, c("John 3:16").as_ptr()).is_null());
         let hr4: Value = serde_json::from_str(
-            &take(pure_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
+            &take(plumbline_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
         assert!(hr4["runs"].as_array().map(|a| a.is_empty()).unwrap_or(true));
 
         // Memorization (Tier 2 #15): grade → card, drill, recall, coverage, activity.
-        assert!(pure_engine_memory_grade(
+        assert!(plumbline_engine_memory_grade(
             e, c("John 3:16").as_ptr(), c("good").as_ptr(), stamp.as_ptr()).is_null());
         let card: Value = serde_json::from_str(
-            &take(pure_engine_memory_card_json(e, c("John 3:16").as_ptr())).unwrap()).unwrap();
+            &take(plumbline_engine_memory_card_json(e, c("John 3:16").as_ptr())).unwrap()).unwrap();
         assert_eq!(card["ref"], "John 3:16");
         assert_eq!(card["reps"], 1);
         assert_eq!(card["mastery"], "young"); // 1-day interval after one Good
         assert_eq!(card["reviews"].as_array().unwrap().len(), 1);
         // An unknown grade is rejected (non-null error).
-        assert!(!pure_engine_memory_grade(
+        assert!(!plumbline_engine_memory_grade(
             e, c("John 3:16").as_ptr(), c("bogus").as_ptr(), stamp.as_ptr()).is_null());
 
         // Drill: first-letter skeleton + (level-0) unblanked form of the verse.
         let drill: Value = serde_json::from_str(
-            &take(pure_engine_memory_drill_json(e, c("John 3:16").as_ptr(), 0)).unwrap()).unwrap();
+            &take(plumbline_engine_memory_drill_json(e, c("John 3:16").as_ptr(), 0)).unwrap()).unwrap();
         assert!(drill["text"].as_str().unwrap().starts_with("For God so loved"));
         assert_eq!(drill["firstLetters"], "F G s l t w.");
         assert!(!drill["blanked"].as_str().unwrap().contains('_')); // nothing hidden at level 0
 
         // Recall scoring: a perfect (case/punctuation-tolerant) recall is 1.0.
-        let sc: Value = serde_json::from_str(&take(pure_engine_memory_score_json(
+        let sc: Value = serde_json::from_str(&take(plumbline_engine_memory_score_json(
             e, c("John 3:16").as_ptr(), c("for god so loved the world").as_ptr())).unwrap()).unwrap();
         assert_eq!(sc["accuracy"], 1.0);
 
         // Coverage + activity, from the review log.
-        let cov: Value = serde_json::from_str(&take(pure_engine_memory_coverage_json(
+        let cov: Value = serde_json::from_str(&take(plumbline_engine_memory_coverage_json(
             e, stamp.as_ptr())).unwrap()).unwrap();
         assert_eq!(cov["verses"][0]["ref"], "John 3:16");
         let gospels = cov["sections"].as_array().unwrap().iter()
             .find(|s| s["label"] == "Gospels").unwrap().clone();
         assert_eq!(gospels["cards"], 1);
         let act: Value = serde_json::from_str(
-            &take(pure_engine_memory_activity_json(e)).unwrap()).unwrap();
+            &take(plumbline_engine_memory_activity_json(e)).unwrap()).unwrap();
         assert_eq!(act["days"].as_array().unwrap().len(), 1);
 
         // Seed a card without reviewing ("Memorize this verse") → new, reps 0.
-        assert!(pure_engine_memory_add(e, c("John 3:18").as_ptr(), stamp.as_ptr()).is_null());
+        assert!(plumbline_engine_memory_add(e, c("John 3:18").as_ptr(), stamp.as_ptr()).is_null());
         let seeded: Value = serde_json::from_str(
-            &take(pure_engine_memory_card_json(e, c("John 3:18").as_ptr())).unwrap()).unwrap();
+            &take(plumbline_engine_memory_card_json(e, c("John 3:18").as_ptr())).unwrap()).unwrap();
         assert_eq!(seeded["reps"], 0);
         assert_eq!(seeded["mastery"], "new");
-        assert!(pure_engine_memory_remove(e, c("John 3:18").as_ptr()).is_null());
+        assert!(plumbline_engine_memory_remove(e, c("John 3:18").as_ptr()).is_null());
 
         // Remove → the card is gone.
-        assert!(pure_engine_memory_remove(e, c("John 3:16").as_ptr()).is_null());
-        assert!(pure_engine_memory_card_json(e, c("John 3:16").as_ptr()).is_null());
+        assert!(plumbline_engine_memory_remove(e, c("John 3:16").as_ptr()).is_null());
+        assert!(plumbline_engine_memory_card_json(e, c("John 3:16").as_ptr()).is_null());
 
         // Warming is a null-on-success no-op that stays callable.
-        assert!(pure_engine_warm_indexes(e).is_null());
+        assert!(plumbline_engine_warm_indexes(e).is_null());
 
-        pure_engine_free(e);
+        plumbline_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
     }
 }

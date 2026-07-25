@@ -20,7 +20,7 @@ target
 # .NET build output (from the C# binding demo)
 **/bin/
 **/obj/
-# …but NOT Rust's src/bin/ crate-binary sources (e.g. the pure-bindgen tool),
+# …but NOT Rust's src/bin/ crate-binary sources (e.g. the plumbline-bindgen tool),
 # which the broad **/bin/ rule above would otherwise swallow.
 !**/src/bin/
 !**/src/bin/**
@@ -50,4 +50,4 @@ target
 apps/web/node_modules/
 apps/web/dist/
 apps/web/public/pack/
-apps/web/public/pure_ffi.wasm
+apps/web/public/plumbline_ffi.wasm

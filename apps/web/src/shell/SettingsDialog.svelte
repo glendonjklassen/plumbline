@@ -12,16 +12,25 @@
   //    Android backup writes — one archive restores across devices. ──────────
   const BACKUP_DIRS = ["tags/", "threads/", "weaves/", "notes/", "memory/", ".config/"];
 
+  // Archives written before the Plumbline rename carry the config under
+  // ".config/pure-study/"; the live home reads ".config/plumbline/". Remapped on
+  // restore only — nothing ever writes the old name back. Without this an older
+  // backup silently drops the user's settings (the authored dirs above are
+  // unaffected: their names never moved).
+  const LEGACY_CONFIG = ".config/pure-study/";
+  const currentConfigPath = (p: string): string =>
+    p.startsWith(LEGACY_CONFIG) ? ".config/plumbline/" + p.slice(LEGACY_CONFIG.length) : p;
+
   function backup(): void {
     const files = s.home.exportUserData();
     files.set(
-      "purestudy-backup.json",
+      "plumbline-backup.json",
       new TextEncoder().encode(JSON.stringify({ format: 1, app: "web", exported: nowStamp() })),
     );
     const blob = new Blob([zipWrite(files) as unknown as BlobPart], { type: "application/zip" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `pure-study-backup-${nowStamp().slice(0, 10)}.zip`;
+    a.download = `plumbline-backup-${nowStamp().slice(0, 10)}.zip`;
     a.click();
     URL.revokeObjectURL(a.href);
     s.showToast(`Backed up ${files.size - 1} files`);
@@ -38,7 +47,7 @@
       const safe = new Map<string, Uint8Array>();
       for (const [path, bytes] of entries)
         if (BACKUP_DIRS.some((d) => path.startsWith(d)) && !path.includes(".."))
-          safe.set(path, bytes);
+          safe.set(currentConfigPath(path), bytes);
       if (safe.size === 0) {
         s.showToast("No study data found in that zip");
         return;

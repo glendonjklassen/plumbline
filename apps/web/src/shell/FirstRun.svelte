@@ -24,7 +24,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={start}></div>
   <div class="dialog" role="dialog" aria-modal="true">
-    <h2>Welcome to pure study</h2>
+    <h2>Welcome to Plumbline</h2>
     <p class="sub">
       The 1769 King James text is always on — reading, search, and your own tags, notes, and
       threads. Choose which layers of analysis sit alongside it:

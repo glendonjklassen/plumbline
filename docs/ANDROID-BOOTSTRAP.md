@@ -1,14 +1,21 @@
 # Android shell — bootstrap plan
 
-The third shell: a Jetpack Compose (Kotlin) app over the same `pure-core`, exactly
-like the GTK and WinUI shells. No study logic in Kotlin — it calls the frozen C ABI.
+> **Status (2026-07-25):** the Compose shell has landed — see
+> [FEATURE-MANIFEST.md](FEATURE-MANIFEST.md) §Android notes for what it does
+> today. This document is kept as the *toolchain* reference (NDK, cross-compile,
+> fold modes, emulator, sideloading); its "Current state" and "Phasing" sections
+> describe the original plan, not today's tree.
 
-Target device: **Google Pixel 9 Pro Fold** (GrapheneOS). Goal: a daily-driver
+A Jetpack Compose (Kotlin) app over the same `plumbline-core`, exactly like the
+desktop shells that preceded it. No study logic in Kotlin — it calls the frozen
+C ABI.
+
+Target device: **a large foldable** running GrapheneOS. Goal: a daily-driver
 Bible reader with three fold-aware layout modes.
 
 ## Current state
-- ✅ `pure-core` (all logic) + the 78-fn C ABI (`pure-ffi`), already built as a `cdylib`.
-- ✅ Partial Kotlin/JNA binding: `crates/ffi/bindings/kotlin/PureStudy.kt` (~21/78 fns).
+- ✅ `plumbline-core` (all logic) + the 78-fn C ABI (`plumbline-ffi`), already built as a `cdylib`.
+- ✅ Partial Kotlin/JNA binding: `crates/ffi/bindings/kotlin/Plumbline.kt` (~21/78 fns).
 - ✅ `cargo-ndk` + Rust Android targets installed on the Linux dev box.
 - ❌ NDK, `apps/android` project, cross-compiled `.so`, Compose UI, fold logic.
 
@@ -17,8 +24,8 @@ JNA consumes the exact same 78 fns C# binds via csbindgen — zero Rust changes,
 one flat C ABI stays the single source of truth. UniFFI can't wrap an existing
 hand-written C ABI (it generates its own), so adopting it would mean a parallel
 second ABI + regenerating C# via an immature tool — rejected. Finish the ~57
-remaining `fun`s in `PureStudy.kt` against `crates/ffi/include/pure_study.h`,
-keeping the `Pointer`-return + `pure_study_string_free` discipline the scaffold
+remaining `fun`s in `Plumbline.kt` against `crates/ffi/include/plumbline.h`,
+keeping the `Pointer`-return + `plumbline_string_free` discipline the scaffold
 already models. If the per-word `measure` layout callback ever profiles hot, drop
 a single JNI shim for that one callback — not a rewrite.
 
@@ -36,25 +43,25 @@ yay -S android-studio         # SDK Manager: Platform 35, Platform-Tools (adb), 
 ### Cross-compile the core → `.so`
 ```bash
 cargo ndk -t arm64-v8a -t x86_64 --platform 24 \
-  -o apps/android/app/src/main/jniLibs build -p pure-ffi --release
+  -o apps/android/app/src/main/jniLibs build -p plumbline-ffi --release
 # NOTE: use --platform (or -P), NOT -p — lowercase -p collides with cargo's --package.
 ```
 NDK r27 (LTS) or r28+; cargo-ndk 4.x auto-injects the mandatory 16 KB page
 alignment (verify with `llvm-readelf -l`). Ship arm64-v8a (device) + x86_64
-(emulator). Loaded via `System.loadLibrary("pure_ffi")`; JNA dep
+(emulator). Loaded via `System.loadLibrary("plumbline_ffi")`; JNA dep
 `net.java.dev.jna:jna:5.17.0@aar` (the `@aar` matters; 5.17+ fixes a 16 KB crash).
 
 ### Data
 Bundle `data/kjv.jsonl` + `strongs.json` (+ notes/xrefs) as app **assets** and open
-the engine with `pure_engine_open_from_bytes` (no writable home needed for reading;
+the engine with `plumbline_engine_open_from_bytes` (no writable home needed for reading;
 personal study data goes to the app's private files dir). ~22 MB of assets — fine.
 
 ## The three fold modes
 Source of truth: `androidx.window` `WindowInfoTracker` → `FoldingFeature`
 (`FLAT`/`HALF_OPENED`, hinge orientation, bounds). Panes: `androidx.compose.
 material3.adaptive`. Derive a single `UiMode` from *(width breakpoint + FoldingFeature
-present + state)* — **never gate two-pane on width alone** (the Fold's inner display
-is ~1:1 and may not clear the 840dp "Expanded" breakpoint).
+present + state)* — **never gate two-pane on width alone** (the target foldable's
+inner display is ~1:1 and may not clear the 840dp "Expanded" breakpoint).
 
 | Mode | Trigger | Layout |
 |------|---------|--------|
@@ -97,5 +104,5 @@ signing keys forces an uninstall on update.
 5. **Reach parity** — panes, study panel, search, highlights, weaves.
 
 Steps 1–2 are verifiable headless here; 3–5 compile/run on the dev machine + device
-(like WinUI). Record the Android binding/loading approach in
+(as the desktop shells did). Record the Android binding/loading approach in
 `docs/FEATURE-MANIFEST.md` as a shell delta until parity lands.

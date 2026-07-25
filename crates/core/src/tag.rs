@@ -480,7 +480,7 @@ mod tests {
 
     #[test]
     fn add_dedupes_remove_and_reload() {
-        let home = std::env::temp_dir().join(format!("pure-tag-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-tag-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         let isa = TagTarget::Verse(VRef::new("Isa", 53, 5));
         let concept = TagTarget::Concept("G5547".into());
@@ -578,7 +578,7 @@ mod tests {
 
     #[test]
     fn add_and_remove_highlight_roundtrip() {
-        let home = std::env::temp_dir().join(format!("pure-hl-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("plumbline-hl-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         let range = HighlightRange {
             start: VRef::new("John", 3, 16),

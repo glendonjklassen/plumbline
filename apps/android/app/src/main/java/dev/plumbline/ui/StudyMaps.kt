@@ -1,4 +1,4 @@
-// The study panel's embedded maps (Glendon's feedback, 2026-07-24): the concept
+// The study panel's embedded maps (product feedback, 2026-07-24): the concept
 // map and the across-the-canon heatmap as first-class cards INSIDE the word
 // study, scaled down — not just links to fullscreen overlays. The radial card
 // taps through to the fullscreen (zoomable) concept map; tapping a book column
@@ -8,7 +8,7 @@
 //
 // Author D (Compose UI).
 
-package dev.purestudy.ui
+package dev.plumbline.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -29,10 +29,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.purestudy.ConceptMapData
-import dev.purestudy.StudyEngine
-import dev.purestudy.TocBook
-import dev.purestudy.parseWire
+import dev.plumbline.ConceptMapData
+import dev.plumbline.StudyEngine
+import dev.plumbline.TocBook
+import dev.plumbline.parseWire
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.max

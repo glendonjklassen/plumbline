@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The pure-study mark: a woven Latin cross (two vertical + two horizontal gold
-     strands), centred in the adaptive-icon safe zone. Ported from the desktop
-     SVG (apps/desktop/assets/icons/.../dev.purestudy.app.svg); the intricate
-     basket-weave tuck detail is dropped at launcher size. -->
+<!-- The app mark: a woven Latin cross (two vertical + two horizontal gold
+     strands), for the weave motif, centred in the adaptive-icon safe zone. The
+     intricate basket-weave tuck detail is dropped at launcher size. NOTE: this
+     glyph predates the Plumbline name and carries no plumb-line/true-vertical
+     imagery — whether the mark should change is an open product call. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"

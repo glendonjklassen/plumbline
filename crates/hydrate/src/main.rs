@@ -1,4 +1,4 @@
-//! `pure-hydrate` — assemble and verify the pure-study data pack into a home.
+//! `plumbline-hydrate` — assemble and verify the Plumbline data pack into a home.
 //!
 //! The reader needs only `kjv.jsonl` + `strongs.json` (+ optional notes); the
 //! R&D tier adds `cross-references.tsv`, `concept-vectors.vec` (with its `.meta`
@@ -9,17 +9,17 @@
 //! answered concretely rather than by guessing from file presence.
 //!
 //! Usage:
-//!   pure-hydrate check [--home <dir>]        # inspect a home (default: resolved)
-//!   pure-hydrate copy  --from <dir> [--to <dir>]   # copy the pack, then verify
+//!   plumbline-hydrate check [--home <dir>]        # inspect a home (default: resolved)
+//!   plumbline-hydrate copy  --from <dir> [--to <dir>]   # copy the pack, then verify
 //!
 //! All paths join cross-platform; copies create the target `data/` as needed.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use pure_core::canon::TOKENIZATION_VERSION;
-use pure_core::{corpus, crossref, home, notes, strongs};
-use pure_rnd::{bridge, embed, morph};
+use plumbline_core::canon::TOKENIZATION_VERSION;
+use plumbline_core::{corpus, crossref, home, notes, strongs};
+use plumbline_rnd::{bridge, embed, morph};
 
 /// The pack files, relative to a home. Core files gate the reader; the R&D
 /// files are optional tiers. Sidecars ride with their primary file.
@@ -47,7 +47,7 @@ const RND_FILES: &[&str] = &[
 ];
 /// Authored / seed content copied as whole directories. The overlay home keeps
 /// the user's weaves (parallel passages), threads, tags, the suggested-weave
-/// review queue, and patches here; seeding them means a fresh pure-study home
+/// review queue, and patches here; seeding them means a fresh Plumbline home
 /// opens with the same study aids instead of an empty reader.
 const USER_DIRS: &[&str] = &["weaves", "suggested", "threads", "tags", "patches"];
 
@@ -89,12 +89,12 @@ fn main() -> ExitCode {
 }
 
 const HELP: &str = "\
-pure-hydrate — assemble + verify the pure-study data pack
+plumbline-hydrate — assemble + verify the Plumbline data pack
 
-  pure-hydrate check [--home <dir>]
+  plumbline-hydrate check [--home <dir>]
       Inspect a home and report which tiers will light up.
 
-  pure-hydrate copy --from <dir> [--to <dir>]
+  plumbline-hydrate copy --from <dir> [--to <dir>]
       Copy the pack from <dir>/data into <dir-to>/data, seed the authored
       dirs (weaves/threads/tags/suggested/patches) without overwriting any
       existing files there, then verify.
@@ -114,7 +114,7 @@ fn resolve_home() -> PathBuf {
 /// Copy every pack file that exists under `from` into `to`, creating `to/data`.
 ///
 /// Pack files land atomically (temp sibling → rename, mirroring
-/// `pure_core::store::write_atomic`) so a crash mid-copy can never leave a
+/// `plumbline_core::store::write_atomic`) so a crash mid-copy can never leave a
 /// truncated file where a good one stood. The authored dirs are seeded without
 /// ever overwriting an existing file — those hold the user's own study aids.
 fn copy(from: &Path, to: &Path) -> std::io::Result<()> {
@@ -171,7 +171,7 @@ fn copy(from: &Path, to: &Path) -> std::io::Result<()> {
 
 /// Copy `src` over `dst` atomically: stream into a hidden temp sibling in the
 /// destination directory, fsync, close, then rename into place — the same
-/// dance as `pure_core::store::write_atomic` (a rename within one directory is
+/// dance as `plumbline_core::store::write_atomic` (a rename within one directory is
 /// atomic on Unix and Windows, so a crash mid-copy never leaves a truncated
 /// pack file behind). Returns the number of bytes copied.
 fn copy_atomic(src: &Path, dst: &Path) -> std::io::Result<u64> {
@@ -317,7 +317,7 @@ mod tests {
 
     fn scratch(tag: &str) -> PathBuf {
         // A unique-per-process scratch dir under the OS temp dir (portable).
-        std::env::temp_dir().join(format!("pure-hydrate-{}-{tag}", std::process::id()))
+        std::env::temp_dir().join(format!("plumbline-hydrate-{}-{tag}", std::process::id()))
     }
 
     #[test]

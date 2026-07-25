@@ -8,7 +8,7 @@
 //! a **semantic** colour role + a logical point size + bold/italic + an optional
 //! `uri`; the shell maps the role to its palette and paints. Data reaches the
 //! producer through the [`PanelSource`] trait, which both the GTK `State` and
-//! the FFI `PureEngine` implement — so the derivation lives here **once**.
+//! the FFI `PlumblineEngine` implement — so the derivation lives here **once**.
 //!
 //! The block vocabulary is deliberately tiny and generic (unknown kinds render
 //! as nothing on the wire), so the core can add kinds without breaking older
@@ -327,7 +327,7 @@ pub struct SearchHitView {
 // ── the data source ───────────────────────────────────────────────────────────
 
 /// Everything the panel producer reads. Both the GTK `State` and the FFI
-/// `PureEngine` implement this over the same underlying indices, so the panel
+/// `PlumblineEngine` implement this over the same underlying indices, so the panel
 /// derivation is written once. Every method is a thin projection; the R&D tiers
 /// (bridge / concept / morphology / similar verses) return empty when their
 /// artifact is absent, so a simple-reader source needs only the base methods.
@@ -392,7 +392,7 @@ pub trait PanelSource {
 // The producer above bakes every interactive `uri`; [`parse_link`] turns one
 // back into a typed verb. Emit and parse live side by side here, so the verb
 // vocabulary is a single source both shells route through (GTK calls it
-// directly; the non-Rust shells via `pure_route_link_json`) — a verb can't
+// directly; the non-Rust shells via `plumbline_route_link_json`) — a verb can't
 // drift between what the panel emits and what a shell handles. Navigation and
 // native prompts stay shell-side; the write verbs still call the author
 // endpoints (which need shell-gathered input).
@@ -1290,7 +1290,7 @@ fn guide_section(out: &mut Vec<Block>, title: &str, paras: &[&str]) {
 /// The in-app guide: a concise tour of the reader. (The full manual lives in
 /// docs/GUIDE.md; this is the on-screen version.)
 pub fn guide_blocks() -> Vec<Block> {
-    let mut out = vec![Block::para(vec![Run::new("Using pure-study", sz::TITLE, Color::Ink).bold()])];
+    let mut out = vec![Block::para(vec![Run::new("Using Plumbline", sz::TITLE, Color::Ink).bold()])];
     guide_section(
         &mut out,
         "GETTING AROUND",
@@ -1345,7 +1345,7 @@ pub fn guide_blocks() -> Vec<Block> {
 /// The About content (edition, provenance, covenant), pushed onto `out` so both
 /// the standalone About card and the combined guide can reuse it verbatim.
 fn about_body(out: &mut Vec<Block>) {
-    out.push(Block::para(vec![Run::new("About pure-study", sz::TITLE, Color::Ink).bold()]));
+    out.push(Block::para(vec![Run::new("About Plumbline", sz::TITLE, Color::Ink).bold()]));
     out.push(Block::para(vec![Run::new(
         "A KJV-only Bible-study tool: a parallel-passage reader with an optional Full-study tier of Strong's, morphology, cross-references, and corpus analytics. Everything runs locally and offline.",
         sz::BODY,

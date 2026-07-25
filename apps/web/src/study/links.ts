@@ -1,5 +1,5 @@
 // The one link dispatcher (manifest P1.4): every panel URI parses in the core
-// via pure_route_link_json; this switch owns only navigation, prompts, and the
+// via plumbline_route_link_json; this switch owns only navigation, prompts, and the
 // write choreography (author endpoint → engine reloads → shell re-fetches).
 // Shift/Ctrl-click on a go: link opens the other pane (Tier-0 #8).
 

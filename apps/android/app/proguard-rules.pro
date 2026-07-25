@@ -1,4 +1,4 @@
-# pure-study ProGuard / R8 rules.
+# Plumbline ProGuard / R8 rules.
 # Release builds currently ship with minification off, but these keep rules make
 # it safe to flip isMinifyEnabled on later.
 
@@ -10,10 +10,10 @@
 -keepclassmembers class com.sun.jna.** { *; }
 -dontwarn java.awt.**
 
-# Our JNA binding lives in dev.purestudy.core (PureStudyNative interface + the
-# PureLayoutConfig Structure with @Structure.FieldOrder). Keep it intact.
--keep class dev.purestudy.core.** { *; }
--keepclassmembers class dev.purestudy.core.** { *; }
+# Our JNA binding lives in dev.plumbline.core (PlumblineNative interface + the
+# PlumblineLayoutConfig Structure with @Structure.FieldOrder). Keep it intact.
+-keep class dev.plumbline.core.** { *; }
+-keepclassmembers class dev.plumbline.core.** { *; }
 
 # Keep anything implementing a JNA Library or Callback, and Structure subclasses.
 -keep class * implements com.sun.jna.Library { *; }
@@ -34,8 +34,8 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 # Keep the @Serializable wire data classes themselves.
--keep,includedescriptorclasses class dev.purestudy.**$$serializer { *; }
--keepclassmembers @kotlinx.serialization.Serializable class dev.purestudy.** {
+-keep,includedescriptorclasses class dev.plumbline.**$$serializer { *; }
+-keepclassmembers @kotlinx.serialization.Serializable class dev.plumbline.** {
     *** Companion;
     kotlinx.serialization.KSerializer serializer(...);
 }

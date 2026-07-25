@@ -1,8 +1,8 @@
-package dev.purestudy.ui
+package dev.plumbline.ui
 
 // Tag→weave conversion sheet (2026-07-25): a topic tag accumulates passages
 // over time; this turns the tag — or a checked subset of its verse members —
-// into a canon-ordered weave via pure_engine_weave_from_tag. Re-running after
+// into a canon-ordered weave via plumbline_engine_weave_from_tag. Re-running after
 // the tag grows just adds the new edges.
 
 import android.widget.Toast
@@ -36,9 +36,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.purestudy.StudyEngine
-import dev.purestudy.Tags
-import dev.purestudy.parseWire
+import dev.plumbline.StudyEngine
+import dev.plumbline.Tags
+import dev.plumbline.parseWire
 import kotlinx.serialization.encodeToString
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -113,7 +113,7 @@ fun TagWeaveSheet(
                     onClick = {
                         val refsJson =
                             if (checked.size == members.size) null
-                            else dev.purestudy.PureJson.encodeToString(checked.toList())
+                            else dev.plumbline.PlumblineJson.encodeToString(checked.toList())
                         val err = engine.WeaveFromTag(tag.name, refsJson, name.trim().takeIf { it != tag.name }, nowUtc())
                         Toast.makeText(
                             context,
