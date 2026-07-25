@@ -705,7 +705,8 @@ swipe), context menu (copy shapes / note / tones / tag / thread / memorize),
 tag picker + tag→weave sheets, drag highlights + span pins + ＋link, the
 three map popups from the core view-models (pinch-zoom), memorization (hub /
 drill / coverage / activity), Present mode (sunlight, share +
-BibleGateway), notes browser, history, first-run, guide/about/shortcuts,
+BibleGateway + the hosted PWA link), notes browser, history, first-run,
+guide/about/shortcuts,
 light/dark/night/system themes from the core palette, per-tier gates,
 config round-trip incl. scroll-verse restore (flushed on tab hide — the
 ON_PAUSE twin), PWA (installable, offline after first visit; pack cached
@@ -729,7 +730,9 @@ keep its URLs base-relative).
     high-contrast ("sunlight") large-type presentation for showing someone in
     person — scrollable overview (bounce anywhere), tap-to-focus a passage
     huge, "In context" fades surrounding verses in, end card with plain-text
-    Share + BibleGateway KJV link. **Delta (GTK/WinUI):** a projection-friendly
+    Share + BibleGateway KJV link. The share's closing line carries the
+    hosted PWA link (2026-07-25, both shells) — the take-home hands the
+    recipient the app, not just the text. **Delta (GTK/WinUI):** a projection-friendly
     presentation window (fullscreen, large type, step keys) from the same
     thread data.
   - **Embedded study maps** (`ui/StudyMaps.kt`): the concept map + canon

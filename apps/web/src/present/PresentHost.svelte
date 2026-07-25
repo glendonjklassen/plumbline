@@ -45,13 +45,19 @@
     else close();
   }
 
+  // The hosted PWA — the take-home carries the app itself, not just the text.
+  const PWA_URL = "https://glendonjklassen.github.io/plumbline/";
+
   function shareText(): string {
     const lines = [thread.name, ""];
     for (const e of entries) {
       lines.push(e.display, e.body, "");
     }
-    lines.push("Read online: https://www.biblegateway.com/passage/?version=KJV&search=" +
-      encodeURIComponent(entries.map((e) => e.display).join("; ")));
+    lines.push(
+      "Read online: https://www.biblegateway.com/passage/?version=KJV&search=" +
+        encodeURIComponent(entries.map((e) => e.display).join("; ")),
+      `Shared from Plumbline — ${PWA_URL}`,
+    );
     return lines.join("\n");
   }
   async function share(): Promise<void> {

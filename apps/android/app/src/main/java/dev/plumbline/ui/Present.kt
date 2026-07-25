@@ -112,6 +112,9 @@ private fun onlineLink(entries: List<PresentEntry>): String? {
     return "https://www.biblegateway.com/passage/?search=$search&version=KJV"
 }
 
+/** The hosted PWA — the take-home carries the app itself, not just the text. */
+private const val PWA_URL = "https://glendonjklassen.github.io/plumbline/"
+
 /** The plain-text take-home for a presented thread (the end-card Share). */
 private fun shareText(name: String, entries: List<PresentEntry>): String =
     buildString {
@@ -124,6 +127,8 @@ private fun shareText(name: String, entries: List<PresentEntry>): String =
             appendLine()
             appendLine("Read online: $it")
         }
+        appendLine()
+        appendLine("Shared from Plumbline — $PWA_URL")
     }
 
 /**
