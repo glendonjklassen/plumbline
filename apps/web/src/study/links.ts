@@ -65,6 +65,10 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       if (tag) report(s, s.engine.tagRemove(tag.name, "verse", link.refKey));
       break;
     }
+    case "makeWeave":
+      // Tag→weave: pick the members (default all), name it, chain it.
+      s.tagWeaveFor = link.tag;
+      break;
     case "approve":
       report(s, s.engine.weaveApprove(link.index));
       break;

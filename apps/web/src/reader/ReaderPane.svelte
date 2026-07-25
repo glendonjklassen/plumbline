@@ -343,9 +343,9 @@
       onWordStudy?.(hit.verse, hit.tokenIndex);
       return;
     }
-    // Single click (Full study): pin a span for ＋ link — same-verse clicks
-    // re-span from the anchor, a different verse resets (manifest §Weave).
-    if (!s.full) return;
+    // Single click: pin a span for ＋ link — same-verse clicks re-span from
+    // the anchor, a different verse resets (manifest §Weave). Authoring is
+    // the reader's own data, so pinning is never mode-gated.
     const p = pane.pinned;
     if (p && p.verse === hit.verse) {
       pane.pinned = {

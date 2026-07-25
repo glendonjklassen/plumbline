@@ -70,6 +70,8 @@ export class Session {
   contextMenu = $state<{ x: number; y: number; refKey: string } | null>(null);
   /** Tag-picker sheet target (refKey), Android TagPickerSheet parity. */
   tagPickFor = $state<string | null>(null);
+  /** Tag→weave sheet target (tag ordinal) — the makeweave: verb. */
+  tagWeaveFor = $state<number | null>(null);
   /** Active text prompt (rendered by PromptDialog); resolves null on cancel. */
   promptReq = $state<{
     title: string;
@@ -85,8 +87,10 @@ export class Session {
     });
   }
 
-  get full(): boolean {
-    return this.config.studyMode === "full";
+  /** Per-tier content gates (bit 0 = human/scholars, bit 1 = machine); the
+   *  text and the reader's own data are always on (2026-07-25 product). */
+  get gates(): number {
+    return (this.config.humanAnalysis !== false ? 1 : 0) | (this.config.machineAnalysis !== false ? 2 : 0);
   }
 
   #saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -106,7 +110,9 @@ export class Session {
       .map((p: any) => ({
         book: p.book,
         chapter: p.chapter,
-        targetVerse: null,
+        // Reopen mid-chapter: the saved first-visible verse becomes the
+        // scroll target once the first layout lands.
+        targetVerse: p.verse && p.verse > 1 ? p.verse : null,
         scrollY: 0,
         back: [],
         fwd: [],
@@ -127,6 +133,27 @@ export class Session {
 
     // Debug handle for the console (and the repo's headless probes).
     (globalThis as any).__pureStudy = this;
+
+    // The web twin of Android's ON_PAUSE persist: flush the session (incl.
+    // the scroll verse) when the tab hides or unloads.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") this.flushConfig();
+    });
+    addEventListener("pagehide", () => this.flushConfig());
+  }
+
+  /** Save immediately (tab hide/close) — no debounce. */
+  flushConfig(): void {
+    if (this.#saveTimer) clearTimeout(this.#saveTimer);
+    this.config.openPanes = this.panes.map((p, i) => ({
+      book: p.book,
+      chapter: p.chapter,
+      verse: this.#firstVisibleVerse(i),
+    }));
+    this.config.activePane = this.activePane;
+    this.config.firstRun = undefined;
+    configSave(this.wasm, this.config);
+    void this.home.persistUserData();
   }
 
   resolvedTheme(): string {
@@ -144,9 +171,28 @@ export class Session {
       ?.setAttribute("content", this.palette.paper ?? "#fcf9f4");
   }
 
-  /** Persist config (debounced) — pane set, zoom, theme, mode, history. */
+  /** A pane's first visible verse (for cross-session scroll restore). */
+  #firstVisibleVerse(idx: number): number | undefined {
+    const pane = this.panes[idx];
+    const geom = this.paneVerseGeom[idx];
+    if (!pane || !geom) return undefined;
+    let best: number | undefined;
+    let bestY = Infinity;
+    for (const [v, g] of geom)
+      if (g.y + g.h > pane.scrollY && g.y < bestY) {
+        bestY = g.y;
+        best = v;
+      }
+    return best && best > 1 ? best : undefined;
+  }
+
+  /** Persist config (debounced) — pane set, zoom, theme, gates, history. */
   saveConfig(): void {
-    this.config.openPanes = this.panes.map((p) => ({ book: p.book, chapter: p.chapter }));
+    this.config.openPanes = this.panes.map((p, i) => ({
+      book: p.book,
+      chapter: p.chapter,
+      verse: this.#firstVisibleVerse(i),
+    }));
     this.config.activePane = this.activePane;
     if (this.#saveTimer) clearTimeout(this.#saveTimer);
     this.#saveTimer = setTimeout(() => {

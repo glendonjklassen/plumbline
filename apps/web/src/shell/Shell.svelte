@@ -12,6 +12,7 @@
   import MapsHost from "../maps/MapsHost.svelte";
   import ContextMenu from "../reader/ContextMenu.svelte";
   import TagPicker from "../study/TagPicker.svelte";
+  import TagWeave from "../study/TagWeave.svelte";
   import { nowStamp } from "../engine/StudyEngine";
   import { getSession } from "../state/session.svelte";
 
@@ -58,9 +59,8 @@
     s.applyTheme();
     s.saveConfig();
   }
-  function setMode(mode: "simple" | "full"): void {
-    s.config.studyMode = mode;
-    if (mode === "simple") s.panel = null;
+  function toggleGate(key: "humanAnalysis" | "machineAnalysis"): void {
+    s.config[key] = s.config[key] === false;
     s.saveConfig();
   }
 
@@ -165,14 +165,12 @@
   <header>
     <span class="title">pure study</span>
     <span class="subtitle">{subtitle}</span>
-    {#if s.full}
-      <nav class="browse">
+    <nav class="browse">
         <button onclick={() => (s.panel = { kind: "threads" })}>Threads</button>
         <button onclick={() => (s.panel = { kind: "tags" })}>Tags</button>
         <button onclick={() => (s.panel = { kind: "weaves" })}>Weaves</button>
         <button disabled={pinnedPanes.length < 2} onclick={addLink} title="Link the pinned spans">＋ link</button>
       </nav>
-    {/if}
     <span class="spacer"></span>
     <input
       class="search"
@@ -189,12 +187,19 @@
         <div class="backdrop" onclick={() => (menuOpen = false)}></div>
         <div class="menu">
           <div class="group">Weave views</div>
-          <button disabled={!s.full} onclick={menu(() => (s.panel = { kind: "suggested" }))}>Suggested</button>
-          <button disabled={!s.full} onclick={menu(() => (s.mapPopup = { kind: "chord" }))}>Weave map</button>
-          <button disabled={!s.full} onclick={menu(() => (s.mapPopup = { kind: "constellation" }))}>Constellation</button>
+          <button onclick={menu(() => (s.panel = { kind: "suggested" }))}>Suggested</button>
+          <button onclick={menu(() => (s.mapPopup = { kind: "chord" }))}>Weave map</button>
+          <button onclick={menu(() => (s.mapPopup = { kind: "constellation" }))}>Constellation</button>
+          <div class="group">Analysis</div>
+          <button
+            class:checked={s.config.humanAnalysis !== false}
+            onclick={menu(() => toggleGate("humanAnalysis"))}>Scholars' analysis</button
+          >
+          <button
+            class:checked={s.config.machineAnalysis !== false}
+            onclick={menu(() => toggleGate("machineAnalysis"))}>Machine analysis</button
+          >
           <div class="group">Reading</div>
-          <button class:checked={!s.full} onclick={menu(() => setMode("simple"))}>Simple reader</button>
-          <button class:checked={s.full} onclick={menu(() => setMode("full"))}>Full study</button>
           <button
             class:checked={!!s.config.versePerLine}
             onclick={menu(() => {
@@ -240,6 +245,7 @@
 <MapsHost />
 <ContextMenu />
 <TagPicker />
+<TagWeave />
 
 <style>
   .frame {

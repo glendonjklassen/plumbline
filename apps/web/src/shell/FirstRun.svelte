@@ -6,7 +6,11 @@
   const s = getSession();
 
   function choose(mode: "simple" | "full"): void {
+    // studyMode round-trips for older readers; the real switches are the
+    // per-tier gates (togglable any time under ≡ Analysis).
     s.config.studyMode = mode;
+    s.config.humanAnalysis = mode === "full";
+    s.config.machineAnalysis = mode === "full";
     s.showFirstRun = false;
     s.saveConfig();
   }

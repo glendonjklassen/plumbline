@@ -255,21 +255,23 @@ export class StudyEngine {
 
   // ── panel content model ─────────────────────────────────────────────────────
 
-  wordStudyBlocks(refKey: string, tokenIndex: number, full: boolean): any {
+  /** Word study with per-tier gates: bit 0 = human analysis, bit 1 = machine. */
+  wordStudyBlocks(refKey: string, tokenIndex: number, gates: number): any {
     const s = this.#call(
       (r) =>
         this.#w.takeStr(
-          (this.#w.exports.pure_engine_word_study_blocks_json as Function)(this.#engine, r, tokenIndex, full ? 1 : 0) as number,
+          (this.#w.exports.pure_engine_word_study_blocks2_json as Function)(this.#engine, r, tokenIndex, gates) as number,
         ),
       [refKey],
     );
     return s === null ? null : JSON.parse(s);
   }
-  codeStudyBlocks(code: string, word: string | null, full: boolean): any {
+  /** Code study card with per-tier gates (see wordStudyBlocks). */
+  codeStudyBlocks(code: string, word: string | null, gates: number): any {
     const s = this.#call(
       (c, wd) =>
         this.#w.takeStr(
-          (this.#w.exports.pure_engine_code_study_blocks_json as Function)(this.#engine, c, wd, full ? 1 : 0) as number,
+          (this.#w.exports.pure_engine_code_study_blocks2_json as Function)(this.#engine, c, wd, gates) as number,
         ),
       [code, word],
     );
@@ -334,6 +336,16 @@ export class StudyEngine {
       (f, n, a, b, ad) => f(this.#engine, n, a, b, aLo, aHi, bLo, bHi, ad),
       [name, aRef, bRef, added],
     );
+  }
+  /** Weave a tag's passages (or a refKey subset) into a canon-ordered chain;
+   *  null weaveName reuses the tag's name. Re-runs only add new edges. */
+  weaveFromTag(tagName: string, refsJson: string | null, weaveName: string | null, added: string): string | null {
+    return this.#author("pure_engine_weave_from_tag", (f, ...p) => f(this.#engine, ...p), [
+      tagName,
+      refsJson,
+      weaveName,
+      added,
+    ]);
   }
   weaveApprove(index: number): string | null {
     const err = this.#w.takeStr((this.#w.exports.pure_engine_weave_approve as Function)(this.#engine, index) as number);

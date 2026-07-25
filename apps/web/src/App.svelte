@@ -21,7 +21,7 @@
       session = initSession(result);
       // Kill the first-study-click pause off the critical path (Tier-0 #6),
       // GTK-style: proactive, after first paint.
-      if (session.full) setTimeout(() => session!.engine.warmIndexes(), 400);
+      if (session.gates & 2) setTimeout(() => session!.engine.warmIndexes(), 400);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }

@@ -17,9 +17,9 @@
     const e = s.engine;
     switch (p.kind) {
       case "wordStudy":
-        return e.wordStudyBlocks(p.refKey, p.tokenIndex, s.full)?.blocks;
+        return e.wordStudyBlocks(p.refKey, p.tokenIndex, s.gates)?.blocks;
       case "codeStudy":
-        return e.codeStudyBlocks(p.code, p.word, s.full)?.blocks;
+        return e.codeStudyBlocks(p.code, p.word, s.gates)?.blocks;
       case "concordance":
         return e.concordanceBlocks(p.code)?.blocks;
       case "renderingConcordance":
@@ -37,7 +37,7 @@
       case "suggested":
         return e.suggestedBlocks()?.blocks;
       case "compare":
-        return e.compareBlocks(p.index, s.full)?.blocks;
+        return e.compareBlocks(p.index, true)?.blocks;
       case "search":
         return e.searchBlocks(s.searchQuery)?.blocks;
       case "guide":

@@ -110,11 +110,9 @@
       {/each}
     </div>
     <button onclick={removeHighlight}>Remove highlight</button>
-    {#if s.full}
-      <hr />
-      <button onclick={tagPick}>Tag…</button>
-      <button onclick={addThread}>Add to thread…</button>
-    {/if}
+    <hr />
+    <button onclick={tagPick}>Tag…</button>
+    <button onclick={addThread}>Add to thread…</button>
     <hr />
     <button onclick={memorize}>Memorize this verse</button>
   </div>
