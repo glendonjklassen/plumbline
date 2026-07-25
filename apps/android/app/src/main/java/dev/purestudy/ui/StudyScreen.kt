@@ -181,6 +181,7 @@ fun StudyScreen(
     var studySheet by remember { mutableStateOf(false) }            // phone: study as a bottom sheet
     var showSearch by remember { mutableStateOf(false) }            // full-screen search overlay
     var showExplore by remember { mutableStateOf(false) }           // "Explore" study-tools screen
+    var showPresent by remember { mutableStateOf(false) }           // thread presentation mode
     var showHistory by remember { mutableStateOf(false) }           // reading-history sheet
     var showSettings by remember { mutableStateOf(false) }          // settings dialog
     var showWeaves by remember { mutableStateOf(false) }            // Weaves screen (All/Suggested filter)
@@ -366,6 +367,7 @@ fun StudyScreen(
             onToggleSecondPane = {
                 secondPane = if (secondPane == SecondPane.Study) SecondPane.Bible else SecondPane.Study
             },
+            onPresent = { showPresent = true },
             onMemorize = { memView = MemorizeView.List },
             onExplore = { showExplore = true },
             onHistory = { showHistory = true },
@@ -481,6 +483,11 @@ fun StudyScreen(
                 onOpenWeave = {},
             )
         }
+        // Presentation mode (Glendon's #1): fullscreen, over everything — the
+        // reader hands the phone across, so no study chrome bleeds through.
+        if (showPresent) {
+            PresentOverlay(engine, palette, onClose = { showPresent = false })
+        }
         if (showChord) MapOverlay("Chord map", palette, { showChord = false }) {
             ChordMap(
                 engine, toc, palette, Modifier.fillMaxSize(),
@@ -544,6 +551,7 @@ private fun TopBar(
     onSearch: () -> Unit,
     secondStudy: Boolean,
     onToggleSecondPane: () -> Unit,
+    onPresent: () -> Unit,
     onMemorize: () -> Unit,
     onExplore: () -> Unit,
     onHistory: () -> Unit,
@@ -599,6 +607,7 @@ private fun TopBar(
                     Icon(Icons.Filled.MoreVert, contentDescription = "Menu", tint = palette.ink)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("Present") }, onClick = { onPresent(); menu = false })
                     DropdownMenuItem(text = { Text("Memorize") }, onClick = { onMemorize(); menu = false })
                     DropdownMenuItem(text = { Text("Explore") }, onClick = { onExplore(); menu = false })
                     DropdownMenuItem(text = { Text("History") }, onClick = { onHistory(); menu = false })
