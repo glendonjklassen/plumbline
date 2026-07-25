@@ -45,7 +45,7 @@ export async function fetchPack(
   const workers = Array.from({ length: 4 }, async () => {
     for (let f = queue.shift(); f; f = queue.shift()) {
       onProgress?.({ fraction: doneGz / totalGz, currentFile: f.path });
-      const res = await fetch(`${PACK_BASE}${f.path}.gz`);
+      const res = await fetch(`${PACK_BASE}${f.path}.gz?v=${manifest.version}`);
       if (!res.ok) throw new Error(`data pack file ${f.path}: HTTP ${res.status}`);
       out.set(f.path, await gunzip(await res.arrayBuffer()));
       doneGz += f.gzBytes;

@@ -195,6 +195,11 @@
           <button onclick={menu(() => (s.panel = { kind: "suggested" }))}>Suggested</button>
           <button onclick={menu(() => (s.mapPopup = { kind: "chord" }))}>Weave map</button>
           <button onclick={menu(() => (s.mapPopup = { kind: "constellation" }))}>Constellation</button>
+          <div class="group">Explore</div>
+          <button onclick={menu(() => (s.panel = { kind: "threads" }))}>Threads</button>
+          <button onclick={menu(() => (s.panel = { kind: "tags" }))}>Tags</button>
+          <button onclick={menu(() => (s.panel = { kind: "weaves" }))}>Weaves</button>
+          <button onclick={menu(() => (s.panel = { kind: "suggested" }))}>Suggested</button>
           <div class="group">Study</div>
           <button onclick={menu(() => (s.memorize = { view: "hub" }))}>Memorize</button>
           <button onclick={menu(() => (s.panel = { kind: "notesBrowser" }))}>Notes</button>
@@ -217,6 +222,8 @@
               s.saveConfig();
             })}>Verse per line</button
           >
+          <button onclick={() => s.setZoom(Number(s.config.bodySize ?? 18) + 1)}>Text size +</button>
+          <button onclick={() => s.setZoom(Number(s.config.bodySize ?? 18) - 1)}>Text size −</button>
           <div class="group">Theme</div>
           {#each ["light", "dark", "night", "system"] as t (t)}
             <button class:checked={(s.config.theme ?? "system") === t} onclick={menu(() => setTheme(t))}>
@@ -297,6 +304,12 @@
   }
   .browse button:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
+  }
+  @media (max-width: 700px) {
+    .browse,
+    .subtitle {
+      display: none;
+    }
   }
   .spacer {
     flex: 1;

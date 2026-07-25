@@ -651,6 +651,41 @@ by mastery; activity is reviews-per-day columns. **WinUI** mirrors via the C ABI
 time for v1; **delta:** a "memorize this tag/thread" bulk-enqueue and printable
 flashcards (needs #14) are follow-ups.
 
+## Web shell (apps/web, branch web-shell — 2026-07-25)
+
+The fourth shell: Svelte 5 + TS over the **same C ABI**, compiled unchanged to
+`wasm32-wasip1` and run in the browser under `@bjorn3/browser_wasi_shim` with
+an in-memory home (data pack fetched + gunzipped into it; authored files
+mirrored to IndexedDB after every write; the corpus idxcache persisted for
+fast reopens). `apps/web/src/engine/StudyEngine.ts` is the method-for-method
+TS sibling of StudyEngine.kt / PureStudy.cs. Build:
+`npm run pack:data && cargo build -p pure-ffi --release --target
+wasm32-wasip1 && npm run pack:wasm && npm run build` (in apps/web). Two
+wasm-only ABI shims live in `crates/ffi/src/wasm.rs` (`pure_web_alloc/free`,
+the `purestudy.pure_js_measure` import surfaced as a `PureMeasureFn`);
+pure-bindgen excludes them from the native bindings by name.
+
+Feature state (per this manifest): reader core (canvas painter, measure via
+canvas `measureText`, all flags/bands/washes/runs/gutter marks), multi-pane
+(≤3) + canon strip + ambient connectors, the whole panel content-model +
+link router (incl. `makeweave:`), live search, hover gloss (native tooltip),
+keyboard map + wheel + touch (pan, long-press menu, horizontal chapter
+swipe), context menu (copy shapes / note / tones / tag / thread / memorize),
+tag picker + tag→weave sheets, drag highlights + span pins + ＋link, the
+three map popups from the core view-models (pinch-zoom), memorization (hub /
+drill / coverage / activity), Present mode (sunlight, share +
+BibleGateway), notes browser, history, first-run, guide/about/shortcuts,
+light/dark/night/system themes from the core palette, per-tier gates,
+config round-trip incl. scroll-verse restore (flushed on tab hide — the
+ON_PAUSE twin), PWA (installable, offline after first visit; pack cached
+`?v=<content-hash>`).
+
+Web deltas: engine runs on the main thread (GTK-style; a worker is the
+escape hatch if jank shows); analytical popups keep light paper (shared
+delta); user data lives per-browser (export/import + sync are future work);
+Present "In context" fade not built; hosting undecided (static-host ready,
+base "./").
+
 ## Android notes
 
 - **On-device feedback round 3 (2026-07-24/25, v0.4.0–v0.5.0).** Landed

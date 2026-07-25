@@ -49,7 +49,7 @@ export async function instantiate(homeRoot: Map<string, Directory | File>): Prom
   let measure: (text: string) => number = (t) => t.length * 8;
 
   const source = await WebAssembly.compileStreaming(
-    fetch(`${import.meta.env.BASE_URL}pure_ffi.wasm`),
+    fetch(`${import.meta.env.BASE_URL}pure_ffi.wasm?v=${__BUILD_ID__}`),
   );
   const instance = await WebAssembly.instantiate(source, {
     wasi_snapshot_preview1: wasi.wasiImport,

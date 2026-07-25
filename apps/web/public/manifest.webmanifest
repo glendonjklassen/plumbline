@@ -1,0 +1,14 @@
+{
+  "name": "pure study — 1769 KJV",
+  "short_name": "pure study",
+  "description": "A pure, offline King James Bible study: text, Strong's, weaves, memorization.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fcf9f4",
+  "theme_color": "#fcf9f4",
+  "icons": [
+    { "src": "./icon-128.png", "sizes": "128x128", "type": "image/png" },
+    { "src": "./icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" }
+  ]
+}

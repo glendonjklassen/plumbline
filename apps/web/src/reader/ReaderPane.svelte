@@ -255,8 +255,11 @@
     return out;
   }
 
-  // ── touch panning + long-press menu; mouse click/dblclick/drag ──
+  // ── touch panning + long-press menu + chapter swipe; mouse click/drag ──
   let touchLastY: number | null = null;
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchDx = 0;
   let moved = false;
   let longPress: ReturnType<typeof setTimeout> | null = null;
   let suppressClick = false;
@@ -266,6 +269,9 @@
     moved = false;
     if (e.pointerType === "touch") {
       touchLastY = e.clientY;
+      touchStartX = e.clientX;
+      touchStartY = e.clientY;
+      touchDx = 0;
       canvas.setPointerCapture(e.pointerId);
       const { clientX, clientY } = e;
       longPress = setTimeout(() => {
@@ -283,7 +289,8 @@
   function onPointerMove(e: PointerEvent): void {
     if (touchLastY !== null && e.pointerType === "touch") {
       const dy = touchLastY - e.clientY;
-      if (Math.abs(dy) > 2) {
+      touchDx = e.clientX - touchStartX;
+      if (Math.abs(dy) > 2 || Math.abs(touchDx) > 8) {
         moved = true;
         if (longPress) clearTimeout(longPress);
       }
@@ -309,6 +316,13 @@
     }
     if (e.pointerType === "touch") {
       touchLastY = null;
+      // A dominant horizontal fling steps the chapter (Compose parity):
+      // left → next, right → previous.
+      if (Math.abs(touchDx) > 72 && Math.abs(touchDx) > Math.abs(e.clientY - touchStartY)) {
+        s.stepChapter(paneIdx, touchDx < 0 ? 1 : -1);
+        touchDx = 0;
+        return;
+      }
       if (!moved) {
         const hit = hitAt(e);
         if (hit?.tokenIndex != null) onWordStudy?.(hit.verse, hit.tokenIndex);

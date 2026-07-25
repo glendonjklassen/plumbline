@@ -5,6 +5,9 @@ import { svelte } from "@sveltejs/vite-plugin-svelte";
 // SWA) and under a repo subpath (GitHub Pages) without a rebuild.
 export default defineConfig({
   base: "./",
+  define: {
+    __BUILD_ID__: JSON.stringify(Date.now().toString(36)),
+  },
   plugins: [svelte()],
   build: {
     target: "es2022",
