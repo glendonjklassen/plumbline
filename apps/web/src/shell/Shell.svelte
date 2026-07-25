@@ -92,7 +92,10 @@
     const line = fontPx * 3;
     const page = 0.85 * (innerHeight - 120);
     const scroll = (dy: number, all = false) => {
-      for (const p of all ? s.panes : [pane]) p.scrollY = Math.max(0, p.scrollY + dy);
+      for (const p of all ? s.panes : [pane]) {
+        p.scrollY = Math.max(0, p.scrollY + dy);
+        p.pendingScroll = false;
+      }
     };
     switch (e.key) {
       case "ArrowUp":
@@ -110,9 +113,11 @@
         break;
       case "Home":
         pane.scrollY = 0;
+        pane.pendingScroll = false;
         break;
       case "End":
         pane.scrollY = Number.MAX_SAFE_INTEGER; // pane clamps on next frame
+        pane.pendingScroll = false;
         break;
       case "ArrowRight":
         if (e.altKey) s.historyStep(s.activePane, 1);

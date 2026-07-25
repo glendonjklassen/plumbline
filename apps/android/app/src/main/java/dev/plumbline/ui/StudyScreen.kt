@@ -100,6 +100,7 @@ import dev.plumbline.StudyEngine
 import dev.plumbline.Toc
 import dev.plumbline.TocBook
 import dev.plumbline.UserNote
+import dev.plumbline.WeaveLib
 import dev.plumbline.ConfigState
 import dev.plumbline.PlumblineJson
 import dev.plumbline.StudyConfig
@@ -324,6 +325,24 @@ fun StudyScreen(
         dest = Dest.Read
     }
 
+    // Loading a weave pulls its first link's passages up behind the card
+    // (product 2026-07-25, both shells — the web opens both in split panes):
+    // the reader shows endpoint `a`; the fold's second pane picks up `b` so
+    // flipping back to the Bible lands on the other side.
+    fun openWeavePassages(index: Int) {
+        val lib = engine.WeavesJson()?.let { j -> runCatching { parseWire<WeaveLib>(j) }.getOrNull() } ?: return
+        val links = lib.weaves.getOrNull(index)?.links ?: return
+        val link = links.firstOrNull { it.resolved } ?: links.firstOrNull() ?: return
+        goToRef(link.a)
+        val sp = link.b.lastIndexOf(' ')
+        val bBook = if (sp > 0) link.b.substring(0, sp) else return
+        val bCh = link.b.substring(sp + 1).substringBefore(':').toIntOrNull() ?: return
+        if (bBook != book || bCh != chapter) {
+            secondBook = bBook
+            secondChapter = bCh
+        }
+    }
+
     // Load a study library (threads / tags / weaves / suggested / guide / about)
     // into the study surface — StudyPane renders each block list identically.
     fun openLibrary(which: Library) {
@@ -365,7 +384,11 @@ fun StudyScreen(
             "codeStudy" -> link.code?.let { studyCode = it; show(engine.CodeStudyBlocks2Json(it, link.word, gates)) }
             "thread" -> link.index?.let { studyCode = null; show(engine.ThreadBlocksJson(it)) }
             "tag" -> link.index?.let { studyCode = null; show(engine.TagBlocksJson(it)) }
-            "weave" -> link.index?.let { studyCode = null; show(engine.CompareBlocksJson(it, true)) }
+            "weave" -> link.index?.let {
+                studyCode = null
+                openWeavePassages(it)
+                show(engine.CompareBlocksJson(it, true))
+            }
             // Tag→weave: the accumulate-then-organize flow — pick the members
             // (default all), name it, chain it through the canon.
             "makeWeave" -> link.tag?.let { makeWeaveTag = it }

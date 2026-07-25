@@ -4,6 +4,7 @@
   // scroll/zoom/gesture state and repaints on any reactive change. The
   // "poll until fresh layout" dance from the desktop shells vanishes here —
   // wasm layout is synchronous.
+  import { untrack } from "svelte";
   import { getSession } from "../state/session.svelte";
   import { fontExtent, measureFor, readerFont } from "./measure";
   import { itemVerse, MARGIN, paintChapter, verseExtents, type LayoutItem, type PaintOverlays } from "./paint";
@@ -109,12 +110,25 @@
       if (it.kind === "verseNumber" && it.verseNumber !== null && !geom.has(it.verseNumber))
         geom.set(it.verseNumber, { y: it.y, h: it.h });
     s.paneVerseGeom[paneIdx] = geom;
-    // Jump to the navigation target (band verse) once the layout is fresh.
-    if (pane.targetVerse != null) {
-      const e = verseExtents(raw.items).get(pane.targetVerse);
+    // Untracked: this effect must NOT depend on scrollY/contentH, or every
+    // scroll would re-run a synchronous wasm relayout (and, with a pending
+    // verse snap, ping-pong scrollY into an infinite update loop).
+    untrack(clampScroll);
+  });
+
+  // Scroll the navigation target into view on each fresh layout, until the
+  // user scrolls this pane themselves (wheel/touch/keys clear pendingScroll)
+  // or it navigates again. Re-applying per layout keeps the verse in place
+  // while pane widths settle (pane splits, panel open/close, zoom); the band
+  // itself (pane.targetVerse) persists until the next navigation regardless.
+  $effect(() => {
+    if (!pane.pendingScroll) return;
+    void items;
+    untrack(() => {
+      const e = pane.targetVerse != null ? verseExtents(items).get(pane.targetVerse) : undefined;
       if (e) pane.scrollY = Math.max(0, e.top - 8);
-    }
-    clampScroll();
+      clampScroll();
+    });
   });
 
   function maxScroll(): number {
@@ -141,6 +155,9 @@
     void cssW;
     void cssH;
     void pane.targetVerse;
+    // Clamp before painting (untracked — clamping must never feed back into
+    // layout): covers End-key overshoot, resizes, and content changes alike.
+    untrack(clampScroll);
     cancelAnimationFrame(rafId);
     rafId = requestAnimationFrame(draw);
   });
@@ -201,7 +218,10 @@
     }
     s.activePane = paneIdx;
     const panes = e.shiftKey ? s.panes : [pane];
-    for (const p of panes) p.scrollY += e.deltaY;
+    for (const p of panes) {
+      p.scrollY += e.deltaY;
+      p.pendingScroll = false;
+    }
     clampScroll();
     e.preventDefault();
   }
@@ -294,6 +314,7 @@
         if (longPress) clearTimeout(longPress);
       }
       pane.scrollY += dy;
+      pane.pendingScroll = false;
       clampScroll();
       touchLastY = e.clientY;
       return;

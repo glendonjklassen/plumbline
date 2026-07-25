@@ -89,6 +89,52 @@ test("passage navigator jumps to a verse", async ({ page }) => {
   await expect(page.locator(".subtitle")).toContainText("Gen 15");
 });
 
+test("opening a weave splits to its passages; verse clicks stay responsive (freeze regression)", async ({
+  page,
+}) => {
+  await boot(page);
+  await page.getByRole("button", { name: "Weaves", exact: true }).click();
+  await expect(page.locator("aside.panel")).toBeVisible();
+  // Open the first weave: both endpoint passages must come up on their own.
+  await page.locator("aside.panel button.link").first().click();
+  await expect(page.locator(".pane canvas")).toHaveCount(2);
+  const targets = await page.evaluate(() =>
+    (window as any).__plumbline.panes.map((p: any) => ({
+      book: p.book,
+      chapter: p.chapter,
+      verse: p.targetVerse,
+    })),
+  );
+  expect(targets).toHaveLength(2);
+  expect(targets[0].verse).not.toBeNull();
+  expect(targets[1].verse).not.toBeNull();
+  expect(`${targets[0].book} ${targets[0].chapter}`).not.toBe(`${targets[1].book} ${targets[1].chapter}`);
+
+  // Clicking the card's verse links used to spiral the layout effect into an
+  // effect_update_depth_exceeded freeze (~10s) that killed reactivity. Each
+  // click must settle fast and leave both panes scrollable.
+  const verseLink = page.locator("aside.panel button.link", { hasText: /\d+:\d+/ });
+  for (const i of [0, 1]) {
+    const t0 = Date.now();
+    await verseLink.nth(i).click();
+    await expect(page.locator(".subtitle")).toContainText("1769 KJV", { timeout: 2_000 });
+    expect(Date.now() - t0).toBeLessThan(2_000);
+  }
+  for (const paneIdx of [0, 1]) {
+    const canvas = page.locator(".pane canvas").nth(paneIdx);
+    const box = (await canvas.boundingBox())!;
+    const before = await page.evaluate(
+      (i) => (window as any).__plumbline.panes[i].scrollY,
+      paneIdx,
+    );
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, before > 0 ? -160 : 160);
+    await expect
+      .poll(() => page.evaluate((i) => (window as any).__plumbline.panes[i].scrollY, paneIdx))
+      .not.toBe(before);
+  }
+});
+
 test("backup round-trips through a zip", async ({ page }, testInfo) => {
   await boot(page);
   await page.evaluate(() => {

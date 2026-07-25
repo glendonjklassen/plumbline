@@ -38,6 +38,7 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       break;
     case "weave":
       s.panel = { kind: "compare", index: link.index };
+      openWeavePassages(s, link.index);
       break;
     case "conceptMap":
       s.mapPopup = { kind: "conceptMap", code: link.code };
@@ -111,4 +112,32 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
 /** Authoring endpoints return null on success, else an error string. */
 function report(s: Session, err: string | null): void {
   if (err) s.showToast(err);
+}
+
+/** refKey ("Gen 1:7", frozen wire form) → pane coordinates. */
+function parseRefKey(ref: string | undefined): { book: string; chapter: number; verse: number } | null {
+  if (!ref) return null;
+  const sp = ref.lastIndexOf(" ");
+  const colon = ref.indexOf(":", sp);
+  if (sp <= 0 || colon < 0) return null;
+  const chapter = Number(ref.slice(sp + 1, colon));
+  const verse = Number(ref.slice(colon + 1));
+  return chapter && verse ? { book: ref.slice(0, sp), chapter, verse } : null;
+}
+
+/** Loading a weave pulls its first link's two passages up (product 2026-07-25,
+ *  both shells): active pane → endpoint a, the next pane → endpoint b — no
+ *  hunting through the card to see the weave in the text. */
+function openWeavePassages(s: Session, index: number): void {
+  const links = s.engine.weaves()?.weaves?.[index]?.links ?? [];
+  const link = links.find((l: any) => l.resolved) ?? links[0];
+  const a = parseRefKey(link?.a);
+  const b = parseRefKey(link?.b);
+  if (!a || !b) return;
+  const first = s.activePane;
+  s.navigate(first, a.book, a.chapter, a.verse);
+  if (b.book !== a.book || b.chapter !== a.chapter) {
+    if (s.panes.length < 2) s.addPane(first);
+    s.navigate((first + 1) % s.panes.length, b.book, b.chapter, b.verse);
+  }
 }

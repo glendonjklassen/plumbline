@@ -273,6 +273,17 @@ each side verse link + verse text small with **span words bold** and added
 words italic gray. *Data*: `plumbline_engine_weave_add_link_spans`, `weaves_json`,
 `verse_json` (tokens for span rendering).
 
+**Opening a weave pulls its passages up (2026-07-25, both shells).** The
+`weave:` verb, besides loading the compare card, navigates the reader to the
+weave's first resolved link (else its first link) so nobody hunts the text
+down through the card: **web** — endpoint `a` in the active pane, endpoint
+`b` in the next pane (created when only one is open; skipped when both
+endpoints share a book+chapter), each with the verse band + scroll target;
+**Android** — the reader goes to `a` (`goToRef`, behind the card sheet on a
+phone) and the fold's second pane is pointed at `b`, so flipping it back
+from Study lands on the other side. *Data*: `weaves_json` link endpoints
+(frozen refKey form).
+
 ## Canon strip (M:2938–2989)
 
 30-px strip under the panes. 8 sections (Law 0–4, History 5–16, Wisdom 17–21,

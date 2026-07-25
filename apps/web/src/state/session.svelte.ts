@@ -10,8 +10,10 @@ import type { StudyEngine } from "../engine/StudyEngine";
 export interface PaneState {
   book: string;
   chapter: number;
-  /** Verse to scroll to + band once the fresh layout paints (manifest §Reader). */
+  /** Band verse — persists until this pane next navigates (manifest §Reader). */
   targetVerse: number | null;
+  /** One-shot: scroll targetVerse into view once the fresh layout lands. */
+  pendingScroll: boolean;
   scrollY: number;
   back: { book: string; chapter: number }[];
   fwd: { book: string; chapter: number }[];
@@ -124,6 +126,7 @@ export class Session {
         // Reopen mid-chapter: the saved first-visible verse becomes the
         // scroll target once the first layout lands.
         targetVerse: p.verse && p.verse > 1 ? p.verse : null,
+        pendingScroll: !!(p.verse && p.verse > 1),
         scrollY: 0,
         back: [],
         fwd: [],
@@ -242,6 +245,7 @@ export class Session {
     pane.book = book;
     pane.chapter = chapter;
     pane.targetVerse = verse;
+    pane.pendingScroll = verse != null;
     pane.scrollY = 0;
     this.activePane = paneIdx;
     this.#pushHistory(book, chapter);
@@ -258,6 +262,7 @@ export class Session {
     pane.book = entry.book;
     pane.chapter = entry.chapter;
     pane.targetVerse = null;
+    pane.pendingScroll = false;
     pane.scrollY = 0;
     this.activePane = paneIdx;
     this.saveConfig();
@@ -289,10 +294,11 @@ export class Session {
       book: src.book,
       chapter: src.chapter,
       targetVerse: null,
+      pendingScroll: false,
       scrollY: 0,
       back: [],
       fwd: [],
-        pinned: null,
+      pinned: null,
     });
     this.activePane = afterIdx + 1;
     this.saveConfig();
