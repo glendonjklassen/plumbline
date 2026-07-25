@@ -9,6 +9,7 @@
   import Shortcuts from "./Shortcuts.svelte";
   import CanonStrip from "./CanonStrip.svelte";
   import ConnectorsOverlay from "./ConnectorsOverlay.svelte";
+  import MapsHost from "../maps/MapsHost.svelte";
   import { getSession } from "../state/session.svelte";
 
   const s = getSession();
@@ -63,6 +64,8 @@
   }
   function onKeydown(e: KeyboardEvent): void {
     if (isEditable(e.target) || s.promptReq) return;
+    // An open map popup owns the arrow keys (constellation paging).
+    if (s.mapPopup && e.key !== "Escape") return;
     const pane = s.panes[s.activePane];
     if (!pane) return;
     const fontPx = Number(s.config.bodySize ?? 18);
@@ -214,6 +217,7 @@
 <PromptDialog />
 <FirstRun />
 <Shortcuts />
+<MapsHost />
 
 <style>
   .frame {
