@@ -20,6 +20,7 @@ package dev.purestudy.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -72,6 +73,7 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -91,6 +93,7 @@ import androidx.compose.ui.unit.sp
 import androidx.window.layout.FoldingFeature
 import dev.purestudy.Hit
 import dev.purestudy.PaneRef1
+import dev.purestudy.Thread1
 import dev.purestudy.PanelLinkData
 import dev.purestudy.SearchResult
 import dev.purestudy.StudyEngine
@@ -130,16 +133,23 @@ fun PureStudyApp(
     bundledOn: Boolean = true,
     onToggleBundled: () -> Unit = {},
 ) {
-    // Light is the v0 default; dark/night are a future toggle (item 6).
-    val theme = "light"
-    val palette = remember(theme) { ReaderPalette.forTheme(theme) }
+    // The reader's theme choice, persisted in the shared config
+    // ("system" | "light" | "dark" | "night"); System follows the OS.
+    var themeChoice by remember {
+        mutableStateOf(
+            runCatching { parseWire<ConfigState>(StudyConfig.LoadJson()) }.getOrNull()?.theme ?: "system",
+        )
+    }
+    val systemDark = isSystemInDarkTheme()
+    val resolved = if (themeChoice == "system") (if (systemDark) "dark" else "light") else themeChoice
+    val palette = remember(resolved) { ReaderPalette.forTheme(resolved) }
     val scheme = if (palette.dark) {
         darkColorScheme(background = palette.paper, surface = palette.paper, onSurface = palette.ink)
     } else {
         lightColorScheme(background = palette.paper, surface = palette.paper, onSurface = palette.ink)
     }
     MaterialTheme(colorScheme = scheme) {
-        StudyScreen(engine, fold, palette, bundledOn, onToggleBundled)
+        StudyScreen(engine, fold, palette, themeChoice, { themeChoice = it }, bundledOn, onToggleBundled)
     }
 }
 
@@ -148,6 +158,8 @@ fun StudyScreen(
     engine: StudyEngine,
     fold: FoldingFeature?,
     palette: ReaderPalette,
+    themeChoice: String = "system",
+    onThemeChoice: (String) -> Unit = {},
     bundledOn: Boolean = true,
     onToggleBundled: () -> Unit = {},
 ) {
@@ -185,8 +197,15 @@ fun StudyScreen(
     var conceptCode by remember { mutableStateOf<String?>(null) }   // conceptmap:CODE
     var showConstellation by remember { mutableStateOf(false) }
     var showChord by remember { mutableStateOf(false) }
-    var highlightEpoch by remember { mutableStateOf(0) }            // repaint after highlight edits
-    var fullMode by remember { mutableStateOf(true) }               // Simple vs Full study depth
+    var highlightEpoch by remember { mutableStateOf(0) }            // repaint after highlight/note edits
+    // Per-tier content gates (2026-07-25): the text is always on; curated and
+    // machine analysis are independently switchable. Persisted in the config.
+    var humanAnalysis by remember { mutableStateOf(loadedCfg?.humanAnalysis ?: true) }
+    var machineAnalysis by remember { mutableStateOf(loadedCfg?.machineAnalysis ?: true) }
+    var clearPinEpoch by remember { mutableStateOf(0) }             // un-highlight the tapped word
+    var presentThread by remember { mutableStateOf<Thread1?>(null) } // Present: chosen thread (picker keeps nav)
+    var makeWeaveTag by remember { mutableStateOf<Int?>(null) }     // tag→weave sheet (tag ordinal)
+    var firstVisibleVerse by remember { mutableStateOf(lastPane?.verse) } // scroll restore across sessions
     var studySheet by remember { mutableStateOf(false) }            // phone: study as a bottom sheet
     var showSearch by remember { mutableStateOf(false) }            // full-screen search overlay
     var showPresent by remember { mutableStateOf(false) }           // thread presentation mode
@@ -209,10 +228,13 @@ fun StudyScreen(
     var copyStyle by remember { mutableStateOf(loadedCfg?.copyStyle ?: "verseRef") }
     var history by remember { mutableStateOf(loadedCfg?.history ?: emptyList()) }
 
+    val gates = (if (humanAnalysis) 1 else 0) or (if (machineAnalysis) 2 else 0)
+
     fun persistCfg() {
         val cfg = (loadedCfg ?: ConfigState()).copy(
             bodySize = bodySize, sideMargin = sideMargin, lineSpacing = lineSpacing, copyStyle = copyStyle,
-            openPanes = listOf(PaneRef1(book, chapter)), activePane = 0, history = history,
+            openPanes = listOf(PaneRef1(book, chapter, firstVisibleVerse)), activePane = 0, history = history,
+            theme = themeChoice, humanAnalysis = humanAnalysis, machineAnalysis = machineAnalysis,
         )
         scope.launch { withContext(Dispatchers.Default) { runCatching { StudyConfig.SaveJson(PureJson.encodeToString(cfg)) } } }
     }
@@ -225,6 +247,26 @@ fun StudyScreen(
         history = (listOf(PaneRef1(book, chapter)) +
             history.filterNot { it.book == book && it.chapter == chapter }).take(50)
         persistCfg()
+    }
+
+    // Reopen mid-chapter: scroll the saved first-visible verse into view once
+    // (the same target mechanism the navigator uses).
+    LaunchedEffect(Unit) {
+        lastPane?.verse?.takeIf { it > 1 }?.let { v ->
+            pendingVerse = v
+            navEpoch++
+        }
+    }
+
+    // Persist on backgrounding — chapter changes save eagerly, but the scroll
+    // position (and anything mid-flight) must survive a plain app switch/close.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) persistCfg()
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
 
     val mode = rememberUiMode(fold)
@@ -266,7 +308,7 @@ fun StudyScreen(
     // canon heatmap cards inside the study pane.
     fun onWord(hit: Hit) {
         studyCode = hit.strongs.firstOrNull()
-        loadStudy { engine.WordStudyBlocksJson(hit.verse, hit.tokenIndex.toInt(), fullMode) }
+        loadStudy { engine.WordStudyBlocks2Json(hit.verse, hit.tokenIndex.toInt(), gates) }
     }
 
     // Navigate the reader to a refKey ("John 3:16"), scrolling the verse into view.
@@ -320,10 +362,13 @@ fun StudyScreen(
                 studyCode = link.code
                 show(engine.RenderingConcordanceBlocksJson(link.code!!, link.rendering!!))
             }
-            "codeStudy" -> link.code?.let { studyCode = it; show(engine.CodeStudyBlocksJson(it, link.word, fullMode)) }
+            "codeStudy" -> link.code?.let { studyCode = it; show(engine.CodeStudyBlocks2Json(it, link.word, gates)) }
             "thread" -> link.index?.let { studyCode = null; show(engine.ThreadBlocksJson(it)) }
             "tag" -> link.index?.let { studyCode = null; show(engine.TagBlocksJson(it)) }
-            "weave" -> link.index?.let { studyCode = null; show(engine.CompareBlocksJson(it, fullMode)) }
+            "weave" -> link.index?.let { studyCode = null; show(engine.CompareBlocksJson(it, true)) }
+            // Tag→weave: the accumulate-then-organize flow — pick the members
+            // (default all), name it, chain it through the canon.
+            "makeWeave" -> link.tag?.let { makeWeaveTag = it }
             "guide" -> { studyCode = null; show(StudyEngine.GuideBlocksJson()) }
             "about" -> { studyCode = null; show(StudyEngine.AboutBlocksJson()) }
             // Tagging offers the existing tags first; freetext is the secondary
@@ -375,6 +420,8 @@ fun StudyScreen(
                 highlightEpoch = highlightEpoch,
                 targetVerse = if (isSecond) null else pendingVerse,
                 targetEpoch = if (isSecond) 0 else navEpoch,
+                clearPinEpoch = clearPinEpoch,
+                onFirstVisibleVerse = if (isSecond) ({ }) else ({ v -> firstVisibleVerse = v }),
             )
         }
     }
@@ -418,6 +465,7 @@ fun StudyScreen(
                         secondStudy = secondPane == SecondPane.Study,
                         onToggleSecondPane = {
                             secondPane = if (secondPane == SecondPane.Study) SecondPane.Bible else SecondPane.Study
+                            if (secondPane == SecondPane.Bible) clearPinEpoch++
                         },
                         onHistory = { showHistory = true },
                         onGuide = { openLibrary(Library.Guide) },
@@ -459,6 +507,58 @@ fun StudyScreen(
                     },
                 )
             }
+
+            // ── in-content overlays: these cover the destination but keep the
+            //    bottom nav in reach (2026-07-25 — disappearing chrome is
+            //    disorienting). Fullscreen-by-design surfaces (search, the
+            //    live presentation) stay in the overlay layer below. ──────────
+            if (showNotes) {
+                NotesScreen(
+                    engine, palette,
+                    onOpen = { ref -> showNotes = false; goToRef(ref) },
+                    onClose = { showNotes = false },
+                )
+            }
+            if (showWeaves) {
+                WeavesScreen(
+                    engine, palette, studyScale,
+                    onLink = { uri -> onLink(uri); showWeaves = false },
+                    onClose = { showWeaves = false },
+                )
+            }
+            // Drilling a single verse tapped in the hub — back returns to it.
+            drillRef?.let { ref ->
+                MemorizeReview(engine, palette, onClose = { drillRef = null }, only = ref)
+            }
+            conceptCode?.let { c ->
+                MapOverlay("Concept map — $c", palette, { conceptCode = null }) {
+                    ConceptMap(engine, c, palette, Modifier.fillMaxSize())
+                }
+            }
+            if (showConstellation) MapOverlay("Constellation", palette, { showConstellation = false }) {
+                Constellation(
+                    engine, palette, Modifier.fillMaxSize(),
+                    onNavigate = { b, ch, _ -> book = b; chapter = ch; showConstellation = false; dest = Dest.Read },
+                    onOpenWeave = {},
+                )
+            }
+            if (showChord) MapOverlay("Chord map", palette, { showChord = false }) {
+                ChordMap(
+                    engine, toc, palette, Modifier.fillMaxSize(),
+                    onPickBook = { b -> book = b; chapter = 1; showChord = false; dest = Dest.Read },
+                )
+            }
+            // Present: picking a thread keeps the nav; the presentation itself
+            // (below, over everything) is deliberately fullscreen — the phone
+            // gets handed across.
+            if (showPresent && presentThread == null) {
+                PresentOverlay(
+                    engine, palette,
+                    thread = null,
+                    onThread = { presentThread = it },
+                    onClose = { showPresent = false },
+                )
+            }
         }
 
         // The bottom nav bar: the whole IA in thumb reach (Read · Explore ·
@@ -473,14 +573,14 @@ fun StudyScreen(
         NavigationBar(containerColor = palette.paneNavBg) {
             NavigationBarItem(
                 selected = dest == Dest.Read && !showPresent,
-                onClick = { dest = Dest.Read },
+                onClick = { showPresent = false; dest = Dest.Read },
                 icon = { Icon(NavIconRead, contentDescription = null) },
                 label = { Text("Read") },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = dest == Dest.Explore && !showPresent,
-                onClick = { dest = Dest.Explore },
+                onClick = { showPresent = false; dest = Dest.Explore },
                 icon = { Icon(NavIconExplore, contentDescription = null) },
                 label = { Text("Explore") },
                 colors = navColors,
@@ -494,7 +594,7 @@ fun StudyScreen(
             )
             NavigationBarItem(
                 selected = dest == Dest.Memorize && !showPresent,
-                onClick = { memView = MemorizeView.List; dest = Dest.Memorize },
+                onClick = { showPresent = false; memView = MemorizeView.List; dest = Dest.Memorize },
                 icon = { Icon(NavIconMemorize, contentDescription = null) },
                 label = { Text("Memorize") },
                 colors = navColors,
@@ -504,7 +604,11 @@ fun StudyScreen(
 
         // ── overlays / sheets (parity features layered over the reader) ──────
         if (studySheet && mode == UiMode.FullscreenVertical) {
-            StudySheet(studyBlocks, palette, studyScale, ::onLink, studyEmbed) { studySheet = false }
+            // Swiping the study away also clears the tapped word's highlight.
+            StudySheet(studyBlocks, palette, studyScale, ::onLink, studyEmbed) {
+                studySheet = false
+                clearPinEpoch++
+            }
         }
         bookNavPane?.let { paneIdx ->
             BookNavScreen(
@@ -522,13 +626,6 @@ fun StudyScreen(
                 onClose = { bookNavPane = null },
             )
         }
-        if (showNotes) {
-            NotesScreen(
-                engine, palette,
-                onOpen = { ref -> showNotes = false; goToRef(ref) },
-                onClose = { showNotes = false },
-            )
-        }
         tagPickRef?.let { ref ->
             TagPickerSheet(engine, palette, ref, onDismiss = { tagPickRef = null })
         }
@@ -540,13 +637,6 @@ fun StudyScreen(
                 onNavigate = { b, c -> book = b; chapter = c },
                 onLink = ::onLink,
                 onClose = { showSearch = false },
-            )
-        }
-        if (showWeaves) {
-            WeavesScreen(
-                engine, palette, studyScale,
-                onLink = { uri -> onLink(uri); showWeaves = false },
-                onClose = { showWeaves = false },
             )
         }
         if (showHistory) {
@@ -561,18 +651,19 @@ fun StudyScreen(
                 engine, palette, v,
                 copyStyle = copyStyle,
                 onHighlightsChanged = { highlightEpoch++ },
+                onTag = { ref -> tagPickRef = ref },
                 onDismiss = { actionVerse = null },
             )
         }
-        // Drilling a single verse tapped in the hub — drawn over it; back returns
-        // to the list.
-        drillRef?.let { ref ->
-            MemorizeReview(engine, palette, onClose = { drillRef = null }, only = ref)
+        makeWeaveTag?.let { ti ->
+            TagWeaveSheet(engine, palette, ti, onDone = { makeWeaveTag = null })
         }
         if (showSettings) {
             SettingsDialog(
                 palette = palette,
-                fullStudy = fullMode, onToggleFull = { fullMode = !fullMode },
+                humanAnalysis = humanAnalysis, onToggleHuman = { humanAnalysis = !humanAnalysis },
+                machineAnalysis = machineAnalysis, onToggleMachine = { machineAnalysis = !machineAnalysis },
+                themeChoice = themeChoice, onTheme = onThemeChoice,
                 bodySize = bodySize, onBodySize = { bodySize = it },
                 sideMargin = sideMargin, onSideMargin = { sideMargin = it },
                 lineSpacing = lineSpacing, onLineSpacing = { lineSpacing = it },
@@ -587,31 +678,26 @@ fun StudyScreen(
                 onDismissRequest = { prompt = null },
                 title = { Text(p.title) },
                 text = { OutlinedTextField(value = text, onValueChange = { text = it }) },
-                confirmButton = { TextButton(onClick = { p.onConfirm(text); prompt = null }) { Text("Save") } },
+                confirmButton = {
+                    TextButton(onClick = {
+                        p.onConfirm(text)
+                        prompt = null
+                        highlightEpoch++ // note indicators / washes re-fetch
+                    }) { Text("Save") }
+                },
                 dismissButton = { TextButton(onClick = { prompt = null }) { Text("Cancel") } },
             )
         }
-        conceptCode?.let { c ->
-            MapOverlay("Concept map — $c", palette, { conceptCode = null }) {
-                ConceptMap(engine, c, palette, Modifier.fillMaxSize())
-            }
-        }
-        if (showConstellation) MapOverlay("Constellation", palette, { showConstellation = false }) {
-            Constellation(
-                engine, palette, Modifier.fillMaxSize(),
-                onNavigate = { b, ch, _ -> book = b; chapter = ch; showConstellation = false; dest = Dest.Read },
-                onOpenWeave = {},
-            )
-        }
-        // Presentation mode (Glendon's #1): fullscreen, over everything — the
-        // reader hands the phone across, so no study chrome bleeds through.
-        if (showPresent) {
-            PresentOverlay(engine, palette, onClose = { showPresent = false })
-        }
-        if (showChord) MapOverlay("Chord map", palette, { showChord = false }) {
-            ChordMap(
-                engine, toc, palette, Modifier.fillMaxSize(),
-                onPickBook = { b -> book = b; chapter = 1; showChord = false; dest = Dest.Read },
+        // Presentation mode (Glendon's #1): once a thread is chosen it goes
+        // fullscreen, over everything — the reader hands the phone across, so
+        // no study chrome bleeds through. (The picker lives in-content above,
+        // with the bottom nav.)
+        if (showPresent && presentThread != null) {
+            PresentOverlay(
+                engine, palette,
+                thread = presentThread,
+                onThread = { presentThread = it },
+                onClose = { presentThread = null; showPresent = false },
             )
         }
     }
@@ -943,13 +1029,18 @@ private fun HistorySheet(
     }
 }
 
-/** One Settings dialog: study depth, text size/margin/spacing, copy format, and
- *  the bundled study set — folded together so the overflow menu stays short. */
+/** One Settings dialog: the per-tier analysis gates, theme, text
+ *  size/margin/spacing, copy format, and the bundled study set — folded
+ *  together so the overflow menu stays short. */
 @Composable
 private fun SettingsDialog(
     palette: ReaderPalette,
-    fullStudy: Boolean,
-    onToggleFull: () -> Unit,
+    humanAnalysis: Boolean,
+    onToggleHuman: () -> Unit,
+    machineAnalysis: Boolean,
+    onToggleMachine: () -> Unit,
+    themeChoice: String,
+    onTheme: (String) -> Unit,
     bodySize: Double,
     onBodySize: (Double) -> Unit,
     sideMargin: Double,
@@ -967,7 +1058,35 @@ private fun SettingsDialog(
         title = { Text("Settings") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                SettingToggle("Full study", "Strong's, morphology, analytics, weave authoring.", fullStudy, palette, onToggleFull)
+                // The text is always on; each analysis tier switches off on its
+                // own (the old all-or-nothing Full study switch is gone).
+                SettingToggle(
+                    "Scholars' analysis",
+                    "Renderings, morphology, same-root, treasury cross-references.",
+                    humanAnalysis, palette, onToggleHuman,
+                )
+                SettingToggle(
+                    "Machine analysis",
+                    "Similar concepts, appears-alongside, verses-like-this, concept maps.",
+                    machineAnalysis, palette, onToggleMachine,
+                )
+                HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
+                Text("Theme", color = palette.faded, fontSize = 12.sp)
+                val themes = listOf(
+                    "system" to "Follow system",
+                    "light" to "Light",
+                    "dark" to "Dark",
+                    "night" to "Night (true black)",
+                )
+                for ((token, label) in themes) {
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onTheme(token) }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = themeChoice == token, onClick = { onTheme(token) })
+                        Text(label, color = palette.ink)
+                    }
+                }
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 Text("Text size — reader & study", color = palette.faded, fontSize = 12.sp)
                 Text("Aa", fontSize = bodySize.sp, color = palette.ink)

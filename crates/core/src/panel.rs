@@ -421,6 +421,9 @@ pub enum PanelLink {
     AddThread { refkey: String },
     /// `untag:I:REF` — remove REF from tag I.
     Untag { tag: usize, refkey: String },
+    /// `makeweave:I` — weave tag I's passages (the shell may offer a subset)
+    /// into a canon-ordered chain via `weave_from_tag`.
+    MakeWeave { tag: usize },
     /// `approve:I` / `reject:I` — resolve a suggested weave (suggested ordinal).
     Approve { index: usize },
     Reject { index: usize },
@@ -474,6 +477,7 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
             let (i, refkey) = rest.split_once(':')?;
             PanelLink::Untag { tag: i.parse().ok()?, refkey: refkey.to_string() }
         }
+        "makeweave" => PanelLink::MakeWeave { tag: rest.parse().ok()? },
         "approve" => PanelLink::Approve { index: rest.parse().ok()? },
         "reject" => PanelLink::Reject { index: rest.parse().ok()? },
         "editthreadnotes" => PanelLink::EditThreadNotes { index: rest.parse().ok()? },
@@ -1036,6 +1040,15 @@ pub fn tag_detail(src: &dyn PanelSource, index: usize) -> Vec<Block> {
     let tags = src.tags();
     let Some(t) = tags.get(index) else { return tags_list(src) };
     let mut out = vec![Block::para(vec![Run::new(&t.name, sz::TITLE, Color::Ink).bold()])];
+    // Tags accumulate over time; the weave comes later — offer the conversion
+    // whenever a chain is possible (≥2 verse members).
+    let verse_members = t.members.iter().filter(|m| m.kind == "verse").count();
+    if verse_members >= 2 {
+        out.push(Block::para(vec![
+            Run::new("⇔ make weave", sz::LIST, Color::Gold).link(format!("makeweave:{index}")),
+            Run::new("   chain these passages through the canon", sz::CAPTION, Color::Faded),
+        ]));
+    }
     for m in &t.members {
         let mut runs = if m.kind == "verse" && m.verse.is_some() {
             let v = m.verse.as_ref().unwrap();

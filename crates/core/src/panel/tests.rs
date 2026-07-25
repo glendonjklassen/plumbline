@@ -213,6 +213,8 @@ fn parse_link_round_trips_the_producer_uris() {
         parse_link("untag:1:John 3:16"),
         Some(PanelLink::Untag { tag: 1, refkey: "John 3:16".into() })
     );
+    assert_eq!(parse_link("makeweave:2"), Some(PanelLink::MakeWeave { tag: 2 }));
+    assert_eq!(parse_link("makeweave:x"), None);
     assert_eq!(parse_link("approve:3"), Some(PanelLink::Approve { index: 3 }));
     assert_eq!(parse_link("reject:3"), Some(PanelLink::Reject { index: 3 }));
     assert_eq!(parse_link("editthreadnotes:2"), Some(PanelLink::EditThreadNotes { index: 2 }));

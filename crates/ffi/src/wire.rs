@@ -1167,6 +1167,7 @@ pub enum WirePanelLink {
         #[serde(rename = "refKey")]
         ref_key: String,
     },
+    MakeWeave { tag: usize },
     Approve { index: usize },
     Reject { index: usize },
     EditThreadNotes { index: usize },
@@ -1193,6 +1194,7 @@ pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
         PanelLink::AddTag { refkey } => WirePanelLink::AddTag { ref_key: refkey },
         PanelLink::AddThread { refkey } => WirePanelLink::AddThread { ref_key: refkey },
         PanelLink::Untag { tag, refkey } => WirePanelLink::Untag { tag, ref_key: refkey },
+        PanelLink::MakeWeave { tag } => WirePanelLink::MakeWeave { tag },
         PanelLink::Approve { index } => WirePanelLink::Approve { index },
         PanelLink::Reject { index } => WirePanelLink::Reject { index },
         PanelLink::EditThreadNotes { index } => WirePanelLink::EditThreadNotes { index },

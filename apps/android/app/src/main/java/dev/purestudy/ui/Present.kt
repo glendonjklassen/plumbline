@@ -127,13 +127,17 @@ private fun shareText(name: String, entries: List<PresentEntry>): String =
     }
 
 /**
- * The presentation surface, layered fullscreen over the app. [onClose] tears the
- * whole mode down; back steps focus → overview → picker → closed.
+ * The presentation surface. The chosen [thread] is hoisted so the shell can
+ * render the picker in-content (bottom nav visible) and the presentation
+ * itself fullscreen; [onThread] reports picks and back-steps. [onClose] tears
+ * the whole mode down; back steps focus → overview → picker → closed.
  */
 @Composable
 fun PresentOverlay(
     engine: StudyEngine,
     palette: ReaderPalette,
+    thread: Thread1?,
+    onThread: (Thread1?) -> Unit,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -148,7 +152,6 @@ fun PresentOverlay(
     }
 
     var threads by remember { mutableStateOf<List<Thread1>?>(null) }
-    var thread by remember { mutableStateOf<Thread1?>(null) }
     var entries by remember { mutableStateOf<List<PresentEntry>>(emptyList()) }
     // null = overview; entries.size = the end card.
     var focus by remember { mutableStateOf<Int?>(null) }
@@ -179,7 +182,7 @@ fun PresentOverlay(
     BackHandler {
         when {
             focus != null -> focus = null
-            thread != null -> { thread = null; focus = null }
+            thread != null -> { onThread(null); focus = null }
             else -> onClose()
         }
     }
@@ -187,11 +190,11 @@ fun PresentOverlay(
     Box(Modifier.fillMaxSize().background(SunPaper)) {
         val t = thread
         when {
-            t == null -> PresentPicker(threads, palette, serif, onPick = { thread = it }, onClose = onClose)
+            t == null -> PresentPicker(threads, palette, serif, onPick = { onThread(it) }, onClose = onClose)
             focus == null -> PresentOverview(
                 t.name, entries, serif,
                 onFocus = { focus = it },
-                onBack = { thread = null },
+                onBack = { onThread(null) },
                 onShare = { sharePlain(context, shareText(t.name, entries)) },
             )
             else -> PresentFocus(

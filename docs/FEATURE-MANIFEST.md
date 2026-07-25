@@ -572,6 +572,58 @@ New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
   the modifier in the link handler; GTK captures it with a capture-phase click
   gesture on the study label just before the link activates).
 
+## Per-tier analysis gates + tag→weave (2026-07-25, product round 4)
+
+Glendon's street-use feedback retired two ideas at once: the all-or-nothing
+Simple/Full switch ("weirdly selective") and highlight-tones-as-annotation.
+**Tags are the primary annotation** (topic study accumulates over time); the
+**weave comes later** from the tag. Landed core-first; Android consumes it now,
+the other shells owe the UI (deltas below).
+
+- **Gates.** `pure_core::panel::Gates { human, machine }` replaces the
+  producer-level `full: bool`: *human* gates curated scholarship (RENDERINGS +
+  reverse lens, morphology gloss, SAME ROOT, TSK), *machine* gates the
+  learned/statistical tiers (SIMILAR CONCEPTS, ALONGSIDE, CONCENTRATES,
+  LEITWORT, verses-like-this, the concept-map link). The text and the
+  reader's own data — author actions (`＋ tag verse` / `＋ add to thread`),
+  the verse's tags + `untag`, weave xrefs, margin + personal notes, the
+  compare card's `✎ note` — are **never gated**. Legacy `full:bool` fns
+  remain as exact wrappers (Full = all on), so GTK compiles unchanged.
+- **Note-first panel.** The reader's own note block moved to the **top** of
+  the word study (right under the tapped word), in every mode.
+- **ABI (additive).** `pure_engine_word_study_blocks2_json(ref, tok, gates)`
+  and `pure_engine_code_study_blocks2_json(code, word?, gates)` — `gates`
+  bitmask: bit 0 human, bit 1 machine. `pure_engine_weave_from_tag(tag,
+  refsJson|null=all verse members, weaveName|null=tag name, added)` chains
+  the tag's passages canon-ordered (`weave::add_chain`: sorted, deduped,
+  consecutive pairs; find-or-create + link-dedup make re-runs additive).
+  Surface is now **90 fns**; bindings regenerated.
+- **Verbs.** `makeweave:I` (→ `{verb:"makeWeave", tag}`) — emitted by the tag
+  detail card whenever ≥2 verse members; the shell offers the member subset +
+  name, then calls `weave_from_tag`.
+- **Config (additive, round-tripping).** `humanAnalysis` / `machineAnalysis`
+  booleans (absent → derived from `studyMode`), and `openPanes` entries gain
+  `verse` — the pane's first visible verse, so a session **reopens
+  mid-chapter**. `studyMode` still round-trips for old readers.
+- **Compose (landed 2026-07-25).** Long-press sheet gained **Tag…** (opens
+  TagPickerSheet — the reader-level tag path); `TagWeaveSheet` (member
+  checkboxes, name field, Create) behind the tag card's ⇔ make weave;
+  study-sheet dismissal clears the tapped-word pin (`clearPinEpoch`);
+  personal-note **gutter dots** by the verse number; scroll restore via the
+  config verse + `ON_PAUSE` persist; **theme switch** in Settings
+  (system/light/dark/night over the core palette); Settings' Full-study
+  toggle replaced by the two gate switches (persisted); **bottom nav stays
+  visible** under Notes / Weaves / maps / the memorize drill / the Present
+  picker (in-content overlays) — only search and the live presentation remain
+  fullscreen-by-design.
+- **Deltas owed (GTK/WinUI):** the two gate switches in place of the
+  Simple/Full UI (their menus still show the radio; producers already accept
+  both via the legacy wrappers), reader-level Tag… action, tag→weave UI
+  (`makeweave:` routing + subset picker), personal-note gutter mark parity
+  (GTK already has one; WinUI check), scroll-verse restore, and consuming the
+  `*_blocks2` endpoints. **Web shell (branch `web-shell`):** same list —
+  adopt before merge.
+
 ## Memorization — spaced repetition (Tier 2 #15)
 
 `pure_core::memory`: one SM-2 SRS card per verse (VRef-keyed) — ease / interval /

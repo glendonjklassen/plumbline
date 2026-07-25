@@ -138,6 +138,9 @@ fun VerseActionSheet(
     // of listing every variant. One of "verse" / "verseRef" / "verseMarkdown".
     copyStyle: String = "verseRef",
     onHighlightsChanged: () -> Unit = {},
+    /** Open the tag picker for this verse — tags are the primary annotation
+     *  (topic study over time); the tone swatches are just washes. */
+    onTag: (String) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -328,7 +331,9 @@ fun VerseActionSheet(
             ActionRow("Share…", palette.ink) { copy(copyStyle, share = true) }
             HorizontalDivider(color = palette.rule)
 
-            // ── note + memorize ─────────────────────────────────────────────
+            // ── tag + note + memorize — tagging first: it's how topics
+            //    accumulate for later weaving (2026-07-25 feedback) ───────────
+            ActionRow("Tag…", palette.ink) { onDismiss(); onTag(verseRef) }
             ActionRow("Note…", palette.ink) { showNote = true }
             ActionRow("Memorize this verse", palette.ink) { memorize() }
             HorizontalDivider(color = palette.rule)

@@ -50,6 +50,7 @@ import dev.purestudy.DisplayList
 import dev.purestudy.Hit
 import dev.purestudy.PureFlags
 import dev.purestudy.StudyEngine
+import dev.purestudy.UserNotes
 import dev.purestudy.core.PureLayoutConfig
 import dev.purestudy.parseWire
 import kotlinx.coroutines.Dispatchers
@@ -124,6 +125,12 @@ fun ReaderPane(
     // to re-apply for the same verse (the book navigator's verse tap).
     targetVerse: Int? = null,
     targetEpoch: Int = 0,
+    // Bump to clear the tapped-word pin (the study sheet was dismissed — the
+    // word should un-highlight with it).
+    clearPinEpoch: Int = 0,
+    // Reports the first visible verse as the reader scrolls — persisted so a
+    // session reopens mid-chapter where it left off.
+    onFirstVisibleVerse: (Int) -> Unit = {},
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -152,6 +159,12 @@ fun ReaderPane(
     var highlights by remember { mutableStateOf<Map<String, Color>>(emptyMap()) }
     var runs by remember { mutableStateOf<List<HighlightRunUi>>(emptyList()) }
     var pin by remember { mutableStateOf<PinSpan?>(null) }
+    var noteVerses by remember { mutableStateOf<Set<Int>>(emptySet()) }
+
+    // The study sheet was dismissed — drop the tapped word's highlight too.
+    LaunchedEffect(clearPinEpoch) {
+        if (clearPinEpoch > 0) pin = null
+    }
 
     var scrollY by remember { mutableStateOf(0f) }
     var viewportH by remember { mutableStateOf(0f) }
@@ -217,6 +230,33 @@ fun ReaderPane(
                 } ?: emptyList()
             } else {
                 highlights = emptyMap(); runs = emptyList()
+            }
+        }
+
+        // Which verses carry a personal note — the reader's own words get a
+        // visible mark (a gutter dot by the verse number). Re-fetched with the
+        // highlights epoch (note edits bump it).
+        LaunchedEffect(book, chapter, highlightEpoch) {
+            val prefix = "$book $chapter:"
+            noteVerses = withContext(Dispatchers.Default) {
+                runCatching { synchronized(engine) { engine.UserNotesJson() } }.getOrNull()
+                    ?.let { runCatching { parseWire<UserNotes>(it).notes }.getOrNull() }
+                    ?.filter { it.verse.startsWith(prefix) }
+                    ?.mapNotNull { it.verse.substringAfterLast(':').toIntOrNull() }
+                    ?.toSet() ?: emptySet()
+            }
+        }
+
+        // Report the first visible verse (top edge) whenever scroll settles on a
+        // new one — the config persists it for cross-session scroll restore.
+        var lastReported by remember { mutableStateOf(-1) }
+        LaunchedEffect(scrollY, dl) {
+            val list = dl ?: return@LaunchedEffect
+            val first = list.items.firstOrNull { it.kind == "verseNumber" && it.y + it.h > scrollY }
+                ?.verseNumber?.toInt() ?: return@LaunchedEffect
+            if (first != lastReported) {
+                lastReported = first
+                onFirstVisibleVerse(first)
             }
         }
 
@@ -353,6 +393,21 @@ fun ReaderPane(
                         it.verse == p.verse && onScreen(it) &&
                             it.tokenIndex?.toInt()?.let { t -> t in p.lo..p.hi } == true
                     }.forEach { drawRect(palette.pinBand, Offset(it.x - 1.5f, it.y), Size(it.w + 3f, it.h)) }
+                }
+
+                // 4b. Note marks: a small gutter dot beside the verse number of
+                // any verse carrying the reader's own note (their words are in
+                // the study pane; this says "you wrote here" at a glance).
+                if (noteVerses.isNotEmpty()) {
+                    list.items.filter {
+                        it.kind == "verseNumber" && it.verseNumber?.toInt() in noteVerses && onScreen(it)
+                    }.forEach {
+                        drawCircle(
+                            color = palette.gutterDot,
+                            radius = 5f,
+                            center = Offset(it.x - 18f, it.y + it.h * 0.5f),
+                        )
+                    }
                 }
 
                 // 5. The text itself.
