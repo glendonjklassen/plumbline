@@ -1,0 +1,5 @@
+# Generated artifacts — rebuilt by `npm run pack:data` / `pack:wasm` / `build`.
+node_modules/
+dist/
+public/pack/
+public/pure_ffi.wasm
