@@ -7,6 +7,8 @@
   import PromptDialog from "./PromptDialog.svelte";
   import FirstRun from "./FirstRun.svelte";
   import Shortcuts from "./Shortcuts.svelte";
+  import CanonStrip from "./CanonStrip.svelte";
+  import ConnectorsOverlay from "./ConnectorsOverlay.svelte";
   import { getSession } from "../state/session.svelte";
 
   const s = getSession();
@@ -193,10 +195,14 @@
   </header>
 
   <div class="body">
-    <div class="panes">
-      {#each s.panes as _, i (i)}
-        <ReaderPane paneIdx={i} onWordStudy={openWordStudy} onWordPin={pinWord} />
-      {/each}
+    <div class="reading">
+      <div class="panes">
+        {#each s.panes as _, i (i)}
+          <ReaderPane paneIdx={i} onWordStudy={openWordStudy} onWordPin={pinWord} />
+        {/each}
+        <ConnectorsOverlay />
+      </div>
+      <CanonStrip />
     </div>
     <StudyPanel />
   </div>
@@ -314,10 +320,17 @@
     min-height: 0;
     display: flex;
   }
-  .panes {
+  .reading {
     flex: 1;
     min-width: 0;
     display: flex;
+    flex-direction: column;
+  }
+  .panes {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    position: relative;
   }
   .panes > :global(.pane + .pane) {
     border-left: 1px solid var(--rule, #d8cba8);

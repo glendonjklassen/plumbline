@@ -56,6 +56,9 @@ export class Session {
   searchQuery = $state("");
   /** Refreshed after any authoring write (engine reloads → shell re-fetches). */
   studyEpoch = $state(0);
+  /** Per-pane verse-number geometry (verse → line box, layout coords), kept
+   *  fresh by each ReaderPane for the connectors overlay + canon pins. */
+  paneVerseGeom = $state<Map<number, { y: number; h: number }>[]>([]);
   toast = $state<string | null>(null);
   showFirstRun = $state(false);
   showShortcuts = $state(false);

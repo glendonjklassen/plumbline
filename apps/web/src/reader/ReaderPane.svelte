@@ -41,6 +41,17 @@
   const toc = s.engine.toc();
   const chapterCount = $derived(s.engine.chapterCount(pane.book) || 1);
 
+  // Verses in this chapter with weave partners — the gold gutter dot.
+  const weaveDots = $derived.by(() => {
+    void s.studyEpoch;
+    const set = new Set<number>();
+    for (const p of s.engine.linkPairs()?.pairs ?? []) {
+      if (p.aBook === pane.book && p.aChapter === pane.chapter) set.add(p.aVerse);
+      if (p.bBook === pane.book && p.bChapter === pane.chapter) set.add(p.bVerse);
+    }
+    return set;
+  });
+
   // ── layout: recompute when inputs change ──
   $effect(() => {
     if (!pane || cssW <= 0) return;
@@ -63,6 +74,12 @@
     const raw = next.raw as { items: LayoutItem[]; height: number };
     items = raw.items;
     contentH = raw.height;
+    // Publish verse-number geometry for the connectors overlay + canon pins.
+    const geom = new Map<number, { y: number; h: number }>();
+    for (const it of raw.items)
+      if (it.kind === "verseNumber" && it.verseNumber !== null && !geom.has(it.verseNumber))
+        geom.set(it.verseNumber, { y: it.y, h: it.h });
+    s.paneVerseGeom[paneIdx] = geom;
     // Jump to the navigation target (band verse) once the layout is fresh.
     if (pane.targetVerse != null) {
       const e = verseExtents(raw.items).get(pane.targetVerse);
@@ -86,6 +103,7 @@
     void pane.scrollY;
     void s.palette;
     void overlays;
+    void weaveDots;
     void cssW;
     void cssH;
     void pane.targetVerse;
@@ -114,7 +132,7 @@
         viewportW: cssW,
         viewportH: cssH,
       },
-      { bandVerse: pane.targetVerse, ...overlays },
+      { bandVerse: pane.targetVerse, weaveDotVerses: weaveDots, ...overlays },
     );
   }
 
