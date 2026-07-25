@@ -1343,8 +1343,8 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
             .iter()
             .map(|p| PaneRef { book: p.book.clone(), chapter: p.chapter.max(1), verse: None })
             .collect(),
-        human_analysis: w.human_analysis.unwrap_or_else(|| mode.is_full()),
-        machine_analysis: w.machine_analysis.unwrap_or_else(|| mode.is_full()),
+        human_analysis: w.human_analysis.unwrap_or(true),
+        machine_analysis: w.machine_analysis.unwrap_or(true),
     }
 }
 

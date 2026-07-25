@@ -224,9 +224,11 @@ impl Config {
                 .map(|p| PaneRef { book: p.book, chapter: p.chapter.max(1), verse: None })
                 .take(HISTORY_CAP)
                 .collect(),
-            // Older file: what the reader saw under Simple/Full carries over.
-            human_analysis: w.human_analysis.unwrap_or_else(|| mode.is_full()),
-            machine_analysis: w.machine_analysis.unwrap_or_else(|| mode.is_full()),
+            // Absent in an older file → on. (Deriving from studyMode would
+            // surprise-hide the tiers on devices whose shell defaulted to Full
+            // without persisting it — the gates are opt-OUT switches.)
+            human_analysis: w.human_analysis.unwrap_or(true),
+            machine_analysis: w.machine_analysis.unwrap_or(true),
         }
     }
 
