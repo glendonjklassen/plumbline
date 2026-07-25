@@ -8,6 +8,9 @@
   import FirstRun from "./FirstRun.svelte";
   import Shortcuts from "./Shortcuts.svelte";
   import CanonStrip from "./CanonStrip.svelte";
+  import HistorySheet from "./HistorySheet.svelte";
+  import MemorizeHost from "../memorize/MemorizeHost.svelte";
+  import PresentHost from "../present/PresentHost.svelte";
   import ConnectorsOverlay from "./ConnectorsOverlay.svelte";
   import MapsHost from "../maps/MapsHost.svelte";
   import ContextMenu from "../reader/ContextMenu.svelte";
@@ -142,6 +145,8 @@
         break;
       case "Escape":
         if (s.mapPopup) s.mapPopup = null;
+        else if (s.memorize) s.memorize = null;
+        else if (s.showHistory) s.showHistory = false;
         else if (s.showShortcuts) s.showShortcuts = false;
         else if (s.panel) {
           s.panel = null;
@@ -190,6 +195,11 @@
           <button onclick={menu(() => (s.panel = { kind: "suggested" }))}>Suggested</button>
           <button onclick={menu(() => (s.mapPopup = { kind: "chord" }))}>Weave map</button>
           <button onclick={menu(() => (s.mapPopup = { kind: "constellation" }))}>Constellation</button>
+          <div class="group">Study</div>
+          <button onclick={menu(() => (s.memorize = { view: "hub" }))}>Memorize</button>
+          <button onclick={menu(() => (s.panel = { kind: "notesBrowser" }))}>Notes</button>
+          <button onclick={menu(() => (s.showHistory = true))}>History</button>
+          <button onclick={menu(() => (s.showPresent = true))}>Present</button>
           <div class="group">Analysis</div>
           <button
             class:checked={s.config.humanAnalysis !== false}
@@ -246,6 +256,9 @@
 <ContextMenu />
 <TagPicker />
 <TagWeave />
+<MemorizeHost />
+<HistorySheet />
+<PresentHost />
 
 <style>
   .frame {

@@ -72,6 +72,12 @@ export class Session {
   tagPickFor = $state<string | null>(null);
   /** Tag→weave sheet target (tag ordinal) — the makeweave: verb. */
   tagWeaveFor = $state<number | null>(null);
+  /** Memorization surface (hub / review drill / coverage+activity stats). */
+  memorize = $state<{ view: "hub" } | { view: "review"; only?: string } | { view: "stats" } | null>(null);
+  /** Reading-history sheet (recents from the shared config). */
+  showHistory = $state(false);
+  /** Present mode — fullscreen, high-contrast thread presentation. */
+  showPresent = $state(false);
   /** Active text prompt (rendered by PromptDialog); resolves null on cancel. */
   promptReq = $state<{
     title: string;

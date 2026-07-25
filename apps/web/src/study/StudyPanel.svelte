@@ -10,6 +10,13 @@
 
   const s = getSession();
 
+  // Notes browser (Explore ▸ Notes parity): every personal note, tap → verse,
+  // edit in place. Built shell-side from user_notes_json (no block producer).
+  const notes = $derived.by(() => {
+    void s.studyEpoch;
+    return s.panel?.kind === "notesBrowser" ? ((s.engine.userNotes()?.notes ?? []) as any[]) : [];
+  });
+
   const blocks = $derived.by(() => {
     void s.studyEpoch; // any authoring write invalidates panel content
     const p = s.panel;
@@ -54,14 +61,32 @@
   }
 </script>
 
-{#if s.panel && blocks}
+{#if s.panel && (blocks || s.panel.kind === "notesBrowser")}
   <aside class="panel">
     <div class="bar">
       <div class="grip" aria-hidden="true"></div>
       <button class="close" onclick={() => (s.panel = null)} aria-label="Close panel">✕</button>
     </div>
     <div class="content">
-      <BlockList {blocks} {onLink} />
+      {#if s.panel.kind === "notesBrowser"}
+        <h2 class="nb-title">Your notes ({notes.length})</h2>
+        {#if notes.length === 0}
+          <p class="nb-empty">No notes yet — right-click or long-press a verse and choose Note…</p>
+        {/if}
+        {#each notes as n (n.verse)}
+          <div class="nb-note">
+            <div class="nb-head">
+              <button class="nb-ref" onclick={(e) => onLink(`go:${n.verse.replace(" ", ":")}`, e)}>
+                {n.display ?? n.verse}
+              </button>
+              <button class="nb-edit" onclick={(e) => onLink(`editnote:${n.verse}`, e)}>✎ edit</button>
+            </div>
+            <p class="nb-text">{n.text}</p>
+          </div>
+        {/each}
+      {:else}
+        <BlockList {blocks} {onLink} />
+      {/if}
     </div>
   </aside>
 {/if}
@@ -97,6 +122,40 @@
     flex: 1;
     overflow-y: auto;
     padding: 4px 16px 24px;
+  }
+  .nb-title {
+    font-size: 17px;
+    font-weight: 600;
+    margin: 4px 0 8px;
+  }
+  .nb-empty {
+    color: var(--faded, #8a8276);
+    font-size: 13.5px;
+  }
+  .nb-note {
+    border-bottom: 1px solid color-mix(in srgb, var(--rule, #d8cba8) 55%, transparent);
+    padding: 6px 0;
+  }
+  .nb-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .nb-ref {
+    color: var(--gold, #9e7d38);
+    font-weight: 600;
+  }
+  .nb-ref:hover {
+    text-decoration: underline;
+  }
+  .nb-edit {
+    font-size: 12px;
+    color: var(--faded, #8a8276);
+  }
+  .nb-text {
+    font-size: 14.5px;
+    margin-top: 2px;
+    white-space: pre-wrap;
   }
 
   /* Narrow screens: bottom sheet (Compose-phone pattern). */
