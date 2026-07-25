@@ -76,6 +76,8 @@ import dev.purestudy.ChapterHighlights
 import dev.purestudy.HighlightTone
 import dev.purestudy.HighlightTones
 import dev.purestudy.StudyEngine
+import dev.purestudy.Tag1
+import dev.purestudy.Tags
 import dev.purestudy.UserNote
 import dev.purestudy.VerseData
 import dev.purestudy.parseWire
@@ -416,6 +418,124 @@ private fun ActionRow(label: String, color: Color, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, color = color, fontSize = 16.sp)
+    }
+}
+
+/**
+ * The tag picker (Glendon's feedback, 2026-07-24): tagging a verse offers the
+ * EXISTING tags first — plain tags before the coloured highlight-tone ones — and
+ * "New tag…" is the secondary, freetext path. New tags are created colourless
+ * (colour stays an explicit, optional choice; core never assigns one).
+ * Opened by the study panel's `addtag:REF` link.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TagPickerSheet(
+    engine: StudyEngine,
+    palette: ReaderPalette,
+    verseRef: String,
+    onDismiss: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var tags by remember { mutableStateOf<List<Tag1>?>(null) }
+    var newMode by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        tags = withContext(Dispatchers.Default) {
+            runCatching { synchronized(engine) { engine.TagsJson() } }.getOrNull()
+                ?.let { runCatching { parseWire<Tags>(it).tags }.getOrNull() }
+        } ?: emptyList()
+    }
+
+    fun apply(name: String) {
+        val tag = name.trim()
+        if (tag.isEmpty()) return
+        scope.launch {
+            val err = withContext(Dispatchers.Default) {
+                runCatching {
+                    synchronized(engine) { engine.TagAdd(tag, "verse", verseRef, null, Instant.now().toString()) }
+                }.getOrNull()
+            }
+            Toast.makeText(
+                context,
+                if (err.isNullOrBlank()) "Tagged $verseRef — $tag" else err,
+                Toast.LENGTH_SHORT,
+            ).show()
+            onDismiss()
+        }
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = palette.panelBg) {
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                .navigationBarsPadding().padding(horizontal = 16.dp),
+        ) {
+            Text(
+                "Tag $verseRef",
+                color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(vertical = 8.dp),
+            )
+            HorizontalDivider(color = palette.rule)
+
+            val list = tags
+            if (list == null) {
+                Text("…", color = palette.faded, modifier = Modifier.padding(vertical = 12.dp))
+            } else {
+                // Existing tags first: plain topical tags, then the coloured
+                // highlight-tone ones (they are highlight machinery, not topics).
+                val ordered = list.sortedWith(compareBy({ it.color != null }, { it.name.lowercase() }))
+                for (t in ordered) {
+                    Row(
+                        Modifier.fillMaxWidth().clickable { apply(t.name) }
+                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(t.name, color = palette.ink, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                        t.color?.let { hex ->
+                            Box(
+                                Modifier.size(12.dp).clip(CircleShape)
+                                    .background(ReaderPalette.hex(hex), CircleShape),
+                            )
+                            Spacer(Modifier.size(8.dp))
+                        }
+                        Text(
+                            "${t.members.size} verse${if (t.members.size == 1) "" else "s"}",
+                            color = palette.faded, fontSize = 12.sp,
+                        )
+                    }
+                }
+                if (list.isEmpty()) {
+                    Text(
+                        "No tags yet — name your first below.",
+                        color = palette.faded, fontSize = 14.sp,
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                }
+            }
+
+            HorizontalDivider(color = palette.rule)
+            if (!newMode) {
+                ActionRow("New tag…", palette.ink) { newMode = true }
+            } else {
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        placeholder = { Text("Tag name") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { apply(newName) }) { Text("Add", color = palette.gold) }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
     }
 }
 

@@ -601,6 +601,39 @@ flashcards (needs #14) are follow-ups.
 
 ## Android notes
 
+- **On-device feedback round 3 (2026-07-24/25, v0.4.0–v0.5.0).** Landed
+  Android-first from Glendon's street-use feedback; the product features among
+  them are **GTK/WinUI deltas** owed to the desktop shells:
+  - **Present mode** (`ui/Present.kt`, #1 priority): a thread as a fullscreen,
+    high-contrast ("sunlight") large-type presentation for showing someone in
+    person — scrollable overview (bounce anywhere), tap-to-focus a passage
+    huge, "In context" fades surrounding verses in, end card with plain-text
+    Share + BibleGateway KJV link. **Delta (GTK/WinUI):** a projection-friendly
+    presentation window (fullscreen, large type, step keys) from the same
+    thread data.
+  - **Embedded study maps** (`ui/StudyMaps.kt`): the concept map + canon
+    dispersion heatmap as scaled-down, first-class cards inside the word-study
+    panel (before the first titled section), tapping through to the fullscreen
+    map / a book jump. **Delta (GTK/WinUI):** same embed in their study panels
+    (both already have the fullscreen popups).
+  - **Notes browser** (`ui/Notes.kt`, Explore ▸ Notes): every personal note,
+    browsable; tap → passage, Edit in place. **Delta (GTK/WinUI):** desktop
+    only paints note gutter marks; a notes library view is owed.
+  - **Tag picker** (`ui/VerseActions.kt` TagPickerSheet): `addtag:` offers
+    existing tags first (plain before coloured tone tags), freetext "New tag…"
+    secondary; tags stay colourless unless explicitly coloured. **Delta
+    (GTK/WinUI):** both still open a bare text prompt.
+  - **Memorize hub layout**: coverage is an inline strip above the verse list
+    (not a screen); Activity is a half/half calendar-heatmap + history-log
+    split. **Delta (GTK/WinUI):** both still present coverage/activity as
+    separate popups with the bar-chart activity.
+  - Phone-idiom (no desktop port intended): **bottom nav bar** (Read · Explore
+    · Present · Memorize, one-handed reach; `ui/NavIcons.kt`), the **passage
+    navigator** (`ui/BookNav.kt`: OT/NT → book → chapter → verse tap grids,
+    replacing the book dropdown; ReaderPane scrolls the target verse into
+    view), the near-fullscreen-expandable study sheet, and the reader
+    whitespace fix (manifest MARGIN/MAX_COLUMN are logical units — density-
+    scaled on Android).
 - **Compose parity (passes 1–3, 2026-07-24).** The Compose shell reached
   near-parity with GTK/WinUI. Beyond the v0 reader + word study + search + fold
   layouts it now has: **memorization** (review drill · coverage · activity —

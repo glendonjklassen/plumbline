@@ -169,7 +169,7 @@ private fun mapTypeface(context: Context): Typeface =
         .getOrNull() ?: Typeface.SERIF
 
 @Composable
-private fun rememberMapPaint(): Paint {
+internal fun rememberMapPaint(): Paint {
     val context = LocalContext.current
     return remember {
         Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = mapTypeface(context) }
@@ -213,7 +213,7 @@ private fun Paint.labelHeight(lines: Int): Float {
 
 /** Render the wire label "gloss\nlemma" as GTK's "gloss (lemma)" (falling back
  *  to whichever line exists) — the bridge-caption naming, matching WinUI. */
-private fun partnerName(label: String): String {
+internal fun partnerName(label: String): String {
     val parts = label.split('\n')
     return if (parts.size >= 2 && parts[1].isNotEmpty()) "${parts[0]} (${parts[1]})" else parts[0]
 }
@@ -277,122 +277,145 @@ fun ConceptMap(
                     .pointerInput(Unit) { detectTapGestures(onDoubleTap = { zoom.reset() }) }
                     .zoomable(zoom),
             ) {
-                val w = size.width
-                val h = size.height
                 val stripH = 56.dp.toPx()
-                val mapH = h - stripH
-                val cx = w / 2f
-                val cy = mapH / 2f
-                val radius = max(min(w, mapH) / 2f - 95.dp.toPx(), 40.dp.toPx())
-
-                val goldStroke = palette.gold.copy(alpha = 0.5f)
-                val greenStroke = Color(red = 107, green = 140, blue = 102, alpha = 128)
-                val goldNode = palette.gold.copy(alpha = 0.9f)
-
-                // ── spokes ──
-                paint.textSize = 12.sp.toPx()
-                val spokes = map.spokes
-                val n = max(1, spokes.size)
-                for (i in spokes.indices) {
-                    val angle = 2.0 * PI * i / n - PI / 2.0
-                    val ca = cos(angle).toFloat()
-                    val sa = sin(angle).toFloat()
-                    val nx = cx + radius * ca
-                    val ny = cy + radius * sa
-                    drawLine(
-                        if (spokes[i].semantic) goldStroke else greenStroke,
-                        Offset(cx, cy), Offset(nx, ny), strokeWidth = 1.4.dp.toPx(),
-                    )
-                    drawCircle(goldNode, radius = 3.dp.toPx(), center = Offset(nx, ny))
-
-                    val lines = spokes[i].label.split('\n')
-                    val th = paint.labelHeight(lines.size)
-                    val align: Paint.Align
-                    val lx: Float
-                    var top: Float
-                    when {
-                        ca > 0.35f -> { align = Paint.Align.LEFT; lx = nx + 9.dp.toPx(); top = ny - th / 2f }
-                        ca < -0.35f -> { align = Paint.Align.RIGHT; lx = nx - 9.dp.toPx(); top = ny - th / 2f }
-                        sa < 0f -> { align = Paint.Align.CENTER; lx = nx; top = ny - 10.dp.toPx() - th }
-                        else -> { align = Paint.Align.CENTER; lx = nx; top = ny + 9.dp.toPx() }
-                    }
-                    top = top.coerceIn(2f, max(2f, mapH - th - 2f))
-                    drawLabel(paint, lines, lx, top, align, palette.ink.toArgbInt())
-                }
-
-                // ── centre node ──
-                drawCircle(palette.gold, radius = 5.dp.toPx(), center = Offset(cx, cy))
-                paint.textSize = 15.sp.toPx()
-                val centreLines = map.centerLabel.split('\n')
-                val centreTh = paint.labelHeight(centreLines.size)
-                drawLabel(
-                    paint, centreLines, cx, cy - 14.dp.toPx() - centreTh,
-                    Paint.Align.CENTER, palette.ink.toArgbInt(),
-                )
-
-                // ── dispersion strip (banding mirrors WinUI exactly) ──
-                val bridge = map.bridge
-                val hasBridge = bridge != null && bridge.byBook.any { it > 0 }
-                if (map.byBook.any { it > 0 } || hasBridge) {
-                    val y0 = h - stripH
-                    val bc = max(1, map.bookCount).toFloat()
-                    drawRect(Color.Black.copy(alpha = 10f / 255f), Offset(0f, y0), Size(w, stripH))
-
-                    val gap = 1f
-                    val primH = if (hasBridge) max((stripH - gap) * 0.55f, 1f) else stripH
-                    val brdgY = if (hasBridge) primH + gap else stripH
-                    val brdgH = if (hasBridge) stripH - primH - gap else 0f
-
-                    // Primary dispersion (gold): where CODE itself occurs. Alpha ∝
-                    // this row's own max (GTK 0.62,0.49,0.22 == palette.gold).
-                    val bmax = max(1, map.byBook.maxOrNull() ?: 1).toFloat()
-                    for (bi in map.byBook.indices) {
-                        val cnt = map.byBook[bi]
-                        if (cnt == 0) continue
-                        val alpha = 0.15f + 0.75f * cnt / bmax
-                        val x0 = bi / bc * w
-                        val x1 = (bi + 1) / bc * w
-                        drawRect(palette.gold.copy(alpha = alpha), Offset(x0, y0), Size(x1 - x0, primH))
-                    }
-
-                    // Bridge dispersion (indigo): where the cross-testament partners
-                    // occur. Alpha ∝ the bridge row's OWN max; rgb 77,89,158.
-                    if (hasBridge) {
-                        val bb = bridge!!.byBook
-                        val pmax = max(1, bb.maxOrNull() ?: 1).toFloat()
-                        for (bi in bb.indices) {
-                            val cnt = bb[bi]
-                            if (cnt == 0) continue
-                            val alpha = 0.18f + 0.72f * cnt / pmax
-                            val x0 = bi / bc * w
-                            val x1 = (bi + 1) / bc * w
-                            drawRect(
-                                Color(red = 77, green = 89, blue = 158, alpha = (alpha * 255f).toInt()),
-                                Offset(x0, y0 + brdgY), Size(x1 - x0, brdgH),
-                            )
-                        }
-                    }
-
-                    // OT/NT seam (full height of the strip).
-                    val seam = map.otNtDivide / bc * w
-                    drawLine(
-                        Color(red = 102, green = 77, blue = 51, alpha = 128),
-                        Offset(seam, y0), Offset(seam, h), strokeWidth = 1.dp.toPx(),
-                    )
-
-                    // Caption naming the bridge partners, dim, just above the strip.
-                    caption?.let { cap ->
-                        paint.textSize = 11.sp.toPx()
-                        drawLabel(
-                            paint, listOf(cap), 8.dp.toPx(),
-                            y0 - paint.labelHeight(1) - 3.dp.toPx(),
-                            Paint.Align.LEFT,
-                            Color(red = 89, green = 77, blue = 56, alpha = 190).toArgbInt(),
-                        )
-                    }
-                }
+                drawConceptRadial(map, paint, palette, size.height - stripH)
+                drawDispersionStrip(map, paint, palette, size.height - stripH, stripH, caption)
             }
         }
+    }
+}
+
+/** The radial neighbourhood (spokes + centre node) into the top [mapH] px of the
+ *  current draw scope. Geometry mirrors WinUI Popups.ConceptMap; shared by the
+ *  fullscreen map and the study panel's embedded card. */
+internal fun DrawScope.drawConceptRadial(
+    map: ConceptMapData,
+    paint: Paint,
+    palette: ReaderPalette,
+    mapH: Float,
+) {
+    val w = size.width
+    val cx = w / 2f
+    val cy = mapH / 2f
+    val radius = max(min(w, mapH) / 2f - 95.dp.toPx(), 40.dp.toPx())
+
+    val goldStroke = palette.gold.copy(alpha = 0.5f)
+    val greenStroke = Color(red = 107, green = 140, blue = 102, alpha = 128)
+    val goldNode = palette.gold.copy(alpha = 0.9f)
+
+    // ── spokes ──
+    paint.textSize = 12.sp.toPx()
+    val spokes = map.spokes
+    val n = max(1, spokes.size)
+    for (i in spokes.indices) {
+        val angle = 2.0 * PI * i / n - PI / 2.0
+        val ca = cos(angle).toFloat()
+        val sa = sin(angle).toFloat()
+        val nx = cx + radius * ca
+        val ny = cy + radius * sa
+        drawLine(
+            if (spokes[i].semantic) goldStroke else greenStroke,
+            Offset(cx, cy), Offset(nx, ny), strokeWidth = 1.4.dp.toPx(),
+        )
+        drawCircle(goldNode, radius = 3.dp.toPx(), center = Offset(nx, ny))
+
+        val lines = spokes[i].label.split('\n')
+        val th = paint.labelHeight(lines.size)
+        val align: Paint.Align
+        val lx: Float
+        var top: Float
+        when {
+            ca > 0.35f -> { align = Paint.Align.LEFT; lx = nx + 9.dp.toPx(); top = ny - th / 2f }
+            ca < -0.35f -> { align = Paint.Align.RIGHT; lx = nx - 9.dp.toPx(); top = ny - th / 2f }
+            sa < 0f -> { align = Paint.Align.CENTER; lx = nx; top = ny - 10.dp.toPx() - th }
+            else -> { align = Paint.Align.CENTER; lx = nx; top = ny + 9.dp.toPx() }
+        }
+        top = top.coerceIn(2f, max(2f, mapH - th - 2f))
+        drawLabel(paint, lines, lx, top, align, palette.ink.toArgbInt())
+    }
+
+    // ── centre node ──
+    drawCircle(palette.gold, radius = 5.dp.toPx(), center = Offset(cx, cy))
+    paint.textSize = 15.sp.toPx()
+    val centreLines = map.centerLabel.split('\n')
+    val centreTh = paint.labelHeight(centreLines.size)
+    drawLabel(
+        paint, centreLines, cx, cy - 14.dp.toPx() - centreTh,
+        Paint.Align.CENTER, palette.ink.toArgbInt(),
+    )
+}
+
+/** The canon dispersion strip at [y0]..[y0]+[stripH] (banding mirrors WinUI
+ *  exactly): gold = where the code occurs, indigo bridge row = where its
+ *  cross-testament partners occur, OT/NT seam, optional [caption] just above.
+ *  Shared by the fullscreen map and the study panel's embedded heatmap. */
+internal fun DrawScope.drawDispersionStrip(
+    map: ConceptMapData,
+    paint: Paint,
+    palette: ReaderPalette,
+    y0: Float,
+    stripH: Float,
+    caption: String?,
+) {
+    val w = size.width
+    val bridge = map.bridge
+    val hasBridge = bridge != null && bridge.byBook.any { it > 0 }
+    if (map.byBook.none { it > 0 } && !hasBridge) return
+
+    val bc = max(1, map.bookCount).toFloat()
+    drawRect(Color.Black.copy(alpha = 10f / 255f), Offset(0f, y0), Size(w, stripH))
+
+    val gap = 1f
+    val primH = if (hasBridge) max((stripH - gap) * 0.55f, 1f) else stripH
+    val brdgY = if (hasBridge) primH + gap else stripH
+    val brdgH = if (hasBridge) stripH - primH - gap else 0f
+
+    // Primary dispersion (gold): where CODE itself occurs. Alpha ∝ this row's
+    // own max (GTK 0.62,0.49,0.22 == palette.gold).
+    val bmax = max(1, map.byBook.maxOrNull() ?: 1).toFloat()
+    for (bi in map.byBook.indices) {
+        val cnt = map.byBook[bi]
+        if (cnt == 0) continue
+        val alpha = 0.15f + 0.75f * cnt / bmax
+        val x0 = bi / bc * w
+        val x1 = (bi + 1) / bc * w
+        drawRect(palette.gold.copy(alpha = alpha), Offset(x0, y0), Size(x1 - x0, primH))
+    }
+
+    // Bridge dispersion (indigo): where the cross-testament partners occur.
+    // Alpha ∝ the bridge row's OWN max; rgb 77,89,158.
+    if (hasBridge) {
+        val bb = bridge!!.byBook
+        val pmax = max(1, bb.maxOrNull() ?: 1).toFloat()
+        for (bi in bb.indices) {
+            val cnt = bb[bi]
+            if (cnt == 0) continue
+            val alpha = 0.18f + 0.72f * cnt / pmax
+            val x0 = bi / bc * w
+            val x1 = (bi + 1) / bc * w
+            drawRect(
+                Color(red = 77, green = 89, blue = 158, alpha = (alpha * 255f).toInt()),
+                Offset(x0, y0 + brdgY), Size(x1 - x0, brdgH),
+            )
+        }
+    }
+
+    // OT/NT seam (full height of the strip).
+    val seam = map.otNtDivide / bc * w
+    drawLine(
+        Color(red = 102, green = 77, blue = 51, alpha = 128),
+        Offset(seam, y0), Offset(seam, y0 + stripH), strokeWidth = 1.dp.toPx(),
+    )
+
+    // Caption naming the bridge partners, dim, just above the strip.
+    caption?.let { cap ->
+        paint.textSize = 11.sp.toPx()
+        drawLabel(
+            paint, listOf(cap), 8.dp.toPx(),
+            y0 - paint.labelHeight(1) - 3.dp.toPx(),
+            Paint.Align.LEFT,
+            Color(red = 89, green = 77, blue = 56, alpha = 190).toArgbInt(),
+        )
     }
 }
 

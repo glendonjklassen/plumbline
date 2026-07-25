@@ -42,6 +42,9 @@ private const val LINK_TAG = "link"
  *
  * @param blocksJson a pure_engine_*_blocks_json payload (or null).
  * @param onLink invoked with a run's URI when a link is tapped.
+ * @param embed an optional composable (the concept map + canon heatmap cards)
+ *   slotted into the block flow just before the first titled section — after
+ *   the headline paras, before the study tiers — so it reads first-class.
  */
 @Composable
 fun StudyPane(
@@ -50,6 +53,7 @@ fun StudyPane(
     modifier: Modifier = Modifier,
     scale: Float = 1f,
     onLink: (String) -> Unit = {},
+    embed: (@Composable () -> Unit)? = null,
 ) {
     val blocks = remember(blocksJson) {
         blocksJson?.let {
@@ -73,13 +77,20 @@ fun StudyPane(
             )
             return@Column
         }
-        for (b in blocks) {
+        val embedAt = if (embed == null) {
+            -1
+        } else {
+            blocks.indexOfFirst { it.kind == "section" }.let { if (it < 0) blocks.size else it }
+        }
+        for ((i, b) in blocks.withIndex()) {
+            if (i == embedAt) embed!!()
             when (b.kind) {
                 "rule" -> HorizontalDivider(color = palette.rule)
                 "section" -> SectionBlock(b, palette, scale)
                 "para" -> ParaBlock(b, palette, scale, onLink)
             }
         }
+        if (embedAt == blocks.size) embed!!()
     }
 }
 

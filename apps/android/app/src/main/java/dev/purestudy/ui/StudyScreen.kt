@@ -58,6 +58,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
@@ -106,7 +109,11 @@ import kotlinx.serialization.encodeToString
 /** What the second (right) pane shows in fold mode. */
 private enum class SecondPane { Study, Bible }
 
-/** A study "library" the overflow menu loads into the study surface as blocks. */
+/** The bottom-nav destinations (one-handed reach — Glendon's 2026-07-24 call).
+ *  Present is a launcher on the same bar but renders as a fullscreen overlay. */
+private enum class Dest { Read, Explore, Memorize }
+
+/** A study "library" the Explore screen loads into the study surface as blocks. */
 enum class Library { Threads, Tags, Weaves, Suggested, Guide, About }
 
 /** A one-field text-input authoring dialog (add tag / add thread / edit note). */
@@ -164,14 +171,16 @@ fun StudyScreen(
     var secondChapter by remember { mutableStateOf(lastPane?.chapter?.takeIf { it > 0 } ?: 3) }
 
     var studyBlocks by remember { mutableStateOf<String?>(null) }
+    var studyCode by remember { mutableStateOf<String?>(null) }     // code behind the study → embedded maps
     var searchHits by remember { mutableStateOf<Set<String>>(emptySet()) }
     var searchText by remember { mutableStateOf("") }
 
     var secondPane by remember { mutableStateOf(SecondPane.Study) }
 
-    // Overlays / sheets layered over the reader (parity features).
+    // The bottom-nav destination plus overlays / sheets layered over it.
+    var dest by remember { mutableStateOf(Dest.Read) }
     var actionVerse by remember { mutableStateOf<String?>(null) }   // long-press verse sheet
-    var memView by remember { mutableStateOf<MemorizeView?>(null) } // memorize destinations
+    var memView by remember { mutableStateOf(MemorizeView.List) }   // memorize sub-view (dest Memorize)
     var drillRef by remember { mutableStateOf<String?>(null) }      // drill one chosen verse
     var conceptCode by remember { mutableStateOf<String?>(null) }   // conceptmap:CODE
     var showConstellation by remember { mutableStateOf(false) }
@@ -180,12 +189,18 @@ fun StudyScreen(
     var fullMode by remember { mutableStateOf(true) }               // Simple vs Full study depth
     var studySheet by remember { mutableStateOf(false) }            // phone: study as a bottom sheet
     var showSearch by remember { mutableStateOf(false) }            // full-screen search overlay
-    var showExplore by remember { mutableStateOf(false) }           // "Explore" study-tools screen
     var showPresent by remember { mutableStateOf(false) }           // thread presentation mode
+    var showNotes by remember { mutableStateOf(false) }             // personal-notes browser
     var showHistory by remember { mutableStateOf(false) }           // reading-history sheet
     var showSettings by remember { mutableStateOf(false) }          // settings dialog
     var showWeaves by remember { mutableStateOf(false) }            // Weaves screen (All/Suggested filter)
+    var bookNavPane by remember { mutableStateOf<Int?>(null) }      // passage navigator (0 primary, 1 second)
+    var tagPickRef by remember { mutableStateOf<String?>(null) }    // tag-picker target verse
     var prompt by remember { mutableStateOf<AuthorPrompt?>(null) }   // text-input authoring dialog
+
+    // The navigator's verse target: ReaderPane scrolls it into view on layout.
+    var pendingVerse by remember { mutableStateOf<Int?>(null) }
+    var navEpoch by remember { mutableStateOf(0) }
 
     // Reader prefs + reading history (all persisted to the shared config).
     var bodySize by remember { mutableStateOf((loadedCfg?.bodySize ?: 18.0).coerceIn(12.0, 40.0)) }
@@ -247,13 +262,30 @@ fun StudyScreen(
     }
 
     // ── word tap → word study (bottom sheet on a phone, right pane on the fold) ─
+    // The tapped word's primary Strong's code drives the embedded concept map +
+    // canon heatmap cards inside the study pane.
     fun onWord(hit: Hit) {
+        studyCode = hit.strongs.firstOrNull()
         loadStudy { engine.WordStudyBlocksJson(hit.verse, hit.tokenIndex.toInt(), fullMode) }
+    }
+
+    // Navigate the reader to a refKey ("John 3:16"), scrolling the verse into view.
+    fun goToRef(ref: String) {
+        val sp = ref.lastIndexOf(' ')
+        if (sp <= 0) return
+        val cv = ref.substring(sp + 1).split(':')
+        val ch = cv.getOrNull(0)?.toIntOrNull() ?: return
+        book = ref.substring(0, sp)
+        chapter = ch
+        pendingVerse = cv.getOrNull(1)?.toIntOrNull()
+        navEpoch++
+        dest = Dest.Read
     }
 
     // Load a study library (threads / tags / weaves / suggested / guide / about)
     // into the study surface — StudyPane renders each block list identically.
     fun openLibrary(which: Library) {
+        studyCode = null
         loadStudy {
             when (which) {
                 Library.Threads -> engine.ThreadsBlocksJson()
@@ -279,23 +311,24 @@ fun StudyScreen(
         when (link.verb) {
             "go" -> if (link.book != null && link.chapter != null) {
                 book = link.book!!; chapter = link.chapter!!.toInt()
+                pendingVerse = link.verse?.toInt(); navEpoch++
+                dest = Dest.Read
             }
             "conceptMap" -> link.code?.let { conceptCode = it }
-            "occurrences" -> link.code?.let { show(engine.ConcordanceBlocksJson(it)) }
+            "occurrences" -> link.code?.let { studyCode = it; show(engine.ConcordanceBlocksJson(it)) }
             "rendering" -> if (link.code != null && link.rendering != null) {
+                studyCode = link.code
                 show(engine.RenderingConcordanceBlocksJson(link.code!!, link.rendering!!))
             }
-            "codeStudy" -> link.code?.let { show(engine.CodeStudyBlocksJson(it, link.word, fullMode)) }
-            "thread" -> link.index?.let { show(engine.ThreadBlocksJson(it)) }
-            "tag" -> link.index?.let { show(engine.TagBlocksJson(it)) }
-            "weave" -> link.index?.let { show(engine.CompareBlocksJson(it, fullMode)) }
-            "guide" -> show(StudyEngine.GuideBlocksJson())
-            "about" -> show(StudyEngine.AboutBlocksJson())
-            "addTag" -> link.refKey?.let { ref ->
-                prompt = AuthorPrompt("New tag on $ref", "") { name ->
-                    if (name.isNotBlank()) engine.TagAdd(name, "verse", ref, null, nowUtc())
-                }
-            }
+            "codeStudy" -> link.code?.let { studyCode = it; show(engine.CodeStudyBlocksJson(it, link.word, fullMode)) }
+            "thread" -> link.index?.let { studyCode = null; show(engine.ThreadBlocksJson(it)) }
+            "tag" -> link.index?.let { studyCode = null; show(engine.TagBlocksJson(it)) }
+            "weave" -> link.index?.let { studyCode = null; show(engine.CompareBlocksJson(it, fullMode)) }
+            "guide" -> { studyCode = null; show(StudyEngine.GuideBlocksJson()) }
+            "about" -> { studyCode = null; show(StudyEngine.AboutBlocksJson()) }
+            // Tagging offers the existing tags first; freetext is the secondary
+            // path inside the picker (Glendon's 2026-07-24 call).
+            "addTag" -> link.refKey?.let { ref -> tagPickRef = ref }
             "addThread" -> link.refKey?.let { ref ->
                 prompt = AuthorPrompt("New thread on $ref", "") { name ->
                     if (name.isNotBlank()) engine.ThreadAdd(name, ref, null, nowUtc())
@@ -328,24 +361,39 @@ fun StudyScreen(
                     toc = toc, book = b, chapter = c, palette = palette,
                     onPrev = { val (nb, nc) = step(b, c, -1); setPane(nb, nc) },
                     onNext = { val (nb, nc) = step(b, c, +1); setPane(nb, nc) },
-                    onPick = { bk -> setPane(bk.id, 1) },
+                    onOpenNav = { bookNavPane = if (isSecond) 1 else 0 },
                 )
                 HorizontalDivider(color = palette.rule)
             }
             ReaderPane(
                 engine = engine, book = b, chapter = c, palette = palette,
                 modifier = Modifier.weight(1f), searchHits = searchHits, fontSizeSp = bodySize.toFloat(),
-                sideMarginPx = sideMargin.toFloat(), lineSpacing = lineSpacing.toFloat(),
+                sideMargin = sideMargin.toFloat(), lineSpacing = lineSpacing.toFloat(),
                 onWordTap = ::onWord,
                 onVerseLongPress = { verse -> actionVerse = verse },
                 onSwipeChapter = { dir -> val (nb, nc) = step(b, c, dir); setPane(nb, nc) },
                 highlightEpoch = highlightEpoch,
+                targetVerse = if (isSecond) null else pendingVerse,
+                targetEpoch = if (isSecond) 0 else navEpoch,
+            )
+        }
+    }
+
+    // The concept map + canon heatmap cards embedded in the study pane whenever
+    // the study has a Strong's code behind it (first-class, scaled down —
+    // Glendon's 2026-07-24 call). Tap-through: fullscreen map / book jump.
+    val studyEmbed: (@Composable () -> Unit)? = studyCode?.let { code ->
+        {
+            StudyMapCards(
+                engine, code, palette, toc,
+                onOpenFull = { conceptCode = code },
+                onGoBook = { b -> book = b; chapter = 1; studySheet = false; dest = Dest.Read },
             )
         }
     }
     val study: @Composable (Modifier) -> Unit = { m ->
         Box(m.background(palette.panelBg)) {
-            StudyPane(studyBlocks, palette, onLink = ::onLink, scale = studyScale)
+            StudyPane(studyBlocks, palette, onLink = ::onLink, scale = studyScale, embed = studyEmbed)
         }
     }
 
@@ -355,43 +403,134 @@ fun StudyScreen(
     Box(Modifier.fillMaxSize().background(palette.paneNavBg)) {
     Box(Modifier.fillMaxSize().systemBarsPadding()) {
     Column(Modifier.fillMaxSize().background(palette.paper)) {
-        TopBar(
-            palette = palette,
-            mode = mode,
-            toc = toc, book = book, chapter = chapter,
-            onPrev = { val (nb, nc) = step(book, chapter, -1); book = nb; chapter = nc },
-            onNext = { val (nb, nc) = step(book, chapter, +1); book = nb; chapter = nc },
-            onPick = { bk -> book = bk.id; chapter = 1 },
-            onSearch = { showSearch = true },
-            secondStudy = secondPane == SecondPane.Study,
-            onToggleSecondPane = {
-                secondPane = if (secondPane == SecondPane.Study) SecondPane.Bible else SecondPane.Study
-            },
-            onPresent = { showPresent = true },
-            onMemorize = { memView = MemorizeView.List },
-            onExplore = { showExplore = true },
-            onHistory = { showHistory = true },
-            onGuide = { openLibrary(Library.Guide) },
-            onSettings = { showSettings = true },
-        )
-        HorizontalDivider(color = palette.rule)
+        // The destination content, above the always-in-thumb-reach nav bar.
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            when (dest) {
+                Dest.Read -> Column(Modifier.fillMaxSize()) {
+                    TopBar(
+                        palette = palette,
+                        mode = mode,
+                        toc = toc, book = book, chapter = chapter,
+                        onPrev = { val (nb, nc) = step(book, chapter, -1); book = nb; chapter = nc },
+                        onNext = { val (nb, nc) = step(book, chapter, +1); book = nb; chapter = nc },
+                        onOpenNav = { bookNavPane = 0 },
+                        onSearch = { showSearch = true },
+                        secondStudy = secondPane == SecondPane.Study,
+                        onToggleSecondPane = {
+                            secondPane = if (secondPane == SecondPane.Study) SecondPane.Bible else SecondPane.Study
+                        },
+                        onHistory = { showHistory = true },
+                        onGuide = { openLibrary(Library.Guide) },
+                        onSettings = { showSettings = true },
+                    )
+                    HorizontalDivider(color = palette.rule)
 
-        when (mode) {
-            UiMode.FullscreenVertical -> biblePane(Modifier.fillMaxSize(), false, false)
+                    when (mode) {
+                        UiMode.FullscreenVertical -> biblePane(Modifier.fillMaxSize(), false, false)
 
-            UiMode.FoldFullscreen -> Row(Modifier.fillMaxSize()) {
-                biblePane(Modifier.fillMaxHeight().weight(1f), false, true)
-                HingeSpacerVertical(fold)
-                VerticalDivider(color = palette.rule)
-                if (secondPane == SecondPane.Study) study(Modifier.fillMaxHeight().weight(1f))
-                else biblePane(Modifier.fillMaxHeight().weight(1f), true, true)
+                        UiMode.FoldFullscreen -> Row(Modifier.fillMaxSize()) {
+                            biblePane(Modifier.fillMaxHeight().weight(1f), false, true)
+                            HingeSpacerVertical(fold)
+                            VerticalDivider(color = palette.rule)
+                            if (secondPane == SecondPane.Study) study(Modifier.fillMaxHeight().weight(1f))
+                            else biblePane(Modifier.fillMaxHeight().weight(1f), true, true)
+                        }
+                    }
+                }
+
+                Dest.Explore -> ExploreScreen(
+                    palette = palette,
+                    onNotes = { showNotes = true },
+                    onThreads = { openLibrary(Library.Threads) },
+                    onTags = { openLibrary(Library.Tags) },
+                    onWeaves = { showWeaves = true },
+                    onConstellation = { showConstellation = true },
+                    onChord = { showChord = true },
+                    onClose = { dest = Dest.Read },
+                )
+
+                Dest.Memorize -> MemorizeScreen(
+                    engine, memView, toc, palette,
+                    onSelectView = { memView = it },
+                    onDrill = { ref -> drillRef = ref },
+                    onClose = {
+                        if (memView == MemorizeView.List) dest = Dest.Read
+                        else memView = MemorizeView.List
+                    },
+                )
             }
+        }
+
+        // The bottom nav bar: the whole IA in thumb reach (Read · Explore ·
+        // Present · Memorize). Present launches its fullscreen overlay.
+        val navColors = NavigationBarItemDefaults.colors(
+            selectedIconColor = palette.gold,
+            selectedTextColor = palette.gold,
+            unselectedIconColor = palette.faded,
+            unselectedTextColor = palette.faded,
+            indicatorColor = palette.gold.copy(alpha = 0.14f),
+        )
+        NavigationBar(containerColor = palette.paneNavBg) {
+            NavigationBarItem(
+                selected = dest == Dest.Read && !showPresent,
+                onClick = { dest = Dest.Read },
+                icon = { Icon(NavIconRead, contentDescription = null) },
+                label = { Text("Read") },
+                colors = navColors,
+            )
+            NavigationBarItem(
+                selected = dest == Dest.Explore && !showPresent,
+                onClick = { dest = Dest.Explore },
+                icon = { Icon(NavIconExplore, contentDescription = null) },
+                label = { Text("Explore") },
+                colors = navColors,
+            )
+            NavigationBarItem(
+                selected = showPresent,
+                onClick = { showPresent = true },
+                icon = { Icon(NavIconPresent, contentDescription = null) },
+                label = { Text("Present") },
+                colors = navColors,
+            )
+            NavigationBarItem(
+                selected = dest == Dest.Memorize && !showPresent,
+                onClick = { memView = MemorizeView.List; dest = Dest.Memorize },
+                icon = { Icon(NavIconMemorize, contentDescription = null) },
+                label = { Text("Memorize") },
+                colors = navColors,
+            )
         }
     }
 
         // ── overlays / sheets (parity features layered over the reader) ──────
         if (studySheet && mode == UiMode.FullscreenVertical) {
-            StudySheet(studyBlocks, palette, studyScale, ::onLink) { studySheet = false }
+            StudySheet(studyBlocks, palette, studyScale, ::onLink, studyEmbed) { studySheet = false }
+        }
+        bookNavPane?.let { paneIdx ->
+            BookNavScreen(
+                engine, toc, palette,
+                currentBook = if (paneIdx == 1) secondBook else book,
+                onGo = { b, c, v ->
+                    if (paneIdx == 1) {
+                        secondBook = b; secondChapter = c
+                    } else {
+                        book = b; chapter = c
+                        pendingVerse = v; navEpoch++
+                    }
+                    bookNavPane = null
+                },
+                onClose = { bookNavPane = null },
+            )
+        }
+        if (showNotes) {
+            NotesScreen(
+                engine, palette,
+                onOpen = { ref -> showNotes = false; goToRef(ref) },
+                onClose = { showNotes = false },
+            )
+        }
+        tagPickRef?.let { ref ->
+            TagPickerSheet(engine, palette, ref, onDismiss = { tagPickRef = null })
         }
         if (showSearch) {
             SearchOverlay(
@@ -401,17 +540,6 @@ fun StudyScreen(
                 onNavigate = { b, c -> book = b; chapter = c },
                 onLink = ::onLink,
                 onClose = { showSearch = false },
-            )
-        }
-        if (showExplore) {
-            ExploreScreen(
-                palette = palette,
-                onThreads = { showExplore = false; openLibrary(Library.Threads) },
-                onTags = { showExplore = false; openLibrary(Library.Tags) },
-                onWeaves = { showExplore = false; showWeaves = true },
-                onConstellation = { showExplore = false; showConstellation = true },
-                onChord = { showExplore = false; showChord = true },
-                onClose = { showExplore = false },
             )
         }
         if (showWeaves) {
@@ -434,14 +562,6 @@ fun StudyScreen(
                 copyStyle = copyStyle,
                 onHighlightsChanged = { highlightEpoch++ },
                 onDismiss = { actionVerse = null },
-            )
-        }
-        memView?.let { v ->
-            MemorizeScreen(
-                engine, v, toc, palette,
-                onSelectView = { memView = it },
-                onDrill = { ref -> drillRef = ref },
-                onClose = { memView = null },
             )
         }
         // Drilling a single verse tapped in the hub — drawn over it; back returns
@@ -479,7 +599,7 @@ fun StudyScreen(
         if (showConstellation) MapOverlay("Constellation", palette, { showConstellation = false }) {
             Constellation(
                 engine, palette, Modifier.fillMaxSize(),
-                onNavigate = { b, ch, _ -> book = b; chapter = ch; showConstellation = false },
+                onNavigate = { b, ch, _ -> book = b; chapter = ch; showConstellation = false; dest = Dest.Read },
                 onOpenWeave = {},
             )
         }
@@ -491,15 +611,15 @@ fun StudyScreen(
         if (showChord) MapOverlay("Chord map", palette, { showChord = false }) {
             ChordMap(
                 engine, toc, palette, Modifier.fillMaxSize(),
-                onPickBook = { b -> book = b; chapter = 1; showChord = false },
+                onPickBook = { b -> book = b; chapter = 1; showChord = false; dest = Dest.Read },
             )
         }
     }
     }
 }
 
-/** A pane's own compact navigation: ‹ Book Ch › with a book picker (fold mode,
- *  one per Bible pane, so the two panes navigate independently). */
+/** A pane's own compact navigation: ‹ Book Ch › opening the passage navigator
+ *  (fold mode, one per Bible pane, so the two panes navigate independently). */
 @Composable
 private fun PaneHeader(
     toc: List<TocBook>,
@@ -508,9 +628,8 @@ private fun PaneHeader(
     palette: ReaderPalette,
     onPrev: () -> Unit,
     onNext: () -> Unit,
-    onPick: (TocBook) -> Unit,
+    onOpenNav: () -> Unit,
 ) {
-    var menu by remember { mutableStateOf(false) }
     val name = toc.firstOrNull { it.id == book }?.name ?: book
     Surface(color = palette.paneNavBg) {
         Row(
@@ -520,14 +639,7 @@ private fun PaneHeader(
             IconButton(onClick = onPrev) {
                 Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "Previous chapter", tint = palette.ink)
             }
-            Box {
-                TextButton(onClick = { menu = true }) { Text("$name $chapter", color = palette.ink) }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    for (b in toc) {
-                        DropdownMenuItem(text = { Text(b.name) }, onClick = { onPick(b); menu = false })
-                    }
-                }
-            }
+            TextButton(onClick = onOpenNav) { Text("$name $chapter", color = palette.ink) }
             IconButton(onClick = onNext) {
                 Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Next chapter", tint = palette.ink)
             }
@@ -535,9 +647,10 @@ private fun PaneHeader(
     }
 }
 
-/** Top chrome: on a phone, inline ‹ Book Ch › nav; then a search icon, the fold
- *  pane toggle (fold only), and a short overflow (⋮) menu. Icons over text;
- *  study tools live behind the Explore screen, not a long scrolling menu. */
+/** Top chrome: on a phone, inline ‹ Book Ch › nav (the title opens the passage
+ *  navigator — OT/NT → book → chapter → verse taps); then a search icon, the
+ *  fold pane toggle (fold only), and a short overflow (⋮) menu. The study
+ *  destinations live on the bottom nav bar, in thumb reach. */
 @Composable
 private fun TopBar(
     palette: ReaderPalette,
@@ -547,13 +660,10 @@ private fun TopBar(
     chapter: Int,
     onPrev: () -> Unit,
     onNext: () -> Unit,
-    onPick: (TocBook) -> Unit,
+    onOpenNav: () -> Unit,
     onSearch: () -> Unit,
     secondStudy: Boolean,
     onToggleSecondPane: () -> Unit,
-    onPresent: () -> Unit,
-    onMemorize: () -> Unit,
-    onExplore: () -> Unit,
     onHistory: () -> Unit,
     onGuide: () -> Unit,
     onSettings: () -> Unit,
@@ -565,19 +675,11 @@ private fun TopBar(
         ) {
             // Phone: the single pane's book nav lives here (no per-pane header).
             if (mode == UiMode.FullscreenVertical) {
-                var pick by remember { mutableStateOf(false) }
                 val name = toc.firstOrNull { it.id == book }?.name ?: book
                 IconButton(onClick = onPrev) {
                     Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "Previous chapter", tint = palette.ink)
                 }
-                Box {
-                    TextButton(onClick = { pick = true }) { Text("$name $chapter", color = palette.ink, fontSize = 16.sp) }
-                    DropdownMenu(expanded = pick, onDismissRequest = { pick = false }) {
-                        for (b in toc) {
-                            DropdownMenuItem(text = { Text(b.name) }, onClick = { onPick(b); pick = false })
-                        }
-                    }
-                }
+                TextButton(onClick = onOpenNav) { Text("$name $chapter", color = palette.ink, fontSize = 16.sp) }
                 IconButton(onClick = onNext) {
                     Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Next chapter", tint = palette.ink)
                 }
@@ -607,9 +709,6 @@ private fun TopBar(
                     Icon(Icons.Filled.MoreVert, contentDescription = "Menu", tint = palette.ink)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("Present") }, onClick = { onPresent(); menu = false })
-                    DropdownMenuItem(text = { Text("Memorize") }, onClick = { onMemorize(); menu = false })
-                    DropdownMenuItem(text = { Text("Explore") }, onClick = { onExplore(); menu = false })
                     DropdownMenuItem(text = { Text("History") }, onClick = { onHistory(); menu = false })
                     DropdownMenuItem(text = { Text("Guide & About") }, onClick = { onGuide(); menu = false })
                     DropdownMenuItem(text = { Text("Settings") }, onClick = { onSettings(); menu = false })
@@ -620,7 +719,9 @@ private fun TopBar(
 }
 
 /** Study as a bottom sheet — the phone surface for a word tap / library / link
- *  result. Swipe down or tap the scrim to dismiss. Links route through [onLink]. */
+ *  result. Opens half-height; drag the handle up to fill (nearly) the whole
+ *  screen (Glendon's 2026-07-24 call). Swipe down or tap the scrim to dismiss.
+ *  Links route through [onLink]; [embed] slots the concept map + heatmap cards. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StudySheet(
@@ -628,11 +729,12 @@ private fun StudySheet(
     palette: ReaderPalette,
     scale: Float,
     onLink: (String) -> Unit,
+    embed: (@Composable () -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = palette.panelBg) {
-        Box(Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
-            StudyPane(blocksJson, palette, onLink = onLink, scale = scale)
+        Box(Modifier.fillMaxWidth().fillMaxHeight(0.94f)) {
+            StudyPane(blocksJson, palette, onLink = onLink, scale = scale, embed = embed)
         }
     }
 }
@@ -726,6 +828,7 @@ private fun SearchOverlay(
 @Composable
 private fun ExploreScreen(
     palette: ReaderPalette,
+    onNotes: () -> Unit,
     onThreads: () -> Unit,
     onTags: () -> Unit,
     onWeaves: () -> Unit,
@@ -735,8 +838,9 @@ private fun ExploreScreen(
 ) {
     MapOverlay("Explore", palette, onClose) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            ExploreCard("Notes", "Everything you've written on a verse, in one browsable place.", palette, onNotes)
             ExploreCard("Threads", "Ordered trails of passages you've linked — follow a theme across the canon.", palette, onThreads)
-            ExploreCard("Tags", "Labelled sets of verses. Give a tag a colour and its verses get a highlight wash.", palette, onTags)
+            ExploreCard("Tags", "Labelled sets of verses — group passages by topic.", palette, onTags)
             ExploreCard("Weaves", "Parallel passages tied together — see how Scripture echoes itself.", palette, onWeaves)
             ExploreCard("Constellation", "The whole weave library as lanes across the canon — tap a node to jump there.", palette, onConstellation)
             ExploreCard("Chord map", "How strongly each pair of books is woven, drawn as arcs over the canon.", palette, onChord)

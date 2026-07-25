@@ -58,8 +58,12 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
-private const val MARGIN = 28f      // GTK MARGIN — all sides
-private const val MAX_COLUMN = 720f // GTK MAX_COLUMN
+// The manifest constants are LOGICAL units (the desktop shells run ~1 device px
+// per logical px). On a phone (density ~2.6) treating them as raw device px
+// capped the text column at ~277dp and left wide empty gutters — Glendon's
+// "lots of whitespace" feedback (2026-07-24) — so both scale by density here.
+private const val MARGIN_DP = 28f      // GTK MARGIN — all sides
+private const val MAX_COLUMN_DP = 720f // GTK MAX_COLUMN
 
 /** A pinned word span (single tap sets a one-word anchor; parity-lite with the
  *  desktop pin — full widen-on-second-tap is a TODO). */
@@ -101,10 +105,10 @@ fun ReaderPane(
     palette: ReaderPalette,
     modifier: Modifier = Modifier,
     fontSizeSp: Float = 18f,
-    // Horizontal margin (px) either side of the text column, and the line-height
+    // Horizontal margin (dp) either side of the text column, and the line-height
     // multiple — both reader prefs (config), defaulting to the feature-manifest
     // MARGIN 28 / line_height 1.35.
-    sideMarginPx: Float = 28f,
+    sideMargin: Float = 28f,
     lineSpacing: Float = 1.35f,
     versePerLine: Boolean = false,
     searchHits: Set<String> = emptySet(),
@@ -116,10 +120,15 @@ fun ReaderPane(
     // Bump to force a highlight re-fetch after an add/trim/remove that didn't
     // change book/chapter (the verse-action sheet edits highlights in place).
     highlightEpoch: Int = 0,
+    // Scroll this verse number into view once the layout lands; bump the epoch
+    // to re-apply for the same verse (the book navigator's verse tap).
+    targetVerse: Int? = null,
+    targetEpoch: Int = 0,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
     val fontPx = with(density) { fontSizeSp.sp.toPx() }
+    val marginPx = with(density) { MARGIN_DP.dp.toPx() }
 
     val typefaces = remember { loadTypefaces(context) }
     val paints = remember(fontPx) {
@@ -153,12 +162,13 @@ fun ReaderPane(
 
     BoxWithConstraints(modifier.fillMaxSize()) {
         val widthPx = with(density) { maxWidth.toPx() }
-        val column = min(widthPx - 2 * sideMarginPx, MAX_COLUMN)
+        val sidePx = with(density) { sideMargin.dp.toPx() }
+        val column = min(widthPx - 2 * sidePx, with(density) { MAX_COLUMN_DP.dp.toPx() })
         val originX = (widthPx - column) / 2f
 
         // (Re)lay out the chapter whenever an input that affects it changes
         // (margin/spacing change the column width + rhythm, so re-lay out too).
-        LaunchedEffect(book, chapter, widthPx, fontPx, versePerLine, sideMarginPx, lineSpacing) {
+        LaunchedEffect(book, chapter, widthPx, fontPx, versePerLine, sideMargin, lineSpacing) {
             if (widthPx < 60f) return@LaunchedEffect
             val cfg = PureLayoutConfig.ByValue().apply {
                 width = column
@@ -210,7 +220,21 @@ fun ReaderPane(
             }
         }
 
-        val docHeight = (dl?.height ?: 0f) + 2 * MARGIN
+        // Scroll the navigator's target verse into view once the layout lands.
+        // Epoch-guarded so a re-layout (font/margin change) doesn't re-jump.
+        var appliedTarget by remember { mutableStateOf(-1) }
+        LaunchedEffect(dl, targetEpoch) {
+            val tv = targetVerse ?: return@LaunchedEffect
+            val list = dl ?: return@LaunchedEffect
+            if (appliedTarget == targetEpoch) return@LaunchedEffect
+            val item = list.items.firstOrNull { it.kind == "verseNumber" && it.verseNumber?.toInt() == tv }
+            if (item != null) {
+                scrollY = max(0f, item.y)
+                appliedTarget = targetEpoch
+            }
+        }
+
+        val docHeight = (dl?.height ?: 0f) + 2 * marginPx
         val maxScroll = max(0f, docHeight - viewportH)
         scrollY = scrollY.coerceIn(0f, maxScroll)
 
@@ -256,7 +280,7 @@ fun ReaderPane(
                         onTap = { pos ->
                             val chap = chapterHandle ?: return@detectTapGestures
                             val x = pos.x - originXNow.value
-                            val y = pos.y - MARGIN + scrollYNow.value
+                            val y = pos.y - marginPx + scrollYNow.value
                             val hj = runCatching {
                                 synchronized(engine) { chap.HitTestJson(x, y) }
                             }.getOrNull() ?: return@detectTapGestures
@@ -266,7 +290,7 @@ fun ReaderPane(
                             onWordTap(hit)
                         },
                         onLongPress = { pos ->
-                            val verse = verseAt(dl, pos, originXNow.value, scrollYNow.value, book, chapter, engine, chapterHandle)
+                            val verse = verseAt(dl, pos, originXNow.value, scrollYNow.value, marginPx, book, chapter, engine, chapterHandle)
                             if (verse != null) onVerseLongPress(verse)
                         },
                     )
@@ -278,16 +302,16 @@ fun ReaderPane(
             if (list == null) {
                 // "loading…" / an error, at the top margin.
                 drawContext.canvas.nativeCanvas.drawText(
-                    problem ?: "loading…", MARGIN, MARGIN - fm.ascent,
+                    problem ?: "loading…", marginPx, marginPx - fm.ascent,
                     Paint(regular).apply { color = palette.inkFaded.toArgbInt() },
                 )
                 return@Canvas
             }
 
-            val top = scrollY - MARGIN
+            val top = scrollY - marginPx
             val viewH = size.height
 
-            translate(left = originX, top = MARGIN - scrollY) {
+            translate(left = originX, top = marginPx - scrollY) {
                 // Same viewport cull the text uses (§5): a wash/band for an item
                 // scrolled off-screen must not paint — otherwise it lands over the
                 // chrome above the pane on scroll. clipToBounds is the safety net.
@@ -373,6 +397,7 @@ private fun verseAt(
     pos: Offset,
     originX: Float,
     scrollY: Float,
+    marginPx: Float,
     book: String,
     chapter: Int,
     engine: StudyEngine,
@@ -381,13 +406,13 @@ private fun verseAt(
     if (dl == null) return null
     if (chap != null) {
         val hj = runCatching {
-            synchronized(engine) { chap.HitTestJson(pos.x - originX, pos.y - MARGIN + scrollY) }
+            synchronized(engine) { chap.HitTestJson(pos.x - originX, pos.y - marginPx + scrollY) }
         }.getOrNull()
         if (hj != null) {
             runCatching { parseWire<Hit>(hj) }.getOrNull()?.let { return it.verse }
         }
     }
-    val y = pos.y - MARGIN + scrollY
+    val y = pos.y - marginPx + scrollY
     var best: DisplayItem? = null
     var bestD = Float.MAX_VALUE
     for (it in dl.items.filter { it.kind == "verseNumber" }) {

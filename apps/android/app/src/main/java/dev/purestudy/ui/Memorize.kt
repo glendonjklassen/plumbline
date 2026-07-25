@@ -4,12 +4,11 @@
 // M:3117, M:3355, M:3435) and the WinUI Memorize.cs. All study logic lives across
 // the ABI (StudyEngine.Memory*); this file is orchestration + paint only.
 //
-// The three views are full-screen destinations (not overlays): StudyScreen holds
-// a nullable MemorizeView and swaps the whole screen for [MemorizeScreen] while a
-// view is open, restoring the reader when it is dismissed (system back or the ‹
-// button, wired through [MemFrame]'s BackHandler + onClose). The big visuals are
-// pinch-zoom + pan (Glendon's decision for dense canvas maps) via the reusable
-// [zoomable] modifier below.
+// The hub [MemorizeList] carries the coverage strip INLINE above the verse list
+// (Glendon's 2026-07-24 call — coverage is a section, not a screen), with
+// ReviewDue and Activity as the two full-screen destinations, dismissed back to
+// the hub via [MemFrame]'s BackHandler + onClose. Activity is a half/half split:
+// calendar heatmap over a most-recent-first history log.
 //
 // Author D (Compose UI).
 
@@ -20,7 +19,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +28,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -60,13 +59,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.purestudy.CanonSegments
@@ -81,6 +76,10 @@ import dev.purestudy.TocBook
 import dev.purestudy.VerseData
 import dev.purestudy.parseWire
 import java.time.Instant
+import java.time.LocalDate
+import java.time.format.TextStyle
+import java.time.temporal.ChronoUnit
+import java.util.Locale
 import kotlin.math.roundToInt
 
 // ── shared helpers ───────────────────────────────────────────────────────────
@@ -94,10 +93,10 @@ fun nowUtc(): String = Instant.now().toString()
 fun memorizeVerse(engine: StudyEngine, verseRef: String): String? =
     synchronized(engine) { engine.MemoryAdd(verseRef, nowUtc()) }
 
-/** The memorization destinations, mirroring GTK's "Memorize ▸" submenu plus the
- *  [List] of everything the reader is memorizing (Review due / My verses /
- *  Coverage map / Activity). */
-enum class MemorizeView { ReviewDue, List, Coverage, Activity }
+/** The memorization destinations: the hub [List] (verse list + inline coverage
+ *  strip — Glendon's 2026-07-24 call: coverage is a section of the hub, not a
+ *  screen that replaces it), the [ReviewDue] drill, and [Activity]. */
+enum class MemorizeView { ReviewDue, List, Activity }
 
 /**
  * The single entry point StudyScreen mounts full-screen while a memorization view
@@ -119,7 +118,6 @@ fun MemorizeScreen(
     when (view) {
         MemorizeView.ReviewDue -> MemorizeReview(engine, palette, onClose)
         MemorizeView.List -> MemorizeList(engine, books, palette, onSelectView, onDrill, onClose)
-        MemorizeView.Coverage -> MemorizeCoverage(engine, books, palette, onClose)
         MemorizeView.Activity -> MemorizeActivity(engine, palette, onClose)
     }
 }
@@ -143,13 +141,19 @@ fun MemorizeList(
                 ?.let { parseWire<MemoryCoverage>(it) }
         }.getOrNull()
     }
+    val segments = remember {
+        runCatching {
+            synchronized(engine) { engine.CanonSegmentsJson() }
+                ?.let { parseWire<CanonSegments>(it) }
+        }.getOrNull()
+    }
     val nameOf = remember(books) { books.associate { it.id to it.name } }
     val verses = coverage?.verses ?: emptyList()
     val dueCount = verses.count { it.due }
 
     MemFrame("Memorize", palette, onClose) {
         Column(Modifier.fillMaxSize()) {
-            // Actions: Review due (with a count), Coverage map, Activity.
+            // Actions: Review due (with a count) and Activity.
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -161,15 +165,26 @@ fun MemorizeList(
                     colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
                 ) { Text(if (dueCount > 0) "Review $dueCount due" else "Nothing due") }
                 OutlinedButton(
-                    onClick = { onSelectView(MemorizeView.Coverage) },
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.ink),
-                ) { Text("Coverage") }
-                OutlinedButton(
                     onClick = { onSelectView(MemorizeView.Activity) },
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.ink),
                 ) { Text("Activity") }
             }
             HorizontalDivider(color = palette.rule)
+
+            // Coverage lives INLINE with the verse list it summarises — a strip,
+            // not a screen (fullscreen felt like leaving the hub).
+            if (verses.isNotEmpty()) {
+                Text(
+                    "Coverage — the canon shaded by mastery",
+                    color = palette.faded, fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+                CoverageCanvas(
+                    books, coverage, segments, palette,
+                    Modifier.fillMaxWidth().height(120.dp).padding(horizontal = 12.dp),
+                )
+                HorizontalDivider(color = palette.rule, modifier = Modifier.padding(top = 8.dp))
+            }
 
             if (verses.isEmpty()) {
                 Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -455,42 +470,15 @@ private fun RowScope.GradeButton(
     }
 }
 
-// ── (b) the coverage map (GTK draw_mem_coverage) ──────────────────────────────
+// ── (b) the coverage strip (GTK draw_mem_coverage; inline in the hub) ─────────
 
 /**
- * The canon strip shaded by how much of each book is being memorized and how well
- * (average mastery), OT/NT seam marked, section labels along the top — the
- * dispersion visual language reused for memory work. Pinch-zoom + pan for a close
- * look at the thin per-book columns. [books] is the TOC (66 books, canon order);
- * a verse maps to a book by its ref key.
+ * The canon strip shaded by how much of each book is being memorized and how
+ * well (average mastery), OT/NT seam marked, section labels along the top — the
+ * dispersion visual language reused for memory work. Rendered inline in the
+ * memorize hub above the verse list it summarises. [books] is the TOC (66
+ * books, canon order); a verse maps to a book by its ref key.
  */
-@Composable
-fun MemorizeCoverage(
-    engine: StudyEngine,
-    books: List<TocBook>,
-    palette: ReaderPalette,
-    onClose: () -> Unit,
-) {
-    val coverage = remember {
-        runCatching {
-            synchronized(engine) { engine.MemoryCoverageJson(nowUtc()) }
-                ?.let { parseWire<MemoryCoverage>(it) }
-        }.getOrNull()
-    }
-    val segments = remember {
-        runCatching {
-            synchronized(engine) { engine.CanonSegmentsJson() }
-                ?.let { parseWire<CanonSegments>(it) }
-        }.getOrNull()
-    }
-    MemFrame("Memory coverage", palette, onClose) {
-        CoverageCanvas(
-            books, coverage, segments, palette,
-            Modifier.fillMaxSize().zoomable(),
-        )
-    }
-}
-
 @Composable
 private fun CoverageCanvas(
     books: List<TocBook>,
@@ -570,12 +558,12 @@ private fun bookOf(refKey: String): String? {
     return if (i > 0) refKey.substring(0, i) else null
 }
 
-// ── (c) the activity heatmap (GTK draw_mem_activity) ──────────────────────────
+// ── (c) memory activity: calendar heatmap over a history log ──────────────────
 
 /**
- * Reviews per calendar day, oldest → newest, as gold columns with the first and
- * last day labelled — a glance at when the memory work happened. Pinch-zoom + pan
- * for a long history.
+ * When the memory work happened, split half-and-half (Glendon's 2026-07-24
+ * call): the top half is a calendar heatmap (weeks as columns, GitHub-style,
+ * shaded by reviews that day), the bottom half a most-recent-first history log.
  */
 @Composable
 fun MemorizeActivity(engine: StudyEngine, palette: ReaderPalette, onClose: () -> Unit) {
@@ -586,51 +574,109 @@ fun MemorizeActivity(engine: StudyEngine, palette: ReaderPalette, onClose: () ->
         }.getOrNull() ?: emptyList()
     }
     MemFrame("Memory activity", palette, onClose) {
-        ActivityCanvas(days, palette, Modifier.fillMaxSize().zoomable())
+        if (days.isEmpty()) {
+            Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                Text(
+                    "No reviews yet — grade some cards in Review due.",
+                    color = palette.ink, fontSize = 15.sp,
+                )
+            }
+        } else {
+            Column(Modifier.fillMaxSize()) {
+                ActivityCalendar(
+                    days, palette,
+                    Modifier.fillMaxWidth().weight(1f).padding(horizontal = 14.dp, vertical = 10.dp),
+                )
+                HorizontalDivider(color = palette.rule)
+                LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
+                    item {
+                        Text(
+                            "History — most recent first",
+                            color = palette.faded, fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                        )
+                    }
+                    items(days.asReversed()) { d ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(prettyDay(d.day), color = palette.ink, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                            Text(
+                                "${d.reviews} review${if (d.reviews == 1) "" else "s"}",
+                                color = palette.gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        HorizontalDivider(color = palette.rule)
+                    }
+                }
+            }
+        }
     }
 }
 
+/** "2026-07-21" → "Tue, Jul 21 2026" (falls back to the raw day string). */
+private fun prettyDay(day: String): String = runCatching {
+    val d = LocalDate.parse(day)
+    val dow = d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())
+    val mon = d.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())
+    "$dow, $mon ${d.dayOfMonth} ${d.year}"
+}.getOrDefault(day)
+
+/**
+ * The calendar heatmap: columns are weeks (Monday-first rows), each day a cell
+ * shaded by its review count, month names along the top. Sized to fit — the
+ * history log below carries the exact numbers.
+ */
 @Composable
-private fun ActivityCanvas(days: List<DayActivity>, palette: ReaderPalette, modifier: Modifier) {
+private fun ActivityCalendar(days: List<DayActivity>, palette: ReaderPalette, modifier: Modifier) {
+    val byDay = remember(days) {
+        days.mapNotNull { d ->
+            runCatching { LocalDate.parse(d.day) }.getOrNull()?.let { it to d.reviews }
+        }.toMap()
+    }
     val textPaint = remember { Paint(Paint.ANTI_ALIAS_FLAG) }
     Canvas(modifier) {
-        val w = size.width
-        val h = size.height
         drawRect(palette.paper, size = size)
+        if (byDay.isEmpty()) return@Canvas
 
-        if (days.isEmpty()) {
-            textPaint.textSize = 13.dp.toPx()
-            textPaint.color = palette.faded.toArgb()
-            drawTopText(
-                "No reviews yet — grade some cards in Review due.",
-                24f, h / 2f - 8f, textPaint,
-            )
-            return@Canvas
-        }
+        val first = byDay.keys.min()
+        val last = byDay.keys.max()
+        val start = first.minusDays(first.dayOfWeek.value - 1L)   // Monday of the first week
+        val weeks = (ChronoUnit.DAYS.between(start, last).toInt() / 7) + 1
+        val labelH = 14.dp.toPx()
+        val cell = minOf((size.width - 4f) / weeks, (size.height - labelH) / 7f)
+        val gap = maxOf(1.2f, cell * 0.12f)
+        val maxR = maxOf(1, days.maxOf { it.reviews })
 
-        val max = maxOf(1, days.maxOf { it.reviews })
-        val n = days.size.toFloat()
-        val baseline = h - 28f
-        val plotH = baseline - 24f
-        val gap = (w - 48f) / n
-        val barW = maxOf(minOf(gap, 28f), 2f) - 2f
-        for (i in days.indices) {
-            val x = 24f + i * gap
-            val bh = days[i].reviews.toFloat() / max * plotH
-            drawRect(
-                color = palette.gold.copy(alpha = 0.85f),
-                topLeft = Offset(x, baseline - bh),
-                size = Size(maxOf(2f, barW), bh),
-            )
-        }
-
-        // First + last day labels.
-        textPaint.textSize = 10.dp.toPx()
+        textPaint.textSize = 9.dp.toPx()
         textPaint.color = palette.faded.toArgb()
-        drawTopText(days.first().day, 24f, baseline + 6f, textPaint)
-        if (days.size > 1) {
-            val tw = textPaint.measureText(days.last().day)
-            drawTopText(days.last().day, w - 24f - tw, baseline + 6f, textPaint)
+
+        var prevMonth = -1
+        for (wi in 0 until weeks) {
+            val monday = start.plusWeeks(wi.toLong())
+            if (monday.monthValue != prevMonth) {
+                prevMonth = monday.monthValue
+                drawTopText(
+                    monday.month.getDisplayName(TextStyle.SHORT, Locale.getDefault()),
+                    wi * cell, 0f, textPaint,
+                )
+            }
+            for (di in 0..6) {
+                val d = monday.plusDays(di.toLong())
+                if (d.isAfter(last)) break
+                val r = byDay[d] ?: 0
+                val color = if (r > 0) {
+                    palette.gold.copy(alpha = 0.20f + 0.75f * r / maxR)
+                } else {
+                    palette.gold.copy(alpha = 0.06f)
+                }
+                drawRect(
+                    color,
+                    topLeft = Offset(wi * cell, labelH + di * cell),
+                    size = Size(cell - gap, cell - gap),
+                )
+            }
         }
     }
 }
@@ -642,43 +688,5 @@ private fun DrawScope.drawTopText(text: String, x: Float, top: Float, paint: Pai
     drawContext.canvas.nativeCanvas.drawText(text, x, top - paint.fontMetrics.ascent, paint)
 }
 
-// ── zoom + pan ────────────────────────────────────────────────────────────────
-
-/**
- * Pinch-to-zoom + drag-to-pan for a big canvas visual (Glendon's decision for the
- * dense maps). Applies a [graphicsLayer] scale/translation driven by
- * [detectTransformGestures]; panning is disabled (offset reset) at 1× so the map
- * always springs back to fit.
- */
-fun Modifier.zoomable(minScale: Float = 1f, maxScale: Float = 6f): Modifier = composed {
-    var scale by remember { mutableStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
-    var size by remember { mutableStateOf(IntSize.Zero) }
-    onSizeChanged { size = it }
-        .graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-            translationX = offset.x
-            translationY = offset.y
-            // Clip the panned/zoomed drawing to the canvas bounds, so a dragged
-            // coverage/activity map can't paint over the frame's back bar above it.
-            clip = true
-        }
-        .pointerInput(Unit) {
-            detectTransformGestures { _, pan, zoom, _ ->
-                val s = (scale * zoom).coerceIn(minScale, maxScale)
-                scale = s
-                // Bound the pan so the map can't be flung off-screen; pin at 1×.
-                offset = if (s <= 1f) {
-                    Offset.Zero
-                } else {
-                    val minX = size.width * (1f - s)
-                    val minY = size.height * (1f - s)
-                    Offset(
-                        (offset.x + pan.x).coerceIn(minX, 0f),
-                        (offset.y + pan.y).coerceIn(minY, 0f),
-                    )
-                }
-            }
-        }
-}
+// (The zoom/pan modifier the fullscreen coverage/activity views used lives on in
+// Maps.kt as ZoomState.zoomable — both views are now inline/fit-to-frame here.)
