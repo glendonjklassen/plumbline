@@ -174,6 +174,14 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
     // ── study-panel content model (typed block lists) ─────────────────────────
 
     /** Word study for a tapped token as a block list; `full` gates the R&D tiers. */
+    /** Word study with per-tier gates: bit 0 = human analysis, bit 1 = machine. */
+    fun WordStudyBlocks2Json(refKey: String, tokenIndex: Int, gates: Int): String? =
+        take(ffi.pure_engine_word_study_blocks2_json(h, refKey, tokenIndex, gates))
+
+    /** Code study card with per-tier gates (see [WordStudyBlocks2Json]). */
+    fun CodeStudyBlocks2Json(code: String, word: String?, gates: Int): String? =
+        take(ffi.pure_engine_code_study_blocks2_json(h, code, word, gates))
+
     fun WordStudyBlocksJson(refKey: String, tokenIndex: Int, full: Boolean): String? =
         take(ffi.pure_engine_word_study_blocks_json(h, refKey, tokenIndex, full))
 

@@ -2206,6 +2206,38 @@ pub unsafe extern "C" fn pure_engine_word_study_blocks_json(
     })
 }
 
+/// [`pure_engine_word_study_blocks_json`] with per-tier gates instead of the
+/// legacy Simple/Full flag: `gates` bit 0 = curated-scholarship (human)
+/// analysis, bit 1 = learned/statistical (machine) analysis. The text and the
+/// reader's own data are always on.
+///
+/// # Safety
+/// `engine` is a live engine; `ref_key` is a valid NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_word_study_blocks2_json(
+    engine: *const PureEngine,
+    ref_key: *const c_char,
+    token_index: u32,
+    gates: u32,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(rk)) = (engine.as_ref(), opt_str(ref_key)) else {
+            return ptr::null_mut();
+        };
+        let codes: Vec<String> = VRef::parse_ref_key(rk)
+            .and_then(|v| e.corpus.verse(&v).and_then(|verse| verse.tokens.get(token_index as usize).cloned()))
+            .map(|t| t.strongs)
+            .unwrap_or_default();
+        out_json(&wire::blocks_to_wire(panel::word_study_gated(
+            e,
+            panel::Gates::from_bits(gates),
+            rk,
+            token_index,
+            &codes,
+        )))
+    })
+}
+
 /// The standalone `code:CODE[:word]` study card (the reverse rendering-lens
 /// target). `word` may be null. Never null on a live engine.
 ///
@@ -2223,6 +2255,32 @@ pub unsafe extern "C" fn pure_engine_code_study_blocks_json(
             return ptr::null_mut();
         };
         out_json(&wire::blocks_to_wire(panel::code_study_card(e, full, code, opt_str(word).unwrap_or(""))))
+    })
+}
+
+/// [`pure_engine_code_study_blocks_json`] with per-tier gates (bit 0 = human
+/// analysis, bit 1 = machine analysis).
+///
+/// # Safety
+/// `engine` is a live engine; `code` is valid NUL-terminated UTF-8; `word` is
+/// null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn pure_engine_code_study_blocks2_json(
+    engine: *const PureEngine,
+    code: *const c_char,
+    word: *const c_char,
+    gates: u32,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(code)) = (engine.as_ref(), opt_str(code)) else {
+            return ptr::null_mut();
+        };
+        out_json(&wire::blocks_to_wire(panel::code_study_card_gated(
+            e,
+            panel::Gates::from_bits(gates),
+            code,
+            opt_str(word).unwrap_or(""),
+        )))
     })
 }
 

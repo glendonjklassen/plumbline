@@ -545,6 +545,18 @@ char *pure_engine_word_study_blocks_json(const struct PureEngine *engine,
                                          uint32_t token_index,
                                          bool full);
 
+// [`pure_engine_word_study_blocks_json`] with per-tier gates instead of the
+// legacy Simple/Full flag: `gates` bit 0 = curated-scholarship (human)
+// analysis, bit 1 = learned/statistical (machine) analysis. The text and the
+// reader's own data are always on.
+//
+// # Safety
+// `engine` is a live engine; `ref_key` is a valid NUL-terminated UTF-8 string.
+char *pure_engine_word_study_blocks2_json(const struct PureEngine *engine,
+                                          const char *ref_key,
+                                          uint32_t token_index,
+                                          uint32_t gates);
+
 // The standalone `code:CODE[:word]` study card (the reverse rendering-lens
 // target). `word` may be null. Never null on a live engine.
 //
@@ -554,6 +566,17 @@ char *pure_engine_code_study_blocks_json(const struct PureEngine *engine,
                                          const char *code,
                                          const char *word,
                                          bool full);
+
+// [`pure_engine_code_study_blocks_json`] with per-tier gates (bit 0 = human
+// analysis, bit 1 = machine analysis).
+//
+// # Safety
+// `engine` is a live engine; `code` is valid NUL-terminated UTF-8; `word` is
+// null or valid NUL-terminated UTF-8.
+char *pure_engine_code_study_blocks2_json(const struct PureEngine *engine,
+                                          const char *code,
+                                          const char *word,
+                                          uint32_t gates);
 
 // The full concordance for a code as blocks. Never null on a live engine.
 //

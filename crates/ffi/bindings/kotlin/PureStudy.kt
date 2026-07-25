@@ -124,6 +124,12 @@ internal interface PureStudyNative : Library {
     fun pure_engine_gloss(engine: Pointer, code: String): Pointer?
 
     // ── study-panel content model (typed block lists) ───────────────────────
+    fun pure_engine_word_study_blocks2_json(
+        engine: Pointer, refKey: String, tokenIndex: Int, gates: Int,
+    ): Pointer?
+    fun pure_engine_code_study_blocks2_json(
+        engine: Pointer, code: String, word: String?, gates: Int,
+    ): Pointer?
     fun pure_engine_word_study_blocks_json(
         engine: Pointer, refKey: String, tokenIndex: Int, full: Boolean,
     ): Pointer?

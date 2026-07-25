@@ -246,16 +246,21 @@ fn simple_word_study_is_just_display_word_and_dictionary() {
     );
 
     let blocks = word_study(&f, f.full, "John 3:16", 1, &["G2316".to_string()]);
-    // Header, the big word, a rule, the code header, lemma, def, KJV.
+    // Header, the big word, the reader's own note slot (near the top — their
+    // words before the evidence), a rule, the code header, lemma, def, KJV.
     assert_eq!(text_of(&blocks[0]), "John 3:16");
     assert_eq!(text_of(&blocks[1]), "God");
-    assert!(matches!(blocks[2], Block::Rule));
-    assert_eq!(text_of(&blocks[3]), "G2316   1317 occurrences ▸");
-    // The occurrence link is pre-baked.
-    assert!(uris(&blocks).contains(&"occ:G2316".to_string()));
-    // No R&D sections in simple mode.
+    assert!(text_of(&blocks[2]).starts_with("your note"));
+    assert!(matches!(blocks[3], Block::Rule));
+    assert_eq!(text_of(&blocks[4]), "G2316   1317 occurrences ▸");
+    // The occurrence + note links are pre-baked; author actions are ungated.
+    let u = uris(&blocks);
+    assert!(u.contains(&"occ:G2316".to_string()));
+    assert!(u.contains(&"editnote:John 3:16".to_string()));
+    assert!(u.contains(&"addtag:John 3:16".to_string()));
+    // No analysis sections with every gate off.
     assert!(section_titles(&blocks).is_empty());
-    // No legend in simple mode.
+    // No legend with every gate off.
     assert!(!blocks.iter().any(|b| text_of(b).contains("where this comes from")));
 }
 
@@ -359,16 +364,47 @@ fn verse_extras_gate_on_full_and_prebake_author_uris() {
     assert!(u.contains(&"tag:0".to_string()));
     assert!(u.contains(&"untag:0:John 3:16".to_string()));
     assert!(blocks.iter().any(|b| text_of(b) == "Or, begotten"));
-    // Simple mode drops the author actions + TSK + tags but keeps margin notes.
+    // Text-only mode drops the TSK tier but KEEPS the reader's own data:
+    // author actions, tags, margin notes, weave xrefs (2026-07-25 change —
+    // tags accumulate in any mode).
     let mut simple = f;
     simple.full = false;
     let sb = word_study(&simple, simple.full, "John 3:16", 1, &["G2316".to_string()]);
     let su = uris(&sb);
-    assert!(!su.iter().any(|x| x.starts_with("addtag")));
-    assert!(!su.iter().any(|x| x.starts_with("tag:")));
+    assert!(su.iter().any(|x| x.starts_with("addtag")));
+    assert!(su.iter().any(|x| x.starts_with("tag:")));
+    assert!(!su.contains(&"go:Rom:5:8".to_string())); // TSK is human-gated
     assert!(sb.iter().any(|b| text_of(b) == "Or, begotten")); // margin notes survive
-    // Weave xrefs are not full-gated, so they still show in simple mode.
+    // Weave xrefs are the reader's own — still shown.
     assert!(su.contains(&"go:John:3:18".to_string()));
+}
+
+#[test]
+fn gates_split_human_and_machine_tiers() {
+    let mut f = Fake::default();
+    f.displays.insert("John 3:16".into(), "John 3:16".into());
+    f.words.insert(("John 3:16".into(), 3), "loved".into());
+    f.occ_count.insert("G25".into(), 43);
+    f.entries.insert("G25".into(), StrongsView { lemma: Some("ἀγαπάω".into()), ..Default::default() });
+    f.renderings.insert("G25".into(), vec![RenderingView { rendering: "loved".into(), total: 30 }]);
+    f.near.insert("G25".into(), (vec!["G5368".into()], vec![]));
+    f.study_xrefs.insert("John 3:16".into(), vec![StudyXrefView { to: "Rom 5:8".into(), to_display: "Rom 5:8".into(), end: None, end_display: None }]);
+
+    // Human only: renderings + TSK, no machine analytics.
+    let hb = word_study_gated(&f, Gates { human: true, machine: false }, "John 3:16", 3, &["G25".to_string()]);
+    let ht = section_titles(&hb);
+    assert!(ht.contains(&"RENDERINGS".to_string()));
+    assert!(!ht.contains(&"SIMILAR CONCEPTS".to_string()));
+    assert!(uris(&hb).contains(&"go:Rom:5:8".to_string()));
+    assert!(!uris(&hb).iter().any(|u| u.starts_with("conceptmap:")));
+
+    // Machine only: analytics + concept map, no renderings/TSK.
+    let mb = word_study_gated(&f, Gates { human: false, machine: true }, "John 3:16", 3, &["G25".to_string()]);
+    let mt = section_titles(&mb);
+    assert!(!mt.contains(&"RENDERINGS".to_string()));
+    assert!(mt.contains(&"SIMILAR CONCEPTS".to_string()));
+    assert!(!uris(&mb).contains(&"go:Rom:5:8".to_string()));
+    assert!(uris(&mb).iter().any(|u| u.starts_with("conceptmap:")));
 }
 
 #[test]

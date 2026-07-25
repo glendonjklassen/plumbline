@@ -1256,6 +1256,13 @@ pub struct WireConfigState {
     /// Reading history, most-recent-first (capped by the core).
     #[serde(default)]
     pub history: Vec<WirePaneRef>,
+    /// Show the curated-scholarship analysis tiers (additive, 2026-07-25;
+    /// absent on load → derived from `studyMode`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub human_analysis: Option<bool>,
+    /// Show the learned/statistical analysis tiers (additive, 2026-07-25).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine_analysis: Option<bool>,
     /// Load-only: true when no config file existed yet (guided first run).
     #[serde(default)]
     pub first_run: bool,
@@ -1267,6 +1274,9 @@ pub struct WirePaneRef {
     pub book: String,
     #[serde(default)]
     pub chapter: u16,
+    /// First visible verse (additive; absent = top of the chapter).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verse: Option<u16>,
 }
 
 pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
@@ -1276,7 +1286,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         open_panes: cfg
             .panes
             .iter()
-            .map(|p| WirePaneRef { book: p.book.clone(), chapter: p.chapter })
+            .map(|p| WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: p.verse })
             .collect(),
         active_pane: cfg.active,
         verse_per_line: cfg.verse_per_line,
@@ -1287,20 +1297,27 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         history: cfg
             .history
             .iter()
-            .map(|p| WirePaneRef { book: p.book.clone(), chapter: p.chapter })
+            .map(|p| WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: None })
             .collect(),
+        human_analysis: Some(cfg.human_analysis),
+        machine_analysis: Some(cfg.machine_analysis),
         first_run,
     }
 }
 
 pub fn config_from_wire(w: &WireConfigState) -> Config {
+    let mode = StudyMode::parse(&w.study_mode).unwrap_or(StudyMode::Simple);
     Config {
-        mode: StudyMode::parse(&w.study_mode).unwrap_or(StudyMode::Simple),
+        mode,
         body_size: if w.body_size.is_finite() && w.body_size > 0.0 { w.body_size } else { 18.0 },
         panes: w
             .open_panes
             .iter()
-            .map(|p| PaneRef { book: p.book.clone(), chapter: p.chapter.max(1) })
+            .map(|p| PaneRef {
+                book: p.book.clone(),
+                chapter: p.chapter.max(1),
+                verse: p.verse.filter(|v| *v >= 1),
+            })
             .collect(),
         active: w.active_pane,
         verse_per_line: w.verse_per_line,
@@ -1322,8 +1339,10 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         history: w
             .history
             .iter()
-            .map(|p| PaneRef { book: p.book.clone(), chapter: p.chapter.max(1) })
+            .map(|p| PaneRef { book: p.book.clone(), chapter: p.chapter.max(1), verse: None })
             .collect(),
+        human_analysis: w.human_analysis.unwrap_or_else(|| mode.is_full()),
+        machine_analysis: w.machine_analysis.unwrap_or_else(|| mode.is_full()),
     }
 }
 

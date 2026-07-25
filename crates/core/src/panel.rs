@@ -559,11 +559,46 @@ fn legend() -> Block {
 
 // ── word study ────────────────────────────────────────────────────────────────
 
-/// The study of a clicked word: its Strong's entries (dictionary + Full-study
-/// tiers), this verse's cross-references, and its margin notes. `verse`/`token`
-/// locate the tap; `codes` are its Strong's codes; `full` gates the R&D tiers
-/// and author actions (a shell setting, so it's a request parameter).
-pub fn word_study(src: &dyn PanelSource, full: bool, verse: &str, token: u32, codes: &[String]) -> Vec<Block> {
+/// Which analysis tiers the reader has switched on. The text (and the reader's
+/// own data — tags, notes, author actions) is always on; **human** gates the
+/// curated-scholarship tiers (renderings, morphology, same-root, TSK) and
+/// **machine** the learned/statistical ones (embeddings, concept, SIF,
+/// leitwort). Replaces the old all-or-nothing Simple/Full request flag — the
+/// reader accumulates tags in any mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Gates {
+    pub human: bool,
+    pub machine: bool,
+}
+
+impl Gates {
+    pub const ALL: Gates = Gates { human: true, machine: true };
+    pub const TEXT_ONLY: Gates = Gates { human: false, machine: false };
+
+    /// The legacy Simple/Full flag as gates (Full = everything on).
+    pub fn from_full(full: bool) -> Gates {
+        if full {
+            Gates::ALL
+        } else {
+            Gates::TEXT_ONLY
+        }
+    }
+
+    /// The wire form: bit 0 = human, bit 1 = machine.
+    pub fn from_bits(bits: u32) -> Gates {
+        Gates { human: bits & 1 != 0, machine: bits & 2 != 0 }
+    }
+
+    pub fn any(self) -> bool {
+        self.human || self.machine
+    }
+}
+
+/// The study of a clicked word: its Strong's entries (dictionary + gated
+/// analysis tiers), this verse's cross-references, and its margin notes.
+/// `verse`/`token` locate the tap; `codes` are its Strong's codes. The
+/// legacy `full: bool` shape lives on as [`word_study`].
+pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token: u32, codes: &[String]) -> Vec<Block> {
     let mut out = Vec::new();
     let display = src.verse_display(verse).unwrap_or_else(|| verse.to_string());
     let word = src.token_word(verse, token).unwrap_or_default();
@@ -572,28 +607,38 @@ pub fn word_study(src: &dyn PanelSource, full: bool, verse: &str, token: u32, co
     if !word.is_empty() {
         out.push(Block::para(vec![Run::new(&word, sz::WORD, Color::Ink)]));
     }
-    if full {
+    if gates.human {
         if let Some(g) = src.morph_gloss(verse, token) {
             out.push(Block::para(vec![Run::new(g, sz::NOTE, Color::Morph).italic()]));
         }
     }
+    // The reader's own note rides near the top — it's what they wrote, not
+    // evidence to scroll for (product feedback 2026-07-25).
+    user_note_block(src, verse, &mut out);
     if codes.is_empty() {
         out.push(Block::para(vec![Run::new("no Strong's tag on this word", sz::BODY, Color::Faded).italic()]));
     }
     for code in codes {
-        code_study(src, code, &word, full, &mut out);
+        code_study(src, code, &word, gates, &mut out);
     }
-    verse_extras(src, verse, full, &mut out);
-    if full && !codes.is_empty() {
+    verse_extras(src, verse, gates, &mut out);
+    if gates.any() && !codes.is_empty() {
         out.push(legend());
     }
     out
 }
 
-/// The study of one Strong's code, appended to `out`: dictionary entry and — in
-/// Full study — the rendering lens plus the analytics tiers. Rendered inline for
-/// each of a tapped word's codes and standalone by [`code_study_card`].
-fn code_study(src: &dyn PanelSource, code: &str, word: &str, full: bool, out: &mut Vec<Block>) {
+/// Legacy Simple/Full entry point (the GTK shell + the v1 ABI endpoints call
+/// this shape); Full switches every tier on.
+pub fn word_study(src: &dyn PanelSource, full: bool, verse: &str, token: u32, codes: &[String]) -> Vec<Block> {
+    word_study_gated(src, Gates::from_full(full), verse, token, codes)
+}
+
+/// The study of one Strong's code, appended to `out`: dictionary entry plus
+/// the gated tiers — the rendering lens + same-root under `human`, the
+/// analytics under `machine`. Rendered inline for each of a tapped word's
+/// codes and standalone by [`code_study_card`].
+fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: &mut Vec<Block>) {
     out.push(Block::Rule);
 
     let n = src.occurrence_count(code);
@@ -628,13 +673,13 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, full: bool, out: &m
         None => out.push(Block::para(vec![Run::new("(not in the dictionary)", sz::BODY, Color::Faded).italic()])),
     }
 
-    if !full {
+    if !gates.any() {
         return;
     }
 
     // RENDERINGS: the English words this code is translated as, most frequent
     // first; the tapped word's own rendering is bold.
-    let rends = src.renderings(code);
+    let rends = if gates.human { src.renderings(code) } else { Vec::new() };
     if !rends.is_empty() {
         out.push(Block::section_marked("RENDERINGS", "†", Color::TierHuman));
         let wkey = render_key(word);
@@ -671,7 +716,7 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, full: bool, out: &m
         }
     }
 
-    let partners = src.bridge_partners(code);
+    let partners = if gates.human { src.bridge_partners(code) } else { Vec::new() };
     if !partners.is_empty() {
         out.push(Block::section("SAME ROOT ACROSS TESTAMENTS"));
         for p in partners.iter().take(6) {
@@ -680,6 +725,10 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, full: bool, out: &m
             tier_marks(&mut runs, &p.tiers, p.research_grade);
             out.push(Block::para(runs));
         }
+    }
+
+    if !gates.machine {
+        return;
     }
 
     let (near, cross) = src.concept_near(code, 6);
@@ -719,19 +768,19 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, full: bool, out: &m
 }
 
 /// The per-verse extras after a word's code blocks: author actions, weave + TSK
-/// cross-references, "verses like this", tags, and margin notes.
-fn verse_extras(src: &dyn PanelSource, verse: &str, full: bool, out: &mut Vec<Block>) {
-    if full {
-        out.push(Block::Para {
-            runs: vec![
-                Run::new("＋ tag verse", sz::LIST, Color::Gold).link(format!("addtag:{verse}")),
-                Run::new("     ", sz::LIST, Color::Ink),
-                Run::new("＋ add to thread", sz::LIST, Color::Gold).link(format!("addthread:{verse}")),
-            ],
-            indent: false,
-            top_gap: true,
-        });
-    }
+/// cross-references, "verses like this", tags, and margin notes. Author
+/// actions and the verse's tags are the reader's own data — never gated
+/// (tags accumulate in any mode; the weave comes later).
+fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<Block>) {
+    out.push(Block::Para {
+        runs: vec![
+            Run::new("＋ tag verse", sz::LIST, Color::Gold).link(format!("addtag:{verse}")),
+            Run::new("     ", sz::LIST, Color::Ink),
+            Run::new("＋ add to thread", sz::LIST, Color::Gold).link(format!("addthread:{verse}")),
+        ],
+        indent: false,
+        top_gap: true,
+    });
 
     let xrefs = src.verse_xrefs(verse);
     if !xrefs.is_empty() {
@@ -745,7 +794,7 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, full: bool, out: &mut Vec<Bl
         }
     }
 
-    if full {
+    if gates.human {
         let sx = src.study_xrefs(verse);
         if !sx.is_empty() {
             out.push(Block::para(vec![
@@ -765,7 +814,9 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, full: bool, out: &mut Vec<Bl
                 out.push(Block::para(vec![Run::new(format!("… {} more", sx.len() - 40), sz::CAPTION, Color::Faded).italic()]));
             }
         }
+    }
 
+    if gates.machine {
         let (in_t, cross_t) = src.similar_verses(verse, 6);
         if !in_t.is_empty() || !cross_t.is_empty() {
             out.push(Block::para(vec![
@@ -782,17 +833,17 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, full: bool, out: &mut Vec<Bl
                 }
             }
         }
+    }
 
-        let tags = src.verse_tags(verse);
-        if !tags.is_empty() {
-            out.push(Block::para(vec![Run::new("tags", sz::LABEL, Color::Ink).bold()]));
-            for (i, name) in &tags {
-                out.push(Block::para(vec![
-                    Run::new(name, sz::LIST, Color::Gold).link(format!("tag:{i}")),
-                    Run::new("  ", sz::LIST, Color::Ink),
-                    Run::new("✕", sz::LIST, Color::Faded).link(format!("untag:{i}:{verse}")),
-                ]));
-            }
+    let tags = src.verse_tags(verse);
+    if !tags.is_empty() {
+        out.push(Block::para(vec![Run::new("tags", sz::LABEL, Color::Ink).bold()]));
+        for (i, name) in &tags {
+            out.push(Block::para(vec![
+                Run::new(name, sz::LIST, Color::Gold).link(format!("tag:{i}")),
+                Run::new("  ", sz::LIST, Color::Ink),
+                Run::new("✕", sz::LIST, Color::Faded).link(format!("untag:{i}:{verse}")),
+            ]));
         }
     }
 
@@ -807,8 +858,12 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, full: bool, out: &mut Vec<Bl
         }
     }
 
-    // Your own note — a daily-driver feature, so it shows in both modes (not
-    // gated on Full study like weave/thread authoring). The edit link prompts.
+}
+
+/// The reader's own note for a verse — emitted near the **top** of the word
+/// study (their words come before the evidence; product feedback 2026-07-25).
+/// Never gated. The edit link prompts; empty text clears.
+fn user_note_block(src: &dyn PanelSource, verse: &str, out: &mut Vec<Block>) {
     let mine = src.user_note(verse);
     out.push(Block::Para {
         runs: vec![
@@ -835,9 +890,14 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, full: bool, out: &mut Vec<Bl
 /// target): the code's own entry, so "'love' also translates G5368" lands on
 /// G5368 rather than a bare concordance. `word` is the surface that led here.
 pub fn code_study_card(src: &dyn PanelSource, full: bool, code: &str, word: &str) -> Vec<Block> {
+    code_study_card_gated(src, Gates::from_full(full), code, word)
+}
+
+/// [`code_study_card`] with per-tier gates (the v2 endpoints' shape).
+pub fn code_study_card_gated(src: &dyn PanelSource, gates: Gates, code: &str, word: &str) -> Vec<Block> {
     let mut out = Vec::new();
-    code_study(src, code, word, full, &mut out);
-    if full {
+    code_study(src, code, word, gates, &mut out);
+    if gates.any() {
         out.push(legend());
     }
     out
@@ -1072,11 +1132,12 @@ pub fn compare_card(src: &dyn PanelSource, full: bool, index: usize) -> Vec<Bloc
         Run::new(&w.name, sz::TITLE, Color::Ink).bold(),
         Run::new(format!("   {}{suffix}", w.kind_label), sz::CAPTION, Color::Mono),
     ])];
+    // ✎ note is the reader's own annotation — always available (author
+    // actions left the Simple/Full gate with the 2026-07-25 product change).
+    let _ = full;
     let mut head = vec![Run::new(format!("{} link{}", w.links.len(), plural(w.links.len(), "", "s")), sz::SMALL, Color::Faded)];
-    if full {
-        head.push(Run::new("   ", sz::SMALL, Color::Ink));
-        head.push(Run::new("✎ note", sz::CAPTION, Color::Faded).link(format!("editweavenotes:{index}")));
-    }
+    head.push(Run::new("   ", sz::SMALL, Color::Ink));
+    head.push(Run::new("✎ note", sz::CAPTION, Color::Faded).link(format!("editweavenotes:{index}")));
     out.push(Block::para(head));
     if !w.notes.is_empty() {
         out.push(Block::para(vec![Run::new(&w.notes, sz::NOTE, Color::Faded)]));

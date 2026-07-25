@@ -424,10 +424,15 @@ data class ConfigState(
     val lineSpacing: Double = 1.35,
     // Reading history, most-recent-first (capped by the core). Additive.
     val history: List<PaneRef1> = emptyList(),
+    // Per-tier analysis gates (2026-07-25, additive): curated scholarship and
+    // machine/statistical tiers, independently switchable. Null in an older
+    // file → the core derives them from studyMode.
+    val humanAnalysis: Boolean? = null,
+    val machineAnalysis: Boolean? = null,
 )
 
 @Serializable
-data class PaneRef1(val book: String, val chapter: Int = 0)
+data class PaneRef1(val book: String, val chapter: Int = 0, val verse: Int? = null)
 
 // ── Tier 0: palette, tones, personal notes, highlights ────────────────────────
 

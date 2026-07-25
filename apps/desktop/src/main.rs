@@ -1654,7 +1654,7 @@ fn persist_config(state: &Shared) {
             panes: st
                 .panes
                 .iter()
-                .map(|p| config::PaneRef { book: p.book.clone(), chapter: p.chapter })
+                .map(|p| config::PaneRef { book: p.book.clone(), chapter: p.chapter, verse: None })
                 .collect(),
             active: st.active,
             verse_per_line: st.verse_per_line,

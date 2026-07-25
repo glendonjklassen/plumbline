@@ -52,11 +52,15 @@ impl StudyMode {
     }
 }
 
-/// One reopened reading pane: which passage it showed.
+/// One reopened reading pane: which passage it showed, and (additively since
+/// 2026-07-25) the first visible verse, so a session reopens mid-chapter where
+/// the reader left off. `None` = top of the chapter; history entries don't
+/// carry it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PaneRef {
     pub book: String,
     pub chapter: u16,
+    pub verse: Option<u16>,
 }
 
 /// The persisted settings. New fields must be additive (default on absence) so
@@ -87,6 +91,12 @@ pub struct Config {
     /// Reading history, most-recent-first, deduped by (book, chapter) and capped
     /// at [`HISTORY_CAP`] — powers a "recently read" list + jump-back.
     pub history: Vec<PaneRef>,
+    /// Show the curated-scholarship analysis tiers (renderings, morphology,
+    /// same-root, TSK). Replaces half of the old Simple/Full switch; the text
+    /// and the reader's own data are never gated.
+    pub human_analysis: bool,
+    /// Show the learned/statistical tiers (embeddings, concept, SIF, leitwort).
+    pub machine_analysis: bool,
 }
 
 /// A verse copy-shape token accepted for [`Config::copy_style`].
@@ -108,6 +118,8 @@ impl Default for Config {
             side_margin: 28.0,
             line_spacing: 1.35,
             history: Vec::new(),
+            human_analysis: true,
+            machine_analysis: true,
         }
     }
 }
@@ -137,12 +149,21 @@ struct ConfigWire {
     line_spacing: f64,
     #[serde(default)]
     history: Vec<PaneWire>,
+    // The per-tier analysis gates (2026-07-25). Absent in an older file →
+    // derived from studyMode, preserving what the reader was seeing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    human_analysis: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    machine_analysis: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize)]
 struct PaneWire {
     book: String,
     chapter: u16,
+    /// First visible verse (additive; absent = top / an old writer).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    verse: Option<u16>,
 }
 
 fn default_mode_token() -> String {
@@ -176,15 +197,20 @@ fn clamp_or(v: f64, lo: f64, hi: f64, fallback: f64) -> f64 {
 impl Config {
     fn from_wire(w: ConfigWire) -> Config {
         let n_panes = w.open_panes.len();
+        let mode = StudyMode::parse(&w.study_mode).unwrap_or_default();
         Config {
-            mode: StudyMode::parse(&w.study_mode).unwrap_or_default(),
+            mode,
             // Guard against a corrupt / absurd size.
             body_size: if w.body_size.is_finite() && w.body_size >= 6.0 && w.body_size <= 96.0 {
                 w.body_size
             } else {
                 Config::default().body_size
             },
-            panes: w.open_panes.into_iter().map(|p| PaneRef { book: p.book, chapter: p.chapter.max(1) }).collect(),
+            panes: w
+                .open_panes
+                .into_iter()
+                .map(|p| PaneRef { book: p.book, chapter: p.chapter.max(1), verse: p.verse.filter(|v| *v >= 1) })
+                .collect(),
             // Clamp: shells index panes with this.
             active: if n_panes == 0 { 0 } else { w.active_pane.min(n_panes - 1) },
             verse_per_line: w.verse_per_line,
@@ -195,9 +221,12 @@ impl Config {
             history: w
                 .history
                 .into_iter()
-                .map(|p| PaneRef { book: p.book, chapter: p.chapter.max(1) })
+                .map(|p| PaneRef { book: p.book, chapter: p.chapter.max(1), verse: None })
                 .take(HISTORY_CAP)
                 .collect(),
+            // Older file: what the reader saw under Simple/Full carries over.
+            human_analysis: w.human_analysis.unwrap_or_else(|| mode.is_full()),
+            machine_analysis: w.machine_analysis.unwrap_or_else(|| mode.is_full()),
         }
     }
 
@@ -205,7 +234,11 @@ impl Config {
         ConfigWire {
             study_mode: self.mode.token().to_string(),
             body_size: self.body_size,
-            open_panes: self.panes.iter().map(|p| PaneWire { book: p.book.clone(), chapter: p.chapter }).collect(),
+            open_panes: self
+                .panes
+                .iter()
+                .map(|p| PaneWire { book: p.book.clone(), chapter: p.chapter, verse: p.verse })
+                .collect(),
             active_pane: self.active,
             verse_per_line: self.verse_per_line,
             theme: self.theme.token().to_string(),
@@ -216,8 +249,10 @@ impl Config {
                 .history
                 .iter()
                 .take(HISTORY_CAP)
-                .map(|p| PaneWire { book: p.book.clone(), chapter: p.chapter })
+                .map(|p| PaneWire { book: p.book.clone(), chapter: p.chapter, verse: None })
                 .collect(),
+            human_analysis: Some(self.human_analysis),
+            machine_analysis: Some(self.machine_analysis),
         }
     }
 }
@@ -316,14 +351,16 @@ mod tests {
         let cfg = Config {
             mode: StudyMode::Full,
             body_size: 21.5,
-            panes: vec![PaneRef { book: "John".into(), chapter: 3 }, PaneRef { book: "Rom".into(), chapter: 8 }],
+            panes: vec![PaneRef { book: "John".into(), chapter: 3, verse: Some(16) }, PaneRef { book: "Rom".into(), chapter: 8, verse: None }],
             active: 1,
             verse_per_line: true,
             theme: ThemeChoice::Night,
             copy_style: "verseMarkdown".to_string(),
             side_margin: 40.0,
             line_spacing: 1.6,
-            history: vec![PaneRef { book: "Gen".into(), chapter: 1 }, PaneRef { book: "Rom".into(), chapter: 8 }],
+            history: vec![PaneRef { book: "Gen".into(), chapter: 1, verse: None }, PaneRef { book: "Rom".into(), chapter: 8, verse: None }],
+            human_analysis: true,
+            machine_analysis: false,
         };
         save_to(&path, &cfg).unwrap();
 
