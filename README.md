@@ -24,9 +24,10 @@ Download the APK from the
 
 ### Web
 
-Plumbline is also a PWA. A hosted link is coming; once it lands, open it in
-any browser and install it from the address bar — it works offline after the
-first visit, and your study data lives in browser storage.
+Plumbline is also a PWA:
+**[glendonjklassen.github.io/plumbline](https://glendonjklassen.github.io/plumbline/)** —
+open it in any browser and install it from the address bar. It works offline
+after the first visit, and your study data lives in browser storage.
 
 ## Getting started (60 seconds)
 

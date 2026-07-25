@@ -147,8 +147,9 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
 
 - Tag `v*` → `.github/workflows/release.yml` builds a signed Android APK
   (arm64-v8a + x86_64) and attaches it to a GitHub Release — the repo is the
-  download page. The PWA deploy (hosting TBD: Azure SWA vs GitHub Pages) will
-  join the same workflow once hosting is decided.
+  download page — and deploys the PWA to GitHub Pages
+  (<https://glendonjklassen.github.io/plumbline/>; hosting decided
+  2026-07-25).
 - The APK job needs four repo secrets — `ANDROID_KEYSTORE_BASE64`,
   `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
   (generation steps are in the workflow header). Without them the job no-ops

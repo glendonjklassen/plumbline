@@ -1,21 +1,8 @@
-/* Global styles: the bundled scripture font, resets, and the palette exposed
-   as CSS variables (set from plumbline_theme_palette_json at boot / theme switch —
-   the core is the single palette source, same as GTK/WinUI). */
-
-@font-face {
-  font-family: "EB Garamond";
-  src: url("/fonts/EBGaramond.ttf") format("truetype");
-  font-weight: 400 700;
-  font-style: normal;
-  font-display: block;
-}
-@font-face {
-  font-family: "EB Garamond";
-  src: url("/fonts/EBGaramond-Italic.ttf") format("truetype");
-  font-weight: 400 700;
-  font-style: italic;
-  font-display: block;
-}
+/* Global styles: resets and the palette exposed as CSS variables (set from
+   plumbline_theme_palette_json at boot / theme switch — the core is the single
+   palette source, same as GTK/WinUI). The scripture font's @font-face lives
+   in public/fonts.css (linked from index.html) so its URLs stay
+   base-relative — see the note there. */
 
 * {
   margin: 0;

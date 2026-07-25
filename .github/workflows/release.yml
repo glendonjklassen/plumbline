@@ -1,9 +1,9 @@
 name: Release
 
 # Tag a version (v0.2.0) and this turns the repo into a download page: a
-# signed Android APK (arm64-v8a + x86_64) attached to a GitHub Release. The
-# PWA (apps/web) is the path for everyone else; the desktop shells were
-# retired 2026-07-25.
+# signed Android APK (arm64-v8a + x86_64) attached to a GitHub Release, and
+# the PWA (apps/web) deployed to GitHub Pages — the path for everyone else
+# (hosting decided 2026-07-25). The desktop shells were retired 2026-07-25.
 
 on:
   push:
@@ -116,3 +116,61 @@ jobs:
           OUT="plumbline-${{ github.ref_name }}-android.apk"
           cp apps/android/app/build/outputs/apk/release/app-release.apk "$OUT"
           gh release upload "${{ github.ref_name }}" "$OUT" --clobber
+
+  # Deploy the PWA to GitHub Pages — the install path for everyone without an
+  # APK (hosting decided 2026-07-25). Same pipeline CI verifies: data pack →
+  # wasm engine → Vite bundle; the bundle is base "./" so the /plumbline/
+  # subpath needs no rebuild. Independent of the APK job on purpose (the
+  # lesson of v0.3.0 — one artifact's break must not block the others).
+  pages:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: apps/web
+
+      - name: Build the data pack
+        run: node scripts/build-web-pack.mjs
+
+      - name: Build the engine (wasm32-wasip1)
+        run: cargo build --locked -p plumbline-ffi --release --target wasm32-wasip1
+
+      - name: Build the app
+        run: |
+          node scripts/copy-wasm.mjs
+          npm run build
+        working-directory: apps/web
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

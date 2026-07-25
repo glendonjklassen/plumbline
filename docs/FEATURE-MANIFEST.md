@@ -714,8 +714,11 @@ ON_PAUSE twin), PWA (installable, offline after first visit; pack cached
 Web deltas: engine runs on the main thread (GTK-style; a worker is the
 escape hatch if jank shows); analytical popups keep light paper (shared
 delta); user data lives per-browser (export/import + sync are future work);
-Present "In context" fade not built; hosting undecided (static-host ready,
-base "./").
+Present "In context" fade not built. Hosting decided 2026-07-25: GitHub
+Pages (<https://glendonjklassen.github.io/plumbline/>), deployed by the
+release workflow on every `v*` tag (base "./", so the subpath needs no
+rebuild; the scripture font's @font-face lives in `public/fonts.css` to
+keep its URLs base-relative).
 
 ## Android notes
 
