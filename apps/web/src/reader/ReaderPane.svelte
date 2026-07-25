@@ -38,7 +38,6 @@
   const marginX = $derived(Math.max(sideMargin, (cssW - columnWidth) / 2));
 
   const toc = s.engine.toc();
-  const chapterCount = $derived(s.engine.chapterCount(pane.book) || 1);
 
   // Verses in this chapter with weave partners — the gold gutter dot.
   const weaveDots = $derived.by(() => {
@@ -403,24 +402,15 @@
 
 <div class="pane" class:active={isActive}>
   <div class="nav">
-    <select
-      value={pane.book}
-      onchange={(e) => s.navigate(paneIdx, (e.target as HTMLSelectElement).value, 1)}
-      aria-label="Book"
-    >
-      {#each toc.books as b (b.id)}
-        <option value={b.id}>{b.name ?? b.id}</option>
-      {/each}
-    </select>
     <button onclick={() => s.stepChapter(paneIdx, -1)} title="Previous chapter">‹</button>
-    <input
-      type="number"
-      min="1"
-      max={chapterCount}
-      value={pane.chapter}
-      onchange={(e) => s.navigate(paneIdx, pane.book, Number((e.target as HTMLInputElement).value))}
-      aria-label="Chapter"
-    />
+    <button
+      class="passage"
+      onclick={() => (s.bookNavFor = paneIdx)}
+      title="Go to… (book · chapter · verse)"
+    >
+      {toc.books.find((b: any) => b.id === pane.book)?.name ?? pane.book}
+      {pane.chapter} ▾
+    </button>
     <button onclick={() => s.stepChapter(paneIdx, 1)} title="Next chapter">›</button>
     <span class="spacer"></span>
     {#if s.panes.length < 3}
@@ -464,20 +454,11 @@
     background: var(--paneNavBg, #efeae1);
     font-size: 14px;
   }
-  .nav select {
-    max-width: 11em;
-    background: transparent;
+  .nav .passage {
     border: 1px solid var(--rule, #d8cba8);
-    border-radius: 4px;
-    padding: 2px 4px;
-  }
-  .nav input {
-    width: 3.2em;
-    background: transparent;
-    border: 1px solid var(--rule, #d8cba8);
-    border-radius: 4px;
-    padding: 2px 4px;
-    text-align: center;
+    border-radius: 5px;
+    padding: 2px 10px;
+    font-weight: 600;
   }
   .nav button {
     padding: 2px 8px;

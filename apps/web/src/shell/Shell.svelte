@@ -7,8 +7,10 @@
   import PromptDialog from "./PromptDialog.svelte";
   import FirstRun from "./FirstRun.svelte";
   import Shortcuts from "./Shortcuts.svelte";
+  import BookNav from "./BookNav.svelte";
   import CanonStrip from "./CanonStrip.svelte";
   import HistorySheet from "./HistorySheet.svelte";
+  import SettingsDialog from "./SettingsDialog.svelte";
   import MemorizeHost from "../memorize/MemorizeHost.svelte";
   import PresentHost from "../present/PresentHost.svelte";
   import ConnectorsOverlay from "./ConnectorsOverlay.svelte";
@@ -55,16 +57,6 @@
   function onSearchInput(): void {
     if (s.searchQuery.trim()) s.panel = { kind: "search" };
     else if (s.panel?.kind === "search") s.panel = null;
-  }
-
-  function setTheme(theme: string): void {
-    s.config.theme = theme;
-    s.applyTheme();
-    s.saveConfig();
-  }
-  function toggleGate(key: "humanAnalysis" | "machineAnalysis"): void {
-    s.config[key] = s.config[key] === false;
-    s.saveConfig();
   }
 
   let menuOpen = $state(false);
@@ -145,6 +137,8 @@
         break;
       case "Escape":
         if (s.mapPopup) s.mapPopup = null;
+        else if (s.bookNavFor !== null) s.bookNavFor = null;
+        else if (s.showSettings) s.showSettings = false;
         else if (s.memorize) s.memorize = null;
         else if (s.showHistory) s.showHistory = false;
         else if (s.showShortcuts) s.showShortcuts = false;
@@ -191,49 +185,13 @@
         <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
         <div class="backdrop" onclick={() => (menuOpen = false)}></div>
         <div class="menu">
-          <div class="group">Weave views</div>
-          <button onclick={menu(() => (s.panel = { kind: "suggested" }))}>Suggested</button>
-          <button onclick={menu(() => (s.mapPopup = { kind: "chord" }))}>Weave map</button>
-          <button onclick={menu(() => (s.mapPopup = { kind: "constellation" }))}>Constellation</button>
-          <div class="group">Explore</div>
-          <button onclick={menu(() => (s.panel = { kind: "threads" }))}>Threads</button>
-          <button onclick={menu(() => (s.panel = { kind: "tags" }))}>Tags</button>
-          <button onclick={menu(() => (s.panel = { kind: "weaves" }))}>Weaves</button>
-          <button onclick={menu(() => (s.panel = { kind: "suggested" }))}>Suggested</button>
-          <div class="group">Study</div>
           <button onclick={menu(() => (s.memorize = { view: "hub" }))}>Memorize</button>
-          <button onclick={menu(() => (s.panel = { kind: "notesBrowser" }))}>Notes</button>
+          <button onclick={menu(() => (s.panel = { kind: "explore" }))}>Explore</button>
           <button onclick={menu(() => (s.showHistory = true))}>History</button>
           <button onclick={menu(() => (s.showPresent = true))}>Present</button>
-          <div class="group">Analysis</div>
-          <button
-            class:checked={s.config.humanAnalysis !== false}
-            onclick={menu(() => toggleGate("humanAnalysis"))}>Scholars' analysis</button
-          >
-          <button
-            class:checked={s.config.machineAnalysis !== false}
-            onclick={menu(() => toggleGate("machineAnalysis"))}>Machine analysis</button
-          >
-          <div class="group">Reading</div>
-          <button
-            class:checked={!!s.config.versePerLine}
-            onclick={menu(() => {
-              s.config.versePerLine = !s.config.versePerLine;
-              s.saveConfig();
-            })}>Verse per line</button
-          >
-          <button onclick={() => s.setZoom(Number(s.config.bodySize ?? 18) + 1)}>Text size +</button>
-          <button onclick={() => s.setZoom(Number(s.config.bodySize ?? 18) - 1)}>Text size −</button>
-          <div class="group">Theme</div>
-          {#each ["light", "dark", "night", "system"] as t (t)}
-            <button class:checked={(s.config.theme ?? "system") === t} onclick={menu(() => setTheme(t))}>
-              {t === "system" ? "Follow system" : t[0].toUpperCase() + t.slice(1)}
-            </button>
-          {/each}
-          <div class="group">Help</div>
-          <button onclick={menu(() => (s.panel = { kind: "guide" }))}>Guide</button>
+          <button onclick={menu(() => (s.panel = { kind: "guide" }))}>Guide & about</button>
           <button onclick={menu(() => (s.showShortcuts = true))}>Keyboard shortcuts</button>
-          <button onclick={menu(() => (s.panel = { kind: "about" }))}>About</button>
+          <button onclick={menu(() => (s.showSettings = true))}>Settings</button>
         </div>
       {/if}
     </div>
@@ -266,6 +224,8 @@
 <MemorizeHost />
 <HistorySheet />
 <PresentHost />
+<SettingsDialog />
+<BookNav />
 
 <style>
   .frame {
@@ -350,13 +310,6 @@
     max-height: 80vh;
     overflow-y: auto;
   }
-  .menu .group {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--faded, #8a8276);
-    padding: 8px 8px 2px;
-  }
   .menu button {
     text-align: left;
     padding: 5px 8px;
@@ -368,10 +321,6 @@
   }
   .menu button:not(:disabled):hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
-  }
-  .menu button.checked::after {
-    content: " ✓";
-    color: var(--gold, #9e7d38);
   }
   .body {
     flex: 1;

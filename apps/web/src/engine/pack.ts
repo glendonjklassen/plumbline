@@ -5,7 +5,7 @@
 
 export interface PackManifest {
   version: string;
-  files: { path: string; bytes: number; gzBytes: number }[];
+  files: { path: string; bytes: number; gzBytes: number; stock?: boolean }[];
 }
 
 export interface PackProgress {

@@ -4,11 +4,37 @@
   // dismissible bottom sheet (Compose-phone pattern). Re-fetches after any
   // authoring write via studyEpoch (write → reload → re-fetch, never mutate).
   import BlockList from "./BlockList.svelte";
+  import EmbedMaps from "./EmbedMaps.svelte";
   import { dispatchLink } from "./links";
   import { getSession } from "../state/session.svelte";
   import { aboutBlocks, guideBlocks } from "../engine/StudyEngine";
 
   const s = getSession();
+
+  // The Strong's code behind the current study — drives the embedded map
+  // cards (Android StudyMaps parity; machine-tier, so gate-checked).
+  const studyCode = $derived.by(() => {
+    const p = s.panel;
+    if (!p || !(s.gates & 2)) return null;
+    if (p.kind === "codeStudy" || p.kind === "concordance") return p.code;
+    if (p.kind === "wordStudy") {
+      const tok = s.engine.token(p.refKey, p.tokenIndex);
+      return (tok?.strongs?.[0] as string | undefined) ?? null;
+    }
+    return null;
+  });
+
+  // Explore: the study tools as described cards so they aren't cryptic
+  // (Android ExploreScreen parity).
+  const exploreCards = [
+    { label: "Notes", desc: "Every note you've written, tap to revisit.", go: () => (s.panel = { kind: "notesBrowser" }) },
+    { label: "Threads", desc: "Reading paths you assemble verse by verse.", go: () => (s.panel = { kind: "threads" }) },
+    { label: "Tags", desc: "Your topics — accumulate now, weave later.", go: () => (s.panel = { kind: "tags" }) },
+    { label: "Weaves", desc: "Passages linked as one thread through the canon.", go: () => (s.panel = { kind: "weaves" }) },
+    { label: "Suggested", desc: "Proposed weaves awaiting your review.", go: () => (s.panel = { kind: "suggested" }) },
+    { label: "Constellation", desc: "Every weave as lanes of stars across the canon.", go: () => (s.mapPopup = { kind: "constellation" }) },
+    { label: "Weave map", desc: "Book-to-book ribbons of every link.", go: () => (s.mapPopup = { kind: "chord" }) },
+  ];
 
   // Notes browser (Explore ▸ Notes parity): every personal note, tap → verse,
   // edit in place. Built shell-side from user_notes_json (no block producer).
@@ -61,14 +87,22 @@
   }
 </script>
 
-{#if s.panel && (blocks || s.panel.kind === "notesBrowser")}
+{#if s.panel && (blocks || s.panel.kind === "notesBrowser" || s.panel.kind === "explore")}
   <aside class="panel">
     <div class="bar">
       <div class="grip" aria-hidden="true"></div>
       <button class="close" onclick={() => (s.panel = null)} aria-label="Close panel">✕</button>
     </div>
     <div class="content">
-      {#if s.panel.kind === "notesBrowser"}
+      {#if s.panel.kind === "explore"}
+        <h2 class="nb-title">Explore</h2>
+        {#each exploreCards as c (c.label)}
+          <button class="ex-card" onclick={c.go}>
+            <span class="ex-name">{c.label}</span>
+            <span class="ex-desc">{c.desc}</span>
+          </button>
+        {/each}
+      {:else if s.panel.kind === "notesBrowser"}
         <h2 class="nb-title">Your notes ({notes.length})</h2>
         {#if notes.length === 0}
           <p class="nb-empty">No notes yet — right-click or long-press a verse and choose Note…</p>
@@ -85,6 +119,9 @@
           </div>
         {/each}
       {:else}
+        {#if studyCode}
+          <EmbedMaps code={studyCode} />
+        {/if}
         <BlockList {blocks} {onLink} />
       {/if}
     </div>
@@ -156,6 +193,30 @@
     font-size: 14.5px;
     margin-top: 2px;
     white-space: pre-wrap;
+  }
+  .ex-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    text-align: left;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 9px;
+    background: var(--paper, #fcf9f4);
+    padding: 10px 12px;
+    margin: 4px 0;
+  }
+  .ex-card:hover {
+    border-color: var(--gold, #9e7d38);
+  }
+  .ex-name {
+    font-weight: 600;
+    color: var(--gold, #9e7d38);
+  }
+  .ex-desc {
+    font-size: 12.5px;
+    color: var(--faded, #8a8276);
   }
 
   /* Narrow screens: bottom sheet (Compose-phone pattern). */

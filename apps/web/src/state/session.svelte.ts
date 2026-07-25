@@ -35,7 +35,8 @@ export type PanelView =
   | { kind: "search" }
   | { kind: "guide" }
   | { kind: "about" }
-  | { kind: "notesBrowser" };
+  | { kind: "notesBrowser" }
+  | { kind: "explore" };
 
 export type MapPopup =
   | { kind: "chord" }
@@ -76,6 +77,10 @@ export class Session {
   memorize = $state<{ view: "hub" } | { view: "review"; only?: string } | { view: "stats" } | null>(null);
   /** Reading-history sheet (recents from the shared config). */
   showHistory = $state(false);
+  /** The one Settings dialog (Android IA). */
+  showSettings = $state(false);
+  /** Passage navigator (OT/NT → book → chapter → verse grids); pane index. */
+  bookNavFor = $state<number | null>(null);
   /** Present mode — fullscreen, high-contrast thread presentation. */
   showPresent = $state(false);
   /** Active text prompt (rendered by PromptDialog); resolves null on cancel. */

@@ -30,7 +30,8 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   );
 
   onPhase({ phase: "prepare" });
-  const home = await buildHome(pack);
+  const stockPaths = new Set(manifest.files.filter((f) => f.stock).map((f) => f.path));
+  const home = await buildHome(pack, stockPaths);
   const wasm = await instantiate(home.root);
 
   onPhase({ phase: "open" });

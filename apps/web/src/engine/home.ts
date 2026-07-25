@@ -19,7 +19,16 @@ export interface VirtualHome {
   persistUserData(): Promise<void>;
   /** Persist the engine-built idxcache once, after a successful open. */
   persistIdxcache(): Promise<void>;
+  /** Whether the bundled stock study set is enabled. */
+  bundledOn: boolean;
+  /** Flip the bundled set (removes/reseeds the stock files); reload after. */
+  setBundled(on: boolean): Promise<void>;
 }
+
+const STOCK_SEEDED = "meta:stockSeeded";
+const BUNDLED = "meta:bundled";
+const enc = new TextEncoder();
+const dec = new TextDecoder();
 
 function ensureDir(root: Map<string, Directory | File>, path: string): Directory {
   let contents = root;
@@ -52,25 +61,66 @@ function collectFiles(prefix: string, dir: Directory, out: Map<string, Uint8Arra
   }
 }
 
-export async function buildHome(pack: Map<string, Uint8Array>): Promise<VirtualHome> {
+export async function buildHome(
+  pack: Map<string, Uint8Array>,
+  stockPaths: Set<string> = new Set(),
+): Promise<VirtualHome> {
   const root = new Map<string, Directory | File>();
-  for (const [path, bytes] of pack) insertFile(root, path, bytes);
+  const [userFiles, idxcache, seededFlag, bundledFlag] = await Promise.all([
+    idbEntries("user"),
+    idbGet("cache", IDXCACHE),
+    idbGet("cache", STOCK_SEEDED),
+    idbGet("cache", BUNDLED),
+  ]);
+  const bundledOn = bundledFlag ? dec.decode(bundledFlag) !== "off" : true;
+  // The stock set seeds ONCE (Android parity): after that the user's own
+  // copies rule, so edits and deletions stick across pack updates.
+  const seedStock = bundledOn && !seededFlag;
+
+  for (const [path, bytes] of pack) {
+    if (stockPaths.has(path) && !seedStock) continue;
+    insertFile(root, path, bytes);
+  }
 
   // Authoring dirs must exist even when empty (the engine lists them), and
   // weaves/suggested is part of the expected shape.
   for (const d of USER_DIRS) ensureDir(root, d);
   ensureDir(root, "weaves/suggested");
 
-  // Restore the user's files and the corpus cache from previous sessions.
-  const [userFiles, idxcache] = await Promise.all([idbEntries("user"), idbGet("cache", IDXCACHE)]);
+  // Restore the user's files and the corpus cache from previous sessions
+  // (user copies overwrite freshly-seeded stock — theirs is newer).
   for (const [path, bytes] of userFiles) insertFile(root, path, bytes);
   if (idxcache) insertFile(root, IDXCACHE, idxcache);
 
   // Snapshot of what IndexedDB currently holds, for cheap diffs on persist.
   let synced = new Set(userFiles.keys());
 
+  if (seedStock) {
+    // Persist the seeded stock as the user's own files + set the marker.
+    const seeded = new Map<string, Uint8Array>();
+    for (const d of USER_DIRS) {
+      const dir = root.get(d);
+      if (dir instanceof Directory) collectFiles(d, dir, seeded);
+    }
+    await idbApply("user", seeded);
+    await idbApply("cache", new Map([[STOCK_SEEDED, enc.encode("1")]]));
+    synced = new Set(seeded.keys());
+  }
+
   return {
     root,
+    bundledOn,
+    async setBundled(on: boolean) {
+      await idbApply("cache", new Map([[BUNDLED, enc.encode(on ? "on" : "off")]]));
+      if (on) {
+        // Re-seed on next boot: missing stock files come back, kept edits win.
+        await idbApply("cache", new Map(), [STOCK_SEEDED]);
+      } else {
+        // Remove just the stock items by their bundled paths; anything the
+        // reader authored under other names stays (Android parity).
+        await idbApply("user", new Map(), [...stockPaths]);
+      }
+    },
     async persistUserData() {
       const current = new Map<string, Uint8Array>();
       for (const d of USER_DIRS) {
