@@ -631,6 +631,19 @@ the other shells owe the UI (deltas below).
   `*_blocks2` endpoints. **Web shell (branch `web-shell`):** same list —
   adopt before merge.
 
+## Backup / restore (2026-07-25, both shells)
+
+Settings exports the authored home — `tags/ threads/ weaves/ notes/ memory/`
++ the config as `.config/pure-study/config.json` + a `purestudy-backup.json`
+marker — as a **zip with a shared layout**, so one archive restores across
+devices (phone ↔ browser). Restore is merge-by-overwrite (same-name items
+replaced), path-filtered to the authored dirs (no traversal), then the engine
+re-opens over the restored home. Web: dependency-free zip (store-only write;
+store+deflate read) in `apps/web/src/engine/zip.ts`, IndexedDB write with ALL
+persistence frozen until the reload (three clobber paths guarded, covered by
+the Playwright round-trip test). Android: `ui/Backup.kt` over SAF
+Create/OpenDocument + java.util.zip; restore recreates the activity.
+
 ## Memorization — spaced repetition (Tier 2 #15)
 
 `pure_core::memory`: one SM-2 SRS card per verse (VRef-keyed) — ease / interval /

@@ -1113,6 +1113,8 @@ private fun SettingsDialog(
                 }
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 SettingToggle("Bundled study set", "Ship-with-app threads, tags, and weaves.", bundledOn, palette, onToggleBundled)
+                HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
+                BackupRestoreRows(palette)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
