@@ -39,6 +39,13 @@
 //!   two threads at once — though all calls here are `&`-only, so it is in
 //!   practice also safe to read concurrently).
 
+// Wasm-only shims for the web shell's TS binding — not part of the native C
+// ABI surface (header / C# / Kotlin). cbindgen doesn't evaluate `cfg`, so
+// pure-bindgen excludes this module's items by name; keep its exclude list in
+// step with the exports here.
+#[cfg(target_arch = "wasm32")]
+mod wasm;
+
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;

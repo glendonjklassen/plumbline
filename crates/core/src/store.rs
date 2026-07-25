@@ -57,11 +57,27 @@ fn temp_sibling(path: &Path) -> PathBuf {
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "out".to_string());
-    let tmp_name = format!(".{name}.{}.tmp", std::process::id());
+    let tmp_name = format!(".{name}.{}.tmp", temp_discriminator());
     match path.parent() {
         Some(p) if !p.as_os_str().is_empty() => p.join(tmp_name),
         _ => PathBuf::from(tmp_name),
     }
+}
+
+/// The unique-per-process part of a temp name: the pid natively. Wasm has no
+/// pids (`std::process::id` panics: "no pids on this platform"); a wasm engine
+/// instance is single-process by construction, so a monotonic counter gives the
+/// same collision-freedom there.
+#[cfg(not(target_arch = "wasm32"))]
+fn temp_discriminator() -> u64 {
+    std::process::id() as u64
+}
+
+#[cfg(target_arch = "wasm32")]
+fn temp_discriminator() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    NEXT.fetch_add(1, Ordering::Relaxed)
 }
 
 /// Slug a display name into a filename stem: lowercase, non-alphanumerics to

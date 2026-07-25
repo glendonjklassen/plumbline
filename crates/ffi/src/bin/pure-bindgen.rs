@@ -41,6 +41,16 @@ fn generate_c_header(crate_dir: &str) {
                 .to_string(),
         ),
         usize_is_size_t: true,
+        export: cbindgen::ExportConfig {
+            // `src/wasm.rs` is wasm32-only (the web shell's TS binding);
+            // cbindgen doesn't evaluate `cfg`, so its items are excluded by
+            // name — extend this list when that module gains an export.
+            exclude: ["pure_js_measure", "pure_web_alloc", "pure_web_free", "pure_web_measure_fnptr"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
