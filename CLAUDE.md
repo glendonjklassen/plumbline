@@ -14,7 +14,7 @@
   Releases for rooted/sideloading users. No Play Store, no Google account.
 - `../overlay` (Haskell) is the read-only reference implementation — port
   from it, never modify it.
-- Frozen contracts: the on-disk data formats (README.md §Data formats), `kjv1769-tok2`
+- Frozen contracts: the on-disk data formats (§Data formats below), `kjv1769-tok2`
   tokenization stamp, the camelCase wire JSON (additive evolution only), and
   refKey (`"Gen 1:7"`). The format tags keep their pre-rename names on purpose —
   `pure-note-v1` (`crates/core/src/usernote.rs`) is serialized into every user
@@ -24,6 +24,89 @@
 - The bundled stock study set lives at `apps/android/app/src/main/assets/stock`
   (threads/tags/weaves); both shells seed it once and user edits/deletions
   stick.
+
+## Layout of the tree
+
+| Crate (package) | What it is |
+|-----------------|------------|
+| `crates/core` (`plumbline-core`) | Pure domain: corpus, Strong's, search, weaves, tags, config, atomic store |
+| `crates/layout` (`plumbline-layout`) | Greedy line-breaker + hit regions (measures via callback) |
+| `crates/rnd` (`plumbline-rnd`) | Feature-gated analytics: bridge, embeddings, morphology, keyness, witness, concept |
+| `crates/ffi` (`plumbline-ffi`) | The single flat C ABI for native shells (cdylib) — see [crates/ffi/README.md](crates/ffi/README.md) |
+| `crates/hydrate` (`plumbline-hydrate`) | CLI: copy/verify the data pack into a home |
+| `apps/android` | The Compose shell (Android) — the UX gold standard |
+| `apps/web` | The PWA shell (Svelte + the core compiled to wasm32-wasip1) |
+
+The five portable crates are dependency-light pure Rust and build anywhere,
+including `wasm32-wasip1` (the web shell) and the Android NDK targets. CI runs
+the portable tests, the R&D-feature tests, an MSRV check, an FFI
+binding-drift guard, the web shell's Playwright suite, and the Android APK
+build — engine cross-compiled for both shipped ABIs — on every push. The
+offline pipeline that produced the data pack is documented in
+[data-prep/README.md](data-prep/README.md).
+
+## Architecture
+
+Decisions locked 2026-07-08, still in force:
+
+| # | Decision | Choice |
+|---|----------|--------|
+| 1 | UI strategy | **Native shell per platform** over a shared Rust core. Today: Jetpack Compose (Android, the UX gold standard) + a PWA (web) covering every desktop. The GTK/WinUI desktop shells were built first and retired 2026-07-25. |
+| 2 | Build order | Desktop first (GTK4) → Windows → Android → web; the desktops then retired in favour of the PWA. |
+| 3 | Data delivery | **Bundle core, download R&D** — KJV + Strong's ship in-app; heavy analytics artifacts are optional packs. |
+| 4 | R&D default | **Guided first-run** — first launch picks the analysis tiers (scholars' / machine) with examples; the text and the reader's own data are always on (revised 2026-07-25 from the original Simple/Full split). |
+| — | Patches / signed rules | Dropped — the Ed25519 point-patch/rule layer was not ported. |
+| — | Future | A paid cross-device **sync SaaS**; the data model must not block it (stable ids, no host-local assumptions). |
+
+```
+Rust core (pure, headless, fully testable)
+  ├─ crates/core     domain: canon, references, corpus, Strong's, search, weaves, threads
+  ├─ crates/rnd      OPTIONAL, feature-gated analytics
+  ├─ crates/layout   text layout + per-word HIT-TESTING → a display list
+  └─ crates/ffi      one C ABI surface → Kotlin/Android JNA + the wasm web binding
+
+Thin native shells (paint the display list, forward input coords back to core)
+  ├─ apps/android    Jetpack Compose — the UX gold standard
+  └─ apps/web        Svelte PWA over the core compiled to wasm32-wasip1
+```
+
+The load-bearing idea: **layout and hit-testing live in the core.** Given a
+chapter + width + font metrics (via an injected measure callback —
+android.graphics.Paint on Android, canvas measureText on the web), the core
+produces a *display list*: positioned glyph runs plus a table of tappable word
+rectangles, each carrying its verse ref, token index, and Strong's refs. A
+shell only paints that list and sends tap / hover `(x, y)` back for the core to
+hit-test. Word-level study features are written once, and shells stay
+genuinely thin.
+
+## Data formats (frozen)
+
+- **`kjv.jsonl`** — line 1 is a header `{format, tokenization, source, verses}`;
+  every subsequent line is a verse `{"b":OSIS,"c":ch,"v":vs,"t":[token,...]}`.
+  A **token** is a positional array `[pre, word, post, [strongs], flags]`.
+  `flags` is a bitfield: `1` added (KJV italics), `2` divine name, `4` title
+  (psalm superscription), `8` paragraph mark (¶) precedes the word.
+- **`strongs.json`** — one minified object, `"H7225" → {lemma?, xlit?, pron?,
+  derivation?, strongs_def?, kjv_def?}` (14,197 entries).
+- **`kjv-notes.jsonl`** — `{"b","c","v","note"}` (1769 translators' margin notes).
+- **weave** — `{format:"overlay-weave-v2", name, kind, tokenization, notes,
+  notesSource, created, approved, links:[{a:"Gen 1:7", b:..., label?, approved?,
+  spanA?, spanB?}]}`. A weave is an undirected graph of verse↔verse links.
+- **`refKey`** — the frozen compact ref string, `"Gen 1:7"` (OSIS book id).
+- **tokenization version** — `kjv1769-tok2`; loaders refuse a version mismatch.
+
+The **tokenizer** stays an offline data-prep step — the runtime only
+*consumes* `kjv.jsonl`, carrying the version stamp check but not the tokenizer
+itself.
+
+The **data home** is the first of: `$PLUMBLINE_HOME` / `$OVERLAY_HOME`, a
+directory tree containing `data/kjv.jsonl` (a checkout counts), the
+executable's directory, or the per-user data dir (`~/.local/share/plumbline`
+on Linux). Seed one outside the checkout with:
+
+```sh
+cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/plumbline
+```
 
 ## Working on this machine (Linux)
 
