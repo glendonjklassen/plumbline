@@ -1,9 +1,9 @@
 name: Release
 
-# Tag a version (v0.2.0) and this turns the repo into a download page:
-# self-contained Windows apps for arm64 / x64 / x86, each bundling the data
-# pack, plus a signed Android APK (arm64-v8a + x86_64), attached to a GitHub
-# Release.
+# Tag a version (v0.2.0) and this turns the repo into a download page: a
+# signed Android APK (arm64-v8a + x86_64) attached to a GitHub Release. The
+# PWA (apps/web) is the path for everyone else; the desktop shells were
+# retired 2026-07-25.
 
 on:
   push:
@@ -13,11 +13,9 @@ permissions:
   contents: write
 
 jobs:
-  # Create the GitHub Release up front so each platform job attaches its own
-  # artifacts independently. Before v0.3.1 the Android APK job was gated on the
-  # Windows job (`needs: windows`), so a Windows compile error meant no APK
-  # shipped at all — which is exactly what happened at v0.3.0. Now a break in
-  # one platform never blocks the others from shipping.
+  # Create the GitHub Release up front so the platform jobs attach their own
+  # artifacts independently (the lesson of v0.3.0, where one platform's break
+  # blocked every other artifact from shipping).
   create-release:
     runs-on: ubuntu-latest
     steps:
@@ -29,48 +27,6 @@ jobs:
             || gh release create "${{ github.ref_name }}" --repo "$GITHUB_REPOSITORY" \
                  --title "pure study ${{ github.ref_name }}" --generate-notes
 
-  windows:
-    runs-on: windows-latest
-    needs: create-release
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-pc-windows-msvc,x86_64-pc-windows-msvc,i686-pc-windows-msvc
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "8.0.x"
-      - name: Package all architectures
-        run: pwsh scripts/package-windows.ps1 -Arch arm64,x64,x86 -Version "${{ github.ref_name }}"
-      - name: Attach engine DLLs for developers
-        run: |
-          copy target\aarch64-pc-windows-msvc\release\pure_ffi.dll dist\pure_ffi-${{ github.ref_name }}-arm64.dll
-          copy target\x86_64-pc-windows-msvc\release\pure_ffi.dll dist\pure_ffi-${{ github.ref_name }}-x64.dll
-          copy target\i686-pc-windows-msvc\release\pure_ffi.dll dist\pure_ffi-${{ github.ref_name }}-x86.dll
-      - name: Attach the Windows apps + engine DLLs to the release
-        # bash so `dist/*` is glob-expanded (windows-latest defaults to pwsh,
-        # which passes the literal string to gh — gh does not expand globs).
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.ref_name }}" dist/* --clobber
-
-  # Cross-compiles the Rust core for Android, builds a signed release APK
-  # (arm64-v8a for the device + x86_64 for emulators), and attaches it to the
-  # release created by create-release. Independent of the Windows job, so the
-  # APK ships even if the Windows build breaks. Requires four repo secrets
-  # (Settings → Secrets and variables → Actions); without them the job no-ops
-  # with a warning so the rest of the release still ships:
-  #   ANDROID_KEYSTORE_BASE64    base64 of your release keystore (.jks)
-  #   ANDROID_KEYSTORE_PASSWORD  store password
-  #   ANDROID_KEY_ALIAS          key alias
-  #   ANDROID_KEY_PASSWORD       key password
-  # Generate the keystore once (keep it + the passwords safe — this key identifies
-  # every future update; losing it means users must uninstall to upgrade):
-  #   keytool -genkeypair -v -keystore pure-study.jks -alias pure-study \
-  #       -keyalg RSA -keysize 4096 -validity 10000
-  #   base64 -w0 pure-study.jks    # → paste into ANDROID_KEYSTORE_BASE64
   android:
     runs-on: ubuntu-latest
     needs: create-release

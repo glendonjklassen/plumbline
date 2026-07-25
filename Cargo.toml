@@ -6,12 +6,8 @@ members = [
     "crates/rnd",
     "crates/ffi",
     "crates/hydrate",
-    "apps/desktop",
 ]
 
-# apps/desktop pulls in gtk4 which is heavy; keep it out of the default set so
-# `cargo test -p pure-core` stays fast. Build the app explicitly with
-# `cargo run -p pure-desktop`.
 default-members = [
     "crates/core",
     "crates/layout",

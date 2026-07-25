@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "C ABI surface for pure-study: consumed by JNA (Kotlin/Android) and csbindgen (C#/WinUI)."
+description = "C ABI surface for pure-study: consumed by JNA (Kotlin/Android) and, compiled to wasm, by the web shell."
 
 [lib]
 # A C-callable dynamic + static lib. `cdylib` for Android/.so and Windows/.dll;
@@ -28,14 +28,12 @@ serde_json = { workspace = true }
 [dependencies.cbindgen]
 version = "0.29"
 optional = true
-[dependencies.csbindgen]
-version = "1"
-optional = true
 
 [features]
 # `cargo run -p pure-ffi --features bindgen --bin pure-bindgen` regenerates the
-# committed C header + C# P/Invoke shim from this crate's `extern "C"` surface.
-bindgen = ["dep:cbindgen", "dep:csbindgen"]
+# committed C header from this crate's `extern "C"` surface (and checks the
+# hand-written Kotlin binding against it).
+bindgen = ["dep:cbindgen"]
 
 [[bin]]
 name = "pure-bindgen"

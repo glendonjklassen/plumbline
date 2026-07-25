@@ -1,11 +1,18 @@
 # Shell feature manifest — the parity contract
 
-The canonical inventory of everything a pure-study shell does, written so a new
-shell (WinUI, Compose/Android) can be built **without re-surveying the repo**.
-The GTK shell (`apps/desktop/src/main.rs`, one file) is the reference
-implementation; line refs below point there (as of branch `windows-arm64`,
-2026-07-14). Non-GTK shells reach everything through the C ABI (`crates/ffi`);
-the *Data* line under each feature names the endpoint(s).
+> **2026-07-25 — the shells are Android (Compose, the UX gold standard) and
+> the web PWA.** The GTK and WinUI desktop shells were retired and REMOVED
+> from the tree (git history has them). Sections below that cite GTK
+> `M:<line>` refs or name GTK/WinUI behaviours are kept as the historical
+> spec of *what* each feature does — the line refs no longer resolve, and
+> "deltas owed to GTK/WinUI" are void. Treat the Android shell as the living
+> reference implementation.
+
+The canonical inventory of everything a pure-study shell does, written so a
+shell can be built **without re-surveying the repo**. Historically the GTK
+shell was the reference implementation; line refs below (`M:<line>`) pointed
+at its `main.rs`. Non-Rust shells reach everything through the C ABI
+(`crates/ffi`); the *Data* line under each feature names the endpoint(s).
 
 Conventions used everywhere:
 

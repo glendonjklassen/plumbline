@@ -10,33 +10,28 @@ weave's connector lines](assets/readme/reader-weaves.png)
 
 ## Install & run
 
-### Windows
+### Web (any device)
 
-Download the zip for your architecture (arm64 / x64 / x86) from the
-[Releases page](https://github.com/glendonjklassen/pure-study/releases) —
-self-contained, data pack bundled. Unzip anywhere and run `PureStudyWin.exe`;
-no installer, no runtime to install. (The build is unsigned for now, so
-SmartScreen may ask once — "More info → Run anyway".)
-
-### Linux (from source)
-
-The GUI is GTK4 + libadwaita. You need the Rust toolchain
-([rustup](https://rustup.rs)) and the GTK development packages:
+The app is a PWA — a hosted link is coming; until then, run it locally:
 
 ```sh
-# Arch:            sudo pacman -S gtk4 libadwaita
-# Debian/Ubuntu:   sudo apt install libgtk-4-dev libadwaita-1-dev build-essential
-# Fedora:          sudo dnf install gtk4-devel libadwaita-devel
-
 git clone https://github.com/glendonjklassen/pure-study.git
-cd pure-study
-cargo run --release -p pure-desktop
+cd pure-study/apps/web
+npm install && npm run pack:data
+rustup target add wasm32-wasip1
+cargo build -p pure-ffi --release --target wasm32-wasip1 && npm run pack:wasm
+npm run build && npm run preview   # → http://localhost:4173
 ```
 
-That's it — the checkout itself is a hydrated data home (KJV text, Strong's,
-weaves, the full analytics pack), so everything lights up on first launch.
-There is no Linux package yet (AppImage/flatpak/AUR are planned); on Linux,
-building from source is currently the only path.
+Everything runs in your browser — the engine is the same Rust core compiled
+to WebAssembly, your study data lives in browser storage, and the app works
+offline after the first visit (installable as an app from the address bar).
+
+### Android
+
+Download the APK from the
+[Releases page](https://github.com/glendonjklassen/pure-study/releases)
+(arm64-v8a + x86_64, signed; no Play Store, no Google services required).
 
 To run the app from anywhere (not just the checkout), seed a per-user home
 once — `~/.local/share/pure-study` on Linux — and the binary will find it:
@@ -110,11 +105,11 @@ atomic (temp → fsync → rename), on every platform.
 ## Limitations, honestly
 
 - **KJV-only, by design.** The analytics ride the 1769 tokenization end to end.
-- **Linux and Windows today.** The GTK (Linux) and WinUI (Windows) shells are
-  at feature parity over the same Rust core
+- **Android + web today.** The Compose (Android) shell and the PWA (web)
+  share the same Rust core at feature parity
   ([docs/FEATURE-MANIFEST.md](docs/FEATURE-MANIFEST.md) is the parity
-  contract); the Android (Compose) shell is next, macOS much later — see
-  [TODO.md](TODO.md).
+  contract). The GTK/WinUI desktop shells were retired 2026-07-25 — the PWA
+  covers desktops now; git history has the old shells.
 - **No sync.** One machine, one home; copy the authored dirs to move.
 - **Grammar search** (`tense:aorist`-style form predicates) is a placeholder —
   word/phrase/reference/Strong's-code search all work (see the guide).
@@ -139,21 +134,17 @@ Scripture renders in EB Garamond (OFL, bundled).
 | `crates/rnd` | Feature-gated analytics: bridge, embeddings, morphology, keyness, witness, concept |
 | `crates/ffi` | The single flat C ABI for native shells (cdylib) — see [crates/ffi/README.md](crates/ffi/README.md) |
 | `crates/hydrate` | `pure-hydrate` CLI: copy/verify the data pack into a home |
-| `apps/desktop` | The GTK4 + libadwaita shell (Linux) |
-| `apps/windows` | The WinUI 3 + Win2D shell (Windows) — see [its README](apps/windows/PureStudyWin/README.md) |
+| `apps/android` | The Compose shell (Android) — the UX gold standard |
+| `apps/web` | The PWA shell (Svelte + the core compiled to wasm32-wasip1) |
 
 ```sh
 cargo test -p pure-core -p pure-layout -p pure-rnd -p pure-ffi -p pure-hydrate
 cargo test -p pure-rnd --features "bridge embeddings morphology concept"
 ```
 
-The five portable crates are dependency-light pure Rust and build on Linux,
-macOS, and Windows including ARM64 (`aarch64-pc-windows-msvc` — on the ARM box:
-VS Build Tools with the **C++ ARM64/ARM64EC build tools** component, then
-`cargo build --release -p pure-ffi` → `pure_ffi.dll` + the committed C header /
-C# P/Invoke shim; without that component rustc silently falls back to whatever
-`link.exe` is on PATH and fails cryptically). CI runs the portable tests, the
-R&D-feature tests, an FFI binding-drift guard, and Windows x86_64 + ARM64
+The five portable crates are dependency-light pure Rust and build anywhere,
+including `wasm32-wasip1` (the web shell) and the Android NDK targets. CI runs
+the portable tests, the R&D-feature tests, an FFI binding-drift guard, and
 cross-builds of the C ABI on every push. The offline pipeline that produced
 the data pack is documented in [data-prep/README.md](data-prep/README.md); the
 porting history (from the Haskell *overlay*, 2026-07) lives in the git log.
@@ -164,10 +155,10 @@ Decisions locked 2026-07-08, still in force:
 
 | # | Decision | Choice |
 |---|----------|--------|
-| 1 | UI strategy | **Native shell per platform** over a shared Rust core — GTK4 (Linux), WinUI 3 (Windows), Jetpack Compose (Android); macOS later. |
-| 2 | Build order | Desktop first (GTK4), then Windows, then Android over the same core. |
+| 1 | UI strategy | **Native shell per platform** over a shared Rust core. Today: Jetpack Compose (Android, the UX gold standard) + a PWA (web) covering every desktop. The GTK/WinUI desktop shells were built first and retired 2026-07-25. |
+| 2 | Build order | Desktop first (GTK4) → Windows → Android → web; the desktops then retired in favour of the PWA. |
 | 3 | Data delivery | **Bundle core, download R&D** — KJV + Strong's ship in-app; heavy analytics artifacts are optional packs. |
-| 4 | R&D default | **Off + guided first-run** — first launch asks *Simple reader* vs *Full study*; casual users never see the complexity. |
+| 4 | R&D default | **Guided first-run** — first launch picks the analysis tiers (scholars' / machine) with examples; the text and the reader's own data are always on (revised 2026-07-25 from the original Simple/Full split). |
 | — | Patches / signed rules | Dropped — overlay's Ed25519 point-patch/rule layer was not ported. |
 | — | Future | A paid cross-device **sync SaaS**; the data model must not block it (stable ids, no host-local assumptions). |
 
@@ -176,17 +167,16 @@ Rust core (pure, headless, fully testable)
   ├─ crates/core     domain: canon, references, corpus, Strong's, search, weaves, threads
   ├─ crates/rnd      OPTIONAL, feature-gated analytics
   ├─ crates/layout   text layout + per-word HIT-TESTING → a display list
-  └─ crates/ffi      one C ABI surface → C#/WinUI + Kotlin/Android bindings
+  └─ crates/ffi      one C ABI surface → Kotlin/Android JNA + the wasm web binding
 
 Thin native shells (paint the display list, forward input coords back to core)
-  ├─ apps/desktop    GTK4 + libadwaita (Linux)
-  ├─ apps/windows    WinUI 3 (C#)
-  └─ apps/android    Jetpack Compose — next up
+  ├─ apps/android    Jetpack Compose — the UX gold standard
+  └─ apps/web        Svelte PWA over the core compiled to wasm32-wasip1
 ```
 
 The load-bearing idea: **layout and hit-testing live in the core.** Given a
-chapter + width + font metrics (via an injected measure callback — Pango on
-GTK, Win2D on Windows), the core produces a *display list*: positioned glyph
+chapter + width + font metrics (via an injected measure callback — android.graphics.Paint
+on Android, canvas measureText on the web), the core produces a *display list*: positioned glyph
 runs plus a table of tappable word rectangles, each carrying its verse ref,
 token index, and Strong's refs. A shell only paints that list and sends tap /
 hover `(x, y)` back for the core to hit-test. Word-level study features are

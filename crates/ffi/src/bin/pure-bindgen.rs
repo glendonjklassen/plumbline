@@ -1,16 +1,16 @@
-//! Regenerate the committed language bindings from the `pure-ffi` C ABI.
+//! Regenerate the committed C header from the `pure-ffi` C ABI, and verify the
+//! hand-written Kotlin binding covers the same surface.
 //!
 //! ```sh
 //! cargo run -p pure-ffi --features bindgen --bin pure-bindgen
 //! ```
 //!
 //! Emits, relative to the crate root:
-//!   * `include/pure_study.h`                 — C header (cbindgen), for
-//!                                              C consumers and csbindgen/P-Invoke.
-//!   * `bindings/csharp/PureStudyNative.g.cs` — C# P/Invoke shim (csbindgen).
+//!   * `include/pure_study.h` — C header (cbindgen), the ABI's reference.
 //!
-//! Kotlin/Android binds the same header via JNA (see `bindings/kotlin/`); its
-//! wrapper is hand-written rather than generated, so it is not produced here.
+//! Kotlin/Android binds this surface via JNA (`bindings/kotlin/PureStudy.kt`,
+//! hand-written); the web shell's TS binding drives the same surface compiled
+//! to wasm. The C#/WinUI shim was retired with the desktop shells (2026-07-25).
 //!
 //! This is a developer tool, kept out of the cdylib so a plain build /
 //! cross-compile never pulls host-only generators.
@@ -20,7 +20,6 @@ use std::path::Path;
 fn main() {
     let crate_dir = env!("CARGO_MANIFEST_DIR");
     generate_c_header(crate_dir);
-    generate_csharp(crate_dir);
     verify_surface(crate_dir);
     println!("bindings regenerated.");
 }
@@ -63,27 +62,9 @@ fn generate_c_header(crate_dir: &str) {
     println!("wrote {}", out.display());
 }
 
-fn generate_csharp(crate_dir: &str) {
-    let out = Path::new(crate_dir).join("bindings/csharp/PureStudyNative.g.cs");
-    std::fs::create_dir_all(out.parent().unwrap()).expect("create bindings/csharp/");
-
-    // NOTE: csbindgen reads ONLY the files listed here. An extern fn added in
-    // a new module would land in the C header but silently vanish from this
-    // shim — main() cross-checks the two outputs below and fails on drift.
-    csbindgen::Builder::default()
-        .input_extern_file(Path::new(crate_dir).join("src/lib.rs"))
-        .csharp_class_name("PureStudyNative")
-        .csharp_dll_name("pure_ffi")
-        .csharp_namespace("PureStudy.Native")
-        .csharp_class_accessibility("public")
-        .generate_csharp_file(&out)
-        .expect("csbindgen: generate C# bindings");
-    println!("wrote {}", out.display());
-}
-
-/// Every `pure_*` symbol in the C header must appear as a DllImport in the C#
-/// shim and vice versa (csbindgen only parses the files it is given, so a fn
-/// in an unlisted module would otherwise vanish silently — with no CI diff).
+/// Every `pure_*` symbol in the C header must appear in the Kotlin JNA
+/// interface and vice versa — the Kotlin binding is hand-written, so a fn
+/// added to the ABI would otherwise vanish silently on Android.
 fn verify_surface(crate_dir: &str) {
     let names = |text: &str| -> std::collections::BTreeSet<String> {
         let mut out = std::collections::BTreeSet::new();
@@ -107,16 +88,15 @@ fn verify_surface(crate_dir: &str) {
     };
     let header = std::fs::read_to_string(Path::new(crate_dir).join("include/pure_study.h"))
         .expect("read generated header");
-    let shim =
-        std::fs::read_to_string(Path::new(crate_dir).join("bindings/csharp/PureStudyNative.g.cs"))
-            .expect("read generated C# shim");
+    let kotlin = std::fs::read_to_string(Path::new(crate_dir).join("bindings/kotlin/PureStudy.kt"))
+        .expect("read Kotlin binding");
     let h: std::collections::BTreeSet<_> = names(&header);
-    let c: std::collections::BTreeSet<_> = names(&shim);
-    let missing_cs: Vec<_> = h.difference(&c).collect();
-    let missing_h: Vec<_> = c.difference(&h).collect();
+    let k: std::collections::BTreeSet<_> = names(&kotlin);
+    let missing_kt: Vec<_> = h.difference(&k).collect();
+    let missing_h: Vec<_> = k.difference(&h).collect();
     assert!(
-        missing_cs.is_empty() && missing_h.is_empty(),
-        "binding surface drift — missing from C#: {missing_cs:?}; missing from header: {missing_h:?}"
+        missing_kt.is_empty() && missing_h.is_empty(),
+        "binding surface drift — missing from Kotlin: {missing_kt:?}; missing from header: {missing_h:?}"
     );
     println!("surface check: {} functions in both bindings.", h.len());
 }
