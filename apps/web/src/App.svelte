@@ -5,6 +5,7 @@
   // PAINTING; the worker loads its own copy for layout measurement.
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
   import { idbGet } from "./engine/idb";
+  import { precacheShell } from "./engine/precache";
   import { MARGIN, paintChapter } from "./reader/paint";
   import { initSession, type Session } from "./state/session.svelte";
   import FirstRun from "./shell/FirstRun.svelte";
@@ -147,6 +148,9 @@
         s.bootTrace = t;
         console.table(t.map(([stage, ms]) => ({ stage, ms })));
       });
+      // Idle work: make this visit enough to run offline next time.
+      const idle = globalThis.requestIdleCallback ?? ((f: () => void) => setTimeout(f, 1200));
+      idle(() => void precacheShell());
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }

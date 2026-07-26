@@ -3,6 +3,7 @@
 // binding lives in StudyEngine.ts (the TS sibling of StudyEngine.kt /
 // Plumbline.cs); this module owns the runtime plumbing only.
 
+import { stash } from "./cache";
 import { assetUrl } from "./pack";
 import {
   ConsoleStdout,
@@ -49,9 +50,12 @@ export async function instantiate(homeRoot: Map<string, Directory | File>): Prom
 
   let measure: (text: string) => number = (t) => t.length * 8;
 
-  const source = await WebAssembly.compileStreaming(
-    fetch(assetUrl(`plumbline_ffi.wasm?v=${__BUILD_ID__}`)),
-  );
+  // Stash the module bytes as they land: on a first visit this worker may not
+  // be SW-controlled yet, and an uncached engine means no offline launch.
+  const wasmUrl = assetUrl(`plumbline_ffi.wasm?v=${__BUILD_ID__}`);
+  const wasmRes = await fetch(wasmUrl);
+  void stash(wasmUrl, wasmRes.clone());
+  const source = await WebAssembly.compileStreaming(wasmRes);
   const instance = await WebAssembly.instantiate(source, {
     wasi_snapshot_preview1: wasi.wasiImport,
     plumbline: {

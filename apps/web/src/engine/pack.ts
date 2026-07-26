@@ -1,7 +1,11 @@
 // Fetch the read-only data pack (built by scripts/build-web-pack.mjs):
 // manifest first, then the gzipped files, decompressed with the browser's
-// DecompressionStream. HTTP-level caching is left to the service worker /
-// Cache API layer; this module just loads bytes and reports progress.
+// DecompressionStream. Every download is stashed in the app's Cache bucket as
+// it lands — on a first visit the service worker isn't controlling this
+// worker yet, so leaving it to the SW meant the pack might not be cached at
+// all and the next launch couldn't boot offline (see engine/cache.ts).
+
+import { stash } from "./cache";
 
 export interface PackManifest {
   version: string;
@@ -39,8 +43,10 @@ export function assetUrl(path: string): string {
 }
 
 export async function fetchManifest(): Promise<PackManifest> {
-  const res = await fetch(new URL("pack/manifest.json", assetBase).href);
+  const url = new URL("pack/manifest.json", assetBase).href;
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`data pack manifest: HTTP ${res.status}`);
+  void stash(url, res.clone());
   return res.json();
 }
 
@@ -67,8 +73,10 @@ async function fetchFiles(
   const workers = Array.from({ length: 4 }, async () => {
     for (let f = queue.shift(); f; f = queue.shift()) {
       onProgress?.({ fraction: doneGz / totalGz, currentFile: f.path });
-      const res = await fetch(`${packUrl(f.path)}.gz?v=${version}`);
+      const url = `${packUrl(f.path)}.gz?v=${version}`;
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`data pack file ${f.path}: HTTP ${res.status}`);
+      void stash(url, res.clone());
       out.set(f.path, await gunzip(await res.arrayBuffer()));
       doneGz += f.gzBytes;
       onProgress?.({ fraction: doneGz / totalGz, currentFile: f.path });

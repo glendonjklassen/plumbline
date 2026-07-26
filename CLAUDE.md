@@ -128,6 +128,22 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
   test green — the engine lives in ONE worker thread, so a long synchronous
   engine call starves every layout/tap RPC queued behind it. Background
   loading must stay chunked with yields (see `engine.worker.ts`).
+- **Mutation-test any regression test you add.** Break the fix, watch the new
+  test fail, restore. Two tests written on 2026-07-26 passed against the very
+  bug they described: one used `page.route()` (Playwright interception
+  **bypasses service workers** — SW behaviour must be driven by a real
+  stalling origin, see `e2e/network.spec.ts`), the other used a fixed
+  millisecond ceiling that a whole un-chunked warm still fit inside (budgets
+  for worker-scheduling tests must be **derived from the machine's own
+  measured chunk cost**, not a constant).
+- **The offline promise is a test, not a hope.** A first visit must leave the
+  device able to boot with the network off. The SW cannot manage that alone:
+  it isn't controlling the page while the shell loads and it claims the engine
+  worker mid-boot, so page and worker each stash their own downloads
+  (`engine/cache.ts`, `engine/precache.ts`). Cache lookups pass
+  `ignoreVary: true` — responses come back `Vary: Origin` and Vite's
+  `<script crossorigin>` requests carry an Origin that a plain fetch does not,
+  which otherwise hides an entry from the request it was stored for.
 
 ## Verification
 

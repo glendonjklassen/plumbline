@@ -29,14 +29,31 @@ self.addEventListener("fetch", (event) => {
   const immutable =
     url.searchParams.has("v") || url.pathname.includes("/assets/") || url.pathname.includes("/fonts/");
 
+  // `ignoreVary` on every lookup: these are our own same-origin files, keyed
+  // by URL (pack files carry ?v=). Responses come back `Vary: Origin`, and
+  // Vite's <script crossorigin> asset requests DO send Origin while a plain
+  // precache fetch does not — honouring Vary made a cached entry invisible to
+  // the very request it was stored for, and the app failed to boot offline
+  // with everything already on disk (2026-07-26).
+  const MATCH = { ignoreVary: true };
+
   if (immutable) {
     event.respondWith(
       caches.open(CACHE).then(async (cache) => {
-        const hit = await cache.match(req);
+        const hit = await cache.match(req, MATCH);
         if (hit) return hit;
-        const res = await fetch(req);
-        if (res.ok) cache.put(req, res.clone());
-        return res;
+        try {
+          const res = await fetch(req);
+          if (res.ok) {
+            const copy = res.clone();
+            cache.put(req, copy);
+          }
+          return res;
+        } catch {
+          // Offline with nothing cached: fail as a response, not as a
+          // rejected respondWith (which surfaces as a cryptic ERR_FAILED).
+          return Response.error();
+        }
       }),
     );
   } else {
@@ -60,11 +77,16 @@ self.addEventListener("fetch", (event) => {
           }
           return res;
         } catch {
-          const hit = await caches.match(req);
+          const hit = await caches.match(req, MATCH);
           if (hit) return hit;
           // Only navigations fall back to the app shell — handing HTML to a
           // JSON fetch would turn one failure into a stranger one.
-          return req.mode === "navigate" ? ((await caches.match("./index.html")) ?? Response.error()) : Response.error();
+          if (req.mode !== "navigate") return Response.error();
+          return (
+            (await caches.match(new URL("./index.html", location.href).href, MATCH)) ??
+            (await caches.match(new URL("./", location.href).href, MATCH)) ??
+            Response.error()
+          );
         }
       })(),
     );

@@ -266,3 +266,97 @@ test("backup round-trips through a zip", async ({ page }, testInfo) => {
   );
   expect(text).toBe("backup probe");
 });
+
+// ── boot resilience (2026-07-26) ──────────────────────────────────────────────
+// The bugs these cover all shipped: two panes of John 3 on a phone, the intro
+// on every launch, a reload that hung on "preparing your study tools", an
+// 8.4 s cold parse, and an app that could not actually run offline.
+
+test("boots offline after ONE visit — the whole promise of the thing", async ({ page, context }) => {
+  // A first visit must leave the device self-sufficient: someone opens a
+  // shared link once, then reads on a plane. The service worker cannot manage
+  // this alone (it isn't controlling the page while the shell loads, and it
+  // claims the engine worker mid-boot — a race the pack used to lose), so the
+  // page and the worker stash their own downloads.
+  await boot(page);
+  await expect
+    .poll(async () => page.evaluate(() => (window as any).__plumbline?.bootTrace?.length ?? 0), {
+      timeout: 30_000,
+    })
+    .toBeGreaterThan(0); // boot finished; precache runs at the following idle
+  await page.waitForTimeout(1_500);
+
+  await context.setOffline(true);
+  try {
+    await page.reload();
+    await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/);
+  } finally {
+    await context.setOffline(false);
+  }
+});
+
+test("a first visit never parses the corpus — the pack ships the cache", async ({ page }) => {
+  // Every test starts on empty storage, so this IS a first visit. The engine
+  // used to parse ~19 MB of JSONL here: 8.4 s on a real phone. The pack now
+  // carries a prebuilt idxcache (hydrate `web-cache`, stamped mtime 0 like
+  // the browser WASI shim reports) — if that stops shipping or stops
+  // validating, the label flips and this fails.
+  await boot(page);
+  const label = await page.evaluate(async () => {
+    const trace: [string, number][] = await (window as any).__plumbline.rpc.bootTrace();
+    return trace.find(([stage]) => stage.startsWith("engine open"))?.[0];
+  });
+  expect(label).toBe("engine open (idxcache fast path)");
+});
+
+test("background loading never starves the reader (worker-thread scheduling)", async ({ page }) => {
+  // Stage-2 data and the analytics warm-up run on the ONE thread that also
+  // answers layout, so they must stay chunked with yields. When they didn't, a
+  // pane re-layout queued behind seconds of work and the reader was left
+  // half-width after closing a split.
+  await boot(page);
+  const { worst, chunk } = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    let worst = 0;
+    // Cover the window where stage-2 + the warm steps are running.
+    for (let i = 0; i < 24; i++) {
+      const t0 = performance.now();
+      await s.rpc.layout("John", 3, { font: 18, width: 600 + (i % 5), lineSpacing: 1.35, versePerLine: false });
+      worst = Math.max(worst, performance.now() - t0);
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    const trace: [string, number][] = await s.rpc.bootTrace();
+    const steps = trace.filter(([label]) => label.startsWith("warm step")).map(([, ms]) => ms);
+    return { worst, chunk: Math.max(0, ...steps) };
+  });
+  // Self-calibrating: a queued layout may wait out ONE background chunk, never
+  // the whole sequence — so the budget follows this machine's own chunk cost
+  // and a slow CI box moves both sides together. A fixed millisecond ceiling
+  // does NOT work here: 1500 ms passed against a deliberately un-chunked warm
+  // (mutation-tested 2026-07-26 — worst was 311 ms chunked vs 917 ms as one
+  // block, with the driver chunk at 357 ms and 223 ms respectively).
+  expect(worst).toBeLessThan(Math.max(400, chunk * 2.5));
+});
+
+test("the reader scrolls natively, and the pane follows both ways", async ({ page }) => {
+  // Scrolling is the browser's (a spacer sized to the chapter, canvas sticky
+  // on top) — that is where momentum and fling come from on a phone. The
+  // hand-rolled 1:1 pointer version felt dead, so guard the wiring: the
+  // scroller must have real range, and scrollTop <-> pane.scrollY must track.
+  await boot(page);
+  const scroller = page.locator(".pane .scroll").first();
+  await expect
+    .poll(async () => scroller.evaluate((el) => el.scrollHeight - el.clientHeight))
+    .toBeGreaterThan(100);
+
+  // Native scroll → the pane's state.
+  await scroller.evaluate((el) => el.scrollTo(0, 320));
+  await expect
+    .poll(() => page.evaluate(() => Math.round((window as any).__plumbline.panes[0].scrollY)))
+    .toBe(320);
+
+  // The pane's state (keyboard, navigation, verse targeting) → native scroll.
+  await page.evaluate(() => ((window as any).__plumbline.panes[0].scrollY = 40));
+  await expect.poll(async () => scroller.evaluate((el) => Math.round(el.scrollTop))).toBe(40);
+});
