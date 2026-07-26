@@ -297,7 +297,22 @@ internal fun DrawScope.drawConceptRadial(
     val w = size.width
     val cx = w / 2f
     val cy = mapH / 2f
-    val radius = max(min(w, mapH) / 2f - 95.dp.toPx(), 40.dp.toPx())
+    // Floor high enough that even the embedded card's ring clears the centre
+    // label (drawn BELOW the node since 2026-07-26 — above, it superimposed
+    // the centre word over the 12-o'clock spoke).
+    val rOuter = max(min(w, mapH) / 2f - 95.dp.toPx(), 64.dp.toPx())
+    // Relatedness → distance: the strongest semantic neighbour sits closest.
+    // Community spokes (no weight) draw at the outer ring. The inner floor
+    // keeps even the closest spoke clear of the centre label block.
+    val rInner = max(rOuter * 0.55f, 56.dp.toPx())
+    val weights = map.spokes.mapNotNull { it.weight }
+    val wMin = weights.minOrNull() ?: 0.0
+    val wMax = weights.maxOrNull() ?: 0.0
+    fun spokeRadius(weight: Double?): Float {
+        if (weight == null || wMax <= wMin) return rOuter
+        val t = ((weight - wMin) / (wMax - wMin)).toFloat()
+        return rOuter - (rOuter - rInner) * t
+    }
 
     val goldStroke = palette.gold.copy(alpha = 0.5f)
     val greenStroke = Color(red = 107, green = 140, blue = 102, alpha = 128)
@@ -311,6 +326,7 @@ internal fun DrawScope.drawConceptRadial(
         val angle = 2.0 * PI * i / n - PI / 2.0
         val ca = cos(angle).toFloat()
         val sa = sin(angle).toFloat()
+        val radius = spokeRadius(spokes[i].weight)
         val nx = cx + radius * ca
         val ny = cy + radius * sa
         drawLine(
@@ -335,12 +351,14 @@ internal fun DrawScope.drawConceptRadial(
     }
 
     // ── centre node ──
+    // Label BELOW the node (web-shell parity): drawn above, it sat exactly on
+    // the 12-o'clock spoke whenever the radius floor bound (the embedded card,
+    // small phones) — the centre word superimposed over a related concept.
     drawCircle(palette.gold, radius = 5.dp.toPx(), center = Offset(cx, cy))
     paint.textSize = 15.sp.toPx()
     val centreLines = map.centerLabel.split('\n')
-    val centreTh = paint.labelHeight(centreLines.size)
     drawLabel(
-        paint, centreLines, cx, cy - 14.dp.toPx() - centreTh,
+        paint, centreLines, cx, cy + 12.dp.toPx(),
         Paint.Align.CENTER, palette.ink.toArgbInt(),
     )
 }

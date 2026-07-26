@@ -689,6 +689,19 @@ fn concept_map_bridge_row_lights_up_the_other_testament() {
             serde_json::from_str(&take(plumbline_engine_concept_map_json(e, c("G2316").as_ptr())).unwrap()).unwrap();
         assert!(m2["bridge"].is_null(), "no bridge row without a cross-testament partner");
 
+        // Semantic spokes carry their cosine weight (shells scale distance by
+        // it); community spokes omit it (serde skips the None).
+        for m in [&m, &m2] {
+            for sp in m["spokes"].as_array().unwrap() {
+                if sp["semantic"].as_bool().unwrap() {
+                    let w = sp["weight"].as_f64().expect("semantic spokes are weighted");
+                    assert!((-1.0..=1.0).contains(&w), "a cosine, not a rank: {w}");
+                } else {
+                    assert!(sp["weight"].is_null(), "community spokes carry no weight");
+                }
+            }
+        }
+
         plumbline_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
     }

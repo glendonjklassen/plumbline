@@ -390,7 +390,14 @@ data class ConceptMapData(
 )
 
 @Serializable
-data class ConceptSpoke(val code: String, val label: String, val semantic: Boolean = false)
+data class ConceptSpoke(
+    val code: String,
+    val label: String,
+    val semantic: Boolean = false,
+    /** Cosine similarity to the centre (semantic spokes only) — scales spoke
+     *  distance so more-related concepts sit closer. Null for community spokes. */
+    val weight: Double? = null,
+)
 
 /** The concept map's cross-testament "bridge" row: the strongest other-testament
  *  partners and their unioned per-book dispersion (canon order, length

@@ -1876,22 +1876,22 @@ pub unsafe extern "C" fn plumbline_engine_concept_map_json(
             return ptr::null_mut();
         };
         // Semantic neighbours (gold) — empty without an embedding artifact.
-        let near: Vec<String> = e
+        // The cosine scores travel out as spoke weights so the shells can
+        // scale distance by relatedness (equidistant spokes read as "equally
+        // related", which the data never said).
+        let near_scored: Vec<(String, f32)> = e
             .embedding
             .get()
-            .map(|emb| {
-                emb.nearest_concepts(code, CONCEPT_MAP_SPOKES)
-                    .into_iter()
-                    .map(|(c, _)| c)
-                    .collect()
-            })
+            .map(|emb| emb.nearest_concepts(code, CONCEPT_MAP_SPOKES))
             .unwrap_or_default();
+        let near: Vec<String> = near_scored.iter().map(|(c, _)| c.clone()).collect();
         let ce = e.concept();
         let community = ce.community(code);
         let spokes = concept::radial_spokes(&near, &community, CONCEPT_MAP_SPOKES)
             .into_iter()
             .map(|(c, semantic)| wire::WireConceptSpoke {
                 label: concept_label(e, &c),
+                weight: near_scored.iter().find(|(n, _)| *n == c).map(|(_, s)| *s),
                 code: c,
                 semantic,
             })

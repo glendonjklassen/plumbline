@@ -54,7 +54,19 @@
     const bridgeH = m.bridge ? 52 : 0;
     const cx = W / 2;
     const cy = (H - stripH - bridgeH) / 2;
-    const radius = Math.min(W, H - stripH - bridgeH) / 2 - 95;
+    const rOuter = Math.min(W, H - stripH - bridgeH) / 2 - 95;
+    // Relatedness → distance (2026-07-26): semantic spokes carry a cosine
+    // weight, and the strongest neighbour sits closest. Community spokes
+    // (no weight) draw at the outer ring. Equidistant spokes read as
+    // "equally related", which the data never said.
+    const rInner = rOuter * 0.55;
+    const weights = m.spokes.map((sp: any) => sp.weight).filter((v: any) => typeof v === "number");
+    const wMin = Math.min(...weights);
+    const wMax = Math.max(...weights);
+    const spokeRadius = (weight: unknown): number =>
+      typeof weight === "number" && wMax > wMin
+        ? rOuter - (rOuter - rInner) * ((weight - wMin) / (wMax - wMin))
+        : rOuter;
 
     // Spokes: semantic gold, community green.
     spokePos = [];
@@ -62,6 +74,7 @@
     const nSpokes = m.spokes.length || 1;
     m.spokes.forEach((sp: any, i: number) => {
       const angle = (i / nSpokes) * Math.PI * 2 - Math.PI / 2;
+      const radius = spokeRadius(sp.weight);
       const x = cx + Math.cos(angle) * radius;
       const y = cy + Math.sin(angle) * radius;
       spokePos.push({ x, y, code: sp.code });

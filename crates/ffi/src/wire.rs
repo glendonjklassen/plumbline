@@ -1058,6 +1058,12 @@ pub struct WireConceptSpoke {
     pub code: String,
     pub label: String,
     pub semantic: bool,
+    /// Cosine similarity to the centre concept (semantic spokes only) — the
+    /// shells scale spoke distance by it, so more-related concepts sit closer.
+    /// Absent for community spokes, which draw at the outer ring. Additive
+    /// wire evolution (2026-07-26): older shells ignore it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weight: Option<f32>,
 }
 
 /// The dispersion strip's cross-testament overlay (see [`WireConceptMap::bridge`]):
