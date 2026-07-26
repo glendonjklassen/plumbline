@@ -40,6 +40,7 @@
     // Odd sections shaded (ink α0.04); labels centred when they fit.
     ctx.textBaseline = "middle";
     ctx.font = '11px "EB Garamond", Georgia, serif';
+    if (!seg?.segments) return;
     seg.segments.forEach((sec: any, i: number) => {
       const x0 = xOf(sec.first);
       const x1 = xOf(sec.last + 1);

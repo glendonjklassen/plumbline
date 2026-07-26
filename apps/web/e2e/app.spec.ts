@@ -128,6 +128,20 @@ test("settings switch the theme", async ({ page }) => {
   expect(paper.toLowerCase()).toContain("#0");
 });
 
+test("phones keep ONE pane (no split; weaves navigate instead)", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await boot(page);
+  await expect(page.locator(".nav button[title='Split pane']")).toHaveCount(0);
+  // A weave open must navigate the single pane, not split it.
+  await page.getByLabel("Menu").click();
+  await page.getByRole("button", { name: "Explore", exact: true }).click();
+  await page.locator(".ex-card", { hasText: /^Weaves/ }).click();
+  await page.locator("aside.panel button.link").first().click();
+  await expect(page.locator(".pane canvas")).toHaveCount(1);
+  const panes = await page.evaluate(() => (window as any).__plumbline.panes.length);
+  expect(panes).toBe(1);
+});
+
 test("passage navigator jumps to a verse", async ({ page }) => {
   await boot(page);
   await page.locator(".nav .passage").first().click();

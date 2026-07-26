@@ -9,7 +9,7 @@ import type { Session } from "../state/session.svelte";
 export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Promise<void> {
   const link = await s.rpc.static("routeLink", uri);
   if (!link) return;
-  const otherPane = !!(ev && (ev.shiftKey || ev.ctrlKey || ev.metaKey));
+  const otherPane = !!(ev && (ev.shiftKey || ev.ctrlKey || ev.metaKey)) && !s.narrow;
 
   switch (link.verb) {
     case "go": {
@@ -138,7 +138,8 @@ async function openWeavePassages(s: Session, index: number): Promise<void> {
   if (!a || !b) return;
   const first = s.activePane;
   s.navigate(first, a.book, a.chapter, a.verse);
-  if (b.book !== a.book || b.chapter !== a.chapter) {
+  // One pane on a phone: endpoint b stays a tap away on the compare card.
+  if (!s.narrow && (b.book !== a.book || b.chapter !== a.chapter)) {
     if (s.panes.length < 2) s.addPane(first);
     s.navigate((first + 1) % s.panes.length, b.book, b.chapter, b.verse);
   }

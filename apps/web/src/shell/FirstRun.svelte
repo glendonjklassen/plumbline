@@ -55,14 +55,21 @@
     targetVerse: verse,
     pendingScroll: verse != null,
     scrollY: 0,
-    back: [],
-    fwd: [],
+    back: [] as { book: string; chapter: number }[],
+    fwd: [] as { book: string; chapter: number }[],
   });
 
-  /** New-believer landing: John 1 — a tapped reference opens beside it. */
+  /** New-believer landing: John 1 — a tapped reference opens beside it
+   *  (phones: the passage opens with John 1 one back-step away). */
   function startInJohn(ref?: Ref): void {
     finish(false, false);
-    s.panes = ref ? [pane("John", 1), pane(ref.book, ref.chapter, ref.verse)] : [pane("John", 1)];
+    if (ref && s.narrow) {
+      const p = pane(ref.book, ref.chapter, ref.verse);
+      p.back = [{ book: "John", chapter: 1 }];
+      s.panes = [p];
+    } else {
+      s.panes = ref ? [pane("John", 1), pane(ref.book, ref.chapter, ref.verse)] : [pane("John", 1)];
+    }
     s.activePane = 0;
     s.saveConfig();
   }
