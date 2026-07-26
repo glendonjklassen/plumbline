@@ -11,10 +11,10 @@
   let cssW = $state(0);
 
   const HEIGHT = 30;
-  const seg = s.engine.canonSegments(); // {segments:[{label,first,last}], otNtDivide}
-  const toc = s.engine.toc();
-  const bookCount: number = toc.books.length;
-  const orderOf = new Map<string, number>(toc.books.map((b: any, i: number) => [b.id, i]));
+  const seg = $derived(s.q("canonSegments")); // {segments:[{label,first,last}], otNtDivide}
+  const toc = $derived(s.q("toc"));
+  const bookCount: number = $derived(toc?.books?.length ?? 0);
+  const orderOf = $derived(new Map<string, number>((toc?.books ?? []).map((b: any, i: number) => [b.id, i])));
 
   $effect(() => {
     const ro = new ResizeObserver(() => (cssW = host.clientWidth));
@@ -76,7 +76,7 @@
   function onClick(e: MouseEvent): void {
     const rect = canvas.getBoundingClientRect();
     const idx = Math.min(bookCount - 1, Math.max(0, Math.floor(((e.clientX - rect.left) / cssW) * bookCount)));
-    const book = toc.books[idx];
+    const book = toc?.books?.[idx];
     if (book) s.navigate(s.activePane, book.id, 1);
   }
 </script>

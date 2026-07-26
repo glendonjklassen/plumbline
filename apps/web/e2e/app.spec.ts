@@ -18,12 +18,17 @@ async function boot(page: Page): Promise<void> {
 test("boots to the reader with the stock set seeded", async ({ page }) => {
   await boot(page);
   await expect(page.locator("canvas").first()).toBeVisible();
-  const counts = await page.evaluate(() => {
+  const counts = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
+    const [weaves, threads, tags] = await Promise.all([
+      s.engine.weaves(),
+      s.engine.threads(),
+      s.engine.tags(),
+    ]);
     return {
-      weaves: s.engine.weaves()?.weaves?.length ?? 0,
-      threads: s.engine.threads()?.threads?.length ?? 0,
-      tags: s.engine.tags()?.tags?.length ?? 0,
+      weaves: weaves?.weaves?.length ?? 0,
+      threads: threads?.threads?.length ?? 0,
+      tags: tags?.tags?.length ?? 0,
     };
   });
   expect(counts.weaves).toBeGreaterThan(20);
@@ -66,7 +71,7 @@ test("the deferred machine-tier pack loads after boot", async ({ page }) => {
   const neighbours = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     await s.ensureRnd();
-    return s.engine.conceptNeighbours("G2316", 3)?.near?.length ?? 0; // G2316 = God
+    return (await s.engine.conceptNeighbours("G2316", 3))?.near?.length ?? 0; // G2316 = God
   });
   expect(neighbours).toBeGreaterThan(0);
 });
@@ -182,9 +187,9 @@ test("opening a weave splits to its passages; verse clicks stay responsive (free
 
 test("backup round-trips through a zip", async ({ page }, testInfo) => {
   await boot(page);
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    s.engine.userNoteSet("John 3:16", "backup probe", "2026-07-25T00:00:00Z");
+    await s.engine.userNoteSet("John 3:16", "backup probe", "2026-07-25T00:00:00Z");
   });
   await page.getByLabel("Menu").click();
   await page.getByRole("button", { name: "Settings" }).click();
@@ -196,9 +201,9 @@ test("backup round-trips through a zip", async ({ page }, testInfo) => {
   await download.saveAs(zipPath);
 
   // Damage the note, then restore the backup over it.
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    s.engine.userNoteSet("John 3:16", "damaged", "2026-07-25T01:00:00Z");
+    await s.engine.userNoteSet("John 3:16", "damaged", "2026-07-25T01:00:00Z");
   });
   // Mark the current document, then wait until the restore's reload has
   // actually replaced it (waitForLoadState resolves against the old page).
@@ -211,7 +216,7 @@ test("backup round-trips through a zip", async ({ page }, testInfo) => {
     .toBeNull();
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
   const text = await page.evaluate(
-    () => (window as any).__plumbline.engine.userNote("John 3:16")?.text,
+    async () => (await (window as any).__plumbline.engine.userNote("John 3:16"))?.text,
   );
   expect(text).toBe("backup probe");
 });

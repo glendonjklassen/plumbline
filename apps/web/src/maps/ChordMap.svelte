@@ -12,10 +12,10 @@
 
   const model = $derived.by(() => {
     void s.studyEpoch;
-    return s.engine.chordMap(); // {pairs:[{a,b,count}], max, otNtDivide, bookCount}
+    return s.q("chordMap"); // {pairs:[{a,b,count}], max, otNtDivide, bookCount}
   });
-  const seg = s.engine.canonSegments();
-  const toc = s.engine.toc();
+  const seg = $derived(s.q("canonSegments"));
+  const toc = $derived(s.q("toc"));
 
   let canvas: HTMLCanvasElement;
   let host: HTMLDivElement | undefined = $state();
@@ -111,7 +111,7 @@
     const rect = canvas.getBoundingClientRect();
     const px = ((e.clientX - rect.left - zoom.x) / (zoom.scale * (rect.width / W)) / W) * model.bookCount;
     const idx = Math.min(model.bookCount - 1, Math.max(0, Math.floor(px)));
-    const book = toc.books[idx];
+    const book = toc?.books?.[idx];
     if (book) {
       s.navigate(s.activePane, book.id, 1);
       s.mapPopup = null;

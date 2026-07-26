@@ -3,11 +3,11 @@
   // Remove highlight · (Full) Tag… / Add to thread… · Memorize. Opened by
   // right-click or long-press; the target verse rides in session state.
   import { getSession } from "../state/session.svelte";
-  import { highlightTones, nowStamp } from "../engine/StudyEngine";
+  import { nowStamp } from "../engine/StudyEngine";
   import { dispatchLink } from "../study/links";
 
   const s = getSession();
-  const tones: { name: string; hex: string }[] = highlightTones(s.wasm)?.tones ?? [];
+  const tones = $derived(s.tones);
 
   const menu = $derived(s.contextMenu);
 
@@ -18,7 +18,7 @@
   async function copy(kind: string): Promise<void> {
     const ref = menu!.refKey;
     close();
-    const text = s.engine.copyText(ref, kind);
+    const text = await s.rpc.call("copyText", ref, kind);
     if (text) {
       await navigator.clipboard.writeText(text);
       s.showToast("Copied");
@@ -36,23 +36,24 @@
     close();
     // Whole-verse wash: membership in the tone's colour tag (created coloured).
     const capName = tone.name[0].toUpperCase() + tone.name.slice(1);
-    const err = s.engine.tagAdd(capName, "verse", ref, null, nowStamp());
-    if (err) {
-      s.showToast(err);
-      return;
-    }
-    s.engine.tagSetColor(capName, tone.hex);
-    s.lastTone = { name: capName, hex: tone.hex };
+    void s.author("tagAdd", capName, "verse", ref, null, nowStamp()).then((err) => {
+      if (err) {
+        s.showToast(err);
+        return;
+      }
+      void s.author("tagSetColor", capName, tone.hex);
+      s.lastTone = { name: capName, hex: tone.hex };
+    });
   }
 
-  function removeHighlight(): void {
+  async function removeHighlight(): Promise<void> {
     const ref = menu!.refKey;
     close();
     // Clear any word-precise range covering the verse, then drop membership
     // in every colour tag holding it (errors from non-membership are noise).
-    s.engine.highlightClearVerse(ref);
-    for (const t of s.engine.tags()?.tags ?? [])
-      if (t.color) s.engine.tagRemove(t.name, "verse", ref);
+    void s.author("highlightClearVerse", ref);
+    for (const t of (await s.fetchQ("tags"))?.tags ?? [])
+      if (t.color) void s.author("tagRemove", t.name, "verse", ref);
   }
 
   function tagPick(): void {
@@ -70,8 +71,7 @@
   function memorize(): void {
     const ref = menu!.refKey;
     close();
-    const err = s.engine.memoryAdd(ref, nowStamp());
-    s.showToast(err ?? `Memorizing ${ref}`);
+    void s.author("memoryAdd", ref, nowStamp()).then((err) => s.showToast(err ?? `Memorizing ${ref}`));
   }
 
   // Clamp the menu into the viewport.

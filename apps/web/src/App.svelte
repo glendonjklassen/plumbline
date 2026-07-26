@@ -1,46 +1,38 @@
 <script lang="ts">
-  // Boot: fetch pack → build home → instantiate wasm → open engine, with a
-  // progress screen; then hand over to the Shell. Fonts load before the first
-  // layout so the measure callback sees real EB Garamond metrics.
-  import { boot, type BootPhase } from "./engine/boot";
+  // Boot (TODO #28): the ENGINE WORKER does everything — pack fetch, home,
+  // wasm, open, warm, and later the deferred R&D pack — while this thread
+  // paints the splash from its progress messages. Fonts load here too, for
+  // PAINTING; the worker loads its own copy for layout measurement.
+  import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
   import { initSession, type Session } from "./state/session.svelte";
   import Shell from "./shell/Shell.svelte";
 
-  let phase = $state<BootPhase>({ phase: "download", fraction: 0 });
+  let phase = $state<WorkerProgress>({ phase: "download", fraction: 0 });
   let error = $state<string | null>(null);
   let session = $state<Session | null>(null);
 
   async function start(): Promise<void> {
     try {
-      await Promise.all([
+      const rpc = new EngineRpc();
+      rpc.onProgress = (p) => (phase = p);
+      const [info] = await Promise.all([
+        rpc.boot(),
         document.fonts.load('18px "EB Garamond"'),
         document.fonts.load('italic 18px "EB Garamond"'),
         document.fonts.load('bold 18px "EB Garamond"'),
       ]);
-      const result = await boot((p) => (phase = p));
-      const s = initSession(result);
-      // Warm the corpus-derived analytics DURING the splash: the engine runs
-      // on the main thread, so warming after first paint froze the UI
-      // (menus wouldn't open). Behind the splash the block is invisible —
-      // and it's the cheap warm now: the heavy machine-tier artifacts are not
-      // in the boot pack at all (TODO #28), so this builds only the
-      // concept/leitwort indexes over the corpus.
-      if (s.gates & 2) {
-        phase = { phase: "warm" };
-        await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30)));
-        s.engine.warmIndexes();
-      }
+      // Prime what synchronous readers need on their first frame: the theme
+      // palettes, highlight tones, and the TOC/canon shape.
+      const [light, dark, night, tones] = await Promise.all([
+        rpc.static("themePalette", "light"),
+        rpc.static("themePalette", "dark"),
+        rpc.static("themePalette", "night"),
+        rpc.static("highlightTones"),
+      ]);
+      const s = initSession(rpc, info, { light, dark, night }, info.bundledOn);
+      s.tones = tones?.tones ?? [];
+      await Promise.all([s.fetchQ("toc"), s.fetchQ("canonSegments")]);
       session = s;
-      // The deferred machine-tier pack: fetch + load once the reader has been
-      // idle a moment. The trailing engine block is synchronous, so this
-      // waits out the first interactions rather than competing with them.
-      // First-run visitors are still choosing their tiers — FirstRun's start()
-      // triggers the load for them if they keep the machine tier on.
-      if (s.gates & 2 && !s.showFirstRun) {
-        const idle: (cb: () => void) => unknown =
-          "requestIdleCallback" in window ? (cb) => requestIdleCallback(cb, { timeout: 8000 }) : (cb) => setTimeout(cb, 250);
-        setTimeout(() => idle(() => void s.ensureRnd()), 2500);
-      }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }

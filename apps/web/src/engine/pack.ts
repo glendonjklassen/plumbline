@@ -14,10 +14,23 @@ export interface PackProgress {
   currentFile: string;
 }
 
-const PACK_BASE = `${import.meta.env.BASE_URL}pack/`;
+// The app's asset base as an ABSOLUTE url. Vite's BASE_URL is "./" (host-
+// agnostic), which resolves against the *current script* — wrong inside the
+// engine worker (it lives under assets/). The main thread passes the resolved
+// page base into the worker, which overrides it here before booting.
+let assetBase = typeof document !== "undefined" ? new URL(import.meta.env.BASE_URL, location.href).href : "";
+export function setAssetBase(url: string): void {
+  assetBase = url;
+}
+export function packUrl(path: string): string {
+  return new URL(`pack/${path}`, assetBase).href;
+}
+export function assetUrl(path: string): string {
+  return new URL(path, assetBase).href;
+}
 
 export async function fetchManifest(): Promise<PackManifest> {
-  const res = await fetch(`${PACK_BASE}manifest.json`);
+  const res = await fetch(new URL("pack/manifest.json", assetBase).href);
   if (!res.ok) throw new Error(`data pack manifest: HTTP ${res.status}`);
   return res.json();
 }
@@ -45,7 +58,7 @@ async function fetchFiles(
   const workers = Array.from({ length: 4 }, async () => {
     for (let f = queue.shift(); f; f = queue.shift()) {
       onProgress?.({ fraction: doneGz / totalGz, currentFile: f.path });
-      const res = await fetch(`${PACK_BASE}${f.path}.gz?v=${version}`);
+      const res = await fetch(`${packUrl(f.path)}.gz?v=${version}`);
       if (!res.ok) throw new Error(`data pack file ${f.path}: HTTP ${res.status}`);
       out.set(f.path, await gunzip(await res.arrayBuffer()));
       doneGz += f.gzBytes;

@@ -9,7 +9,7 @@
 
   const tag = $derived.by(() => {
     void s.studyEpoch;
-    return s.tagWeaveFor === null ? null : (s.engine.tags()?.tags?.[s.tagWeaveFor] ?? null);
+    return s.tagWeaveFor === null ? null : (s.q("tags")?.tags?.[s.tagWeaveFor] ?? null);
   });
   const members = $derived(
     (tag?.members ?? []).filter((m: any) => m.kind === "verse" && m.verse) as any[],
@@ -37,8 +37,9 @@
     if (!tag) return;
     const refsJson = checked.size === members.length ? null : JSON.stringify([...checked]);
     const weaveName = name.trim() !== tag.name ? name.trim() : null;
-    const err = s.engine.weaveFromTag(tag.name, refsJson, weaveName, nowStamp());
-    s.showToast(err ?? `Weave “${name.trim()}” — ${checked.size} passages chained`);
+    void s.author("weaveFromTag", tag.name, refsJson, weaveName, nowStamp()).then((err) =>
+      s.showToast(err ?? `Weave “${name.trim()}” — ${checked.size} passages chained`),
+    );
     close();
   }
 </script>

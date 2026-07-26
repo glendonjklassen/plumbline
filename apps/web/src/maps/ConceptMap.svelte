@@ -17,7 +17,7 @@
   const W = 720;
   const H = 560;
 
-  const model = $derived(s.engine.conceptMap(code));
+  const model = $derived(s.q("conceptMap", code));
 
   let canvas: HTMLCanvasElement;
   let host: HTMLDivElement | undefined = $state();
@@ -135,9 +135,9 @@
     }
     // Dispersion strip → jump to that book.
     if (my > H - 40 - (model.bridge ? 52 : 0)) {
-      const toc = s.engine.toc();
+      const toc = s.q("toc");
       const idx = Math.min(model.bookCount - 1, Math.max(0, Math.floor((mx / W) * model.bookCount)));
-      const book = toc.books[idx];
+      const book = toc?.books?.[idx];
       if (book) {
         s.navigate(s.activePane, book.id, 1);
         s.mapPopup = null;

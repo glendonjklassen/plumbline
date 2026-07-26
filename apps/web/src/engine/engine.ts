@@ -3,6 +3,7 @@
 // binding lives in StudyEngine.ts (the TS sibling of StudyEngine.kt /
 // Plumbline.cs); this module owns the runtime plumbing only.
 
+import { assetUrl } from "./pack";
 import {
   ConsoleStdout,
   File,
@@ -49,7 +50,7 @@ export async function instantiate(homeRoot: Map<string, Directory | File>): Prom
   let measure: (text: string) => number = (t) => t.length * 8;
 
   const source = await WebAssembly.compileStreaming(
-    fetch(`${import.meta.env.BASE_URL}plumbline_ffi.wasm?v=${__BUILD_ID__}`),
+    fetch(assetUrl(`plumbline_ffi.wasm?v=${__BUILD_ID__}`)),
   );
   const instance = await WebAssembly.instantiate(source, {
     wasi_snapshot_preview1: wasi.wasiImport,

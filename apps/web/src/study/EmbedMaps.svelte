@@ -11,7 +11,7 @@
   let { code }: Props = $props();
 
   const s = getSession();
-  const model = $derived(s.engine.conceptMap(code));
+  const model = $derived(s.q("conceptMap", code));
 
   let canvas: HTMLCanvasElement | undefined = $state();
   let host: HTMLDivElement | undefined = $state();

@@ -71,6 +71,22 @@ export function itemVerse(it: LayoutItem): number | null {
 }
 
 /** Per-verse vertical extents (layout coords), for bands and washes. */
+/** Hit-test a layout point against the word rectangles — the TS twin of
+ *  plumbline_layout_hit_test_json, so hover/tap never crosses to the worker
+ *  (TODO #28). Coordinates are layout-space (caller subtracts margins). */
+export function hitTest(
+  items: LayoutItem[],
+  x: number,
+  y: number,
+): { verse: string; tokenIndex: number; strongs: string[] } | null {
+  for (const it of items) {
+    if (it.kind !== "word" || it.verse == null || it.tokenIndex == null) continue;
+    if (x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h)
+      return { verse: it.verse, tokenIndex: it.tokenIndex, strongs: it.strongs ?? [] };
+  }
+  return null;
+}
+
 export function verseExtents(items: LayoutItem[]): Map<number, { top: number; bottom: number; firstY: number }> {
   const out = new Map<number, { top: number; bottom: number; firstY: number }>();
   for (const it of items) {

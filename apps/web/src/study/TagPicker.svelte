@@ -10,7 +10,7 @@
   const tags = $derived.by(() => {
     void s.studyEpoch;
     if (!s.tagPickFor) return [];
-    const all: any[] = s.engine.tags()?.tags ?? [];
+    const all: any[] = s.q("tags")?.tags ?? [];
     return [...all.filter((t) => !t.color), ...all.filter((t) => t.color)];
   });
 
@@ -22,8 +22,9 @@
   }
   function pick(name: string): void {
     const ref = s.tagPickFor!;
-    const err = s.engine.tagAdd(name, "verse", ref, null, nowStamp());
-    s.showToast(err ?? `Tagged ${ref} — ${name}`);
+    void s.author("tagAdd", name, "verse", ref, null, nowStamp()).then((err) =>
+      s.showToast(err ?? `Tagged ${ref} — ${name}`),
+    );
     close();
   }
 </script>

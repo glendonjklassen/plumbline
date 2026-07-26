@@ -48,15 +48,32 @@ history reads.
             triggered at idle, from the first-run machine choice, or the
             Settings toggle. Decision #3 finally applied to the web; no
             user-agent sniffing.
-      - [ ] **Engine off the main thread** (a Worker + async bridge;
-            OffscreenCanvas `measureText` covers the measure callback). The
-            remaining stage: kills interaction jank for good (every engine
-            call still blocks the UI, and the deferred R&D load costs one
-            main-thread block at idle). The boot-responsiveness e2e test is
-            the guard.
-      - [ ] Remaining open-path rocks if boot needs more: `renderings` build
-            (210 ms native) and the corpus/search/occ index builds (~300 ms)
-            could take the same interning treatment as concept.
+      - [x] **Engine off the main thread** (2026-07-26, branch
+            `perf/engine-worker`). As built:
+            1. `engine.worker.ts` hosts the WHOLE engine life: pack fetch,
+               IDB home, wasm instantiate, open, warm, deferred R&D load,
+               authoring writes + persistence. Fonts via `self.fonts` +
+               OffscreenCanvas `measureText` for the layout measure callback.
+               Splash progress + studyEpoch bumps arrive as messages.
+            2. A postMessage RPC proxy exposes the same StudyEngine method
+               names returning Promises ({id, method, args} → {id, result}).
+            3. The shell keeps its synchronous `$derived` graph via a
+               **read-through reactive cache**: `q(method, ...args)` returns
+               the cached value (or null on first ask) and fires the async
+               fill; the response invalidates a version signal so deriveds
+               re-run. Panels already tolerate `?.blocks` = null.
+            4. Layout: the worker returns the display-list JSON (items +
+               height), cached by (book, chapter, cfg). **Hit-testing moves
+               to TS** over the item rects (a simple scan) so hover/tap
+               never round-trips.
+            5. e2e: `window.__plumbline.engine.*` becomes async — tests
+               await; the boot-responsiveness tests are the guard that the
+               main thread stays free.
+      - [ ] Remaining boot levers if the phone still wants more: persist the
+            open-time indexes (renderings/search/occ — ~330 ms native) via the
+            idxcache pattern, and/or intern the renderings build like concept.
+            The worker now hands the UI over BEFORE the analytics warm, so
+            the splash ends at engine-open, not warm-end.
 - [ ] **29. Multilingual program** — promoted 2026-07-25 (the maintainer's
       pick): see **AI-generated Strong's tagging** below. Start with the
       afternoon spike (hand-built 10-verse Luther jsonl through

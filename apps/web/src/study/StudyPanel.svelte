@@ -7,7 +7,6 @@
   import EmbedMaps from "./EmbedMaps.svelte";
   import { dispatchLink } from "./links";
   import { getSession } from "../state/session.svelte";
-  import { aboutBlocks, guideBlocks } from "../engine/StudyEngine";
 
   const s = getSession();
 
@@ -18,7 +17,7 @@
     if (!p || !(s.gates & 2)) return null;
     if (p.kind === "codeStudy" || p.kind === "concordance") return p.code;
     if (p.kind === "wordStudy") {
-      const tok = s.engine.token(p.refKey, p.tokenIndex);
+      const tok = s.q("token", p.refKey, p.tokenIndex);
       return (tok?.strongs?.[0] as string | undefined) ?? null;
     }
     return null;
@@ -40,43 +39,42 @@
   // edit in place. Built shell-side from user_notes_json (no block producer).
   const notes = $derived.by(() => {
     void s.studyEpoch;
-    return s.panel?.kind === "notesBrowser" ? ((s.engine.userNotes()?.notes ?? []) as any[]) : [];
+    return s.panel?.kind === "notesBrowser" ? ((s.q("userNotes")?.notes ?? []) as any[]) : [];
   });
 
   const blocks = $derived.by(() => {
     void s.studyEpoch; // any authoring write invalidates panel content
     const p = s.panel;
     if (!p) return null;
-    const e = s.engine;
     switch (p.kind) {
       case "wordStudy":
-        return e.wordStudyBlocks(p.refKey, p.tokenIndex, s.gates)?.blocks;
+        return s.q("wordStudyBlocks", p.refKey, p.tokenIndex, s.gates)?.blocks;
       case "codeStudy":
-        return e.codeStudyBlocks(p.code, p.word, s.gates)?.blocks;
+        return s.q("codeStudyBlocks", p.code, p.word, s.gates)?.blocks;
       case "concordance":
-        return e.concordanceBlocks(p.code)?.blocks;
+        return s.q("concordanceBlocks", p.code)?.blocks;
       case "renderingConcordance":
-        return e.renderingConcordanceBlocks(p.code, p.rendering)?.blocks;
+        return s.q("renderingConcordanceBlocks", p.code, p.rendering)?.blocks;
       case "threads":
-        return e.threadsBlocks()?.blocks;
+        return s.q("threadsBlocks")?.blocks;
       case "thread":
-        return e.threadBlocks(p.index)?.blocks;
+        return s.q("threadBlocks", p.index)?.blocks;
       case "tags":
-        return e.tagsBlocks()?.blocks;
+        return s.q("tagsBlocks")?.blocks;
       case "tag":
-        return e.tagBlocks(p.index)?.blocks;
+        return s.q("tagBlocks", p.index)?.blocks;
       case "weaves":
-        return e.weavesBlocks()?.blocks;
+        return s.q("weavesBlocks")?.blocks;
       case "suggested":
-        return e.suggestedBlocks()?.blocks;
+        return s.q("suggestedBlocks")?.blocks;
       case "compare":
-        return e.compareBlocks(p.index, true)?.blocks;
+        return s.q("compareBlocks", p.index, true)?.blocks;
       case "search":
-        return e.searchBlocks(s.searchQuery)?.blocks;
+        return s.q("searchBlocks", s.searchQuery)?.blocks;
       case "guide":
-        return guideBlocks(s.wasm)?.blocks;
+        return s.qs("guideBlocks")?.blocks;
       case "about":
-        return aboutBlocks(s.wasm)?.blocks;
+        return s.qs("aboutBlocks")?.blocks;
       default:
         return null;
     }

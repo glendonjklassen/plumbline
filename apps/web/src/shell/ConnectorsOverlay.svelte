@@ -28,7 +28,7 @@
 
   const pairs = $derived.by(() => {
     void s.studyEpoch;
-    return (s.engine.linkPairs()?.pairs ?? []).filter((p: any) => p.resolved);
+    return (s.q("linkPairs")?.pairs ?? []).filter((p: any) => p.resolved);
   });
 
   let rafId = 0;

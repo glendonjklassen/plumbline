@@ -54,8 +54,11 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   const wasm = await instantiate(home.root);
 
   onPhase({ phase: "open" });
-  // Yield a frame so the "opening" state paints before the synchronous parse.
-  await new Promise((r) => requestAnimationFrame(() => r(null)));
+  // Yield so the "opening" progress message lands before the synchronous
+  // parse (rAF on the main thread; a macrotask in the engine worker).
+  await new Promise((r) =>
+    typeof requestAnimationFrame !== "undefined" ? requestAnimationFrame(() => r(null)) : setTimeout(r, 0),
+  );
   const engine = StudyEngine.open(wasm, "/home");
 
   // Persistence choreography: any authoring write mirrors the user subtree.

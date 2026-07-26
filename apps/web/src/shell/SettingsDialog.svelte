@@ -21,8 +21,8 @@
   const currentConfigPath = (p: string): string =>
     p.startsWith(LEGACY_CONFIG) ? ".config/plumbline/" + p.slice(LEGACY_CONFIG.length) : p;
 
-  function backup(): void {
-    const files = s.home.exportUserData();
+  async function backup(): Promise<void> {
+    const files = new Map<string, Uint8Array>(await s.rpc.exportUserData());
     files.set(
       "plumbline-backup.json",
       new TextEncoder().encode(JSON.stringify({ format: 1, app: "web", exported: nowStamp() })),
@@ -55,7 +55,7 @@
       // The restored files are now the truth — nothing (incl. the pagehide
       // flush) may persist the current session over them; just reload.
       s.restoring = true;
-      s.home.freeze(); // the debounced authoring persist must not fire either
+      await s.rpc.freeze(); // the debounced authoring persist must not fire either
       await idbApply("user", safe);
       location.reload(); // the engine re-opens over the restored home
     } catch (err) {
@@ -80,7 +80,7 @@
     s.saveConfig();
   }
   async function toggleBundled(): Promise<void> {
-    await s.home.setBundled(!s.home.bundledOn);
+    await s.rpc.setBundled(!s.bundledOn);
     s.flushConfig();
     location.reload(); // the engine re-opens with/without the stock set
   }
@@ -202,7 +202,7 @@
           <span class="name">Bundled study set</span>
           <span class="desc">Ship-with-app threads, tags, and weaves (reloads the app).</span>
         </span>
-        <input type="checkbox" checked={s.home.bundledOn} onchange={toggleBundled} />
+        <input type="checkbox" checked={s.bundledOn} onchange={toggleBundled} />
       </label>
       <hr />
       <p class="label">Your study data — notes, tags, threads, weaves, memorization</p>

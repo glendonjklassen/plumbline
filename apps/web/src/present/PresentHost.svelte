@@ -18,7 +18,7 @@
 
   const threads = $derived.by(() => {
     void s.studyEpoch;
-    return s.showPresent ? ((s.engine.threads()?.threads ?? []) as any[]) : [];
+    return s.showPresent ? ((s.q("threads")?.threads ?? []) as any[]) : [];
   });
 
   let thread = $state<any | null>(null);
@@ -39,7 +39,7 @@
   const entries = $derived.by((): Entry[] => {
     if (!thread) return [];
     return (thread.entries ?? []).map((e: any) => {
-      const v = s.engine.verse(e.verse);
+      const v = s.q("verse", e.verse);
       return {
         ref: e.verse,
         display: v?.display ?? e.display ?? e.verse,

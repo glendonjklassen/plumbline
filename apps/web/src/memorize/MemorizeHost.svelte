@@ -16,11 +16,11 @@
   // ── hub data ──
   const coverage = $derived.by(() => {
     void s.studyEpoch;
-    return view ? s.engine.memoryCoverage(nowStamp()) : null;
+    return view ? s.q("memoryCoverage", nowStamp()) : null;
   });
   const dueRefs = $derived.by(() => {
     void s.studyEpoch;
-    return view ? ((s.engine.memoryDue(nowStamp())?.refs ?? []) as string[]) : [];
+    return view ? ((s.q("memoryDue", nowStamp())?.refs ?? []) as string[]) : [];
   });
 
   function close(): void {
@@ -50,15 +50,13 @@
   });
 
   const currentRef = $derived(view?.view === "review" ? queue[qi] : undefined);
-  const drill = $derived(currentRef ? s.engine.memoryDrill(currentRef, level) : null);
+  const drill = $derived(currentRef ? s.q("memoryDrill", currentRef, level) : null);
 
   function grade(g: "again" | "hard" | "good" | "easy"): void {
     if (!currentRef) return;
-    const err = s.engine.memoryGrade(currentRef, g, nowStamp());
-    if (err) {
-      s.showToast(err);
-      return;
-    }
+    void s.author("memoryGrade", currentRef, g, nowStamp()).then((err) => {
+      if (err) s.showToast(err);
+    });
     typed = "";
     score = null;
     mode = "first";
@@ -77,7 +75,7 @@
 
   const activity = $derived.by(() => {
     void s.studyEpoch;
-    return view?.view === "stats" ? ((s.engine.memoryActivity()?.days ?? []) as { day: string; reviews: number }[]) : [];
+    return view?.view === "stats" ? ((s.q("memoryActivity")?.days ?? []) as { day: string; reviews: number }[]) : [];
   });
   const maxReviews = $derived(Math.max(1, ...activity.map((d) => d.reviews)));
 </script>
@@ -124,10 +122,10 @@
               <button
                 class="remove"
                 title="Remove card"
-                onclick={() => {
-                  const err = s.engine.memoryRemove(v.ref);
-                  if (err) s.showToast(err);
-                }}>✕</button
+                onclick={() =>
+                  void s.author("memoryRemove", v.ref).then((err) => {
+                    if (err) s.showToast(err);
+                  })}>✕</button
               >
             </div>
           {/each}

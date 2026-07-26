@@ -2,7 +2,11 @@
 // offscreen 2D context + per-font width cache. The engine measures thousands
 // of words per chapter layout; the cache makes repeat layouts near-free.
 
-const ctx = document.createElement("canvas").getContext("2d")!;
+// Works on the main thread AND in the engine worker (TODO #28): the layout
+// measure callback runs where the engine runs, over an OffscreenCanvas there.
+const ctx = (typeof document !== "undefined"
+  ? document.createElement("canvas").getContext("2d")
+  : new OffscreenCanvas(2, 2).getContext("2d"))! as CanvasRenderingContext2D;
 const caches = new Map<string, Map<string, number>>();
 
 export const READER_FONT_FAMILY = '"EB Garamond", Georgia, serif';

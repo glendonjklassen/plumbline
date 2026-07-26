@@ -3,12 +3,11 @@
   // verse tap grids, replacing dropdown + spinner. Verse counts come from a
   // throwaway layout of the chosen chapter (wasm layout is ~1ms).
   import { getSession } from "../state/session.svelte";
-  import { measureFor, readerFont } from "../reader/measure";
 
   const s = getSession();
 
-  const toc = s.engine.toc();
-  const seg = s.engine.canonSegments();
+  const toc = $derived(s.q("toc"));
+  const seg = $derived(s.q("canonSegments"));
 
   let book = $state<string | null>(null);
   let chapter = $state<number | null>(null);
@@ -21,24 +20,24 @@
     }
   });
 
-  const chapterCount = $derived(book ? s.engine.chapterCount(book) || 1 : 0);
+  const chapterCount = $derived(book ? s.chapterCount(book) || 1 : 0);
 
-  const verseCount = $derived.by(() => {
-    if (!book || !chapter) return 0;
-    s.wasm.setMeasure(measureFor(readerFont(18)));
-    const dl = s.engine.layoutChapter(book, chapter, {
-      width: 600,
-      lineHeight: 24,
-      spaceWidth: 5,
-      verseNumGap: 7,
-      paraIndent: 20,
-      paraSpacing: 10,
-      versePerLine: false,
-    });
-    if (!dl) return 0;
-    const n = (dl.raw as any).items.filter((it: any) => it.kind === "verseNumber").length;
-    dl.free();
-    return n;
+  // Verse count via a throwaway worker layout (async; the grid fills when
+  // the reply lands — BookNav opens rarely, and never blocks).
+  let verseCount = $state(0);
+  $effect(() => {
+    if (!book || !chapter) {
+      verseCount = 0;
+      return;
+    }
+    const b = book;
+    const c = chapter;
+    s.rpc
+      .layout(b, c, { font: 18, width: 600, lineSpacing: 1.35, versePerLine: false })
+      .then((raw: any) => {
+        if (book === b && chapter === c)
+          verseCount = raw?.items.filter((it: any) => it.kind === "verseNumber").length ?? 0;
+      });
   });
 
   function close(): void {
@@ -50,8 +49,8 @@
     close();
   }
 
-  const otBooks = $derived(toc.books.slice(0, seg.otNtDivide));
-  const ntBooks = $derived(toc.books.slice(seg.otNtDivide));
+  const otBooks = $derived((toc?.books ?? []).slice(0, seg?.otNtDivide ?? 39));
+  const ntBooks = $derived((toc?.books ?? []).slice(seg?.otNtDivide ?? 39));
 </script>
 
 {#if open}

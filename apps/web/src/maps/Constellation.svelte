@@ -21,7 +21,7 @@
 
   const model = $derived.by(() => {
     void s.studyEpoch;
-    return s.engine.constellation(page, pins);
+    return s.q("constellation", page, pins);
   });
 
   const COLORS = ["#8f6b28", "#5f7a94", "#7a8f5f", "#94655f", "#6b5f94", "#8f5f82", "#5f8f8a"];
@@ -71,7 +71,8 @@
     edgePos = [];
 
     // Canon ruler + OT/NT seam.
-    const seg = s.engine.canonSegments();
+    const seg = s.q("canonSegments");
+    if (!seg) return;
     const n = seg.segments.at(-1).last + 1;
     ctx.strokeStyle = "rgba(158,125,56,0.5)";
     ctx.lineWidth = 1;

@@ -6,9 +6,8 @@
   // wasm layout is synchronous.
   import { untrack } from "svelte";
   import { getSession } from "../state/session.svelte";
-  import { fontExtent, measureFor, readerFont } from "./measure";
-  import { itemVerse, MARGIN, paintChapter, verseExtents, type LayoutItem, type PaintOverlays } from "./paint";
-  import { highlightTones, nowStamp, type DisplayList } from "../engine/StudyEngine";
+  import { hitTest, itemVerse, MARGIN, paintChapter, verseExtents, type LayoutItem, type PaintOverlays } from "./paint";
+  import { nowStamp } from "../engine/StudyEngine";
 
   const MAX_COLUMN = 720;
 
@@ -27,7 +26,6 @@
   let cssW = $state(0);
   let cssH = $state(0);
 
-  let dl: DisplayList | null = null;
   let items = $state<LayoutItem[]>([]);
   let contentH = $state(0);
 
@@ -38,13 +36,13 @@
   const columnWidth = $derived(Math.max(120, Math.min(cssW - 2 * sideMargin, MAX_COLUMN)));
   const marginX = $derived(Math.max(sideMargin, (cssW - columnWidth) / 2));
 
-  const toc = s.engine.toc();
+  const toc = $derived(s.q("toc"));
 
   // Verses in this chapter with weave partners — the gold gutter dot.
   const weaveDots = $derived.by(() => {
     void s.studyEpoch;
     const set = new Set<number>();
-    for (const p of s.engine.linkPairs()?.pairs ?? []) {
+    for (const p of s.q("linkPairs")?.pairs ?? []) {
       if (p.aBook === pane.book && p.aChapter === pane.chapter) set.add(p.aVerse);
       if (p.bBook === pane.book && p.bChapter === pane.chapter) set.add(p.bVerse);
     }
@@ -56,7 +54,7 @@
   // Highlight washes + word-precise runs for this chapter (Tier-0 #4).
   const highlights = $derived.by(() => {
     void s.studyEpoch;
-    return s.engine.chapterHighlights(pane.book, pane.chapter);
+    return s.q("chapterHighlights", pane.book, pane.chapter);
   });
   const washes = $derived(
     new Map<number, string>((highlights?.verses ?? []).map((v: any) => [verseNumOf(v.verse), v.color])),
@@ -70,43 +68,36 @@
     void s.studyEpoch;
     const prefix = `${pane.book} ${pane.chapter}:`;
     const set = new Set<number>();
-    for (const n of s.engine.userNotes()?.notes ?? [])
+    for (const n of s.q("userNotes")?.notes ?? [])
       if (n.verse.startsWith(prefix)) set.add(verseNumOf(n.verse));
     return set;
   });
 
-  // ── layout: recompute when inputs change ──
+  // ── layout: recompute when inputs change (async — the worker measures and
+  //    lays out off-thread; a stale reply is dropped by the sequence check) ──
+  let layoutSeq = 0;
   $effect(() => {
     if (!pane || cssW <= 0) return;
-    const font = readerFont(fontPx);
-    const measure = measureFor(font);
-    s.wasm.setMeasure(measure);
-    const lineHeight = fontExtent(fontPx) * lineSpacing;
-    const next = s.engine.layoutChapter(pane.book, pane.chapter, {
-      width: columnWidth,
-      lineHeight,
-      spaceWidth: measure(" "),
-      verseNumGap: measure(" ") * 1.4,
-      paraIndent: lineHeight * 0.9,
-      paraSpacing: lineHeight * 0.45,
-      versePerLine,
-    });
-    if (!next) return;
-    dl?.free();
-    dl = next;
-    const raw = next.raw as { items: LayoutItem[]; height: number };
-    items = raw.items;
-    contentH = raw.height;
-    // Publish verse-number geometry for the connectors overlay + canon pins.
-    const geom = new Map<number, { y: number; h: number }>();
-    for (const it of raw.items)
-      if (it.kind === "verseNumber" && it.verseNumber !== null && !geom.has(it.verseNumber))
-        geom.set(it.verseNumber, { y: it.y, h: it.h });
-    s.paneVerseGeom[paneIdx] = geom;
-    // Untracked: this effect must NOT depend on scrollY/contentH, or every
-    // scroll would re-run a synchronous wasm relayout (and, with a pending
-    // verse snap, ping-pong scrollY into an infinite update loop).
-    untrack(clampScroll);
+    const seq = ++layoutSeq;
+    s.rpc
+      .layout(pane.book, pane.chapter, {
+        font: fontPx,
+        width: columnWidth,
+        lineSpacing,
+        versePerLine,
+      })
+      .then((raw: { items: LayoutItem[]; height: number } | null) => {
+        if (seq !== layoutSeq || !raw) return;
+        items = raw.items;
+        contentH = raw.height;
+        // Publish verse-number geometry for the connectors overlay + canon pins.
+        const geom = new Map<number, { y: number; h: number }>();
+        for (const it of raw.items)
+          if (it.kind === "verseNumber" && it.verseNumber !== null && !geom.has(it.verseNumber))
+            geom.set(it.verseNumber, { y: it.y, h: it.h });
+        s.paneVerseGeom[paneIdx] = geom;
+        untrack(clampScroll);
+      });
   });
 
   // Scroll the navigation target into view on each fresh layout, until the
@@ -193,11 +184,7 @@
       cssH = container.clientHeight;
     });
     ro.observe(container);
-    return () => {
-      ro.disconnect();
-      dl?.free();
-      dl = null;
-    };
+    return () => ro.disconnect();
   });
 
   // ── input ──
@@ -218,9 +205,8 @@
   }
 
   function hitAt(e: MouseEvent | PointerEvent): any {
-    if (!dl) return null;
     const rect = canvas.getBoundingClientRect();
-    return dl.hitTest(e.clientX - rect.left - marginX, e.clientY - rect.top - MARGIN + pane.scrollY);
+    return hitTest(items, e.clientX - rect.left - marginX, e.clientY - rect.top - MARGIN + pane.scrollY);
   }
 
   // ── verse under a point: hit word's verse, else nearest verse-number by y ──
@@ -243,9 +229,11 @@
 
   // ── drag highlights (mouse): press marks the start word, a 6px drag
   //    previews the range in the last-used tone ──
-  const tones: { name: string; hex: string }[] = highlightTones(s.wasm)?.tones ?? [];
   const defaultTone = () =>
-    s.lastTone ?? { name: tones[0]?.name.replace(/^./, (c) => c.toUpperCase()) ?? "Amber", hex: tones[0]?.hex ?? "#f6e0a0" };
+    s.lastTone ?? {
+      name: s.tones[0]?.name.replace(/^./, (c) => c.toUpperCase()) ?? "Amber",
+      hex: s.tones[0]?.hex ?? "#f6e0a0",
+    };
   let dragStart: { verse: number; tok: number; x: number; y: number } | null = null;
   let dragEnd: { verse: number; tok: number } | null = null;
   let dragPreview = $state<{ verse: number; lo: number; hi: number; color: string }[] | null>(null);
@@ -348,9 +336,12 @@
           : [dragEnd, dragStart];
       const tone = defaultTone();
       const mk = (v: number) => `${pane.book} ${pane.chapter}:${v}`;
-      const err = s.engine.highlightAdd(tone.name, tone.hex, mk(a.verse), a.tok, mk(b.verse), b.tok, nowStamp());
-      if (err) s.showToast(err);
-      else s.lastTone = tone;
+      void s.author("highlightAdd", tone.name, tone.hex, mk(a.verse), a.tok, mk(b.verse), b.tok, nowStamp()).then(
+        (err) => {
+          if (err) s.showToast(err);
+          else s.lastTone = tone;
+        },
+      );
       suppressClick = true;
     }
     dragStart = null;
@@ -378,7 +369,8 @@
   function onMouseMove(e: MouseEvent): void {
     const hit = hitAt(e);
     if (hit?.strongs?.length) {
-      const st = s.engine.strongs(hit.strongs[0]);
+      // Cache-warmed on first hover; the tooltip fills on the next move.
+      const st = s.q("strongs", hit.strongs[0]);
       hoverTitle = st
         ? `${st.code}  ${st.lemma ?? ""}${st.xlit ? `  ${st.xlit}` : ""}\n${(st.kjv || st.def || "").slice(0, 80)}`
         : "";
@@ -400,7 +392,7 @@
       onclick={() => (s.bookNavFor = paneIdx)}
       title="Go to… (book · chapter · verse)"
     >
-      {toc.books.find((b: any) => b.id === pane.book)?.name ?? pane.book}
+      {toc?.books?.find((b: any) => b.id === pane.book)?.name ?? pane.book}
       {pane.chapter} ▾
     </button>
     <button onclick={() => s.stepChapter(paneIdx, 1)} title="Next chapter">›</button>
