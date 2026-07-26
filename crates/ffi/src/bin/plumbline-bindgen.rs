@@ -44,10 +44,16 @@ fn generate_c_header(crate_dir: &str) {
             // `src/wasm.rs` is wasm32-only (the web shell's TS binding);
             // cbindgen doesn't evaluate `cfg`, so its items are excluded by
             // name — extend this list when that module gains an export.
-            exclude: ["plumbline_js_measure", "plumbline_web_alloc", "plumbline_web_free", "plumbline_web_measure_fnptr"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
+            exclude: [
+                "plumbline_js_measure",
+                "plumbline_web_alloc",
+                "plumbline_web_free",
+                "plumbline_web_measure_fnptr",
+                "plumbline_engine_warm_step",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
             ..Default::default()
         },
         ..Default::default()

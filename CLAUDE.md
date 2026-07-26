@@ -125,8 +125,9 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
   Launching is fine only when asked.
 - **Web shell:** Playwright end-to-end tests are sanctioned and wanted
   (`apps/web`, `npm run test:e2e`). Keep the boot-responsiveness regression
-  test green — the engine runs on the main thread, so long synchronous engine
-  calls freeze the UI.
+  test green — the engine lives in ONE worker thread, so a long synchronous
+  engine call starves every layout/tap RPC queued behind it. Background
+  loading must stay chunked with yields (see `engine.worker.ts`).
 
 ## Verification
 

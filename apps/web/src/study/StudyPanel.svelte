@@ -84,6 +84,17 @@
     void dispatchLink(s, uri, ev);
   }
 
+  // The "load analysis" offer (phones defer the machine-tier auto-download):
+  // shown on the studies that gain machine sections, while the tier is on
+  // but the pack isn't in yet. The loading state shows for desktops too —
+  // their auto-download announces itself the same way.
+  const rndOffer = $derived.by(() => {
+    const k = s.panel?.kind;
+    if (!(k === "wordStudy" || k === "codeStudy" || k === "concordance")) return false;
+    if (!(s.gates & 2) || s.rndState === "ready") return false;
+    return s.rndState === "loading" || s.rndDeferred;
+  });
+
   // The reader's text-size setting scales the whole study surface too —
   // fixed 380px/13px chrome reads tiny on a 4K display (feedback 2026-07-25).
   // Everything inside multiplies by --uiScale (1 at the default 18px body).
@@ -122,6 +133,17 @@
           </div>
         {/each}
       {:else}
+        {#if rndOffer}
+          <div class="rnd-offer">
+            {#if s.rndState === "loading"}
+              <span class="rnd-note">Loading the analysis pack — {Math.round(s.rndProgress * 100)}%</span>
+              <div class="rnd-bar"><div class="rnd-fill" style:width={`${s.rndProgress * 100}%`}></div></div>
+            {:else}
+              <span class="rnd-note">Similar concepts, verses-like-this, and concept maps are a one-time ~4 MB download.</span>
+              <button class="rnd-load" onclick={() => void s.ensureRnd()}>Load analysis</button>
+            {/if}
+          </div>
+        {/if}
         {#if studyCode}
           <EmbedMaps code={studyCode} />
         {/if}
@@ -242,6 +264,43 @@
   .ex-desc {
     font-size: calc(12.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
+  }
+  .rnd-offer {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 9px;
+    background: var(--paper, #fcf9f4);
+    padding: 10px 12px;
+    margin: 6px 0;
+  }
+  .rnd-note {
+    font-size: calc(12.5px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
+  }
+  .rnd-load {
+    align-self: flex-start;
+    font-size: calc(13px * var(--uiScale, 1));
+    font-weight: 600;
+    color: var(--gold, #9e7d38);
+    border: 1px solid var(--gold, #9e7d38);
+    border-radius: 6px;
+    padding: 3px 12px;
+  }
+  .rnd-load:hover {
+    background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
+  }
+  .rnd-bar {
+    height: 4px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--gold, #9e7d38) 18%, transparent);
+    overflow: hidden;
+  }
+  .rnd-fill {
+    height: 100%;
+    background: var(--gold, #9e7d38);
+    transition: width 0.2s ease;
   }
 
   /* Narrow screens: bottom sheet (Compose-phone pattern). */

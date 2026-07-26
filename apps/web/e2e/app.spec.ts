@@ -142,6 +142,25 @@ test("phones keep ONE pane (no split; weaves navigate instead)", async ({ page }
   expect(panes).toBe(1);
 });
 
+test("phones clamp a restored multi-pane session to one pane", async ({ page }) => {
+  // A wide session saves a split; reopening on a phone must restore ONE pane.
+  // The narrow rule guards addPane, but the restore path must clamp too —
+  // 2026-07-26, a phone booting into two panes of John 3.
+  await boot(page);
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    s.addPane(0);
+    s.flushConfig();
+    await s.engine.toc(); // FIFO worker queue: the configSave ahead has landed
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
+  const panes = await page.evaluate(() => (window as any).__plumbline.panes.length);
+  expect(panes).toBe(1);
+  await expect(page.locator(".pane canvas")).toHaveCount(1);
+});
+
 test("passage navigator jumps to a verse", async ({ page }) => {
   await boot(page);
   await page.locator(".nav .passage").first().click();

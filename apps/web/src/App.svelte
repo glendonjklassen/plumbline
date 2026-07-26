@@ -5,7 +5,7 @@
   // PAINTING; the worker loads its own copy for layout measurement.
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
   import { idbGet } from "./engine/idb";
-  import { paintChapter } from "./reader/paint";
+  import { MARGIN, paintChapter } from "./reader/paint";
   import { initSession, type Session } from "./state/session.svelte";
   import Shell from "./shell/Shell.svelte";
 
@@ -20,7 +20,10 @@
   let snapCanvas = $state<HTMLCanvasElement | null>(null);
   // The preview is a LIVE mini-reader, not a screenshot (feedback
   // 2026-07-26): it scrolls, resumes at the saved position, and wears the
-  // app's own chrome so boot reads as "the app, loading its tools".
+  // app's own chrome so boot reads as "the app, loading its tools". The
+  // scrolling is NATIVE (a spacer div sized to the chapter, canvas sticky
+  // on top) — the browser's momentum, not hand-rolled pointer math.
+  let snapContainer = $state<HTMLDivElement | null>(null);
   let snapScroll = $state(0);
   let snapScrolled = false;
   const snapPalette = (() => {
@@ -36,31 +39,19 @@
     /* top of chapter */
   }
 
-  function snapClamp(): void {
-    if (!snapshot) return;
-    const max = Math.max(0, snapshot.height + 56 - innerHeight);
-    snapScroll = Math.min(Math.max(snapScroll, 0), max);
+  function onSnapScroll(): void {
+    if (!snapContainer) return;
+    const top = snapContainer.scrollTop;
+    if (Math.abs(top - snapScroll) > 1) snapScrolled = true; // the reader, not our restore
+    snapScroll = top;
   }
-  function onSnapWheel(e: WheelEvent): void {
-    snapScroll += e.deltaY;
-    snapScrolled = true;
-    snapClamp();
-    e.preventDefault();
-  }
-  let snapTouchY: number | null = null;
-  function onSnapPointerDown(e: PointerEvent): void {
-    if (e.pointerType === "touch") snapTouchY = e.clientY;
-  }
-  function onSnapPointerMove(e: PointerEvent): void {
-    if (snapTouchY === null || e.pointerType !== "touch") return;
-    snapScroll += snapTouchY - e.clientY;
-    snapScrolled = true;
-    snapTouchY = e.clientY;
-    snapClamp();
-  }
-  function onSnapPointerUp(): void {
-    snapTouchY = null;
-  }
+  // Resume the preview at the saved offset once the scroller exists.
+  let snapInit = false;
+  $effect(() => {
+    if (!snapshot || !snapContainer || snapInit) return;
+    snapInit = true;
+    snapContainer.scrollTop = snapScroll; // clamps; onSnapScroll reads back truth
+  });
 
   void idbGet("cache", "lastLayout")
     .then((bytes) => {
@@ -68,9 +59,12 @@
     })
     .catch(() => {});
 
-  $effect(() => {
+  // Paint the visible window of the snapshot — rAF-batched so a scroll burst
+  // costs one repaint per frame, not one per event.
+  let snapRaf = 0;
+  let snapFontKicked = false;
+  function snapPaint(): void {
     if (!snapshot || !snapCanvas) return;
-    void snapScroll;
     const dpr = devicePixelRatio || 1;
     const w = innerWidth;
     const h = innerHeight - 56; // below the chrome mimic
@@ -80,33 +74,44 @@
     }
     const ctx = snapCanvas.getContext("2d")!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const paint = () =>
-      paintChapter(
-        ctx,
-        snapshot.items,
-        {
-          palette: snapPalette,
-          fontPx: snapshot.fontPx,
-          marginX: Math.max(snapshot.sideMargin ?? 28, (w - snapshot.columnWidth) / 2),
-          columnWidth: snapshot.columnWidth,
-          scrollY: snapScroll,
-          viewportW: w,
-          viewportH: h - 3,
-        },
-        {},
-      );
-    paint();
-    // Repaint once the real Garamond lands (first frames may use the
-    // fallback serif — text beats blankness).
-    void document.fonts.load(`${snapshot.fontPx}px "EB Garamond"`).then(paint);
+    paintChapter(
+      ctx,
+      snapshot.items,
+      {
+        palette: snapPalette,
+        fontPx: snapshot.fontPx,
+        marginX: Math.max(snapshot.sideMargin ?? 28, (w - snapshot.columnWidth) / 2),
+        columnWidth: snapshot.columnWidth,
+        scrollY: snapScroll,
+        viewportW: w,
+        viewportH: h - 3,
+      },
+      {},
+    );
+    if (!snapFontKicked) {
+      snapFontKicked = true;
+      // Repaint once the real Garamond lands (first frames may use the
+      // fallback serif — text beats blankness).
+      void document.fonts.load(`${snapshot.fontPx}px "EB Garamond"`).then(snapPaint);
+    }
+  }
+  $effect(() => {
+    if (!snapshot || !snapCanvas) return;
+    void snapScroll;
+    cancelAnimationFrame(snapRaf);
+    snapRaf = requestAnimationFrame(snapPaint);
   });
 
   async function start(): Promise<void> {
     try {
       const rpc = new EngineRpc();
       rpc.onProgress = (p) => (phase = p);
+      // Phones defer the machine-tier auto-download (2026-07-26): the shell
+      // offers an explicit "load analysis" action instead of spending ~4 MB
+      // and worker time behind the reader's back.
+      const deferRnd = matchMedia("(max-width: 700px)").matches;
       const [info] = await Promise.all([
-        rpc.boot(),
+        rpc.boot({ deferRnd }),
         document.fonts.load('18px "EB Garamond"'),
         document.fonts.load('italic 18px "EB Garamond"'),
         document.fonts.load('bold 18px "EB Garamond"'),
@@ -120,6 +125,7 @@
         rpc.static("highlightTones"),
       ]);
       const s = initSession(rpc, info, { light, dark, night }, info.bundledOn);
+      s.rndDeferred = deferRnd;
       s.tones = tones?.tones ?? [];
       await Promise.all([s.fetchQ("toc"), s.fetchQ("canonSegments")]);
       // Reading continues exactly where the preview left it — including any
@@ -135,6 +141,11 @@
         }
       }
       session = s;
+      // The on-device boot numbers (also under Settings → boot diagnostics).
+      void rpc.bootTrace().then((t) => {
+        s.bootTrace = t;
+        console.table(t.map(([stage, ms]) => ({ stage, ms })));
+      });
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -165,13 +176,11 @@
       <span class="mimic-spacer"></span>
       <span class="mimic-loading" style:color={snapPalette.faded ?? "#8a8276"}>preparing your study tools…</span>
     </header>
-    <canvas
-      bind:this={snapCanvas}
-      onwheel={onSnapWheel}
-      onpointerdown={onSnapPointerDown}
-      onpointermove={onSnapPointerMove}
-      onpointerup={onSnapPointerUp}
-    ></canvas>
+    <div class="snap-scroll" bind:this={snapContainer} onscroll={onSnapScroll}>
+      <div class="snap-spacer" style:height={`${Math.max(snapshot.height + 2 * MARGIN, innerHeight - 56)}px`}>
+        <canvas bind:this={snapCanvas}></canvas>
+      </div>
+    </div>
     <div class="strip" title="Loading">
       <div
         class="strip-fill"
@@ -206,15 +215,26 @@
     position: fixed;
     inset: 0;
   }
-  .preview canvas {
+  .snap-scroll {
     position: absolute;
     top: 56px;
     left: 0;
     right: 0;
     bottom: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+  }
+  .snap-spacer {
+    position: relative;
+  }
+  .preview canvas {
+    position: sticky;
+    top: 0;
+    display: block;
     width: 100%;
-    height: calc(100% - 56px);
-    touch-action: none;
+    height: calc(100dvh - 56px);
+    touch-action: pan-y;
   }
   .mimic {
     position: absolute;

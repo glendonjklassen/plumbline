@@ -3,23 +3,32 @@
 // authoring writes and their persistence. The main thread never blocks on an
 // engine call again; it speaks the tiny RPC below and paints.
 //
+// SCHEDULING RULE (2026-07-26, the half-width-pane bug): this thread is the
+// only one that can answer layout/tap RPCs, so background loading must never
+// hold it for one long synchronous block. Stage-2 load, index warming, and
+// the R&D load all run as separate macrotasks with yields between them —
+// pending RPC messages interleave. Warming goes index-by-index through the
+// wasm-only `warmStep` export instead of one monolithic `warmIndexes` call.
+//
 // Protocol (structured-clone JSON):
-//   in:  { id, op: "boot", base, fontUrl }          → boots; progress streams
+//   in:  { id, op: "boot", base, fontUrl, italicUrl, deferRnd } → boots; progress streams
 //   in:  { id, op: "call", method, args }           → StudyEngine[method](...args)
 //   in:  { id, op: "static", fn, args }             → engine-independent fns
 //   in:  { id, op: "layout", book, chapter, cfg, font } → display-list JSON
 //   in:  { id, op: "loadRnd" }                      → deferred pack + re-warm
+//   in:  { id, op: "bootTrace" }                    → [label, ms][] so far
 //   in:  { id, op: "export" } / { id, op: "freeze" } / { id, op: "setBundled", on }
 //   out: { id, result } | { id, error }
 //   out: { type: "progress", phase, fraction?, detail? }   (during boot)
 //   out: { type: "authored" }                       (any authoring write landed)
+//   out: { type: "coreReady" } / { type: "rndReady" } / { type: "rndProgress", fraction }
 //
 // Layout measure runs HERE over an OffscreenCanvas (measure.ts adapts), so
 // EB Garamond must be loaded into self.fonts before the first layout — the
 // boot message carries the resolved font URL.
 
-import { boot, loadRndPack, loadStage2, type BootResult } from "./boot";
-import { setAssetBase } from "./pack";
+import { boot, type BootResult } from "./boot";
+import { fetchRndPack, fetchStage2Pack, setAssetBase } from "./pack";
 import { measureFor, readerFont, fontExtent } from "../reader/measure";
 import {
   aboutBlocks,
@@ -34,6 +43,86 @@ import {
 } from "./StudyEngine";
 
 let booted: BootResult | null = null;
+
+// ── background-load scheduling ────────────────────────────────────────────────
+
+/** Let queued messages (layout, taps) run before the next synchronous chunk. */
+const yieldTask = () => new Promise<void>((r) => setTimeout(r, 0));
+
+/** Run one synchronous chunk, timing it into the boot trace. */
+function timedChunk<T>(label: string, f: () => T): T {
+  const t0 = performance.now();
+  const v = f();
+  booted!.trace.push([label, Math.round(performance.now() - t0)]);
+  return v;
+}
+
+/** Resolved once the first layout has been served — the reader is on screen
+ *  and the worker may start spending time on background loads. The race in
+ *  backgroundLoad() caps the wait so a boot that never lays out (unexpected,
+ *  but possible) still gets its study data. */
+let firstLayoutServed: (() => void) | null = null;
+const firstLayout = new Promise<void>((r) => (firstLayoutServed = r));
+
+/** Warm the lazy indexes one per macrotask (idempotent; safe to re-run after
+ *  the R&D pack lands — the SIF model only builds once the embedding is in). */
+async function warmChunked(): Promise<void> {
+  for (let step = 0; ; step++) {
+    await yieldTask();
+    const more = timedChunk(`warm step ${step}`, () => booted!.engine.warmStep(step));
+    if (!more) break;
+  }
+}
+
+/** Fetch + load the machine-tier pack, chunked, with progress events for the
+ *  shell's "load analysis" affordance. Shared by the auto path and the
+ *  loadRnd op; concurrent callers reuse the in-flight run. */
+let rndRun: Promise<void> | null = null;
+function loadRndChunked(): Promise<void> {
+  return (rndRun ??= (async () => {
+    if (!booted!.manifest.files.some((f) => f.rnd)) return;
+    const t0 = performance.now();
+    const files = await fetchRndPack(booted!.manifest, (p) =>
+      self.postMessage({ type: "rndProgress", fraction: p.fraction }),
+    );
+    booted!.trace.push(["rnd fetch+gunzip", Math.round(performance.now() - t0)]);
+    await yieldTask();
+    timedChunk("rnd load (embeddings + morphology)", () => {
+      booted!.home.addFiles(files);
+      booted!.engine.loadRndData();
+    });
+    await warmChunked();
+    self.postMessage({ type: "rndReady" });
+  })().catch((e) => {
+    rndRun = null; // offline — the Settings toggle or next boot retries
+    throw e;
+  }));
+}
+
+/** Everything beyond the text, AFTER the reader hands over (TODO #28 — text
+ *  on screen is the north star): stage-2 core files (Strong's, cross-refs,
+ *  margin notes) → warm → the R&D pack unless deferred (phones defer; the
+ *  shell offers an explicit "load analysis" action instead). */
+async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<void> {
+  await Promise.race([firstLayout, new Promise((r) => setTimeout(r, 2500))]);
+  try {
+    const t0 = performance.now();
+    const files = await fetchStage2Pack(booted!.manifest);
+    booted!.trace.push(["stage2 fetch+gunzip", Math.round(performance.now() - t0)]);
+    await yieldTask();
+    timedChunk("stage2 load (Strong's + notes)", () => {
+      booted!.home.addFiles(files);
+      booted!.engine.loadCoreData();
+    });
+    self.postMessage({ type: "coreReady" });
+    await warmChunked();
+    if (machineOn && !deferRnd) await loadRndChunked();
+  } catch {
+    /* offline — the Settings toggle or next boot retries */
+  }
+}
+
+// ── statics ───────────────────────────────────────────────────────────────────
 
 async function loadFonts(fontUrl: string, italicUrl: string): Promise<void> {
   // Workers have their own FontFaceSet; measurement must see the real
@@ -76,8 +165,11 @@ self.onmessage = async (ev: MessageEvent) => {
     switch (m.op) {
       case "boot": {
         setAssetBase(m.base);
+        const t0 = performance.now();
         await loadFonts(m.fontUrl, m.italicUrl);
+        const fontsMs = Math.round(performance.now() - t0);
         booted = await boot((p) => self.postMessage({ type: "progress", ...p }));
+        booted.trace.unshift(["worker fonts", fontsMs]);
         let persistPending = false;
         booted.engine.onAuthored = () => {
           if (!persistPending) {
@@ -90,24 +182,7 @@ self.onmessage = async (ev: MessageEvent) => {
           self.postMessage({ type: "authored" });
         };
         const cfg = configLoad(booted.wasm) ?? {};
-        // Everything beyond the text follows AFTER the reader hands over
-        // (TODO #28 — text on screen is the north star): stage-2 core files
-        // (Strong's, cross-refs, margin notes) → warm → the R&D pack.
-        setTimeout(() => {
-          loadStage2(booted!)
-            .then(() => {
-              self.postMessage({ type: "coreReady" });
-              if (cfg.machineAnalysis !== false) {
-                booted!.engine.warmIndexes();
-                return loadRndPack(booted!).then(() => self.postMessage({ type: "rndReady" }));
-              }
-              booted!.engine.warmIndexes();
-              return undefined;
-            })
-            .catch(() => {
-              /* offline — the Settings toggle or next boot retries */
-            });
-        }, 50);
+        void backgroundLoad(cfg.machineAnalysis !== false, m.deferRnd === true);
         reply({
           packVersion: booted.packVersion,
           config: cfg,
@@ -141,6 +216,8 @@ self.onmessage = async (ev: MessageEvent) => {
           versePerLine: m.versePerLine,
         };
         const dl = eng.layoutChapter(m.book, m.chapter, cfg);
+        firstLayoutServed?.();
+        firstLayoutServed = null;
         if (!dl) {
           reply(null);
           break;
@@ -162,8 +239,12 @@ self.onmessage = async (ev: MessageEvent) => {
         break;
       }
       case "loadRnd": {
-        await loadRndPack(booted!);
+        await loadRndChunked();
         reply(null);
+        break;
+      }
+      case "bootTrace": {
+        reply(booted ? [...booted.trace] : []);
         break;
       }
       case "export": {

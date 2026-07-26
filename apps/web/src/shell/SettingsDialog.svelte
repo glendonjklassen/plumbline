@@ -85,6 +85,12 @@
     location.reload(); // the engine re-opens with/without the stock set
   }
 
+  // Fresh boot timings whenever the dialog opens (the background stages keep
+  // appending after boot — Strong's, warm steps, the analysis pack).
+  $effect(() => {
+    if (s.showSettings) void s.rpc.bootTrace().then((t) => (s.bootTrace = t));
+  });
+
   const themes = [
     ["system", "Follow system"],
     ["light", "Light"],
@@ -126,6 +132,16 @@
           onchange={() => toggleGate("machineAnalysis")}
         />
       </label>
+      {#if s.config.machineAnalysis !== false && s.rndState !== "ready"}
+        <div class="rnd-status">
+          {#if s.rndState === "loading"}
+            <span>Downloading the analysis pack — {Math.round(s.rndProgress * 100)}%</span>
+          {:else}
+            <span>Analysis pack not downloaded (~4 MB).</span>
+            <button class="rnd-now" onclick={() => void s.ensureRnd()}>Download now</button>
+          {/if}
+        </div>
+      {/if}
       <label class="toggle">
         <span class="body">
           <span class="name">Verse per line</span>
@@ -217,6 +233,19 @@
         The same zip restores on Android and the web. Restoring replaces items with the same
         name; everything else is kept.
       </p>
+      {#if s.bootTrace.length}
+        <hr />
+        <details class="diag">
+          <summary>Boot diagnostics — this device</summary>
+          <table>
+            <tbody>
+              {#each s.bootTrace as [stage, ms], i (i)}
+                <tr><td>{stage}</td><td class="ms">{ms} ms</td></tr>
+              {/each}
+            </tbody>
+          </table>
+        </details>
+      {/if}
     </div>
     <button class="done" onclick={() => (s.showSettings = false)}>Done</button>
   </div>
@@ -249,6 +278,42 @@
   h2 {
     font-size: 17px;
     font-weight: 600;
+  }
+  .rnd-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12.5px;
+    color: var(--faded, #8a8276);
+    padding: 0 0 6px 2px;
+  }
+  .rnd-now {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--gold, #9e7d38);
+    border: 1px solid var(--gold, #9e7d38);
+    border-radius: 5px;
+    padding: 1px 9px;
+  }
+  .diag summary {
+    font-size: 13px;
+    color: var(--faded, #8a8276);
+    cursor: pointer;
+  }
+  .diag table {
+    width: 100%;
+    margin-top: 6px;
+    font-size: 12.5px;
+    color: var(--faded, #8a8276);
+    border-collapse: collapse;
+  }
+  .diag td {
+    padding: 1px 0;
+  }
+  .diag .ms {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink, #211f1a);
   }
   .content {
     overflow-y: auto;

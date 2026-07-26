@@ -17,7 +17,7 @@
 
 use std::ffi::{c_char, c_void};
 
-use crate::PlumblineMeasureFn;
+use crate::{guard, PlumblineEngine, PlumblineMeasureFn};
 
 #[link(wasm_import_module = "plumbline")]
 extern "C" {
@@ -36,6 +36,58 @@ extern "C" fn measure_trampoline(ctx: *mut c_void, text: *const c_char) -> f32 {
 #[no_mangle]
 pub extern "C" fn plumbline_web_measure_fnptr() -> PlumblineMeasureFn {
     Some(measure_trampoline)
+}
+
+/// Warm ONE lazy index — the same set
+/// [`plumbline_engine_warm_indexes`](crate::plumbline_engine_warm_indexes)
+/// builds, split so the single-threaded engine worker can warm between RPCs
+/// instead of stalling them behind one long call (a mid-warm layout request
+/// otherwise waits the whole warm out). Returns 1 while `step` named an index
+/// (built now, already built, or its build panicked — keep stepping), 0 once
+/// past the end or on a null engine. Idempotent per step (`OnceLock`-guarded).
+///
+/// # Safety
+/// `engine` is a live engine or null.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_warm_step(engine: *const PlumblineEngine, step: u32) -> i32 {
+    let Some(e) = (unsafe { engine.as_ref() }) else {
+        return 0;
+    };
+    guard(1, || match step {
+        0 => {
+            e.search_ix();
+            1
+        }
+        1 => {
+            e.occ_ix();
+            1
+        }
+        2 => {
+            e.renderings();
+            1
+        }
+        3 => {
+            e.xref_ix();
+            1
+        }
+        4 => {
+            e.bridge();
+            1
+        }
+        5 => {
+            e.concept();
+            1
+        }
+        6 => {
+            e.leitwort();
+            1
+        }
+        7 => {
+            e.verse_sim();
+            1
+        }
+        _ => 0,
+    })
 }
 
 /// Allocate `len` bytes the shell will fill with a NUL-terminated UTF-8

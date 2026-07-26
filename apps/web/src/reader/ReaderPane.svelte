@@ -1,9 +1,14 @@
 <script lang="ts">
   // One reading column: nav strip + chapter canvas. Layout comes from the
   // core (display list over the measure callback); this component owns
-  // scroll/zoom/gesture state and repaints on any reactive change. The
-  // "poll until fresh layout" dance from the desktop shells vanishes here —
-  // wasm layout is synchronous.
+  // scroll/zoom/gesture state and repaints on any reactive change.
+  //
+  // Scrolling is NATIVE (2026-07-26): the canvas sits sticky inside a spacer
+  // sized to the laid-out chapter, and the browser owns the scroll — momentum,
+  // fling, and overscroll come free (the hand-rolled 1:1 pointer tracking made
+  // the whole app feel dead on phones). `pane.scrollY` mirrors scrollTop both
+  // ways: onscroll writes it, and external writers (keyboard, navigation,
+  // verse targeting) push it back via the guarded effect below.
   import { untrack } from "svelte";
   import { getSession } from "../state/session.svelte";
   import { hitTest, itemVerse, MARGIN, paintChapter, verseExtents, type LayoutItem, type PaintOverlays } from "./paint";
@@ -143,8 +148,36 @@
     return Math.max(0, contentH + 2 * MARGIN - cssH);
   }
   function clampScroll(): void {
+    // No layout yet: leave pane.scrollY alone — it may hold a restored offset
+    // (the boot preview's position) that the first layout will honour.
+    if (contentH <= 0) return;
     pane.scrollY = Math.min(Math.max(pane.scrollY, 0), maxScroll());
   }
+
+  // ── native scroll ↔ pane.scrollY ──
+  const spacerH = $derived(Math.max(contentH + 2 * MARGIN, cssH));
+  let programmaticScroll = false;
+  function onScroll(): void {
+    const top = container.scrollTop;
+    if (programmaticScroll) {
+      programmaticScroll = false;
+    } else if (Math.abs(top - pane.scrollY) > 0.5) {
+      // The reader scrolled this pane themselves — it owns focus, and any
+      // pending scroll-to-verse must not fight them.
+      pane.pendingScroll = false;
+      s.activePane = paneIdx;
+    }
+    pane.scrollY = top;
+  }
+  $effect(() => {
+    const y = pane.scrollY;
+    void contentH; // re-push once the spacer can actually hold the offset
+    if (!container || contentH <= 0) return;
+    if (Math.abs(container.scrollTop - y) > 0.5) {
+      programmaticScroll = true;
+      container.scrollTop = y; // the browser clamps; onScroll reads back truth
+    }
+  });
 
   // ── paint on any reactive change ──
   let rafId = 0;
@@ -212,21 +245,27 @@
   });
 
   // ── input ──
-  function onWheel(e: WheelEvent): void {
+  // Plain wheel is native (the container scrolls; onScroll mirrors it). This
+  // handler only claims the modified gestures — ctrl+wheel zoom, shift+wheel
+  // scroll-all-panes — so it must be a real non-passive listener (Svelte
+  // attaches onwheel passively, where preventDefault is ignored).
+  function onWheelModifiers(e: WheelEvent): void {
     if (e.ctrlKey) {
       e.preventDefault();
       s.setZoom(fontPx + (e.deltaY < 0 ? 1 : -1));
-      return;
+    } else if (e.shiftKey) {
+      e.preventDefault();
+      s.activePane = paneIdx;
+      for (const p of s.panes) {
+        p.scrollY = Math.max(0, p.scrollY + e.deltaY);
+        p.pendingScroll = false;
+      }
     }
-    s.activePane = paneIdx;
-    const panes = e.shiftKey ? s.panes : [pane];
-    for (const p of panes) {
-      p.scrollY += e.deltaY;
-      p.pendingScroll = false;
-    }
-    clampScroll();
-    e.preventDefault();
   }
+  $effect(() => {
+    container.addEventListener("wheel", onWheelModifiers, { passive: false });
+    return () => container.removeEventListener("wheel", onWheelModifiers);
+  });
 
   function hitAt(e: MouseEvent | PointerEvent): any {
     const rect = canvas.getBoundingClientRect();
@@ -277,11 +316,13 @@
     return out;
   }
 
-  // ── touch panning + long-press menu + chapter swipe; mouse click/drag ──
-  let touchLastY: number | null = null;
+  // ── touch: tap, long-press menu, horizontal chapter swipe; mouse click/drag.
+  //    Vertical panning is the browser's (touch-action: pan-y) — when native
+  //    scroll claims the gesture we get pointercancel and stand down. ──
   let touchStartX = 0;
   let touchStartY = 0;
   let touchDx = 0;
+  let touchCancelled = false;
   let moved = false;
   let longPress: ReturnType<typeof setTimeout> | null = null;
   let suppressClick = false;
@@ -290,14 +331,13 @@
     s.activePane = paneIdx;
     moved = false;
     if (e.pointerType === "touch") {
-      touchLastY = e.clientY;
+      touchCancelled = false;
       touchStartX = e.clientX;
       touchStartY = e.clientY;
       touchDx = 0;
-      canvas.setPointerCapture(e.pointerId);
       const { clientX, clientY } = e;
       longPress = setTimeout(() => {
-        if (!moved) {
+        if (!moved && !touchCancelled) {
           openContextMenu(clientX, clientY, e);
           moved = true; // swallow the tap-up
         }
@@ -309,17 +349,12 @@
     }
   }
   function onPointerMove(e: PointerEvent): void {
-    if (touchLastY !== null && e.pointerType === "touch") {
-      const dy = touchLastY - e.clientY;
+    if (e.pointerType === "touch") {
       touchDx = e.clientX - touchStartX;
-      if (Math.abs(dy) > 2 || Math.abs(touchDx) > 8) {
+      if (Math.abs(e.clientY - touchStartY) > 8 || Math.abs(touchDx) > 8) {
         moved = true;
         if (longPress) clearTimeout(longPress);
       }
-      pane.scrollY += dy;
-      pane.pendingScroll = false;
-      clampScroll();
-      touchLastY = e.clientY;
       return;
     }
     if (dragStart && Math.hypot(e.clientX - dragStart.x, e.clientY - dragStart.y) > 6) {
@@ -330,6 +365,12 @@
       }
     }
   }
+  function onPointerCancel(): void {
+    // Native scrolling took the pointer — not a tap, not a long-press.
+    touchCancelled = true;
+    moved = true;
+    if (longPress) clearTimeout(longPress);
+  }
   function onPointerUp(e: PointerEvent): void {
     if (longPress) clearTimeout(longPress);
     // Mouse buttons 4/5 → per-pane history (Tier-0 #2).
@@ -338,7 +379,7 @@
       return;
     }
     if (e.pointerType === "touch") {
-      touchLastY = null;
+      if (touchCancelled) return;
       // A dominant horizontal fling steps the chapter (Compose parity):
       // left → next, right → previous.
       if (Math.abs(touchDx) > 72 && Math.abs(touchDx) > Math.abs(e.clientY - touchStartY)) {
@@ -428,17 +469,20 @@
       <button onclick={() => s.closePane(paneIdx)} title="Close pane">✕</button>
     {/if}
   </div>
-  <div class="scroll" bind:this={container} title={hoverTitle}>
-    <canvas
-      bind:this={canvas}
-      onwheel={onWheel}
-      onclick={onClick}
-      oncontextmenu={onContextMenu}
-      onpointerdown={onPointerDown}
-      onpointermove={onPointerMove}
-      onpointerup={onPointerUp}
-      onmousemove={onMouseMove}
-    ></canvas>
+  <div class="scroll" bind:this={container} onscroll={onScroll} title={hoverTitle}>
+    <div class="spacer" style:height={`${spacerH}px`}>
+      <canvas
+        bind:this={canvas}
+        style:height={`${cssH}px`}
+        onclick={onClick}
+        oncontextmenu={onContextMenu}
+        onpointerdown={onPointerDown}
+        onpointermove={onPointerMove}
+        onpointerup={onPointerUp}
+        onpointercancel={onPointerCancel}
+        onmousemove={onMouseMove}
+      ></canvas>
+    </div>
   </div>
 </div>
 
@@ -481,13 +525,23 @@
     position: relative;
     flex: 1;
     min-height: 0;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* No scroll chaining into the page; pull-to-refresh stays off the text. */
+    overscroll-behavior: contain;
+  }
+  .spacer {
+    position: relative;
   }
   canvas {
-    position: absolute;
-    inset: 0;
+    /* Pinned to the scrollport while the spacer provides the scroll range;
+       the paint offsets by pane.scrollY, mirrored from scrollTop. */
+    position: sticky;
+    top: 0;
+    display: block;
     width: 100%;
-    height: 100%;
-    touch-action: none;
+    /* Vertical panning belongs to the browser (momentum for free); we keep
+       taps, long-press, and the horizontal chapter swipe. */
+    touch-action: pan-y;
   }
 </style>

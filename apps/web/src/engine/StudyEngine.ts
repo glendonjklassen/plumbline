@@ -236,6 +236,12 @@ export class StudyEngine {
   warmIndexes(): string | null {
     return this.#text("plumbline_engine_warm_indexes");
   }
+  /** Warm ONE lazy index (wasm-only export) — true while `step` named one.
+   *  The engine worker warms via this instead of warmIndexes so layout RPCs
+   *  interleave with the warm-up (they share its single thread). */
+  warmStep(step: number): boolean {
+    return ((this.#w.exports.plumbline_engine_warm_step as Function)(this.#engine, step) as number) === 1;
+  }
   /** Load the R&D artifacts from the home if they arrived after open (the
    *  deferred pack); no-op when already loaded or still missing. */
   loadRndData(): string | null {

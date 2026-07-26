@@ -28,6 +28,8 @@ export class EngineRpc {
   onCoreReady: () => void = () => {};
   /** The deferred R&D pack finished loading — machine tiers just lit up. */
   onRndReady: () => void = () => {};
+  /** R&D pack download progress (0..1) — drives the "load analysis" UI. */
+  onRndProgress: (fraction: number) => void = () => {};
 
   constructor() {
     this.#w = new Worker(new URL("./engine.worker.ts", import.meta.url), { type: "module" });
@@ -37,6 +39,7 @@ export class EngineRpc {
       if (m.type === "authored") return this.onAuthored();
       if (m.type === "coreReady") return this.onCoreReady();
       if (m.type === "rndReady") return this.onRndReady();
+      if (m.type === "rndProgress") return this.onRndProgress(m.fraction ?? 0);
       const p = this.#waiting.get(m.id);
       if (!p) return;
       this.#waiting.delete(m.id);
@@ -53,13 +56,16 @@ export class EngineRpc {
     });
   }
 
-  boot(): Promise<BootInfo> {
+  /** `deferRnd` skips the automatic machine-tier download (phones: the shell
+   *  offers an explicit "load analysis" action instead — 2026-07-26). */
+  boot(opts: { deferRnd?: boolean } = {}): Promise<BootInfo> {
     const base = new URL(import.meta.env.BASE_URL, location.href).href;
     return this.#send({
       op: "boot",
       base,
       fontUrl: new URL("fonts/EBGaramond.ttf", base).href,
       italicUrl: new URL("fonts/EBGaramond-Italic.ttf", base).href,
+      deferRnd: opts.deferRnd === true,
     });
   }
   /** A StudyEngine method by name — reads AND authoring calls alike. */
@@ -84,6 +90,10 @@ export class EngineRpc {
   }
   loadRnd(): Promise<void> {
     return this.#send({ op: "loadRnd" });
+  }
+  /** Per-stage boot timings ([label, ms]) measured on-device. */
+  bootTrace(): Promise<[string, number][]> {
+    return this.#send({ op: "bootTrace" });
   }
   exportUserData(): Promise<[string, Uint8Array][]> {
     return this.#send({ op: "export" });
