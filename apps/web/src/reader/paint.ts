@@ -44,8 +44,6 @@ export interface PaintOverlays {
   runs?: WordRun[];
   /** Live drag preview (per-verse runs), painted in the default tone. */
   dragPreview?: WordRun[] | null;
-  /** Pinned weave-authoring span (blue wash per word). */
-  pinned?: { verse: number; lo: number; hi: number } | null;
   /** Verses with weave partners — gold gutter dot by the verse number. */
   weaveDotVerses?: Set<number>;
   /** Verses with a personal note — square gutter mark left of the dot. */
@@ -131,7 +129,7 @@ export function paintChapter(
     }
   }
 
-  // ── word-precise runs (highlight ranges, drag preview, pinned span) ──
+  // ── word-precise runs (highlight ranges, drag preview) ──
   const paintRun = (run: WordRun, color: string, alpha: number) => {
     for (const it of items) {
       if (it.kind !== "word" || itemVerse(it) !== run.verse) continue;
@@ -144,7 +142,6 @@ export function paintChapter(
   };
   if (ov.runs) for (const r of ov.runs) paintRun(r, r.color, 0.45);
   if (ov.dragPreview) for (const r of ov.dragPreview) paintRun(r, r.color, 0.35);
-  if (ov.pinned) paintRun({ ...ov.pinned, color: "" }, p.pin ?? "#4073b8", 0.22);
 
   // ── gutter marks: weave dot + note square beside the verse number ──
   for (const [v, e] of extents) {

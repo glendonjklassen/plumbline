@@ -310,6 +310,11 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
      *  at startup in Full mode). Safe from any thread; null = success. */
     fun WarmIndexes(): String? = take(ffi.plumbline_engine_warm_indexes(h))
 
+    /** Load the optional R&D artifacts from the home if they were absent at
+     *  open (the web shell's late-pack path; a no-op when already loaded or
+     *  still missing). Null = success. */
+    fun LoadRndData(): String? = take(ffi.plumbline_engine_load_rnd_data(h))
+
     // ── memorization (Tier 2 #15): SRS cards, drills, coverage + activity ─────
 
     /** Grade a verse (`again`/`hard`/`good`/`easy`) at `nowUtc`, creating its

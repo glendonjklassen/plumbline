@@ -75,13 +75,6 @@
     return set;
   });
 
-  // Pinned weave-authoring span, when it belongs to this chapter.
-  const pinnedRun = $derived.by(() => {
-    const p = pane.pinned;
-    if (!p || !p.verse.startsWith(`${pane.book} ${pane.chapter}:`)) return null;
-    return { verse: verseNumOf(p.verse), lo: p.lo, hi: p.hi };
-  });
-
   // ── layout: recompute when inputs change ──
   $effect(() => {
     if (!pane || cssW <= 0) return;
@@ -150,7 +143,6 @@
     void washes;
     void runs;
     void noteVerses;
-    void pinnedRun;
     void dragPreview;
     void cssW;
     void cssH;
@@ -189,7 +181,6 @@
         noteVerses,
         washes,
         runs,
-        pinned: pinnedRun,
         dragPreview,
         ...overlays,
       },
@@ -250,8 +241,8 @@
     if (refKey) s.contextMenu = { x: clientX, y: clientY, refKey };
   }
 
-  // ── drag highlights (mouse): press pins the start word, a 6px drag
-  //    supersedes the pin and previews the range in the last-used tone ──
+  // ── drag highlights (mouse): press marks the start word, a 6px drag
+  //    previews the range in the last-used tone ──
   const tones: { name: string; hex: string }[] = highlightTones(s.wasm)?.tones ?? [];
   const defaultTone = () =>
     s.lastTone ?? { name: tones[0]?.name.replace(/^./, (c) => c.toUpperCase()) ?? "Amber", hex: tones[0]?.hex ?? "#f6e0a0" };
@@ -366,33 +357,13 @@
     dragEnd = null;
     dragPreview = null;
   }
+  // Single click a word → word study (Compose tap parity; touch taps already
+  // do this in onPointerUp).
   function onClick(e: MouseEvent): void {
     if (suppressClick) {
       suppressClick = false;
       return;
     }
-    const hit = hitAt(e);
-    if (hit?.tokenIndex == null) return;
-    if (e.ctrlKey || e.metaKey) {
-      onWordStudy?.(hit.verse, hit.tokenIndex);
-      return;
-    }
-    // Single click: pin a span for ＋ link — same-verse clicks re-span from
-    // the anchor, a different verse resets (manifest §Weave). Authoring is
-    // the reader's own data, so pinning is never mode-gated.
-    const p = pane.pinned;
-    if (p && p.verse === hit.verse) {
-      pane.pinned = {
-        verse: p.verse,
-        anchor: p.anchor,
-        lo: Math.min(p.anchor, hit.tokenIndex),
-        hi: Math.max(p.anchor, hit.tokenIndex),
-      };
-    } else {
-      pane.pinned = { verse: hit.verse, anchor: hit.tokenIndex, lo: hit.tokenIndex, hi: hit.tokenIndex };
-    }
-  }
-  function onDblClick(e: MouseEvent): void {
     const hit = hitAt(e);
     if (hit?.tokenIndex != null) onWordStudy?.(hit.verse, hit.tokenIndex);
   }
@@ -446,7 +417,6 @@
       bind:this={canvas}
       onwheel={onWheel}
       onclick={onClick}
-      ondblclick={onDblClick}
       oncontextmenu={onContextMenu}
       onpointerdown={onPointerDown}
       onpointermove={onPointerMove}

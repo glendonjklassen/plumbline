@@ -19,15 +19,28 @@
       ]);
       const result = await boot((p) => (phase = p));
       const s = initSession(result);
-      // Warm the lazy analytics DURING the splash: the engine runs on the
-      // main thread, so warming after first paint froze the UI for seconds
-      // (menus wouldn't open). Behind the splash the block is invisible.
+      // Warm the corpus-derived analytics DURING the splash: the engine runs
+      // on the main thread, so warming after first paint froze the UI
+      // (menus wouldn't open). Behind the splash the block is invisible —
+      // and it's the cheap warm now: the heavy machine-tier artifacts are not
+      // in the boot pack at all (TODO #28), so this builds only the
+      // concept/leitwort indexes over the corpus.
       if (s.gates & 2) {
         phase = { phase: "warm" };
         await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30)));
         s.engine.warmIndexes();
       }
       session = s;
+      // The deferred machine-tier pack: fetch + load once the reader has been
+      // idle a moment. The trailing engine block is synchronous, so this
+      // waits out the first interactions rather than competing with them.
+      // First-run visitors are still choosing their tiers — FirstRun's start()
+      // triggers the load for them if they keep the machine tier on.
+      if (s.gates & 2 && !s.showFirstRun) {
+        const idle: (cb: () => void) => unknown =
+          "requestIdleCallback" in window ? (cb) => requestIdleCallback(cb, { timeout: 8000 }) : (cb) => setTimeout(cb, 250);
+        setTimeout(() => idle(() => void s.ensureRnd()), 2500);
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }

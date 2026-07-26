@@ -45,7 +45,7 @@
           {#if r.uri}
             <button
               class="link"
-              style:font-size="{r.size}px"
+              style:font-size="calc({r.size}px * var(--uiScale, 1))"
               style:color={color(r.color)}
               style:font-weight={r.bold ? 600 : 400}
               style:font-style={r.italic ? "italic" : "normal"}
@@ -53,7 +53,7 @@
             >
           {:else}
             <span
-              style:font-size="{r.size}px"
+              style:font-size="calc({r.size}px * var(--uiScale, 1))"
               style:color={color(r.color)}
               style:font-weight={r.bold ? 600 : 400}
               style:font-style={r.italic ? "italic" : "normal"}>{r.text}</span
@@ -78,7 +78,7 @@
     margin: 10px 0 6px;
   }
   h3 {
-    font-size: 12px;
+    font-size: calc(12px * var(--uiScale, 1));
     font-weight: 600;
     letter-spacing: 0.09em;
     color: var(--section, #a0894a);
@@ -90,7 +90,7 @@
   }
   h3 .mark {
     margin-left: 6px;
-    font-size: 12px;
+    font-size: calc(12px * var(--uiScale, 1));
   }
   p {
     margin: 2px 0;

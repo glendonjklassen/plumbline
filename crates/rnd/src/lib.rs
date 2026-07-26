@@ -38,6 +38,10 @@ pub mod morph;
 #[cfg(feature = "concept")]
 pub mod concept;
 
+/// Grammatical function-word Strong's codes, excluded from concept-neighbour
+/// surfaces (pure data, no feature gate — used by `embeddings` and `concept`).
+pub mod stopwords;
+
 /// Leitwort / burst discovery (Poisson scan statistic over concept positions).
 /// Bundled with the `concept` feature.
 #[cfg(feature = "concept")]

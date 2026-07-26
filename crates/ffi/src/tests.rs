@@ -1251,3 +1251,168 @@ fn tier0_endpoints_via_abi() {
         let _ = std::fs::remove_dir_all(&home);
     }
 }
+
+/// Boot-phase timing harness for TODO #28 (PWA mobile performance): times
+/// engine open + each lazy analytics build over the repo's own data home.
+/// Ignored by default — run manually, release mode, when tuning boot:
+///   cargo test --release -p plumbline-ffi timing_harness -- --ignored --nocapture
+#[test]
+#[ignore]
+fn timing_harness() {
+    use std::time::Instant;
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let home = std::ffi::CString::new(repo.to_str().unwrap()).unwrap();
+    let mut err: *mut c_char = ptr::null_mut();
+
+    let t = Instant::now();
+    let e = unsafe { plumbline_engine_open(home.as_ptr(), &mut err) };
+    assert!(!e.is_null(), "open failed: {:?}", unsafe { opt_str(err) });
+    println!("open (corpus+strongs+xref+bridge+morph+embed): {:?}", t.elapsed());
+    let eng = unsafe { &*e };
+
+    let t = Instant::now();
+    let _ = eng.concept();
+    println!("concept build:  {:?}", t.elapsed());
+
+    let t = Instant::now();
+    let _ = eng.leitwort();
+    println!("leitwort scan:  {:?}", t.elapsed());
+
+    let t = Instant::now();
+    let _ = eng.verse_sim();
+    println!("verse_sim SIF:  {:?}", t.elapsed());
+
+    unsafe { plumbline_engine_free(e) };
+}
+
+/// Companion to [`timing_harness`]: the open-time loads, individually.
+#[test]
+#[ignore]
+fn timing_harness_open_parts() {
+    use std::time::Instant;
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let data = repo.join("data");
+
+    let t = Instant::now();
+    let m = morph::load_morph(canon::TOKENIZATION_VERSION, data.join("morphology.jsonl"));
+    println!("morphology parse: {:?} (loaded: {})", t.elapsed(), m.is_some());
+
+    let t = Instant::now();
+    let emb = embed::load_embedding(canon::TOKENIZATION_VERSION, data.join("concept-vectors.vec"));
+    println!("embedding load:   {:?} (loaded: {})", t.elapsed(), emb.is_some());
+
+    let t = Instant::now();
+    let x = crossref::load_cross_refs(crossref::cross_refs_path(&repo));
+    println!("crossref parse:   {:?} (entries: {})", t.elapsed(), x.len());
+}
+
+/// Companion to [`timing_harness`]: concept-build internals + core index builds.
+#[test]
+#[ignore]
+fn timing_harness_concept_parts() {
+    use std::time::Instant;
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+
+    let t = Instant::now();
+    let corpus = corpus::load_corpus(repo.join("data/kjv.jsonl")).unwrap();
+    println!("corpus load:      {:?}", t.elapsed());
+
+    let t = Instant::now();
+    let strongs = strongs::load_strongs(repo.join("data/strongs.json")).unwrap();
+    println!("strongs parse:    {:?} ({} entries)", t.elapsed(), strongs.len());
+
+    let t = Instant::now();
+    let _ = SearchIx::build(&corpus);
+    println!("search ix build:  {:?}", t.elapsed());
+
+    let t = Instant::now();
+    let _ = OccurrenceIx::build(&corpus);
+    println!("occ ix build:     {:?}", t.elapsed());
+
+    let t = Instant::now();
+    let _ = Renderings::build(&corpus);
+    println!("renderings build: {:?}", t.elapsed());
+
+    let t = Instant::now();
+    let ix = concept::build_concept_ix(&corpus);
+    println!("concept ix:       {:?} ({} codes)", t.elapsed(), ix.len());
+
+    let t = Instant::now();
+    let df = concept::verse_frequency(&corpus);
+    let co = concept::co_occurrence(&corpus);
+    println!("co-occurrence:    {:?} ({} pairs)", t.elapsed(), co.len());
+
+    let t = Instant::now();
+    let edges = concept::ppmi(corpus.verses().len(), &df, &co);
+    println!("ppmi:             {:?} ({} edges)", t.elapsed(), edges.len());
+
+    let t = Instant::now();
+    let knn = concept::mutual_knn(10, &edges);
+    println!("mutual knn:       {:?} ({} kept)", t.elapsed(), knn.len());
+
+    let t = Instant::now();
+    let comms = concept::communities(30, &knn);
+    println!("communities:      {:?} ({} groups)", t.elapsed(), comms.len());
+}
+
+/// The web boot order (TODO #28): open on the core pack only, warm, then the
+/// R&D artifacts arrive late — `load_rnd_data` + a re-warm must light up the
+/// embedding/morphology tiers, and the early warm must NOT have pinned the
+/// SIF model empty.
+#[test]
+fn rnd_data_loads_after_open() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-laternd-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null() && !e.is_null());
+        let c = |s: &str| CString::new(s).unwrap();
+
+        // Core-pack boot: warm builds concept + leitwort; the R&D tiers are dark.
+        assert!(plumbline_engine_warm_indexes(e).is_null());
+        assert!(plumbline_engine_concept_neighbours_json(e, c("G25").as_ptr(), 5).is_null());
+        assert!(plumbline_engine_morph_json(e, c("John 3:16").as_ptr(), 3).is_null());
+        assert!(plumbline_engine_similar_verses_json(e, c("John 3:16").as_ptr(), 5).is_null());
+
+        // A no-op load while the files are still missing is harmless.
+        assert!(plumbline_engine_load_rnd_data(e).is_null());
+
+        // The R&D pack arrives (same artifacts as rnd_tier_via_abi).
+        std::fs::write(
+            home.join("data").join("concept-vectors.vec"),
+            "4 2\nG2316 1 0\nG25 0.9 0.1\nG4100 0.2 1\nH7225 0.95 0.05\n",
+        )
+        .unwrap();
+        std::fs::write(
+            home.join("data").join("concept-vectors.vec.meta"),
+            r#"{"tokenization":"kjv1769-tok2","aligned":"procrustes"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            home.join("data").join("morphology.jsonl"),
+            "{\"format\":\"overlay-morphology-v1\",\"tokenization\":\"kjv1769-tok2\",\"source\":\"test\"}\n\
+             {\"b\":\"John\",\"c\":3,\"v\":16,\"e\":[[3,\"G25\",null,\"V-AAI-3S\"]]}\n",
+        )
+        .unwrap();
+
+        assert!(plumbline_engine_load_rnd_data(e).is_null());
+        assert!(plumbline_engine_warm_indexes(e).is_null()); // builds the SIF now
+
+        let n: Value = serde_json::from_str(&take(plumbline_engine_concept_neighbours_json(e, c("G25").as_ptr(), 5)).unwrap()).unwrap();
+        assert_eq!(n["code"], "G25");
+        let m: Value = serde_json::from_str(&take(plumbline_engine_morph_json(e, c("John 3:16").as_ptr(), 3)).unwrap()).unwrap();
+        assert_eq!(m["code"], "V-AAI-3S");
+        let s: Value = serde_json::from_str(&take(plumbline_engine_similar_verses_json(e, c("John 3:16").as_ptr(), 5)).unwrap()).unwrap();
+        assert!(s["in"].as_array().unwrap().iter().any(|x| x["verse"] == "John 3:18"));
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}

@@ -56,7 +56,7 @@ Decisions locked 2026-07-08, still in force:
 | 3 | Data delivery | **Bundle core, download R&D** — KJV + Strong's ship in-app; heavy analytics artifacts are optional packs. |
 | 4 | R&D default | **Guided first-run** — first launch picks the analysis tiers (scholars' / machine) with examples; the text and the reader's own data are always on (revised 2026-07-25 from the original Simple/Full split). |
 | — | Patches / signed rules | Dropped — the Ed25519 point-patch/rule layer was not ported. |
-| — | Future | A paid cross-device **sync SaaS**; the data model must not block it (stable ids, no host-local assumptions). |
+| — | Future | The paid sync SaaS was **cancelled 2026-07-25** — the product is entirely free. Keep the data-model discipline it imposed anyway (stable ids, no host-local assumptions, exportable single-file JSON). |
 
 ```
 Rust core (pure, headless, fully testable)
@@ -147,9 +147,9 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
 
 - Tag `v*` → `.github/workflows/release.yml` builds a signed Android APK
   (arm64-v8a + x86_64) and attaches it to a GitHub Release — the repo is the
-  download page — and deploys the PWA to GitHub Pages
-  (<https://glendonjklassen.github.io/plumbline/>; hosting decided
-  2026-07-25).
+  download page — and deploys the PWA to GitHub Pages at
+  <https://plumblinebible.org/> (custom domain live 2026-07-25; the old
+  glendonjklassen.github.io/plumbline URL 301s there).
 - The APK job needs four repo secrets — `ANDROID_KEYSTORE_BASE64`,
   `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
   (generation steps are in the workflow header). Without them the job no-ops

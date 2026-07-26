@@ -806,12 +806,26 @@ char *plumbline_theme_highlight_tones_json(void);
 // Force the lazy analytics indexes (concept engine, leitwort scan, SIF verse
 // similarity) to build now — call once on a background thread at startup in
 // Full mode so the first study click doesn't stall. Safe to call from any
-// thread (the builds are `OnceLock`-guarded) and idempotent. Null on success,
-// else an owned error.
+// thread (the builds are `OnceLock`-guarded) and idempotent — except that the
+// SIF model builds only once the embedding artifact is loaded, so a shell
+// that fetches the R&D pack late calls this *again* after
+// [`plumbline_engine_load_rnd_data`]. Null on success, else an owned error.
 //
 // # Safety
 // `engine` is a live engine (or null → an error string).
 char *plumbline_engine_warm_indexes(const struct PlumblineEngine *engine);
+
+// Load the optional R&D artifacts (concept embeddings, morphology sidecar)
+// from the engine's home if they were absent at open. The web shell boots on
+// the core data pack for a fast first paint, fetches the R&D pack in the
+// background, writes the files into the home, then calls this — followed by
+// [`plumbline_engine_warm_indexes`] to build the SIF model the new embedding
+// enables. Idempotent (nothing loads twice), cheap when the files are still
+// missing, safe from any thread. Null on success, else an owned error.
+//
+// # Safety
+// `engine` is a live engine (or null → an error string).
+char *plumbline_engine_load_rnd_data(const struct PlumblineEngine *engine);
 
 // Grade the verse `verse_ref` at `now` (RFC3339 UTC), creating its SRS card on
 // first review; SM-2 reschedules and appends to the review log. `grade` is one

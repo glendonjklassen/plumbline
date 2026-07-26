@@ -18,7 +18,7 @@
   import ContextMenu from "../reader/ContextMenu.svelte";
   import TagPicker from "../study/TagPicker.svelte";
   import TagWeave from "../study/TagWeave.svelte";
-  import { nowStamp } from "../engine/StudyEngine";
+  import QrCode, { PWA_URL } from "./QrCode.svelte";
   import { getSession } from "../state/session.svelte";
 
   const s = getSession();
@@ -32,27 +32,6 @@
     s.panel = { kind: "wordStudy", refKey, tokenIndex };
   }
 
-  // ＋ link: enabled when ≥2 panes hold pins; takes the first two, prompts a
-  // weave name, writes a Quotation-kind link with both spans, clears pins.
-  const pinnedPanes = $derived(s.panes.filter((p) => p.pinned));
-  async function addLink(): Promise<void> {
-    const [a, b] = pinnedPanes;
-    if (!a?.pinned || !b?.pinned) return;
-    const name = await s.askText("Weave name");
-    if (!name?.trim()) return;
-    const err = s.engine.weaveAddLinkSpans(
-      name.trim(),
-      a.pinned.verse, b.pinned.verse,
-      a.pinned.lo, a.pinned.hi, b.pinned.lo, b.pinned.hi,
-      nowStamp(),
-    );
-    if (err) s.showToast(err);
-    else {
-      s.showToast(`Linked — ${name.trim()}`);
-      for (const p of s.panes) p.pinned = null;
-    }
-  }
-
   // ── live search: per keystroke; empty query closes (manifest §Search) ──
   function onSearchInput(): void {
     if (s.searchQuery.trim()) s.panel = { kind: "search" };
@@ -60,6 +39,20 @@
   }
 
   let menuOpen = $state(false);
+  // ⋮/≡ → Share the app: the PWA QR + link (Compose ShareAppDialog parity).
+  let shareApp = $state(false);
+  async function shareLink(): Promise<void> {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Plumbline", url: PWA_URL });
+        return;
+      } catch {
+        /* fall through to clipboard */
+      }
+    }
+    await navigator.clipboard.writeText(PWA_URL);
+    s.showToast("Link copied");
+  }
   function menu(action: () => void): () => void {
     return () => {
       menuOpen = false;
@@ -147,7 +140,8 @@
         else return;
         break;
       case "Escape":
-        if (s.mapPopup) s.mapPopup = null;
+        if (shareApp) shareApp = false;
+        else if (s.mapPopup) s.mapPopup = null;
         else if (s.bookNavFor !== null) s.bookNavFor = null;
         else if (s.showSettings) s.showSettings = false;
         else if (s.memorize) s.memorize = null;
@@ -179,7 +173,6 @@
         <button onclick={() => (s.panel = { kind: "threads" })}>Threads</button>
         <button onclick={() => (s.panel = { kind: "tags" })}>Tags</button>
         <button onclick={() => (s.panel = { kind: "weaves" })}>Weaves</button>
-        <button disabled={pinnedPanes.length < 2} onclick={addLink} title="Link the pinned spans">＋ link</button>
       </nav>
     <span class="spacer"></span>
     <input
@@ -199,6 +192,7 @@
           <button onclick={menu(() => (s.memorize = { view: "hub" }))}>Memorize</button>
           <button onclick={menu(() => (s.panel = { kind: "explore" }))}>Explore</button>
           <button onclick={menu(() => (s.showHistory = true))}>History</button>
+          <button onclick={menu(() => (shareApp = true))}>Share the app</button>
           <button onclick={menu(() => (s.showPresent = true))}>Present</button>
           <button onclick={menu(() => (s.panel = { kind: "guide" }))}>Guide & about</button>
           <button onclick={menu(() => (s.showShortcuts = true))}>Keyboard shortcuts</button>
@@ -221,6 +215,21 @@
     <StudyPanel />
   </div>
 </div>
+
+{#if shareApp}
+  <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+  <div class="share-backdrop" onclick={() => (shareApp = false)}></div>
+  <div class="share-dialog" role="dialog" aria-modal="true" aria-label="Share Plumbline">
+    <h2>Share Plumbline</h2>
+    <p class="share-sub">Free, offline, no account.</p>
+    <QrCode size={220} />
+    <p class="share-url">{PWA_URL}</p>
+    <div class="share-actions">
+      <button class="share-primary" onclick={shareLink}>Share the link</button>
+      <button onclick={() => (shareApp = false)}>Close</button>
+    </div>
+  </div>
+{/if}
 
 {#if s.toast}
   <div class="toast">{s.toast}</div>
@@ -357,6 +366,52 @@
   }
   .panes > :global(.pane + .pane) {
     border-left: 1px solid var(--rule, #d8cba8);
+  }
+  .share-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 16, 8, 0.35);
+    z-index: 49;
+  }
+  .share-dialog {
+    position: fixed;
+    z-index: 50;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    background: #ffffff; /* fixed light — the QR needs its white field */
+    color: #101010;
+    border-radius: 14px;
+    padding: 22px 26px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.3);
+  }
+  .share-dialog h2 {
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .share-sub,
+  .share-url {
+    color: #5a564e;
+    font-size: 13px;
+  }
+  .share-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 6px;
+  }
+  .share-actions button {
+    padding: 5px 14px;
+    border: 1px solid #d8cba8;
+    border-radius: 6px;
+  }
+  .share-actions .share-primary {
+    background: #9e7d38;
+    color: #ffffff;
+    border-color: #9e7d38;
   }
   .toast {
     position: fixed;

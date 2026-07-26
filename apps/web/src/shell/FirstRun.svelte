@@ -17,6 +17,7 @@
     s.config.studyMode = human || machine ? "full" : "simple";
     s.showFirstRun = false;
     s.saveConfig();
+    if (machine) void s.ensureRnd();
   }
 </script>
 

@@ -5,7 +5,7 @@
 
 export interface PackManifest {
   version: string;
-  files: { path: string; bytes: number; gzBytes: number; stock?: boolean }[];
+  files: { path: string; bytes: number; gzBytes: number; stock?: boolean; rnd?: boolean }[];
 }
 
 export interface PackProgress {
@@ -32,20 +32,20 @@ async function gunzip(body: ArrayBuffer): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-/** Load every pack file, returning home-relative path → raw bytes. */
-export async function fetchPack(
-  manifest: PackManifest,
+async function fetchFiles(
+  version: string,
+  files: PackManifest["files"],
   onProgress?: (p: PackProgress) => void,
 ): Promise<Map<string, Uint8Array>> {
-  const totalGz = manifest.files.reduce((s, f) => s + f.gzBytes, 0);
+  const totalGz = files.reduce((s, f) => s + f.gzBytes, 0);
   let doneGz = 0;
   const out = new Map<string, Uint8Array>();
   // Fetch a few files concurrently; decompression overlaps the network.
-  const queue = [...manifest.files];
+  const queue = [...files];
   const workers = Array.from({ length: 4 }, async () => {
     for (let f = queue.shift(); f; f = queue.shift()) {
       onProgress?.({ fraction: doneGz / totalGz, currentFile: f.path });
-      const res = await fetch(`${PACK_BASE}${f.path}.gz?v=${manifest.version}`);
+      const res = await fetch(`${PACK_BASE}${f.path}.gz?v=${version}`);
       if (!res.ok) throw new Error(`data pack file ${f.path}: HTTP ${res.status}`);
       out.set(f.path, await gunzip(await res.arrayBuffer()));
       doneGz += f.gzBytes;
@@ -54,4 +54,22 @@ export async function fetchPack(
   });
   await Promise.all(workers);
   return out;
+}
+
+/** Load the CORE pack files (everything not marked `rnd`) — the boot path.
+ *  Returns home-relative path → raw bytes. */
+export function fetchPack(
+  manifest: PackManifest,
+  onProgress?: (p: PackProgress) => void,
+): Promise<Map<string, Uint8Array>> {
+  return fetchFiles(manifest.version, manifest.files.filter((f) => !f.rnd), onProgress);
+}
+
+/** Load the deferred machine-tier (`rnd`) files — fetched in the background
+ *  after first paint, never on the boot path (TODO #28). */
+export function fetchRndPack(
+  manifest: PackManifest,
+  onProgress?: (p: PackProgress) => void,
+): Promise<Map<string, Uint8Array>> {
+  return fetchFiles(manifest.version, manifest.files.filter((f) => f.rnd), onProgress);
 }

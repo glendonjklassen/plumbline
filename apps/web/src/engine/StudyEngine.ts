@@ -236,6 +236,11 @@ export class StudyEngine {
   warmIndexes(): string | null {
     return this.#text("plumbline_engine_warm_indexes");
   }
+  /** Load the R&D artifacts from the home if they arrived after open (the
+   *  deferred pack); no-op when already loaded or still missing. */
+  loadRndData(): string | null {
+    return this.#text("plumbline_engine_load_rnd_data");
+  }
 
   // ── view-models (maps) ──────────────────────────────────────────────────────
 

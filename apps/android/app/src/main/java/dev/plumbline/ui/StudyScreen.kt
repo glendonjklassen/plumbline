@@ -814,14 +814,17 @@ private fun TopBar(
 
             Box {
                 var menu by remember { mutableStateOf(false) }
+                var shareApp by remember { mutableStateOf(false) }
                 IconButton(onClick = { menu = true }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = "Menu", tint = palette.ink)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text("History") }, onClick = { onHistory(); menu = false })
+                    DropdownMenuItem(text = { Text("Share the app") }, onClick = { shareApp = true; menu = false })
                     DropdownMenuItem(text = { Text("Guide & About") }, onClick = { onGuide(); menu = false })
                     DropdownMenuItem(text = { Text("Settings") }, onClick = { onSettings(); menu = false })
                 }
+                if (shareApp) ShareAppDialog(onDismiss = { shareApp = false })
             }
         }
     }

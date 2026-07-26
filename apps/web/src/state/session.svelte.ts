@@ -3,7 +3,7 @@
 // make the pieces reactive; the engine itself stays a plain synchronous
 // object (single-threaded, like the GTK shell's Rc<RefCell> state).
 
-import type { BootResult } from "../engine/boot";
+import { loadRndPack, type BootResult } from "../engine/boot";
 import { configLoad, configSave, themePalette } from "../engine/StudyEngine";
 import type { StudyEngine } from "../engine/StudyEngine";
 
@@ -17,8 +17,6 @@ export interface PaneState {
   scrollY: number;
   back: { book: string; chapter: number }[];
   fwd: { book: string; chapter: number }[];
-  /** Weave-authoring pin: a word span in this pane (manifest §Weave authoring). */
-  pinned: { verse: string; anchor: number; lo: number; hi: number } | null;
 }
 
 /** Descriptor of what the study surface is showing (sidebar or sheet). */
@@ -108,8 +106,28 @@ export class Session {
 
   #saveTimer: ReturnType<typeof setTimeout> | null = null;
   #systemDark = matchMedia("(prefers-color-scheme: dark)");
+  #boot!: BootResult;
+  #rndLoading: Promise<void> | null = null;
+
+  /** Fetch + load the deferred machine-tier pack, once. Called at an idle
+   *  moment after boot and when the machine toggle flips on. The final engine
+   *  block (load + SIF warm) is synchronous on the main thread — callers must
+   *  never invoke this mid-interaction. Open panels re-fetch via studyEpoch
+   *  so the new tiers appear without a reload. */
+  ensureRnd(): Promise<void> {
+    this.#rndLoading ??= loadRndPack(this.#boot)
+      .then(() => {
+        this.studyEpoch++;
+      })
+      .catch((err) => {
+        this.#rndLoading = null; // offline? retry on the next trigger
+        console.warn("[plumbline] deferred R&D pack failed to load:", err);
+      });
+    return this.#rndLoading;
+  }
 
   constructor(boot: BootResult) {
+    this.#boot = boot;
     this.engine = boot.engine;
     this.wasm = boot.wasm;
     this.home = boot.home;
@@ -130,7 +148,6 @@ export class Session {
         scrollY: 0,
         back: [],
         fwd: [],
-        pinned: null,
       }));
     this.activePane = Math.min(loaded.activePane ?? 0, this.panes.length - 1);
 
@@ -298,7 +315,6 @@ export class Session {
       scrollY: 0,
       back: [],
       fwd: [],
-      pinned: null,
     });
     this.activePane = afterIdx + 1;
     this.saveConfig();

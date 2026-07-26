@@ -187,6 +187,9 @@ internal interface PlumblineNative : Library {
     // ── warm lazy indexes ───────────────────────────────────────────────────
     fun plumbline_engine_warm_indexes(engine: Pointer): Pointer?
 
+    // ── late R&D artifact load (web boots on the core pack; see the header) ──
+    fun plumbline_engine_load_rnd_data(engine: Pointer): Pointer?
+
     // ── memorization (Tier 2 #15): SRS cards, drills, coverage + activity ────
     fun plumbline_engine_memory_grade(
         engine: Pointer, verseRef: String, grade: String, now: String,

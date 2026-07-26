@@ -1,6 +1,7 @@
 //! Reader text layout + per-word hit-testing.
 //!
-//! This is the load-bearing idea from `PLAN.md`: overlay's reader
+//! This is the load-bearing idea from the architecture plan (README §For
+//! developers / CLAUDE.md §Architecture): overlay's reader
 //! (`ReaderView.hs`) lays out and hit-tests **every word individually** so
 //! Strong's clicks, hover cards, and cross-pane weave connectors all ride on
 //! one layout. We keep that layout in shared Rust — but instead of forcing a

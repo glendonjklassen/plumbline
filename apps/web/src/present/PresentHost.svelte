@@ -2,9 +2,11 @@
   // Present mode (Android parity, the top-priority request): a thread as a
   // fullscreen, high-contrast ("sunlight") large-type presentation for showing
   // someone in person. Picker → scrollable overview → tap-to-focus huge → end
-  // card with plain-text share + BibleGateway link. Deliberately hard-coded
-  // light — the phone/laptop gets handed across in daylight.
+  // card with plain-text share + a scannable QR of the hosted PWA.
+  // Deliberately hard-coded light — the phone/laptop gets handed across in
+  // daylight.
   import { getSession } from "../state/session.svelte";
+  import QrCode, { PWA_URL } from "../shell/QrCode.svelte";
 
   const s = getSession();
 
@@ -45,19 +47,12 @@
     else close();
   }
 
-  // The hosted PWA — the take-home carries the app itself, not just the text.
-  const PWA_URL = "https://glendonjklassen.github.io/plumbline/";
-
   function shareText(): string {
     const lines = [thread.name, ""];
     for (const e of entries) {
       lines.push(e.display, e.body, "");
     }
-    lines.push(
-      "Read online: https://www.biblegateway.com/passage/?version=KJV&search=" +
-        encodeURIComponent(entries.map((e) => e.display).join("; ")),
-      `Shared from Plumbline — ${PWA_URL}`,
-    );
+    lines.push(`Shared from Plumbline — ${PWA_URL}`);
     return lines.join("\n");
   }
   async function share(): Promise<void> {
@@ -148,13 +143,10 @@
         <p class="fref">{thread.name}</p>
         <p class="endnote">— the whole thread, yours to keep —</p>
         <button class="sharebig" onclick={share}>Share the passages</button>
-        <a
-          class="bglink"
-          href={"https://www.biblegateway.com/passage/?version=KJV&search=" +
-            encodeURIComponent(entries.map((e) => e.display).join("; "))}
-          target="_blank"
-          rel="noopener">Read online (BibleGateway KJV)</a
-        >
+        <div class="qr">
+          <QrCode size={148} />
+          <span class="qrnote">scan for the app — free, offline, no account</span>
+        </div>
         <button class="ovbtn" onclick={() => (focus = null)}>back to overview</button>
       </div>
     {/if}
@@ -311,8 +303,14 @@
     padding: 12px 28px;
     font-size: 20px;
   }
-  .bglink {
-    color: #2a4d8f;
-    font-size: 16px;
+  .qr {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .qrnote {
+    color: #6a6a6a;
+    font-size: 14px;
   }
 </style>

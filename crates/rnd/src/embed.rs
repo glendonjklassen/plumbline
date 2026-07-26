@@ -99,10 +99,12 @@ impl Embedding {
     }
 
     /// The `k` nearest concepts by cosine, restricted to the same language
-    /// (testament), strongest first.
+    /// (testament), strongest first. Function words (articles, conjunctions,
+    /// prepositions…) are skipped — they co-occur with everything, so they
+    /// cosine-near every content word without meaning anything by it.
     pub fn nearest_concepts(&self, code: &str, k: usize) -> Vec<(String, f32)> {
         let lang = lang_of(code);
-        self.neighbours_by(code, k, |c| lang_of(c) == lang)
+        self.neighbours_by(code, k, |c| lang_of(c) == lang && !crate::stopwords::is_function_word(c))
     }
 
     /// The `k` nearest concepts in the *other* language — the cross-testament
@@ -113,7 +115,7 @@ impl Embedding {
             return Vec::new();
         }
         let lang = lang_of(code);
-        self.neighbours_by(code, k, |c| lang_of(c) != lang)
+        self.neighbours_by(code, k, |c| lang_of(c) != lang && !crate::stopwords::is_function_word(c))
     }
 }
 

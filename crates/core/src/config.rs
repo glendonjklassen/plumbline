@@ -2,11 +2,12 @@
 //! body-text size, persisted as JSON at the platform's per-user config
 //! directory.
 //!
-//! Decision #4 (see PLAN.md) is *off by default + guided first-run*: the first
-//! launch asks **Simple reader** vs **Full study**, and casual readers never see
-//! the study/authoring complexity. That choice — and the live font size — live
-//! here so every shell (GTK today, WinUI/Compose later) reads and writes the
-//! same file through one code path.
+//! Decision #4 (README §For developers, decisions table; revised 2026-07-25)
+//! is *guided first-run*: the first launch picks the analysis tiers
+//! (scholars' / machine) with examples — the text and the reader's own data
+//! are always on. That choice — and the live font size — live here so every
+//! shell (Compose and the PWA) reads and writes the same file through one
+//! code path.
 //!
 //! Paths are resolved per-OS and composed with [`Path::join`] (never a hardcoded
 //! separator); writes go through the cross-platform atomic writer in

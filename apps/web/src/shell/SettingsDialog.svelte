@@ -66,6 +66,9 @@
   function toggleGate(key: "humanAnalysis" | "machineAnalysis"): void {
     s.config[key] = s.config[key] === false;
     s.saveConfig();
+    // Machine tier switched on: pull the deferred R&D pack in (no-op if the
+    // idle path already did).
+    if (key === "machineAnalysis" && s.config[key] !== false) void s.ensureRnd();
   }
   function setTheme(theme: string): void {
     s.config.theme = theme;

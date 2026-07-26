@@ -5,7 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
 // product branding — index.html, the manifest and the shell header must agree.
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
-  await expect(page).toHaveTitle("Plumbline — 1769 KJV");
+  await expect(page).toHaveTitle("Plumbline Bible");
   await expect(page.locator(".subtitle")).toContainText("1769 KJV", { timeout: 90_000 });
   const start = page.getByRole("button", { name: "Start reading" });
   if (await start.isVisible().catch(() => false)) await start.click();
@@ -24,7 +24,23 @@ test("boots to the reader with the stock set seeded", async ({ page }) => {
   });
   expect(counts.weaves).toBeGreaterThan(20);
   expect(counts.threads).toBeGreaterThanOrEqual(1);
-  expect(counts.tags).toBeGreaterThanOrEqual(4);
+  // Tags are the reader's own (semantic) groupings — nothing ships stock.
+  // This also guards against stray authoring leftovers in the stock set
+  // (a shipped amber highlight once painted John 3:7 on every fresh install).
+  expect(counts.tags).toBe(0);
+});
+
+test("the deferred machine-tier pack loads after boot", async ({ page }) => {
+  await boot(page);
+  // Boot ships the core pack only (TODO #28); ensureRnd pulls morphology +
+  // concept vectors in and re-warms. Force it (instead of waiting out the
+  // idle timer) and check a machine-tier lookup lights up.
+  const neighbours = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.ensureRnd();
+    return s.engine.conceptNeighbours("G2316", 3)?.near?.length ?? 0; // G2316 = God
+  });
+  expect(neighbours).toBeGreaterThan(0);
 });
 
 test("menus open promptly after boot (freeze regression)", async ({ page }) => {
@@ -48,13 +64,14 @@ test("menu destinations are exclusive (memorize does not linger)", async ({ page
   await expect(page.getByText("Weave map")).toBeVisible();
 });
 
-test("word study opens from a double-click and respects the gates", async ({ page }) => {
+test("word study opens from a single click and respects the gates", async ({ page }) => {
   await boot(page);
   const canvas = page.locator("canvas").first();
   const box = (await canvas.boundingBox())!;
-  // Walk the first text line until a word hit opens the panel.
+  // Walk the first text line until a word hit opens the panel (single click —
+  // Compose tap parity, 2026-07-25; the pin/＋link flow is gone).
   for (const x of [0.3, 0.35, 0.4, 0.45, 0.5]) {
-    await canvas.dblclick({ position: { x: box.width * x, y: 46 } });
+    await canvas.click({ position: { x: box.width * x, y: 46 } });
     if (await page.locator("aside.panel").isVisible().catch(() => false)) break;
   }
   await expect(page.locator("aside.panel")).toBeVisible();

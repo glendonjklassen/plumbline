@@ -96,14 +96,14 @@
     align-items: baseline;
   }
   .title {
-    font-size: 11px;
+    font-size: calc(11px * var(--uiScale, 1));
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--section, #a0894a);
     flex: 1;
   }
   .open {
-    font-size: 11.5px;
+    font-size: calc(11.5px * var(--uiScale, 1));
     color: var(--gold, #9e7d38);
   }
   .strip {
@@ -114,7 +114,7 @@
     width: 100%;
   }
   .caption {
-    font-size: 11.5px;
+    font-size: calc(11.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     white-space: nowrap;
     overflow: hidden;

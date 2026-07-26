@@ -85,10 +85,15 @@
   function onLink(uri: string, ev: MouseEvent): void {
     void dispatchLink(s, uri, ev);
   }
+
+  // The reader's text-size setting scales the whole study surface too —
+  // fixed 380px/13px chrome reads tiny on a 4K display (feedback 2026-07-25).
+  // Everything inside multiplies by --uiScale (1 at the default 18px body).
+  const uiScale = $derived(Number(s.config.bodySize ?? 18) / 18);
 </script>
 
 {#if s.panel && (blocks || s.panel.kind === "notesBrowser" || s.panel.kind === "explore")}
-  <aside class="panel">
+  <aside class="panel" style:--uiScale={uiScale}>
     <div class="bar">
       <div class="grip" aria-hidden="true"></div>
       <button class="close" onclick={() => (s.panel = null)} aria-label="Close panel">✕</button>
@@ -134,8 +139,9 @@
     flex-direction: column;
     background: var(--popupPaper, #f2eee6);
     border-left: 1px solid var(--rule, #d8cba8);
-    width: 380px;
-    min-width: 380px;
+    width: calc(380px * var(--uiScale, 1));
+    min-width: calc(380px * var(--uiScale, 1));
+    font-size: calc(16px * var(--uiScale, 1));
   }
   .bar {
     display: flex;
@@ -148,7 +154,7 @@
   }
   .close {
     color: var(--faded, #8a8276);
-    font-size: 15px;
+    font-size: calc(15px * var(--uiScale, 1));
     padding: 2px 6px;
     border-radius: 4px;
   }
@@ -161,13 +167,13 @@
     padding: 4px 16px 24px;
   }
   .nb-title {
-    font-size: 17px;
+    font-size: calc(17px * var(--uiScale, 1));
     font-weight: 600;
     margin: 4px 0 8px;
   }
   .nb-empty {
     color: var(--faded, #8a8276);
-    font-size: 13.5px;
+    font-size: calc(13.5px * var(--uiScale, 1));
   }
   .nb-note {
     border-bottom: 1px solid color-mix(in srgb, var(--rule, #d8cba8) 55%, transparent);
@@ -186,11 +192,11 @@
     text-decoration: underline;
   }
   .nb-edit {
-    font-size: 12px;
+    font-size: calc(12px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }
   .nb-text {
-    font-size: 14.5px;
+    font-size: calc(14.5px * var(--uiScale, 1));
     margin-top: 2px;
     white-space: pre-wrap;
   }
@@ -215,7 +221,7 @@
     color: var(--gold, #9e7d38);
   }
   .ex-desc {
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }
 

@@ -10,6 +10,10 @@
 //
 // The pack version is a content hash, so the service worker / Cache API can
 // invalidate exactly when the data actually changes.
+//
+// Heavy machine-tier artifacts are marked `rnd` (TODO #28): the app boots on
+// the core files (what the Android APK bundles) and fetches the rnd set in
+// the background after first paint — see apps/web/src/engine/boot.ts.
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -19,6 +23,15 @@ import { gzipSync } from "node:zlib";
 const repo = dirname(dirname(fileURLToPath(import.meta.url)));
 const outRoot = join(repo, "apps/web/public/pack");
 const STOCK = join(repo, "apps/android/app/src/main/assets/stock");
+
+// The machine-tier artifacts deferred out of the boot path. Everything else
+// under data/ matches the Android APK's bundled core set.
+const RND = new Set([
+  "data/morphology.jsonl",
+  "data/concept-vectors.vec",
+  "data/concept-vectors.vec.freq",
+  "data/concept-vectors.vec.meta",
+]);
 
 // (srcDir, homeDir, filter, stock) tuples for the home shipped to the browser.
 const SOURCES = [
@@ -46,6 +59,7 @@ for (const [src, dir, keep, stock] of SOURCES) {
     hash.update(dir).update(name).update(raw);
     const entry = { path: `${dir}/${name}`, bytes: raw.length, gzBytes: gz.length };
     if (stock) entry.stock = true;
+    if (RND.has(entry.path)) entry.rnd = true;
     files.push(entry);
   }
 }

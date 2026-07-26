@@ -77,64 +77,197 @@ fn is_nt(book: &str) -> bool {
 }
 
 // ── co-occurrence graph ────────────────────────────────────────────────────────
+//
+// The pipeline (co-occurrence → PPMI → mutual-kNN → label propagation) runs
+// end-to-end over interned `u32` ids with unordered pairs packed into `u64`
+// keys: at corpus scale every stage visits ~600k distinct pairs, and carrying
+// `String` pair keys between stages made this warm-up the most expensive block
+// of a cold boot (890 ms native, several seconds on a phone — TODO #28). Ids
+// are assigned in **lexicographic order** of the code string, so id
+// comparisons and string comparisons agree everywhere: pair canonicalization
+// (`a < b`) and every ordering tie-break below match the String-keyed public
+// wrappers bit for bit.
 
-/// Undirected co-occurrence counts: how many verses each unordered code pair
-/// shares. Pairs are stored canonically (`a < b`).
-///
-/// Internally the codes are interned to `u32` ids and pairs counted under a
-/// packed `u64` key, so the per-pair inner loop (quadratic per verse, across
-/// the whole corpus) allocates nothing; the `String`-keyed map is materialized
-/// once at the end, one pair of clones per *distinct* pair. Because `present`
-/// is sorted (by code string) before pairing, `(i, j)` with `i < j` is already
-/// the canonical `a < b` order — the id pair inherits it regardless of the
-/// interner's first-seen id assignment.
-pub fn co_occurrence(corpus: &Corpus) -> HashMap<(String, String), u32> {
-    let mut names: Vec<&str> = Vec::new();
-    let mut id_of: HashMap<&str, u32> = HashMap::new();
-    let mut counts: HashMap<u64, u32> = HashMap::new();
-    let mut present_ids: Vec<u32> = Vec::new();
+/// The interned corpus: sorted vocabulary + everything the pipeline consumes.
+struct IdGraph {
+    /// id → code; ids follow the lexicographic order of the code strings.
+    names: Vec<String>,
+    /// Packed unordered pair (`lo << 32 | hi`, lo < hi) → shared-verse count.
+    co: HashMap<u64, u32>,
+    /// id → distinct-verse frequency.
+    df: Vec<u32>,
+    n_verses: usize,
+}
+
+fn pack(a: u32, b: u32) -> u64 {
+    (u64::from(a) << 32) | u64::from(b)
+}
+fn unpack(key: u64) -> (u32, u32) {
+    ((key >> 32) as u32, (key & 0xFFFF_FFFF) as u32)
+}
+fn name_pair(names: &[String], key: u64) -> (String, String) {
+    let (a, b) = unpack(key);
+    (names[a as usize].clone(), names[b as usize].clone())
+}
+
+/// Two passes over the corpus: the sorted vocabulary, then per-verse pair
+/// counts + verse frequency, all in id space.
+fn intern_corpus(corpus: &Corpus) -> IdGraph {
+    let mut vocab: HashSet<&str> = HashSet::new();
     for v in corpus.verses() {
-        let mut present: Vec<&String> = v.tokens.iter().flat_map(|t| &t.strongs).collect();
-        present.sort();
-        present.dedup();
-        present_ids.clear();
-        present_ids.extend(present.iter().map(|s| {
-            *id_of.entry(s.as_str()).or_insert_with(|| {
-                names.push(s.as_str());
-                (names.len() - 1) as u32
-            })
-        }));
-        for i in 0..present_ids.len() {
-            for j in (i + 1)..present_ids.len() {
-                let key = (u64::from(present_ids[i]) << 32) | u64::from(present_ids[j]);
-                *counts.entry(key).or_insert(0) += 1;
+        for t in &v.tokens {
+            for s in &t.strongs {
+                vocab.insert(s.as_str());
             }
         }
     }
-    counts
-        .into_iter()
-        .map(|(key, c)| {
-            let a = names[(key >> 32) as usize].to_string();
-            let b = names[(key & 0xFFFF_FFFF) as usize].to_string();
-            ((a, b), c)
+    let mut sorted: Vec<&str> = vocab.into_iter().collect();
+    sorted.sort_unstable();
+    let id_of: HashMap<&str, u32> = sorted.iter().enumerate().map(|(i, &s)| (s, i as u32)).collect();
+
+    let mut co: HashMap<u64, u32> = HashMap::new();
+    let mut df = vec![0u32; sorted.len()];
+    let mut present: Vec<u32> = Vec::new();
+    for v in corpus.verses() {
+        present.clear();
+        present.extend(v.tokens.iter().flat_map(|t| &t.strongs).map(|s| id_of[s.as_str()]));
+        present.sort_unstable(); // id order == string order
+        present.dedup();
+        for (i, &a) in present.iter().enumerate() {
+            df[a as usize] += 1;
+            for &b in &present[i + 1..] {
+                *co.entry(pack(a, b)).or_insert(0) += 1;
+            }
+        }
+    }
+    IdGraph { names: sorted.into_iter().map(String::from).collect(), co, df, n_verses: corpus.verses().len() }
+}
+
+/// Intern a String-pair edge map for the public wrappers (ids lexicographic,
+/// pairs canonicalized by id — identical to canonicalizing by string).
+fn intern_edges<V: Copy>(edges: &HashMap<(String, String), V>) -> (Vec<String>, HashMap<u64, V>) {
+    let mut names: Vec<&str> = edges.keys().flat_map(|(a, b)| [a.as_str(), b.as_str()]).collect();
+    names.sort_unstable();
+    names.dedup();
+    let id_of: HashMap<&str, u32> = names.iter().enumerate().map(|(i, &s)| (s, i as u32)).collect();
+    let ided = edges
+        .iter()
+        .map(|((a, b), v)| {
+            let (x, y) = (id_of[a.as_str()], id_of[b.as_str()]);
+            (pack(x.min(y), x.max(y)), *v)
         })
+        .collect();
+    (names.into_iter().map(String::from).collect(), ided)
+}
+
+fn ppmi_ids(n_verses: usize, df: &[u32], co: &HashMap<u64, u32>) -> HashMap<u64, f32> {
+    let n = n_verses.max(1) as f64;
+    let df_of = |i: u32| f64::from(df.get(i as usize).copied().unwrap_or(1).max(1));
+    let mut out = HashMap::new();
+    for (&key, &c) in co {
+        let (a, b) = unpack(key);
+        let v = (f64::from(c) * n / (df_of(a) * df_of(b))).ln();
+        if v > 0.0 {
+            out.insert(key, v as f32);
+        }
+    }
+    out
+}
+
+fn mutual_knn_ids(k: usize, n_ids: usize, edges: &HashMap<u64, f32>) -> HashMap<u64, f32> {
+    // Each node's top-k neighbour set.
+    let mut nbrs: Vec<Vec<(u32, f32)>> = vec![Vec::new(); n_ids];
+    for (&key, &w) in edges {
+        let (a, b) = unpack(key);
+        nbrs[a as usize].push((b, w));
+        nbrs[b as usize].push((a, w));
+    }
+    let top: Vec<HashSet<u32>> = nbrs
+        .into_iter()
+        .map(|mut list| {
+            list.sort_by(|x, y| y.1.total_cmp(&x.1));
+            list.truncate(k);
+            list.into_iter().map(|(n, _)| n).collect()
+        })
+        .collect();
+    edges
+        .iter()
+        .filter(|(&key, _)| {
+            let (a, b) = unpack(key);
+            top[a as usize].contains(&b) && top[b as usize].contains(&a)
+        })
+        .map(|(&key, &w)| (key, w))
         .collect()
+}
+
+fn communities_ids(max_rounds: usize, n_ids: usize, edges: &HashMap<u64, f32>) -> Vec<Vec<u32>> {
+    // Weighted adjacency; ids with no edges never participate.
+    let mut adj: Vec<Vec<(u32, f32)>> = vec![Vec::new(); n_ids];
+    for (&key, &w) in edges {
+        let (a, b) = unpack(key);
+        adj[a as usize].push((b, w));
+        adj[b as usize].push((a, w));
+    }
+    // Label per node (start: itself), updated synchronously per round.
+    let mut labels: Vec<u32> = (0..n_ids as u32).collect();
+    for _ in 0..max_rounds {
+        let mut next = labels.clone();
+        let mut changed = false;
+        for v in 0..n_ids {
+            if adj[v].is_empty() {
+                continue;
+            }
+            // Sum edge weight per neighbouring label.
+            let mut pull: HashMap<u32, f32> = HashMap::new();
+            for &(u, w) in &adj[v] {
+                *pull.entry(labels[u as usize]).or_insert(0.0) += w;
+            }
+            let best = pull.values().copied().fold(f32::MIN, f32::max);
+            // Smallest label among the heaviest — order-independent, and id
+            // order == string order, so this matches the String tie-break.
+            let chosen = pull
+                .iter()
+                .filter(|(_, w)| **w >= best)
+                .map(|(l, _)| *l)
+                .min()
+                .unwrap_or(labels[v]);
+            if chosen != next[v] {
+                next[v] = chosen;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+        labels = next;
+    }
+
+    let mut grouped: HashMap<u32, Vec<u32>> = HashMap::new();
+    for v in 0..n_ids {
+        if !adj[v].is_empty() {
+            grouped.entry(labels[v]).or_default().push(v as u32);
+        }
+    }
+    let mut out: Vec<Vec<u32>> = grouped.into_values().filter(|g| g.len() >= 3).collect();
+    for g in &mut out {
+        g.sort_unstable(); // == lexicographic member order
+    }
+    out.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.first().cmp(&b.first())));
+    out
+}
+
+/// Undirected co-occurrence counts: how many verses each unordered code pair
+/// shares. Pairs are stored canonically (`a < b`). (String-keyed wrapper over
+/// the id-space pipeline; [`Concept::build`] stays in id space throughout.)
+pub fn co_occurrence(corpus: &Corpus) -> HashMap<(String, String), u32> {
+    let g = intern_corpus(corpus);
+    g.co.iter().map(|(&key, &c)| (name_pair(&g.names, key), c)).collect()
 }
 
 /// Verse frequency: how many distinct verses each code appears in.
 pub fn verse_frequency(corpus: &Corpus) -> HashMap<String, u32> {
-    let mut m: HashMap<String, u32> = HashMap::new();
-    for v in corpus.verses() {
-        let mut seen: HashSet<&String> = HashSet::new();
-        for t in &v.tokens {
-            for s in &t.strongs {
-                if seen.insert(s) {
-                    *m.entry(s.clone()).or_insert(0) += 1;
-                }
-            }
-        }
-    }
-    m
+    let g = intern_corpus(corpus);
+    g.names.into_iter().zip(g.df).collect()
 }
 
 /// Positive pointwise mutual information over the co-occurrence counts, keyed by
@@ -144,16 +277,12 @@ pub fn ppmi(
     df: &HashMap<String, u32>,
     co: &HashMap<(String, String), u32>,
 ) -> HashMap<(String, String), f32> {
-    let n = n_verses.max(1) as f64;
-    let df_of = |s: &str| df.get(s).copied().unwrap_or(1).max(1) as f64;
-    let mut out = HashMap::new();
-    for ((a, b), c) in co {
-        let v = (*c as f64 * n / (df_of(a) * df_of(b))).ln();
-        if v > 0.0 {
-            out.insert((a.clone(), b.clone()), v as f32);
-        }
-    }
-    out
+    let (names, co_ids) = intern_edges(co);
+    let df_vec: Vec<u32> = names.iter().map(|n| df.get(n).copied().unwrap_or(1)).collect();
+    ppmi_ids(n_verses, &df_vec, &co_ids)
+        .iter()
+        .map(|(&key, &w)| (name_pair(&names, key), w))
+        .collect()
 }
 
 /// Keep only mutual top-`k` edges: `(a,b)` survives iff `b` is among `a`'s
@@ -162,27 +291,10 @@ pub fn mutual_knn(
     k: usize,
     edges: &HashMap<(String, String), f32>,
 ) -> HashMap<(String, String), f32> {
-    // Each node's top-k neighbour set.
-    let mut nbrs: HashMap<&str, Vec<(&str, f32)>> = HashMap::new();
-    for ((a, b), w) in edges {
-        nbrs.entry(a).or_default().push((b, *w));
-        nbrs.entry(b).or_default().push((a, *w));
-    }
-    let top: HashMap<&str, HashSet<&str>> = nbrs
-        .into_iter()
-        .map(|(node, mut list)| {
-            list.sort_by(|x, y| y.1.total_cmp(&x.1));
-            list.truncate(k);
-            (node, list.into_iter().map(|(n, _)| n).collect())
-        })
-        .collect();
-    edges
+    let (names, ids) = intern_edges(edges);
+    mutual_knn_ids(k, names.len(), &ids)
         .iter()
-        .filter(|((a, b), _)| {
-            top.get(a.as_str()).is_some_and(|s| s.contains(b.as_str()))
-                && top.get(b.as_str()).is_some_and(|s| s.contains(a.as_str()))
-        })
-        .map(|((a, b), w)| ((a.clone(), b.clone()), *w))
+        .map(|(&key, &w)| (name_pair(&names, key), w))
         .collect()
 }
 
@@ -190,56 +302,11 @@ pub fn mutual_knn(
 /// largest first. Deterministic (ties break to the smallest label among the
 /// heaviest), bounded to `max_rounds`.
 pub fn communities(max_rounds: usize, edges: &HashMap<(String, String), f32>) -> Vec<Vec<String>> {
-    // Weighted adjacency.
-    let mut adj: HashMap<&str, Vec<(&str, f32)>> = HashMap::new();
-    for ((a, b), w) in edges {
-        adj.entry(a).or_default().push((b, *w));
-        adj.entry(b).or_default().push((a, *w));
-    }
-    // Label per node (start: itself).
-    let mut labels: HashMap<&str, &str> = adj.keys().map(|&n| (n, n)).collect();
-
-    for _ in 0..max_rounds {
-        let mut next: HashMap<&str, &str> = HashMap::with_capacity(labels.len());
-        for (&v, nbrs) in &adj {
-            // Sum edge weight per neighbouring label.
-            let mut pull: HashMap<&str, f32> = HashMap::new();
-            for (u, w) in nbrs {
-                *pull.entry(labels[u]).or_insert(0.0) += *w;
-            }
-            let chosen = match pull.iter().map(|(_, w)| *w).fold(f32::MIN, f32::max) {
-                best if best > f32::MIN => {
-                    // Smallest label among the heaviest — order-independent.
-                    pull.iter()
-                        .filter(|(_, w)| **w >= best)
-                        .map(|(l, _)| *l)
-                        .min()
-                        .unwrap_or(labels[v])
-                }
-                _ => labels[v],
-            };
-            next.insert(v, chosen);
-        }
-        if next == labels {
-            break;
-        }
-        labels = next;
-    }
-
-    let mut grouped: HashMap<&str, Vec<String>> = HashMap::new();
-    for (v, lbl) in &labels {
-        grouped.entry(lbl).or_default().push(v.to_string());
-    }
-    let mut out: Vec<Vec<String>> = grouped
-        .into_values()
-        .filter(|g| g.len() >= 3)
-        .map(|mut g| {
-            g.sort();
-            g
-        })
-        .collect();
-    out.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.first().cmp(&b.first())));
-    out
+    let (names, ids) = intern_edges(edges);
+    communities_ids(max_rounds, names.len(), &ids)
+        .into_iter()
+        .map(|g| g.into_iter().map(|i| names[i as usize].clone()).collect())
+        .collect()
 }
 
 // ── the assembled engine ───────────────────────────────────────────────────────
@@ -264,23 +331,29 @@ const COMMUNITY_ROUNDS: usize = 30;
 impl Concept {
     pub fn build(corpus: &Corpus) -> Concept {
         let ix = build_concept_ix(corpus);
-        let n_verses = corpus.verses().len();
-        let df = verse_frequency(corpus);
-        let co = co_occurrence(corpus);
-        let edges = ppmi(n_verses, &df, &co);
+        // The whole pipeline stays in id space (see the module note on
+        // interning); only the small retained results become Strings.
+        let IdGraph { names, co, df, n_verses } = intern_corpus(corpus);
+        let edges = ppmi_ids(n_verses, &df, &co);
         drop(co); // free the dense count matrix
-        let knn = mutual_knn(KNN, &edges);
+        let knn = mutual_knn_ids(KNN, names.len(), &edges);
         drop(edges);
-        let communities = communities(COMMUNITY_ROUNDS, &knn);
+        let comm_ids = communities_ids(COMMUNITY_ROUNDS, names.len(), &knn);
 
         let mut collocates: HashMap<String, Vec<(String, f32)>> = HashMap::new();
-        for ((a, b), w) in &knn {
-            collocates.entry(a.clone()).or_default().push((b.clone(), *w));
-            collocates.entry(b.clone()).or_default().push((a.clone(), *w));
+        for (&key, &w) in &knn {
+            let (a, b) = unpack(key);
+            let (a, b) = (&names[a as usize], &names[b as usize]);
+            collocates.entry(a.clone()).or_default().push((b.clone(), w));
+            collocates.entry(b.clone()).or_default().push((a.clone(), w));
         }
         for list in collocates.values_mut() {
             list.sort_by(|x, y| y.1.total_cmp(&x.1));
         }
+        let communities: Vec<Vec<String>> = comm_ids
+            .into_iter()
+            .map(|g| g.into_iter().map(|i| names[i as usize].clone()).collect())
+            .collect();
         let mut community_of = HashMap::new();
         for (i, grp) in communities.iter().enumerate() {
             for code in grp {
@@ -321,16 +394,30 @@ impl Concept {
         self.ix.get(code).map(testament_split).unwrap_or((0, 0))
     }
 
-    /// The strongest collocates of a code (mutual-kNN, by PPMI).
+    /// The strongest collocates of a code (mutual-kNN, by PPMI), function
+    /// words excluded (see [`crate::stopwords`]).
     pub fn collocates(&self, code: &str, k: usize) -> Vec<(String, f32)> {
-        self.collocates.get(code).map(|v| v.iter().take(k).cloned().collect()).unwrap_or_default()
+        self.collocates
+            .get(code)
+            .map(|v| {
+                v.iter()
+                    .filter(|(c, _)| !crate::stopwords::is_function_word(c))
+                    .take(k)
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// The collocation community `code` belongs to (its co-occurring field),
-    /// excluding the code itself; empty if it's in none.
+    /// excluding the code itself and any function words; empty if it's in none.
     pub fn community(&self, code: &str) -> Vec<String> {
         match self.community_of.get(code) {
-            Some(&i) => self.communities[i].iter().filter(|c| c.as_str() != code).cloned().collect(),
+            Some(&i) => self.communities[i]
+                .iter()
+                .filter(|c| c.as_str() != code && !crate::stopwords::is_function_word(c))
+                .cloned()
+                .collect(),
             None => Vec::new(),
         }
     }

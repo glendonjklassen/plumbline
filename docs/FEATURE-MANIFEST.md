@@ -32,7 +32,7 @@ Conventions used everywhere:
 | MARGIN | 28 px | text margin, all sides |
 | MIN/MAX/DEFAULT_FONT | 12 / 48 / 18 pt | zoom range, 1-pt steps |
 | MAX_PANES | 3 | reading columns |
-| PANEL_WIDTH | 380 px | study sidebar (fixed width) |
+| PANEL_WIDTH | 380 px | study sidebar (web: × the text-size setting — the reader zoom scales the whole study surface, width and type; 2026-07-25) |
 | OCC_SHOWN | 300 | concordance cap |
 | XREF_SHOWN | 40 | xref/link list caps |
 | GLOSS_SAMPLE | 80 | verses sampled for the english gloss |
@@ -110,10 +110,10 @@ Native tooltip timing; hit-test under pointer; only when the word has Strong's
 refs. Per code: bold code, lemma, italic xlit, then `kjv` (fallback `def`)
 trimmed to 80 chars. *Data*: `plumbline_layout_hit_test_json` + `plumbline_engine_strongs_json`.
 
-## Word study panel (double-click **or Ctrl+click**; M:3168–3515)
+## Word study panel (click a word — 2026-07-25, was double-click; M:3168–3515)
 
-Sidebar 380 px, on-demand; Esc hides; clearing search hides. Content order —
-(F) = Full mode only.
+Sidebar 380 px (web: scaled by the text-size setting), on-demand; Esc hides;
+clearing search hides. Content order — (F) = Full mode only.
 
 **Structure — one core producer, thin per-block renderers (P0.1).** The whole
 panel is now a **typed block list** built once in `plumbline_core::panel` and served
@@ -155,8 +155,12 @@ producer emits*, not shell code.
      by usage" in `#b04a3a` when the text-witness disbelieves (shipped data never
      grades, so silent).
    - **SIMILAR CONCEPTS** *(Machine ≈)* — embedding neighbours (6); "across the
-     testaments —" cross (6).
-   - **APPEARS ALONGSIDE** *(Machine ≈)* — concept community (8).
+     testaments —" cross (6). Grammatical function words (articles,
+     conjunctions, prepositions, pronouns, be-verbs — `rnd::stopwords`) never
+     appear as neighbours (2026-07-25: *believe* was offering *because*);
+     they remain directly studyable.
+   - **APPEARS ALONGSIDE** *(Machine ≈)* — concept community (8), same
+     function-word filter.
    - **WHERE IT CONCENTRATES** *(Machine ≈)* — top books (5) "Book ×N · …" + "(OT x · NT y)".
    - **LEITWORT** *(Machine ≈)* — "{winCount} of its {n} uses cluster in {label} (p ≈ 10^−{score})".
    - "▸ open concept map" link.
@@ -262,12 +266,11 @@ reject deletes the file. Ordinals shift after every write — always re-fetch.
 
 ## Weave authoring (M:2137–2236)
 
-Single left-click a word → pin `PinSpan{verse, anchor, lo, hi}` in that pane:
-same-verse clicks re-span `lo=min(anchor,tok), hi=max(anchor,tok)`; a
-different verse resets. Pinned span painted blue α0.22 per word rect. Header
-`＋ link` enabled when ≥2 panes have pins; takes the first two, prompts a
-weave name, writes a Quotation-kind link with both spans (canon-ordered), then
-clears pins + redraws connectors. **Compare card** (`weave:i`): name + kind +
+**The desktop-era pin/＋link flow was removed 2026-07-25** (single left-click
+now opens word study, matching the Compose tap): weave links are authored via
+the tag→weave sheet (`makeweave:` — tag passages as a topic, then chain them),
+in both shells. `plumbline_engine_weave_add_link_spans` remains in the ABI for
+span-precise links; no shell surfaces it today. **Compare card** (`weave:i`): name + kind +
 "(suggested)"; "N link(s)" + (F) `✎ note`; per link ≤40: label `"…"` gold,
 each side verse link + verse text small with **span words bold** and added
 words italic gray. *Data*: `plumbline_engine_weave_add_link_spans`, `weaves_json`,
@@ -337,7 +340,7 @@ First run: modal "Welcome to Plumbline" with two cards — "Simple reader"
 ("Just the text…") / "Full study" ("Everything…"); closing without choosing
 keeps Simple. Reading mode is now a radio in the primary ≡ menu (Reading ▸
 Simple reader / Full study), not a header button; leaving Full collapses the
-panel. Simple hides the header study tools (Threads, Tags, Weaves, ＋link) and
+panel. Simple hides the header study tools (Threads, Tags, Weaves) and
 disables the menu's weave views (Suggested, Weave map, Constellation) plus every
 (F) item above; Simple keeps reading, search, hover gloss, basic word study
 (Strong's + occurrences + weave xrefs + margin notes), canon strip, connectors,
@@ -345,9 +348,12 @@ zoom.
 
 ## Primary menu (≡)
 
-The header keeps only the core browse buttons (Threads, Tags, Weaves, ＋link) +
+The header keeps only the core browse buttons (Threads, Tags, Weaves) +
 search; everything else moved into a right-aligned primary ≡ menu, in both
-shells: **Weave views** (Suggested, Weave map, Constellation — disabled outside
+shells. **Share the app** (2026-07-25, both shells): a menu item opens the
+hosted PWA's QR code (pre-generated matrix, no QR dependency —
+`QrCode.svelte` / `QrShare.kt`) + the link via system share / copy; the same
+QR closes Present's end card. Menu contents: **Weave views** (Suggested, Weave map, Constellation — disabled outside
 Full study), **Reading** (Simple/Full radio + Verse-per-line toggle), **Theme**
 (light/dark/night/follow-system radio), and **Guide / Keyboard shortcuts /
 About**. GTK: a `gtk::MenuButton` + `gio::Menu` backed by `win.*` `SimpleAction`s
@@ -702,10 +708,10 @@ canvas `measureText`, all flags/bands/washes/runs/gutter marks), multi-pane
 link router (incl. `makeweave:`), live search, hover gloss (native tooltip),
 keyboard map + wheel + touch (pan, long-press menu, horizontal chapter
 swipe), context menu (copy shapes / note / tones / tag / thread / memorize),
-tag picker + tag→weave sheets, drag highlights + span pins + ＋link, the
+tag picker + tag→weave sheets, drag highlights, the
 three map popups from the core view-models (pinch-zoom), memorization (hub /
-drill / coverage / activity), Present mode (sunlight, share +
-BibleGateway + the hosted PWA link), notes browser, history, first-run,
+drill / coverage / activity), Present mode (sunlight, share + the hosted
+PWA link + its QR on the end card), notes browser, history, first-run,
 guide/about/shortcuts,
 light/dark/night/system themes from the core palette, per-tier gates,
 config round-trip incl. scroll-verse restore (flushed on tab hide — the
@@ -713,13 +719,21 @@ ON_PAUSE twin), PWA (installable, offline after first visit; pack cached
 `?v=<content-hash>`).
 
 Web deltas: engine runs on the main thread (GTK-style; a worker is the
-escape hatch if jank shows); analytical popups keep light paper (shared
-delta); user data lives per-browser (export/import + sync are future work);
+escape hatch if jank shows — TODO #28's remaining stage). **Boot ships the
+core pack only** (2026-07-25, TODO #28): the `rnd`-marked artifacts
+(morphology, concept vectors) stream in after first paint —
+`loadRndPack` → `plumbline_engine_load_rnd_data` → a re-warm builds the SIF —
+at idle / on the first-run machine choice / on the Settings toggle, with
+`studyEpoch` refreshing any open panel; until they land, the machine tiers
+are simply absent, exactly like an Android install (which never bundles
+them). Analytical popups keep light paper (shared delta); user data lives
+per-browser (export/import is the portability story);
 Present "In context" fade not built. Hosting decided 2026-07-25: GitHub
-Pages (<https://glendonjklassen.github.io/plumbline/>), deployed by the
-release workflow on every `v*` tag (base "./", so the subpath needs no
-rebuild; the scripture font's @font-face lives in `public/fonts.css` to
-keep its URLs base-relative).
+Pages at <https://plumblinebible.org/> (custom domain, same day; the old
+github.io URL 301s there), deployed by the release workflow on every `v*`
+tag (base "./", so any host or subpath works without a rebuild; the
+scripture font's @font-face lives in `public/fonts.css` to keep its URLs
+base-relative).
 
 ## Android notes
 
@@ -730,9 +744,10 @@ keep its URLs base-relative).
     high-contrast ("sunlight") large-type presentation for showing someone in
     person — scrollable overview (bounce anywhere), tap-to-focus a passage
     huge, "In context" fades surrounding verses in, end card with plain-text
-    Share + BibleGateway KJV link. The share's closing line carries the
-    hosted PWA link (2026-07-25, both shells) — the take-home hands the
-    recipient the app, not just the text. **Delta (GTK/WinUI):** a projection-friendly
+    Share. The share's closing line carries the hosted PWA link and the end
+    card shows its QR (2026-07-25, both shells; the BibleGateway link was
+    dropped the same day — the verse text is inlined, and the take-home hands
+    the recipient the app, not just the text). **Delta (GTK/WinUI):** a projection-friendly
     presentation window (fullscreen, large type, step keys) from the same
     thread data.
   - **Embedded study maps** (`ui/StudyMaps.kt`): the concept map + canon

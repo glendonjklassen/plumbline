@@ -102,30 +102,15 @@ private fun refParts(ref: String): Triple<String, Int, Int>? {
     return Triple(ref.substring(0, sp), ch, v)
 }
 
-/** An online KJV link for the whole trail (BibleGateway takes a comma-separated
- *  passage list), so the take-home is readable without the app. Long trails link
- *  the first passage only to keep the URL sane. */
-private fun onlineLink(entries: List<PresentEntry>): String? {
-    if (entries.isEmpty()) return null
-    val refs = if (entries.size <= 8) entries.map { it.display } else listOf(entries.first().display)
-    val search = refs.joinToString(",") { it.replace(' ', '+') }
-    return "https://www.biblegateway.com/passage/?search=$search&version=KJV"
-}
-
-/** The hosted PWA — the take-home carries the app itself, not just the text. */
-private const val PWA_URL = "https://glendonjklassen.github.io/plumbline/"
-
-/** The plain-text take-home for a presented thread (the end-card Share). */
+/** The plain-text take-home for a presented thread (the end-card Share). The
+ *  full verse text is inlined, so it reads without any online Bible; the
+ *  closing line carries the hosted PWA ([PWA_URL], QrShare.kt). */
 private fun shareText(name: String, entries: List<PresentEntry>): String =
     buildString {
         appendLine(name)
         for (e in entries) {
             appendLine()
             appendLine("“${e.body}” — ${e.display}")
-        }
-        onlineLink(entries)?.let {
-            appendLine()
-            appendLine("Read online: $it")
         }
         appendLine()
         appendLine("Shared from Plumbline — $PWA_URL")
@@ -490,5 +475,13 @@ private fun EndCard(
             Spacer(Modifier.padding(horizontal = 4.dp))
             Text("Share these passages", fontSize = 16.sp)
         }
+        Spacer(Modifier.height(26.dp))
+        // The take-home carries the app itself: scan → the hosted PWA.
+        PwaQrCode(size = 148.dp)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "scan for the app — free, offline, no account",
+            color = SunFaded, fontSize = 13.sp, fontFamily = serif, textAlign = TextAlign.Center,
+        )
     }
 }

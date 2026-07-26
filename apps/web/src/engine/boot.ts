@@ -1,11 +1,17 @@
-// Boot sequence: data pack → virtual home → wasm instance → engine open.
+// Boot sequence: CORE data pack → virtual home → wasm instance → engine open.
 // Returns the ready StudyEngine with persistence wired. The caller drives a
 // progress UI; the heavy step after download is the first-visit corpus parse
 // (the built cache is persisted so later visits skip it).
+//
+// The machine-tier artifacts (morphology, concept vectors — ~17 MB raw) are
+// NOT part of boot: the engine opens without them (same shape as the Android
+// APK, which never bundles them), and loadRndPack() streams them in after
+// first paint (TODO #28). The engine runs on the main thread, so the split is
+// what keeps the splash short on phones.
 
 import { instantiate, type WasmEngine } from "./engine";
 import { buildHome, type VirtualHome } from "./home";
-import { fetchManifest, fetchPack } from "./pack";
+import { fetchManifest, fetchPack, fetchRndPack, type PackManifest } from "./pack";
 import { StudyEngine } from "./StudyEngine";
 
 export interface BootPhase {
@@ -19,7 +25,20 @@ export interface BootResult {
   engine: StudyEngine;
   wasm: WasmEngine;
   home: VirtualHome;
+  manifest: PackManifest;
   packVersion: string;
+}
+
+/** Fetch the deferred machine-tier pack, hand its files to the live home, and
+ *  (re)warm — the SIF model only builds once the embedding is in. One long
+ *  synchronous engine block at the end (main-thread engine), so callers
+ *  schedule this at an idle moment, never during interaction. Idempotent. */
+export async function loadRndPack(r: BootResult): Promise<void> {
+  if (!r.manifest.files.some((f) => f.rnd)) return;
+  const files = await fetchRndPack(r.manifest);
+  r.home.addFiles(files);
+  r.engine.loadRndData();
+  r.engine.warmIndexes();
 }
 
 export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult> {
@@ -51,5 +70,5 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   };
 
   void home.persistIdxcache();
-  return { engine, wasm, home, packVersion: manifest.version };
+  return { engine, wasm, home, manifest, packVersion: manifest.version };
 }

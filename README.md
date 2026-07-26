@@ -25,7 +25,7 @@ Download the APK from the
 ### Web
 
 Plumbline is also a PWA:
-**[glendonjklassen.github.io/plumbline](https://glendonjklassen.github.io/plumbline/)** —
+**[plumblinebible.org](https://plumblinebible.org/)** —
 open it in any browser and install it from the address bar. It works offline
 after the first visit, and your study data lives in browser storage.
 
