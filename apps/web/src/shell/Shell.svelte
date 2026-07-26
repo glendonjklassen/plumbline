@@ -5,7 +5,6 @@
   import ReaderPane from "../reader/ReaderPane.svelte";
   import StudyPanel from "../study/StudyPanel.svelte";
   import PromptDialog from "./PromptDialog.svelte";
-  import FirstRun from "./FirstRun.svelte";
   import Shortcuts from "./Shortcuts.svelte";
   import BookNav from "./BookNav.svelte";
   import CanonStrip from "./CanonStrip.svelte";
@@ -246,7 +245,6 @@
   <div class="toast">{s.toast}</div>
 {/if}
 <PromptDialog />
-<FirstRun />
 <Shortcuts />
 <MapsHost />
 <ContextMenu />

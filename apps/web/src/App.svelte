@@ -7,6 +7,7 @@
   import { idbGet } from "./engine/idb";
   import { MARGIN, paintChapter } from "./reader/paint";
   import { initSession, type Session } from "./state/session.svelte";
+  import FirstRun from "./shell/FirstRun.svelte";
   import Shell from "./shell/Shell.svelte";
 
   let phase = $state<WorkerProgress>({ phase: "download", fraction: 0 });
@@ -164,7 +165,16 @@
 </script>
 
 {#if session}
-  <Shell />
+  {#if session.showFirstRun}
+    <!-- First launch: the welcome owns the screen, straight off the loader —
+         the reader mounts only after a path is chosen (no John 3 flashing
+         under a question, feedback 2026-07-26). -->
+    <div class="firstrun-stage">
+      <FirstRun />
+    </div>
+  {:else}
+    <Shell />
+  {/if}
 {:else if snapshot && !error}
   <!-- Last session's chapter, painted from the snapshot — readable text in
        the first frames. The strip below says the engine is still coming. -->
@@ -211,6 +221,11 @@
 {/if}
 
 <style>
+  .firstrun-stage {
+    position: fixed;
+    inset: 0;
+    background: var(--paper, #fcf9f4);
+  }
   .preview {
     position: fixed;
     inset: 0;

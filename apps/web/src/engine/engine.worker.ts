@@ -198,6 +198,11 @@ self.onmessage = async (ev: MessageEvent) => {
       }
       case "static": {
         reply(statics()[m.fn](...m.args));
+        // Config writes land in the in-memory WASI home; mirror them to
+        // IndexedDB like any authoring write. Before this, config persisted
+        // only when an authoring write happened to follow — a pure reader's
+        // first-run choice (and pane layout) never survived a relaunch.
+        if (m.fn === "configSave") void booted!.home.persistUserData();
         break;
       }
       case "layout": {

@@ -15,6 +15,9 @@ const IDXCACHE = "data/kjv.jsonl.idxcache";
 export interface VirtualHome {
   /** Root contents map handed to PreopenDirectory("/home", …). */
   root: Map<string, Directory | File>;
+  /** Whether a persisted corpus idxcache was restored into this home — when
+   *  true the engine open should take the fast path (no 19 MB re-parse). */
+  hadIdxcache: boolean;
   /** Insert read-only pack files into the live home (the WASI shim resolves
    *  paths on open, so the engine sees them immediately) — the late R&D pack. */
   addFiles(files: Map<string, Uint8Array>): void;
@@ -117,6 +120,7 @@ export async function buildHome(
 
   return {
     root,
+    hadIdxcache: !!idxcache,
     addFiles(files: Map<string, Uint8Array>) {
       for (const [path, bytes] of files) insertFile(root, path, bytes);
     },

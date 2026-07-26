@@ -1,18 +1,22 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// Boot the app and wait for the reader. First-run modal is dismissed via
-// "Start reading" (fresh storage per test). The title check also pins the
-// product branding — index.html, the manifest and the shell header must agree.
+// Boot the app and wait for the reader. On a fresh profile the first-run
+// chooser OWNS the screen straight off the loader (the reader mounts after a
+// path is chosen — 2026-07-26); take the established path. The title check
+// also pins the product branding — index.html, the manifest and the shell
+// header must agree.
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
   await expect(page).toHaveTitle("Plumbline Bible");
-  await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
-  // First-run chooser (fresh storage per test): take the established path.
   const established = page.getByRole("button", { name: "Established believer" });
+  // Either the chooser (fresh profile) or the reader canvas (returning) —
+  // the canvas, not .subtitle, because phones hide the subtitle.
+  await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
   if (await established.isVisible().catch(() => false)) {
     await established.click();
     await page.getByRole("button", { name: "Start reading" }).click();
   }
+  await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 
 test("boots to the reader with the stock set seeded", async ({ page }) => {
@@ -41,8 +45,8 @@ test("boots to the reader with the stock set seeded", async ({ page }) => {
 
 test("first-run: a new believer's welcome reference opens beside John", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
-  await page.getByRole("button", { name: "New in the faith" }).click();
+  // The chooser is the first screen after the loader — no reader behind it.
+  await page.getByRole("button", { name: "New in the faith" }).click({ timeout: 90_000 });
   await expect(page.getByText("We're so glad you've put your faith in Jesus")).toBeVisible();
   await page.getByRole("button", { name: "Psalm 12:6–7" }).click();
   const panes = await page.evaluate(() => {
@@ -56,8 +60,7 @@ test("first-run: a new believer's welcome reference opens beside John", async ({
 
 test("first-run: sharing the gospel lands in the Romans Road presentation", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
-  await page.getByRole("button", { name: "Sharing the gospel" }).click();
+  await page.getByRole("button", { name: "Sharing the gospel" }).click({ timeout: 90_000 });
   // Straight past the picker into the trail overview.
   await expect(page.locator(".present .title")).toContainText("Romans Road");
   await expect(page.getByText("For all have sinned")).toBeVisible();
@@ -140,6 +143,16 @@ test("phones keep ONE pane (no split; weaves navigate instead)", async ({ page }
   await expect(page.locator(".pane canvas")).toHaveCount(1);
   const panes = await page.evaluate(() => (window as any).__plumbline.panes.length);
   expect(panes).toBe(1);
+});
+
+test("the first-run choice survives a relaunch", async ({ page }) => {
+  // Config must persist WITHOUT an authoring write — it used to reach
+  // IndexedDB only as a side effect of authoring, so a pure reader saw the
+  // intro every single launch (2026-07-26).
+  await boot(page); // dismisses first-run via the established path
+  await page.reload();
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole("button", { name: "Established believer" })).toHaveCount(0);
 });
 
 test("phones clamp a restored multi-pane session to one pane", async ({ page }) => {

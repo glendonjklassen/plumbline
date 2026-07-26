@@ -45,7 +45,10 @@
     // studyMode round-trips for older readers of the shared config.
     s.config.studyMode = h || m ? "full" : "simple";
     s.showFirstRun = false;
-    s.saveConfig();
+    // Flush, not the debounced save: whoever picks a path and closes the app
+    // straight away must not meet the intro again (the pagehide flush posts
+    // to a worker that dies with the page).
+    s.flushConfig();
     if (m) void s.ensureRnd();
   }
 
@@ -71,7 +74,7 @@
       s.panes = ref ? [pane("John", 1), pane(ref.book, ref.chapter, ref.verse)] : [pane("John", 1)];
     }
     s.activePane = 0;
-    s.saveConfig();
+    s.flushConfig(); // the landing panes must survive an immediate close too
   }
 
   /** Witnessing: straight to Present with the Romans Road, ready to show. */

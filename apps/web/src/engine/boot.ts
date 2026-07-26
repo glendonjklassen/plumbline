@@ -60,7 +60,12 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   await new Promise((r) =>
     typeof requestAnimationFrame !== "undefined" ? requestAnimationFrame(() => r(null)) : setTimeout(r, 0),
   );
-  const engine = await timed("engine open (corpus parse)", () => StudyEngine.open(wasm, "/home"));
+  // The label says whether the persisted corpus cache was there to skip the
+  // 19 MB re-parse — the first question when this stage is slow on a device.
+  const engine = await timed(
+    home.hadIdxcache ? "engine open (idxcache fast path)" : "engine open (cold corpus parse)",
+    () => StudyEngine.open(wasm, "/home"),
+  );
 
   // Persistence choreography: any authoring write mirrors the user subtree.
   let pending = false;
