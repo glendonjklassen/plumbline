@@ -110,11 +110,15 @@ pub const PLUMBLINE_WIRE_VERSION: u32 = 1;
 pub struct PlumblineEngine {
     corpus: Corpus,
     strongs: StrongsDict,
-    search_ix: SearchIx,
-    occ_ix: OccurrenceIx,
+    /// The corpus-derived indexes are built LAZILY (TODO #28: boot cost —
+    /// the app opens like Instagram, many times a day; every millisecond of
+    /// open is paid every time). First access builds; `warm_indexes` forces
+    /// them right after the shell hands its UI over, off-thread.
+    search_ix: OnceLock<SearchIx>,
+    occ_ix: OnceLock<OccurrenceIx>,
     /// The rendering lens: code → English renderings and surface word → codes,
     /// both corpus-derived and immutable after open (like `occ_ix`).
-    renderings: Renderings,
+    renderings: OnceLock<Renderings>,
     /// The data home, if opened from one — required to author (write) study
     /// data. `None` when opened from bytes (study data is then read-only/empty).
     home: Option<PathBuf>,
@@ -137,8 +141,9 @@ pub struct PlumblineEngine {
     /// (or a warm call) and cached. Never set while the embedding is absent,
     /// so a warm that ran before the R&D pack arrived doesn't pin it empty.
     verse_sim: OnceLock<embed::VerseSim>,
-    /// TSK topical cross-references (loaded when opened from a home dir).
-    xref_ix: XRefIx,
+    /// TSK topical cross-references (parsed lazily from the home — an 8.5 MB
+    /// TSV nobody should pay for at every open).
+    xref_ix: OnceLock<XRefIx>,
     /// The symbolic concept engine (collocations, distribution, communities)
     /// and the leitwort scan — corpus-wide sweeps, built lazily like the SIF
     /// model and cached for the engine's lifetime.
@@ -148,9 +153,6 @@ pub struct PlumblineEngine {
 
 impl PlumblineEngine {
     fn new(corpus: Corpus, strongs: StrongsDict, home: Option<PathBuf>) -> PlumblineEngine {
-        let search_ix = SearchIx::build(&corpus);
-        let occ_ix = OccurrenceIx::build(&corpus);
-        let renderings = Renderings::build(&corpus);
         // R&D artifacts. The bridge's etymology layer works from the in-memory
         // dict even without a home; external witnesses + the embedding/morph
         // sidecars need a home's files. Without a home, no filesystem is
@@ -171,28 +173,20 @@ impl PlumblineEngine {
                 let _ = morph.set(m);
             }
         }
-        let xref_ix = match &home {
-            Some(h) => crossref::load_cross_refs(crossref::cross_refs_path(h)),
-            None => XRefIx::new(),
-        };
         let study = load_study(&home);
-        // Margin notes never change after open (authoring writes touch
-        // threads/tags/weaves only), so attach them to the search index once.
-        let mut search_ix = search_ix;
-        search_ix.attach_notes(&corpus, &study.notes);
         PlumblineEngine {
             corpus,
             strongs,
-            search_ix,
-            occ_ix,
-            renderings,
+            search_ix: OnceLock::new(),
+            occ_ix: OnceLock::new(),
+            renderings: OnceLock::new(),
             home,
             study: std::sync::RwLock::new(study),
             bridge,
             embedding,
             morph,
             verse_sim: OnceLock::new(),
-            xref_ix,
+            xref_ix: OnceLock::new(),
             concept: OnceLock::new(),
             leitwort: OnceLock::new(),
         }
@@ -237,6 +231,34 @@ impl PlumblineEngine {
                 let _ = self.morph.set(m);
             }
         }
+    }
+
+    /// The search index, built on first use; the reader's notes attach then
+    /// (same content as the old at-open attach — notes searchable either way).
+    fn search_ix(&self) -> &SearchIx {
+        self.search_ix.get_or_init(|| {
+            let mut ix = SearchIx::build(&self.corpus);
+            ix.attach_notes(&self.corpus, &self.study_read().notes);
+            ix
+        })
+    }
+
+    /// The occurrence index, built on first use.
+    fn occ_ix(&self) -> &OccurrenceIx {
+        self.occ_ix.get_or_init(|| OccurrenceIx::build(&self.corpus))
+    }
+
+    /// The rendering lens, built on first use.
+    fn renderings(&self) -> &Renderings {
+        self.renderings.get_or_init(|| Renderings::build(&self.corpus))
+    }
+
+    /// The TSK cross-references, parsed from the home on first use.
+    fn xref_ix(&self) -> &XRefIx {
+        self.xref_ix.get_or_init(|| match &self.home {
+            Some(h) => crossref::load_cross_refs(crossref::cross_refs_path(h)),
+            None => XRefIx::new(),
+        })
     }
 
     /// The concept engine, built lazily on the first concept query.
@@ -816,7 +838,7 @@ pub unsafe extern "C" fn plumbline_engine_strongs_occurrences_json(
         let (Some(engine), Some(code)) = (engine.as_ref(), opt_str(code)) else {
             return ptr::null_mut();
         };
-        let all = engine.occ_ix.verses(code);
+        let all = engine.occ_ix().verses(code);
         let total = all.len();
         let verses: Vec<String> = all.iter().take(OCCURRENCE_CAP).map(|v| v.ref_key()).collect();
         out_json(&wire::Occurrences {
@@ -847,7 +869,7 @@ pub unsafe extern "C" fn plumbline_engine_renderings_json(
             return ptr::null_mut();
         };
         let renderings = engine
-            .renderings
+            .renderings()
             .renderings(code)
             .into_iter()
             .map(|r| {
@@ -892,7 +914,7 @@ pub unsafe extern "C" fn plumbline_engine_word_codes_json(
             return ptr::null_mut();
         };
         let codes = engine
-            .renderings
+            .renderings()
             .word_codes(word)
             .into_iter()
             .map(|(code, count)| wire::WireWordCode { code: code.to_string(), count })
@@ -918,7 +940,7 @@ pub unsafe extern "C" fn plumbline_engine_search_json(
             return ptr::null_mut();
         };
         let study = engine.study_read();
-        match search::run_search(&engine.corpus, &study.notes, &engine.search_ix, query) {
+        match search::run_search(&engine.corpus, &study.notes, engine.search_ix(), query) {
             Some(answer) => out_json(&wire::search_to_wire(&answer)),
             None => ptr::null_mut(),
         }
@@ -1614,7 +1636,7 @@ pub unsafe extern "C" fn plumbline_engine_study_xrefs_json(
         let Some(vref) = VRef::parse_ref_key(rk) else {
             return ptr::null_mut();
         };
-        match e.xref_ix.get(&vref) {
+        match e.xref_ix().get(&vref) {
             Some(rs) if !rs.is_empty() => out_json(&wire::study_xrefs_to_wire(&vref, rs)),
             _ => ptr::null_mut(),
         }
@@ -1909,7 +1931,7 @@ impl PanelSource for PlumblineEngine {
         md.gloss(&v, token)
     }
     fn occurrence_count(&self, code: &str) -> usize {
-        self.occ_ix.verses(code).len()
+        self.occ_ix().verses(code).len()
     }
     fn strongs(&self, code: &str) -> Option<panel::StrongsView> {
         let e = self.strongs.get(code)?;
@@ -1933,7 +1955,7 @@ impl PanelSource for PlumblineEngine {
         }
     }
     fn renderings(&self, code: &str) -> Vec<panel::RenderingView> {
-        self.renderings
+        self.renderings()
             .renderings(code)
             .into_iter()
             .map(|r| panel::RenderingView { rendering: r.label.to_string(), total: r.count as u32 })
@@ -1942,7 +1964,7 @@ impl PanelSource for PlumblineEngine {
     fn rendering_refs(&self, code: &str, rendering: &str) -> Option<panel::RenderingRefsView> {
         let key = plumbline_core::renderings::normalize(rendering);
         let r = self
-            .renderings
+            .renderings()
             .renderings(code)
             .into_iter()
             .find(|r| plumbline_core::renderings::normalize(r.label) == key)?;
@@ -1953,10 +1975,10 @@ impl PanelSource for PlumblineEngine {
         })
     }
     fn word_codes(&self, word: &str) -> Vec<String> {
-        self.renderings.word_codes(word).into_iter().map(|(c, _)| c.to_string()).collect()
+        self.renderings().word_codes(word).into_iter().map(|(c, _)| c.to_string()).collect()
     }
     fn occurrences(&self, code: &str) -> panel::OccurrencesView {
-        let all = self.occ_ix.verses(code);
+        let all = self.occ_ix().verses(code);
         panel::OccurrencesView {
             total: all.len() as u32,
             verses: all.iter().take(PANEL_OCC_CAP).map(|v| (v.ref_key(), v.display())).collect(),
@@ -2015,7 +2037,7 @@ impl PanelSource for PlumblineEngine {
     }
     fn study_xrefs(&self, verse: &str) -> Vec<panel::StudyXrefView> {
         let Some(v) = VRef::parse_ref_key(verse) else { return Vec::new() };
-        match self.xref_ix.get(&v) {
+        match self.xref_ix().get(&v) {
             Some(rs) => rs
                 .iter()
                 .map(|r| panel::StudyXrefView {
@@ -2190,7 +2212,7 @@ impl PanelSource for PlumblineEngine {
     }
     fn search(&self, query: &str) -> panel::SearchView {
         let study = self.study_read();
-        match search::run_search(&self.corpus, &study.notes, &self.search_ix, query) {
+        match search::run_search(&self.corpus, &study.notes, self.search_ix(), query) {
             Some(search::SearchAnswer::GoTo { book, chapter, verse }) => {
                 let display = match verse {
                     Some(v) => VRef::new(book.clone(), chapter, v).display(),
@@ -2474,7 +2496,7 @@ const GLOSS_SAMPLE: usize = 80;
 /// verbatim from the GTK shell so every shell shows the same chips.
 fn english_gloss(e: &PlumblineEngine, code: &str) -> Option<String> {
     let mut tally: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
-    for r in e.occ_ix.verses(code).iter().take(GLOSS_SAMPLE) {
+    for r in e.occ_ix().verses(code).iter().take(GLOSS_SAMPLE) {
         if let Some(v) = e.corpus.verse(r) {
             for t in &v.tokens {
                 // Skip translator-supplied words: they render nothing original.
@@ -3051,6 +3073,10 @@ pub unsafe extern "C" fn plumbline_engine_warm_indexes(engine: *const PlumblineE
         let Some(e) = engine.as_ref() else {
             return out_string("null engine".to_string());
         };
+        e.search_ix();
+        e.occ_ix();
+        e.renderings();
+        e.xref_ix();
         e.concept();
         e.leitwort();
         e.verse_sim();

@@ -69,11 +69,17 @@ history reads.
             5. e2e: `window.__plumbline.engine.*` becomes async — tests
                await; the boot-responsiveness tests are the guard that the
                main thread stays free.
-      - [ ] Remaining boot levers if the phone still wants more: persist the
-            open-time indexes (renderings/search/occ — ~330 ms native) via the
-            idxcache pattern, and/or intern the renderings build like concept.
-            The worker now hands the UI over BEFORE the analytics warm, so
-            the splash ends at engine-open, not warm-end.
+      - [x] **Lazy derived indexes** (2026-07-26): search/occurrence/
+            renderings/cross-references build on first use instead of at open
+            — open 715 ms → 326 ms native (corpus + Strong's + study only);
+            `warm_indexes` forces all of it right after the shell hands over,
+            off-thread. The app opens like Instagram — open cost is paid every
+            single time, so nothing derived is allowed on it.
+      - [ ] If boot wants still more: the corpus load itself (~176 ms native
+            with idxcache) and the ~31 MB gunzip are the last rocks — a
+            binary corpus cache / decompressed-bytes cache would attack them.
+            Renderings interning (206 ms, now off the boot path) would speed
+            the warm if the first study tap ever feels it.
 - [ ] **29. Multilingual program** — promoted 2026-07-25 (the maintainer's
       pick): see **AI-generated Strong's tagging** below. Start with the
       afternoon spike (hand-built 10-verse Luther jsonl through
