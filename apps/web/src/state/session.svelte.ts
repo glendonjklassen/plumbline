@@ -83,6 +83,9 @@ export class Session {
   bookNavFor = $state<number | null>(null);
   /** Present mode — fullscreen, high-contrast thread presentation. */
   showPresent = $state(false);
+  /** Present opens straight into this thread when set (first-run "Sharing
+   *  the gospel" → the Romans Road); consumed on open. */
+  presentThreadName = $state<string | null>(null);
   /** Active text prompt (rendered by PromptDialog); resolves null on cancel. */
   promptReq = $state<{
     title: string;

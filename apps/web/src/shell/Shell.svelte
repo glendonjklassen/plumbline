@@ -25,7 +25,7 @@
 
   const subtitle = $derived.by(() => {
     const p = s.panes[s.activePane];
-    return p ? `${p.book} ${p.chapter} · 1769 KJV` : "";
+    return p ? `${p.book} ${p.chapter}` : "";
   });
 
   function openWordStudy(refKey: string, tokenIndex: number): void {
@@ -39,7 +39,8 @@
   }
 
   let menuOpen = $state(false);
-  // ⋮/≡ → Share the app: the PWA QR + link (Compose ShareAppDialog parity).
+  // Share the app: the PWA QR + link (Compose ShareAppDialog parity) — a
+  // first-class header button (2026-07-26), not a menu trip.
   let shareApp = $state(false);
   async function shareLink(): Promise<void> {
     if (navigator.share) {
@@ -53,11 +54,12 @@
     await navigator.clipboard.writeText(PWA_URL);
     s.showToast("Link copied");
   }
-  function menu(action: () => void): () => void {
+  // Surfaces are exclusive: picking a destination closes the others
+  // (Memorize left open over Explore was disorienting). Shared by the
+  // header's destination buttons and the ≡ utilities.
+  function go(action: () => void): () => void {
     return () => {
       menuOpen = false;
-      // Surfaces are exclusive: picking a destination closes the others
-      // (Memorize left open over Explore was disorienting).
       s.memorize = null;
       s.showHistory = false;
       s.showSettings = false;
@@ -169,10 +171,14 @@
   <header>
     <span class="title">Plumbline</span>
     <span class="subtitle">{subtitle}</span>
+    <!-- Destinations are first-class in the top bar (Compose bottom-nav
+         parity: Read is the base layer, then Explore · Present · Memorize);
+         the ≡ menu holds utilities only. Threads/Tags/Weaves live inside
+         Explore, as on Android. -->
     <nav class="browse">
-        <button onclick={() => (s.panel = { kind: "threads" })}>Threads</button>
-        <button onclick={() => (s.panel = { kind: "tags" })}>Tags</button>
-        <button onclick={() => (s.panel = { kind: "weaves" })}>Weaves</button>
+        <button onclick={go(() => (s.panel = { kind: "explore" }))}>Explore</button>
+        <button onclick={go(() => (s.showPresent = true))}>Present</button>
+        <button onclick={go(() => (s.memorize = { view: "hub" }))}>Memorize</button>
       </nav>
     <span class="spacer"></span>
     <input
@@ -183,20 +189,22 @@
       oninput={onSearchInput}
       aria-label="Search"
     />
+    <button class="share-first" onclick={go(() => (shareApp = true))}>Share</button>
     <div class="menu-host">
       <button class="menu-btn" onclick={() => (menuOpen = !menuOpen)} aria-label="Menu">≡</button>
       {#if menuOpen}
         <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
         <div class="backdrop" onclick={() => (menuOpen = false)}></div>
         <div class="menu">
-          <button onclick={menu(() => (s.memorize = { view: "hub" }))}>Memorize</button>
-          <button onclick={menu(() => (s.panel = { kind: "explore" }))}>Explore</button>
-          <button onclick={menu(() => (s.showHistory = true))}>History</button>
-          <button onclick={menu(() => (shareApp = true))}>Share the app</button>
-          <button onclick={menu(() => (s.showPresent = true))}>Present</button>
-          <button onclick={menu(() => (s.panel = { kind: "guide" }))}>Guide & about</button>
-          <button onclick={menu(() => (s.showShortcuts = true))}>Keyboard shortcuts</button>
-          <button onclick={menu(() => (s.showSettings = true))}>Settings</button>
+          <!-- Narrow screens: the header destinations fold in here. -->
+          <button class="narrow-only" onclick={go(() => (s.panel = { kind: "explore" }))}>Explore</button>
+          <button class="narrow-only" onclick={go(() => (s.showPresent = true))}>Present</button>
+          <button class="narrow-only" onclick={go(() => (s.memorize = { view: "hub" }))}>Memorize</button>
+          <div class="menu-rule narrow-only"></div>
+          <button onclick={go(() => (s.showHistory = true))}>History</button>
+          <button onclick={go(() => (s.panel = { kind: "guide" }))}>Guide & about</button>
+          <button onclick={go(() => (s.showShortcuts = true))}>Keyboard shortcuts</button>
+          <button onclick={go(() => (s.showSettings = true))}>Settings</button>
         </div>
       {/if}
     </div>
@@ -290,10 +298,33 @@
   .browse button:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
   }
+  .share-first {
+    font-size: 13.5px;
+    padding: 4px 12px;
+    border: 1px solid var(--gold, #9e7d38);
+    border-radius: 6px;
+    color: var(--gold, #9e7d38);
+    font-weight: 600;
+  }
+  .share-first:hover {
+    background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
+  }
+  .menu .narrow-only,
+  .menu-rule {
+    display: none;
+  }
   @media (max-width: 700px) {
     .browse,
     .subtitle {
       display: none;
+    }
+    .menu .narrow-only {
+      display: block;
+    }
+    .menu .menu-rule {
+      display: block;
+      border-top: 1px solid var(--rule, #d8cba8);
+      margin: 4px 2px;
     }
   }
   .spacer {

@@ -334,26 +334,40 @@ startup; persist on close, mode toggle, first-run pick, every zoom. Scroll
 position intentionally transient. *Data*: `plumbline_config_load_json` /
 `plumbline_config_save_json` (shared file with GTK — keep the shape).
 
-## Simple/Full mode (M:462–488, 1564–1644)
+## First run — who is opening the Book? (2026-07-26, both shells)
 
-First run: modal "Welcome to Plumbline" with two cards — "Simple reader"
-("Just the text…") / "Full study" ("Everything…"); closing without choosing
-keeps Simple. Reading mode is now a radio in the primary ≡ menu (Reading ▸
-Simple reader / Full study), not a header button; leaving Full collapses the
-panel. Simple hides the header study tools (Threads, Tags, Weaves) and
-disables the menu's weave views (Suggested, Weave map, Constellation) plus every
-(F) item above; Simple keeps reading, search, hover gloss, basic word study
-(Strong's + occurrences + weave xrefs + margin notes), canon strip, connectors,
-zoom.
+The first launch asks who's here (`FirstRun.svelte` / `FirstRun.kt` — keep
+the copy in sync):
+
+- **New in the faith** — a welcome from the maintainer (next steps: read —
+  Ps 12:6–7; find a church — Heb 10:24–25; assurance — Rom 5:8, John 3:16,
+  1 John 5:13, John 10:28–29, Phil 1:6, 1 John 1:9, 2 Tim 3:16–17). Every
+  reference is tappable and opens **beside John**: web — second pane; fold —
+  second pane; phone — the passage opens with John 1 as the saved start.
+  "Open the book of John" lands in John 1 with **both analysis tiers off** —
+  just the text.
+- **Sharing the gospel** — straight into Present with the Romans Road
+  (default tiers; the picker shows if the stock thread was removed).
+- **Established believer** — the analysis-tier picker (scholars' / machine,
+  with examples). The text is always on; tiers change any time in Settings.
+  Dismissing without choosing (click-away / system back) keeps the defaults.
+
+The old Simple/Full first-run modal is gone; `studyMode` still round-trips in
+the config for older readers of the shared file.
 
 ## Primary menu (≡)
 
-The header keeps only the core browse buttons (Threads, Tags, Weaves) +
-search; everything else moved into a right-aligned primary ≡ menu, in both
-shells. **Share the app** (2026-07-25, both shells): a menu item opens the
-hosted PWA's QR code (pre-generated matrix, no QR dependency —
+**Reworked 2026-07-26 (web): destinations vs utilities.** The web header now
+mirrors the Compose IA — Read is the base layer; **Explore · Present ·
+Memorize** are first-class header buttons (narrow screens fold them into ≡
+above a divider), plus search, a first-class **Share** button, and a ≡ menu
+holding utilities only (History · Guide & about · Keyboard shortcuts ·
+Settings). Threads/Tags/Weaves live inside Explore, as on Android. The
+subtitle is just the passage ("John 3" — no edition suffix; the e2e boot
+signal matches `/\w+ \d+/`). **Share the app** (2026-07-25, both shells)
+opens the hosted PWA's QR code (pre-generated matrix, no QR dependency —
 `QrCode.svelte` / `QrShare.kt`) + the link via system share / copy; the same
-QR closes Present's end card. Menu contents: **Weave views** (Suggested, Weave map, Constellation — disabled outside
+QR closes Present's end card. Historical menu notes: **Weave views** (Suggested, Weave map, Constellation — disabled outside
 Full study), **Reading** (Simple/Full radio + Verse-per-line toggle), **Theme**
 (light/dark/night/follow-system radio), and **Guide / Keyboard shortcuts /
 About**. GTK: a `gtk::MenuButton` + `gio::Menu` backed by `win.*` `SimpleAction`s
@@ -742,6 +756,16 @@ base-relative).
   them are **GTK/WinUI deltas** owed to the desktop shells:
   - **Present mode** (`ui/Present.kt`, #1 priority): a thread as a fullscreen,
     high-contrast ("sunlight") large-type presentation for showing someone in
+    person. **Re-warmed 2026-07-26 (both shells):** the sunlight palette now
+    sits on the app's warm paper (#FCF9F4, warm rules, gold accents, picker
+    cards, a ✦ on the end card) instead of stark white — still fixed-light
+    and daylight-readable. EB Garamond now actually ships in the APK
+    (`assets/fonts/`, the web's variable-weight files; the reader's bold is a
+    `wght 700` instance) — Present had been silently falling back to Roboto.
+    Present also accepts a **preselected thread** (`presentThreadName` /
+    `presentThread`) so first-run "Sharing the gospel" opens the Romans Road
+    directly. Original description follows: a thread as a fullscreen
+    presentation for showing someone in
     person — scrollable overview (bounce anywhere), tap-to-focus a passage
     huge, "In context" fades surrounding verses in, end card with plain-text
     Share. The share's closing line carries the hosted PWA link and the end

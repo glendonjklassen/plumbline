@@ -24,6 +24,18 @@
   let thread = $state<any | null>(null);
   let focus = $state<number | null>(null); // null = overview; entries.length = end card
 
+  // A preselected thread (first-run "Sharing the gospel" → the Romans Road)
+  // skips the picker; unknown names fall through to it.
+  $effect(() => {
+    if (!s.showPresent || !s.presentThreadName || threads.length === 0) return;
+    const t = threads.find((x: any) => x.name === s.presentThreadName);
+    if (t) {
+      thread = t;
+      focus = null;
+    }
+    s.presentThreadName = null;
+  });
+
   const entries = $derived.by((): Entry[] => {
     if (!thread) return [];
     return (thread.entries ?? []).map((e: any) => {
@@ -140,6 +152,7 @@
       </div>
     {:else}
       <div class="endcard">
+        <p class="mark" aria-hidden="true">✦</p>
         <p class="fref">{thread.name}</p>
         <p class="endnote">— the whole thread, yours to keep —</p>
         <button class="sharebig" onclick={share}>Share the passages</button>
@@ -159,8 +172,8 @@
     position: fixed;
     inset: 0;
     z-index: 60;
-    background: #ffffff;
-    color: #101010;
+    background: #fcf9f4;
+    color: #211f1a;
     display: flex;
     flex-direction: column;
     font-family: "EB Garamond", Georgia, serif;
@@ -170,11 +183,11 @@
     align-items: center;
     gap: 12px;
     padding: 10px 14px;
-    border-bottom: 1px solid #d9d2c2;
+    border-bottom: 1px solid #d8cba8;
   }
   .close {
     font-size: 18px;
-    color: #101010;
+    color: #211f1a;
   }
   .title {
     font-size: 19px;
@@ -184,16 +197,17 @@
     flex: 1;
   }
   .sharebtn {
-    border: 1.5px solid #101010;
+    border: 1.5px solid #9e7d38;
     border-radius: 8px;
     padding: 4px 14px;
     font-size: 15px;
+    color: #6b5417;
   }
   .empty {
     margin: auto;
     max-width: 26em;
     text-align: center;
-    color: #6a6a6a;
+    color: #8a8276;
     font-size: 17px;
     padding: 24px;
   }
@@ -209,19 +223,21 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
-    border: 1.5px solid #d9d2c2;
+    border: 1.5px solid #d8cba8;
     border-radius: 12px;
     padding: 16px;
+    background: #fffdf8;
+    box-shadow: 0 1px 4px rgba(60, 45, 10, 0.05);
   }
   .pick:hover {
-    border-color: #101010;
+    border-color: #9e7d38;
   }
   .pick .name {
     font-size: 22px;
     font-weight: 600;
   }
   .pick .n {
-    color: #6a6a6a;
+    color: #8a8276;
     font-size: 14px;
   }
   .overview {
@@ -240,7 +256,11 @@
   }
   .entry .ref {
     font-weight: 700;
-    font-size: 17px;
+    font-size: 15px;
+    color: #6b5417;
+    letter-spacing: 0.06em;
+    font-variant: small-caps;
+    text-transform: lowercase;
   }
   .entry .body {
     font-size: 21px;
@@ -269,9 +289,9 @@
     justify-content: center;
     gap: 22px;
     padding: 12px;
-    border-top: 1px solid #d9d2c2;
+    border-top: 1px solid #d8cba8;
     font-size: 15px;
-    color: #6a6a6a;
+    color: #8a8276;
   }
   .stepbar button {
     font-size: 22px;
@@ -280,7 +300,7 @@
   }
   .ovbtn {
     font-size: 14px;
-    color: #6a6a6a;
+    color: #8a8276;
     text-decoration: underline;
   }
   .endcard {
@@ -293,12 +313,16 @@
     padding: 24px;
     text-align: center;
   }
+  .endcard .mark {
+    color: #9e7d38;
+    font-size: 26px;
+  }
   .endnote {
-    color: #6a6a6a;
+    color: #8a8276;
     font-style: italic;
   }
   .sharebig {
-    border: 2px solid #101010;
+    border: 2px solid #9e7d38;
     border-radius: 12px;
     padding: 12px 28px;
     font-size: 20px;
@@ -310,7 +334,7 @@
     gap: 8px;
   }
   .qrnote {
-    color: #6a6a6a;
+    color: #8a8276;
     font-size: 14px;
   }
 </style>

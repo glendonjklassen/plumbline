@@ -94,6 +94,7 @@ import androidx.window.layout.FoldingFeature
 import dev.plumbline.Hit
 import dev.plumbline.PaneRef1
 import dev.plumbline.Thread1
+import dev.plumbline.Threads
 import dev.plumbline.PanelLinkData
 import dev.plumbline.SearchResult
 import dev.plumbline.StudyEngine
@@ -203,6 +204,9 @@ fun StudyScreen(
     // machine analysis are independently switchable. Persisted in the config.
     var humanAnalysis by remember { mutableStateOf(loadedCfg?.humanAnalysis ?: true) }
     var machineAnalysis by remember { mutableStateOf(loadedCfg?.machineAnalysis ?: true) }
+    // First run (2026-07-26): the core derives firstRun from "no config file
+    // yet", so this shows exactly once — the first persist clears it for good.
+    var showFirstRun by remember { mutableStateOf(loadedCfg?.firstRun == true) }
     var clearPinEpoch by remember { mutableStateOf(0) }             // un-highlight the tapped word
     var presentThread by remember { mutableStateOf<Thread1?>(null) } // Present: chosen thread (picker keeps nav)
     var makeWeaveTag by remember { mutableStateOf<Int?>(null) }     // tag→weave sheet (tag ordinal)
@@ -721,6 +725,57 @@ fun StudyScreen(
                 thread = presentThread,
                 onThread = { presentThread = it },
                 onClose = { presentThread = null; showPresent = false },
+            )
+        }
+
+        // First run — over everything: who is opening the Book? (web twin
+        // FirstRun.svelte; the three paths are described in FirstRun.kt.)
+        if (showFirstRun) {
+            FirstRunOverlay(
+                palette,
+                onNewBeliever = { ref ->
+                    humanAnalysis = false
+                    machineAnalysis = false
+                    showFirstRun = false
+                    book = "John"; chapter = 1
+                    pendingVerse = null; navEpoch++
+                    dest = Dest.Read
+                    if (ref != null) {
+                        if (mode == UiMode.FoldFullscreen) {
+                            // Beside John: the referenced passage in the second pane
+                            // (the same shape openWeavePassages uses).
+                            val sp = ref.refKey.lastIndexOf(' ')
+                            secondBook = ref.refKey.substring(0, sp)
+                            secondChapter =
+                                ref.refKey.substring(sp + 1).substringBefore(':').toIntOrNull() ?: 1
+                        } else {
+                            // Phone: open the passage now — John 1 stays the saved
+                            // start position and sits first in History.
+                            goToRef(ref.refKey)
+                        }
+                    }
+                    persistCfg()
+                },
+                onSharing = {
+                    showFirstRun = false
+                    persistCfg()
+                    scope.launch {
+                        val t = withContext(Dispatchers.Default) {
+                            runCatching { synchronized(engine) { engine.ThreadsJson() } }.getOrNull()
+                                ?.let { runCatching { parseWire<Threads>(it).threads }.getOrNull() }
+                        }?.firstOrNull { it.name == "Romans Road" }
+                        // Straight into the trail; if the stock thread was somehow
+                        // removed the picker shows instead.
+                        presentThread = t
+                        showPresent = true
+                    }
+                },
+                onEstablished = { h, m ->
+                    humanAnalysis = h
+                    machineAnalysis = m
+                    showFirstRun = false
+                    persistCfg()
+                },
             )
         }
     }

@@ -6,9 +6,13 @@ import { expect, test, type Page } from "@playwright/test";
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
   await expect(page).toHaveTitle("Plumbline Bible");
-  await expect(page.locator(".subtitle")).toContainText("1769 KJV", { timeout: 90_000 });
-  const start = page.getByRole("button", { name: "Start reading" });
-  if (await start.isVisible().catch(() => false)) await start.click();
+  await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
+  // First-run chooser (fresh storage per test): take the established path.
+  const established = page.getByRole("button", { name: "Established believer" });
+  if (await established.isVisible().catch(() => false)) {
+    await established.click();
+    await page.getByRole("button", { name: "Start reading" }).click();
+  }
 }
 
 test("boots to the reader with the stock set seeded", async ({ page }) => {
@@ -28,6 +32,30 @@ test("boots to the reader with the stock set seeded", async ({ page }) => {
   // This also guards against stray authoring leftovers in the stock set
   // (a shipped amber highlight once painted John 3:7 on every fresh install).
   expect(counts.tags).toBe(0);
+});
+
+test("first-run: a new believer's welcome reference opens beside John", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
+  await page.getByRole("button", { name: "New in the faith" }).click();
+  await expect(page.getByText("We're so glad you've put your faith in Jesus")).toBeVisible();
+  await page.getByRole("button", { name: "Psalm 12:6–7" }).click();
+  const panes = await page.evaluate(() => {
+    const s = (window as any).__plumbline;
+    return { gates: s.gates, panes: s.panes.map((p: any) => ({ book: p.book, chapter: p.chapter, verse: p.targetVerse })) };
+  });
+  expect(panes.gates).toBe(0); // just the text
+  expect(panes.panes[0]).toEqual({ book: "John", chapter: 1, verse: null });
+  expect(panes.panes[1]).toEqual({ book: "Ps", chapter: 12, verse: 6 });
+});
+
+test("first-run: sharing the gospel lands in the Romans Road presentation", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
+  await page.getByRole("button", { name: "Sharing the gospel" }).click();
+  // Straight past the picker into the trail overview.
+  await expect(page.locator(".present .title")).toContainText("Romans Road");
+  await expect(page.getByText("For all have sinned")).toBeVisible();
 });
 
 test("the deferred machine-tier pack loads after boot", async ({ page }) => {
@@ -53,12 +81,10 @@ test("menus open promptly after boot (freeze regression)", async ({ page }) => {
   expect(Date.now() - t0).toBeLessThan(2_000);
 });
 
-test("menu destinations are exclusive (memorize does not linger)", async ({ page }) => {
+test("destinations are exclusive (memorize does not linger)", async ({ page }) => {
   await boot(page);
-  await page.getByLabel("Menu").click();
   await page.getByRole("button", { name: "Memorize" }).click();
   await expect(page.getByText("Review due")).toBeVisible();
-  await page.getByLabel("Menu").click();
   await page.getByRole("button", { name: "Explore", exact: true }).click();
   await expect(page.getByText("Review due")).toBeHidden();
   await expect(page.getByText("Weave map")).toBeVisible();
@@ -110,7 +136,9 @@ test("opening a weave splits to its passages; verse clicks stay responsive (free
   page,
 }) => {
   await boot(page);
-  await page.getByRole("button", { name: "Weaves", exact: true }).click();
+  // Weaves lives inside Explore now (Android parity — no header browse row).
+  await page.getByRole("button", { name: "Explore", exact: true }).click();
+  await page.locator(".ex-card", { hasText: /^Weaves/ }).click();
   await expect(page.locator("aside.panel")).toBeVisible();
   // Open the first weave: both endpoint passages must come up on their own.
   await page.locator("aside.panel button.link").first().click();
@@ -134,7 +162,7 @@ test("opening a weave splits to its passages; verse clicks stay responsive (free
   for (const i of [0, 1]) {
     const t0 = Date.now();
     await verseLink.nth(i).click();
-    await expect(page.locator(".subtitle")).toContainText("1769 KJV", { timeout: 2_000 });
+    await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 2_000 });
     expect(Date.now() - t0).toBeLessThan(2_000);
   }
   for (const paneIdx of [0, 1]) {
@@ -181,7 +209,7 @@ test("backup round-trips through a zip", async ({ page }, testInfo) => {
       timeout: 30_000,
     })
     .toBeNull();
-  await expect(page.locator(".subtitle")).toContainText("1769 KJV", { timeout: 90_000 });
+  await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
   const text = await page.evaluate(
     () => (window as any).__plumbline.engine.userNote("John 3:16")?.text,
   );

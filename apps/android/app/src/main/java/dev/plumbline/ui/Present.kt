@@ -23,6 +23,7 @@ package dev.plumbline.ui
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -30,6 +31,7 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,6 +41,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -80,11 +83,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 // ── the "sunlight" presentation palette: maximum contrast, no washes ─────────
-private val SunPaper = Color(0xFFFFFFFF)
-private val SunInk = Color(0xFF141414)
+private val SunPaper = Color(0xFFFCF9F4)   // the app's warm paper — fixed light
+private val SunInk = Color(0xFF211F1A)
 private val SunAccent = Color(0xFF6B5417)   // dark gold — AA on white at 15sp+
-private val SunFaded = Color(0xFF5A564E)
-private val SunRule = Color(0xFFE3DFD6)
+private val SunFaded = Color(0xFF8A8276)
+private val SunRule = Color(0xFFD8CBA8)
+private val SunCard = Color(0xFFFFFDF8)   // picker cards, a breath above the paper
+private val SunGold = Color(0xFF9E7D38)
 
 /** One presentable passage: the ref, its display form, and the FULL verse text
  *  (fetched fresh — the thread's word-span snapshot is for study, not showing). */
@@ -136,7 +141,6 @@ fun PresentOverlay(
             FontFamily(
                 Font("fonts/EBGaramond-Regular.ttf", context.assets),
                 Font("fonts/EBGaramond-Italic.ttf", context.assets, style = FontStyle.Italic),
-                Font("fonts/EBGaramond-Bold.ttf", context.assets, weight = FontWeight.Bold),
             )
         }.getOrElse { FontFamily.Serif }
     }
@@ -235,11 +239,15 @@ private fun PresentPicker(
                     color = SunInk, fontSize = 17.sp, fontFamily = serif,
                 )
             }
-            else -> LazyColumn(Modifier.fillMaxSize()) {
+            else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
                 items(threads) { t ->
                     Column(
-                        Modifier.fillMaxWidth().clickable { onPick(t) }
-                            .padding(horizontal = 24.dp, vertical = 18.dp),
+                        Modifier.fillMaxWidth()
+                            .padding(vertical = 6.dp)
+                            .border(1.dp, SunRule, RoundedCornerShape(12.dp))
+                            .background(SunCard, RoundedCornerShape(12.dp))
+                            .clickable { onPick(t) }
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
                     ) {
                         Text(t.name, color = SunInk, fontSize = 22.sp, fontFamily = serif, fontWeight = FontWeight.Bold)
                         val first = t.entries.firstOrNull()?.display
@@ -250,7 +258,6 @@ private fun PresentPicker(
                             modifier = Modifier.padding(top = 3.dp),
                         )
                     }
-                    HorizontalDivider(color = SunRule)
                 }
             }
         }
@@ -458,6 +465,8 @@ private fun EndCard(
         Modifier.fillMaxWidth().padding(horizontal = 26.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        Text("✦", color = SunGold, fontSize = 24.sp)
+        Spacer(Modifier.height(8.dp))
         Text(
             name, color = SunInk, fontSize = 28.sp, fontFamily = serif,
             fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,

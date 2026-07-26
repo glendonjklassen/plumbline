@@ -78,12 +78,15 @@ private data class ReaderTypefaces(val regular: Typeface, val italic: Typeface, 
 private fun loadTypefaces(context: Context): ReaderTypefaces {
     fun asset(path: String): Typeface? =
         runCatching { Typeface.createFromAsset(context.assets, path) }.getOrNull()
-    // Bundled EB Garamond (like the desktop shells); fall back to the platform serif.
+    // Bundled EB Garamond (a variable font, weight 400–700 — the same files
+    // the web ships); fall back to the platform serif.
     val regular = asset("fonts/EBGaramond-Regular.ttf") ?: Typeface.SERIF
     val italic = asset("fonts/EBGaramond-Italic.ttf")
         ?: Typeface.create(Typeface.SERIF, Typeface.ITALIC)
-    val bold = asset("fonts/EBGaramond-Bold.ttf")
-        ?: Typeface.create(regular, Typeface.BOLD)
+    val bold = runCatching {
+        Typeface.Builder(context.assets, "fonts/EBGaramond-Regular.ttf")
+            .setFontVariationSettings("'wght' 700").build()
+    }.getOrNull() ?: Typeface.create(regular, Typeface.BOLD)
     return ReaderTypefaces(regular, italic, bold)
 }
 
