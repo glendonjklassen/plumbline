@@ -40,13 +40,33 @@ self.addEventListener("fetch", (event) => {
       }),
     );
   } else {
+    // Network-first, TIMEBOXED (2026-07-26): a stalled mobile connection must
+    // never hang boot — the manifest fetch used to pend forever and the app
+    // sat on the "preparing your study tools" preview. After 3.5s the cached
+    // copy is served; updates land on the next healthy load.
     event.respondWith(
-      fetch(req)
-        .then((res) => {
-          if (res.ok) caches.open(CACHE).then((cache) => cache.put(req, res.clone()));
+      (async () => {
+        try {
+          const res = await Promise.race([
+            fetch(req),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("sw-timeout")), 3500)),
+          ]);
+          if (res.ok) {
+            // Clone SYNCHRONOUSLY, before the page consumes the body — a
+            // deferred clone throws "already used" and silently left the
+            // manifest uncached, so the offline fallback never had it.
+            const copy = res.clone();
+            caches.open(CACHE).then((cache) => cache.put(req, copy));
+          }
           return res;
-        })
-        .catch(async () => (await caches.match(req)) ?? (await caches.match("./index.html")) ?? Response.error()),
+        } catch {
+          const hit = await caches.match(req);
+          if (hit) return hit;
+          // Only navigations fall back to the app shell — handing HTML to a
+          // JSON fetch would turn one failure into a stranger one.
+          return req.mode === "navigate" ? ((await caches.match("./index.html")) ?? Response.error()) : Response.error();
+        }
+      })(),
     );
   }
 });
