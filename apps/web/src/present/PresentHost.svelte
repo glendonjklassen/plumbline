@@ -97,7 +97,9 @@
 <svelte:window onkeydown={onKeydown} />
 
 {#if s.showPresent}
-  <div class="present">
+  <!-- The picker is the OWNER's screen — it follows the app theme; the
+       presentation itself stays fixed-light sunlight (feedback 2026-07-26). -->
+  <div class="present" class:picking={!thread}>
     {#if !thread}
       <div class="bar">
         <button class="close" onclick={close} aria-label="Close">✕</button>
@@ -231,6 +233,31 @@
   }
   .pick:hover {
     border-color: #9e7d38;
+  }
+  /* Theme-aware picker stage (dark mode was jarringly white). */
+  .present.picking {
+    background: var(--paper, #fcf9f4);
+    color: var(--ink, #211f1a);
+  }
+  .present.picking .bar {
+    border-bottom-color: var(--rule, #d8cba8);
+  }
+  .present.picking .close {
+    color: var(--ink, #211f1a);
+  }
+  .present.picking .empty {
+    color: var(--faded, #8a8276);
+  }
+  .present.picking .pick {
+    border-color: var(--rule, #d8cba8);
+    background: var(--popupPaper, #fffdf8);
+    box-shadow: none;
+  }
+  .present.picking .pick:hover {
+    border-color: var(--gold, #9e7d38);
+  }
+  .present.picking .pick .n {
+    color: var(--faded, #8a8276);
   }
   .pick .name {
     font-size: 22px;

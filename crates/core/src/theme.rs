@@ -213,7 +213,10 @@ pub fn palette(theme: Theme) -> Palette {
             paper: "#1f1b16".into(),
             ink: "#e8e0d0".into(),
             faded: "#9a9385".into(),
-            added: "#8f8778".into(),
+            // Barely below the ink: on dark paper a dimmed added-word grey read
+            // as "darkened" and broke the reading flow (feedback 2026-07-26) —
+            // the italic slant carries the distinction, the tint only whispers.
+            added: "#d9cfba".into(),
             divine: "#d8b48c".into(),
             title_ink: "#b8aa90".into(),
             gold: "#c8a24e".into(),
@@ -237,7 +240,8 @@ pub fn palette(theme: Theme) -> Palette {
             paper: "#000000".into(),
             ink: "#d8d2c6".into(),
             faded: "#8a857a".into(),
-            added: "#7d786e".into(),
+            added: "#c8c1b0".into(), // see Dark — italics carry the distinction
+
             divine: "#d0ac86".into(),
             title_ink: "#a89e88".into(),
             gold: "#c9a24e".into(),

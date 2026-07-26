@@ -756,7 +756,10 @@ base-relative).
   them are **GTK/WinUI deltas** owed to the desktop shells:
   - **Present mode** (`ui/Present.kt`, #1 priority): a thread as a fullscreen,
     high-contrast ("sunlight") large-type presentation for showing someone in
-    person. **Re-warmed 2026-07-26 (both shells):** the sunlight palette now
+    person. **The thread picker follows the app theme** (2026-07-26 — it's the
+    owner's screen; only the presentation itself stays fixed-light), and a
+    destination tap always dismisses the fullscreen maps (chord map ate the
+    Explore button before). **Re-warmed 2026-07-26 (both shells):** the sunlight palette now
     sits on the app's warm paper (#FCF9F4, warm rules, gold accents, picker
     cards, a ✦ on the end card) instead of stark white — still fixed-light
     and daylight-readable. EB Garamond now actually ships in the APK

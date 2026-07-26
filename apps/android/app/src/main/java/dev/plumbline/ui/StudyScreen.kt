@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -600,28 +601,28 @@ fun StudyScreen(
         NavigationBar(containerColor = palette.paneNavBg) {
             NavigationBarItem(
                 selected = dest == Dest.Read && !showPresent,
-                onClick = { showPresent = false; dest = Dest.Read },
+                onClick = { showPresent = false; showChord = false; showConstellation = false; conceptCode = null; dest = Dest.Read },
                 icon = { Icon(NavIconRead, contentDescription = null) },
                 label = { Text("Read") },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = dest == Dest.Explore && !showPresent,
-                onClick = { showPresent = false; dest = Dest.Explore },
+                onClick = { showPresent = false; showChord = false; showConstellation = false; conceptCode = null; dest = Dest.Explore },
                 icon = { Icon(NavIconExplore, contentDescription = null) },
                 label = { Text("Explore") },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = showPresent,
-                onClick = { showPresent = true },
+                onClick = { showChord = false; showConstellation = false; conceptCode = null; showPresent = true },
                 icon = { Icon(NavIconPresent, contentDescription = null) },
                 label = { Text("Present") },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = dest == Dest.Memorize && !showPresent,
-                onClick = { showPresent = false; memView = MemorizeView.List; dest = Dest.Memorize },
+                onClick = { showPresent = false; showChord = false; showConstellation = false; conceptCode = null; memView = MemorizeView.List; dest = Dest.Memorize },
                 icon = { Icon(NavIconMemorize, contentDescription = null) },
                 label = { Text("Memorize") },
                 colors = navColors,
@@ -812,8 +813,8 @@ private fun PaneHeader(
 }
 
 /** Top chrome: on a phone, inline ‹ Book Ch › nav (the title opens the passage
- *  navigator — OT/NT → book → chapter → verse taps); then a search icon, the
- *  fold pane toggle (fold only), and a short overflow (⋮) menu. The study
+ *  navigator — OT/NT → book → chapter → verse taps); then share-the-app and
+ *  search icons, the fold pane toggle (fold only), and a short overflow (⋮) menu. The study
  *  destinations live on the bottom nav bar, in thumb reach. */
 @Composable
 private fun TopBar(
@@ -851,6 +852,14 @@ private fun TopBar(
 
             Spacer(Modifier.weight(1f))
 
+            // Share the app — first-class beside the search icon (2026-07-26),
+            // not a menu trip: the QR + link sheet (QrShare.kt).
+            var shareApp by remember { mutableStateOf(false) }
+            IconButton(onClick = { shareApp = true }) {
+                Icon(Icons.Filled.Share, contentDescription = "Share the app", tint = palette.ink)
+            }
+            if (shareApp) ShareAppDialog(onDismiss = { shareApp = false })
+
             IconButton(onClick = onSearch) {
                 Icon(Icons.Filled.Search, contentDescription = "Search", tint = palette.ink)
             }
@@ -869,17 +878,14 @@ private fun TopBar(
 
             Box {
                 var menu by remember { mutableStateOf(false) }
-                var shareApp by remember { mutableStateOf(false) }
                 IconButton(onClick = { menu = true }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = "Menu", tint = palette.ink)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text("History") }, onClick = { onHistory(); menu = false })
-                    DropdownMenuItem(text = { Text("Share the app") }, onClick = { shareApp = true; menu = false })
                     DropdownMenuItem(text = { Text("Guide & About") }, onClick = { onGuide(); menu = false })
                     DropdownMenuItem(text = { Text("Settings") }, onClick = { onSettings(); menu = false })
                 }
-                if (shareApp) ShareAppDialog(onDismiss = { shareApp = false })
             }
         }
     }

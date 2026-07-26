@@ -64,6 +64,9 @@
       s.showHistory = false;
       s.showSettings = false;
       s.bookNavFor = null;
+      // A destination tap also dismisses the fullscreen maps — on the chord
+      // map, hitting Explore previously did nothing (feedback 2026-07-26).
+      s.mapPopup = null;
       action();
     };
   }

@@ -181,7 +181,7 @@ fun PresentOverlay(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(SunPaper)) {
+    Box(Modifier.fillMaxSize().background(if (thread == null) palette.paper else SunPaper)) {
         val t = thread
         when {
             t == null -> PresentPicker(threads, palette, serif, onPick = { onThread(it) }, onClose = onClose)
@@ -224,19 +224,19 @@ private fun PresentPicker(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, contentDescription = "Close", tint = SunInk)
+                Icon(Icons.Filled.Close, contentDescription = "Close", tint = palette.ink)
             }
-            Text("Present", color = SunInk, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Text("Present", color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         }
-        HorizontalDivider(color = SunRule)
+        HorizontalDivider(color = palette.rule)
         when {
             threads == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Loading threads…", color = SunFaded)
+                Text("Loading threads…", color = palette.faded)
             }
             threads.isEmpty() -> Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                 Text(
                     "No threads yet.\n\nA thread is a trail of passages — build one from a word study (“＋ thread”), then present it here.",
-                    color = SunInk, fontSize = 17.sp, fontFamily = serif,
+                    color = palette.ink, fontSize = 17.sp, fontFamily = serif,
                 )
             }
             else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
@@ -244,17 +244,17 @@ private fun PresentPicker(
                     Column(
                         Modifier.fillMaxWidth()
                             .padding(vertical = 6.dp)
-                            .border(1.dp, SunRule, RoundedCornerShape(12.dp))
-                            .background(SunCard, RoundedCornerShape(12.dp))
+                            .border(1.dp, palette.rule, RoundedCornerShape(12.dp))
+                            .background(palette.panelBg, RoundedCornerShape(12.dp))
                             .clickable { onPick(t) }
                             .padding(horizontal = 20.dp, vertical = 16.dp),
                     ) {
-                        Text(t.name, color = SunInk, fontSize = 22.sp, fontFamily = serif, fontWeight = FontWeight.Bold)
+                        Text(t.name, color = palette.ink, fontSize = 22.sp, fontFamily = serif, fontWeight = FontWeight.Bold)
                         val first = t.entries.firstOrNull()?.display
                         Text(
                             "${t.entries.size} passage${if (t.entries.size == 1) "" else "s"}" +
                                 (first?.let { " · begins at $it" } ?: ""),
-                            color = SunFaded, fontSize = 13.sp,
+                            color = palette.faded, fontSize = 13.sp,
                             modifier = Modifier.padding(top = 3.dp),
                         )
                     }
