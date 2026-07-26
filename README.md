@@ -11,8 +11,10 @@ optional "Full study" tier of Strong's, morphology, cross-references, and
 corpus analytics. Everything runs on your device and works offline — no
 account, no sign-in, nothing phoned home.
 
-![Genesis 15 and Romans 4 side by side, joined by the "Abraham believed God"
-weave's connector lines](assets/readme/reader-weaves.png)
+![Isaiah 2 and Micah 4 open side by side, joined by weave connector lines,
+with the study panel on "treasures" — Strong's H214, its morphology, every
+KJV rendering, and where the concept concentrates across the
+canon](assets/readme/reader-weaves.png)
 
 ## Install
 
@@ -91,8 +93,6 @@ leaves its connector pinned at the pane edge as a hint.
   the canon backbone; page with `‹ ›` (or `Left`/`Right`), **pin** a lane
   (click its `▪`) to hold it while paging others past it, click a node to jump
   there, an edge to open the weave.
-
-![The constellation: weave lanes over the canon backbone](assets/readme/constellation.png)
 
 > [!NOTE]
 > The weaves shipped with the app began life as **AI-generated study aids**.
