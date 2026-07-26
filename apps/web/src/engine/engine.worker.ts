@@ -18,7 +18,7 @@
 // EB Garamond must be loaded into self.fonts before the first layout — the
 // boot message carries the resolved font URL.
 
-import { boot, loadRndPack, type BootResult } from "./boot";
+import { boot, loadRndPack, loadStage2, type BootResult } from "./boot";
 import { setAssetBase } from "./pack";
 import { measureFor, readerFont, fontExtent } from "../reader/measure";
 import {
@@ -90,20 +90,24 @@ self.onmessage = async (ev: MessageEvent) => {
           self.postMessage({ type: "authored" });
         };
         const cfg = configLoad(booted.wasm) ?? {};
-        if (cfg.machineAnalysis !== false) {
-          // Warm AFTER handing the UI over (below) — the reader paints those
-          // seconds earlier, and a first analytics tap simply waits for the
-          // OnceLock build here, off-thread. Then the deferred R&D pack, the
-          // same way.
-          setTimeout(() => {
-            booted!.engine.warmIndexes();
-            loadRndPack(booted!)
-              .then(() => self.postMessage({ type: "rndReady" }))
-              .catch(() => {
-                /* offline — the Settings toggle or next boot retries */
-              });
-          }, 50);
-        }
+        // Everything beyond the text follows AFTER the reader hands over
+        // (TODO #28 — text on screen is the north star): stage-2 core files
+        // (Strong's, cross-refs, margin notes) → warm → the R&D pack.
+        setTimeout(() => {
+          loadStage2(booted!)
+            .then(() => {
+              self.postMessage({ type: "coreReady" });
+              if (cfg.machineAnalysis !== false) {
+                booted!.engine.warmIndexes();
+                return loadRndPack(booted!).then(() => self.postMessage({ type: "rndReady" }));
+              }
+              booted!.engine.warmIndexes();
+              return undefined;
+            })
+            .catch(() => {
+              /* offline — the Settings toggle or next boot retries */
+            });
+        }, 50);
         reply({
           packVersion: booted.packVersion,
           config: cfg,

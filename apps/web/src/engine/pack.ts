@@ -69,13 +69,30 @@ async function fetchFiles(
   return out;
 }
 
-/** Load the CORE pack files (everything not marked `rnd`) — the boot path.
- *  Returns home-relative path → raw bytes. */
+/** Stage 1 — the FASTEST path to text on screen (TODO #28): the corpus plus
+ *  the tiny stock study set. Everything else follows after the reader is up. */
 export function fetchPack(
   manifest: PackManifest,
   onProgress?: (p: PackProgress) => void,
 ): Promise<Map<string, Uint8Array>> {
-  return fetchFiles(manifest.version, manifest.files.filter((f) => !f.rnd), onProgress);
+  return fetchFiles(
+    manifest.version,
+    manifest.files.filter((f) => f.path === "data/kjv.jsonl" || f.stock),
+    onProgress,
+  );
+}
+
+/** Stage 2 — the rest of the core pack (Strong's, cross-references, margin
+ *  notes, bridge witnesses), fetched right after the reader hands over. */
+export function fetchStage2Pack(
+  manifest: PackManifest,
+  onProgress?: (p: PackProgress) => void,
+): Promise<Map<string, Uint8Array>> {
+  return fetchFiles(
+    manifest.version,
+    manifest.files.filter((f) => !f.rnd && !f.stock && f.path !== "data/kjv.jsonl"),
+    onProgress,
+  );
 }
 
 /** Load the deferred machine-tier (`rnd`) files — fetched in the background

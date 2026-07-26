@@ -90,7 +90,7 @@
   const uiScale = $derived(Number(s.config.bodySize ?? 18) / 18);
 </script>
 
-{#if s.panel && (blocks || s.panel.kind === "notesBrowser" || s.panel.kind === "explore")}
+{#if s.panel}
   <aside class="panel" style:--uiScale={uiScale}>
     <div class="bar">
       <div class="grip" aria-hidden="true"></div>
@@ -125,7 +125,12 @@
         {#if studyCode}
           <EmbedMaps code={studyCode} />
         {/if}
-        <BlockList {blocks} {onLink} />
+        {#if blocks}
+          <BlockList {blocks} {onLink} />
+        {:else}
+          <!-- Never look frozen: the worker is answering. -->
+          <p class="loading" aria-live="polite">— loading —</p>
+        {/if}
       {/if}
     </div>
   </aside>
@@ -163,6 +168,22 @@
     flex: 1;
     overflow-y: auto;
     padding: 4px 16px 24px;
+  }
+  .loading {
+    color: var(--faded, #8a8276);
+    text-align: center;
+    padding: 22px 0;
+    font-size: calc(13.5px * var(--uiScale, 1));
+    animation: loadpulse 1.1s ease-in-out infinite;
+  }
+  @keyframes loadpulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 0.9;
+    }
   }
   .nb-title {
     font-size: calc(17px * var(--uiScale, 1));

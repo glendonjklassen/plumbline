@@ -24,6 +24,8 @@ export class EngineRpc {
   onProgress: (p: WorkerProgress) => void = () => {};
   /** An authoring write landed (worker persisted it) — re-fetch study data. */
   onAuthored: () => void = () => {};
+  /** Stage-2 core data landed (Strong's, margin notes, cross-refs). */
+  onCoreReady: () => void = () => {};
   /** The deferred R&D pack finished loading — machine tiers just lit up. */
   onRndReady: () => void = () => {};
 
@@ -33,6 +35,7 @@ export class EngineRpc {
       const m = ev.data;
       if (m.type === "progress") return this.onProgress(m);
       if (m.type === "authored") return this.onAuthored();
+      if (m.type === "coreReady") return this.onCoreReady();
       if (m.type === "rndReady") return this.onRndReady();
       const p = this.#waiting.get(m.id);
       if (!p) return;

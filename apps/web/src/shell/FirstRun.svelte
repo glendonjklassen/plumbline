@@ -17,18 +17,27 @@
   let machine = $state(true);
 
   // The welcome's verse references (refKeys use OSIS book ids — canon.rs).
-  const REF = {
-    love: { label: "Romans 5:8", book: "Rom", chapter: 5, verse: 8 },
-    pure: { label: "Psalm 12:6–7", book: "Ps", chapter: 12, verse: 6 },
-    church: { label: "Hebrews 10:24–25", book: "Heb", chapter: 10, verse: 24 },
-    loved: { label: "John 3:16", book: "John", chapter: 3, verse: 16 },
-    know: { label: "1 John 5:13", book: "1John", chapter: 5, verse: 13 },
-    kept: { label: "John 10:28–29", book: "John", chapter: 10, verse: 28 },
-    perfected: { label: "Philippians 1:6", book: "Phil", chapter: 1, verse: 6 },
-    forgiven: { label: "1 John 1:9", book: "1John", chapter: 1, verse: 9 },
-    wisdom: { label: "2 Timothy 3:16–17", book: "2Tim", chapter: 3, verse: 16 },
-  } as const;
-  type Ref = (typeof REF)[keyof typeof REF];
+  // `keys` are the verses QUOTED inline — the new believer reads scripture
+  // itself, not a row of links (product 2026-07-26).
+  interface Ref {
+    label: string;
+    book: string;
+    chapter: number;
+    verse: number;
+    keys: string[];
+  }
+  const REF: Record<string, Ref> = {
+    love: { label: "Romans 5:8", book: "Rom", chapter: 5, verse: 8, keys: ["Rom 5:8"] },
+    pure: { label: "Psalm 12:6–7", book: "Ps", chapter: 12, verse: 6, keys: ["Ps 12:6", "Ps 12:7"] },
+    church: { label: "Hebrews 10:24–25", book: "Heb", chapter: 10, verse: 24, keys: ["Heb 10:24", "Heb 10:25"] },
+    heart: { label: "Psalm 119:11", book: "Ps", chapter: 119, verse: 11, keys: ["Ps 119:11"] },
+    loved: { label: "John 3:16", book: "John", chapter: 3, verse: 16, keys: ["John 3:16"] },
+    know: { label: "1 John 5:13", book: "1John", chapter: 5, verse: 13, keys: ["1John 5:13"] },
+    kept: { label: "John 10:28–29", book: "John", chapter: 10, verse: 28, keys: ["John 10:28"] },
+    perfected: { label: "Philippians 1:6", book: "Phil", chapter: 1, verse: 6, keys: ["Phil 1:6"] },
+    forgiven: { label: "1 John 1:9", book: "1John", chapter: 1, verse: 9, keys: ["1John 1:9"] },
+    wisdom: { label: "2 Timothy 3:16–17", book: "2Tim", chapter: 3, verse: 16, keys: ["2Tim 3:16", "2Tim 3:17"] },
+  };
 
   function finish(h: boolean, m: boolean): void {
     s.config.humanAnalysis = h;
@@ -76,6 +85,17 @@
   <button class="ref" onclick={() => startInJohn(r)} title="Open {r.label} beside John">{r.label}</button>
 {/snippet}
 
+{#snippet vquote(refs: Ref[])}
+  <blockquote class="vq">
+    <span class="vq-text">“{refs
+      .flatMap((r) => r.keys)
+      .map((k) => s.q("verse", k)?.body ?? "")
+      .join(" ")
+      .trim()}”</span>
+    <span class="vq-refs">{#each refs as r (r.label)}{@render refchip(r)}{/each}</span>
+  </blockquote>
+{/snippet}
+
 {#if s.showFirstRun}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={dismiss}></div>
@@ -105,23 +125,37 @@
           King James Version, which is the closest to the original texts and has been used for
           hundreds of years by millions of believers. If you have trouble with the older English,
           we recommend you read a newer translation like the ESV alongside (not instead of) the
-          King James to better understand. {@render refchip(REF.pure)}
+          King James to better understand.
         </p>
+        {@render vquote([REF.pure])}
         <p>
           <b>Find a church.</b> Being part of a local church is a great way to grow in your faith
           and connect with believers. If someone shared this app with you, consider reaching out to
-          them or attending a Sunday morning service at their church. {@render refchip(REF.church)}
+          them or attending a Sunday morning service at their church.
         </p>
+        {@render vquote([REF.church])}
         <p>
-          Know that Jesus loves you {@render refchip(REF.love)}, and if you trust in him for your
-          salvation, then you have eternal life
-          {@render refchip(REF.loved)}{@render refchip(REF.know)}. No one can take it away from you
-          {@render refchip(REF.kept)}. One day you will be perfected {@render refchip(REF.perfected)},
-          but not yet — and so while you are here, you are imperfect but you are forgiven
-          {@render refchip(REF.forgiven)}. We highly recommend you read your Bible as it is rich
-          with wisdom on how to navigate this world and how to serve our Lord and Saviour Jesus
-          Christ {@render refchip(REF.wisdom)}.
+          <b>Memorize.</b> This app can also help you memorize scripture — hiding the word in your
+          heart is a wise and helpful thing to do.
         </p>
+        {@render vquote([REF.heart])}
+        <p>
+          Know that Jesus loves you, and if you trust in him for your salvation, then you have
+          eternal life:
+        </p>
+        {@render vquote([REF.love, REF.loved])}
+        <p>No one can take it away from you, and you can know that for certain:</p>
+        {@render vquote([REF.kept, REF.know])}
+        <p>
+          One day you will be perfected, but not yet — and so while you are here, you are imperfect
+          but you are forgiven:
+        </p>
+        {@render vquote([REF.perfected, REF.forgiven])}
+        <p>
+          We highly recommend you read your Bible as it is rich with wisdom on how to navigate this
+          world and how to serve our Lord and Saviour Jesus Christ:
+        </p>
+        {@render vquote([REF.wisdom])}
         <p>
           May the peace and joy of Christ be with you, and may you share that peace and joy with
           others. God bless you!
@@ -217,6 +251,23 @@
     gap: 10px;
     font-size: 15px;
     line-height: 1.55;
+  }
+  .vq {
+    margin: -2px 6px 0;
+    padding: 6px 12px;
+    border-left: 2px solid var(--gold, #9e7d38);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .vq-text {
+    font-family: "EB Garamond", Georgia, serif;
+    font-size: 15.5px;
+    line-height: 1.5;
+    font-style: italic;
+  }
+  .vq-refs {
+    align-self: flex-end;
   }
   .ref {
     display: inline;

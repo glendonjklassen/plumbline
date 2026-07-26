@@ -7,6 +7,7 @@
   import { untrack } from "svelte";
   import { getSession } from "../state/session.svelte";
   import { hitTest, itemVerse, MARGIN, paintChapter, verseExtents, type LayoutItem, type PaintOverlays } from "./paint";
+  import { idbApply } from "../engine/idb";
   import { nowStamp } from "../engine/StudyEngine";
 
   const MAX_COLUMN = 720;
@@ -97,6 +98,29 @@
             geom.set(it.verseNumber, { y: it.y, h: it.h });
         s.paneVerseGeom[paneIdx] = geom;
         untrack(clampScroll);
+        // The boot snapshot (TODO #28: no blank Bible page, ever): the
+        // primary pane's laid-out chapter persists so the NEXT launch paints
+        // it before the engine even exists.
+        if (paneIdx === 0)
+          void idbApply(
+            "cache",
+            new Map([
+              [
+                "lastLayout",
+                new TextEncoder().encode(
+                  JSON.stringify({
+                    book: pane.book,
+                    chapter: pane.chapter,
+                    fontPx,
+                    sideMargin,
+                    columnWidth,
+                    items: raw.items,
+                    height: raw.height,
+                  }),
+                ),
+              ],
+            ]),
+          );
       });
   });
 

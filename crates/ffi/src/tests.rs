@@ -1416,3 +1416,35 @@ fn rnd_data_loads_after_open() {
         let _ = std::fs::remove_dir_all(&home);
     }
 }
+
+/// The web's stage-1 boot (TODO #28): open on the corpus ALONE — text first —
+/// then strongs.json arrives and `load_core_data` lights the dictionary up.
+#[test]
+fn core_data_loads_after_open() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-stage1-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null() && !e.is_null(), "corpus-only open must succeed");
+        let c = |s: &str| CString::new(s).unwrap();
+
+        // The text reads; the dictionary is dark.
+        assert!(!plumbline_engine_verse_json(e, c("John 3:16").as_ptr()).is_null());
+        assert!(plumbline_engine_strongs_json(e, c("G2316").as_ptr()).is_null());
+
+        // Stage 2 lands.
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+        assert!(plumbline_engine_load_core_data(e).is_null());
+        let st: Value = serde_json::from_str(&take(plumbline_engine_strongs_json(e, c("G2316").as_ptr())).unwrap()).unwrap();
+        assert_eq!(st["code"], "G2316");
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}

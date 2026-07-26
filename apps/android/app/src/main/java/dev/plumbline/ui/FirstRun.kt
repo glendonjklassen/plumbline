@@ -49,27 +49,48 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.LaunchedEffect
+import dev.plumbline.StudyEngine
+import dev.plumbline.VerseData
+import dev.plumbline.parseWire
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-/** One tappable verse reference in the welcome ("Psalm 12:6–7" → "Ps 12:6"). */
-data class WelcomeRef(val label: String, val refKey: String)
+/** One tappable verse reference in the welcome ("Psalm 12:6–7" → "Ps 12:6");
+ *  [keys] are the verses QUOTED inline — the new believer reads scripture
+ *  itself, not a row of links (product 2026-07-26). */
+data class WelcomeRef(val label: String, val refKey: String, val keys: List<String> = listOf())
 
-private val LOVE = WelcomeRef("Romans 5:8", "Rom 5:8")
-private val PURE = WelcomeRef("Psalm 12:6–7", "Ps 12:6")
-private val CHURCH = WelcomeRef("Hebrews 10:24–25", "Heb 10:24")
-private val LOVED = WelcomeRef("John 3:16", "John 3:16")
-private val KNOW = WelcomeRef("1 John 5:13", "1John 5:13")
-private val KEPT = WelcomeRef("John 10:28–29", "John 10:28")
-private val PERFECTED = WelcomeRef("Philippians 1:6", "Phil 1:6")
-private val FORGIVEN = WelcomeRef("1 John 1:9", "1John 1:9")
-private val WISDOM = WelcomeRef("2 Timothy 3:16–17", "2Tim 3:16")
+private val LOVE = WelcomeRef("Romans 5:8", "Rom 5:8", listOf("Rom 5:8"))
+private val PURE = WelcomeRef("Psalm 12:6–7", "Ps 12:6", listOf("Ps 12:6", "Ps 12:7"))
+private val CHURCH = WelcomeRef("Hebrews 10:24–25", "Heb 10:24", listOf("Heb 10:24", "Heb 10:25"))
+private val HEART = WelcomeRef("Psalm 119:11", "Ps 119:11", listOf("Ps 119:11"))
+private val LOVED = WelcomeRef("John 3:16", "John 3:16", listOf("John 3:16"))
+private val KNOW = WelcomeRef("1 John 5:13", "1John 5:13", listOf("1John 5:13"))
+private val KEPT = WelcomeRef("John 10:28–29", "John 10:28", listOf("John 10:28"))
+private val PERFECTED = WelcomeRef("Philippians 1:6", "Phil 1:6", listOf("Phil 1:6"))
+private val FORGIVEN = WelcomeRef("1 John 1:9", "1John 1:9", listOf("1John 1:9"))
+private val WISDOM = WelcomeRef("2 Timothy 3:16–17", "2Tim 3:16", listOf("2Tim 3:16", "2Tim 3:17"))
+private val ALL_QUOTED = listOf(LOVE, PURE, CHURCH, HEART, LOVED, KNOW, KEPT, PERFECTED, FORGIVEN, WISDOM)
 
 @Composable
 fun FirstRunOverlay(
+    engine: StudyEngine,
     palette: ReaderPalette,
     onNewBeliever: (WelcomeRef?) -> Unit,
     onSharing: () -> Unit,
     onEstablished: (human: Boolean, machine: Boolean) -> Unit,
 ) {
+    // The quoted verse bodies, fetched off-thread (keyed by refKey).
+    var bodies by remember { mutableStateOf(mapOf<String, String>()) }
+    LaunchedEffect(Unit) {
+        bodies = withContext(Dispatchers.Default) {
+            ALL_QUOTED.flatMap { it.keys }.distinct().associateWith { k ->
+                runCatching { synchronized(engine) { engine.VerseJson(k) } }.getOrNull()
+                    ?.let { runCatching { parseWire<VerseData>(it).body }.getOrNull() } ?: ""
+            }
+        }
+    }
     val context = LocalContext.current
     val serif = remember {
         runCatching {
@@ -99,7 +120,7 @@ fun FirstRunOverlay(
             Column(Modifier.widthIn(max = 560.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 when (stage) {
                     0 -> Choose(palette, serif, onPath = { stage = it }, onSharing = onSharing)
-                    1 -> Welcome(palette, serif, onRef = { onNewBeliever(it) }, onStart = { onNewBeliever(null) })
+                    1 -> Welcome(palette, serif, bodies, onRef = { onNewBeliever(it) }, onStart = { onNewBeliever(null) })
                     else -> Tiers(
                         palette, human, machine,
                         onHuman = { human = it }, onMachine = { machine = it },
@@ -153,6 +174,7 @@ private fun PathCard(palette: ReaderPalette, name: String, desc: String, onClick
 private fun Welcome(
     palette: ReaderPalette,
     serif: FontFamily,
+    bodies: Map<String, String>,
     onRef: (WelcomeRef) -> Unit,
     onStart: () -> Unit,
 ) {
@@ -162,16 +184,28 @@ private fun Welcome(
         fontFamily = serif, modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
     )
 
+    // Scripture itself, inline: the quoted verses with their tappable refs.
     @Composable
-    fun Refs(vararg refs: WelcomeRef) = FlowRow(
-        Modifier.fillMaxWidth().padding(top = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        for (r in refs) {
-            Text(
-                r.label, color = palette.gold, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable { onRef(r) }.padding(vertical = 3.dp),
-            )
+    fun Quote(vararg refs: WelcomeRef) {
+        val text = refs.flatMap { it.keys }.joinToString(" ") { bodies[it] ?: "" }.trim()
+        Column(Modifier.fillMaxWidth().padding(top = 6.dp, start = 14.dp, end = 6.dp)) {
+            if (text.isNotEmpty()) {
+                Text(
+                    "“$text”", color = palette.ink, fontSize = 15.5.sp, lineHeight = 23.sp,
+                    fontFamily = serif, fontStyle = FontStyle.Italic,
+                )
+            }
+            FlowRow(
+                Modifier.fillMaxWidth().padding(top = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                for (r in refs) {
+                    Text(
+                        r.label, color = palette.gold, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable { onRef(r) }.padding(vertical = 3.dp),
+                    )
+                }
+            }
         }
     }
 
@@ -189,21 +223,35 @@ private fun Welcome(
             "English, we recommend you read a newer translation like the ESV alongside (not " +
             "instead of) the King James to better understand.",
     )
-    Refs(PURE)
+    Quote(PURE)
     Para(
         "Find a church. Being part of a local church is a great way to grow in your faith and " +
             "connect with believers. If someone shared this app with you, consider reaching out " +
             "to them or attending a Sunday morning service at their church.",
     )
-    Refs(CHURCH)
+    Quote(CHURCH)
+    Para(
+        "Memorize. This app can also help you memorize scripture — hiding the word in your " +
+            "heart is a wise and helpful thing to do.",
+    )
+    Quote(HEART)
     Para(
         "Know that Jesus loves you, and if you trust in him for your salvation, then you have " +
-            "eternal life. No one can take it away from you. One day you will be perfected, but " +
-            "not yet — and so while you are here, you are imperfect but you are forgiven. We " +
-            "highly recommend you read your Bible as it is rich with wisdom on how to navigate " +
-            "this world and how to serve our Lord and Saviour Jesus Christ.",
+            "eternal life:",
     )
-    Refs(LOVE, LOVED, KNOW, KEPT, PERFECTED, FORGIVEN, WISDOM)
+    Quote(LOVE, LOVED)
+    Para("No one can take it away from you, and you can know that for certain:")
+    Quote(KEPT, KNOW)
+    Para(
+        "One day you will be perfected, but not yet — and so while you are here, you are " +
+            "imperfect but you are forgiven:",
+    )
+    Quote(PERFECTED, FORGIVEN)
+    Para(
+        "We highly recommend you read your Bible as it is rich with wisdom on how to navigate " +
+            "this world and how to serve our Lord and Saviour Jesus Christ:",
+    )
+    Quote(WISDOM)
     Para(
         "May the peace and joy of Christ be with you, and may you share that peace and joy with " +
             "others. God bless you!",

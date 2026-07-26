@@ -4,12 +4,63 @@
   // paints the splash from its progress messages. Fonts load here too, for
   // PAINTING; the worker loads its own copy for layout measurement.
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
+  import { idbGet } from "./engine/idb";
+  import { paintChapter } from "./reader/paint";
   import { initSession, type Session } from "./state/session.svelte";
   import Shell from "./shell/Shell.svelte";
 
   let phase = $state<WorkerProgress>({ phase: "download", fraction: 0 });
   let error = $state<string | null>(null);
   let session = $state<Session | null>(null);
+
+  // ── the boot snapshot: last session's laid-out chapter paints BEFORE the
+  //    engine exists (TODO #28 — never a blank Bible page). The worker's real
+  //    layout replaces it the moment the session lands. ──
+  let snapshot = $state<any | null>(null);
+  let snapCanvas = $state<HTMLCanvasElement | null>(null);
+  const snapPalette = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("plumbline:palette") ?? "null") ?? {};
+    } catch {
+      return {};
+    }
+  })();
+
+  void idbGet("cache", "lastLayout")
+    .then((bytes) => {
+      if (bytes && !session) snapshot = JSON.parse(new TextDecoder().decode(bytes));
+    })
+    .catch(() => {});
+
+  $effect(() => {
+    if (!snapshot || !snapCanvas) return;
+    const dpr = devicePixelRatio || 1;
+    const w = innerWidth;
+    const h = innerHeight;
+    snapCanvas.width = Math.round(w * dpr);
+    snapCanvas.height = Math.round(h * dpr);
+    const ctx = snapCanvas.getContext("2d")!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const paint = () =>
+      paintChapter(
+        ctx,
+        snapshot.items,
+        {
+          palette: snapPalette,
+          fontPx: snapshot.fontPx,
+          marginX: Math.max(snapshot.sideMargin ?? 28, (w - snapshot.columnWidth) / 2),
+          columnWidth: snapshot.columnWidth,
+          scrollY: 0,
+          viewportW: w,
+          viewportH: h - 3,
+        },
+        {},
+      );
+    paint();
+    // Repaint once the real Garamond lands (first frames may use the
+    // fallback serif — text beats blankness).
+    void document.fonts.load(`${snapshot.fontPx}px "EB Garamond"`).then(paint);
+  });
 
   async function start(): Promise<void> {
     try {
@@ -52,6 +103,19 @@
 
 {#if session}
   <Shell />
+{:else if snapshot && !error}
+  <!-- Last session's chapter, painted from the snapshot — readable text in
+       the first frames. The strip below says the engine is still coming. -->
+  <div class="preview" style:background={snapPalette.paper ?? "#fcf9f4"}>
+    <canvas bind:this={snapCanvas}></canvas>
+    <div class="strip" title="Loading">
+      <div
+        class="strip-fill"
+        class:indeterminate={phase.phase !== "download"}
+        style:width={phase.phase === "download" ? `${(phase.fraction ?? 0) * 100}%` : "100%"}
+      ></div>
+    </div>
+  </div>
 {:else}
   <div class="splash">
     <div class="mark">✦</div>
@@ -74,6 +138,32 @@
 {/if}
 
 <style>
+  .preview {
+    position: fixed;
+    inset: 0;
+  }
+  .preview canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .strip {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    background: rgba(158, 125, 56, 0.15);
+  }
+  .strip-fill {
+    height: 100%;
+    background: #9e7d38;
+    transition: width 0.15s ease;
+  }
+  .strip-fill.indeterminate {
+    animation: pulse 1.2s ease-in-out infinite;
+  }
   .splash {
     height: 100%;
     display: flex;

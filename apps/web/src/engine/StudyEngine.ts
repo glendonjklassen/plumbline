@@ -241,6 +241,11 @@ export class StudyEngine {
   loadRndData(): string | null {
     return this.#text("plumbline_engine_load_rnd_data");
   }
+  /** Load the stage-2 core data (Strong's + margin-note study reload) once
+   *  those files land in the home; no-op when nothing is missing. */
+  loadCoreData(): string | null {
+    return this.#text("plumbline_engine_load_core_data");
+  }
 
   // ── view-models (maps) ──────────────────────────────────────────────────────
 

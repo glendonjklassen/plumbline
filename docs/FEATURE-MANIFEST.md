@@ -340,9 +340,11 @@ The first launch asks who's here (`FirstRun.svelte` / `FirstRun.kt` — keep
 the copy in sync):
 
 - **New in the faith** — a welcome from the maintainer (next steps: read —
-  Ps 12:6–7; find a church — Heb 10:24–25; assurance — Rom 5:8, John 3:16,
-  1 John 5:13, John 10:28–29, Phil 1:6, 1 John 1:9, 2 Tim 3:16–17). Every
-  reference is tappable and opens **beside John**: web — second pane; fold —
+  Ps 12:6–7; find a church — Heb 10:24–25; memorize — Ps 119:11; assurance —
+  Rom 5:8, John 3:16, 1 John 5:13, John 10:28–29, Phil 1:6, 1 John 1:9,
+  2 Tim 3:16–17). **The verses are QUOTED inline** (2026-07-26 — the new
+  believer reads scripture itself, fetched live from the engine, not a row
+  of links); every reference is tappable and opens **beside John**: web — second pane; fold —
   second pane; phone — the passage opens with John 1 as the saved start.
   "Open the book of John" lands in John 1 with **both analysis tiers off** —
   just the text.

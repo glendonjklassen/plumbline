@@ -815,6 +815,16 @@ char *plumbline_theme_highlight_tones_json(void);
 // `engine` is a live engine (or null → an error string).
 char *plumbline_engine_warm_indexes(const struct PlumblineEngine *engine);
 
+// Load the stage-2 core data (Strong's dictionary + a study reload for the
+// 1769 margin notes) once those files have arrived in the home — the web
+// boots on the corpus alone (TODO #28: text on screen is the north star)
+// and calls this when the rest of the core pack lands. Idempotent, cheap
+// when nothing is missing. Null on success, else an owned error.
+//
+// # Safety
+// `engine` is a live engine (or null → an error string).
+char *plumbline_engine_load_core_data(const struct PlumblineEngine *engine);
+
 // Load the optional R&D artifacts (concept embeddings, morphology sidecar)
 // from the engine's home if they were absent at open. The web shell boots on
 // the core data pack for a fast first paint, fetches the R&D pack in the

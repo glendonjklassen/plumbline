@@ -16,26 +16,29 @@ weave's connector lines](assets/readme/reader-weaves.png)
 
 ## Install
 
-### Android
+### Web — the way most people should get it
 
-Download the APK from the
-[Releases page](https://github.com/glendonjklassen/plumbline/releases)
-(arm64-v8a + x86_64, signed; no Play Store, no Google services required).
-
-### Web
-
-Plumbline is also a PWA:
 **[plumblinebible.org](https://plumblinebible.org/)** —
-open it in any browser and install it from the address bar. It works offline
-after the first visit, and your study data lives in browser storage.
+open it in any browser and install it from the address bar (phone or
+desktop). It works offline after the first visit, and your study data lives
+in browser storage.
+
+### Android (sideload)
+
+For unlocked phones and people comfortable sideloading: download the APK
+from the [Releases page](https://github.com/glendonjklassen/plumbline/releases)
+(arm64-v8a + x86_64, signed; no Play Store, no Google services required —
+note Google's newer install rules can make sideloading a chore on stock
+devices).
 
 ## Getting started (60 seconds)
 
-First launch asks which **analysis layers** you want beside the text — the
-scholars' tier (renderings, word grammar, cross-references) and the machine
-tier (similar concepts, verses-like-this, concept maps). Both are on by
-default and switchable any time in **Settings**; the text and your own notes,
-tags, and threads are always on.
+First launch asks who's opening the Book — **new in the faith** (a welcome
+with next steps, landing in John), **sharing the gospel** (straight into the
+Romans Road presentation), or **established believer** (pick which analysis
+layers sit beside the text: the scholars' tier and the machine tier). All of
+it is switchable any time in **Settings**; the text and your own notes, tags,
+and threads are always on.
 
 Then:
 

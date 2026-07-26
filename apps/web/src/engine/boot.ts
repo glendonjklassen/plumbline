@@ -11,7 +11,7 @@
 
 import { instantiate, type WasmEngine } from "./engine";
 import { buildHome, type VirtualHome } from "./home";
-import { fetchManifest, fetchPack, fetchRndPack, type PackManifest } from "./pack";
+import { fetchManifest, fetchPack, fetchRndPack, fetchStage2Pack, type PackManifest } from "./pack";
 import { StudyEngine } from "./StudyEngine";
 
 export interface BootPhase {
@@ -27,6 +27,14 @@ export interface BootResult {
   home: VirtualHome;
   manifest: PackManifest;
   packVersion: string;
+}
+
+/** Fetch the stage-2 core files (Strong's, cross-refs, margin notes, bridge)
+ *  into the live home — the engine picks them up via load_core_data. */
+export async function loadStage2(r: BootResult): Promise<void> {
+  const files = await fetchStage2Pack(r.manifest);
+  r.home.addFiles(files);
+  r.engine.loadCoreData();
 }
 
 /** Fetch the deferred machine-tier pack, hand its files to the live home, and

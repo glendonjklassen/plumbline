@@ -190,6 +190,9 @@ internal interface PlumblineNative : Library {
     // ── late R&D artifact load (web boots on the core pack; see the header) ──
     fun plumbline_engine_load_rnd_data(engine: Pointer): Pointer?
 
+    // ── stage-2 core load (web boots on the corpus alone; see the header) ──
+    fun plumbline_engine_load_core_data(engine: Pointer): Pointer?
+
     // ── memorization (Tier 2 #15): SRS cards, drills, coverage + activity ────
     fun plumbline_engine_memory_grade(
         engine: Pointer, verseRef: String, grade: String, now: String,

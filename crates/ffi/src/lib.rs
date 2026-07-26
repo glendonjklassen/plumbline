@@ -109,7 +109,11 @@ pub const PLUMBLINE_WIRE_VERSION: u32 = 1;
 /// [`plumbline_engine_free`].
 pub struct PlumblineEngine {
     corpus: Corpus,
-    strongs: StrongsDict,
+    /// Strong's dictionary — late-loadable (TODO #28): the web boots on the
+    /// corpus ALONE for the fastest possible text-on-screen, and the rest of
+    /// the core pack arrives moments later via `load_core_data`. Unset means
+    /// "not here yet": lookups answer empty and fill on the shell's re-fetch.
+    strongs: OnceLock<StrongsDict>,
     /// The corpus-derived indexes are built LAZILY (TODO #28: boot cost —
     /// the app opens like Instagram, many times a day; every millisecond of
     /// open is paid every time). First access builds; `warm_indexes` forces
@@ -134,7 +138,7 @@ pub struct PlumblineEngine {
     /// the core pack and fetches the R&D pack in the background, then calls
     /// [`plumbline_engine_load_rnd_data`] — hence `OnceLock` (set-once through
     /// `&self`, thread-safe): unset means "not (yet) available".
-    bridge: bridge::FusedBridge,
+    bridge: OnceLock<bridge::FusedBridge>,
     embedding: OnceLock<embed::Embedding>,
     morph: OnceLock<morph::MorphData>,
     /// SIF "verses like this" — built lazily on the first similar-verses query
@@ -152,16 +156,17 @@ pub struct PlumblineEngine {
 }
 
 impl PlumblineEngine {
-    fn new(corpus: Corpus, strongs: StrongsDict, home: Option<PathBuf>) -> PlumblineEngine {
+    fn new(corpus: Corpus, strongs: Option<StrongsDict>, home: Option<PathBuf>) -> PlumblineEngine {
+        let strongs_cell = OnceLock::new();
+        if let Some(sd) = strongs {
+            let _ = strongs_cell.set(sd);
+        }
         // R&D artifacts. The bridge's etymology layer works from the in-memory
         // dict even without a home; external witnesses + the embedding/morph
         // sidecars need a home's files. Without a home, no filesystem is
         // probed at all (a CWD-relative probe would be nondeterministic and a
         // mild data-injection surface).
-        let bridge = match &home {
-            Some(h) => bridge::FusedBridge::build(&strongs, h),
-            None => bridge::FusedBridge::etymology_only(&strongs),
-        };
+
         let embedding = OnceLock::new();
         let morph = OnceLock::new();
         if let Some(h) = &home {
@@ -176,13 +181,13 @@ impl PlumblineEngine {
         let study = load_study(&home);
         PlumblineEngine {
             corpus,
-            strongs,
+            strongs: strongs_cell,
             search_ix: OnceLock::new(),
             occ_ix: OnceLock::new(),
             renderings: OnceLock::new(),
             home,
             study: std::sync::RwLock::new(study),
-            bridge,
+            bridge: OnceLock::new(),
             embedding,
             morph,
             verse_sim: OnceLock::new(),
@@ -231,6 +236,42 @@ impl PlumblineEngine {
                 let _ = self.morph.set(m);
             }
         }
+    }
+
+    /// Strong's — empty until the dictionary loads (never cached-empty: the
+    /// cell only ever sets from a real parse).
+    fn strongs(&self) -> &StrongsDict {
+        static EMPTY: OnceLock<StrongsDict> = OnceLock::new();
+        self.strongs.get().unwrap_or_else(|| EMPTY.get_or_init(StrongsDict::new))
+    }
+
+    /// The fused OT↔NT bridge — needs Strong's, so it is None until the
+    /// dictionary is in; built once on first use after that.
+    fn bridge(&self) -> Option<&bridge::FusedBridge> {
+        if let Some(b) = self.bridge.get() {
+            return Some(b);
+        }
+        let sd = self.strongs.get()?;
+        let built = match &self.home {
+            Some(h) => bridge::FusedBridge::build(sd, h),
+            None => bridge::FusedBridge::etymology_only(sd),
+        };
+        let _ = self.bridge.set(built);
+        self.bridge.get()
+    }
+
+    /// Load the stage-2 core data (Strong's dictionary; the study data —
+    /// incl. the 1769 margin notes — reloads) once the files have arrived in
+    /// the home. Idempotent; cheap while they are still missing. NOTE: a
+    /// search index built before this call keeps the notes it saw then.
+    fn load_core_data(&self) {
+        let Some(h) = &self.home else { return };
+        if self.strongs.get().is_none() {
+            if let Ok(sd) = strongs::load_strongs(h.join("data").join("strongs.json")) {
+                let _ = self.strongs.set(sd);
+            }
+        }
+        *self.study_write() = load_study(&self.home);
     }
 
     /// The search index, built on first use; the reader's notes attach then
@@ -497,12 +538,20 @@ pub unsafe extern "C" fn plumbline_engine_open(
                 return ptr::null_mut();
             }
         };
-        let strongs = match strongs::load_strongs(format!("{home}/data/strongs.json")) {
-            Ok(s) => s,
-            Err(e) => {
-                set_err(out_err, e.to_string());
-                return ptr::null_mut();
+        // Stage-1 boots (web) may not have strongs.json yet — open on the
+        // corpus alone; load_core_data brings the dictionary in later. A file
+        // that EXISTS but fails to parse stays a hard error.
+        let strongs_path = format!("{home}/data/strongs.json");
+        let strongs = if std::path::Path::new(&strongs_path).exists() {
+            match strongs::load_strongs(&strongs_path) {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    set_err(out_err, e.to_string());
+                    return ptr::null_mut();
+                }
             }
+        } else {
+            None
         };
         Box::into_raw(Box::new(PlumblineEngine::new(corpus, strongs, Some(PathBuf::from(home)))))
     })
@@ -563,7 +612,7 @@ pub unsafe extern "C" fn plumbline_engine_open_from_bytes(
             }
         };
         // No home when opened from bytes: study data is empty and read-only.
-        Box::into_raw(Box::new(PlumblineEngine::new(corpus, strongs, None)))
+        Box::into_raw(Box::new(PlumblineEngine::new(corpus, Some(strongs), None)))
     })
 }
 
@@ -815,7 +864,7 @@ pub unsafe extern "C" fn plumbline_engine_strongs_json(
         let (Some(engine), Some(code)) = (engine.as_ref(), opt_str(code)) else {
             return ptr::null_mut();
         };
-        match engine.strongs.get(code) {
+        match engine.strongs().get(code) {
             Some(e) => out_json(&wire::strongs_to_wire(code, e)),
             None => ptr::null_mut(),
         }
@@ -1063,8 +1112,9 @@ pub unsafe extern "C" fn plumbline_engine_bridge_partners_json(
             return ptr::null_mut();
         };
         let partners = e
-            .bridge
-            .partners(code)
+            .bridge()
+            .map(|b| b.partners(code))
+            .unwrap_or_default()
             .into_iter()
             .map(|p| {
                 // Authority provenance, classified once here (overlay `Tier`):
@@ -1798,7 +1848,7 @@ const CONCEPT_MAP_SPOKES: usize = 6;
 /// `label_of` closure so every shell labels the radial nodes identically.
 fn concept_label(e: &PlumblineEngine, code: &str) -> String {
     let gloss = english_gloss(e, code);
-    let lemma = e.strongs.get(code).and_then(|s| s.lemma.clone());
+    let lemma = e.strongs().get(code).and_then(|s| s.lemma.clone());
     match (gloss, lemma) {
         (Some(g), Some(l)) => format!("{g}\n{l}"),
         (Some(g), None) => g,
@@ -1853,7 +1903,7 @@ pub unsafe extern "C" fn plumbline_engine_concept_map_json(
             .unwrap_or_else(|| vec![0; canon::BOOKS.len()]);
         // Cross-testament bridge row: the strongest other-testament partners and
         // their unioned dispersion (so Christ reveals where Messiah occurs).
-        let partners = e.bridge.partners(code);
+        let partners = e.bridge().map(|b| b.partners(code)).unwrap_or_default();
         let bridge = (!partners.is_empty()).then(|| {
             let top: Vec<&bridge::Partner> =
                 partners.iter().take(concept::BRIDGE_ROW_PARTNERS).collect();
@@ -1934,7 +1984,7 @@ impl PanelSource for PlumblineEngine {
         self.occ_ix().verses(code).len()
     }
     fn strongs(&self, code: &str) -> Option<panel::StrongsView> {
-        let e = self.strongs.get(code)?;
+        let e = self.strongs().get(code)?;
         Some(panel::StrongsView {
             lemma: e.lemma.clone(),
             xlit: e.xlit.clone(),
@@ -1951,7 +2001,7 @@ impl PanelSource for PlumblineEngine {
         panel::ChipView {
             code: code.to_string(),
             gloss: english_gloss(self, code),
-            lemma: self.strongs.get(code).and_then(|e| e.lemma.clone()),
+            lemma: self.strongs().get(code).and_then(|e| e.lemma.clone()),
         }
     }
     fn renderings(&self, code: &str) -> Vec<panel::RenderingView> {
@@ -1985,8 +2035,9 @@ impl PanelSource for PlumblineEngine {
         }
     }
     fn bridge_partners(&self, code: &str) -> Vec<panel::BridgePartnerView> {
-        self.bridge
-            .partners(code)
+        self.bridge()
+            .map(|b| b.partners(code))
+            .unwrap_or_default()
             .into_iter()
             .map(|p| panel::BridgePartnerView {
                 sources: p.sources.iter().map(|s| bridge::source_label(s).to_string()).collect(),
@@ -2515,7 +2566,7 @@ fn english_gloss(e: &PlumblineEngine, code: &str) -> Option<String> {
         return Some(ranked.swap_remove(0).0);
     }
     // No tagged occurrence — distil the dictionary as a last resort.
-    let entry = e.strongs.get(code)?;
+    let entry = e.strongs().get(code)?;
     entry
         .def
         .as_deref()
@@ -3077,9 +3128,29 @@ pub unsafe extern "C" fn plumbline_engine_warm_indexes(engine: *const PlumblineE
         e.occ_ix();
         e.renderings();
         e.xref_ix();
+        e.bridge();
         e.concept();
         e.leitwort();
         e.verse_sim();
+        ptr::null_mut()
+    })
+}
+
+/// Load the stage-2 core data (Strong's dictionary + a study reload for the
+/// 1769 margin notes) once those files have arrived in the home — the web
+/// boots on the corpus alone (TODO #28: text on screen is the north star)
+/// and calls this when the rest of the core pack lands. Idempotent, cheap
+/// when nothing is missing. Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is a live engine (or null → an error string).
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_load_core_data(engine: *const PlumblineEngine) -> *mut c_char {
+    guard_err(|| {
+        let Some(e) = engine.as_ref() else {
+            return out_string("null engine".to_string());
+        };
+        e.load_core_data();
         ptr::null_mut()
     })
 }

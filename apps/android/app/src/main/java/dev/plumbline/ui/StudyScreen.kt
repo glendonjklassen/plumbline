@@ -733,6 +733,7 @@ fun StudyScreen(
         // FirstRun.svelte; the three paths are described in FirstRun.kt.)
         if (showFirstRun) {
             FirstRunOverlay(
+                engine,
                 palette,
                 onNewBeliever = { ref ->
                     humanAnalysis = false

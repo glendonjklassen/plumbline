@@ -315,6 +315,11 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
      *  still missing). Null = success. */
     fun LoadRndData(): String? = take(ffi.plumbline_engine_load_rnd_data(h))
 
+    /** Load the stage-2 core data (Strong's + margin notes) if it arrived
+     *  after open — the web's corpus-first boot; a no-op on Android, where
+     *  everything is present at open. Null = success. */
+    fun LoadCoreData(): String? = take(ffi.plumbline_engine_load_core_data(h))
+
     // ── memorization (Tier 2 #15): SRS cards, drills, coverage + activity ─────
 
     /** Grade a verse (`again`/`hard`/`good`/`easy`) at `nowUtc`, creating its
