@@ -43,9 +43,17 @@ test("boots to the reader with the stock set seeded", async ({ page }) => {
   expect(counts.tags).toBe(0);
 });
 
+test("first-run: the welcome owns the boot screen, with no reader behind it", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "New in the faith" })).toBeVisible({ timeout: 90_000 });
+  // John 3 used to paint underneath and then get asked a question — the
+  // reader must not mount until a path is chosen (feedback 2026-07-26).
+  await expect(page.locator(".pane canvas")).toHaveCount(0);
+  await expect(page.locator("header .search")).toHaveCount(0);
+});
+
 test("first-run: a new believer's welcome reference opens beside John", async ({ page }) => {
   await page.goto("/");
-  // The chooser is the first screen after the loader — no reader behind it.
   await page.getByRole("button", { name: "New in the faith" }).click({ timeout: 90_000 });
   await expect(page.getByText("We're so glad you've put your faith in Jesus")).toBeVisible();
   await page.getByRole("button", { name: "Psalm 12:6–7" }).click();
