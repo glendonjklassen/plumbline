@@ -5,7 +5,16 @@
 
 export interface PackManifest {
   version: string;
-  files: { path: string; bytes: number; gzBytes: number; stock?: boolean; rnd?: boolean }[];
+  files: {
+    path: string;
+    bytes: number;
+    gzBytes: number;
+    stock?: boolean;
+    rnd?: boolean;
+    /** The pack-shipped corpus idxcache — fetched only when IndexedDB
+     *  doesn't already hold a persisted one (see boot.ts). */
+    cache?: boolean;
+  }[];
 }
 
 export interface PackProgress {
@@ -70,14 +79,19 @@ async function fetchFiles(
 }
 
 /** Stage 1 — the FASTEST path to text on screen (TODO #28): the corpus plus
- *  the tiny stock study set. Everything else follows after the reader is up. */
+ *  the tiny stock study set. `withIdxcache` adds the pack-shipped parsed-
+ *  corpus cache — only wanted on a first visit, when IndexedDB has none;
+ *  it turns the 19 MB cold parse into the cache fast path. */
 export function fetchPack(
   manifest: PackManifest,
   onProgress?: (p: PackProgress) => void,
+  opts: { withIdxcache?: boolean } = {},
 ): Promise<Map<string, Uint8Array>> {
   return fetchFiles(
     manifest.version,
-    manifest.files.filter((f) => f.path === "data/kjv.jsonl" || f.stock),
+    manifest.files.filter(
+      (f) => f.path === "data/kjv.jsonl" || f.stock || (opts.withIdxcache === true && f.cache),
+    ),
     onProgress,
   );
 }
@@ -90,7 +104,7 @@ export function fetchStage2Pack(
 ): Promise<Map<string, Uint8Array>> {
   return fetchFiles(
     manifest.version,
-    manifest.files.filter((f) => !f.rnd && !f.stock && f.path !== "data/kjv.jsonl"),
+    manifest.files.filter((f) => !f.rnd && !f.stock && !f.cache && f.path !== "data/kjv.jsonl"),
     onProgress,
   );
 }

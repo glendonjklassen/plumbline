@@ -208,24 +208,65 @@ pub fn load_corpus(path: impl AsRef<Path>) -> Result<Corpus, Error> {
     Ok(corpus)
 }
 
-/// Read + gunzip + decode a corpus cache, or `None` if absent/corrupt/stale.
+/// Read + decode a corpus cache, or `None` if absent/corrupt/stale. The cache
+/// is raw bincode or gzipped bincode — sniffed by the gzip magic, so caches
+/// written by either flavour of [`write_cache`] (and the pack-shipped web
+/// cache, which is raw) all load.
 fn read_cache(path: &Path) -> Option<CorpusCache> {
     use std::io::Read;
     let bytes = std::fs::read(path).ok()?;
-    let mut gz = flate2::read::GzDecoder::new(&bytes[..]);
-    let mut raw = Vec::new();
-    gz.read_to_end(&mut raw).ok()?;
-    bincode::deserialize::<CorpusCache>(&raw).ok()
+    if bytes.len() >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b {
+        let mut gz = flate2::read::GzDecoder::new(&bytes[..]);
+        let mut raw = Vec::new();
+        gz.read_to_end(&mut raw).ok()?;
+        return bincode::deserialize::<CorpusCache>(&raw).ok();
+    }
+    bincode::deserialize::<CorpusCache>(&bytes).ok()
 }
 
-/// Encode + gzip + atomically write a corpus cache (best-effort).
+/// Encode + atomically write a corpus cache (best-effort). Gzipped on native
+/// targets (disk space); RAW bincode on wasm32 — there the "disk" is memory
+/// and IndexedDB, and inflating ~18 MB through flate2 inside wasm on every
+/// boot costs real seconds on phones (measured 2026-07-26).
 fn write_cache<T: Serialize>(path: &Path, cache: &T) -> Result<(), Error> {
-    use std::io::Write;
     let raw = bincode::serialize(cache).map_err(|e| Error::Parse(e.to_string()))?;
-    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
-    gz.write_all(&raw).map_err(|e| Error::Parse(e.to_string()))?;
-    let bytes = gz.finish().map_err(|e| Error::Parse(e.to_string()))?;
+    #[cfg(not(target_arch = "wasm32"))]
+    let bytes = {
+        use std::io::Write;
+        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        gz.write_all(&raw).map_err(|e| Error::Parse(e.to_string()))?;
+        gz.finish().map_err(|e| Error::Parse(e.to_string()))?
+    };
+    #[cfg(target_arch = "wasm32")]
+    let bytes = raw;
     crate::store::write_atomic_bytes(path, &bytes)
+}
+
+/// Parse `src` and write `out` as its idxcache, stamped `(len(src), mtime)`.
+/// Offline data-prep for shells whose filesystem reports a FIXED mtime — the
+/// web's WASI shim reports 0 for every file — so their very first boot takes
+/// the cache fast path instead of re-parsing ~19 MB of JSONL (8.4 s on a 2026
+/// flagship phone). Written RAW (no gzip): the web pack gzips files on the
+/// wire and inflates them in JS, where it's cheap.
+pub fn build_cache_stamped(
+    src: impl AsRef<Path>,
+    out: impl AsRef<Path>,
+    src_mtime: i64,
+) -> Result<(), Error> {
+    let src = src.as_ref();
+    let raw = std::fs::read_to_string(src).map_err(|e| Error::Io {
+        path: src.display().to_string(),
+        source: e,
+    })?;
+    let corpus = from_str(&raw)?;
+    let cache = CorpusCacheRef {
+        src_len: raw.len() as u64,
+        src_mtime,
+        tok: &corpus.tok_version,
+        verses: &corpus.verses,
+    };
+    let encoded = bincode::serialize(&cache).map_err(|e| Error::Parse(e.to_string()))?;
+    crate::store::write_atomic_bytes(out.as_ref(), &encoded)
 }
 
 /// The parsed-corpus cache, keyed to its source file's size + mtime + the
@@ -418,6 +459,34 @@ mod tests {
         let stale = CorpusCache { src_len: lg + 999, src_mtime: mg, tok: a.tok_version.clone(), verses: a.verses.clone() };
         write_cache(&cache_path(&src), &stale).unwrap();
         assert!(load_corpus(&src).is_err(), "stale-stamp cache rejected → garbage source errors");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn raw_and_stamped_caches_load() {
+        let dir = std::env::temp_dir().join(format!("plumbline-corpus-webcache-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("kjv.jsonl");
+        std::fs::write(&src, SAMPLE).unwrap();
+
+        // A RAW (ungzipped) cache is read via the magic sniff — the wasm write
+        // path and the pack-shipped web cache both produce this flavour.
+        let parsed = from_str(SAMPLE).unwrap();
+        let (len, mtime) = source_stamp(&src).unwrap();
+        let cache = CorpusCache { src_len: len, src_mtime: mtime, tok: parsed.tok_version.clone(), verses: parsed.verses.clone() };
+        std::fs::write(cache_path(&src), bincode::serialize(&cache).unwrap()).unwrap();
+        assert_eq!(load_corpus(&src).unwrap().len(), 3, "raw bincode cache is used");
+
+        // build_cache_stamped writes a loadable cache honouring the given
+        // mtime: stamped with the REAL mtime it validates; stamped with the
+        // web's fixed 0 it is (correctly) ignored on this filesystem.
+        build_cache_stamped(&src, cache_path(&src), mtime).unwrap();
+        assert_eq!(load_corpus(&src).unwrap().len(), 3, "stamped cache validates");
+        build_cache_stamped(&src, cache_path(&src), 0).unwrap();
+        let c = load_corpus(&src).unwrap(); // mtime 0 ≠ real → parses the source
+        assert_eq!(c.len(), 3);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

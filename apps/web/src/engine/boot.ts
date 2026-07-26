@@ -13,7 +13,7 @@
 // milliseconds actually go on a phone" (surfaced via the bootTrace RPC).
 
 import { instantiate, type WasmEngine } from "./engine";
-import { buildHome, type VirtualHome } from "./home";
+import { buildHome, loadPersistedIdxcache, type VirtualHome } from "./home";
 import { fetchManifest, fetchPack, type PackManifest } from "./pack";
 import { StudyEngine } from "./StudyEngine";
 
@@ -44,14 +44,22 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   };
 
   onPhase({ phase: "download", fraction: 0 });
-  const manifest = await timed("manifest", fetchManifest);
+  // A first visit has no persisted parsed-corpus cache — pull the pack's
+  // web-stamped one alongside the corpus so even boot #1 skips the 19 MB
+  // parse (8.4 s on a 2026 flagship phone; 2026-07-26 trace).
+  const [manifest, persistedIdx] = await Promise.all([
+    timed("manifest", fetchManifest),
+    timed("idxcache probe (IndexedDB)", loadPersistedIdxcache),
+  ]);
   const pack = await timed("stage1 fetch+gunzip (corpus)", () =>
-    fetchPack(manifest, (p) => onPhase({ phase: "download", fraction: p.fraction, detail: p.currentFile })),
+    fetchPack(manifest, (p) => onPhase({ phase: "download", fraction: p.fraction, detail: p.currentFile }), {
+      withIdxcache: !persistedIdx,
+    }),
   );
 
   onPhase({ phase: "prepare" });
   const stockPaths = new Set(manifest.files.filter((f) => f.stock).map((f) => f.path));
-  const home = await timed("virtual home build", () => buildHome(pack, stockPaths));
+  const home = await timed("virtual home build", () => buildHome(pack, stockPaths, persistedIdx));
   const wasm = await timed("wasm compile+instantiate", () => instantiate(home.root));
 
   onPhase({ phase: "open" });

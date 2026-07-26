@@ -77,12 +77,36 @@ fn main() -> ExitCode {
                 }
             }
         }
+        "web-cache" => {
+            let Some(data) = flag("--data") else {
+                eprintln!("web-cache needs --data <kjv.jsonl> [--out <file>]");
+                return ExitCode::from(2);
+            };
+            let out = flag("--out").unwrap_or_else(|| {
+                let mut s = data.as_os_str().to_os_string();
+                s.push(".idxcache");
+                PathBuf::from(s)
+            });
+            // Stamped mtime 0: the browser WASI shim reports 0 for every file,
+            // so this cache validates on the web's very first boot (native
+            // runtimes see their real mtime and correctly ignore it).
+            match corpus::build_cache_stamped(&data, &out, 0) {
+                Ok(()) => {
+                    println!("wrote {} (web-stamped idxcache)", out.display());
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("web-cache failed: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         "help" | "-h" | "--help" => {
             print!("{}", HELP);
             ExitCode::SUCCESS
         }
         other => {
-            eprintln!("unknown command '{other}'. Try: check | copy | help");
+            eprintln!("unknown command '{other}'. Try: check | copy | web-cache | help");
             ExitCode::from(2)
         }
     }
@@ -99,6 +123,11 @@ plumbline-hydrate — assemble + verify the Plumbline data pack
       dirs (weaves/threads/tags/suggested/patches) without overwriting any
       existing files there, then verify.
       --to defaults to the resolved home (env / working tree / user data dir).
+
+  plumbline-hydrate web-cache --data <kjv.jsonl> [--out <file>]
+      Parse the corpus and write its idxcache stamped for the web shell
+      (mtime 0 — what the browser WASI shim reports), so the PWA's first
+      boot skips the ~19 MB re-parse. Run by scripts/build-web-pack.mjs.
 
 The R&D artifacts are produced offline (see data-prep/README.md); this tool
 places and checks them, it does not train or generate.

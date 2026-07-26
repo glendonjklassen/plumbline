@@ -9,8 +9,16 @@ import { idbApply, idbEntries, idbGet } from "./idb";
 
 /** Home-relative directories that hold user-authored state. */
 const USER_DIRS = ["tags", "threads", "weaves", "notes", "memory", ".config"];
-/** The engine-built corpus cache — rebuildable, persisted to skip re-parse. */
+/** The corpus idxcache — rebuildable, persisted to skip the 19 MB re-parse.
+ *  Sources, in preference order: this device's persisted copy (IndexedDB),
+ *  else the pack-shipped web-stamped one (fetched on first visit). */
 const IDXCACHE = "data/kjv.jsonl.idxcache";
+
+/** This device's persisted idxcache, if any — boot checks it BEFORE the
+ *  stage-1 fetch to decide whether the pack's copy is needed at all. */
+export function loadPersistedIdxcache(): Promise<Uint8Array | undefined> {
+  return idbGet("cache", IDXCACHE);
+}
 
 export interface VirtualHome {
   /** Root contents map handed to PreopenDirectory("/home", …). */
@@ -74,11 +82,11 @@ function collectFiles(prefix: string, dir: Directory, out: Map<string, Uint8Arra
 export async function buildHome(
   pack: Map<string, Uint8Array>,
   stockPaths: Set<string> = new Set(),
+  idxcache?: Uint8Array,
 ): Promise<VirtualHome> {
   const root = new Map<string, Directory | File>();
-  const [userFiles, idxcache, seededFlag, bundledFlag] = await Promise.all([
+  const [userFiles, seededFlag, bundledFlag] = await Promise.all([
     idbEntries("user"),
-    idbGet("cache", IDXCACHE),
     idbGet("cache", STOCK_SEEDED),
     idbGet("cache", BUNDLED),
   ]);
@@ -98,7 +106,8 @@ export async function buildHome(
   ensureDir(root, "weaves/suggested");
 
   // Restore the user's files and the corpus cache from previous sessions
-  // (user copies overwrite freshly-seeded stock — theirs is newer).
+  // (user copies overwrite freshly-seeded stock — theirs is newer; the
+  // persisted idxcache overwrites the pack-shipped copy the same way).
   for (const [path, bytes] of userFiles) insertFile(root, path, bytes);
   if (idxcache) insertFile(root, IDXCACHE, idxcache);
 
@@ -120,7 +129,7 @@ export async function buildHome(
 
   return {
     root,
-    hadIdxcache: !!idxcache,
+    hadIdxcache: !!idxcache || pack.has(IDXCACHE),
     addFiles(files: Map<string, Uint8Array>) {
       for (const [path, bytes] of files) insertFile(root, path, bytes);
     },
