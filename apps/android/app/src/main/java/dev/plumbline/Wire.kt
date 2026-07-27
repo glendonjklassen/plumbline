@@ -447,6 +447,8 @@ data class ConfigState(
      *  links by the web shell. Kept here so an Android save round-trips it
      *  instead of dropping it from the shared config. */
     val church: ChurchState? = null,
+    /** Present-screen shares open as a new believer (additive, 2026-07-27). */
+    val presentSharesAsNew: Boolean? = null,
 )
 
 @Serializable

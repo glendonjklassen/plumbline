@@ -11,7 +11,7 @@
   // making the wait short rather than disguising it.
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
   import { precacheShell } from "./engine/precache";
-  import { churchFromQuery } from "./shell/church";
+  import { churchFromQuery, hasChurch, startsAsNewBeliever } from "./shell/church";
   import { initSession, type Session } from "./state/session.svelte";
   import FirstRun from "./shell/FirstRun.svelte";
   import Shell from "./shell/Shell.svelte";
@@ -47,6 +47,7 @@
       // own (theirs wins if they've already set one), then strip it from the
       // address bar so a bookmark or a reload isn't a link about a church.
       const shared = churchFromQuery(location.search);
+      s.startAsNewBeliever = startsAsNewBeliever(location.search);
       if (shared && !s.config.church?.name) {
         s.config.church = shared;
         s.sharedByChurch = shared;
@@ -54,7 +55,14 @@
       } else if (shared) {
         s.sharedByChurch = shared; // shown in the welcome, not saved over theirs
       }
-      if (shared) history.replaceState(null, "", location.pathname + location.hash);
+      if (shared || s.startAsNewBeliever) {
+        history.replaceState(null, "", location.pathname + location.hash);
+      }
+      // Returning readers never see the welcome, so without this a link's
+      // church would be saved with no sign it happened (feedback 2026-07-27).
+      if (hasChurch(shared) && !s.showFirstRun) {
+        s.showToast(`Home church set to ${shared.name} — tap Church to visit them`);
+      }
       s.rndDeferred = deferRnd;
       s.tones = tones?.tones ?? [];
       await Promise.all([s.fetchQ("toc"), s.fetchQ("canonSegments")]);

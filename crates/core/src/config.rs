@@ -120,6 +120,11 @@ pub struct Config {
     /// The reader's home church — shown in the welcome when a shared link
     /// carried one, and attached to the links this reader shares.
     pub church: Church,
+    /// Whether a link shared from PRESENT opens for a new believer: that
+    /// screen is what you show someone face to face, so the person receiving
+    /// it is usually meeting the Bible, not setting up a study tool. On by
+    /// default (2026-07-27); the recipient can still change everything.
+    pub present_shares_as_new: bool,
 }
 
 /// A verse copy-shape token accepted for [`Config::copy_style`].
@@ -144,6 +149,7 @@ impl Default for Config {
             human_analysis: true,
             machine_analysis: true,
             church: Church::default(),
+            present_shares_as_new: true,
         }
     }
 }
@@ -182,6 +188,10 @@ struct ConfigWire {
     /// The home church (2026-07-27); absent in every older file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     church: Option<ChurchWire>,
+    /// Present-screen shares open as a new believer (2026-07-27); absent in an
+    /// older file → on, which is the default the feature shipped with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    present_shares_as_new: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -269,6 +279,7 @@ impl Config {
             machine_analysis: w.machine_analysis.unwrap_or(true),
             // Trimmed on the way in: these arrive from a shared link's query
             // string, where trailing spaces are an accident of copy-paste.
+            present_shares_as_new: w.present_shares_as_new.unwrap_or(true),
             church: w
                 .church
                 .map(|c| Church {
@@ -303,6 +314,7 @@ impl Config {
                 .collect(),
             human_analysis: Some(self.human_analysis),
             machine_analysis: Some(self.machine_analysis),
+            present_shares_as_new: Some(self.present_shares_as_new),
             church: (!self.church.is_empty()).then(|| ChurchWire {
                 name: self.church.name.clone(),
                 info: self.church.info.clone(),
@@ -416,6 +428,7 @@ mod tests {
             history: vec![PaneRef { book: "Gen".into(), chapter: 1, verse: None }, PaneRef { book: "Rom".into(), chapter: 8, verse: None }],
             human_analysis: true,
             machine_analysis: false,
+            present_shares_as_new: false,
             church: Church {
                 name: "Grace Bible Church".into(),
                 info: "Sundays 10am · 12 Long Street".into(),

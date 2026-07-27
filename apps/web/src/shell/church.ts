@@ -9,6 +9,10 @@
 // deciding whether to open a link should be able to see what is in it, and a
 // church that mistypes its own details can fix them by reading the URL.
 
+/** The hosted PWA — what every share hands over. Keep in sync with the
+ *  Android twin (QrShare.kt). */
+export const PWA_URL = "https://plumblinebible.org/";
+
 export interface Church {
   name: string;
   /** One free line — when and where they meet. */
@@ -44,15 +48,31 @@ export function churchFromQuery(search: string): Church | null {
   return hasChurch(c) ? c : null;
 }
 
-/** A share link for `base` carrying `church` (plain `base` when unset). */
-export function shareUrl(base: string, church: Church | undefined | null): string {
-  if (!hasChurch(church)) return base;
+/** A share link for `base` carrying `church` (plain `base` when unset).
+ *
+ *  `startAsNewBeliever` marks the link as one handed to someone meeting the
+ *  Bible — the recipient's welcome opens on the new-believer path instead of
+ *  asking them to pick. ONLY the Present screen sets it: an ordinary share
+ *  goes to whoever, often someone from the same church, and must stay an
+ *  ordinary link (2026-07-27). */
+export function shareUrl(
+  base: string,
+  church: Church | undefined | null,
+  opts: { startAsNewBeliever?: boolean } = {},
+): string {
   const u = new URL(base);
-  u.searchParams.set("church", church.name);
-  if (church.info) u.searchParams.set("churchInfo", church.info);
-  if (church.url) u.searchParams.set("churchUrl", church.url);
+  if (hasChurch(church)) {
+    u.searchParams.set("church", church.name);
+    if (church.info) u.searchParams.set("churchInfo", church.info);
+    if (church.url) u.searchParams.set("churchUrl", church.url);
+  }
+  if (opts.startAsNewBeliever) u.searchParams.set("start", "new");
   return u.href;
 }
+
+/** Whether this link asks the welcome to open on the new-believer path. */
+export const startsAsNewBeliever = (search: string): boolean =>
+  new URLSearchParams(search).get("start") === "new";
 
 /** Only http(s) links are offered as links — a shared parameter is untrusted
  *  input, and `javascript:` must never reach an anchor's href. */

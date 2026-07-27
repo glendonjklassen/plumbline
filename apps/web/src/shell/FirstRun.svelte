@@ -13,7 +13,9 @@
   const s = getSession();
 
   type Stage = "choose" | "welcome" | "tiers" | "church";
-  let stage = $state<Stage>("choose");
+  // A link shared from Present says who it was meant for, so the person
+  // holding it is not asked to classify themselves (2026-07-27).
+  let stage = $state<Stage>(s.startAsNewBeliever ? "welcome" : "choose");
   let human = $state(true);
   let machine = $state(true);
 

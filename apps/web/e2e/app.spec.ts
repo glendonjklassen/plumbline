@@ -517,7 +517,9 @@ test("the share QR encodes the church, not just the app", async ({ page }) => {
   await page.getByRole("button", { name: "Share", exact: true }).click();
   await expect(page.locator(".share-dialog")).toBeVisible();
   const plain = await modulesFor();
-  await expect(page.locator(".share-url")).toHaveText("https://plumblinebible.org/");
+  // The dialog shows the HOST, never the full link: with a church attached
+  // the URL runs off a phone screen (feedback 2026-07-27).
+  await expect(page.locator(".share-url")).toHaveText("plumblinebible.org");
   await page.getByRole("button", { name: "Close" }).click();
 
   await page.evaluate(() =>
@@ -530,7 +532,30 @@ test("the share QR encodes the church, not just the app", async ({ page }) => {
   await page.getByRole("button", { name: "Share", exact: true }).click();
   const withChurch = await modulesFor();
   expect(withChurch).toBeGreaterThan(plain); // more to encode, bigger symbol
-  const url = await page.locator(".share-url").innerText();
-  expect(url).toContain("church=Grace+Bible+Church");
-  expect(url).toContain("churchInfo=Sundays+10am");
+  await expect(page.locator(".share-with")).toHaveText("with Grace Bible Church");
+  await expect(page.locator(".share-url")).toHaveText("plumblinebible.org");
+
+  // The link itself — what the QR encodes and "Share the link" hands over.
+  const links = await page.evaluate(() => {
+    const s = (window as any).__plumbline;
+    return { normal: s.shareLink, present: s.presentShareLink };
+  });
+  expect(links.normal).toContain("church=Grace+Bible+Church");
+  expect(links.normal).toContain("churchInfo=Sundays+10am");
+  // An ordinary share is an ordinary link — it must NOT declare the recipient
+  // a new believer; that is only for what Present hands over.
+  expect(links.normal).not.toContain("start=new");
+  expect(links.present).toContain("start=new");
+  expect(links.present).toContain("church=Grace+Bible+Church");
+});
+
+test("a Present link opens the welcome for a new believer; a normal one asks", async ({ page }) => {
+  // Present is the screen you show someone face to face, so its link says who
+  // it was meant for and the recipient isn't asked to classify themselves.
+  await page.goto("/?church=Grace+Bible+Church&start=new");
+  await expect(page.getByText("We're so glad you've put your faith in Jesus")).toBeVisible({
+    timeout: 90_000,
+  });
+  await expect(page.getByText("Shared with you by")).toBeVisible();
+  expect(await page.evaluate(() => location.search)).toBe("");
 });

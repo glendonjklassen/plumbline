@@ -1,6 +1,7 @@
 <script lang="ts" module>
-  // The hosted PWA's address. Keep in sync with the Android twin (QrShare.kt).
-  export const PWA_URL = "https://plumblinebible.org/";
+  // Re-exported for the components that render a share surface; it lives with
+  // the sharing logic (shell/church.ts).
+  export { PWA_URL } from "./church";
 </script>
 
 <script lang="ts">
@@ -14,6 +15,7 @@
   // covering both ECC levels, versions 1 through ~15, non-ASCII church names
   // and a full-length share link, all read back exactly.
   import qrcode from "qrcode-generator";
+  import { PWA_URL } from "./church";
 
   // The library's default byte conversion is ASCII-only, and its ESM build
   // doesn't ship the UTF-8 one (`stringToBytesFuncs` exists only in the CJS

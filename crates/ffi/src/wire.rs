@@ -1276,6 +1276,9 @@ pub struct WireConfigState {
     /// shares. Absent when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub church: Option<WireChurch>,
+    /// Present-screen shares open as a new believer (additive, 2026-07-27).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub present_shares_as_new: Option<bool>,
     /// Load-only: true when no config file existed yet (guided first run).
     #[serde(default)]
     pub first_run: bool,
@@ -1326,6 +1329,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
             .collect(),
         human_analysis: Some(cfg.human_analysis),
         machine_analysis: Some(cfg.machine_analysis),
+        present_shares_as_new: Some(cfg.present_shares_as_new),
         church: (!cfg.church.is_empty()).then(|| WireChurch {
             name: cfg.church.name.clone(),
             info: cfg.church.info.clone(),
@@ -1373,6 +1377,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
             .collect(),
         human_analysis: w.human_analysis.unwrap_or(true),
         machine_analysis: w.machine_analysis.unwrap_or(true),
+        present_shares_as_new: w.present_shares_as_new.unwrap_or(true),
         church: w
             .church
             .as_ref()

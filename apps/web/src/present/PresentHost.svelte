@@ -6,7 +6,8 @@
   // Deliberately hard-coded light — the phone/laptop gets handed across in
   // daylight.
   import { getSession } from "../state/session.svelte";
-  import QrCode, { PWA_URL } from "../shell/QrCode.svelte";
+  import QrCode from "../shell/QrCode.svelte";
+  import { hasChurch } from "../shell/church";
 
   const s = getSession();
 
@@ -64,7 +65,14 @@
     for (const e of entries) {
       lines.push(e.display, e.body, "");
     }
-    lines.push(`Shared from Plumbline — ${PWA_URL}`);
+    // The same link the header's Share gives — Present used to hand over a
+    // bare app URL, dropping the church exactly where it matters most, since
+    // this is the screen you show someone face to face (feedback 2026-07-27).
+    lines.push(`Shared from Plumbline — ${s.presentShareLink}`);
+    if (hasChurch(s.church)) {
+      lines.push("");
+      lines.push(s.church.info ? `${s.church.name} — ${s.church.info}` : s.church.name);
+    }
     return lines.join("\n");
   }
   async function share(): Promise<void> {
@@ -159,7 +167,7 @@
         <p class="endnote">— the whole thread, yours to keep —</p>
         <button class="sharebig" onclick={share}>Share the passages</button>
         <div class="qr">
-          <QrCode size={148} />
+          <QrCode size={148} text={s.presentShareLink} />
           <span class="qrnote">scan for the app — free, offline, no account</span>
         </div>
         <button class="ovbtn" onclick={() => (focus = null)}>back to overview</button>

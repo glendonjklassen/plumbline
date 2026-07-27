@@ -17,8 +17,8 @@
   import ContextMenu from "../reader/ContextMenu.svelte";
   import TagPicker from "../study/TagPicker.svelte";
   import TagWeave from "../study/TagWeave.svelte";
-  import QrCode, { PWA_URL } from "./QrCode.svelte";
-  import { hasChurch, shareUrl } from "./church";
+  import QrCode from "./QrCode.svelte";
+  import { hasChurch, safeChurchUrl } from "./church";
   import { getSession } from "../state/session.svelte";
 
   const s = getSession();
@@ -44,7 +44,7 @@
   let shareApp = $state(false);
   // What we actually hand over: the app, plus this reader's church when they
   // have set one (Settings → Your church). One QR, both things.
-  const link = $derived(shareUrl(PWA_URL, s.church));
+  const link = $derived(s.shareLink);
   async function shareLink(): Promise<void> {
     const title = hasChurch(s.church) ? `Plumbline — from ${s.church.name}` : "Plumbline";
     if (navigator.share) {
@@ -73,6 +73,17 @@
       s.mapPopup = null;
       action();
     };
+  }
+
+  // The church button opens their site; with no site to open it at least
+  // tells the reader who and when, which is all we were given.
+  const churchTitle = $derived(
+    [s.church.name, s.church.info].filter(Boolean).join(" — ") || "Your church",
+  );
+  function visitChurch(): void {
+    const url = safeChurchUrl(s.church.url);
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+    else s.showToast(churchTitle);
   }
 
   // ── global keys (manifest §Keyboard + wheel) ──
@@ -196,6 +207,12 @@
       oninput={onSearchInput}
       aria-label="Search"
     />
+    {#if hasChurch(s.church)}
+      <!-- Front and centre, not in Settings: someone handed this to a reader
+           along with their church, and the reader should be able to find them
+           without going hunting (feedback 2026-07-27). -->
+      <button class="church-btn" onclick={visitChurch} title={churchTitle}>Church</button>
+    {/if}
     <button class="share-first" onclick={go(() => (shareApp = true))}>Share</button>
     <div class="menu-host">
       <button class="menu-btn" onclick={() => (menuOpen = !menuOpen)} aria-label="Menu">≡</button>
@@ -242,7 +259,10 @@
         : "Free, offline, no account."}
     </p>
     <QrCode size={220} text={link} />
-    <p class="share-url">{link}</p>
+    <p class="share-url">plumblinebible.org</p>
+    {#if hasChurch(s.church)}
+      <p class="share-with">with {s.church.name}</p>
+    {/if}
     <div class="share-actions">
       <button class="share-primary" onclick={shareLink}>Share the link</button>
       <button onclick={() => (shareApp = false)}>Close</button>
@@ -438,6 +458,23 @@
   .share-url {
     color: #5a564e;
     font-size: 13px;
+  }
+  .share-with {
+    font-size: 13px;
+    font-weight: 600;
+    color: #9e7d38;
+  }
+  .church-btn {
+    font-size: 13.5px;
+    padding: 4px 12px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 6px;
+    color: var(--gold, #9e7d38);
+    white-space: nowrap;
+  }
+  .church-btn:hover {
+    border-color: var(--gold, #9e7d38);
+    background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
   }
   .share-actions {
     display: flex;

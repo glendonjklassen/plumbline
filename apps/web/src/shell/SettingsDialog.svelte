@@ -301,6 +301,23 @@
         onchange={saveChurch}
       />
       <input class="field" placeholder="Website (optional)" bind:value={churchUrl} onchange={saveChurch} />
+      <label class="toggle">
+        <span class="body">
+          <span class="name">Present shares open for a new believer</span>
+          <span class="desc">
+            A link shared from the Present screen opens on the new-believer welcome, since that
+            screen is what you show someone face to face. Your ordinary Share stays a plain link.
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={s.config.presentSharesAsNew !== false}
+          onchange={() => {
+            s.config.presentSharesAsNew = s.config.presentSharesAsNew === false;
+            s.saveConfig();
+          }}
+        />
+      </label>
       <hr />
       <p class="label">Offline</p>
       <div class="offline">
