@@ -36,11 +36,13 @@ devices).
 ## Getting started (60 seconds)
 
 First launch asks who's opening the Book — **new in the faith** (a welcome
-with next steps, landing in John), **sharing the gospel** (straight into the
-Romans Road presentation), or **established believer** (pick which analysis
-layers sit beside the text: the scholars' tier and the machine tier). All of
-it is switchable any time in **Settings**; the text and your own notes, tags,
-and threads are always on.
+with next steps, landing in John), **curious about the Bible** (for someone
+still deciding what they believe), **sharing the gospel** (straight into the
+Romans Road presentation), or **established believer** (set up study and
+memorization, and pick which analysis layers sit beside the text). All of it
+is switchable any time in **Settings**; the text and your own notes, tags,
+and threads are always on. Whichever welcome you were given stays one tap
+away afterwards, under **Welcome** in the top bar.
 
 Then:
 
@@ -61,6 +63,26 @@ Then:
    study tools, described), History, Present (hand-the-phone-across mode),
    the guide, and Settings — including **backup to a zip** that restores on
    any device.
+
+## Share the Bible — and your church — with one code
+
+Put your church in **Settings → Your church** (name, when and where you meet,
+your website) and it travels with everything you share. **Share** in the top
+bar gives a QR and a link that carry both: whoever scans it gets the whole
+Bible, offline and free, *and* your church's details saved on their device —
+with a **Church** button in their top bar that opens your website. If they
+pass the app on, your church goes with it.
+
+Hand a card across at a service, print the code on a bulletin, or text the
+link. Nothing is registered anywhere: the details ride in the link itself
+(`?church=…`), so you can read exactly what you are sending before you send
+it, and there is no account or server involved on either end.
+
+Sharing from **Present** — the hand-the-phone-across mode — is the same code
+with one difference: it opens for someone meeting the Bible rather than
+setting up a study tool, offering just *new in the faith* or *curious about
+the Bible*. Turn that off in Settings if you'd rather it behave like an
+ordinary share.
 
 See **[docs/GUIDE.md](docs/GUIDE.md)** for the full tour — search syntax, the
 study panel tier by tier, weaves, the constellation, threads and tags.

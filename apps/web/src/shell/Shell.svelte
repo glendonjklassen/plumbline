@@ -39,6 +39,21 @@
   }
 
   let menuOpen = $state(false);
+  // Search used to be a permanent field. With Welcome, Church and Share
+  // beside it the bar wrapped onto a second row on a phone (feedback
+  // 2026-07-27), so on narrow screens it collapses to a magnifying glass and
+  // takes the row only while it is being used.
+  let searchOpen = $state(false);
+  let searchEl = $state<HTMLInputElement | null>(null);
+  function openSearch(): void {
+    searchOpen = true;
+    queueMicrotask(() => searchEl?.focus());
+  }
+  function closeSearch(): void {
+    searchOpen = false;
+    s.searchQuery = "";
+    if (s.panel?.kind === "search") s.panel = null;
+  }
   // Share the app: the PWA QR + link (Compose ShareAppDialog parity) — a
   // first-class header button (2026-07-26), not a menu trip.
   let shareApp = $state(false);
@@ -199,14 +214,26 @@
         <button onclick={go(() => (s.memorize = { view: "hub" }))}>Memorize</button>
       </nav>
     <span class="spacer"></span>
+    <button class="glass" class:searching={searchOpen} onclick={openSearch} aria-label="Open search">⌕</button>
     <input
       class="search"
+      class:open={searchOpen}
       type="search"
       placeholder="Search or reference…"
+      bind:this={searchEl}
       bind:value={s.searchQuery}
       oninput={onSearchInput}
+      onkeydown={(e) => e.key === "Escape" && closeSearch()}
       aria-label="Search"
     />
+    {#if searchOpen}
+      <button class="glass narrow-close" onclick={closeSearch} aria-label="Close search">✕</button>
+    {/if}
+    {#if s.intro}
+      <!-- The welcome a reader was given, on demand: they should not have to
+           reinstall to read it twice (feedback 2026-07-27). -->
+      <button class="church-btn" onclick={go(() => (s.reopenIntro = s.intro))}>Welcome</button>
+    {/if}
     {#if hasChurch(s.church)}
       <!-- Front and centre, not in Settings: someone handed this to a reader
            along with their church, and the reader should be able to find them
@@ -260,6 +287,11 @@
     </p>
     <QrCode size={220} text={link} />
     <p class="share-url">plumblinebible.org</p>
+    {#if s.intro}
+      <!-- The welcome a reader was given, on demand: they should not have to
+           reinstall to read it twice (feedback 2026-07-27). -->
+      <button class="church-btn" onclick={go(() => (s.reopenIntro = s.intro))}>Welcome</button>
+    {/if}
     {#if hasChurch(s.church)}
       <p class="share-with">with {s.church.name}</p>
     {/if}
@@ -348,6 +380,32 @@
     .subtitle {
       display: none;
     }
+    /* One row, always: the glass stands in for the field until it's wanted,
+       and while searching the field owns the row. */
+    header {
+      flex-wrap: nowrap;
+    }
+    /* `header` prefix so these beat the base rules further down the file. */
+    header .glass {
+      display: block;
+    }
+    header .search {
+      display: none;
+    }
+    header .search.open {
+      display: block;
+      flex: 1;
+      width: auto;
+      min-width: 0;
+    }
+    .glass.searching {
+      display: none;
+    }
+    header:has(.search.open) .title,
+    header:has(.search.open) .church-btn,
+    header:has(.search.open) .share-first {
+      display: none;
+    }
     .menu .narrow-only {
       display: block;
     }
@@ -359,6 +417,13 @@
   }
   .spacer {
     flex: 1;
+  }
+  .glass {
+    display: none; /* wide screens keep the field itself */
+    font-size: 20px;
+    line-height: 1;
+    padding: 0 6px;
+    color: var(--gold, #9e7d38);
   }
   .search {
     width: min(240px, 38vw);

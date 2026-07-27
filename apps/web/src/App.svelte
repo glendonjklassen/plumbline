@@ -102,6 +102,9 @@
     </div>
   {:else}
     <Shell />
+    <!-- Also mounted over the app: the welcome is re-openable from the top
+         bar, and it renders as its own dialog (feedback 2026-07-27). -->
+    <FirstRun />
   {/if}
 {:else}
   <div class="splash">

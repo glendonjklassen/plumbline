@@ -12,10 +12,16 @@
 
   const s = getSession();
 
-  type Stage = "choose" | "welcome" | "tiers" | "church";
+  type Stage = "choose" | "welcome" | "curious" | "tiers" | "church";
   // A link shared from Present says who it was meant for, so the person
   // holding it is not asked to classify themselves (2026-07-27).
-  let stage = $state<Stage>(s.startAsNewBeliever ? "welcome" : "choose");
+  let stage = $state<Stage>("choose");
+  // Re-reading is the same page without the setup: no path is chosen, no
+  // settings move, and the button at the bottom just closes it.
+  const rereading = $derived(s.reopenIntro !== null);
+  $effect(() => {
+    if (s.reopenIntro) stage = s.reopenIntro === "curious" ? "curious" : "welcome";
+  });
   let human = $state(true);
   let machine = $state(true);
 
@@ -97,6 +103,31 @@
         "If we confess our sins, he is faithful and just to forgive us our sins, and to cleanse us from all " +
         "unrighteousness.",
     },
+    treasure: {
+      label: "Proverbs 2:4–5", book: "Prov", chapter: 2, verse: 4,
+      text:
+        "If thou seekest her as silver, and searchest for her as for hid treasures; " +
+        "Then shalt thou understand the fear of the LORD, and find the knowledge of God.",
+    },
+    unbelief: {
+      label: "Mark 9:24", book: "Mark", chapter: 9, verse: 24,
+      text:
+        "And straightway the father of the child cried out, and said with tears, Lord, I believe; " +
+        "help thou mine unbelief.",
+    },
+    ask: {
+      label: "Matthew 7:7", book: "Matt", chapter: 7, verse: 7,
+      text: "Ask, and it shall be given you; seek, and ye shall find; knock, and it shall be opened unto you:",
+    },
+    seek: {
+      label: "Jeremiah 29:13", book: "Jer", chapter: 29, verse: 13,
+      text: "And ye shall seek me, and find me, when ye shall search for me with all your heart.",
+    },
+    struggle: {
+      label: "Psalm 34:18", book: "Ps", chapter: 34, verse: 18,
+      text:
+        "The LORD is nigh unto them that are of a broken heart; and saveth such as be of a contrite spirit.",
+    },
     wisdom: {
       label: "2 Timothy 3:16–17", book: "2Tim", chapter: 3, verse: 16,
       text:
@@ -131,7 +162,19 @@
 
   /** New-believer landing: John 1 — a tapped reference opens beside it
    *  (phones: the passage opens with John 1 one back-step away). */
+  function openRef(ref: Ref): void {
+    if (!rereading) {
+      startInJohn(ref);
+      return;
+    }
+    s.reopenIntro = null;
+    s.navigate(s.activePane, ref.book, ref.chapter, ref.verse);
+  }
+
   function startInJohn(ref?: Ref): void {
+    // Remember which welcome they read: the top bar offers it again, and a
+    // reader shouldn't have to reinstall to see it twice (2026-07-27).
+    s.config.intro = stage === "curious" ? "curious" : "new";
     finish(false, false);
     if (ref && s.narrow) {
       const p = pane(ref.book, ref.chapter, ref.verse);
@@ -157,6 +200,10 @@
   }
 
   function dismiss(): void {
+    if (rereading) {
+      s.reopenIntro = null;
+      return;
+    }
     // Clicking away on the chooser/tiers keeps the old behaviour (defaults);
     // the welcome page asks for an explicit choice, and so does the church
     // step — dismissing it would silently skip a question just asked.
@@ -165,7 +212,7 @@
 </script>
 
 {#snippet refchip(r: Ref)}
-  <button class="ref" onclick={() => startInJohn(r)} title="Open {r.label} beside John">{r.label}</button>
+  <button class="ref" onclick={() => openRef(r)} title="Open {r.label}">{r.label}</button>
 {/snippet}
 
 {#snippet vquote(refs: Ref[])}
@@ -200,10 +247,10 @@
   </p>
   <input class="ch-field" placeholder="Church name" bind:value={churchName} />
   <input class="ch-field" placeholder="When and where — e.g. Sundays 10am, 12 Long Street" bind:value={churchInfo} />
-  <input class="ch-field" placeholder="Website (optional)" bind:value={churchUrl} />
+  <input class="ch-field" placeholder="Website" bind:value={churchUrl} />
 {/snippet}
 
-{#if s.showFirstRun}
+{#if s.showFirstRun || s.reopenIntro}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={dismiss}></div>
   <div class="dialog" role="dialog" aria-modal="true">
@@ -215,16 +262,28 @@
         <span class="name">New in the faith</span>
         <span class="desc">I've just put my faith in Jesus — where do I start?</span>
       </button>
+      <button class="path" onclick={() => (stage = "curious")}>
+        <span class="name">Curious about the Bible</span>
+        <span class="desc">I'm not sure what I believe — where do I start?</span>
+      </button>
+      <!-- A link shared from Present was handed to someone in person, so it
+           offers only the two paths it was meant for: the rest is setup for a
+           reader who already has a Bible habit (2026-07-27). -->
+      {#if !s.startAsNewBeliever}
       <button class="path" onclick={sharing}>
         <span class="name">Sharing the gospel</span>
         <span class="desc">Walk someone down the Romans Road, right now.</span>
       </button>
       <button class="path" onclick={() => (stage = "tiers")}>
         <span class="name">Established believer</span>
-        <span class="desc">Set up which layers of analysis sit alongside the text.</span>
+        <span class="desc">
+          Set up your Bible for study and memorization, and prepare to share the good news with
+          others.
+        </span>
       </button>
+      {/if}
     {:else if stage === "welcome"}
-      <h2>We're so glad you've put your faith in Jesus</h2>
+      <h2>I'm so glad you've put your faith in Jesus</h2>
       {@render sharedBy()}
       <div class="welcome">
         <p>There are some next steps you can take to grow in faith:</p>
@@ -233,7 +292,7 @@
           great place to start reading the inspired, inerrant word of God. You've been linked the
           King James Version, which is the closest to the original texts and has been used for
           hundreds of years by millions of believers. If you have trouble with the older English,
-          we recommend you read a newer translation like the ESV alongside (not instead of) the
+          I recommend you read a newer translation like the ESV alongside (not instead of) the
           King James to better understand.
         </p>
         {@render vquote([REF.pure])}
@@ -261,17 +320,59 @@
         </p>
         {@render vquote([REF.perfected, REF.forgiven])}
         <p>
-          We highly recommend you read your Bible as it is rich with wisdom on how to navigate this
+          I highly recommend you read your Bible as it is rich with wisdom on how to navigate this
           world and how to serve our Lord and Saviour Jesus Christ:
         </p>
         {@render vquote([REF.wisdom])}
+        <p>
+          If you are in a difficult place in your life, ask God to help you with your struggles:
+        </p>
+        {@render vquote([REF.struggle])}
         <p>
           May the peace and joy of Christ be with you, and may you share that peace and joy with
           others. God bless you!
         </p>
         <p class="hint">Tap any verse reference to open it beside the book of John.</p>
       </div>
-      <button class="start" onclick={() => startInJohn()}>Open the book of John</button>
+      <button class="start" onclick={() => (rereading ? (s.reopenIntro = null) : startInJohn())}>
+        {rereading ? "Close" : "Open the book of John"}
+      </button>
+    {:else if stage === "curious"}
+      <h2>I'm glad you're curious about the Bible</h2>
+      {@render sharedBy()}
+      <div class="welcome">
+        <p>
+          For thousands of years this text has been the foundation of civilizations and of the
+          lives of individuals. People have been killed for reading it and for sharing it.
+        </p>
+        <p>
+          It contains the history of our world from its creation to the incarnation of its Creator
+          here on earth with us. He came to save us because he loves us:
+        </p>
+        {@render vquote([REF.loved])}
+        <p>
+          Whether you are just curious or returning to faith after a long time, there is treasure
+          here for you:
+        </p>
+        {@render vquote([REF.treasure])}
+        <p>
+          If you are having trouble believing, you're not alone — someone said exactly that to
+          Jesus himself:
+        </p>
+        {@render vquote([REF.unbelief])}
+        <p>
+          I encourage you to read this book starting with the book of John, and to pray that if God
+          is real, he would reveal himself to you. I've known many people for whom that prayer has
+          been answered:
+        </p>
+        {@render vquote([REF.ask, REF.seek])}
+        <p>If you are in a difficult place in your life, ask God to help you with your struggles:</p>
+        {@render vquote([REF.struggle])}
+        <p class="hint">Tap any verse reference to open it beside the book of John.</p>
+      </div>
+      <button class="start" onclick={() => (rereading ? (s.reopenIntro = null) : startInJohn())}>
+        {rereading ? "Close" : "Open the book of John"}
+      </button>
     {:else if stage === "church"}
       <h2>Before you share it</h2>
       <p class="sub">
@@ -283,6 +384,9 @@
       <button class="ch-skip" onclick={toRomansRoad}>Skip for now</button>
     {:else}
       <h2>Welcome to Plumbline</h2>
+      <p class="ch-title">Your church</p>
+      {@render churchFields()}
+      <hr class="ch-rule" />
       <p class="sub">
         The Holy Bible is always on — reading, search, and your own tags, notes, and
         threads. Choose which layers of analysis sit alongside it:
@@ -309,9 +413,6 @@
         </span>
       </label>
       <p class="note">Every piece of evidence is marked with where it comes from — ✝ the text · † scholarship · ≈ machine.</p>
-      <hr class="ch-rule" />
-      <p class="ch-title">Your church</p>
-      {@render churchFields()}
       <button
         class="start"
         onclick={() => {

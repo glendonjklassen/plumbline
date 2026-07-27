@@ -55,7 +55,7 @@ test("first-run: the welcome owns the boot screen, with no reader behind it", as
 test("first-run: a new believer's welcome reference opens beside John", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "New in the faith" }).click({ timeout: 90_000 });
-  await expect(page.getByText("We're so glad you've put your faith in Jesus")).toBeVisible();
+  await expect(page.getByText("I'm so glad you've put your faith in Jesus")).toBeVisible();
   await page.getByRole("button", { name: "Psalm 12:6–7" }).click();
   const panes = await page.evaluate(() => {
     const s = (window as any).__plumbline;
@@ -161,7 +161,7 @@ test("word study opens from a single click and respects the gates", async ({ pag
 
 test("live search shows results and Esc clears", async ({ page }) => {
   await boot(page);
-  await page.getByLabel("Search").fill("in the beginning");
+  await page.getByRole("searchbox").fill("in the beginning");
   await expect(page.locator("aside.panel")).toContainText("result");
   await page.keyboard.press("Escape");
   await expect(page.locator("aside.panel")).toBeHidden();
@@ -476,7 +476,7 @@ test("the welcome's verses are the corpus text, verbatim and instant", async ({ 
   // screen against the corpus itself.
   await page.goto("/");
   await page.getByRole("button", { name: "New in the faith" }).click({ timeout: 90_000 });
-  await expect(page.getByText("We're so glad you've put your faith in Jesus")).toBeVisible();
+  await expect(page.getByText("I'm so glad you've put your faith in Jesus")).toBeVisible();
 
   // The quotes are present in the very first paint of this screen, not filled
   // in later: no blockquote may be empty at any point.
@@ -494,6 +494,7 @@ test("the welcome's verses are the corpus text, verbatim and instant", async ({ 
       ["John 10:28", "1John 5:13"],
       ["Phil 1:6", "1John 1:9"],
       ["2Tim 3:16", "2Tim 3:17"],
+      ["Ps 34:18"],
     ];
     const out: string[] = [];
     for (const g of groups) {
@@ -549,13 +550,75 @@ test("the share QR encodes the church, not just the app", async ({ page }) => {
   expect(links.present).toContain("church=Grace+Bible+Church");
 });
 
-test("a Present link opens the welcome for a new believer; a normal one asks", async ({ page }) => {
-  // Present is the screen you show someone face to face, so its link says who
-  // it was meant for and the recipient isn't asked to classify themselves.
+test("a Present link names the church and drops the setup paths", async ({ page }) => {
+  // Present is the screen you show someone face to face: its link says who it
+  // was meant for, so the welcome offers only the two paths that fit and
+  // still names whoever handed it over.
   await page.goto("/?church=Grace+Bible+Church&start=new");
-  await expect(page.getByText("We're so glad you've put your faith in Jesus")).toBeVisible({
-    timeout: 90_000,
-  });
-  await expect(page.getByText("Shared with you by")).toBeVisible();
+  await expect(page.getByText("Shared with you by")).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole("button", { name: "New in the faith" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Curious about the Bible" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Established believer" })).toHaveCount(0);
   expect(await page.evaluate(() => location.search)).toBe("");
+});
+
+test("first-run: curious about the Bible is its own path, and stays re-readable", async ({ page }) => {
+  // A third way in, for someone who hasn't decided what they believe
+  // (2026-07-27) — and the welcome a reader was given must be readable again
+  // afterwards, from the chrome rather than by reinstalling.
+  await page.goto("/");
+  await page.getByRole("button", { name: "Curious about the Bible" }).click({ timeout: 90_000 });
+  await expect(page.getByText("I'm glad you're curious about the Bible")).toBeVisible();
+  await expect(page.getByText(/help thou mine unbelief/)).toBeVisible();
+  await expect(page.getByText(/contrite spirit/)).toBeVisible(); // the struggles verse
+  await page.getByRole("button", { name: "Open the book of John" }).click();
+  await expect(page.locator(".subtitle")).toContainText("John 1");
+
+  // Back to it from the top bar, without changing anything.
+  await page.getByRole("button", { name: "Welcome" }).click();
+  await expect(page.getByText("I'm glad you're curious about the Bible")).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.locator(".pane canvas").first()).toBeVisible();
+
+  // …and it survives a relaunch, since it's the reader's own welcome now.
+  await page.reload();
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole("button", { name: "Welcome" })).toBeVisible();
+});
+
+test("a Present link offers only the two paths it was meant for", async ({ page }) => {
+  // Handed to someone in person: new believer or curious. Setting up study
+  // tiers is not what that moment is for.
+  await page.goto("/?start=new");
+  await expect(page.getByRole("button", { name: "New in the faith" })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole("button", { name: "Curious about the Bible" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Established believer" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sharing the gospel" })).toHaveCount(0);
+});
+
+test("the phone top bar stays on one row, search behind a glass", async ({ page }) => {
+  // Welcome + Church + Share + Search + ≡ wrapped onto a second row on a
+  // phone (feedback 2026-07-27). Search collapses to an icon and only takes
+  // the row while it is being used.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await boot(page);
+  await page.evaluate(() =>
+    (window as any).__plumbline.setChurch({ name: "Grace Bible Church", info: "", url: "https://example.org" }),
+  );
+  const oneRow = () =>
+    page.locator("header").evaluate((h) => {
+      const top = h.getBoundingClientRect().top;
+      return [...h.children].every((c) => Math.abs(c.getBoundingClientRect().top - top) < 24);
+    });
+  await expect.poll(oneRow).toBe(true);
+
+  // The field is behind the glass, and taking it doesn't push anything off.
+  await expect(page.getByRole("searchbox")).toBeHidden();
+  await page.getByLabel("Open search").click();
+  await expect(page.getByRole("searchbox")).toBeFocused();
+  expect(await oneRow()).toBe(true);
+  await page.getByRole("searchbox").fill("in the beginning");
+  await expect(page.locator("aside.panel")).toContainText("result");
+  await page.getByLabel("Close search").click();
+  await expect(page.getByRole("searchbox")).toBeHidden();
 });

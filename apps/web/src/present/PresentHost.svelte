@@ -75,6 +75,22 @@
     }
     return lines.join("\n");
   }
+  /** Hand over the APP (with the church, and marked for a new believer) —
+   *  the Present twin of the header's Share. */
+  async function shareAppLink(): Promise<void> {
+    const url = s.presentShareLink;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Plumbline", url });
+        return;
+      } catch {
+        /* fall through to clipboard */
+      }
+    }
+    await navigator.clipboard.writeText(url);
+    s.showToast("Link copied");
+  }
+
   async function share(): Promise<void> {
     const text = shareText();
     if (navigator.share) {
@@ -169,6 +185,10 @@
         <div class="qr">
           <QrCode size={148} text={s.presentShareLink} />
           <span class="qrnote">scan for the app — free, offline, no account</span>
+          <!-- The same link the QR holds, as a button: handy when the person
+               is not in front of you, and the only way to grab it for a test
+               (feedback 2026-07-27). -->
+          <button class="linkbtn" onclick={shareAppLink}>Copy the app link</button>
         </div>
         <button class="ovbtn" onclick={() => (focus = null)}>back to overview</button>
       </div>
@@ -367,6 +387,15 @@
     flex-direction: column;
     align-items: center;
     gap: 8px;
+  }
+  .linkbtn {
+    margin-top: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #d8cba8;
+    border: 1px solid #6a5f45;
+    border-radius: 6px;
+    padding: 4px 12px;
   }
   .qrnote {
     color: #8a8276;

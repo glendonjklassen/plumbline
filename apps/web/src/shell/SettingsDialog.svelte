@@ -300,7 +300,7 @@
         bind:value={churchInfo}
         onchange={saveChurch}
       />
-      <input class="field" placeholder="Website (optional)" bind:value={churchUrl} onchange={saveChurch} />
+      <input class="field" placeholder="Website" bind:value={churchUrl} onchange={saveChurch} />
       <label class="toggle">
         <span class="body">
           <span class="name">Present shares open for a new believer</span>

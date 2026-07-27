@@ -449,6 +449,8 @@ data class ConfigState(
     val church: ChurchState? = null,
     /** Present-screen shares open as a new believer (additive, 2026-07-27). */
     val presentSharesAsNew: Boolean? = null,
+    /** The welcome this reader was given, "new" | "curious" (additive). */
+    val intro: String? = null,
 )
 
 @Serializable
