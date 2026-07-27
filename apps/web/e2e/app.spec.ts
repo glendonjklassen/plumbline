@@ -622,3 +622,28 @@ test("the phone top bar stays on one row, search behind a glass", async ({ page 
   await page.getByLabel("Close search").click();
   await expect(page.getByRole("searchbox")).toBeHidden();
 });
+
+test("the welcome points a new believer at the church that shared it", async ({ page }) => {
+  // "Find a church" used to say "consider reaching out to them" in the
+  // abstract, even when the link named the church (feedback 2026-07-27).
+  await page.goto(
+    "/?church=Grace+Bible+Church&churchInfo=Sundays+10AM&churchUrl=https%3A%2F%2Fexample.org&start=new",
+  );
+  await page.getByRole("button", { name: "New in the faith" }).click({ timeout: 90_000 });
+  const findChurch = page.locator(".welcome p", { hasText: "Find a church" });
+  await expect(findChurch).toContainText("shared with you by");
+  await expect(findChurch).toContainText("Grace Bible Church");
+  await expect(findChurch).toContainText("Sundays 10AM");
+  await expect(findChurch.getByRole("link", { name: /Visit Grace Bible Church/ })).toHaveAttribute(
+    "href",
+    "https://example.org/",
+  );
+});
+
+test("with no church shared, the welcome keeps its general advice", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "New in the faith" }).click({ timeout: 90_000 });
+  const findChurch = page.locator(".welcome p", { hasText: "Find a church" });
+  await expect(findChurch).toContainText("If someone shared this app with you");
+  await expect(findChurch).not.toContainText("shared with you by");
+});

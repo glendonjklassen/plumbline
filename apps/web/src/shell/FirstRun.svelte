@@ -19,6 +19,9 @@
   // Re-reading is the same page without the setup: no path is chosen, no
   // settings move, and the button at the bottom just closes it.
   const rereading = $derived(s.reopenIntro !== null);
+  /** Whoever's church we know about — the link that brought this reader here,
+   *  or the one already saved (so re-reading later still names them). */
+  const fromChurch = $derived(hasChurch(s.sharedByChurch) ? s.sharedByChurch : s.church);
   $effect(() => {
     if (s.reopenIntro) stage = s.reopenIntro === "curious" ? "curious" : "welcome";
   });
@@ -283,7 +286,7 @@
       </button>
       {/if}
     {:else if stage === "welcome"}
-      <h2>I'm so glad you've put your faith in Jesus</h2>
+      <h2>I'm so glad you've put your faith in Jesus!</h2>
       {@render sharedBy()}
       <div class="welcome">
         <p>There are some next steps you can take to grow in faith:</p>
@@ -298,8 +301,21 @@
         {@render vquote([REF.pure])}
         <p>
           <b>Find a church.</b> Being part of a local church is a great way to grow in your faith
-          and connect with believers. If someone shared this app with you, consider reaching out to
-          them or attending a Sunday morning service at their church.
+          and connect with believers.
+          {#if hasChurch(fromChurch)}
+            This Bible was shared with you by <b>{fromChurch.name}</b>{fromChurch.info
+              ? ` — ${fromChurch.info}`
+              : ""}. Start there: they would be glad to see you, and whoever gave you this can
+            introduce you.
+            {#if safeChurchUrl(fromChurch.url)}
+              <a class="ref-link" href={safeChurchUrl(fromChurch.url)} target="_blank" rel="noopener noreferrer">
+                Visit {fromChurch.name}
+              </a>
+            {/if}
+          {:else}
+            If someone shared this app with you, consider reaching out to them or attending a
+            Sunday morning service at their church.
+          {/if}
         </p>
         {@render vquote([REF.church])}
         <p>
@@ -338,7 +354,7 @@
         {rereading ? "Close" : "Open the book of John"}
       </button>
     {:else if stage === "curious"}
-      <h2>I'm glad you're curious about the Bible</h2>
+      <h2>I'm glad you're curious about the Bible.</h2>
       {@render sharedBy()}
       <div class="welcome">
         <p>
@@ -440,6 +456,11 @@
     width: min(540px, 94vw);
     max-height: 82vh;
     overflow-y: auto;
+    /* The reader's scrollbars are hidden everywhere else; a grey gutter down
+       the side of a welcome is the same eyesore (feedback 2026-07-27). */
+    /* The reader's scrollbars are hidden everywhere else; a grey gutter down
+       the side of a welcome is the same eyesore (feedback 2026-07-27). */
+    scrollbar-width: none;
     background: var(--popupPaper, #f2eee6);
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 12px;
@@ -448,6 +469,14 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+  .dialog::-webkit-scrollbar {
+    display: none;
+  }
+  .ref-link {
+    color: var(--gold, #9e7d38);
+    text-decoration: underline;
+    white-space: nowrap;
   }
   h2 {
     font-size: 20px;
