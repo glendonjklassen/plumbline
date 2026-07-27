@@ -414,6 +414,13 @@ data class BridgeNode(val code: String = "", val label: String = "", val prior: 
 // ── shell config / session ────────────────────────────────────────────────────
 
 @Serializable
+data class ChurchState(
+    val name: String = "",
+    val info: String = "",
+    val url: String = "",
+)
+
+@Serializable
 data class ConfigState(
     val studyMode: String = "",
     val bodySize: Double = 0.0,
@@ -436,6 +443,10 @@ data class ConfigState(
     // file → the core derives them from studyMode.
     val humanAnalysis: Boolean? = null,
     val machineAnalysis: Boolean? = null,
+    /** The reader's home church (additive, 2026-07-27) — carried in shared
+     *  links by the web shell. Kept here so an Android save round-trips it
+     *  instead of dropping it from the shared config. */
+    val church: ChurchState? = null,
 )
 
 @Serializable

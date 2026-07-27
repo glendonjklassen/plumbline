@@ -11,6 +11,7 @@
   // making the wait short rather than disguising it.
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
   import { precacheShell } from "./engine/precache";
+  import { churchFromQuery } from "./shell/church";
   import { initSession, type Session } from "./state/session.svelte";
   import FirstRun from "./shell/FirstRun.svelte";
   import Shell from "./shell/Shell.svelte";
@@ -42,6 +43,18 @@
         rpc.static("highlightTones"),
       ]);
       const s = initSession(rpc, info, { light, dark, night }, info.bundledOn);
+      // A shared link can carry the sender's church. Save it as this reader's
+      // own (theirs wins if they've already set one), then strip it from the
+      // address bar so a bookmark or a reload isn't a link about a church.
+      const shared = churchFromQuery(location.search);
+      if (shared && !s.config.church?.name) {
+        s.config.church = shared;
+        s.sharedByChurch = shared;
+        s.saveConfig();
+      } else if (shared) {
+        s.sharedByChurch = shared; // shown in the welcome, not saved over theirs
+      }
+      if (shared) history.replaceState(null, "", location.pathname + location.hash);
       s.rndDeferred = deferRnd;
       s.tones = tones?.tones ?? [];
       await Promise.all([s.fetchQ("toc"), s.fetchQ("canonSegments")]);
@@ -86,7 +99,7 @@
   <div class="splash">
     <div class="mark">✦</div>
     <h1>Plumbline</h1>
-    <p class="sub">1769 King James Version</p>
+    <p class="sub">The Holy Bible</p>
     {#if error}
       <p class="error">{error}</p>
       <button onclick={() => location.reload()}>Retry</button>

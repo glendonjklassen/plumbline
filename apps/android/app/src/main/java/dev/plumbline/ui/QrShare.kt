@@ -96,7 +96,7 @@ fun PwaQrCode(size: Dp, modifier: Modifier = Modifier) {
 fun sharePwaUrl(context: Context) {
     val send = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, "Plumbline — the 1769 KJV, free and offline: $PWA_URL")
+        putExtra(Intent.EXTRA_TEXT, "Plumbline — the Holy Bible, free and offline: $PWA_URL")
     }
     context.startActivity(Intent.createChooser(send, "Share Plumbline"))
 }

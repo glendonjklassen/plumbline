@@ -18,6 +18,7 @@
   import TagPicker from "../study/TagPicker.svelte";
   import TagWeave from "../study/TagWeave.svelte";
   import QrCode, { PWA_URL } from "./QrCode.svelte";
+  import { hasChurch, shareUrl } from "./church";
   import { getSession } from "../state/session.svelte";
 
   const s = getSession();
@@ -41,16 +42,20 @@
   // Share the app: the PWA QR + link (Compose ShareAppDialog parity) — a
   // first-class header button (2026-07-26), not a menu trip.
   let shareApp = $state(false);
+  // What we actually hand over: the app, plus this reader's church when they
+  // have set one (Settings → Your church). One QR, both things.
+  const link = $derived(shareUrl(PWA_URL, s.church));
   async function shareLink(): Promise<void> {
+    const title = hasChurch(s.church) ? `Plumbline — from ${s.church.name}` : "Plumbline";
     if (navigator.share) {
       try {
-        await navigator.share({ title: "Plumbline", url: PWA_URL });
+        await navigator.share({ title, url: link });
         return;
       } catch {
         /* fall through to clipboard */
       }
     }
-    await navigator.clipboard.writeText(PWA_URL);
+    await navigator.clipboard.writeText(link);
     s.showToast("Link copied");
   }
   // Surfaces are exclusive: picking a destination closes the others
@@ -231,9 +236,13 @@
   <div class="share-backdrop" onclick={() => (shareApp = false)}></div>
   <div class="share-dialog" role="dialog" aria-modal="true" aria-label="Share Plumbline">
     <h2>Share Plumbline</h2>
-    <p class="share-sub">Free, offline, no account.</p>
-    <QrCode size={220} />
-    <p class="share-url">{PWA_URL}</p>
+    <p class="share-sub">
+      {hasChurch(s.church)
+        ? `Free, offline, no account — and your church's details travel with it.`
+        : "Free, offline, no account."}
+    </p>
+    <QrCode size={220} text={link} />
+    <p class="share-url">{link}</p>
     <div class="share-actions">
       <button class="share-primary" onclick={shareLink}>Share the link</button>
       <button onclick={() => (shareApp = false)}>Close</button>

@@ -1271,6 +1271,11 @@ pub struct WireConfigState {
     /// Show the learned/statistical analysis tiers (additive, 2026-07-25).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub machine_analysis: Option<bool>,
+    /// The reader's home church (additive, 2026-07-27): shown in the welcome
+    /// when a shared link carried one, and attached to the links this reader
+    /// shares. Absent when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub church: Option<WireChurch>,
     /// Load-only: true when no config file existed yet (guided first run).
     #[serde(default)]
     pub first_run: bool,
@@ -1285,6 +1290,18 @@ pub struct WirePaneRef {
     /// First visible verse (additive; absent = top of the chapter).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verse: Option<u16>,
+}
+
+/// A home church on the wire (see [`WireConfigState::church`]).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireChurch {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub info: String,
+    #[serde(default)]
+    pub url: String,
 }
 
 pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
@@ -1309,6 +1326,11 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
             .collect(),
         human_analysis: Some(cfg.human_analysis),
         machine_analysis: Some(cfg.machine_analysis),
+        church: (!cfg.church.is_empty()).then(|| WireChurch {
+            name: cfg.church.name.clone(),
+            info: cfg.church.info.clone(),
+            url: cfg.church.url.clone(),
+        }),
         first_run,
     }
 }
@@ -1351,6 +1373,15 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
             .collect(),
         human_analysis: w.human_analysis.unwrap_or(true),
         machine_analysis: w.machine_analysis.unwrap_or(true),
+        church: w
+            .church
+            .as_ref()
+            .map(|c| plumbline_core::config::Church {
+                name: c.name.trim().to_string(),
+                info: c.info.trim().to_string(),
+                url: c.url.trim().to_string(),
+            })
+            .unwrap_or_default(),
     }
 }
 

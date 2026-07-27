@@ -8,13 +8,27 @@
   //  - Established believer → the analysis-tier picker (with examples).
   //    The text is always on; tiers can be changed any time in Settings.
   import { getSession } from "../state/session.svelte";
+  import { cleanChurch, hasChurch, safeChurchUrl } from "./church";
 
   const s = getSession();
 
-  type Stage = "choose" | "welcome" | "tiers";
+  type Stage = "choose" | "welcome" | "tiers" | "church";
   let stage = $state<Stage>("choose");
   let human = $state(true);
   let machine = $state(true);
+
+  // The home church, asked of the people likely to hand this on: the
+  // established believer setting the app up, and whoever is about to walk
+  // someone down the Romans Road (2026-07-27). Optional, and the screen says
+  // plainly why it is collected — it travels in the links they share, and
+  // nowhere else.
+  let churchName = $state("");
+  let churchInfo = $state("");
+  let churchUrl = $state("");
+  function saveChurchIfGiven(): void {
+    const c = cleanChurch({ name: churchName, info: churchInfo, url: churchUrl });
+    if (hasChurch(c)) s.setChurch(c);
+  }
 
   // The welcome's verses (refKeys use OSIS book ids — canon.rs). The text is
   // WRITTEN HERE, not fetched: this screen is the first thing a new believer
@@ -128,8 +142,13 @@
     s.flushConfig(); // the landing panes must survive an immediate close too
   }
 
-  /** Witnessing: straight to Present with the Romans Road, ready to show. */
+  /** Witnessing: ask for the church first — this is the reader most likely to
+   *  hand the app to someone — then straight into the Romans Road. */
   function sharing(): void {
+    stage = "church";
+  }
+  function toRomansRoad(): void {
+    saveChurchIfGiven();
     finish(true, true);
     s.presentThreadName = "Romans Road";
     s.showPresent = true;
@@ -137,8 +156,9 @@
 
   function dismiss(): void {
     // Clicking away on the chooser/tiers keeps the old behaviour (defaults);
-    // the welcome page asks for an explicit choice.
-    if (stage !== "welcome") finish(human, machine);
+    // the welcome page asks for an explicit choice, and so does the church
+    // step — dismissing it would silently skip a question just asked.
+    if (stage !== "welcome" && stage !== "church") finish(human, machine);
   }
 </script>
 
@@ -153,13 +173,42 @@
   </blockquote>
 {/snippet}
 
+{#snippet sharedBy()}
+  {#if hasChurch(s.sharedByChurch)}
+    <!-- Someone handed this over. Say who, before anything else — a QR on a
+         card at a service should lead back to that service. -->
+    <div class="from-church">
+      <span class="fc-lead">Shared with you by</span>
+      <span class="fc-name">{s.sharedByChurch.name}</span>
+      {#if s.sharedByChurch.info}<span class="fc-info">{s.sharedByChurch.info}</span>{/if}
+      {#if safeChurchUrl(s.sharedByChurch.url)}
+        <a class="fc-url" href={safeChurchUrl(s.sharedByChurch.url)} target="_blank" rel="noopener noreferrer">
+          {s.sharedByChurch.url}
+        </a>
+      {/if}
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet churchFields()}
+  <p class="ch-why">
+    Optional. If you add your church, the links and QR codes you share carry it, so whoever you
+    hand the Bible to can also find your church. It stays on your device otherwise — nothing is
+    sent anywhere.
+  </p>
+  <input class="ch-field" placeholder="Church name" bind:value={churchName} />
+  <input class="ch-field" placeholder="When and where — e.g. Sundays 10am, 12 Long Street" bind:value={churchInfo} />
+  <input class="ch-field" placeholder="Website (optional)" bind:value={churchUrl} />
+{/snippet}
+
 {#if s.showFirstRun}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={dismiss}></div>
   <div class="dialog" role="dialog" aria-modal="true">
     {#if stage === "choose"}
       <h2>Welcome to Plumbline</h2>
-      <p class="sub">The 1769 King James text, free and offline. Where would you like to begin?</p>
+      {@render sharedBy()}
+      <p class="sub">The Holy Bible, free and offline. Where would you like to begin?</p>
       <button class="path" onclick={() => (stage = "welcome")}>
         <span class="name">New in the faith</span>
         <span class="desc">I've just put my faith in Jesus — where do I start?</span>
@@ -174,6 +223,7 @@
       </button>
     {:else if stage === "welcome"}
       <h2>We're so glad you've put your faith in Jesus</h2>
+      {@render sharedBy()}
       <div class="welcome">
         <p>There are some next steps you can take to grow in faith:</p>
         <p>
@@ -220,10 +270,19 @@
         <p class="hint">Tap any verse reference to open it beside the book of John.</p>
       </div>
       <button class="start" onclick={() => startInJohn()}>Open the book of John</button>
+    {:else if stage === "church"}
+      <h2>Before you share it</h2>
+      <p class="sub">
+        You're about to walk someone down the Romans Road. If they keep the app afterwards, this
+        is how they find their way back to you.
+      </p>
+      {@render churchFields()}
+      <button class="start" onclick={toRomansRoad}>Open the Romans Road</button>
+      <button class="ch-skip" onclick={toRomansRoad}>Skip for now</button>
     {:else}
       <h2>Welcome to Plumbline</h2>
       <p class="sub">
-        The 1769 King James text is always on — reading, search, and your own tags, notes, and
+        The Holy Bible is always on — reading, search, and your own tags, notes, and
         threads. Choose which layers of analysis sit alongside it:
       </p>
       <label class="card">
@@ -231,7 +290,7 @@
         <span class="body">
           <span class="name">Scholars' analysis <span class="mark human">†</span></span>
           <span class="desc">
-            Curated scholarship: how the 1769 renders each original word (<i>agapaō</i> → “love”
+            Curated scholarship: how the text renders each original word (<i>agapaō</i> → “love”
             ×27 · “beloved” ×13…), word grammar, the same root traced across the testaments, and
             the Treasury's cross-references.
           </span>
@@ -248,7 +307,16 @@
         </span>
       </label>
       <p class="note">Every piece of evidence is marked with where it comes from — ✝ the text · † scholarship · ≈ machine.</p>
-      <button class="start" onclick={() => finish(human, machine)}>Start reading</button>
+      <hr class="ch-rule" />
+      <p class="ch-title">Your church</p>
+      {@render churchFields()}
+      <button
+        class="start"
+        onclick={() => {
+          saveChurchIfGiven();
+          finish(human, machine);
+        }}
+      >Start reading</button>
     {/if}
   </div>
 {/if}
@@ -345,6 +413,67 @@
     font-size: 12.5px;
     color: var(--faded, #8a8276);
     font-style: italic;
+  }
+  .ch-title {
+    font-weight: 600;
+    text-align: center;
+  }
+  .ch-why {
+    font-size: 12.5px;
+    color: var(--faded, #8a8276);
+    line-height: 1.45;
+    text-align: center;
+  }
+  .ch-field {
+    width: 100%;
+    background: var(--paper, #fcf9f4);
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 7px;
+    padding: 8px 10px;
+    font-size: 15px;
+    box-sizing: border-box;
+  }
+  .ch-rule {
+    border: none;
+    border-top: 1px solid var(--rule, #d8cba8);
+    width: 100%;
+    margin: 4px 0 0;
+  }
+  .ch-skip {
+    align-self: center;
+    font-size: 13.5px;
+    color: var(--faded, #8a8276);
+    text-decoration: underline;
+  }
+  .from-church {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: center;
+    text-align: center;
+    border: 1px solid var(--gold, #9e7d38);
+    border-radius: 10px;
+    padding: 10px 14px;
+  }
+  .fc-lead {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--faded, #8a8276);
+  }
+  .fc-name {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--gold, #9e7d38);
+  }
+  .fc-info {
+    font-size: 13.5px;
+  }
+  .fc-url {
+    font-size: 13px;
+    color: var(--gold, #9e7d38);
+    text-decoration: underline;
+    word-break: break-all;
   }
   .card {
     display: flex;

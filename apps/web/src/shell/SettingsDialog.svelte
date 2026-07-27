@@ -3,6 +3,7 @@
   // margin / line-spacing sliders, copy format, bundled stock set.
   import { getSession } from "../state/session.svelte";
   import { completeOffline, surveyOffline, type OfflineSurvey } from "../engine/offline";
+  import { cleanChurch } from "./church";
   import { PERF } from "../engine/perf";
   import { zipRead, zipWrite } from "../engine/zip";
   import { idbApply } from "../engine/idb";
@@ -87,6 +88,25 @@
     location.reload(); // the engine re-opens with/without the stock set
   }
 
+  // ── the reader's home church ────────────────────────────────────────────
+  // Set it here, and every link this reader shares carries it, so a QR handed
+  // out at a service leads back to that service (2026-07-27).
+  let churchName = $state("");
+  let churchInfo = $state("");
+  let churchUrl = $state("");
+  let churchLoaded = false;
+  $effect(() => {
+    if (!s.showSettings || churchLoaded) return;
+    churchLoaded = true;
+    const c = s.church;
+    churchName = c.name;
+    churchInfo = c.info;
+    churchUrl = c.url;
+  });
+  function saveChurch(): void {
+    s.setChurch(cleanChurch({ name: churchName, info: churchInfo, url: churchUrl }));
+  }
+
   // ── offline completeness ────────────────────────────────────────────────
   // The reader's answer to "will this work with no signal?" — and the repair
   // when it wouldn't have.
@@ -101,7 +121,7 @@
     const pack = s.rndState !== "ready" ? "the analysis pack" : "";
     const rest = files ? `${files} data file${files === 1 ? "" : "s"} (${mb(offline!.missingBytes)})` : "";
     const both = [pack, rest].filter(Boolean).join(" and ");
-    return `The King James text is already on this device. Still to download: ${both || "nothing"}.`;
+    return `The Holy Bible is already on this device. Still to download: ${both || "nothing"}.`;
   });
 
   $effect(() => {
@@ -268,6 +288,20 @@
         <input type="checkbox" checked={s.bundledOn} onchange={toggleBundled} />
       </label>
       <hr />
+      <p class="label">Your church</p>
+      <p class="desc-note">
+        Added to the links and QR codes you share, so whoever you hand this to also gets your
+        church. Leave it blank to share the Bible on its own.
+      </p>
+      <input class="field" placeholder="Church name" bind:value={churchName} onchange={saveChurch} />
+      <input
+        class="field"
+        placeholder="When and where — e.g. Sundays 10am, 12 Long Street"
+        bind:value={churchInfo}
+        onchange={saveChurch}
+      />
+      <input class="field" placeholder="Website (optional)" bind:value={churchUrl} onchange={saveChurch} />
+      <hr />
       <p class="label">Offline</p>
       <div class="offline">
         {#if offlineBusy}
@@ -383,6 +417,16 @@
     font-size: 13px;
     color: var(--faded, #8a8276);
     cursor: pointer;
+  }
+  .field {
+    width: 100%;
+    background: var(--paper, #fcf9f4);
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 6px;
+    padding: 6px 9px;
+    font-size: 14px;
+    margin-bottom: 6px;
+    box-sizing: border-box;
   }
   .offline {
     display: flex;

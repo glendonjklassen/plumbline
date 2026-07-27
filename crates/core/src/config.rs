@@ -64,6 +64,25 @@ pub struct PaneRef {
     pub verse: Option<u16>,
 }
 
+/// The reader's home church, carried in a shared link so one QR hands over
+/// both the Bible and where to find the people who sent it (2026-07-27).
+/// Every part is optional; an empty name means "not set".
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Church {
+    pub name: String,
+    /// One free line — when and where they meet.
+    pub info: String,
+    /// Their website, if they have one.
+    pub url: String,
+}
+
+impl Church {
+    /// Nothing to show or share.
+    pub fn is_empty(&self) -> bool {
+        self.name.trim().is_empty()
+    }
+}
+
 /// The persisted settings. New fields must be additive (default on absence) so
 /// an older file keeps loading.
 #[derive(Debug, Clone, PartialEq)]
@@ -98,6 +117,9 @@ pub struct Config {
     pub human_analysis: bool,
     /// Show the learned/statistical tiers (embeddings, concept, SIF, leitwort).
     pub machine_analysis: bool,
+    /// The reader's home church — shown in the welcome when a shared link
+    /// carried one, and attached to the links this reader shares.
+    pub church: Church,
 }
 
 /// A verse copy-shape token accepted for [`Config::copy_style`].
@@ -121,6 +143,7 @@ impl Default for Config {
             history: Vec::new(),
             human_analysis: true,
             machine_analysis: true,
+            church: Church::default(),
         }
     }
 }
@@ -156,6 +179,20 @@ struct ConfigWire {
     human_analysis: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     machine_analysis: Option<bool>,
+    /// The home church (2026-07-27); absent in every older file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    church: Option<ChurchWire>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChurchWire {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    info: String,
+    #[serde(default)]
+    url: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -230,6 +267,16 @@ impl Config {
             // without persisting it — the gates are opt-OUT switches.)
             human_analysis: w.human_analysis.unwrap_or(true),
             machine_analysis: w.machine_analysis.unwrap_or(true),
+            // Trimmed on the way in: these arrive from a shared link's query
+            // string, where trailing spaces are an accident of copy-paste.
+            church: w
+                .church
+                .map(|c| Church {
+                    name: c.name.trim().to_string(),
+                    info: c.info.trim().to_string(),
+                    url: c.url.trim().to_string(),
+                })
+                .unwrap_or_default(),
         }
     }
 
@@ -256,6 +303,11 @@ impl Config {
                 .collect(),
             human_analysis: Some(self.human_analysis),
             machine_analysis: Some(self.machine_analysis),
+            church: (!self.church.is_empty()).then(|| ChurchWire {
+                name: self.church.name.clone(),
+                info: self.church.info.clone(),
+                url: self.church.url.clone(),
+            }),
         }
     }
 }
@@ -364,6 +416,11 @@ mod tests {
             history: vec![PaneRef { book: "Gen".into(), chapter: 1, verse: None }, PaneRef { book: "Rom".into(), chapter: 8, verse: None }],
             human_analysis: true,
             machine_analysis: false,
+            church: Church {
+                name: "Grace Bible Church".into(),
+                info: "Sundays 10am · 12 Long Street".into(),
+                url: "https://example.org".into(),
+            },
         };
         save_to(&path, &cfg).unwrap();
 

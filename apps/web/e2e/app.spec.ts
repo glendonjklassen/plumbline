@@ -66,12 +66,51 @@ test("first-run: a new believer's welcome reference opens beside John", async ({
   expect(panes.panes[1]).toEqual({ book: "Ps", chapter: 12, verse: 6 });
 });
 
-test("first-run: sharing the gospel lands in the Romans Road presentation", async ({ page }) => {
+test("first-run: sharing the gospel asks for your church, then opens the Romans Road", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Sharing the gospel" }).click({ timeout: 90_000 });
-  // Straight past the picker into the trail overview.
+  // The reader about to hand this to someone is asked for their church, and
+  // told why (2026-07-27) — it is optional, and skipping goes straight on.
+  await expect(page.getByText("Before you share it")).toBeVisible();
+  await expect(page.getByText(/links and QR codes you share carry it/)).toBeVisible();
+  await page.getByPlaceholder("Church name").fill("Grace Bible Church");
+  await page.getByPlaceholder(/When and where/).fill("Sundays 10am, 12 Long Street");
+  await page.getByRole("button", { name: "Open the Romans Road" }).click();
   await expect(page.locator(".present .title")).toContainText("Romans Road");
   await expect(page.getByText("For all have sinned")).toBeVisible();
+
+  // What they typed is now theirs, and rides along in what they share.
+  const church = await page.evaluate(() => (window as any).__plumbline.church);
+  expect(church.name).toBe("Grace Bible Church");
+  expect(church.info).toBe("Sundays 10am, 12 Long Street");
+});
+
+test("a shared link carries the church, and the welcome names them", async ({ page }) => {
+  // The whole point of the query string: one QR hands over the Bible AND the
+  // people who sent it (2026-07-27).
+  await page.goto("/?church=Grace+Bible+Church&churchInfo=Sundays+10am&churchUrl=https%3A%2F%2Fexample.org");
+  await expect(page.getByText("Shared with you by")).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByText("Grace Bible Church")).toBeVisible();
+  await expect(page.getByText("Sundays 10am")).toBeVisible();
+
+  // The address bar is left clean — a bookmark of this is the app, not a
+  // link about somebody's church.
+  expect(await page.evaluate(() => location.search)).toBe("");
+
+  // Saved as this reader's own, so THEIR shares carry it onward.
+  const church = await page.evaluate(() => (window as any).__plumbline.church);
+  expect(church).toEqual({ name: "Grace Bible Church", info: "Sundays 10am", url: "https://example.org" });
+
+  // And it survives a relaunch. (Finish first-run first — the welcome owns
+  // the screen until a path is chosen, so a reload before that just shows it
+  // again.)
+  await page.getByRole("button", { name: "Established believer" }).click();
+  await page.getByRole("button", { name: "Start reading" }).click();
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+  await page.reload();
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+  const after = await page.evaluate(() => (window as any).__plumbline.church.name);
+  expect(after).toBe("Grace Bible Church");
 });
 
 test("the deferred machine-tier pack loads after boot", async ({ page }) => {
@@ -430,7 +469,7 @@ test("Settings can make the app completely offline, and says when it is", async 
   expect(missing).toBe(0);
 });
 
-test("the welcome's verses are the 1769 text, verbatim and instant", async ({ page }) => {
+test("the welcome's verses are the corpus text, verbatim and instant", async ({ page }) => {
   // The welcome quotes scripture from literals rather than asking the engine
   // for ten verses one at a time — they used to pop in a beat after the page
   // (feedback 2026-07-27). A copy can drift, so this compares every quote on
@@ -465,4 +504,33 @@ test("the welcome's verses are the 1769 text, verbatim and instant", async ({ pa
     return out;
   });
   expect(quotes.map((q) => q.replace(/[“”]/g, "").trim())).toEqual(expected);
+});
+
+test("the share QR encodes the church, not just the app", async ({ page }) => {
+  // One scan should hand over both (2026-07-27). The QR is generated at
+  // render time now, so setting a church must change what it encodes — a
+  // longer payload needs a bigger symbol.
+  await boot(page);
+  const modulesFor = async () =>
+    page.locator(".share-dialog svg").getAttribute("viewBox").then((v) => Number(v!.split(" ")[2]));
+
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  await expect(page.locator(".share-dialog")).toBeVisible();
+  const plain = await modulesFor();
+  await expect(page.locator(".share-url")).toHaveText("https://plumblinebible.org/");
+  await page.getByRole("button", { name: "Close" }).click();
+
+  await page.evaluate(() =>
+    (window as any).__plumbline.setChurch({
+      name: "Grace Bible Church",
+      info: "Sundays 10am, 12 Long Street",
+      url: "https://example.org",
+    }),
+  );
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  const withChurch = await modulesFor();
+  expect(withChurch).toBeGreaterThan(plain); // more to encode, bigger symbol
+  const url = await page.locator(".share-url").innerText();
+  expect(url).toContain("church=Grace+Bible+Church");
+  expect(url).toContain("churchInfo=Sundays+10am");
 });

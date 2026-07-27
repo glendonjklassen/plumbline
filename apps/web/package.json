@@ -13,7 +13,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@bjorn3/browser_wasi_shim": "^0.4.2"
+    "@bjorn3/browser_wasi_shim": "^0.4.2",
+    "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",

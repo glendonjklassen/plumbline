@@ -983,7 +983,7 @@ private fun SearchOverlay(
             if (blocks == null) {
                 Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                     Text(
-                        "Search the King James text — a word, a phrase, or a reference like “John 3:16”.",
+                        "Search the Holy Bible — a word, a phrase, or a reference like “John 3:16”.",
                         color = palette.faded,
                     )
                 }

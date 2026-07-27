@@ -1,66 +1,68 @@
 <script lang="ts" module>
-  // QR code of the hosted PWA (version 3, ECC M, 29×29), pre-generated so the
-  // app stays offline and dependency-free. The matrix is a build-time constant;
-  // regenerate after a URL change with:
-  //   python3 -c "import qrcode; q=qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, border=0); q.add_data('<url>'); q.make(fit=True); print('\n'.join(''.join('1' if c else '0' for c in r) for r in q.modules))"
-  // (pip install qrcode). Keep this in sync with the Android twin (QrShare.kt).
+  // The hosted PWA's address. Keep in sync with the Android twin (QrShare.kt).
   export const PWA_URL = "https://plumblinebible.org/";
-  const MODULES = [
-    "11111110101001101110101111111",
-    "10000010001001110101001000001",
-    "10111010010110100100101011101",
-    "10111010110110000010001011101",
-    "10111010110100000110001011101",
-    "10000010100010001101101000001",
-    "11111110101010101010101111111",
-    "00000000110001011110100000000",
-    "10001011110011000100111111001",
-    "00000100010011101000001111111",
-    "01111111000000001000011000001",
-    "11000001100110100101010011011",
-    "01110010010011111101110000010",
-    "10101001011100000010001111111",
-    "11100111010101110010100001101",
-    "01000001110001011110011000011",
-    "10000010011101000110110100010",
-    "10101000111001101110001111011",
-    "00101110111000001010010100101",
-    "00001000011110100111001010011",
-    "11010011100101111011111111001",
-    "00000000100010000111100010001",
-    "11111110111111110011101011101",
-    "10000010010011011001100010000",
-    "10111010101101000001111111001",
-    "10111010011101101010110000010",
-    "10111010000011101101010001111",
-    "10000010000111100110100101011",
-    "11111110100010011010101010010",
-  ];
-  const N = MODULES.length;
-  const QUIET = 2; // quiet-zone modules on each side (spec wants ≥4 incl. page white)
 </script>
 
 <script lang="ts">
+  // A QR of whatever we're handing over. This used to be a build-time constant
+  // matrix for one fixed URL; a shared link can now carry the sender's church
+  // (shell/church.ts), so the code is encoded at render time — one scan gives
+  // someone both the Bible and the people who sent it.
+  //
+  // qrcode-generator (MIT, no dependencies of its own) does the encoding.
+  // Verified locally by DECODING what it produces with zxing-cpp — 32 cases
+  // covering both ECC levels, versions 1 through ~15, non-ASCII church names
+  // and a full-length share link, all read back exactly.
+  import qrcode from "qrcode-generator";
+
+  // The library's default byte conversion is ASCII-only, and its ESM build
+  // doesn't ship the UTF-8 one (`stringToBytesFuncs` exists only in the CJS
+  // entry), so a church named "Iglesia Bíblica" would encode as mojibake.
+  // TextEncoder is exactly what that missing function does.
+  qrcode.stringToBytes = (s: string) => Array.from(new TextEncoder().encode(s));
+
   interface Props {
     /** Rendered edge in CSS px (the QR itself; the white quiet zone is inside). */
     size?: number;
+    /** What the code encodes. */
+    text?: string;
   }
-  let { size = 148 }: Props = $props();
+  let { size = 148, text = PWA_URL }: Props = $props();
+
+  const QUIET = 2; // quiet-zone modules per side (the page's white adds the rest)
+
+  const modules = $derived.by(() => {
+    const encode = (s: string) => {
+      const q = qrcode(0, "M"); // 0 = smallest version that fits
+      q.addData(s);
+      q.make();
+      const n = q.getModuleCount();
+      return Array.from({ length: n }, (_, y) => Array.from({ length: n }, (_, x) => q.isDark(y, x)));
+    };
+    try {
+      return encode(text);
+    } catch {
+      // A church typed to absurd length must not take the dialog down: fall
+      // back to the bare app link, which always fits.
+      return encode(PWA_URL);
+    }
+  });
+  const n = $derived(modules.length);
 </script>
 
 <!-- Always dark-on-white regardless of theme: scanners want contrast. -->
 <svg
   width={size}
   height={size}
-  viewBox="0 0 {N + 2 * QUIET} {N + 2 * QUIET}"
+  viewBox="0 0 {n + 2 * QUIET} {n + 2 * QUIET}"
   role="img"
   aria-label="QR code linking to the Plumbline web app"
   shape-rendering="crispEdges"
 >
-  <rect width={N + 2 * QUIET} height={N + 2 * QUIET} fill="#ffffff" />
-  {#each MODULES as row, y (y)}
-    {#each row as cell, x (x)}
-      {#if cell === "1"}
+  <rect width={n + 2 * QUIET} height={n + 2 * QUIET} fill="#ffffff" />
+  {#each modules as row, y (y)}
+    {#each row as dark, x (x)}
+      {#if dark}
         <rect x={x + QUIET} y={y + QUIET} width="1" height="1" fill="#101010" />
       {/if}
     {/each}

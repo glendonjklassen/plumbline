@@ -142,7 +142,7 @@ private fun Choose(palette: ReaderPalette, serif: FontFamily, onPath: (Int) -> U
     )
     Spacer(Modifier.height(6.dp))
     Text(
-        "The 1769 King James text, free and offline.\nWhere would you like to begin?",
+        "The Holy Bible, free and offline.\nWhere would you like to begin?",
         color = palette.faded, fontSize = 14.5.sp,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
@@ -282,7 +282,7 @@ private fun Tiers(
     )
     Spacer(Modifier.height(6.dp))
     Text(
-        "The 1769 King James text is always on — reading, search, and your own tags, notes, " +
+        "The Holy Bible is always on — reading, search, and your own tags, notes, " +
             "and threads. Choose which layers of analysis sit alongside it:",
         color = palette.faded, fontSize = 14.sp,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -290,7 +290,7 @@ private fun Tiers(
     Spacer(Modifier.height(16.dp))
     TierCard(
         palette, human, onHuman, "Scholars' analysis †",
-        "Curated scholarship: how the 1769 renders each original word, word grammar, the same " +
+        "Curated scholarship: how the text renders each original word, word grammar, the same " +
             "root traced across the testaments, and the Treasury's cross-references.",
     )
     TierCard(

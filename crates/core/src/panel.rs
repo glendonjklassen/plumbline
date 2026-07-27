@@ -1351,7 +1351,7 @@ fn about_body(out: &mut Vec<Block>) {
         sz::BODY,
         Color::Ink,
     )]));
-    guide_section(out, "THE TEXT", &["The traditional 1769 King James Version, in the public domain."]);
+    guide_section(out, "THE TEXT", &["The Holy Bible — the traditional English text, in the public domain."]);
     guide_section(
         out,
         "PROVENANCE",
