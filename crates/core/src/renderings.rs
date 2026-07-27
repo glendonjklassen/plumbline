@@ -75,12 +75,12 @@ struct Bucket {
 impl Renderings {
     /// Fold the corpus once, filling both directions. Modeled on
     /// [`OccurrenceIx::build`](crate::strongs::OccurrenceIx::build): one pass
-    /// over `corpus.verses()`, postings kept in canonical order.
+    /// over `corpus.verses_iter()`, postings kept in canonical order.
     pub fn build(corpus: &Corpus) -> Renderings {
         let mut by_code: HashMap<String, HashMap<String, Bucket>> = HashMap::new();
         let mut by_word: HashMap<String, HashMap<String, usize>> = HashMap::new();
 
-        for v in corpus.verses() {
+        for v in corpus.verses_iter() {
             let vr = v.vref();
             let last = v.tokens.len().saturating_sub(1) as u16;
             // Runs open on the current token, keyed by code → (start index,

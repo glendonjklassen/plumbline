@@ -1356,7 +1356,7 @@ fn timing_harness_concept_parts() {
     println!("co-occurrence:    {:?} ({} pairs)", t.elapsed(), co.len());
 
     let t = Instant::now();
-    let edges = concept::ppmi(corpus.verses().len(), &df, &co);
+    let edges = concept::ppmi(corpus.len(), &df, &co);
     println!("ppmi:             {:?} ({} edges)", t.elapsed(), edges.len());
 
     let t = Instant::now();

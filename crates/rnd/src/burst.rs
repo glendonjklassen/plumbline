@@ -223,7 +223,7 @@ fn is_nt(book: &str) -> bool {
 
 /// Discover the corpus's leitwörter, strongest burst first.
 pub fn discover_leitworter(bp: &BurstParams, corpus: &Corpus) -> Vec<Burst> {
-    let vs = corpus.verses();
+    let vs: Vec<&plumbline_core::corpus::Verse> = corpus.verses_iter().collect();
     let total = vs.len();
     let nt_start = vs.iter().position(|v| is_nt(&v.book)).unwrap_or(total);
     let (n_ot, n_nt) = (nt_start as i64, (total - nt_start) as i64);

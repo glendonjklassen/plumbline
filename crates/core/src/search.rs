@@ -48,7 +48,7 @@ impl SearchIx {
         let mut lemma_ix: HashMap<String, Vec<usize>> = HashMap::new();
         let mut word_lem: HashMap<String, HashSet<String>> = HashMap::new();
 
-        for (i, v) in corpus.verses().iter().enumerate() {
+        for (i, v) in corpus.verses_iter().enumerate() {
             let mut lemmas_here: HashSet<&str> = HashSet::new();
             for t in &v.tokens {
                 let w = t.word.to_lowercase();

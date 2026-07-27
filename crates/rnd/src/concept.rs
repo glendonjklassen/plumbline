@@ -39,7 +39,7 @@ pub type ConceptIx = HashMap<String, ConceptStat>;
 /// Build the per-concept index in one fold over the corpus.
 pub fn build_concept_ix(corpus: &Corpus) -> ConceptIx {
     let mut ix: ConceptIx = HashMap::new();
-    for v in corpus.verses() {
+    for v in corpus.verses_iter() {
         for t in &v.tokens {
             for s in &t.strongs {
                 let e = ix.entry(s.clone()).or_default();
@@ -114,7 +114,7 @@ fn name_pair(names: &[String], key: u64) -> (String, String) {
 /// counts + verse frequency, all in id space.
 fn intern_corpus(corpus: &Corpus) -> IdGraph {
     let mut vocab: HashSet<&str> = HashSet::new();
-    for v in corpus.verses() {
+    for v in corpus.verses_iter() {
         for t in &v.tokens {
             for s in &t.strongs {
                 vocab.insert(s.as_str());
@@ -128,7 +128,7 @@ fn intern_corpus(corpus: &Corpus) -> IdGraph {
     let mut co: HashMap<u64, u32> = HashMap::new();
     let mut df = vec![0u32; sorted.len()];
     let mut present: Vec<u32> = Vec::new();
-    for v in corpus.verses() {
+    for v in corpus.verses_iter() {
         present.clear();
         present.extend(v.tokens.iter().flat_map(|t| &t.strongs).map(|s| id_of[s.as_str()]));
         present.sort_unstable(); // id order == string order
@@ -140,7 +140,7 @@ fn intern_corpus(corpus: &Corpus) -> IdGraph {
             }
         }
     }
-    IdGraph { names: sorted.into_iter().map(String::from).collect(), co, df, n_verses: corpus.verses().len() }
+    IdGraph { names: sorted.into_iter().map(String::from).collect(), co, df, n_verses: corpus.len() }
 }
 
 /// Intern a String-pair edge map for the public wrappers (ids lexicographic,

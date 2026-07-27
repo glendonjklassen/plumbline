@@ -46,22 +46,29 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   };
 
   onPhase({ phase: "download", fraction: 0 });
-  // A first visit has no persisted parsed-corpus cache — pull the pack's
-  // web-stamped one alongside the corpus so even boot #1 skips the 19 MB
-  // parse (8.4 s on a 2026 flagship phone; 2026-07-26 trace).
-  const [manifest, persistedIdx] = await Promise.all([
+  // The text arrives as the parsed-corpus cache — the pack's copy on a first
+  // visit, this device's own copy afterwards. Either way the engine never
+  // parses JSONL (8.4 s on a 2026 flagship phone; 2026-07-26 trace) and never
+  // downloads it.
+  const [manifest, persisted] = await Promise.all([
     timed("manifest", fetchManifest),
     timed("idxcache probe (IndexedDB)", loadPersistedIdxcache),
   ]);
-  const pack = await timed("stage1 fetch+gunzip (corpus)", () =>
+  // A persisted cache belongs to the pack that produced it. After a data
+  // update its verses are the OLD text, and the tokenization stamp alone
+  // wouldn't catch that — so it's only reused while the versions agree.
+  const persistedIdx = persisted?.version === manifest.version ? persisted.bytes : undefined;
+  const pack = await timed(persistedIdx ? "stage1 fetch+gunzip (stock only)" : "stage1 fetch+gunzip (text)", () =>
     fetchPack(manifest, (p) => onPhase({ phase: "download", fraction: p.fraction, detail: p.currentFile }), {
-      withIdxcache: !persistedIdx,
+      needText: !persistedIdx,
     }),
   );
 
   onPhase({ phase: "prepare" });
   const stockPaths = new Set(manifest.files.filter((f) => f.stock).map((f) => f.path));
-  const home = await timed("virtual home build", () => buildHome(pack, stockPaths, persistedIdx));
+  const home = await timed("virtual home build", () =>
+    buildHome(pack, stockPaths, persistedIdx, manifest.version),
+  );
   const wasm = await timed("wasm compile+instantiate", () => instantiate(home.root));
 
   onPhase({ phase: "open" });

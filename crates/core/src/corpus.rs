@@ -10,6 +10,7 @@ use crate::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::OnceLock;
 
 // ── token flag bits (stored in JSON, frozen) ────────────────────────────────
 
@@ -111,37 +112,90 @@ pub fn render_tokens<'a, I: IntoIterator<Item = &'a Token>>(tokens: I) -> String
         .join(" ")
 }
 
+/// One chapter's storage: its position in canonical verse order, and either
+/// the decoded verses or the byte range of the cache that holds them.
+#[derive(Debug, Clone)]
+struct ChapterSlot {
+    /// Canonical ordinal of this chapter's first verse.
+    start_ord: usize,
+    /// Byte range within [`Corpus::raw`], for the lazy path.
+    span: Option<(usize, usize)>,
+    /// Decoded verses; filled on first access when `span` is set.
+    cell: OnceLock<Vec<Verse>>,
+}
+
+impl ChapterSlot {
+    /// The chapter's verses, decoding them on first use. A decode failure
+    /// yields an empty chapter rather than a panic — a torn cache degrades to
+    /// "this chapter is blank", and the reader can still move.
+    fn verses(&self, raw: &[u8]) -> &[Verse] {
+        self.cell.get_or_init(|| match self.span {
+            Some((off, len)) => bincode::deserialize(&raw[off..off + len]).unwrap_or_default(),
+            None => Vec::new(),
+        })
+    }
+}
+
 /// The loaded corpus plus the indices every lookup rides on.
+///
+/// **Verses decode per chapter, on demand.** Opening the corpus reads only the
+/// chapter directory (~1,200 entries); a chapter's ~800 tokens are turned into
+/// `Verse`/`Token` structs the first time something asks for them, and stay
+/// decoded after that. Materializing the whole canon up front cost ~8 s on a
+/// 2026 flagship phone (measured 2026-07-26) — millions of small allocations
+/// through wasm, before a single word was on screen — and the reader needs one
+/// chapter. The whole-corpus consumers (search, renderings, concept, Strong's
+/// occurrences) walk [`Corpus::verses_iter`], which decodes as it goes; they
+/// run in the background after first paint.
 #[derive(Debug, Clone)]
 pub struct Corpus {
-    verses: Vec<Verse>,
-    by_ref: HashMap<VRef, usize>,
+    /// The cache bytes chapters decode from; empty on the JSONL path, where
+    /// every slot is already filled.
+    raw: Vec<u8>,
+    /// Chapter slots in canonical order.
+    slots: Vec<ChapterSlot>,
     /// book id → highest chapter number.
     chapters: HashMap<String, u16>,
-    /// (book id, chapter) → (start index, verse count) — a contiguous slice.
-    chapter_ix: HashMap<String, HashMap<u16, (usize, usize)>>,
+    /// (book id, chapter) → slot index.
+    chapter_ix: HashMap<String, HashMap<u16, usize>>,
+    /// Total verses across every chapter (known from the directory alone).
+    total: usize,
     tok_version: String,
 }
 
 impl Corpus {
-    /// All verses in file (canonical) order.
-    pub fn verses(&self) -> &[Verse] {
-        &self.verses
+    /// Every verse in canonical order, decoding chapter by chapter as it goes.
+    /// Walking the whole corpus therefore materializes it — that is the price
+    /// of a full-text index, and it is paid in the background, not at open.
+    pub fn verses_iter(&self) -> impl Iterator<Item = &Verse> {
+        self.slots.iter().flat_map(|s| s.verses(&self.raw).iter())
     }
 
-    /// The verse at an index, if in range.
+    /// The verse at a canonical index, if in range.
     pub fn verse_at(&self, i: usize) -> Option<&Verse> {
-        self.verses.get(i)
+        // Slots are ordered by start_ord, so the owning chapter is a binary
+        // search away — no scan, and only that chapter decodes.
+        let slot = match self.slots.binary_search_by(|s| s.start_ord.cmp(&i)) {
+            Ok(k) => &self.slots[k],
+            Err(0) => return None,
+            Err(k) => &self.slots[k - 1],
+        };
+        slot.verses(&self.raw).get(i - slot.start_ord)
     }
 
-    /// The index of a verse address.
+    /// The canonical index of a verse address.
     pub fn index_of(&self, r: &VRef) -> Option<usize> {
-        self.by_ref.get(r).copied()
+        let slot = self.slot_of(&r.book, r.chapter)?;
+        let at = slot.verses(&self.raw).iter().position(|v| v.verse == r.verse)?;
+        Some(slot.start_ord + at)
     }
 
     /// A verse by address.
     pub fn verse(&self, r: &VRef) -> Option<&Verse> {
-        self.index_of(r).and_then(|i| self.verses.get(i))
+        self.slot_of(&r.book, r.chapter)?
+            .verses(&self.raw)
+            .iter()
+            .find(|v| v.verse == r.verse)
     }
 
     /// The tokenization version stamped in the file header.
@@ -154,21 +208,27 @@ impl Corpus {
         self.chapters.get(book).copied().unwrap_or(1)
     }
 
-    /// The verses of one chapter, in order (empty if the chapter doesn't exist).
+    /// The verses of one chapter, in order (empty if the chapter doesn't
+    /// exist). This is the reader's path — one chapter's worth of decoding.
     pub fn chapter_verses(&self, book: &str, chapter: u16) -> &[Verse] {
-        match self.chapter_ix.get(book).and_then(|m| m.get(&chapter)) {
-            Some(&(start, len)) => &self.verses[start..start + len],
+        match self.slot_of(book, chapter) {
+            Some(slot) => slot.verses(&self.raw),
             None => &[],
         }
     }
 
-    /// Total verse count.
+    /// Total verse count — from the directory, without decoding anything.
     pub fn len(&self) -> usize {
-        self.verses.len()
+        self.total
     }
 
     pub fn is_empty(&self) -> bool {
-        self.verses.is_empty()
+        self.total == 0
+    }
+
+    fn slot_of(&self, book: &str, chapter: u16) -> Option<&ChapterSlot> {
+        let k = *self.chapter_ix.get(book)?.get(&chapter)?;
+        self.slots.get(k)
     }
 }
 
@@ -181,10 +241,19 @@ pub fn load_corpus(path: impl AsRef<Path>) -> Result<Corpus, Error> {
 
     // Fast path: a valid cache built from this exact source (same length,
     // mtime, and tokenization) — skip re-parsing the ~19 MB of JSONL.
-    if let Some((len, mtime)) = stamp {
-        if let Some(c) = read_cache(&cache_path(path)) {
-            if c.src_len == len && c.src_mtime == mtime && c.tok == crate::canon::TOKENIZATION_VERSION {
-                return Ok(mk_corpus(c.tok, c.verses));
+    match stamp {
+        Some((len, mtime)) => {
+            if let Some(c) = load_cache(&cache_path(path), Some((len, mtime))) {
+                return Ok(c);
+            }
+        }
+        // No source file at all: the cache IS the corpus. The web ships its
+        // pack that way — the raw JSONL would be 2.5 MB of download that
+        // nothing ever reads, since the cache supersedes it. Accepted on the
+        // tokenization stamp, which is what actually has to match.
+        None => {
+            if let Some(c) = load_cache(&cache_path(path), None) {
+                return Ok(c);
             }
         }
     }
@@ -197,57 +266,119 @@ pub fn load_corpus(path: impl AsRef<Path>) -> Result<Corpus, Error> {
     })?;
     let corpus = from_str(&raw)?;
     if let Some((len, mtime)) = stamp {
-        let cache = CorpusCacheRef {
-            src_len: len,
-            src_mtime: mtime,
-            tok: &corpus.tok_version,
-            verses: &corpus.verses,
-        };
-        let _ = write_cache(&cache_path(path), &cache);
+        let _ = write_dir_cache(&cache_path(path), &corpus, len, mtime);
     }
     Ok(corpus)
 }
 
-/// Read + decode a corpus cache, or `None` if absent/corrupt/stale. The cache
-/// is raw bincode or gzipped bincode — sniffed by the gzip magic, so caches
-/// written by either flavour of [`write_cache`] (and the pack-shipped web
-/// cache, which is raw) all load.
-fn read_cache(path: &Path) -> Option<CorpusCache> {
+/// Open a corpus straight from its cache file, with no `kjv.jsonl` present.
+///
+/// The web ships the cache in its data pack and the raw JSONL is 2.5 MB of
+/// download the reader would never read (2026-07-26): the cache supersedes it.
+/// `stamp` is the `(len, mtime)` to validate against when the source file DOES
+/// exist; pass `None` to accept the cache on its tokenization stamp alone,
+/// which is the shipped-together case.
+pub fn load_cache(path: impl AsRef<Path>, stamp: Option<(u64, i64)>) -> Option<Corpus> {
+    let bytes = std::fs::read(path.as_ref()).ok()?;
+    let fresh = |src_len: u64, src_mtime: i64, tok: &str| {
+        tok == crate::canon::TOKENIZATION_VERSION
+            && stamp.is_none_or(|(len, mtime)| src_len == len && src_mtime == mtime)
+    };
+
+    // The chapter-directory format: decode the header, leave the payload
+    // alone. This is the whole point — opening costs one directory, not one
+    // canon.
+    if bytes.starts_with(DIR_CACHE_MAGIC) {
+        let head = DIR_CACHE_MAGIC.len();
+        let dir_len = u32::from_le_bytes(bytes.get(head..head + 4)?.try_into().ok()?) as usize;
+        let dir: DirCache = bincode::deserialize(bytes.get(head + 4..head + 4 + dir_len)?).ok()?;
+        if !fresh(dir.src_len, dir.src_mtime, &dir.tok) {
+            return None;
+        }
+        let payload = head + 4 + dir_len;
+        let mut b = CorpusBuilder::new(dir.tok);
+        for (book, chapter, count, off, len) in &dir.chapters {
+            let (off, len) = (payload + *off as usize, *len as usize);
+            if off + len > bytes.len() {
+                return None; // truncated cache: fall back to the JSONL
+            }
+            b.push_lazy(book, *chapter, *count as usize, off, len);
+        }
+        return Some(b.finish(bytes));
+    }
+
+    // The original whole-corpus cache, still on devices from earlier versions.
+    let c = read_cache_v1(&bytes)?;
+    fresh(c.src_len, c.src_mtime, &c.tok).then(|| mk_corpus(c.tok, c.verses))
+}
+
+/// Decode the original whole-corpus cache — raw bincode or gzipped bincode,
+/// sniffed by the gzip magic so both flavours ever written still load.
+fn read_cache_v1(bytes: &[u8]) -> Option<CorpusCache> {
     use std::io::Read;
-    let bytes = std::fs::read(path).ok()?;
     if bytes.len() >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b {
-        let mut gz = flate2::read::GzDecoder::new(&bytes[..]);
+        let mut gz = flate2::read::GzDecoder::new(bytes);
         let mut raw = Vec::new();
         gz.read_to_end(&mut raw).ok()?;
         return bincode::deserialize::<CorpusCache>(&raw).ok();
     }
-    bincode::deserialize::<CorpusCache>(&bytes).ok()
+    bincode::deserialize::<CorpusCache>(bytes).ok()
 }
 
-/// Encode + atomically write a corpus cache (best-effort). Gzipped on native
-/// targets (disk space); RAW bincode on wasm32 — there the "disk" is memory
-/// and IndexedDB, and inflating ~18 MB through flate2 inside wasm on every
-/// boot costs real seconds on phones (measured 2026-07-26).
-fn write_cache<T: Serialize>(path: &Path, cache: &T) -> Result<(), Error> {
-    let raw = bincode::serialize(cache).map_err(|e| Error::Parse(e.to_string()))?;
-    #[cfg(not(target_arch = "wasm32"))]
-    let bytes = {
-        use std::io::Write;
-        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
-        gz.write_all(&raw).map_err(|e| Error::Parse(e.to_string()))?;
-        gz.finish().map_err(|e| Error::Parse(e.to_string()))?
-    };
-    #[cfg(target_arch = "wasm32")]
-    let bytes = raw;
-    crate::store::write_atomic_bytes(path, &bytes)
+/// Serialize a corpus as the chapter-directory cache: `magic | dir_len | dir |
+/// payload`, each chapter a separately-decodable bincode `Vec<Verse>`.
+///
+/// Never gzipped, on any target. The bytes stay resident so chapters can be
+/// decoded out of them on demand, and inflating ~18 MB inside wasm on every
+/// launch cost real seconds on a phone.
+fn encode_dir_cache(corpus: &Corpus, src_len: u64, src_mtime: i64) -> Result<Vec<u8>, Error> {
+    let mut payload: Vec<u8> = Vec::new();
+    let mut chapters = Vec::with_capacity(corpus.slots.len());
+    for (book, by_chapter) in &corpus.chapter_ix {
+        for (&chapter, &ix) in by_chapter {
+            let verses = corpus.slots[ix].verses(&corpus.raw);
+            let blob = bincode::serialize(verses).map_err(|e| Error::Parse(e.to_string()))?;
+            chapters.push((
+                book.clone(),
+                chapter,
+                verses.len() as u32,
+                payload.len() as u32,
+                blob.len() as u32,
+            ));
+            payload.extend_from_slice(&blob);
+        }
+    }
+    // Canonical order, so a rebuilt cache is byte-identical and the slots line
+    // up with the verse ordinals the JSONL path produces.
+    chapters.sort_by_key(|(book, chapter, ..)| {
+        (crate::canon::BOOKS.iter().position(|b| b.id == book).unwrap_or(usize::MAX), *chapter)
+    });
+    let dir = bincode::serialize(&DirCache {
+        src_len,
+        src_mtime,
+        tok: corpus.tok_version.clone(),
+        chapters,
+    })
+    .map_err(|e| Error::Parse(e.to_string()))?;
+
+    let mut out = Vec::with_capacity(DIR_CACHE_MAGIC.len() + 4 + dir.len() + payload.len());
+    out.extend_from_slice(DIR_CACHE_MAGIC);
+    out.extend_from_slice(&(dir.len() as u32).to_le_bytes());
+    out.extend_from_slice(&dir);
+    out.extend_from_slice(&payload);
+    Ok(out)
 }
+
+fn write_dir_cache(path: &Path, corpus: &Corpus, src_len: u64, src_mtime: i64) -> Result<(), Error> {
+    crate::store::write_atomic_bytes(path, &encode_dir_cache(corpus, src_len, src_mtime)?)
+}
+
 
 /// Parse `src` and write `out` as its idxcache, stamped `(len(src), mtime)`.
 /// Offline data-prep for shells whose filesystem reports a FIXED mtime — the
 /// web's WASI shim reports 0 for every file — so their very first boot takes
 /// the cache fast path instead of re-parsing ~19 MB of JSONL (8.4 s on a 2026
-/// flagship phone). Written RAW (no gzip): the web pack gzips files on the
-/// wire and inflates them in JS, where it's cheap.
+/// flagship phone).
 pub fn build_cache_stamped(
     src: impl AsRef<Path>,
     out: impl AsRef<Path>,
@@ -259,19 +390,17 @@ pub fn build_cache_stamped(
         source: e,
     })?;
     let corpus = from_str(&raw)?;
-    let cache = CorpusCacheRef {
-        src_len: raw.len() as u64,
-        src_mtime,
-        tok: &corpus.tok_version,
-        verses: &corpus.verses,
-    };
-    let encoded = bincode::serialize(&cache).map_err(|e| Error::Parse(e.to_string()))?;
-    crate::store::write_atomic_bytes(out.as_ref(), &encoded)
+    write_dir_cache(out.as_ref(), &corpus, raw.len() as u64, src_mtime)
 }
 
 /// The parsed-corpus cache, keyed to its source file's size + mtime + the
 /// tokenization stamp. Any mismatch (regenerated data, changed tokenization)
 /// invalidates it and the JSONL is re-parsed.
+///
+/// This is the ORIGINAL whole-corpus layout: one bincode blob of every verse.
+/// Still read (devices carry these from earlier versions), never written —
+/// decoding it materializes the entire canon, which is exactly what the
+/// chapter-directory format below exists to avoid.
 #[derive(Serialize, Deserialize)]
 struct CorpusCache {
     src_len: u64,
@@ -280,16 +409,22 @@ struct CorpusCache {
     verses: Vec<Verse>,
 }
 
-/// Borrowing twin of [`CorpusCache`] for the write path — bincode encodes the
-/// same field sequence, so the cache round-trips without deep-cloning ~31k
-/// verses just to serialize them.
-#[derive(Serialize)]
-struct CorpusCacheRef<'a> {
+/// Magic for the chapter-directory cache: "PLBC" + format version.
+const DIR_CACHE_MAGIC: &[u8; 8] = b"PLBC0001";
+
+/// The chapter-directory cache's header: the same stamp as [`CorpusCache`],
+/// plus one entry per chapter. Opening the corpus decodes ONLY this; each
+/// entry's `(off, len)` addresses a bincode `Vec<Verse>` in the payload that
+/// follows, decoded when that chapter is first read.
+#[derive(Serialize, Deserialize)]
+struct DirCache {
     src_len: u64,
     src_mtime: i64,
-    tok: &'a str,
-    verses: &'a [Verse],
+    tok: String,
+    /// (book, chapter, verse count, payload offset, payload length)
+    chapters: Vec<(String, u16, u32, u32, u32)>,
 }
+
 
 /// `(len, mtime-seconds)` of the source file, or `None` if it can't be stat'd
 /// (then the cache is skipped and the JSONL is parsed directly).
@@ -384,36 +519,92 @@ fn check_ascending(verses: &[Verse]) -> Result<(), Error> {
 
 /// Build the corpus indices in one pass. Assumes the stream passed
 /// [`check_ascending`], so each chapter's verses form a contiguous run.
+/// Build a corpus from verses already in memory (the JSONL path): every
+/// chapter slot starts filled, so nothing decodes later.
 fn mk_corpus(tok_version: String, verses: Vec<Verse>) -> Corpus {
-    let mut by_ref = HashMap::with_capacity(verses.len());
-    let mut chapters: HashMap<String, u16> = HashMap::new();
-    let mut chapter_ix: HashMap<String, HashMap<u16, (usize, usize)>> = HashMap::new();
-
-    for (i, v) in verses.iter().enumerate() {
-        by_ref.insert(v.vref(), i);
-        // Allocate a book-name key only on first sight of the book (~66 books,
-        // so ~132 allocations total) rather than cloning it for every verse
-        // (~62k). The chapter keys are u16 and never allocate.
-        match chapters.get_mut(&v.book) {
-            Some(hi) => *hi = (*hi).max(v.chapter),
-            None => {
-                chapters.insert(v.book.clone(), v.chapter);
+    let mut b = CorpusBuilder::new(tok_version);
+    // Verses arrive grouped by book and ascending (checked by the caller), so
+    // a chapter's run is contiguous — cut a slot each time the chapter turns.
+    let mut run: Vec<Verse> = Vec::new();
+    for v in verses {
+        if let Some(prev) = run.first() {
+            if prev.book != v.book || prev.chapter != v.chapter {
+                b.push_decoded(std::mem::take(&mut run));
             }
         }
-        let book_ix = match chapter_ix.get_mut(&v.book) {
-            Some(m) => m,
-            None => chapter_ix.entry(v.book.clone()).or_default(),
-        };
-        book_ix
-            .entry(v.chapter)
-            .and_modify(|(start, len)| {
-                *start = (*start).min(i);
-                *len += 1;
-            })
-            .or_insert((i, 1));
+        run.push(v);
+    }
+    if !run.is_empty() {
+        b.push_decoded(run);
+    }
+    b.finish(Vec::new())
+}
+
+/// Assembles chapter slots plus the book/chapter lookup tables. Shared by the
+/// JSONL path (slots pre-filled) and the cache path (slots pointing at byte
+/// ranges), so both produce an identical index.
+struct CorpusBuilder {
+    slots: Vec<ChapterSlot>,
+    chapters: HashMap<String, u16>,
+    chapter_ix: HashMap<String, HashMap<u16, usize>>,
+    total: usize,
+    tok_version: String,
+}
+
+impl CorpusBuilder {
+    fn new(tok_version: String) -> Self {
+        Self {
+            slots: Vec::new(),
+            chapters: HashMap::new(),
+            chapter_ix: HashMap::new(),
+            total: 0,
+            tok_version,
+        }
     }
 
-    Corpus { verses, by_ref, chapters, chapter_ix, tok_version }
+    /// Register a chapter, allocating its book key only on first sight.
+    fn register(&mut self, book: &str, chapter: u16, count: usize) -> usize {
+        match self.chapters.get_mut(book) {
+            Some(hi) => *hi = (*hi).max(chapter),
+            None => {
+                self.chapters.insert(book.to_string(), chapter);
+            }
+        }
+        let ix = self.slots.len();
+        let book_ix = match self.chapter_ix.get_mut(book) {
+            Some(m) => m,
+            None => self.chapter_ix.entry(book.to_string()).or_default(),
+        };
+        book_ix.insert(chapter, ix);
+        let start_ord = self.total;
+        self.total += count;
+        start_ord
+    }
+
+    fn push_decoded(&mut self, verses: Vec<Verse>) {
+        let Some(first) = verses.first() else { return };
+        let (book, chapter) = (first.book.clone(), first.chapter);
+        let start_ord = self.register(&book, chapter, verses.len());
+        let cell = OnceLock::new();
+        let _ = cell.set(verses);
+        self.slots.push(ChapterSlot { start_ord, span: None, cell });
+    }
+
+    fn push_lazy(&mut self, book: &str, chapter: u16, count: usize, off: usize, len: usize) {
+        let start_ord = self.register(book, chapter, count);
+        self.slots.push(ChapterSlot { start_ord, span: Some((off, len)), cell: OnceLock::new() });
+    }
+
+    fn finish(self, raw: Vec<u8>) -> Corpus {
+        Corpus {
+            raw,
+            slots: self.slots,
+            chapters: self.chapters,
+            chapter_ix: self.chapter_ix,
+            total: self.total,
+            tok_version: self.tok_version,
+        }
+    }
 }
 
 /// The header value written at the top of a `kjv.jsonl`. Ported from
@@ -450,15 +641,60 @@ mod tests {
         // then proves the cache path (not the parser) ran.
         std::fs::write(&src, b"garbage, not jsonl").unwrap();
         let (lg, mg) = source_stamp(&src).unwrap();
-        let good = CorpusCache { src_len: lg, src_mtime: mg, tok: a.tok_version.clone(), verses: a.verses.clone() };
-        write_cache(&cache_path(&src), &good).unwrap();
-        assert_eq!(load_corpus(&src).unwrap().len(), 3, "matching cache is used despite garbage source");
+        write_dir_cache(&cache_path(&src), &a, lg, mg).unwrap();
+        let cached = load_corpus(&src).unwrap();
+        assert_eq!(cached.len(), 3, "matching cache is used despite garbage source");
+        // …and it really is the same text, decoded lazily out of the cache.
+        assert_eq!(cached.verse(&VRef::new("Gen", 1, 1)).unwrap().body(), "In the beginning God created");
+        assert_eq!(cached.chapter_verses("Gen", 1).len(), 2);
+        assert_eq!(cached.chapter_count("Gen"), 2);
+        assert_eq!(cached.verse_at(2).unwrap().vref(), VRef::new("Gen", 2, 1));
+        assert_eq!(cached.index_of(&VRef::new("Gen", 2, 1)), Some(2));
+        assert_eq!(cached.verses_iter().count(), 3);
 
         // A stale stamp (wrong length) is rejected → the garbage source is then
         // parsed and errors.
-        let stale = CorpusCache { src_len: lg + 999, src_mtime: mg, tok: a.tok_version.clone(), verses: a.verses.clone() };
-        write_cache(&cache_path(&src), &stale).unwrap();
+        write_dir_cache(&cache_path(&src), &a, lg + 999, mg).unwrap();
         assert!(load_corpus(&src).is_err(), "stale-stamp cache rejected → garbage source errors");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn opening_a_cache_decodes_no_verses_until_asked() {
+        // The point of the chapter-directory format: `load_cache` reads the
+        // directory only. Nothing is decoded until a chapter is touched, and
+        // then only that chapter — this is what keeps boot off the whole canon.
+        let dir = std::env::temp_dir().join(format!("plumbline-corpus-lazy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("kjv.jsonl");
+        std::fs::write(&src, SAMPLE).unwrap();
+        let parsed = load_corpus(&src).unwrap();
+        let cache = dir.join("standalone.idxcache");
+        write_dir_cache(&cache, &parsed, 0, 0).unwrap();
+
+        // Opened with no source file in play at all (the web's shipped-pack
+        // case): accepted on the tokenization stamp alone.
+        let c = load_cache(&cache, None).expect("cache opens without its source");
+        assert_eq!(c.len(), 3, "verse count comes from the directory");
+        assert_eq!(c.chapter_count("Gen"), 2);
+        assert!(c.slots.iter().all(|s| s.cell.get().is_none()), "opening decoded nothing");
+
+        c.chapter_verses("Gen", 1);
+        let decoded = c.slots.iter().filter(|s| s.cell.get().is_some()).count();
+        assert_eq!(decoded, 1, "reading one chapter decoded exactly one chapter");
+
+        // A cache whose tokenization doesn't match this build is refused.
+        let mut bad = std::fs::read(&cache).unwrap();
+        let at = bad
+            .windows(crate::canon::TOKENIZATION_VERSION.len())
+            .position(|w| w == crate::canon::TOKENIZATION_VERSION.as_bytes())
+            .expect("stamp is in the directory");
+        bad[at] = b'x';
+        let other = dir.join("other.idxcache");
+        std::fs::write(&other, &bad).unwrap();
+        assert!(load_cache(&other, None).is_none(), "a foreign tokenization is refused");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -471,13 +707,27 @@ mod tests {
         let src = dir.join("kjv.jsonl");
         std::fs::write(&src, SAMPLE).unwrap();
 
-        // A RAW (ungzipped) cache is read via the magic sniff — the wasm write
-        // path and the pack-shipped web cache both produce this flavour.
+        // A device carrying the ORIGINAL whole-corpus cache (raw bincode, and
+        // the gzipped flavour before it) must still boot — those files are on
+        // disk from earlier versions and are never rewritten in that shape.
         let parsed = from_str(SAMPLE).unwrap();
         let (len, mtime) = source_stamp(&src).unwrap();
-        let cache = CorpusCache { src_len: len, src_mtime: mtime, tok: parsed.tok_version.clone(), verses: parsed.verses.clone() };
-        std::fs::write(cache_path(&src), bincode::serialize(&cache).unwrap()).unwrap();
-        assert_eq!(load_corpus(&src).unwrap().len(), 3, "raw bincode cache is used");
+        let legacy = CorpusCache {
+            src_len: len,
+            src_mtime: mtime,
+            tok: parsed.tok_version.clone(),
+            verses: parsed.verses_iter().cloned().collect(),
+        };
+        let encoded = bincode::serialize(&legacy).unwrap();
+        std::fs::write(cache_path(&src), &encoded).unwrap();
+        assert_eq!(load_corpus(&src).unwrap().len(), 3, "legacy raw bincode cache is used");
+        {
+            use std::io::Write;
+            let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+            gz.write_all(&encoded).unwrap();
+            std::fs::write(cache_path(&src), gz.finish().unwrap()).unwrap();
+        }
+        assert_eq!(load_corpus(&src).unwrap().len(), 3, "legacy gzipped cache is used");
 
         // build_cache_stamped writes a loadable cache honouring the given
         // mtime: stamped with the REAL mtime it validates; stamped with the

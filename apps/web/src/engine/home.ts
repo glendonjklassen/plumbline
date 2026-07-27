@@ -14,10 +14,18 @@ const USER_DIRS = ["tags", "threads", "weaves", "notes", "memory", ".config"];
  *  else the pack-shipped web-stamped one (fetched on first visit). */
 const IDXCACHE = "data/kjv.jsonl.idxcache";
 
-/** This device's persisted idxcache, if any — boot checks it BEFORE the
- *  stage-1 fetch to decide whether the pack's copy is needed at all. */
-export function loadPersistedIdxcache(): Promise<Uint8Array | undefined> {
-  return idbGet("cache", IDXCACHE);
+/** Which pack version the persisted idxcache was built from. A cache outlives
+ *  the data update that invalidates it otherwise: its verses would be the old
+ *  text, and the tokenization stamp (unchanged across data updates) wouldn't
+ *  notice. */
+const IDXCACHE_VERSION = "meta:idxcacheVersion";
+
+/** This device's persisted idxcache and the pack version it came from — boot
+ *  checks it BEFORE the stage-1 fetch to decide whether to download the text
+ *  at all. */
+export async function loadPersistedIdxcache(): Promise<{ bytes: Uint8Array; version: string } | undefined> {
+  const [bytes, version] = await Promise.all([idbGet("cache", IDXCACHE), idbGet("cache", IDXCACHE_VERSION)]);
+  return bytes && version ? { bytes, version: dec.decode(version) } : undefined;
 }
 
 export interface VirtualHome {
@@ -83,6 +91,7 @@ export async function buildHome(
   pack: Map<string, Uint8Array>,
   stockPaths: Set<string> = new Set(),
   idxcache?: Uint8Array,
+  packVersion = "",
 ): Promise<VirtualHome> {
   const root = new Map<string, Directory | File>();
   const [userFiles, seededFlag, bundledFlag] = await Promise.all([
@@ -173,7 +182,16 @@ export async function buildHome(
       const dataDir = root.get("data");
       if (!(dataDir instanceof Directory)) return;
       const cache = (dataDir.contents as Map<string, Directory | File>).get("kjv.jsonl.idxcache");
-      if (cache instanceof File) await idbApply("cache", new Map([[IDXCACHE, (cache as File).data]]));
+      if (!(cache instanceof File)) return;
+      // Stamped with the pack it came from, so the next launch can tell
+      // whether it still describes the shipped text.
+      await idbApply(
+        "cache",
+        new Map([
+          [IDXCACHE, (cache as File).data],
+          [IDXCACHE_VERSION, enc.encode(packVersion)],
+        ]),
+      );
     },
   };
 }

@@ -270,7 +270,7 @@ fn check(home: &Path) -> ExitCode {
     // ── reader core ──────────────────────────────────────────────────────────
     println!("Reader (core):");
     match corpus::load_corpus(data.join("kjv.jsonl")) {
-        Ok(c) => println!("  ✓ kjv.jsonl — {} verses", c.verses().len()),
+        Ok(c) => println!("  ✓ kjv.jsonl — {} verses", c.len()),
         Err(e) => {
             println!("  ✗ kjv.jsonl — {e}");
             core_ok = false;

@@ -52,7 +52,7 @@ impl OccurrenceIx {
     /// once; postings stay in canonical order.
     pub fn build(corpus: &Corpus) -> Self {
         let mut map: HashMap<String, Vec<VRef>> = HashMap::new();
-        for v in corpus.verses() {
+        for v in corpus.verses_iter() {
             let refs: BTreeSet<&str> = v
                 .tokens
                 .iter()

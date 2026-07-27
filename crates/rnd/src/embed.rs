@@ -318,7 +318,7 @@ impl VerseSim {
     /// fresh count over the corpus.
     pub fn build(emb: &Embedding, corpus: &Corpus) -> VerseSim {
         let d = emb.dim;
-        let verses = corpus.verses();
+        let verses: Vec<&plumbline_core::corpus::Verse> = corpus.verses_iter().collect();
 
         // Frequency table + total.
         let (counts, total): (HashMap<&str, u64>, f64) = match &emb.freq {
@@ -328,7 +328,7 @@ impl VerseSim {
             }
             _ => {
                 let mut c: HashMap<&str, u64> = HashMap::new();
-                for v in verses {
+                for v in &verses {
                     for t in &v.tokens {
                         for s in &t.strongs {
                             *c.entry(s.as_str()).or_insert(0) += 1;
@@ -562,12 +562,12 @@ mod tests {
         let e = parse_embedding("kjv1769-tok2", None, TIE, None).unwrap();
         let vs = VerseSim::build(&e, &corpus);
         assert_eq!(vs.count(), 3);
-        let q = corpus.verses()[0].vref();
+        let q = corpus.verse_at(0).unwrap().vref();
         let sim = vs.similar_verses_in(&q, 5);
         assert_eq!(sim.len(), 2);
         assert_eq!(sim[0].1, sim[1].1, "fixture must produce an exact tie");
-        assert_eq!(sim[0].0, corpus.verses()[1].vref());
-        assert_eq!(sim[1].0, corpus.verses()[2].vref());
+        assert_eq!(sim[0].0, corpus.verse_at(1).unwrap().vref());
+        assert_eq!(sim[1].0, corpus.verse_at(2).unwrap().vref());
     }
 
     #[test]
