@@ -136,8 +136,14 @@
         {#if rndOffer}
           <div class="rnd-offer">
             {#if s.rndState === "loading"}
-              <span class="rnd-note">Loading the analysis pack — {Math.round(s.rndProgress * 100)}%</span>
-              <div class="rnd-bar"><div class="rnd-fill" style:width={`${s.rndProgress * 100}%`}></div></div>
+              <span class="rnd-note">
+                {s.rndPreparing
+                  ? "Preparing the analysis — this takes a moment on a phone…"
+                  : `Downloading the analysis pack — ${Math.round(s.rndProgress * 100)}%`}
+              </span>
+              <div class="rnd-bar">
+                <div class="rnd-fill" class:indeterminate={s.rndPreparing} style:width={`${s.rndProgress * 100}%`}></div>
+              </div>
             {:else}
               <span class="rnd-note">Similar concepts, verses-like-this, and concept maps are a one-time ~4 MB download.</span>
               <button class="rnd-load" onclick={() => void s.ensureRnd()}>Load analysis</button>
@@ -301,6 +307,18 @@
     height: 100%;
     background: var(--gold, #9e7d38);
     transition: width 0.2s ease;
+  }
+  .rnd-fill.indeterminate {
+    animation: rndpulse 1.2s ease-in-out infinite;
+  }
+  @keyframes rndpulse {
+    0%,
+    100% {
+      opacity: 0.4;
+    }
+    50% {
+      opacity: 1;
+    }
   }
 
   /* Narrow screens: bottom sheet (Compose-phone pattern). */

@@ -228,18 +228,34 @@ impl PlumblineEngine {
 
     /// Load the optional R&D artifacts (concept embeddings, morphology) from
     /// the home if they were absent at open. Idempotent; nothing loads twice.
+    /// The web loads them one at a time (`plumbline_engine_load_rnd_step`) so
+    /// the worker can answer between two multi-second parses.
     fn load_rnd_data(&self) {
+        self.load_embedding_only();
+        self.load_morph_only();
+    }
+
+    /// The concept embedding alone (~6 MB of vector text to parse).
+    fn load_embedding_only(&self) {
         let Some(h) = &self.home else { return };
-        let data = h.join("data");
-        if self.embedding.get().is_none() {
-            if let Some(e) = embed::load_embedding(canon::TOKENIZATION_VERSION, data.join("concept-vectors.vec")) {
-                let _ = self.embedding.set(e);
-            }
+        if self.embedding.get().is_some() {
+            return;
         }
-        if self.morph.get().is_none() {
-            if let Some(m) = morph::load_morph(canon::TOKENIZATION_VERSION, data.join("morphology.jsonl")) {
-                let _ = self.morph.set(m);
-            }
+        let path = h.join("data").join("concept-vectors.vec");
+        if let Some(e) = embed::load_embedding(canon::TOKENIZATION_VERSION, path) {
+            let _ = self.embedding.set(e);
+        }
+    }
+
+    /// The morphology sidecar alone (~10 MB of JSONL to parse).
+    fn load_morph_only(&self) {
+        let Some(h) = &self.home else { return };
+        if self.morph.get().is_some() {
+            return;
+        }
+        let path = h.join("data").join("morphology.jsonl");
+        if let Some(m) = morph::load_morph(canon::TOKENIZATION_VERSION, path) {
+            let _ = self.morph.set(m);
         }
     }
 

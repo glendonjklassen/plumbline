@@ -2,6 +2,7 @@
   // One Settings dialog (Android IA): analysis switches, theme, text size /
   // margin / line-spacing sliders, copy format, bundled stock set.
   import { getSession } from "../state/session.svelte";
+  import { completeOffline, surveyOffline, type OfflineSurvey } from "../engine/offline";
   import { PERF } from "../engine/perf";
   import { zipRead, zipWrite } from "../engine/zip";
   import { idbApply } from "../engine/idb";
@@ -86,6 +87,43 @@
     location.reload(); // the engine re-opens with/without the stock set
   }
 
+  // ── offline completeness ────────────────────────────────────────────────
+  // The reader's answer to "will this work with no signal?" — and the repair
+  // when it wouldn't have.
+  let offline = $state<OfflineSurvey | null>(null);
+  let offlineBusy = $state(false);
+  let offlineProgress = $state(0);
+  const mb = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
+  const offlineComplete = $derived(!!offline && offline.missing.length === 0 && s.rndState === "ready");
+  /** What is still missing, in a sentence — the text itself never is. */
+  const offlineSummary = $derived.by(() => {
+    const files = offline?.missing.length ?? 0;
+    const pack = s.rndState !== "ready" ? "the analysis pack" : "";
+    const rest = files ? `${files} data file${files === 1 ? "" : "s"} (${mb(offline!.missingBytes)})` : "";
+    const both = [pack, rest].filter(Boolean).join(" and ");
+    return `The King James text is already on this device. Still to download: ${both || "nothing"}.`;
+  });
+
+  $effect(() => {
+    if (s.showSettings && !offlineBusy) void surveyOffline().then((r) => (offline = r));
+  });
+
+  async function downloadEverything(): Promise<void> {
+    offlineBusy = true;
+    offlineProgress = 0;
+    try {
+      // The machine tier first: it is the piece deliberately left out on
+      // phones, and loading it also puts its files in the cache.
+      if (s.rndState !== "ready") await s.ensureRnd();
+      offline = await completeOffline((f) => (offlineProgress = f));
+    } catch {
+      s.showToast("Couldn't finish downloading — check your connection.");
+    } finally {
+      offlineBusy = false;
+      offlineProgress = 0;
+    }
+  }
+
   // Fresh timings whenever the dialog opens: the background stages keep
   // appending to the boot trace (Strong's, warm steps, the analysis pack),
   // and the turn split describes whichever chapter was last laid out — turn
@@ -140,7 +178,11 @@
       {#if s.config.machineAnalysis !== false && s.rndState !== "ready"}
         <div class="rnd-status">
           {#if s.rndState === "loading"}
-            <span>Downloading the analysis pack — {Math.round(s.rndProgress * 100)}%</span>
+            <span>
+              {s.rndPreparing
+                ? "Preparing the analysis…"
+                : `Downloading the analysis pack — ${Math.round(s.rndProgress * 100)}%`}
+            </span>
           {:else}
             <span>Analysis pack not downloaded (~4 MB).</span>
             <button class="rnd-now" onclick={() => void s.ensureRnd()}>Download now</button>
@@ -225,6 +267,33 @@
         </span>
         <input type="checkbox" checked={s.bundledOn} onchange={toggleBundled} />
       </label>
+      <hr />
+      <p class="label">Offline</p>
+      <div class="offline">
+        {#if offlineBusy}
+          <span class="off-note">
+            {s.rndPreparing
+              ? "Preparing the analysis…"
+              : `Downloading — ${Math.round((s.rndState === "ready" ? offlineProgress : s.rndProgress) * 100)}%`}
+          </span>
+          <div class="off-bar">
+            <div
+              class="off-fill"
+              style:width={`${(s.rndState === "ready" ? offlineProgress : s.rndProgress) * 100}%`}
+            ></div>
+          </div>
+        {:else if offlineComplete}
+          <span class="off-ok">Everything is on this device ✓</span>
+          <span class="off-note">
+            Plumbline works with no connection at all.{offline?.bytesOnDevice
+              ? ` Using ${mb(offline.bytesOnDevice)}.`
+              : ""}
+          </span>
+        {:else}
+          <span class="off-note">{offlineSummary}</span>
+          <button class="off-go" onclick={downloadEverything}>Download everything</button>
+        {/if}
+      </div>
       <hr />
       <p class="label">Your study data — notes, tags, threads, weaves, memorization</p>
       <div class="row">
@@ -314,6 +383,44 @@
     font-size: 13px;
     color: var(--faded, #8a8276);
     cursor: pointer;
+  }
+  .offline {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0 2px 4px;
+  }
+  .off-ok {
+    font-weight: 600;
+    color: var(--tierHuman, #6f8f6a);
+  }
+  .off-note {
+    font-size: 12.5px;
+    color: var(--faded, #8a8276);
+    line-height: 1.4;
+  }
+  .off-go {
+    align-self: flex-start;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gold, #9e7d38);
+    border: 1px solid var(--gold, #9e7d38);
+    border-radius: 6px;
+    padding: 3px 12px;
+  }
+  .off-go:hover {
+    background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
+  }
+  .off-bar {
+    height: 4px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--gold, #9e7d38) 18%, transparent);
+    overflow: hidden;
+  }
+  .off-fill {
+    height: 100%;
+    background: var(--gold, #9e7d38);
+    transition: width 0.2s ease;
   }
   .diag-sub {
     margin-top: 8px;

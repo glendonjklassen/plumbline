@@ -247,6 +247,11 @@ export class StudyEngine {
   loadRndData(): string | null {
     return this.#text("plumbline_engine_load_rnd_data");
   }
+  /** Load ONE machine-tier artifact (wasm-only export): true while more
+   *  remain. Split so a ~17 MB parse can't hold the worker for seconds. */
+  loadRndStep(step: number): boolean {
+    return ((this.#w.exports.plumbline_engine_load_rnd_step as Function)(this.#engine, step) as number) === 1;
+  }
   /** Load the stage-2 core data (Strong's + margin-note study reload) once
    *  those files land in the home; no-op when nothing is missing. */
   loadCoreData(): string | null {

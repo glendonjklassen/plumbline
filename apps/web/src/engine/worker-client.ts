@@ -30,6 +30,8 @@ export class EngineRpc {
   onRndReady: () => void = () => {};
   /** R&D pack download progress (0..1) — drives the "load analysis" UI. */
   onRndProgress: (fraction: number) => void = () => {};
+  /** Download finished; the engine is now parsing it (seconds on a phone). */
+  onRndPreparing: () => void = () => {};
 
   constructor() {
     this.#w = new Worker(new URL("./engine.worker.ts", import.meta.url), { type: "module" });
@@ -40,6 +42,7 @@ export class EngineRpc {
       if (m.type === "coreReady") return this.onCoreReady();
       if (m.type === "rndReady") return this.onRndReady();
       if (m.type === "rndProgress") return this.onRndProgress(m.fraction ?? 0);
+      if (m.type === "rndPreparing") return this.onRndPreparing();
       const p = this.#waiting.get(m.id);
       if (!p) return;
       this.#waiting.delete(m.id);

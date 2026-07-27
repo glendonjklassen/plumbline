@@ -405,3 +405,27 @@ test("a chapter turn never shows the old text under the new name", async ({ page
   // …and the header shows the book's NAME, never its OSIS id ("Rev 7").
   await expect(page.locator(".subtitle")).toHaveText("Revelation 7", { timeout: 30_000 });
 });
+
+test("Settings can make the app completely offline, and says when it is", async ({ page }) => {
+  // The reader's answer to "will this work with no signal?". Most of the app
+  // is local after a first visit; this verifies every pack file is really in
+  // the offline cache and fetches whatever isn't (a failed download or an
+  // eviction otherwise goes unnoticed until the reader has no connection).
+  await boot(page);
+  await page.getByLabel("Menu").click();
+  await page.getByRole("button", { name: "Settings" }).click();
+  const download = page.getByRole("button", { name: "Download everything" });
+  if (await download.isVisible().catch(() => false)) await download.click();
+  await expect(page.getByText("Everything is on this device")).toBeVisible({ timeout: 120_000 });
+
+  // Not just a label: the survey must agree that nothing is missing.
+  const missing = await page.evaluate(async () => {
+    const manifest = await (await fetch("pack/manifest.json")).json();
+    const cache = await caches.open("plumbline-v1");
+    let missing = 0;
+    for (const f of manifest.files)
+      if (!(await cache.match(`pack/${f.path}.gz?v=${manifest.version}`, { ignoreVary: true }))) missing++;
+    return missing;
+  });
+  expect(missing).toBe(0);
+});

@@ -66,20 +66,44 @@ async function fetchFiles(
   onProgress?: (p: PackProgress) => void,
 ): Promise<Map<string, Uint8Array>> {
   const totalGz = files.reduce((s, f) => s + f.gzBytes, 0);
-  let doneGz = 0;
+  // Bytes as they arrive, not files as they finish: the analysis pack is four
+  // files and one of them is 2.3 MB, so per-file reporting sat at 0% for the
+  // whole download on a phone (2026-07-27).
+  let received = 0;
   const out = new Map<string, Uint8Array>();
   // Fetch a few files concurrently; decompression overlaps the network.
   const queue = [...files];
   const workers = Array.from({ length: 4 }, async () => {
     for (let f = queue.shift(); f; f = queue.shift()) {
-      onProgress?.({ fraction: doneGz / totalGz, currentFile: f.path });
       const url = `${packUrl(f.path)}.gz?v=${version}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`data pack file ${f.path}: HTTP ${res.status}`);
       void stash(url, res.clone());
-      out.set(f.path, await gunzip(await res.arrayBuffer()));
-      doneGz += f.gzBytes;
-      onProgress?.({ fraction: doneGz / totalGz, currentFile: f.path });
+      const reader = res.body?.getReader();
+      if (!reader) {
+        // No streaming body (very old engines): fall back to whole-file.
+        out.set(f.path, await gunzip(await res.arrayBuffer()));
+        received += f.gzBytes;
+        onProgress?.({ fraction: Math.min(1, received / totalGz), currentFile: f.path });
+        continue;
+      }
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        size += value.length;
+        received += value.length;
+        onProgress?.({ fraction: Math.min(1, received / totalGz), currentFile: f.path });
+      }
+      const body = new Uint8Array(size);
+      let at = 0;
+      for (const c of chunks) {
+        body.set(c, at);
+        at += c.length;
+      }
+      out.set(f.path, await gunzip(body.buffer as ArrayBuffer));
     }
   });
   await Promise.all(workers);

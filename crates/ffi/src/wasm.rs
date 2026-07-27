@@ -71,6 +71,37 @@ pub unsafe extern "C" fn plumbline_engine_warm_step(engine: *const PlumblineEngi
     guard(0, || e.warm_search_slice(SLICE))
 }
 
+/// Load ONE machine-tier artifact: step 0 the concept embedding, step 1 the
+/// morphology sidecar. Returns 1 while steps remain, 0 when done (or on a null
+/// engine). Idempotent — an artifact already loaded, or still missing from the
+/// home, is a cheap no-op.
+///
+/// [`plumbline_engine_load_rnd_data`](crate::plumbline_engine_load_rnd_data)
+/// does both in one call, which parses ~17 MB of text. On a phone that is many
+/// seconds during which this thread answers nothing — the reader tapped a word
+/// and the study sheet sat on "— loading —" until it finished (2026-07-27).
+/// Split, the worker can serve a tap between artifacts.
+///
+/// # Safety
+/// `engine` is a live engine or null.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_load_rnd_step(engine: *const PlumblineEngine, step: u32) -> i32 {
+    let Some(e) = (unsafe { engine.as_ref() }) else {
+        return 0;
+    };
+    guard(0, || match step {
+        0 => {
+            e.load_embedding_only();
+            1
+        }
+        1 => {
+            e.load_morph_only();
+            0
+        }
+        _ => 0,
+    })
+}
+
 /// Allocate `len` bytes the shell will fill with a NUL-terminated UTF-8
 /// argument. Null when `len` is 0. Release with [`plumbline_web_free`].
 #[no_mangle]

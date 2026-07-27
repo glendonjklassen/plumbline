@@ -160,10 +160,18 @@ function loadRndChunked(): Promise<void> {
     );
     booted!.trace.push(["rnd fetch+gunzip", Math.round(performance.now() - t0)]);
     await yieldTask();
-    timedChunk("rnd load (embeddings + morphology)", () => {
-      booted!.home.addFiles(files);
-      booted!.engine.loadRndData();
-    });
+    // Downloaded; now the expensive part. Parsing the embedding and the
+    // morphology is ~17 MB of text, seconds of it on a phone — one artifact
+    // per macrotask so a tap in between is still answered, and the shell is
+    // told we've moved from downloading to preparing (the bar sat at 0% and
+    // the study sheet said "— loading —" through the whole thing).
+    self.postMessage({ type: "rndPreparing" });
+    booted!.home.addFiles(files);
+    for (let step = 0; ; step++) {
+      await yieldTask();
+      const more = timedChunk(`rnd load step ${step}`, () => booted!.engine.loadRndStep(step));
+      if (!more) break;
+    }
     await warmChunked();
     self.postMessage({ type: "rndReady" });
   })().catch((e) => {
