@@ -3,6 +3,7 @@
   // every card with Review due / Coverage & activity, the SM-2 review drill
   // (first letters / blank-out slider / typed recall + four grades), and the
   // stats view (8-section coverage rollup + reviews-per-day activity).
+  import { untrack } from "svelte";
   import { getSession } from "../state/session.svelte";
   import { nowStamp } from "../engine/StudyEngine";
   import { dispatchLink } from "../study/links";
@@ -14,14 +15,23 @@
   const view = $derived(s.memorize);
 
   // ── hub data ──
-  const coverage = $derived.by(() => {
+  // ONE timestamp per opening of the dialog. `nowStamp()` is second-granularity
+  // and lands in the read-through cache KEY, so computing it inside these reads
+  // minted a fresh key every second: the answer went null, `dueRefs` fell back
+  // to [], and the reset effect below re-ran — about once a second it threw the
+  // reader out of "Type it" and discarded what they had typed, which made typed
+  // recall unusable and the e2e drill tests flaky (feedback 2026-07-27).
+  // Keyed on the dialog being OPEN, not on `view`, so hub→review keeps the same
+  // stamp and the queue snapshot below still sees a resolved due list; and on
+  // studyEpoch, so a card just added or graded is scored against now.
+  const open = $derived(!!view);
+  const stamp = $derived.by(() => {
     void s.studyEpoch;
-    return view ? s.q("memoryCoverage", nowStamp()) : null;
+    return open ? nowStamp() : "";
   });
-  const dueRefs = $derived.by(() => {
-    void s.studyEpoch;
-    return view ? ((s.q("memoryDue", nowStamp())?.refs ?? []) as string[]) : [];
-  });
+
+  const coverage = $derived(open ? s.q("memoryCoverage", stamp) : null);
+  const dueRefs = $derived(open ? ((s.q("memoryDue", stamp)?.refs ?? []) as string[]) : []);
 
   function close(): void {
     s.memorize = null;
@@ -39,14 +49,23 @@
   let typed = $state("");
   let score = $state<any>(null);
 
+  // ENTERING the drill resets it, and nothing else does. The queue is
+  // snapshotted once on entry — Android does the same with `remember(only)`
+  // ("this session works the queue as it stood on entry"), and grading walks
+  // `qi` forward itself. The reads are untracked on purpose: tracking `dueRefs`
+  // here meant any study refresh — a grade landing, Strong's arriving, the
+  // per-second stamp churn above — wiped the reader's typing, dropped the mode
+  // back to "First letters" and sent them to the head of the queue.
   $effect(() => {
-    if (view?.view === "review") {
-      queue = view.only ? [view.only] : [...dueRefs];
+    const v = view;
+    if (v?.view !== "review") return;
+    untrack(() => {
+      queue = v.only ? [v.only] : [...dueRefs];
       qi = 0;
       mode = "first";
       typed = "";
       score = null;
-    }
+    });
   });
 
   const currentRef = $derived(view?.view === "review" ? queue[qi] : undefined);

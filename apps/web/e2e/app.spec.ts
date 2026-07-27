@@ -674,10 +674,56 @@ test("checking a typed recall scores it (a perfect copy is 100%)", async ({ page
   await page.getByRole("button", { name: "Check" }).click();
   await expect(page.locator(".accuracy")).toHaveText("100% recalled");
 
-  // A wrong answer must still score — 0% is only ever a real miss.
+  // A SECOND check must rescore rather than leave the first score on screen.
+  // Pinned to the exact figure on purpose: `not.toHaveText("100% recalled")`
+  // also passes when `.accuracy` has gone MISSING, so it would greet a check
+  // that silently cleared the score as a success. Of the 25 words of John
+  // 3:16 this wrong answer shares only "the" — 1/25 = 4%.
   await page.locator("textarea").fill("nothing like the verse at all");
   await page.getByRole("button", { name: "Check" }).click();
-  await expect(page.locator(".accuracy")).not.toHaveText("100% recalled");
+  await expect(page.locator(".accuracy")).toHaveText("4% recalled");
+});
+
+// A reader who pauses to think must not lose their work. `nowStamp()` is
+// second-granularity and lands in the read-through cache KEY, so the due-list
+// read minted a fresh key every second, fell back to [], and re-ran the reset
+// effect — clearing the textarea and dropping the mode back to "First letters"
+// about once a second, which made typed recall unusable (feedback 2026-07-27).
+// The dwell is a fixed 2.5s on purpose: it is not a performance budget but a
+// span that must straddle the one-second boundary the churn ran on.
+test("a typed recall survives a pause and a background study refresh", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.engine.memoryAdd("John 3:16", new Date().toISOString());
+  });
+  await page.getByRole("button", { name: "Memorize" }).click();
+  await page.getByRole("button", { name: "Review due", exact: false }).click();
+  await page.getByRole("button", { name: "Type it" }).click();
+
+  const drilled = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    return (await s.engine.memoryDrill("John 3:16", 0))?.text as string;
+  });
+  await page.locator("textarea").fill(drilled);
+
+  await page.waitForTimeout(2_500);
+  await expect(page.locator("textarea")).toHaveValue(drilled);
+  await expect(page.locator(".modes button", { hasText: "Type it" })).toHaveClass(/checked/);
+  await expect(page.locator(".pos")).toHaveText("1 / 1");
+
+  // Authoring landing mid-drill drops every cached study read. The drill must
+  // keep its place, its mode and its text through that too.
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.engine.memoryAdd("Ps 1:1", new Date().toISOString());
+  });
+  await expect(page.locator("textarea")).toHaveValue(drilled);
+  await expect(page.locator(".pos")).toHaveText("1 / 1");
+
+  // Still live, not merely frozen: it scores.
+  await page.getByRole("button", { name: "Check" }).click();
+  await expect(page.locator(".accuracy")).toHaveText("100% recalled");
 });
 
 // A whole section as ONE card (2026-07-27): the hub lists one row labelled with
