@@ -29,6 +29,7 @@
 
 import { boot, type BootResult } from "./boot";
 import { fetchRndPack, fetchStage2Pack, setAssetBase } from "./pack";
+import { PERF } from "./perf";
 import { measureFor, readerFont, fontExtent } from "../reader/measure";
 import {
   aboutBlocks,
@@ -43,6 +44,78 @@ import {
 } from "./StudyEngine";
 
 let booted: BootResult | null = null;
+/** Cost split of the most recent chapter layout — Settings → diagnostics. */
+let lastTurn: [string, number][] = [];
+
+// ── the turn cache ────────────────────────────────────────────────────────────
+// Laid-out chapters, keyed by everything the layout depends on. Highlights,
+// notes and the verse band are painted OVER the display list by the shell, so
+// authoring never invalidates this — only a width/font/spacing change does,
+// and that changes the key. Small and LRU: a handful of chapters is enough to
+// make paging back and forth free, without holding the canon in memory.
+const TURN_CACHE_MAX = 8;
+type LaidOut = { items: unknown[]; height: number };
+const turnCache = new Map<string, LaidOut>();
+
+interface LayoutReq {
+  book: string;
+  chapter: number;
+  font: number;
+  width: number;
+  lineSpacing: number;
+  versePerLine: boolean;
+}
+
+function layoutChapter(m: LayoutReq): LaidOut | null {
+  const key = `${m.book} ${m.chapter}|${m.font}|${m.width}|${m.lineSpacing}|${m.versePerLine}`;
+  const hit = turnCache.get(key);
+  if (hit) {
+    turnCache.delete(key); // re-insert to keep LRU order
+    turnCache.set(key, hit);
+    firstLayoutServed?.();
+    firstLayoutServed = null;
+    return hit;
+  }
+
+  const t0 = performance.now();
+  const font = readerFont(m.font);
+  const measure = measureFor(font);
+  booted!.wasm.setMeasure(measure);
+  const lineHeight = fontExtent(m.font) * m.lineSpacing;
+  const cfg: LayoutCfg = {
+    width: m.width,
+    lineHeight,
+    spaceWidth: measure(" "),
+    verseNumGap: measure(" ") * 1.4,
+    paraIndent: lineHeight * 0.9,
+    paraSpacing: lineHeight * 0.45,
+    versePerLine: m.versePerLine,
+  };
+  const t1 = performance.now();
+  const crossings0 = PERF ? booted!.wasm.measureCalls() : 0;
+  const dl = booted!.engine.layoutChapter(m.book, m.chapter, cfg);
+  firstLayoutServed?.();
+  firstLayoutServed = null;
+  const t2 = performance.now();
+  if (!dl) return null;
+  // `raw` parses the display-list JSON the core produced — the second of the
+  // two serialisation passes a chapter turn pays for.
+  const raw = dl.raw as LaidOut;
+  dl.free();
+  const t3 = performance.now();
+  if (PERF)
+    lastTurn = [
+      ["measure setup", Math.round(t1 - t0)],
+      ["core layout + text measurement", Math.round(t2 - t1)],
+      ["display-list JSON → objects", Math.round(t3 - t2)],
+      ["items", raw.items.length],
+      ["wasm→JS measure crossings", booted!.wasm.measureCalls() - crossings0],
+    ];
+
+  turnCache.set(key, raw);
+  if (turnCache.size > TURN_CACHE_MAX) turnCache.delete(turnCache.keys().next().value!);
+  return raw;
+}
 
 // ── background-load scheduling ────────────────────────────────────────────────
 
@@ -206,30 +279,19 @@ self.onmessage = async (ev: MessageEvent) => {
         break;
       }
       case "layout": {
-        const eng = booted!.engine;
-        const font = readerFont(m.font);
-        const measure = measureFor(font);
-        booted!.wasm.setMeasure(measure);
-        const lineHeight = fontExtent(m.font) * m.lineSpacing;
-        const cfg: LayoutCfg = {
-          width: m.width,
-          lineHeight,
-          spaceWidth: measure(" "),
-          verseNumGap: measure(" ") * 1.4,
-          paraIndent: lineHeight * 0.9,
-          paraSpacing: lineHeight * 0.45,
-          versePerLine: m.versePerLine,
-        };
-        const dl = eng.layoutChapter(m.book, m.chapter, cfg);
-        firstLayoutServed?.();
-        firstLayoutServed = null;
-        if (!dl) {
-          reply(null);
-          break;
-        }
-        const raw = dl.raw as { items: unknown[]; height: number };
-        dl.free();
-        reply(raw);
+        reply(layoutChapter(m));
+        break;
+      }
+      case "prefetch": {
+        // Warm the turn cache without shipping the display list back over
+        // postMessage — the shell asks for the neighbouring chapters at idle,
+        // so the next page turn is a cache hit.
+        layoutChapter(m);
+        reply(null);
+        break;
+      }
+      case "layoutTrace": {
+        reply(lastTurn);
         break;
       }
       case "fontExtent": {

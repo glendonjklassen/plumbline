@@ -85,6 +85,15 @@ export class EngineRpc {
   ): Promise<any> {
     return this.#send({ op: "layout", book, chapter, ...o });
   }
+  /** Lay a chapter out into the worker's turn cache without shipping it back
+   *  — called at idle for the chapters on either side of the reader. */
+  prefetch(
+    book: string,
+    chapter: number,
+    o: { font: number; width: number; lineSpacing: number; versePerLine: boolean },
+  ): Promise<void> {
+    return this.#send({ op: "prefetch", book, chapter, ...o });
+  }
   fontExtent(px: number): Promise<number> {
     return this.#send({ op: "fontExtent", px });
   }
@@ -94,6 +103,10 @@ export class EngineRpc {
   /** Per-stage boot timings ([label, ms]) measured on-device. */
   bootTrace(): Promise<[string, number][]> {
     return this.#send({ op: "bootTrace" });
+  }
+  /** Cost split of the most recent chapter layout, measured on-device. */
+  layoutTrace(): Promise<[string, number][]> {
+    return this.#send({ op: "layoutTrace" });
   }
   exportUserData(): Promise<[string, Uint8Array][]> {
     return this.#send({ op: "export" });

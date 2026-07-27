@@ -797,9 +797,13 @@ base-relative).
     separate popups with the bar-chart activity.
   - Phone-idiom (no desktop port intended): **bottom nav bar** (Read · Explore
     · Present · Memorize, one-handed reach; `ui/NavIcons.kt`), the **passage
-    navigator** (`ui/BookNav.kt`: OT/NT → book → chapter → verse tap grids,
-    replacing the book dropdown; ReaderPane scrolls the target verse into
-    view), the near-fullscreen-expandable study sheet, and the reader
+    navigator** (`ui/BookNav.kt`: OT/NT → book → chapter tap grids, replacing
+    the book dropdown — **both shells**, and there is no verse stage since
+    2026-07-26: sizing that grid meant probing the engine for the chapter's
+    verse count, so every chapter tap waited on a round trip. Verse targeting
+    still arrives via links, cross-references and search, and ReaderPane
+    scrolls the target verse into view), the near-fullscreen-expandable study
+    sheet, and the reader
     whitespace fix (manifest MARGIN/MAX_COLUMN are logical units — density-
     scaled on Android).
 - **Compose parity (passes 1–3, 2026-07-24).** The Compose shell reached

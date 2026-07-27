@@ -182,13 +182,17 @@ test("phones clamp a restored multi-pane session to one pane", async ({ page }) 
   await expect(page.locator(".pane canvas")).toHaveCount(1);
 });
 
-test("passage navigator jumps to a verse", async ({ page }) => {
+test("passage navigator is two taps, book then chapter, with no waiting", async ({ page }) => {
+  // Every grid comes from the boot-prefetched TOC, so the chapter list for
+  // any book is on screen immediately. There is no verse step: it used to
+  // lay out the whole chapter just to count verses (2026-07-26).
   await boot(page);
   await page.locator(".nav .passage").first().click();
-  await page.getByRole("button", { name: "Genesis", exact: true }).click();
-  await page.getByRole("button", { name: "15", exact: true }).click();
-  await page.getByRole("button", { name: "6", exact: true }).click();
-  await expect(page.locator(".subtitle")).toContainText("Gen 15");
+  await page.getByRole("button", { name: "Joel", exact: true }).click();
+  // Joel's three chapters render synchronously — no round trip to the engine.
+  await expect(page.locator(".grid.nums button")).toHaveCount(3, { timeout: 1_000 });
+  await page.getByRole("button", { name: "3", exact: true }).click();
+  await expect(page.locator(".subtitle")).toContainText("Joel 3");
 });
 
 test("opening a weave splits to its passages; verse clicks stay responsive (freeze regression)", async ({

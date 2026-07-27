@@ -12,7 +12,6 @@
   import { untrack } from "svelte";
   import { getSession } from "../state/session.svelte";
   import { hitTest, itemVerse, MARGIN, paintChapter, verseExtents, type LayoutItem, type PaintOverlays } from "./paint";
-  import { idbApply } from "../engine/idb";
   import { nowStamp } from "../engine/StudyEngine";
 
   const MAX_COLUMN = 720;
@@ -103,31 +102,25 @@
             geom.set(it.verseNumber, { y: it.y, h: it.h });
         s.paneVerseGeom[paneIdx] = geom;
         untrack(clampScroll);
-        // The boot snapshot (TODO #28: no blank Bible page, ever): the
-        // primary pane's laid-out chapter persists so the NEXT launch paints
-        // it before the engine even exists.
-        if (paneIdx === 0)
-          void idbApply(
-            "cache",
-            new Map([
-              [
-                "lastLayout",
-                new TextEncoder().encode(
-                  JSON.stringify({
-                    book: pane.book,
-                    chapter: pane.chapter,
-                    fontPx,
-                    sideMargin,
-                    columnWidth,
-                    items: raw.items,
-                    height: raw.height,
-                  }),
-                ),
-              ],
-            ]),
-          );
+        untrack(prefetchNeighbours);
       });
   });
+
+  // Lay out the chapters on either side while the reader reads, so ‹ › and a
+  // swipe land on an already-laid-out page. Idle work behind the visible
+  // chapter, cancelled if the pane moves on first — the worker keeps them in
+  // its turn cache, and the shell never receives the display lists.
+  let prefetchTimer: ReturnType<typeof setTimeout> | null = null;
+  function prefetchNeighbours(): void {
+    if (prefetchTimer) clearTimeout(prefetchTimer);
+    const cfg = { font: fontPx, width: columnWidth, lineSpacing, versePerLine };
+    const { book, chapter } = pane;
+    const count = s.chapterCount(book);
+    prefetchTimer = setTimeout(() => {
+      for (const c of [chapter + 1, chapter - 1])
+        if (c >= 1 && (count === 0 || c <= count)) void s.rpc.prefetch(book, c, cfg);
+    }, 400);
+  }
 
   // Scroll the navigation target into view on each fresh layout, until the
   // user scrolls this pane themselves (wheel/touch/keys clear pendingScroll)
@@ -529,6 +522,14 @@
     overflow-x: hidden;
     /* No scroll chaining into the page; pull-to-refresh stays off the text. */
     overscroll-behavior: contain;
+    /* Scroll natively but WITHOUT the classic scrollbar: the page is a canvas
+       of typeset scripture, and a grey gutter down the middle of a two-pane
+       spread is not what this should look like (feedback 2026-07-26). The
+       canon strip and the verse band carry position instead. */
+    scrollbar-width: none; /* Firefox */
+  }
+  .scroll::-webkit-scrollbar {
+    display: none; /* Chromium / WebKit */
   }
   .spacer {
     position: relative;

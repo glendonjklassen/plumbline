@@ -640,7 +640,7 @@ fun StudyScreen(
         }
         bookNavPane?.let { paneIdx ->
             BookNavScreen(
-                engine, toc, palette,
+                toc, palette,
                 currentBook = if (paneIdx == 1) secondBook else book,
                 onGo = { b, c, v ->
                     if (paneIdx == 1) {

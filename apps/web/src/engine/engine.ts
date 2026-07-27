@@ -5,6 +5,7 @@
 
 import { stash } from "./cache";
 import { assetUrl } from "./pack";
+import { PERF } from "./perf";
 import {
   ConsoleStdout,
   File,
@@ -26,6 +27,8 @@ export interface WasmEngine {
   withErrSlot<T>(f: (slot: number) => T): [T, string | null];
   /** Point layout text measurement at the shell's current font. */
   setMeasure(measure: (text: string) => number): void;
+  /** Number of wasm → JS text-measurement crossings so far (diagnostics). */
+  measureCalls(): number;
   /** The measure callback as a PlumblineMeasureFn value for plumbline_layout_* calls. */
   measureFnptr: number;
 }
@@ -49,6 +52,7 @@ export async function instantiate(homeRoot: Map<string, Directory | File>): Prom
   );
 
   let measure: (text: string) => number = (t) => t.length * 8;
+  let measureCalls = 0;
 
   // Stash the module bytes as they land: on a first visit this worker may not
   // be SW-controlled yet, and an uncached engine means no offline launch.
@@ -59,7 +63,13 @@ export async function instantiate(homeRoot: Map<string, Directory | File>): Prom
   const instance = await WebAssembly.instantiate(source, {
     wasi_snapshot_preview1: wasi.wasiImport,
     plumbline: {
-      plumbline_js_measure: (_ctx: number, ptr: number) => measure(cstrAt(ptr)),
+      // Every text run the layout engine measures crosses wasm → JS here and
+      // decodes a C string on the way. The counter is how we know whether a
+      // slow chapter turn is the layout algorithm or this boundary.
+      plumbline_js_measure: (_ctx: number, ptr: number) => {
+        if (PERF) measureCalls++;
+        return measure(cstrAt(ptr));
+      },
     },
   });
   const exports = instance.exports as WasmEngine["exports"];
@@ -115,6 +125,7 @@ export async function instantiate(homeRoot: Map<string, Directory | File>): Prom
     setMeasure(m) {
       measure = m;
     },
+    measureCalls: () => measureCalls,
     measureFnptr: (exports.plumbline_web_measure_fnptr as () => number)(),
   };
 }

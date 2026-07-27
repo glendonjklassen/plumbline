@@ -2,6 +2,7 @@
   // One Settings dialog (Android IA): analysis switches, theme, text size /
   // margin / line-spacing sliders, copy format, bundled stock set.
   import { getSession } from "../state/session.svelte";
+  import { PERF } from "../engine/perf";
   import { zipRead, zipWrite } from "../engine/zip";
   import { idbApply } from "../engine/idb";
   import { nowStamp } from "../engine/StudyEngine";
@@ -85,10 +86,14 @@
     location.reload(); // the engine re-opens with/without the stock set
   }
 
-  // Fresh boot timings whenever the dialog opens (the background stages keep
-  // appending after boot — Strong's, warm steps, the analysis pack).
+  // Fresh timings whenever the dialog opens: the background stages keep
+  // appending to the boot trace (Strong's, warm steps, the analysis pack),
+  // and the turn split describes whichever chapter was last laid out — turn
+  // a few pages, then open this.
   $effect(() => {
-    if (s.showSettings) void s.rpc.bootTrace().then((t) => (s.bootTrace = t));
+    if (!PERF || !s.showSettings) return;
+    void s.rpc.bootTrace().then((t) => (s.bootTrace = t));
+    void s.rpc.layoutTrace().then((t) => (s.turnTrace = t));
   });
 
   const themes = [
@@ -233,7 +238,7 @@
         The same zip restores on Android and the web. Restoring replaces items with the same
         name; everything else is kept.
       </p>
-      {#if s.bootTrace.length}
+      {#if PERF && s.bootTrace.length}
         <hr />
         <details class="diag">
           <summary>Boot diagnostics — this device</summary>
@@ -244,6 +249,16 @@
               {/each}
             </tbody>
           </table>
+          {#if s.turnTrace.length}
+            <p class="diag-sub">Last chapter turn</p>
+            <table>
+              <tbody>
+                {#each s.turnTrace as [stage, n], i (i)}
+                  <tr><td>{stage}</td><td class="ms">{n}{stage.startsWith("items") || stage.startsWith("wasm") ? "" : " ms"}</td></tr>
+                {/each}
+              </tbody>
+            </table>
+          {/if}
         </details>
       {/if}
     </div>
@@ -299,6 +314,12 @@
     font-size: 13px;
     color: var(--faded, #8a8276);
     cursor: pointer;
+  }
+  .diag-sub {
+    margin-top: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--faded, #8a8276);
   }
   .diag table {
     width: 100%;

@@ -15,6 +15,7 @@
 import { instantiate, type WasmEngine } from "./engine";
 import { buildHome, loadPersistedIdxcache, type VirtualHome } from "./home";
 import { fetchManifest, fetchPack, type PackManifest } from "./pack";
+import { PERF } from "./perf";
 import { StudyEngine } from "./StudyEngine";
 
 export interface BootPhase {
@@ -37,6 +38,7 @@ export interface BootResult {
 export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult> {
   const trace: [string, number][] = [];
   const timed = async <T>(label: string, f: () => T | Promise<T>): Promise<T> => {
+    if (!PERF) return f();
     const t0 = performance.now();
     const v = await f();
     trace.push([label, Math.round(performance.now() - t0)]);

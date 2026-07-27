@@ -1,12 +1,13 @@
 // The passage navigator (product feedback, 2026-07-24): the book dropdown
-// replaced by tap stages — Testament (OT | NT) → book grid → chapter grid →
-// verse grid — every step a big touch target. Tapping a verse jumps the reader
-// straight to it (ReaderPane scrolls the verse into view); "Whole chapter"
-// skips the verse stage. Fullscreen overlay; back steps a stage, then closes.
+// replaced by tap stages — Testament (OT | NT) → book grid → chapter grid —
+// every step a big touch target. Fullscreen overlay; back steps a stage, then
+// closes.
 //
-// Verse counts aren't a core endpoint; a chapter's count is resolved by binary
-// search over VerseJson existence (≤ ~9 probes even for Psalm 119) off the main
-// thread.
+// The verse stage was dropped 2026-07-26: book and chapter is the navigation
+// people actually use, and verse counts aren't a core endpoint — the stage had
+// to binary-search VerseJson existence to size its grid, so every chapter tap
+// showed a "…" while the probes ran. Verse targeting still arrives through
+// links, cross-references and search, which already carry a verse.
 //
 // Author D (Compose UI).
 
@@ -48,10 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.plumbline.StudyEngine
 import dev.plumbline.TocBook
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /** Canon position of the OT/NT divide (Gen..Mal = 39 books). The core's
  *  CanonSegments carries the same figure; the canon is frozen, so the constant
@@ -60,12 +58,11 @@ private const val OT_BOOKS = 39
 
 /**
  * The fullscreen passage navigator. [currentBook] preselects the testament tab.
- * [onGo] fires with the chosen (book id, chapter, verse or null for the whole
- * chapter) and the caller closes the overlay.
+ * [onGo] fires with the chosen (book id, chapter) — the verse is always null
+ * now that the navigator stops at the chapter — and the caller closes it.
  */
 @Composable
 fun BookNavScreen(
-    engine: StudyEngine,
     toc: List<TocBook>,
     palette: ReaderPalette,
     currentBook: String,
@@ -75,11 +72,9 @@ fun BookNavScreen(
     val currentIdx = toc.indexOfFirst { it.id == currentBook }
     var newTestament by remember { mutableStateOf(currentIdx >= OT_BOOKS) }
     var pickedBook by remember { mutableStateOf<TocBook?>(null) }
-    var pickedChapter by remember { mutableStateOf<Int?>(null) }
 
     fun stepBack() {
         when {
-            pickedChapter != null -> pickedChapter = null
             pickedBook != null -> pickedBook = null
             else -> onClose()
         }
@@ -95,9 +90,7 @@ fun BookNavScreen(
                 IconButton(onClick = ::stepBack) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = palette.ink)
                 }
-                val crumb = pickedBook?.let { b ->
-                    b.name + (pickedChapter?.let { " $it" } ?: "")
-                } ?: "Go to…"
+                val crumb = pickedBook?.name ?: "Go to…"
                 Text(crumb, color = palette.ink, fontSize = 17.sp)
                 Spacer(Modifier.weight(1f))
                 if (pickedBook == null) {
@@ -113,21 +106,18 @@ fun BookNavScreen(
         HorizontalDivider(color = palette.rule)
 
         val book = pickedBook
-        val chapter = pickedChapter
-        when {
-            book == null -> BookGrid(
+        if (book == null) {
+            BookGrid(
                 books = if (newTestament) toc.drop(OT_BOOKS) else toc.take(OT_BOOKS),
                 current = currentBook, palette = palette,
                 onPick = { pickedBook = it },
             )
-            chapter == null -> NumberGrid(
+        } else {
+            // Chapter counts ride in on the TOC, so this grid is instant.
+            NumberGrid(
                 count = book.chapters.toInt(), palette = palette,
                 header = "${book.name} — chapter",
-                onPick = { pickedChapter = it },
-            )
-            else -> VerseGrid(
-                engine = engine, book = book, chapter = chapter, palette = palette,
-                onPick = { v -> onGo(book.id, chapter, v) },
+                onPick = { chapter -> onGo(book.id, chapter, null) },
             )
         }
     }
@@ -188,65 +178,6 @@ private fun NumberGrid(
         ) {
             items((1..count).toList()) { n ->
                 NumberCell(n.toString(), palette) { onPick(n) }
-            }
-        }
-    }
-}
-
-/** The verse stage: "Whole chapter" first, then every verse as a tap target. */
-@Composable
-private fun VerseGrid(
-    engine: StudyEngine,
-    book: TocBook,
-    chapter: Int,
-    palette: ReaderPalette,
-    onPick: (verse: Int?) -> Unit,
-) {
-    var count by remember(book.id, chapter) { mutableStateOf<Int?>(null) }
-    LaunchedEffect(book.id, chapter) {
-        count = withContext(Dispatchers.Default) {
-            fun exists(v: Int): Boolean = runCatching {
-                synchronized(engine) { engine.VerseJson("${book.id} $chapter:$v") }
-            }.getOrNull() != null
-            if (!exists(1)) {
-                0
-            } else {
-                var lo = 1          // known to exist
-                var hi = 200        // > Psalm 119's 176 — known not to exist
-                while (hi - lo > 1) {
-                    val mid = (lo + hi) / 2
-                    if (exists(mid)) lo = mid else hi = mid
-                }
-                lo
-            }
-        }
-    }
-
-    Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("${book.name} $chapter — verse", color = palette.faded, fontSize = 13.sp)
-            Spacer(Modifier.weight(1f))
-            TextButton(onClick = { onPick(null) }) { Text("Whole chapter", color = palette.gold) }
-        }
-        val n = count
-        if (n == null) {
-            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                Text("…", color = palette.faded)
-            }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 56.dp),
-                modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items((1..n).toList()) { v ->
-                    NumberCell(v.toString(), palette) { onPick(v) }
-                }
             }
         }
     }

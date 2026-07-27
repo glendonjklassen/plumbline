@@ -1,7 +1,15 @@
 <script lang="ts">
-  // Passage navigator (Android BookNav parity): OT/NT → book → chapter →
-  // verse tap grids, replacing dropdown + spinner. Verse counts come from a
-  // throwaway layout of the chosen chapter (wasm layout is ~1ms).
+  // Passage navigator: OT/NT → book → chapter, and you're there. Two taps.
+  //
+  // There is no verse step (2026-07-26). Picking a verse cost a throwaway
+  // layout of the whole chapter just to count its verse numbers — an async
+  // round trip on every chapter tap, which on a phone is a visible wait
+  // before the grid even appears. Book and chapter is the navigation people
+  // actually use; verse targeting still happens through links, cross-refs
+  // and search, which arrive with a verse already in hand.
+  //
+  // Everything this dialog needs is the TOC, prefetched at boot — so the
+  // grids are synchronous, and Joel's chapter count is on screen instantly.
   import { getSession } from "../state/session.svelte";
 
   const s = getSession();
@@ -10,42 +18,20 @@
   const seg = $derived(s.q("canonSegments"));
 
   let book = $state<string | null>(null);
-  let chapter = $state<number | null>(null);
 
   const open = $derived(s.bookNavFor !== null);
   $effect(() => {
-    if (open) {
-      book = null;
-      chapter = null;
-    }
+    if (open) book = null;
   });
 
   const chapterCount = $derived(book ? s.chapterCount(book) || 1 : 0);
 
-  // Verse count via a throwaway worker layout (async; the grid fills when
-  // the reply lands — BookNav opens rarely, and never blocks).
-  let verseCount = $state(0);
-  $effect(() => {
-    if (!book || !chapter) {
-      verseCount = 0;
-      return;
-    }
-    const b = book;
-    const c = chapter;
-    s.rpc
-      .layout(b, c, { font: 18, width: 600, lineSpacing: 1.35, versePerLine: false })
-      .then((raw: any) => {
-        if (book === b && chapter === c)
-          verseCount = raw?.items.filter((it: any) => it.kind === "verseNumber").length ?? 0;
-      });
-  });
-
   function close(): void {
     s.bookNavFor = null;
   }
-  function go(verse: number | null): void {
-    if (!book || !chapter || s.bookNavFor === null) return;
-    s.navigate(s.bookNavFor, book, chapter, verse);
+  function go(chapter: number): void {
+    if (!book || s.bookNavFor === null) return;
+    s.navigate(s.bookNavFor, book, chapter);
     close();
   }
 
@@ -58,9 +44,7 @@
   <div class="backdrop" onclick={close}></div>
   <div class="dialog" role="dialog" aria-modal="true">
     <div class="bar">
-      {#if chapter}
-        <button class="crumb" onclick={() => (chapter = null)}>‹ {book} {chapter}</button>
-      {:else if book}
+      {#if book}
         <button class="crumb" onclick={() => (book = null)}>‹ {book}</button>
       {:else}
         <span class="crumb-title">Go to…</span>
@@ -82,22 +66,11 @@
             <button onclick={() => (book = b.id)}>{b.name ?? b.id}</button>
           {/each}
         </div>
-      {:else if !chapter}
+      {:else}
         <p class="sect">{book} — chapter</p>
         <div class="grid nums">
           {#each Array.from({ length: chapterCount }, (_, i) => i + 1) as c (c)}
-            <button onclick={() => (chapter = c)}>{c}</button>
-          {/each}
-        </div>
-      {:else}
-        <p class="sect">
-          {book}
-          {chapter} — verse
-          <button class="whole" onclick={() => go(null)}>whole chapter</button>
-        </p>
-        <div class="grid nums">
-          {#each Array.from({ length: verseCount }, (_, i) => i + 1) as v (v)}
-            <button onclick={() => go(v)}>{v}</button>
+            <button onclick={() => go(c)}>{c}</button>
           {/each}
         </div>
       {/if}
@@ -161,13 +134,6 @@
     display: flex;
     align-items: baseline;
     gap: 12px;
-  }
-  .whole {
-    font-size: 12px;
-    text-transform: none;
-    letter-spacing: 0;
-    color: var(--gold, #9e7d38);
-    text-decoration: underline;
   }
   .grid {
     display: grid;
