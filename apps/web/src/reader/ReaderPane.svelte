@@ -33,6 +33,9 @@
 
   let items = $state<LayoutItem[]>([]);
   let contentH = $state(0);
+  /** Which chapter `items` describes — the guard against painting one
+   *  chapter's text under another's name. */
+  let shownKey = "";
 
   const fontPx = $derived(Number(s.config.bodySize ?? 18));
   const sideMargin = $derived(Number(s.config.sideMargin ?? 28));
@@ -84,6 +87,21 @@
   $effect(() => {
     if (!pane || cssW <= 0) return;
     const seq = ++layoutSeq;
+    // Moving to a DIFFERENT chapter drops the old display list at once. The
+    // nav strip and header change the instant the reader taps, so holding the
+    // previous chapter on the canvas until the layout returns showed John's
+    // text under a header reading Acts — which reads as broken (feedback
+    // 2026-07-26). A re-layout of the SAME chapter (resize, zoom, spacing)
+    // keeps its text on screen: there is nothing stale about it.
+    const key = `${pane.book} ${pane.chapter}`;
+    if (key !== shownKey) {
+      untrack(() => {
+        shownKey = key;
+        items = [];
+        contentH = 0;
+        s.paneVerseGeom[paneIdx] = new Map();
+      });
+    }
     s.rpc
       .layout(pane.book, pane.chapter, {
         font: fontPx,

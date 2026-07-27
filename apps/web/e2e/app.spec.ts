@@ -372,3 +372,36 @@ test("the reader scrolls natively, and the pane follows both ways", async ({ pag
   await page.evaluate(() => ((window as any).__plumbline.panes[0].scrollY = 40));
   await expect.poll(async () => scroller.evaluate((el) => Math.round(el.scrollTop))).toBe(40);
 });
+
+test("a chapter turn never shows the old text under the new name", async ({ page }) => {
+  // The nav strip and header change the instant the reader taps, but the
+  // display list arrives from the worker. Holding the previous chapter on the
+  // canvas meanwhile put John's text under a header reading Acts, which reads
+  // as broken (feedback 2026-07-26). Slowing the layout makes that in-between
+  // state observable; the published verse geometry is what the canvas paints.
+  await boot(page);
+  // The first chapter must actually be ON SCREEN before we navigate away —
+  // without this the assertion below passes vacuously against the bug, which
+  // is exactly how the first version of this test fooled me.
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__plumbline.paneVerseGeom[0]?.size ?? 0), {
+      timeout: 30_000,
+    })
+    .toBeGreaterThan(0);
+
+  const during = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    const orig = s.rpc.layout.bind(s.rpc);
+    s.rpc.layout = (...a: unknown[]) =>
+      new Promise((res) => setTimeout(() => orig(...a).then(res), 1_500));
+    s.navigate(0, "Rev", 7);
+    await new Promise((r) => setTimeout(r, 500)); // inside the slow window
+    const staleVerses = s.paneVerseGeom[0]?.size ?? 0;
+    s.rpc.layout = orig;
+    return { pane: `${s.panes[0].book} ${s.panes[0].chapter}`, staleVerses };
+  });
+  expect(during.pane).toBe("Rev 7");
+  expect(during.staleVerses).toBe(0); // nothing of the previous chapter left
+  // …and the header shows the book's NAME, never its OSIS id ("Rev 7").
+  await expect(page.locator(".subtitle")).toHaveText("Revelation 7", { timeout: 30_000 });
+});
