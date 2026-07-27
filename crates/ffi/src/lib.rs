@@ -119,6 +119,10 @@ pub struct PlumblineEngine {
     /// open is paid every time). First access builds; `warm_indexes` forces
     /// them right after the shell hands its UI over, off-thread.
     search_ix: OnceLock<SearchIx>,
+    /// Partially-folded search index, for the web's sliced warm-up
+    /// (`plumbline_engine_warm_step`). A Mutex because Android may call the
+    /// ABI from more than one thread; the web worker is single-threaded.
+    search_partial: std::sync::Mutex<Option<search::SearchIxBuilder>>,
     occ_ix: OnceLock<OccurrenceIx>,
     /// The rendering lens: code → English renderings and surface word → codes,
     /// both corpus-derived and immutable after open (like `occ_ix`).
@@ -183,6 +187,7 @@ impl PlumblineEngine {
             corpus,
             strongs: strongs_cell,
             search_ix: OnceLock::new(),
+            search_partial: std::sync::Mutex::new(None),
             occ_ix: OnceLock::new(),
             renderings: OnceLock::new(),
             home,
@@ -282,6 +287,27 @@ impl PlumblineEngine {
             ix.attach_notes(&self.corpus, &self.study_read().notes);
             ix
         })
+    }
+
+    /// Fold up to `n` more verses into the search index, returning 1 while
+    /// work remains and 0 once it is built and installed. The web shell's
+    /// sliced warm-up (`plumbline_engine_warm_step`); a no-op once the index
+    /// exists, whoever built it.
+    fn warm_search_slice(&self, n: usize) -> i32 {
+        if self.search_ix.get().is_some() {
+            return 0;
+        }
+        let Ok(mut guard) = self.search_partial.lock() else {
+            return 0; // poisoned: leave it to the build-on-first-use path
+        };
+        let b = guard.get_or_insert_with(search::SearchIxBuilder::default);
+        if b.feed(&self.corpus, n) {
+            return 1;
+        }
+        let mut ix = guard.take().expect("builder present").finish();
+        ix.attach_notes(&self.corpus, &self.study_read().notes);
+        let _ = self.search_ix.set(ix);
+        0
     }
 
     /// The occurrence index, built on first use.

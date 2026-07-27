@@ -38,56 +38,37 @@ pub extern "C" fn plumbline_web_measure_fnptr() -> PlumblineMeasureFn {
     Some(measure_trampoline)
 }
 
-/// Warm ONE lazy index — the same set
-/// [`plumbline_engine_warm_indexes`](crate::plumbline_engine_warm_indexes)
-/// builds, split so the single-threaded engine worker can warm between RPCs
-/// instead of stalling them behind one long call (a mid-warm layout request
-/// otherwise waits the whole warm out). Returns 1 while `step` named an index
-/// (built now, already built, or its build panicked — keep stepping), 0 once
-/// past the end or on a null engine. Idempotent per step (`OnceLock`-guarded).
+/// Do one SLICE of the web shell's warm-up. Returns 1 while work remains, 0
+/// when there is nothing left (or the engine is null). Idempotent.
+///
+/// Only the search index is pre-built, and it is built a slice of verses at a
+/// time. Two measurements drove that (a 2026 flagship phone, 2026-07-26):
+///
+///  - Warming every index cost ~28 s of worker CPU after boot, 12 s of it on
+///    machine-tier indexes the reader hadn't switched on. Everything except
+///    search now builds on first use — the study panel already shows a
+///    loading state, and a reader who never opens a concept map never pays
+///    for one. Search is the exception because the search box is expected to
+///    answer the first keystroke.
+///  - The fold ran as ONE 4.6 s block. This thread also answers layout and
+///    taps, so a page turn during the warm waited it out. Slices give the
+///    worker a chance to serve those between calls; `step` is ignored, since
+///    progress lives in the engine's partial builder.
+///
+/// Android keeps [`plumbline_engine_warm_indexes`](crate::plumbline_engine_warm_indexes):
+/// native builds all of this in well under a second.
 ///
 /// # Safety
 /// `engine` is a live engine or null.
 #[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_warm_step(engine: *const PlumblineEngine, step: u32) -> i32 {
+pub unsafe extern "C" fn plumbline_engine_warm_step(engine: *const PlumblineEngine, _step: u32) -> i32 {
     let Some(e) = (unsafe { engine.as_ref() }) else {
         return 0;
     };
-    guard(1, || match step {
-        0 => {
-            e.search_ix();
-            1
-        }
-        1 => {
-            e.occ_ix();
-            1
-        }
-        2 => {
-            e.renderings();
-            1
-        }
-        3 => {
-            e.xref_ix();
-            1
-        }
-        4 => {
-            e.bridge();
-            1
-        }
-        5 => {
-            e.concept();
-            1
-        }
-        6 => {
-            e.leitwort();
-            1
-        }
-        7 => {
-            e.verse_sim();
-            1
-        }
-        _ => 0,
-    })
+    // ~2k verses a slice: enough that the per-call overhead disappears, short
+    // enough that a tap waits milliseconds rather than seconds.
+    const SLICE: usize = 2048;
+    guard(0, || e.warm_search_slice(SLICE))
 }
 
 /// Allocate `len` bytes the shell will fill with a NUL-terminated UTF-8

@@ -21,7 +21,7 @@
     {/if}
     <div class="list">
       {#each history as h, i (i)}
-        <button onclick={() => open(h.book, h.chapter)}>{h.book} {h.chapter}</button>
+        <button onclick={() => open(h.book, h.chapter)}>{s.bookName(h.book)} {h.chapter}</button>
       {/each}
     </div>
   </div>

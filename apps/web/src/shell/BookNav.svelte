@@ -45,7 +45,7 @@
   <div class="dialog" role="dialog" aria-modal="true">
     <div class="bar">
       {#if book}
-        <button class="crumb" onclick={() => (book = null)}>‹ {book}</button>
+        <button class="crumb" onclick={() => (book = null)}>‹ {s.bookName(book)}</button>
       {:else}
         <span class="crumb-title">Go to…</span>
       {/if}
@@ -67,7 +67,7 @@
           {/each}
         </div>
       {:else}
-        <p class="sect">{book} — chapter</p>
+        <p class="sect">{s.bookName(book)} — chapter</p>
         <div class="grid nums">
           {#each Array.from({ length: chapterCount }, (_, i) => i + 1) as c (c)}
             <button onclick={() => go(c)}>{c}</button>

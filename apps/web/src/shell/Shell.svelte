@@ -24,7 +24,7 @@
 
   const subtitle = $derived.by(() => {
     const p = s.panes[s.activePane];
-    return p ? `${p.book} ${p.chapter}` : "";
+    return p ? `${s.bookName(p.book)} ${p.chapter}` : "";
   });
 
   function openWordStudy(refKey: string, tokenIndex: number): void {

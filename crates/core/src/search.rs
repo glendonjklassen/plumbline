@@ -14,7 +14,7 @@
 //! the morphology layer" placeholder; `plumbline-rnd` will extend it.
 
 use crate::canon;
-use crate::corpus::Corpus;
+use crate::corpus::{Corpus, Verse};
 use crate::reference::VRef;
 use std::collections::{HashMap, HashSet};
 
@@ -40,47 +40,95 @@ pub struct SearchIx {
     notes_lc: Option<Vec<(usize, String)>>,
 }
 
+/// Resumable [`SearchIx`] construction: the same fold, a slice of verses at a
+/// time.
+///
+/// The whole-corpus fold takes seconds on a phone (4.6 s measured 2026-07-26),
+/// and it runs on the one thread that also answers layout and taps — so a
+/// reader who turned a page mid-build waited it out. Feeding it in slices lets
+/// the shell yield between them.
+#[derive(Debug, Default)]
+pub struct SearchIxBuilder {
+    word: HashMap<String, Vec<usize>>,
+    lemma_ix: HashMap<String, Vec<usize>>,
+    word_lem: HashMap<String, HashSet<String>>,
+    /// Next canonical verse ordinal to fold in.
+    next: usize,
+}
+
+impl SearchIxBuilder {
+    /// Fold in up to `n` more verses. Returns true while work remains.
+    pub fn feed(&mut self, corpus: &Corpus, n: usize) -> bool {
+        let end = (self.next + n).min(corpus.len());
+        for i in self.next..end {
+            let Some(v) = corpus.verse_at(i) else { continue };
+            self.fold(i, v);
+        }
+        self.next = end;
+        end < corpus.len()
+    }
+
+    /// Everything the fold has seen, finished into a usable index.
+    pub fn finish(self) -> SearchIx {
+        SearchIx::finalize(self.word, self.lemma_ix, self.word_lem)
+    }
+}
+
 impl SearchIx {
     /// Build the index in one fold over the corpus. Ported from
-    /// `buildSearchIx`.
+    /// `buildSearchIx`; slice it with [`SearchIxBuilder`] where blocking the
+    /// thread for seconds is not acceptable.
     pub fn build(corpus: &Corpus) -> Self {
-        let mut word: HashMap<String, Vec<usize>> = HashMap::new();
-        let mut lemma_ix: HashMap<String, Vec<usize>> = HashMap::new();
-        let mut word_lem: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut b = SearchIxBuilder::default();
+        while b.feed(corpus, 4096) {}
+        b.finish()
+    }
+}
 
-        for (i, v) in corpus.verses_iter().enumerate() {
-            let mut lemmas_here: HashSet<&str> = HashSet::new();
-            for t in &v.tokens {
-                let w = t.word.to_lowercase();
-                // Clone the key only on first sight of a distinct word (~13k)
-                // rather than per token (~1.6M).
-                match word.get_mut(&w) {
-                    Some(idxs) => idxs.push(i),
-                    None => {
-                        word.insert(w.clone(), vec![i]);
-                    }
-                }
-                if !t.strongs.is_empty() {
-                    // One probe on the common path (word already seen); the
-                    // key clone stays gated to first sight, as with `word`.
-                    let lems = match word_lem.get_mut(&w) {
-                        Some(lems) => lems,
-                        None => word_lem.entry(w.clone()).or_default(),
-                    };
-                    for s in &t.strongs {
-                        lemmas_here.insert(s.as_str());
-                        if !lems.contains(s.as_str()) {
-                            lems.insert(s.clone());
-                        }
-                    }
+impl SearchIxBuilder {
+    /// Fold ONE verse (at canonical index `i`) into the partial tables.
+    fn fold(&mut self, i: usize, v: &Verse) {
+        let mut lemmas_here: HashSet<&str> = HashSet::new();
+        for t in &v.tokens {
+            let w = t.word.to_lowercase();
+            // Clone the key only on first sight of a distinct word (~13k)
+            // rather than per token (~1.6M).
+            match self.word.get_mut(&w) {
+                Some(idxs) => idxs.push(i),
+                None => {
+                    self.word.insert(w.clone(), vec![i]);
                 }
             }
-            for s in lemmas_here {
-                lemma_ix.entry(s.to_string()).or_default().push(i);
+            if !t.strongs.is_empty() {
+                // One probe on the common path (word already seen); the key
+                // clone stays gated to first sight, as with `word`.
+                let lems = match self.word_lem.get_mut(&w) {
+                    Some(lems) => lems,
+                    None => self.word_lem.entry(w.clone()).or_default(),
+                };
+                for s in &t.strongs {
+                    lemmas_here.insert(s.as_str());
+                    if !lems.contains(s.as_str()) {
+                        lems.insert(s.clone());
+                    }
+                }
             }
         }
+        for s in lemmas_here {
+            self.lemma_ix.entry(s.to_string()).or_default().push(i);
+        }
+    }
+}
 
-        // postings are already ascending (verses iterated in order); collapse
+impl SearchIx {
+    /// Turn the folded tables into the finished index: dedup the postings,
+    /// derive the stem map, and order each word's lemmas.
+    fn finalize(
+        mut word: HashMap<String, Vec<usize>>,
+        mut lemma_ix: HashMap<String, Vec<usize>>,
+        word_lem: HashMap<String, HashSet<String>>,
+    ) -> Self {
+        // postings are already ascending (verses folded in order); collapse
         // consecutive duplicates from a word/lemma recurring in one verse.
         for v in word.values_mut() {
             v.dedup();
