@@ -11,8 +11,9 @@
   // making the wait short rather than disguising it.
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
   import { precacheShell } from "./engine/precache";
-  import { churchFromQuery, hasChurch, startsAsNewBeliever } from "./shell/church";
+  import { churchFromQuery, hasChurch, sharedAtRef, startsAsNewBeliever } from "./shell/church";
   import { initSession, type Session } from "./state/session.svelte";
+  import { dispatchLink } from "./study/links";
   import FirstRun from "./shell/FirstRun.svelte";
   import Shell from "./shell/Shell.svelte";
 
@@ -55,7 +56,10 @@
       } else if (shared) {
         s.sharedByChurch = shared; // shown in the welcome, not saved over theirs
       }
-      if (shared || s.startAsNewBeliever) {
+      // A shared PASSAGE opens where it points (`?at=Ps 23:1`) — the QR on the
+      // Present end card hands over the weave, not just the app (2026-07-27).
+      const at = sharedAtRef(location.search);
+      if (shared || s.startAsNewBeliever || at) {
         history.replaceState(null, "", location.pathname + location.hash);
       }
       // Returning readers never see the welcome, so without this a link's
@@ -67,6 +71,8 @@
       s.tones = tones?.tones ?? [];
       await Promise.all([s.fetchQ("toc"), s.fetchQ("canonSegments")]);
       session = s;
+      // After the TOC is in, so navigation clamps against a real canon.
+      if (at) void dispatchLink(s, `go:${at.replace(" ", ":")}`);
       // The on-device boot numbers (also under Settings → boot diagnostics).
       void rpc.bootTrace().then((t) => {
         s.bootTrace = t;

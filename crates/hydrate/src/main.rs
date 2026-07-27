@@ -101,12 +101,64 @@ fn main() -> ExitCode {
                 }
             }
         }
+        "vecb" => {
+            // Pack `concept-vectors.vec` (6.4 MB of decimal ASCII) into the f32
+            // form the loader prefers. The text costs an atof per float — 742,600
+            // of them — on EVERY launch, because the parsed embedding lives in
+            // memory and the web cannot keep it between launches; a phone paid
+            // seconds of that before any concept answer (feedback 2026-07-27).
+            let Some(from) = flag("--from") else {
+                eprintln!("vecb needs --from <concept-vectors.vec> [--out <file>]");
+                return ExitCode::from(2);
+            };
+            let out = flag("--out").unwrap_or_else(|| embed::vecb_path(&from));
+            let text = match std::fs::read_to_string(&from) {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("vecb: cannot read {}: {e}", from.display());
+                    return ExitCode::FAILURE;
+                }
+            };
+            let Some(bytes) = embed::encode_embedding_bin(&text) else {
+                eprintln!("vecb: {} is not a readable word2vec text body", from.display());
+                return ExitCode::FAILURE;
+            };
+            if let Err(e) = std::fs::write(&out, &bytes) {
+                eprintln!("vecb: cannot write {}: {e}", out.display());
+                return ExitCode::FAILURE;
+            }
+            // Verify by LOADING it, the way `check` verifies everything else —
+            // a file that writes but doesn't read back is worse than none, since
+            // the loader prefers it over the text.
+            let meta = {
+                let mut s = from.as_os_str().to_os_string();
+                s.push(".meta");
+                std::fs::read_to_string(PathBuf::from(s)).ok()
+            };
+            match embed::parse_embedding_bin(TOKENIZATION_VERSION, meta.as_deref(), &bytes, None) {
+                Some(e) => {
+                    println!(
+                        "wrote {} — {} vectors, dim {} ({} → {} bytes)",
+                        out.display(),
+                        e.size(),
+                        e.dim(),
+                        text.len(),
+                        bytes.len()
+                    );
+                    ExitCode::SUCCESS
+                }
+                None => {
+                    eprintln!("vecb: wrote {} but it does not load back", out.display());
+                    ExitCode::FAILURE
+                }
+            }
+        }
         "help" | "-h" | "--help" => {
             print!("{}", HELP);
             ExitCode::SUCCESS
         }
         other => {
-            eprintln!("unknown command '{other}'. Try: check | copy | web-cache | help");
+            eprintln!("unknown command '{other}'. Try: check | copy | web-cache | vecb | help");
             ExitCode::from(2)
         }
     }
@@ -128,6 +180,12 @@ plumbline-hydrate — assemble + verify the Plumbline data pack
       Parse the corpus and write its idxcache stamped for the web shell
       (mtime 0 — what the browser WASI shim reports), so the PWA's first
       boot skips the ~19 MB re-parse. Run by scripts/build-web-pack.mjs.
+
+  plumbline-hydrate vecb --from <concept-vectors.vec> [--out <file>]
+      Pack the concept vectors into the f32 form the loader prefers, so a
+      launch copies them instead of running 742,600 atof calls. The text
+      file stays valid — a home without the packed sibling still works.
+      Run by scripts/build-web-pack.mjs.
 
 The R&D artifacts are produced offline (see data-prep/README.md); this tool
 places and checks them, it does not train or generate.

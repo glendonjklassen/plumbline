@@ -64,6 +64,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -74,6 +75,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import dev.plumbline.StudyEngine
 import dev.plumbline.Thread1
 import dev.plumbline.Threads
@@ -154,6 +156,14 @@ fun PresentOverlay(
     var entries by remember { mutableStateOf<List<PresentEntry>>(emptyList()) }
     // null = overview; entries.size = the end card.
     var focus by remember { mutableStateOf<Int?>(null) }
+    var showQr by remember { mutableStateOf(false) }
+
+    // What the QR hands over: the app link (church + new-believer marker already
+    // baked in) plus the verse this thread opens on, so a scan lands the
+    // recipient IN the passage rather than wherever they last read.
+    val passageLink = remember(shareLink, entries) {
+        linkAtVerse(shareLink, entries.firstOrNull()?.ref)
+    }
 
     LaunchedEffect(Unit) {
         threads = withContext(Dispatchers.Default) {
@@ -194,16 +204,63 @@ fun PresentOverlay(
                 t.name, entries, serif,
                 onFocus = { focus = it },
                 onBack = { onThread(null) },
-                onShare = { sharePlain(context, shareText(t.name, entries, shareLink)) },
-                shareLink = shareLink,
+                onShare = { showQr = true },
+                shareLink = passageLink,
             )
             else -> PresentFocus(
                 engine, t.name, entries, focus!!, serif,
                 onStep = { i -> focus = i.coerceIn(0, entries.size) },
                 onOverview = { focus = null },
-                onShare = { sharePlain(context, shareText(t.name, entries, shareLink)) },
-                shareLink = shareLink,
+                onShare = { showQr = true },
+                shareLink = passageLink,
             )
+        }
+        if (showQr && t != null) {
+            PresentShareDialog(
+                threadName = t.name,
+                opensAt = entries.firstOrNull()?.display,
+                link = passageLink,
+                onCopy = { sharePlain(context, shareText(t.name, entries, passageLink)) },
+                onDismiss = { showQr = false },
+            )
+        }
+    }
+}
+
+/** Sharing a passage is a QR, not the system share sheet. Present is held up to
+ *  someone standing in front of you: a share sheet sends a wall of text into an
+ *  app they then have to leave, while a code they scan puts the passage on THEIR
+ *  phone, in the reader, at the verse (feedback 2026-07-27). The plain-text share
+ *  stays behind a button for when the person isn't in front of you. Twin of the
+ *  web's PresentHost share sheet. */
+@Composable
+private fun PresentShareDialog(
+    threadName: String,
+    opensAt: String?,
+    link: String,
+    onCopy: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.White)
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(threadName, color = Color(0xFF101010), fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                if (opensAt != null) "Scan to open at $opensAt" else "Scan to open in Plumbline",
+                color = Color(0xFF5A564E), fontSize = 13.sp, textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(16.dp))
+            QrCode(text = link, size = 220.dp)
+            Spacer(Modifier.height(16.dp))
+            Button(onClick = onCopy) { Text("Send the passages as text") }
+            Spacer(Modifier.height(4.dp))
+            TextButton(onClick = onDismiss) { Text("Done") }
         }
     }
 }
@@ -495,11 +552,13 @@ private fun EndCard(
             Text("Share these passages", fontSize = 16.sp)
         }
         Spacer(Modifier.height(26.dp))
-        // The take-home carries the app itself: scan → the hosted PWA.
+        // The take-home carries the PASSAGE, not just the app: scanning opens
+        // the hosted PWA at this thread's first verse (2026-07-27).
         QrCode(text = shareLink, size = 148.dp)
         Spacer(Modifier.height(8.dp))
         Text(
-            "scan for the app — free, offline, no account",
+            entries.firstOrNull()?.display?.let { "scan for $it — free, offline, no account" }
+                ?: "scan for the app — free, offline, no account",
             color = SunFaded, fontSize = 13.sp, fontFamily = serif, textAlign = TextAlign.Center,
         )
     }

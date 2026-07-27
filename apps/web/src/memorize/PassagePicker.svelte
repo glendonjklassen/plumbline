@@ -52,9 +52,16 @@
 
   function commit(): void {
     if (!start || !throughRef) return;
+    // Read the refs BEFORE close(). `start` and `throughRef` derive from
+    // `s.memorizePassageFrom`, which close() nulls — and a stale $derived
+    // recomputes the moment it is read again, so passing them after closing
+    // handed the engine null for both and every attempt came back "null or
+    // invalid argument" with no card written (feedback 2026-07-27).
+    const from = start;
+    const through = throughRef;
     const named = label;
     close();
-    void s.author("memoryAddPassage", start, throughRef, nowStamp()).then((err) => {
+    void s.author("memoryAddPassage", from, through, nowStamp()).then((err) => {
       s.showToast(err ?? `Memorizing ${named}`);
     });
   }

@@ -58,7 +58,7 @@ export function churchFromQuery(search: string): Church | null {
 export function shareUrl(
   base: string,
   church: Church | undefined | null,
-  opts: { startAsNewBeliever?: boolean } = {},
+  opts: { startAsNewBeliever?: boolean; at?: string | null } = {},
 ): string {
   const u = new URL(base);
   if (hasChurch(church)) {
@@ -67,12 +67,24 @@ export function shareUrl(
     if (church.url) u.searchParams.set("churchUrl", church.url);
   }
   if (opts.startAsNewBeliever) u.searchParams.set("start", "new");
+  // `at` opens the recipient straight at a verse — what a shared PASSAGE means.
+  // A refKey ("Ps 23:1") is the frozen compact form, so it travels as-is.
+  if (opts.at) u.searchParams.set("at", opts.at);
   return u.href;
 }
 
 /** Whether this link asks the welcome to open on the new-believer path. */
 export const startsAsNewBeliever = (search: string): boolean =>
   new URLSearchParams(search).get("start") === "new";
+
+/** The verse a link opens at (`?at=Ps 23:1`), or null. Shape-checked here so a
+ *  stranger's query string can't send the reader somewhere absurd — the engine
+ *  still has the last word on whether the ref exists. */
+export function sharedAtRef(search: string): string | null {
+  const raw = new URLSearchParams(search).get("at")?.trim();
+  if (!raw) return null;
+  return /^[1-3]?[A-Za-z]{2,6} \d{1,3}:\d{1,3}$/.test(raw) ? raw : null;
+}
 
 /** Only http(s) links are offered as links — a shared parameter is untrusted
  *  input, and `javascript:` must never reach an anchor's href. */

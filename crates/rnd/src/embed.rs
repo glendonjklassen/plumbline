@@ -148,25 +148,38 @@ pub fn parse_embedding(
     vec_text: &str,
     freq_text: Option<&str>,
 ) -> Option<Embedding> {
-    // Meta: gate on tokenization; pick up `aligned` + the alias map. No meta at
-    // all is accepted (artifacts predate the stamp; the tokenization is frozen).
-    let (aligned, aliases) = match meta_json {
-        None => (false, HashMap::new()),
+    let (aligned, aliases) = parse_meta(tok_version, meta_json)?;
+    let (dim, keys, vecs) = parse_vec_text(vec_text)?;
+    finish(dim, keys, vecs, aligned, &aliases, freq_text)
+}
+
+/// Meta: gate on tokenization; pick up `aligned` + the alias map. No meta at all
+/// is accepted (artifacts predate the stamp; the tokenization is frozen). `None`
+/// means STALE — the vectors address a different text.
+fn parse_meta(
+    tok_version: &str,
+    meta_json: Option<&str>,
+) -> Option<(bool, HashMap<String, String>)> {
+    match meta_json {
+        None => Some((false, HashMap::new())),
         Some(raw) => {
             let m: EmbedMeta = serde_json::from_str(raw).ok()?;
             if m.tokenization != tok_version {
-                return None; // stale: vectors address a different text
+                return None;
             }
-            (m.aligned.is_some(), m.aliases)
+            Some((m.aligned.is_some(), m.aliases))
         }
-    };
+    }
+}
 
+/// The word2vec text body → `(dim, keys, RAW row-major floats)`. Rows are left
+/// un-normalised; [`finish`] does that for every source alike.
+fn parse_vec_text(vec_text: &str) -> Option<(usize, Vec<String>, Vec<f32>)> {
     let mut lines = vec_text.lines();
     let dim: usize = lines.next()?.split_whitespace().nth(1)?.parse().ok()?;
     if dim == 0 {
         return None;
     }
-
     let mut keys: Vec<String> = Vec::new();
     let mut vecs: Vec<f32> = Vec::new();
     for line in lines {
@@ -176,20 +189,34 @@ pub fn parse_embedding(
         if row.len() != dim {
             continue; // skip a malformed row rather than mis-slice the array
         }
-        let mut row = row;
-        normalize(&mut row);
         keys.push(key.to_string());
         vecs.extend_from_slice(&row);
     }
-    if keys.is_empty() {
+    Some((dim, keys, vecs))
+}
+
+/// Normalise, index, alias and attach `.freq` — everything after the bytes have
+/// been read, shared by the text and packed loaders so the two cannot drift.
+fn finish(
+    dim: usize,
+    keys: Vec<String>,
+    mut vecs: Vec<f32>,
+    aligned: bool,
+    aliases: &HashMap<String, String>,
+    freq_text: Option<&str>,
+) -> Option<Embedding> {
+    if dim == 0 || keys.is_empty() || vecs.len() != keys.len() * dim {
         return None;
+    }
+    for row in vecs.chunks_mut(dim) {
+        normalize(row);
     }
 
     let mut ix: HashMap<String, usize> = keys.iter().cloned().zip(0..).collect();
     // Alias keys resolve to their root's ROW, so a split Strong's number the
     // KJV tags is found; the row set — and every neighbour list — stays
     // duplicate-free (aliases never add rows, only extra index entries).
-    for (alias, root) in &aliases {
+    for (alias, root) in aliases {
         if !ix.contains_key(alias) {
             if let Some(&r) = ix.get(root) {
                 ix.insert(alias.clone(), r);
@@ -217,18 +244,142 @@ pub fn parse_embedding(
     Some(Embedding { dim, keys, ix, vecs, aligned, freq })
 }
 
+// ── the packed form (`.vecb`) ──────────────────────────────────────────────────
+//
+// The text `.vec` is 6.4 MB of decimal ASCII — 742,600 floats that cost an atof
+// each, every launch. The browser can't keep the PARSED embedding between
+// launches (it lives in wasm memory), so a phone paid seconds of `atof` on every
+// single start before a concept answer appeared (feedback 2026-07-27). Packed
+// f32 turns that parse into a bounded copy.
+//
+// Deliberately stores RAW, un-normalised rows, exactly as the text does: the
+// reader still runs [`finish`], so a packed load and a text load produce the
+// same `Embedding` by construction rather than by a writer that remembers to
+// normalise the same way. `plumbline-hydrate vecb` writes it.
+//
+//   0..8    magic "PLVECB01"
+//   8..12   dim      u32 LE
+//   12..16  count    u32 LE
+//   16..20  keys_len u32 LE   (key blob length, padded to a multiple of 4)
+//   20..24  reserved u32 LE   (0)
+//   24..    key blob: per row a u8 length then its ASCII bytes, zero-padded
+//   then    count*dim f32 LE, row-major, RAW
+
+const VECB_MAGIC: &[u8; 8] = b"PLVECB01";
+const VECB_HEADER: usize = 24;
+
+/// Pack a word2vec text body into [`parse_embedding_bin`]'s form. `None` if the
+/// text isn't a readable `.vec`.
+pub fn encode_embedding_bin(vec_text: &str) -> Option<Vec<u8>> {
+    let (dim, keys, vecs) = parse_vec_text(vec_text)?;
+    if keys.is_empty() {
+        return None;
+    }
+    let mut blob: Vec<u8> = Vec::new();
+    for k in &keys {
+        let b = k.as_bytes();
+        // A key longer than a byte can count cannot round-trip; refuse rather
+        // than silently truncate one row's identity.
+        if b.len() > u8::MAX as usize {
+            return None;
+        }
+        blob.push(b.len() as u8);
+        blob.extend_from_slice(b);
+    }
+    while blob.len() % 4 != 0 {
+        blob.push(0);
+    }
+
+    let mut out = Vec::with_capacity(VECB_HEADER + blob.len() + vecs.len() * 4);
+    out.extend_from_slice(VECB_MAGIC);
+    out.extend_from_slice(&(dim as u32).to_le_bytes());
+    out.extend_from_slice(&(keys.len() as u32).to_le_bytes());
+    out.extend_from_slice(&(blob.len() as u32).to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(&blob);
+    for v in &vecs {
+        out.extend_from_slice(&v.to_le_bytes());
+    }
+    Some(out)
+}
+
+/// Read the packed form. `None` on a foreign/short/stale file, so a caller can
+/// fall back to the text `.vec` exactly as if the packed one weren't there.
+pub fn parse_embedding_bin(
+    tok_version: &str,
+    meta_json: Option<&str>,
+    bytes: &[u8],
+    freq_text: Option<&str>,
+) -> Option<Embedding> {
+    let (aligned, aliases) = parse_meta(tok_version, meta_json)?;
+    if bytes.len() < VECB_HEADER || &bytes[..8] != VECB_MAGIC {
+        return None;
+    }
+    let u32_at = |o: usize| -> Option<usize> {
+        Some(u32::from_le_bytes(bytes.get(o..o + 4)?.try_into().ok()?) as usize)
+    };
+    let dim = u32_at(8)?;
+    let count = u32_at(12)?;
+    let keys_len = u32_at(16)?;
+    if dim == 0 || count == 0 {
+        return None;
+    }
+
+    let keys_at = VECB_HEADER;
+    let floats_at = keys_at.checked_add(keys_len)?;
+    let floats_len = count.checked_mul(dim)?.checked_mul(4)?;
+    if bytes.len() < floats_at.checked_add(floats_len)? {
+        return None;
+    }
+
+    let blob = &bytes[keys_at..floats_at];
+    let mut keys: Vec<String> = Vec::with_capacity(count);
+    let mut at = 0usize;
+    for _ in 0..count {
+        let len = *blob.get(at)? as usize;
+        at += 1;
+        let raw = blob.get(at..at + len)?;
+        keys.push(std::str::from_utf8(raw).ok()?.to_string());
+        at += len;
+    }
+
+    let vecs: Vec<f32> = bytes[floats_at..floats_at + floats_len]
+        .chunks_exact(4)
+        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect();
+
+    finish(dim, keys, vecs, aligned, &aliases, freq_text)
+}
+
 /// Load `concept-vectors.vec` (with its `.meta` and `.freq` sidecars) from
 /// `path`. Returns `None` if the file is missing, stale (tokenization
 /// mismatch), or unparseable — so the app runs fine without it.
 pub fn load_embedding(tok_version: &str, path: impl AsRef<Path>) -> Option<Embedding> {
     let path = path.as_ref();
-    let vec_text = std::fs::read_to_string(path).ok()?;
     let meta = std::fs::read_to_string(path.with_extension("vec.meta")).ok();
     // `with_extension` replaces after the last dot; build the sidecar paths by
     // appending instead so "concept-vectors.vec" → ".vec.meta"/".vec.freq".
     let meta = meta.or_else(|| std::fs::read_to_string(sidecar(path, "meta")).ok());
     let freq = std::fs::read_to_string(sidecar(path, "freq")).ok();
+
+    // The packed sibling first — same vectors, no 742k-atof parse. A home that
+    // only has the text `.vec` (an older pack, a hand-assembled home) still
+    // works, and a packed file we can't read falls through to the text as well.
+    let packed = vecb_path(path);
+    if let Some(bytes) = std::fs::read(&packed).ok() {
+        if let Some(e) = parse_embedding_bin(tok_version, meta.as_deref(), &bytes, freq.as_deref()) {
+            return Some(e);
+        }
+    }
+    let vec_text = std::fs::read_to_string(path).ok()?;
     parse_embedding(tok_version, meta.as_deref(), &vec_text, freq.as_deref())
+}
+
+/// `data/concept-vectors.vec` → `data/concept-vectors.vecb`.
+pub fn vecb_path(path: &Path) -> std::path::PathBuf {
+    let mut s = path.as_os_str().to_os_string();
+    s.push("b");
+    std::path::PathBuf::from(s)
 }
 
 /// `<path>.<ext>` (append, not replace-extension).
@@ -568,6 +719,74 @@ mod tests {
         assert_eq!(sim[0].1, sim[1].1, "fixture must produce an exact tie");
         assert_eq!(sim[0].0, corpus.verse_at(1).unwrap().vref());
         assert_eq!(sim[1].0, corpus.verse_at(2).unwrap().vref());
+    }
+
+    // ── the packed `.vecb` form ────────────────────────────────────────────────
+
+    /// The packed form must be the SAME embedding, not merely a similar one:
+    /// identical dim/size/keys, identical vectors, identical neighbour answers
+    /// and the same alias + freq behaviour. Compared through the API rather than
+    /// by byte-equality with the text file, which would prove nothing about what
+    /// a reader actually gets.
+    #[test]
+    fn packed_vectors_load_identically_to_the_text() {
+        let text = emb();
+        let bytes = encode_embedding_bin(VEC).expect("encodes");
+        let packed = parse_embedding_bin("kjv1769-tok2", Some(META), &bytes, Some(FREQ)).unwrap();
+
+        assert_eq!(packed.dim(), text.dim());
+        assert_eq!(packed.size(), text.size());
+        assert_eq!(packed.aligned(), text.aligned());
+        assert_eq!(packed.has_trained_freq(), text.has_trained_freq());
+        for key in ["G1", "G2", "H1", "H2"] {
+            assert_eq!(
+                packed.concept_vector(key),
+                text.concept_vector(key),
+                "{key} differs between the text and packed loaders"
+            );
+            assert_eq!(packed.nearest_concepts(key, 3), text.nearest_concepts(key, 3));
+            assert_eq!(packed.cross_concepts(key, 3), text.cross_concepts(key, 3));
+            assert_eq!(packed.freq_of(key), text.freq_of(key));
+        }
+        // The alias map lives in the meta, so it must survive the packed path too.
+        assert_eq!(packed.concept_vector("G9"), packed.concept_vector("G1"));
+    }
+
+    /// Rows are stored RAW so the reader's own normalisation is what makes the
+    /// two paths agree — a packed file of already-normalised rows would be
+    /// double-normalised. Unit vectors either way, and the encoder's floats must
+    /// be the pre-normalisation values.
+    #[test]
+    fn packed_rows_are_stored_unnormalised() {
+        let bytes = encode_embedding_bin(VEC).unwrap();
+        let floats_at = bytes.len() - 4 * 2 * 4; // 4 rows × dim 2 × f32
+        let first: Vec<f32> = bytes[floats_at..floats_at + 8]
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .collect();
+        assert_eq!(first, vec![1.0, 0.0], "G1 stored as written, not normalised");
+        // G2 is 0.9/0.1 raw; normalised it is not.
+        let g2: Vec<f32> = bytes[floats_at + 8..floats_at + 16]
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .collect();
+        assert_eq!(g2, vec![0.9, 0.1]);
+        let loaded = parse_embedding_bin("kjv1769-tok2", Some(META), &bytes, None).unwrap();
+        let n: f32 = loaded.concept_vector("G2").unwrap().iter().map(|x| x * x).sum();
+        assert!((n - 1.0).abs() < 1e-5, "loaded rows are unit length");
+    }
+
+    /// A foreign, truncated or stale packed file must read as "absent" so the
+    /// caller falls back to the text rather than losing the feature.
+    #[test]
+    fn a_bad_packed_file_is_none_not_garbage() {
+        let good = encode_embedding_bin(VEC).unwrap();
+        assert!(parse_embedding_bin("kjv1769-tok2", Some(META), b"not a vecb at all", None).is_none());
+        assert!(parse_embedding_bin("kjv1769-tok2", Some(META), &good[..good.len() - 8], None).is_none());
+        assert!(parse_embedding_bin("kjv1769-tok2", Some(META), &[], None).is_none());
+        // Stale tokenization is refused for the packed form exactly as for text.
+        let stale = r#"{"format":"overlay-embedding-meta-v1","tokenization":"kjv1611-tok1"}"#;
+        assert!(parse_embedding_bin("kjv1769-tok2", Some(stale), &good, None).is_none());
     }
 
     #[test]

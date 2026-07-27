@@ -6,8 +6,8 @@
   // Deliberately hard-coded light — the phone/laptop gets handed across in
   // daylight.
   import { getSession } from "../state/session.svelte";
-  import QrCode from "../shell/QrCode.svelte";
-  import { hasChurch } from "../shell/church";
+  import QrCode, { PWA_URL } from "../shell/QrCode.svelte";
+  import { hasChurch, shareUrl } from "../shell/church";
 
   const s = getSession();
 
@@ -91,17 +91,24 @@
     s.showToast("Link copied");
   }
 
-  async function share(): Promise<void> {
-    const text = shareText();
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: thread.name, text });
-        return;
-      } catch {
-        /* fall through to clipboard */
-      }
-    }
-    await navigator.clipboard.writeText(text);
+  // Sharing a passage is a QR, not the phone's share sheet. Present is the
+  // screen you hold up to someone standing in front of you: a share sheet sends
+  // a wall of text to an app they then have to leave, while a QR they scan puts
+  // the passage on THEIR phone, in the reader, at the verse (feedback
+  // 2026-07-27). `shareText()` stays for the copy fallback — handy when the
+  // person isn't in front of you.
+  let showQr = $state(false);
+  const firstRef = $derived(entries[0]?.ref ?? null);
+  /** The app link plus the verse this thread opens on. */
+  const passageLink = $derived(
+    shareUrl(PWA_URL, s.church, {
+      startAsNewBeliever: s.config.presentSharesAsNew !== false,
+      at: firstRef,
+    }),
+  );
+
+  async function copyPassages(): Promise<void> {
+    await navigator.clipboard.writeText(`${shareText()}\n\n${passageLink}`);
     s.showToast("Copied to clipboard");
   }
 
@@ -154,8 +161,17 @@
         <button class="close" onclick={() => (thread = null)} aria-label="Back">‹</button>
         <span class="title">{thread.name}</span>
         <span class="spacer"></span>
-        <button class="sharebtn" onclick={share}>Share</button>
+        <button class="sharebtn" onclick={() => (showQr = !showQr)}>
+          {showQr ? "Hide QR" : "Share"}
+        </button>
       </div>
+      {#if showQr}
+        <div class="qr sharesheet">
+          <QrCode size={148} text={passageLink} />
+          <span class="qrnote">scan to open {entries[0]?.display ?? thread.name} on their phone</span>
+          <button class="linkbtn" onclick={copyPassages}>Copy the passages</button>
+        </div>
+      {/if}
       <div class="overview">
         {#each entries as e, i (e.ref)}
           <button class="entry" onclick={() => (focus = i)}>
@@ -181,13 +197,17 @@
         <p class="mark" aria-hidden="true">✦</p>
         <p class="fref">{thread.name}</p>
         <p class="endnote">— the whole thread, yours to keep —</p>
-        <button class="sharebig" onclick={share}>Share the passages</button>
+        <!-- ONE QR, and it carries the passage: the end card's job is to hand
+             this thread over, so the code opens the app AT its first verse
+             rather than at whatever the recipient last read (2026-07-27). The
+             app-link button stays for the person who isn't in front of you —
+             and is the only way to grab either link for a test. -->
         <div class="qr">
-          <QrCode size={148} text={s.presentShareLink} />
-          <span class="qrnote">scan for the app — free, offline, no account</span>
-          <!-- The same link the QR holds, as a button: handy when the person
-               is not in front of you, and the only way to grab it for a test
-               (feedback 2026-07-27). -->
+          <QrCode size={148} text={passageLink} />
+          <span class="qrnote">
+            scan for {entries[0]?.display ?? thread.name} — free, offline, no account
+          </span>
+          <button class="linkbtn" onclick={copyPassages}>Copy the passages</button>
           <button class="linkbtn" onclick={shareAppLink}>Copy the app link</button>
         </div>
         <button class="ovbtn" onclick={() => (focus = null)}>back to overview</button>
@@ -376,17 +396,16 @@
     color: #8a8276;
     font-style: italic;
   }
-  .sharebig {
-    border: 2px solid #9e7d38;
-    border-radius: 12px;
-    padding: 12px 28px;
-    font-size: 20px;
-  }
   .qr {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 8px;
+  }
+  /* The overview's Share reveals the same QR inline, above the passage list. */
+  .sharesheet {
+    padding: 12px 0 4px;
+    border-bottom: 1px solid #e0d6bd;
   }
   .linkbtn {
     margin-top: 8px;

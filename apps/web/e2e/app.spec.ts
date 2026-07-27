@@ -550,6 +550,66 @@ test("the share QR encodes the church, not just the app", async ({ page }) => {
   expect(links.present).toContain("church=Grace+Bible+Church");
 });
 
+// Sharing a PASSAGE is a QR carrying the passage, not the phone's share sheet
+// carrying a wall of text (feedback 2026-07-27). Present is held up to someone
+// in front of you, so what they scan must land them in the reader at the verse.
+test("Present shares the passage as a QR whose link opens at the first verse", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Sharing the gospel" }).click({ timeout: 90_000 });
+  await page.getByRole("button", { name: "Open the Romans Road" }).click();
+  await expect(page.locator(".present .title")).toContainText("Romans Road");
+
+  // Record what the copy button hands over, without needing clipboard perms.
+  await page.evaluate(() => {
+    (window as any).__copied = [];
+    navigator.clipboard.writeText = async (t: string) => void (window as any).__copied.push(t);
+  });
+
+  // Present's own Share, not the header's.
+  await page.locator(".present .sharebtn").click();
+  // A QR, and no share-sheet text dump.
+  await expect(page.locator(".sharesheet svg")).toBeVisible();
+  await page.getByRole("button", { name: "Copy the passages" }).click();
+
+  const copied: string = await page.evaluate(() => (window as any).__copied[0]);
+  // The link carries the thread's FIRST verse, url-encoded ("Rom 3:23").
+  expect(copied).toMatch(/[?&]at=Rom\+3%3A23/);
+  expect(copied).toContain("For all have sinned");
+});
+
+// The receiving half of that QR: the link must actually land on the verse.
+test("a shared passage link opens the reader at its verse", async ({ page }) => {
+  await page.goto("/?at=Ps+23%3A1");
+  await page.getByRole("button", { name: "Established believer" }).click({ timeout: 90_000 });
+  await page.getByRole("button", { name: "Start reading" }).click();
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+
+  const where = await page.evaluate(() => {
+    const s = (window as any).__plumbline;
+    return s.panes.map((p: any) => ({ book: p.book, chapter: p.chapter, verse: p.targetVerse }));
+  });
+  expect(where[0].book).toBe("Ps");
+  expect(where[0].chapter).toBe(23);
+  // And the address bar is left clean, like every other shared parameter.
+  expect(await page.evaluate(() => location.search)).toBe("");
+});
+
+// A stranger's query string is untrusted input: a nonsense `at` must be rejected
+// OUTRIGHT, never handed to navigation. The reader staying on John proves little
+// on its own — the link dispatcher discards an unparseable ref anyway — so the
+// signal is the address bar: the shell only strips the query once it has
+// consumed something from it, so junk left in place means junk never counted.
+test("a bogus at= parameter is rejected, not merely survived", async ({ page }) => {
+  await page.goto("/?at=javascript%3Aalert(1)");
+  await page.getByRole("button", { name: "Established believer" }).click({ timeout: 90_000 });
+  await page.getByRole("button", { name: "Start reading" }).click();
+  await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
+
+  const book = await page.evaluate(() => (window as any).__plumbline.panes[0].book);
+  expect(book).toBe("John"); // the default landing, untouched
+  expect(await page.evaluate(() => location.search)).toContain("at=");
+});
+
 test("a Present link names the church and drops the setup paths", async ({ page }) => {
   // Present is the screen you show someone face to face: its link says who it
   // was meant for, so the welcome offers only the two paths that fit and
@@ -724,6 +784,31 @@ test("a typed recall survives a pause and a background study refresh", async ({ 
   // Still live, not merely frozen: it scores.
   await page.getByRole("button", { name: "Check" }).click();
   await expect(page.locator(".accuracy")).toHaveText("100% recalled");
+});
+
+// Through the PICKER, not the engine. The test below seeds its card by calling
+// memoryAddPassage directly, which sailed straight past a dead commit button:
+// commit() read `start`/`throughRef` AFTER close() had nulled the state they
+// derive from, so the engine got null for both and every attempt toasted "null
+// or invalid argument" with no card written (feedback 2026-07-27).
+test("the passage picker actually files the card it names", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() => {
+    (window as any).__plumbline.memorizePassageFrom = "Ps 23:1";
+  });
+  await expect(page.getByText("Tap the verse this passage ends on.")).toBeVisible();
+  await page.locator(".sheet .grid button", { hasText: /^3$/ }).click();
+  await page.getByRole("button", { name: /^Memorize Ps 23:1/ }).click();
+
+  // The toast names the passage rather than reporting an engine error...
+  await expect(page.locator(".toast")).toHaveText("Memorizing Ps 23:1–3");
+  // ...and the card is really on disk, spanning the range that was picked.
+  const cards = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    const cov = await s.engine.memoryCoverage(new Date().toISOString());
+    return (cov?.cards ?? []).map((c: any) => c.label ?? c.ref);
+  });
+  expect(cards).toEqual(["Ps 23:1–3"]);
 });
 
 // A whole section as ONE card (2026-07-27): the hub lists one row labelled with

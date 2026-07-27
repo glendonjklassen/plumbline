@@ -49,6 +49,7 @@ fun shareUrl(
     base: String = PWA_URL,
     church: ChurchState?,
     startAsNewBeliever: Boolean = false,
+    at: String? = null,
 ): String {
     val b = Uri.parse(base).buildUpon()
     val c = cleanChurch(church)
@@ -58,7 +59,21 @@ fun shareUrl(
         if (c.url.isNotEmpty()) b.appendQueryParameter("churchUrl", c.url)
     }
     if (startAsNewBeliever) b.appendQueryParameter("start", "new")
+    // `at` opens the recipient straight at a verse — what a shared PASSAGE
+    // means. The refKey ("Ps 23:1") is the frozen compact form, so it travels
+    // as-is; the twin is shell/church.ts.
+    if (!at.isNullOrBlank()) b.appendQueryParameter("at", at)
     return b.build().toString()
+}
+
+/** Add the opening verse to an ALREADY-built share link, so a caller holding
+ *  only the finished link (Present) doesn't have to rebuild it from the church.
+ *  The parameter name lives here and in [shareUrl] only. */
+fun linkAtVerse(link: String, refKey: String?): String {
+    if (refKey.isNullOrBlank()) return link
+    return runCatching {
+        Uri.parse(link).buildUpon().appendQueryParameter("at", refKey).build().toString()
+    }.getOrDefault(link)
 }
 
 /** Only http(s) links are offered as links — a church URL is typed by hand, and

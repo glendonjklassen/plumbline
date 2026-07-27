@@ -742,7 +742,14 @@ core pack only** (2026-07-25, TODO #28): the `rnd`-marked artifacts
 at idle / on the first-run machine choice / on the Settings toggle, with
 `studyEpoch` refreshing any open panel; until they land, the machine tiers
 are simply absent, exactly like an Android install (which never bundles
-them). Analytical popups keep light paper (shared delta); user data lives
+them). The concept vectors ship **packed** (`concept-vectors.vecb`, f32 rows;
+`plumbline-hydrate vecb` writes it, `embed::load_embedding` prefers it and
+falls back to the text `.vec` for any home that lacks it) — the browser cannot
+keep a parsed embedding between launches, so the word2vec text cost 742,600
+atof calls on EVERY start (34ms → 8ms in wasm; 2026-07-27). It is ~383 KB more
+over the wire, paid once and cached, against a parse paid every launch.
+**Still owed:** `morphology.jsonl` is the bigger half of that repeat cost
+(~80ms in wasm, seconds on a phone) and has no packed form yet. Analytical popups keep light paper (shared delta); user data lives
 per-browser (export/import is the portability story);
 Present "In context" fade not built. Hosting decided 2026-07-25: GitHub
 Pages at <https://plumblinebible.org/> (custom domain, same day; the old
@@ -779,6 +786,18 @@ base-relative).
     the recipient the app, not just the text). **Delta (GTK/WinUI):** a projection-friendly
     presentation window (fullscreen, large type, step keys) from the same
     thread data.
+  - **Sharing a passage is a QR, not the share sheet** (2026-07-27, both
+    shells): Present's Share opens a code rather than handing a wall of text to
+    the system share sheet — this is the screen you hold up to someone in front
+    of you, and what they scan should put the passage on *their* phone. The link
+    carries `?at=<refKey>` (the frozen compact ref) so it opens **at the
+    thread's first verse**; `shareUrl` in both `shell/church.ts` and
+    `ui/Church.kt` builds it, `sharedAtRef` consumes it, and a value that isn't
+    ref-shaped is rejected before it reaches navigation. The plain-text share
+    stays behind a button for when the person isn't with you.
+    **Delta (deliberate, matches the church one):** an Android reader *sends*
+    `at` but never receives it — a plumblinebible.org link opens the PWA, not
+    the APK.
   - **Embedded study maps** (`ui/StudyMaps.kt`): the concept map + canon
     dispersion heatmap as scaled-down, first-class cards inside the word-study
     panel (before the first titled section), tapping through to the fullscreen
