@@ -153,12 +153,57 @@ fn main() -> ExitCode {
                 }
             }
         }
+        "morphb" => {
+            // Pack `morphology.jsonl` (10.4 MB of JSONL — 31,091 serde calls
+            // building 355,603 entries) into interned fixed-width records. Same
+            // reason as `vecb`: the parse cannot outlive a browser tab, so a
+            // phone repeated all of it on every launch.
+            let Some(from) = flag("--from") else {
+                eprintln!("morphb needs --from <morphology.jsonl> [--out <file>]");
+                return ExitCode::from(2);
+            };
+            let out = flag("--out").unwrap_or_else(|| morph::morphb_path(&from));
+            let text = match std::fs::read_to_string(&from) {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("morphb: cannot read {}: {e}", from.display());
+                    return ExitCode::FAILURE;
+                }
+            };
+            let Some(bytes) = morph::encode_morph_bin(TOKENIZATION_VERSION, &text) else {
+                eprintln!("morphb: {} is stale or too large to pack", from.display());
+                return ExitCode::FAILURE;
+            };
+            if let Err(e) = std::fs::write(&out, &bytes) {
+                eprintln!("morphb: cannot write {}: {e}", out.display());
+                return ExitCode::FAILURE;
+            }
+            // Verify by LOADING it back, as `check` does for everything else —
+            // the loader prefers this file, so one that doesn't read is worse
+            // than none at all.
+            match morph::parse_morph_bin(TOKENIZATION_VERSION, &bytes) {
+                Some(m) => {
+                    println!(
+                        "wrote {} — {} verses ({} → {} bytes)",
+                        out.display(),
+                        m.verse_count(),
+                        text.len(),
+                        bytes.len()
+                    );
+                    ExitCode::SUCCESS
+                }
+                None => {
+                    eprintln!("morphb: wrote {} but it does not load back", out.display());
+                    ExitCode::FAILURE
+                }
+            }
+        }
         "help" | "-h" | "--help" => {
             print!("{}", HELP);
             ExitCode::SUCCESS
         }
         other => {
-            eprintln!("unknown command '{other}'. Try: check | copy | web-cache | vecb | help");
+            eprintln!("unknown command '{other}'. Try: check | copy | web-cache | vecb | morphb | help");
             ExitCode::from(2)
         }
     }
@@ -185,6 +230,12 @@ plumbline-hydrate — assemble + verify the Plumbline data pack
       Pack the concept vectors into the f32 form the loader prefers, so a
       launch copies them instead of running 742,600 atof calls. The text
       file stays valid — a home without the packed sibling still works.
+      Run by scripts/build-web-pack.mjs.
+
+  plumbline-hydrate morphb --from <morphology.jsonl> [--out <file>]
+      Pack the morphology sidecar into interned fixed-width records, so a
+      launch reads it instead of running 31,091 JSON parses. The JSONL
+      stays valid — a home without the packed sibling still works.
       Run by scripts/build-web-pack.mjs.
 
 The R&D artifacts are produced offline (see data-prep/README.md); this tool

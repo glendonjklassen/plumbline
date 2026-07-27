@@ -742,14 +742,25 @@ core pack only** (2026-07-25, TODO #28): the `rnd`-marked artifacts
 at idle / on the first-run machine choice / on the Settings toggle, with
 `studyEpoch` refreshing any open panel; until they land, the machine tiers
 are simply absent, exactly like an Android install (which never bundles
-them). The concept vectors ship **packed** (`concept-vectors.vecb`, f32 rows;
-`plumbline-hydrate vecb` writes it, `embed::load_embedding` prefers it and
-falls back to the text `.vec` for any home that lacks it) — the browser cannot
-keep a parsed embedding between launches, so the word2vec text cost 742,600
-atof calls on EVERY start (34ms → 8ms in wasm; 2026-07-27). It is ~383 KB more
-over the wire, paid once and cached, against a parse paid every launch.
-**Still owed:** `morphology.jsonl` is the bigger half of that repeat cost
-(~80ms in wasm, seconds on a phone) and has no packed form yet. Analytical popups keep light paper (shared delta); user data lives
+them). Both machine-tier artifacts ship **packed**, because the browser cannot
+keep a parsed artifact between launches and so repeated the whole parse on
+every start (2026-07-27):
+
+| artifact | packed as | why | wasm parse |
+|---|---|---|---|
+| `concept-vectors.vec` | `.vecb` — f32 rows, stored RAW so the reader's own normalisation still applies | 742,600 atof calls | 34ms → 9ms |
+| `morphology.jsonl` | `.morphb` — interned string table + fixed-width records | 31,091 serde calls, 355,603 entries over only 13,990 Strong's / 2,840 codes / 6 homographs | 82ms → 44ms |
+
+`plumbline-hydrate vecb` / `morphb` write them; `embed::load_embedding` and
+`morph::load_morph` prefer them and fall back to the text for any home that
+lacks one (an older pack, a hand-built home, an unreadable packed file), so the
+text forms stay valid. Whole rnd stage ~244ms → ~106ms in wasm. Wire cost is
+near neutral: `.vecb` is ~383 KB bigger (f32 mantissas gzip worse than short
+decimals), `.morphb` ~230 KB smaller. **Still owed:** morphology's remaining
+cost is allocation, not parsing — 355,603 entries × three owned `String`s — so
+lazy per-verse decoding off the packed bytes would take most of the rest;
+`entries()` has exactly one caller (`plumbline_engine_morph_json`), which wants
+a single token, so the change is contained. Analytical popups keep light paper (shared delta); user data lives
 per-browser (export/import is the portability story);
 Present "In context" fade not built. Hosting decided 2026-07-25: GitHub
 Pages at <https://plumblinebible.org/> (custom domain, same day; the old

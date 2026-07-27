@@ -29,7 +29,7 @@ const STOCK = join(repo, "apps/android/app/src/main/assets/stock");
 // The machine-tier artifacts deferred out of the boot path. Everything else
 // under data/ matches the Android APK's bundled core set.
 const RND = new Set([
-  "data/morphology.jsonl",
+  "data/morphology.morphb",
   "data/concept-vectors.vecb",
   "data/concept-vectors.vec.freq",
   "data/concept-vectors.vec.meta",
@@ -43,13 +43,23 @@ const RND = new Set([
 // would be treated as a core file and fetched on the boot path).
 const VEC_TEXT = "concept-vectors.vec";
 const VEC_PACKED = "concept-vectors.vecb";
+// Same story for the morphology sidecar: 10.4 MB of JSONL, 31,091 serde calls
+// building 355,603 entries, repeated on every launch. Packed it is both faster
+// to read AND ~230 KB smaller over the wire, so there is no trade here at all.
+const MORPH_TEXT = "morphology.jsonl";
+const MORPH_PACKED = "morphology.morphb";
 
 // (srcDir, homeDir, filter, stock) tuples for the home shipped to the browser.
 const SOURCES = [
   [
     join(repo, "data"),
     "data",
-    (n) => !n.endsWith(".idxcache") && n !== VEC_TEXT && n !== VEC_PACKED,
+    (n) =>
+      !n.endsWith(".idxcache") &&
+      n !== VEC_TEXT &&
+      n !== VEC_PACKED &&
+      n !== MORPH_TEXT &&
+      n !== MORPH_PACKED,
     false,
   ],
   [join(repo, "bridge"), "bridge", () => true, false],
@@ -121,6 +131,25 @@ files.push({
   path: `data/${VEC_PACKED}`,
   bytes: vecbRaw.length,
   gzBytes: vecbGz.length,
+  rnd: true,
+});
+
+const morphTmp = join(tmpdir(), `plumbline-morphb-${process.pid}`);
+execFileSync(
+  "cargo",
+  ["run", "--release", "-q", "-p", "plumbline-hydrate", "--", "morphb",
+   "--from", join(repo, "data", MORPH_TEXT), "--out", morphTmp],
+  { cwd: repo, stdio: ["ignore", "inherit", "inherit"] },
+);
+const morphRaw = readFileSync(morphTmp);
+rmSync(morphTmp, { force: true });
+const morphGz = gzipSync(morphRaw, { level: 9 });
+writeFileSync(join(outRoot, "data", `${MORPH_PACKED}.gz`), morphGz);
+hash.update("data").update(MORPH_PACKED).update(morphRaw);
+files.push({
+  path: `data/${MORPH_PACKED}`,
+  bytes: morphRaw.length,
+  gzBytes: morphGz.length,
   rnd: true,
 });
 

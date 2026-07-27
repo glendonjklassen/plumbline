@@ -702,8 +702,228 @@ impl MorphData {
 /// Load `data/morphology.jsonl`. Missing file / stale stamp / parse failure →
 /// `None` (the layer is optional).
 pub fn load_morph(tok_version: &str, path: impl AsRef<Path>) -> Option<MorphData> {
-    let text = std::fs::read_to_string(path.as_ref()).ok()?;
+    let path = path.as_ref();
+    // The packed sibling first — same annotations, no 10.4 MB of JSON. A home
+    // with only the text (an older pack, a hand-built home) still works, and a
+    // packed file we cannot read falls through to the text as well.
+    if let Ok(bytes) = std::fs::read(morphb_path(path)) {
+        if let Some(m) = parse_morph_bin(tok_version, &bytes) {
+            return Some(m);
+        }
+    }
+    let text = std::fs::read_to_string(path).ok()?;
     MorphData::parse(tok_version, &text)
+}
+
+/// `data/morphology.jsonl` → `data/morphology.morphb`.
+pub fn morphb_path(path: &Path) -> std::path::PathBuf {
+    path.with_extension("morphb")
+}
+
+// ── the packed form (`.morphb`) ────────────────────────────────────────────────
+//
+// The sidecar is 10.4 MB of JSONL: 31,091 `serde_json` calls building 355,603
+// entries, each allocating three strings. Like the concept vectors, the parsed
+// result cannot outlive a browser tab, so a phone repeated the whole thing on
+// every launch — and this half cost twice what the vectors did.
+//
+// The shape that makes it cheap is the data's own repetition: those 355,603
+// entries use only 13,990 distinct Strong's numbers, 2,840 codes and 6
+// homographs. Interned, an entry is four small integers, so the body is fixed
+// -width records and the file lands SMALLER than the text it replaces.
+//
+//   0..8    magic "PLMORB01"
+//   8..12   verse_count u32
+//   12..16  entry_count u32
+//   16..20  string_count u32   (shared table: books, Strong's, codes)
+//   20..24  homograph_count u32
+//   then    tokenization, then source: u32 length + bytes, each padded to 4
+//   then    string table:    u32 length + bytes per entry, padded to 4
+//   then    homograph table: same, index 0 is the empty "none" slot
+//   then    verses:  book u16, chapter u16, verse u16, n_entries u16
+//   then    entries: tok u16, strongs u16, code u16, homograph u8, pad u8
+//
+// Indices are u16 on purpose — the encoder REFUSES rather than truncate if the
+// data ever outgrows them, and the caller keeps shipping the text.
+
+const MORPHB_MAGIC: &[u8; 8] = b"PLMORB01";
+const MORPHB_HEADER: usize = 24;
+
+fn push_str(out: &mut Vec<u8>, s: &str) {
+    out.extend_from_slice(&(s.len() as u32).to_le_bytes());
+    out.extend_from_slice(s.as_bytes());
+    while out.len() % 4 != 0 {
+        out.push(0);
+    }
+}
+
+/// Pack the sidecar text into [`parse_morph_bin`]'s form. `None` if the text is
+/// unreadable, stale, or too large for the packed index widths.
+pub fn encode_morph_bin(tok_version: &str, text: &str) -> Option<Vec<u8>> {
+    let data = MorphData::parse(tok_version, text)?;
+
+    // Deterministic order — the pack manifest hashes this file, so an unstable
+    // traversal would churn the pack version on every build.
+    let mut refs: Vec<&VRef> = data.ix.keys().collect();
+    refs.sort_by(|a, b| {
+        (&a.book, a.chapter, a.verse).cmp(&(&b.book, b.chapter, b.verse))
+    });
+
+    let mut strings: Vec<&str> = Vec::new();
+    let mut sx: HashMap<&str, u16> = HashMap::new();
+    let mut homs: Vec<&str> = vec![""]; // 0 = no homograph
+    let mut hx: HashMap<&str, u8> = HashMap::new();
+
+    macro_rules! intern_str {
+        ($s:expr) => {{
+            let s: &str = $s;
+            match sx.get(s) {
+                Some(&i) => i,
+                None => {
+                    let i = u16::try_from(strings.len()).ok()?;
+                    strings.push(s);
+                    sx.insert(s, i);
+                    i
+                }
+            }
+        }};
+    }
+
+    let mut verses: Vec<[u16; 4]> = Vec::with_capacity(refs.len());
+    let mut entries: Vec<[u8; 8]> = Vec::new();
+    for r in &refs {
+        let es = &data.ix[*r];
+        let book = intern_str!(r.book.as_str());
+        let n = u16::try_from(es.len()).ok()?;
+        verses.push([book, r.chapter, r.verse, n]);
+        for e in es {
+            let strongs = intern_str!(e.strongs.as_str());
+            let code = intern_str!(e.code.as_str());
+            let hom: u8 = match e.homograph.as_deref() {
+                None | Some("") => 0,
+                Some(h) => match hx.get(h) {
+                    Some(&i) => i,
+                    None => {
+                        let i = u8::try_from(homs.len()).ok()?;
+                        homs.push(h);
+                        hx.insert(h, i);
+                        i
+                    }
+                },
+            };
+            let tok = u16::try_from(e.tok).ok()?;
+            let mut rec = [0u8; 8];
+            rec[0..2].copy_from_slice(&tok.to_le_bytes());
+            rec[2..4].copy_from_slice(&strongs.to_le_bytes());
+            rec[4..6].copy_from_slice(&code.to_le_bytes());
+            rec[6] = hom;
+            entries.push(rec);
+        }
+    }
+
+    let mut out = Vec::new();
+    out.extend_from_slice(MORPHB_MAGIC);
+    out.extend_from_slice(&(verses.len() as u32).to_le_bytes());
+    out.extend_from_slice(&(entries.len() as u32).to_le_bytes());
+    out.extend_from_slice(&(strings.len() as u32).to_le_bytes());
+    out.extend_from_slice(&(homs.len() as u32).to_le_bytes());
+    push_str(&mut out, tok_version);
+    push_str(&mut out, &data.source);
+    for s in &strings {
+        push_str(&mut out, s);
+    }
+    for h in &homs {
+        push_str(&mut out, h);
+    }
+    for v in &verses {
+        for x in v {
+            out.extend_from_slice(&x.to_le_bytes());
+        }
+    }
+    for e in &entries {
+        out.extend_from_slice(e);
+    }
+    Some(out)
+}
+
+/// Read the packed form. `None` on a foreign/short/stale file, so the caller
+/// falls back to the text exactly as if the packed one weren't there.
+pub fn parse_morph_bin(tok_version: &str, bytes: &[u8]) -> Option<MorphData> {
+    if bytes.len() < MORPHB_HEADER || &bytes[..8] != MORPHB_MAGIC {
+        return None;
+    }
+    let u32_at = |o: usize| -> Option<usize> {
+        Some(u32::from_le_bytes(bytes.get(o..o + 4)?.try_into().ok()?) as usize)
+    };
+    let verse_count = u32_at(8)?;
+    let entry_count = u32_at(12)?;
+    let string_count = u32_at(16)?;
+    let hom_count = u32_at(20)?;
+
+    let mut at = MORPHB_HEADER;
+    let take_str = |at: &mut usize| -> Option<String> {
+        let len = u32::from_le_bytes(bytes.get(*at..*at + 4)?.try_into().ok()?) as usize;
+        *at += 4;
+        let s = std::str::from_utf8(bytes.get(*at..*at + len)?).ok()?.to_string();
+        *at += len;
+        while *at % 4 != 0 {
+            *at += 1;
+        }
+        Some(s)
+    };
+
+    let stamp = take_str(&mut at)?;
+    if stamp != tok_version {
+        return None; // stale: addresses a different tokenization
+    }
+    let source = take_str(&mut at)?;
+    let mut strings: Vec<String> = Vec::with_capacity(string_count);
+    for _ in 0..string_count {
+        strings.push(take_str(&mut at)?);
+    }
+    let mut homs: Vec<String> = Vec::with_capacity(hom_count);
+    for _ in 0..hom_count {
+        homs.push(take_str(&mut at)?);
+    }
+
+    let verses_at = at;
+    let entries_at = verses_at.checked_add(verse_count.checked_mul(8)?)?;
+    if bytes.len() < entries_at.checked_add(entry_count.checked_mul(8)?)? {
+        return None;
+    }
+
+    let u16_at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]);
+    let mut ix: HashMap<VRef, Vec<MorphEntry>> = HashMap::with_capacity(verse_count);
+    let mut parsed: HashMap<String, Morph> = HashMap::new();
+    let mut e_at = entries_at;
+    for i in 0..verse_count {
+        let v = verses_at + i * 8;
+        let book = strings.get(u16_at(v) as usize)?;
+        let vref = VRef::new(book.as_str(), u16_at(v + 2), u16_at(v + 4));
+        let n = u16_at(v + 6) as usize;
+        let mut es = Vec::with_capacity(n);
+        for _ in 0..n {
+            let tok = u16_at(e_at) as u32;
+            let strongs = strings.get(u16_at(e_at + 2) as usize)?;
+            let code = strings.get(u16_at(e_at + 4) as usize)?;
+            let hom = bytes[e_at + 6] as usize;
+            e_at += 8;
+            // Each distinct code parsed once, exactly as the text path does.
+            if !parsed.contains_key(code.as_str()) {
+                if let Ok(m) = parse_for(strongs, code) {
+                    parsed.insert(code.clone(), m);
+                }
+            }
+            es.push(MorphEntry {
+                tok,
+                strongs: strongs.clone(),
+                homograph: homs.get(hom).filter(|h| !h.is_empty()).cloned(),
+                code: code.clone(),
+            });
+        }
+        ix.insert(vref, es);
+    }
+    Some(MorphData { ix, source, parsed })
 }
 
 #[cfg(test)]
@@ -762,5 +982,60 @@ mod tests {
         assert_eq!(md.gloss(&VRef::new("Gen", 1, 1), 99), None);
         // Stale tokenization refused.
         assert!(MorphData::parse("other", text).is_none());
+    }
+
+    // ── the packed `.morphb` form ──────────────────────────────────────────────
+
+    const SIDECAR: &str = "{\"format\":\"overlay-morphology-v1\",\"tokenization\":\"kjv1769-tok2\",\"source\":\"OSHB + TR\"}\n\
+        {\"b\":\"Gen\",\"c\":1,\"v\":1,\"e\":[[2,\"H7225\",null,\"HNcfsa\"],[4,\"H1254\",\"a\",\"HVqp3ms\"]]}\n\
+        {\"b\":\"Gen\",\"c\":1,\"v\":2,\"e\":[[1,\"H776\",null,\"HNcfsa\"]]}\n\
+        {\"b\":\"John\",\"c\":3,\"v\":16,\"e\":[[3,\"G2316\",null,\"N-NSM\"]]}\n";
+
+    /// The packed form must be the SAME sidecar: same verses, same entries in
+    /// token order, same glosses, same provenance — compared through the API,
+    /// since byte-equality with the text would prove nothing about what a reader
+    /// gets. Includes a homograph, a Greek code and a Hebrew one.
+    #[test]
+    fn packed_morphology_loads_identically_to_the_text() {
+        let text = MorphData::parse("kjv1769-tok2", SIDECAR).unwrap();
+        let bytes = encode_morph_bin("kjv1769-tok2", SIDECAR).expect("encodes");
+        let packed = parse_morph_bin("kjv1769-tok2", &bytes).unwrap();
+
+        assert_eq!(packed.source(), text.source());
+        assert_eq!(packed.verse_count(), text.verse_count());
+        for r in [VRef::new("Gen", 1, 1), VRef::new("Gen", 1, 2), VRef::new("John", 3, 16)] {
+            assert_eq!(packed.entries(&r), text.entries(&r), "{r:?} entries differ");
+            for tok in 0..6u32 {
+                assert_eq!(packed.gloss(&r, tok), text.gloss(&r, tok), "{r:?} tok {tok} gloss differs");
+            }
+        }
+        // The homograph rides along rather than being flattened away.
+        assert_eq!(packed.entries(&VRef::new("Gen", 1, 1))[1].homograph.as_deref(), Some("a"));
+        // A verse the sidecar never mentions stays empty.
+        assert!(packed.entries(&VRef::new("Rev", 1, 1)).is_empty());
+    }
+
+    /// Byte-for-byte stable across runs: the pack manifest hashes this file, so
+    /// an unstable HashMap traversal would churn the pack version every build.
+    #[test]
+    fn packing_is_deterministic() {
+        let a = encode_morph_bin("kjv1769-tok2", SIDECAR).unwrap();
+        for _ in 0..8 {
+            assert_eq!(encode_morph_bin("kjv1769-tok2", SIDECAR).unwrap(), a);
+        }
+    }
+
+    /// A foreign, truncated or stale packed file must read as "absent" so the
+    /// caller falls back to the text rather than losing the layer.
+    #[test]
+    fn a_bad_packed_sidecar_is_none_not_garbage() {
+        let good = encode_morph_bin("kjv1769-tok2", SIDECAR).unwrap();
+        assert!(parse_morph_bin("kjv1769-tok2", b"not a morphb").is_none());
+        assert!(parse_morph_bin("kjv1769-tok2", &good[..good.len() - 8]).is_none());
+        assert!(parse_morph_bin("kjv1769-tok2", &[]).is_none());
+        // The stamp is carried INSIDE the packed file, so staleness is caught
+        // without the text header being present at all.
+        assert!(parse_morph_bin("kjv1611-tok1", &good).is_none());
+        assert!(encode_morph_bin("kjv1611-tok1", SIDECAR).is_none());
     }
 }
