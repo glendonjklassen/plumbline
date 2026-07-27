@@ -21,7 +21,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -34,8 +38,26 @@ import dev.plumbline.PanelBlock
 import dev.plumbline.PanelData
 import dev.plumbline.PanelRun
 import dev.plumbline.parseWire
+import kotlinx.coroutines.delay
 
 private const val LINK_TAG = "link"
+
+/** How long a study read may take before it explains itself. */
+private const val SLOW_READ_MS = 600L
+
+/** The one-time-cost note shown under a slow study read. Deliberately still —
+ *  an explanation should sit and be read, not pulse. */
+@Composable
+private fun FirstRunSlowNote(palette: ReaderPalette, scale: Float) {
+    Text(
+        "The first one takes a few seconds while the analysis is built for this text. " +
+            "Every look after this is instant.",
+        color = palette.faded,
+        fontSize = (12.5 * scale).sp,
+        lineHeight = (18 * scale).sp,
+        modifier = Modifier.padding(top = 6.dp),
+    )
+}
 
 /**
  * Renders a panel block-list JSON payload. Pass `null` for the idle placeholder.
@@ -54,11 +76,23 @@ fun StudyPane(
     scale: Float = 1f,
     onLink: (String) -> Unit = {},
     embed: (@Composable () -> Unit)? = null,
+    /** A study read is in flight — see [loading] handling below. */
+    loading: Boolean = false,
 ) {
     val blocks = remember(blocksJson) {
         blocksJson?.let {
             runCatching { parseWire<PanelData>(it).blocks }.getOrNull()
         }
+    }
+    // Once a read outlasts a frame or two, say why it is slow and promise the
+    // rest are fast. Timed rather than flagged: whatever index is cold, the wait
+    // itself is the honest signal. Web twin: StudyPanel.svelte's `slowRead`.
+    var slowRead by remember { mutableStateOf(false) }
+    LaunchedEffect(loading, blocksJson) {
+        slowRead = false
+        if (!loading) return@LaunchedEffect
+        delay(SLOW_READ_MS)
+        slowRead = true
     }
 
     Column(
@@ -68,6 +102,16 @@ fun StudyPane(
             .padding(PaddingValues(horizontal = 18.dp, vertical = 14.dp)),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (loading && blocks == null) {
+            Text(
+                "— loading —",
+                color = palette.faded,
+                fontStyle = FontStyle.Italic,
+                fontSize = (14 * scale).sp,
+            )
+            if (slowRead) FirstRunSlowNote(palette, scale)
+            return@Column
+        }
         if (blocks == null) {
             Text(
                 "Tap a word for study.",
@@ -77,6 +121,8 @@ fun StudyPane(
             )
             return@Column
         }
+        // Refreshing over existing content: the note still explains a long wait.
+        if (loading && slowRead) FirstRunSlowNote(palette, scale)
         val embedAt = if (embed == null) {
             -1
         } else {

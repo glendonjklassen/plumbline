@@ -127,6 +127,18 @@ export class StudyEngine {
   chapterCount(book: string): number {
     return this.#call((b) => (this.#w.exports.plumbline_engine_chapter_count as Function)(this.#engine, b) as number, [book]);
   }
+  /** Highest verse number in a chapter — the passage picker's range. */
+  chapterVerseCount(book: string, chapter: number): number {
+    return this.#call(
+      (b) =>
+        (this.#w.exports.plumbline_engine_chapter_verse_count as Function)(
+          this.#engine,
+          b,
+          chapter,
+        ) as number,
+      [book],
+    );
+  }
   verse(refKey: string): any {
     return this.#json("plumbline_engine_verse_json", refKey);
   }
@@ -441,6 +453,14 @@ export class StudyEngine {
 
   memoryAdd(verseRef: string, now: string): string | null {
     return this.#author("plumbline_engine_memory_add", (f, ...p) => f(this.#engine, ...p), [verseRef, now]);
+  }
+  /** One card for a whole passage (`startRef`…`throughRef`, same chapter). */
+  memoryAddPassage(startRef: string, throughRef: string, now: string): string | null {
+    return this.#author("plumbline_engine_memory_add_passage", (f, ...p) => f(this.#engine, ...p), [
+      startRef,
+      throughRef,
+      now,
+    ]);
   }
   memoryGrade(verseRef: string, grade: Grade, now: string): string | null {
     return this.#author("plumbline_engine_memory_grade", (f, ...p) => f(this.#engine, ...p), [verseRef, grade, now]);

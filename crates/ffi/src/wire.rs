@@ -1506,6 +1506,11 @@ pub fn highlight_tones_to_wire() -> WireHighlightTones {
 pub struct WireMemoryCard {
     #[serde(rename = "ref")]
     pub reference: String,
+    /// Reader-facing name: `"Ps 23:1–6"` for a passage card (additive, 2026-07-27).
+    pub label: String,
+    /// The passage's last verse, when this card is a passage.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub through: Option<String>,
     pub ease: f32,
     pub interval_days: u32,
     pub reps: u32,
@@ -1519,6 +1524,8 @@ pub struct WireMemoryCard {
 pub fn memory_card_to_wire(c: &memory::Card) -> WireMemoryCard {
     WireMemoryCard {
         reference: c.verse.ref_key(),
+        label: c.label(),
+        through: c.through.as_ref().map(plumbline_core::VRef::ref_key),
         ease: c.ease,
         interval_days: c.interval_days,
         reps: c.reps,
@@ -1538,7 +1545,11 @@ pub struct WireMemoryDue {
 /// The coverage-map data: per-verse standing plus the 8-section rollup.
 #[derive(Serialize)]
 pub struct WireMemoryCoverage {
+    /// Per-verse shading for the coverage map — a passage card contributes
+    /// every verse it covers.
     pub verses: Vec<memory::VerseCoverage>,
+    /// One row per card, for the hub's list (additive, 2026-07-27).
+    pub cards: Vec<memory::CardSummary>,
     pub sections: Vec<memory::SectionCoverage>,
 }
 
@@ -1555,6 +1566,11 @@ pub struct WireMemoryActivity {
 pub struct WireMemoryDrill {
     #[serde(rename = "ref")]
     pub reference: String,
+    /// What the drill is called on screen — `"Ps 23:1–6"` for a passage card
+    /// (additive, 2026-07-27).
+    pub label: String,
+    /// Verses in the drill (1 unless this card is a passage).
+    pub verses: u32,
     pub text: String,
     pub first_letters: String,
     pub blanked: String,

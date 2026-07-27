@@ -110,7 +110,7 @@ private fun refParts(ref: String): Triple<String, Int, Int>? {
 /** The plain-text take-home for a presented thread (the end-card Share). The
  *  full verse text is inlined, so it reads without any online Bible; the
  *  closing line carries the hosted PWA ([PWA_URL], QrShare.kt). */
-private fun shareText(name: String, entries: List<PresentEntry>): String =
+private fun shareText(name: String, entries: List<PresentEntry>, link: String): String =
     buildString {
         appendLine(name)
         for (e in entries) {
@@ -118,7 +118,7 @@ private fun shareText(name: String, entries: List<PresentEntry>): String =
             appendLine("“${e.body}” — ${e.display}")
         }
         appendLine()
-        appendLine("Shared from Plumbline — $PWA_URL")
+        appendLine("Shared from Plumbline — $link")
     }
 
 /**
@@ -134,6 +134,11 @@ fun PresentOverlay(
     thread: Thread1?,
     onThread: (Thread1?) -> Unit,
     onClose: () -> Unit,
+    /** THE link this reader hands over — the app plus their church, and (by
+     *  default) the new-believer marker, because Present is the screen you show
+     *  someone face to face. Built by the shell from the shared config so
+     *  Present and the header can never drift apart. */
+    shareLink: String = PWA_URL,
 ) {
     val context = LocalContext.current
     val serif = remember {
@@ -189,13 +194,15 @@ fun PresentOverlay(
                 t.name, entries, serif,
                 onFocus = { focus = it },
                 onBack = { onThread(null) },
-                onShare = { sharePlain(context, shareText(t.name, entries)) },
+                onShare = { sharePlain(context, shareText(t.name, entries, shareLink)) },
+                shareLink = shareLink,
             )
             else -> PresentFocus(
                 engine, t.name, entries, focus!!, serif,
                 onStep = { i -> focus = i.coerceIn(0, entries.size) },
                 onOverview = { focus = null },
-                onShare = { sharePlain(context, shareText(t.name, entries)) },
+                onShare = { sharePlain(context, shareText(t.name, entries, shareLink)) },
+                shareLink = shareLink,
             )
         }
     }
@@ -274,6 +281,7 @@ private fun PresentOverview(
     onFocus: (Int) -> Unit,
     onBack: () -> Unit,
     onShare: () -> Unit,
+    shareLink: String,
 ) {
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -310,7 +318,7 @@ private fun PresentOverview(
                 }
                 HorizontalDivider(color = SunRule, modifier = Modifier.padding(horizontal = 24.dp))
             }
-            item { EndCard(name, entries, serif, onShare) }
+            item { EndCard(name, entries, serif, onShare, shareLink) }
         }
     }
 }
@@ -327,6 +335,7 @@ private fun PresentFocus(
     onStep: (Int) -> Unit,
     onOverview: () -> Unit,
     onShare: () -> Unit,
+    shareLink: String,
 ) {
     val density = LocalDensity.current
     var swipeDx by remember { mutableStateOf(0f) }
@@ -384,7 +393,7 @@ private fun PresentFocus(
                 Column(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.Center,
-                ) { EndCard(name, entries, serif, onShare) }
+                ) { EndCard(name, entries, serif, onShare, shareLink) }
             } else {
                 val e = entries[index]
                 Column(
@@ -460,6 +469,7 @@ private fun EndCard(
     entries: List<PresentEntry>,
     serif: FontFamily,
     onShare: () -> Unit,
+    shareLink: String,
 ) {
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 26.dp, vertical = 28.dp),
@@ -486,7 +496,7 @@ private fun EndCard(
         }
         Spacer(Modifier.height(26.dp))
         // The take-home carries the app itself: scan → the hosted PWA.
-        PwaQrCode(size = 148.dp)
+        QrCode(text = shareLink, size = 148.dp)
         Spacer(Modifier.height(8.dp))
         Text(
             "scan for the app — free, offline, no account",

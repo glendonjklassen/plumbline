@@ -715,6 +715,32 @@ pub unsafe extern "C" fn plumbline_engine_chapter_count(
     })
 }
 
+/// The highest verse number in `book` chapter `chapter` — how many verses a
+/// shell may offer for that chapter (the passage-memorize picker's range).
+/// 0 for a null engine or a chapter the corpus lacks.
+///
+/// # Safety
+/// `engine` is valid; `book` is a valid NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_chapter_verse_count(
+    engine: *const PlumblineEngine,
+    book: *const c_char,
+    chapter: u32,
+) -> u32 {
+    guard(0, || {
+        match (engine.as_ref(), opt_str(book)) {
+            (Some(engine), Some(book)) => engine
+                .corpus
+                .chapter_verses(book, chapter.min(u16::MAX as u32) as u16)
+                .iter()
+                .map(|v| v.verse as u32)
+                .max()
+                .unwrap_or(0),
+            _ => 0,
+        }
+    })
+}
+
 /// A single verse as JSON:
 /// `{"reference","display","body","title","tokens":[...]}`. `reference` is a
 /// compact key like `"John 3:16"`. Null if the reference is unknown or
@@ -1875,8 +1901,12 @@ pub unsafe extern "C" fn plumbline_engine_concept_json(
                 })
                 .collect(),
             by_book: stat.by_book.clone(),
-            collocates: wire::scored_to_wire(ce.collocates(code, 12)),
-            community: ce.community(code).into_iter().take(12).collect(),
+            // Same name filter as the radial map: a concept's neighbours are
+            // concepts (see `name_noise`).
+            collocates: wire::scored_to_wire(
+                ce.collocates(code, 48).into_iter().filter(|(c, _)| !name_noise(e, c)).take(12).collect(),
+            ),
+            community: ce.community(code).into_iter().filter(|c| !name_noise(e, c)).take(12).collect(),
             leitwort,
         })
     })
@@ -1884,6 +1914,21 @@ pub unsafe extern "C" fn plumbline_engine_concept_json(
 
 /// How many spokes each side (semantic / community) of the concept map shows.
 const CONCEPT_MAP_SPOKES: usize = 6;
+
+/// The proper nouns that stay in a concept neighbourhood. In this corpus the
+/// divine name and Christ *are* concepts, not incidental names — everything
+/// the book says about salvation runs through them.
+const CONCEPT_KEEP_NAMES: &[&str] = &["H3068", "H3069", "H3050", "H136", "G2424", "G5547"];
+
+/// Whether `code` is a proper noun that has no business ringing a concept:
+/// "faith" surrounded by Ephraim, Jerusalem and Shechem reads as noise rather
+/// than meaning (feedback 2026-07-27). Names stay fully reachable — as concept
+/// map *centres*, in word study, concordance and search — only the neighbour
+/// rings and collocate lists drop them.
+fn name_noise(e: &PlumblineEngine, code: &str) -> bool {
+    !CONCEPT_KEEP_NAMES.contains(&code)
+        && e.strongs().get(code).is_some_and(strongs::is_proper_noun)
+}
 
 /// A concept-map node label: the English gloss over the lemma (`\n`-separated),
 /// falling back to whichever exists, then the bare code. Mirrors the GTK
@@ -1921,14 +1966,21 @@ pub unsafe extern "C" fn plumbline_engine_concept_map_json(
         // The cosine scores travel out as spoke weights so the shells can
         // scale distance by relatedness (equidistant spokes read as "equally
         // related", which the data never said).
+        // Ask for extra candidates, then drop the proper nouns: filtering after
+        // a k-sized fetch would leave short rings whenever names crowded the top.
         let near_scored: Vec<(String, f32)> = e
             .embedding
             .get()
-            .map(|emb| emb.nearest_concepts(code, CONCEPT_MAP_SPOKES))
-            .unwrap_or_default();
+            .map(|emb| emb.nearest_concepts(code, CONCEPT_MAP_SPOKES * 4))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|(c, _)| !name_noise(e, c))
+            .take(CONCEPT_MAP_SPOKES)
+            .collect();
         let near: Vec<String> = near_scored.iter().map(|(c, _)| c.clone()).collect();
         let ce = e.concept();
-        let community = ce.community(code);
+        let community: Vec<String> =
+            ce.community(code).into_iter().filter(|c| !name_noise(e, c)).collect();
         let spokes = concept::radial_spokes(&near, &community, CONCEPT_MAP_SPOKES)
             .into_iter()
             .map(|(c, semantic)| wire::WireConceptSpoke {
@@ -3294,6 +3346,57 @@ pub unsafe extern "C" fn plumbline_engine_memory_add(
     })
 }
 
+/// Start memorizing the passage `start_ref`…`through_ref` (inclusive) as ONE
+/// card — the whole section recalled in one go, rather than a card per verse
+/// (2026-07-27). The card is keyed and listed by `start_ref`.
+///
+/// `through_ref` must name a later verse of the same chapter; anything else
+/// seeds a plain single-verse card. Already memorizing `start_ref` is a no-op,
+/// so re-running with a different end does NOT silently re-span the card —
+/// remove it first. Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_memory_add_passage(
+    engine: *mut PlumblineEngine,
+    start_ref: *const c_char,
+    through_ref: *const c_char,
+    now: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory; cannot author".to_string());
+        };
+        let (Some(sr), Some(tr), Some(now)) =
+            (opt_str(start_ref), opt_str(through_ref), opt_str(now))
+        else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let (Some(start), Some(through)) = (VRef::parse_ref_key(sr), VRef::parse_ref_key(tr)) else {
+            return out_string("bad ref".to_string());
+        };
+        // Every verse must actually exist, or the drill would prompt for text
+        // the reader can never see.
+        if engine.corpus.verse(&start).is_none() || engine.corpus.verse(&through).is_none() {
+            return out_string("no such verse".to_string());
+        }
+        let (cards, _) = memory::load_cards(&home);
+        if cards.contains_key(&start) {
+            return ptr::null_mut();
+        }
+        let card =
+            memory::Card::new_passage(start, &through, canon::TOKENIZATION_VERSION, now);
+        match memory::write_card(&home, &card) {
+            Ok(()) => ptr::null_mut(),
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
 /// Stop memorizing `verse_ref` (remove its card); a missing card is a no-op.
 /// Null on success, else an owned error.
 ///
@@ -3383,6 +3486,7 @@ pub unsafe extern "C" fn plumbline_engine_memory_coverage_json(
         let cards = e.home.as_ref().map(|h| memory::load_cards(h).0).unwrap_or_default();
         out_json(&wire::WireMemoryCoverage {
             verses: memory::coverage(&cards, now),
+            cards: memory::card_list(&cards, now),
             sections: memory::coverage_by_section(&cards),
         })
     })
@@ -3402,9 +3506,27 @@ pub unsafe extern "C" fn plumbline_engine_memory_activity_json(engine: *const Pl
     })
 }
 
+/// What a memorize card is drilled and scored against: `(label, text, verses)`.
+/// A passage card's verses are joined into one continuous text, so the drill
+/// prompts for — and the check scores — the whole chunk. A ref with no card yet
+/// (or the engine with no home) falls back to the single verse, which is what
+/// every card was before passages existed. None if the verse doesn't exist.
+fn memory_span(e: &PlumblineEngine, vref: &VRef) -> Option<(String, String, u32)> {
+    let card = e.home.as_ref().and_then(|h| memory::load_cards(h).0.remove(vref));
+    let refs = card.as_ref().map_or_else(|| vec![vref.clone()], memory::Card::verses);
+    let bodies: Vec<String> =
+        refs.iter().filter_map(|r| e.corpus.verse(r)).map(|v| v.body()).collect();
+    if bodies.is_empty() {
+        return None;
+    }
+    let label = card.as_ref().map_or_else(|| vref.ref_key(), memory::Card::label);
+    Some((label, bodies.join(" "), bodies.len() as u32))
+}
+
 /// A drill prompt for `verse_ref` at blank-out `level` (0 = full text … max):
-/// the verse text, its first-letter skeleton, and the blanked form. Null if the
-/// verse isn't found.
+/// the text, its first-letter skeleton, and the blanked form. When `verse_ref`
+/// is a passage card's first verse, the drill covers the whole passage. Null if
+/// the verse isn't found.
 ///
 /// # Safety
 /// `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.
@@ -3420,11 +3542,12 @@ pub unsafe extern "C" fn plumbline_engine_memory_drill_json(
         else {
             return ptr::null_mut();
         };
-        let Some(v) = e.corpus.verse(&vref) else { return ptr::null_mut() };
-        let text = v.body();
+        let Some((label, text, verses)) = memory_span(e, &vref) else { return ptr::null_mut() };
         let level = level.min(u8::MAX as u32) as u8;
         out_json(&wire::WireMemoryDrill {
             reference: vref.ref_key(),
+            label,
+            verses,
             first_letters: memory::first_letters(&text),
             blanked: memory::blank_out(&text, level),
             text,
@@ -3451,8 +3574,8 @@ pub unsafe extern "C" fn plumbline_engine_memory_score_json(
         else {
             return ptr::null_mut();
         };
-        let Some(v) = e.corpus.verse(&vref) else { return ptr::null_mut() };
-        out_json(&memory::score_recall(typed, &v.body()))
+        let Some((_, actual, _)) = memory_span(e, &vref) else { return ptr::null_mut() };
+        out_json(&memory::score_recall(typed, &actual))
     })
 }
 

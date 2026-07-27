@@ -142,6 +142,13 @@ dependencies {
     // libjnidispatch.so per-ABI and (5.17+) fixes the 16 KB page-size crash.
     implementation("net.java.dev.jna:jna:5.17.0@aar")
 
+    // QR encoding for the share sheet. The matrix used to be a build-time
+    // constant for one fixed URL, which cannot carry a church (2026-07-27) —
+    // shared links are now per-reader, so the code is generated at render time.
+    // `core` only: the android-integration artifact drags in camera/scanning we
+    // never use. Apache-2.0, no transitive dependencies.
+    implementation("com.google.zxing:core:3.5.3")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")

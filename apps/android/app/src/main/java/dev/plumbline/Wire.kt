@@ -611,6 +611,10 @@ data class SimilarVerses(
 @Serializable
 data class MemoryCard(
     val ref: String = "",
+    /** Reader-facing name: "Ps 23:1–6" for a passage card (additive, 2026-07-27). */
+    val label: String = "",
+    /** The passage's last verse, when this card spans one. */
+    val through: String? = null,
     val ease: Float = 0f,
     val intervalDays: Int = 0,
     val reps: Int = 0,
@@ -628,8 +632,25 @@ data class MemoryDue(val refs: List<String> = emptyList())
 
 @Serializable
 data class MemoryCoverage(
+    /** Per-verse shading for the coverage map — a passage card contributes
+     *  every verse it covers. */
     val verses: List<VerseCoverage> = emptyList(),
+    /** One row per card, for the hub's list (additive, 2026-07-27). */
+    val cards: List<CardSummary> = emptyList(),
     val sections: List<SectionCoverage> = emptyList(),
+)
+
+/** One card as the hub lists it — a passage is ONE row here and every verse it
+ *  covers in [MemoryCoverage.verses]. [ref] (its first verse) addresses it. */
+@Serializable
+data class CardSummary(
+    val ref: String = "",
+    val label: String = "",
+    val verses: Int = 1,
+    val mastery: String = "new",
+    val reps: Int = 0,
+    val lapses: Int = 0,
+    val due: Boolean = false,
 )
 
 @Serializable
@@ -659,6 +680,10 @@ data class DayActivity(val day: String = "", val reviews: Int = 0)
 @Serializable
 data class MemoryDrill(
     val ref: String = "",
+    /** What the drill is called on screen — "Ps 23:1–6" for a passage. */
+    val label: String = "",
+    /** Verses in the drill (1 unless this card is a passage). */
+    val verses: Int = 1,
     val text: String = "",
     val firstLetters: String = "",
     val blanked: String = "",

@@ -135,6 +135,16 @@ char *plumbline_engine_toc_json(const struct PlumblineEngine *engine);
 // `engine` is valid; `book` is a valid NUL-terminated UTF-8 string.
 uint32_t plumbline_engine_chapter_count(const struct PlumblineEngine *engine, const char *book);
 
+// The highest verse number in `book` chapter `chapter` — how many verses a
+// shell may offer for that chapter (the passage-memorize picker's range).
+// 0 for a null engine or a chapter the corpus lacks.
+//
+// # Safety
+// `engine` is valid; `book` is a valid NUL-terminated UTF-8 string.
+uint32_t plumbline_engine_chapter_verse_count(const struct PlumblineEngine *engine,
+                                              const char *book,
+                                              uint32_t chapter);
+
 // A single verse as JSON:
 // `{"reference","display","body","title","tokens":[...]}`. `reference` is a
 // compact key like `"John 3:16"`. Null if the reference is unknown or
@@ -858,6 +868,22 @@ char *plumbline_engine_memory_add(struct PlumblineEngine *engine,
                                   const char *verse_ref,
                                   const char *now);
 
+// Start memorizing the passage `start_ref`…`through_ref` (inclusive) as ONE
+// card — the whole section recalled in one go, rather than a card per verse
+// (2026-07-27). The card is keyed and listed by `start_ref`.
+//
+// `through_ref` must name a later verse of the same chapter; anything else
+// seeds a plain single-verse card. Already memorizing `start_ref` is a no-op,
+// so re-running with a different end does NOT silently re-span the card —
+// remove it first. Null on success, else an owned error.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_memory_add_passage(struct PlumblineEngine *engine,
+                                          const char *start_ref,
+                                          const char *through_ref,
+                                          const char *now);
+
 // Stop memorizing `verse_ref` (remove its card); a missing card is a no-op.
 // Null on success, else an owned error.
 //
@@ -895,8 +921,9 @@ char *plumbline_engine_memory_coverage_json(const struct PlumblineEngine *engine
 char *plumbline_engine_memory_activity_json(const struct PlumblineEngine *engine);
 
 // A drill prompt for `verse_ref` at blank-out `level` (0 = full text … max):
-// the verse text, its first-letter skeleton, and the blanked form. Null if the
-// verse isn't found.
+// the text, its first-letter skeleton, and the blanked form. When `verse_ref`
+// is a passage card's first verse, the drill covers the whole passage. Null if
+// the verse isn't found.
 //
 // # Safety
 // `engine` is a live engine; `verse_ref` is null or valid NUL-terminated UTF-8.

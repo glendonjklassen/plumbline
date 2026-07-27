@@ -61,6 +61,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import dev.plumbline.CanonSegments
 import dev.plumbline.ChordMapData
@@ -69,6 +70,7 @@ import dev.plumbline.ConstellationData
 import dev.plumbline.StudyEngine
 import dev.plumbline.TocBook
 import dev.plumbline.parseWire
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.PI
@@ -223,6 +225,38 @@ internal fun partnerName(label: String): String {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
+ * What a map shows while it is being built. The FIRST analytical map of a
+ * session pays for a corpus-wide sweep; the rest are instant. Several seconds
+ * under a bare label reads as a hang (feedback 2026-07-27), so once the wait is
+ * real, say it is one-time. Web twin: MapFrame.svelte's `slow`.
+ */
+@Composable
+private fun MapBuilding(label: String, palette: ReaderPalette) {
+    var slow by remember { mutableStateOf(false) }
+    LaunchedEffect(label) {
+        delay(600)
+        slow = true
+    }
+    Column(
+        Modifier.padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(label, color = palette.faded)
+        if (slow) {
+            Text(
+                "The first map of a session takes a few seconds: the whole text is being swept " +
+                    "for this. The maps you open after it appear at once.",
+                color = palette.faded,
+                fontSize = 12.5.sp,
+                lineHeight = 18.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+        }
+    }
+}
+
+/**
  * The concept map for [code]: a radial neighbourhood (centre label + spokes,
  * gold = semantic / green = community) over a canon dispersion strip. When the
  * code has a cross-testament bridge, an indigo partner row bands the strip
@@ -268,7 +302,7 @@ fun ConceptMap(
     ) {
         val map = data
         when {
-            loading -> Text("Building concept map…", color = palette.faded)
+            loading -> MapBuilding("Building concept map…", palette)
             map == null -> Text("No concept data for $code.", color = palette.faded)
             else -> Canvas(
                 Modifier
@@ -735,7 +769,7 @@ fun ChordMap(
     ) {
         val map = data
         when {
-            loading -> Text("Building weave map…", color = palette.faded)
+            loading -> MapBuilding("Building weave map…", palette)
             map == null || map.pairs.isEmpty() -> Text("No weaves to map yet.", color = palette.faded)
             else -> Canvas(
                 Modifier

@@ -197,7 +197,11 @@ internal interface PlumblineNative : Library {
     fun plumbline_engine_memory_grade(
         engine: Pointer, verseRef: String, grade: String, now: String,
     ): Pointer?
+    fun plumbline_engine_chapter_verse_count(engine: Pointer, book: String, chapter: Int): Int
     fun plumbline_engine_memory_add(engine: Pointer, verseRef: String, now: String): Pointer?
+    fun plumbline_engine_memory_add_passage(
+        engine: Pointer, startRef: String, throughRef: String, now: String,
+    ): Pointer?
     fun plumbline_engine_memory_remove(engine: Pointer, verseRef: String): Pointer?
     fun plumbline_engine_memory_card_json(engine: Pointer, verseRef: String): Pointer?
     fun plumbline_engine_memory_due_json(engine: Pointer, now: String): Pointer?

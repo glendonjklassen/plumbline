@@ -148,8 +148,12 @@ fun MemorizeList(
         }.getOrNull()
     }
     val nameOf = remember(books) { books.associate { it.id to it.name } }
+    // The LIST is per card — a passage card is one row labelled "Ps 23:1–6".
+    // The coverage strip below keeps using `verses`, which a passage card
+    // contributes every verse to (2026-07-27).
+    val cards = coverage?.cards ?: emptyList()
     val verses = coverage?.verses ?: emptyList()
-    val dueCount = verses.count { it.due }
+    val dueCount = cards.count { it.due }
 
     MemFrame("Memorize", palette, onClose) {
         Column(Modifier.fillMaxSize()) {
@@ -186,26 +190,32 @@ fun MemorizeList(
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(top = 8.dp))
             }
 
-            if (verses.isEmpty()) {
+            if (cards.isEmpty()) {
                 Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                     Text(
-                        "No verses yet.\n\nLong-press a verse → “Memorize this verse” to start a card.",
+                        "No verses yet.\n\nLong-press a verse → “Memorize this verse”, or " +
+                            "“Memorize passage…” for a whole section.",
                         color = palette.ink, fontSize = 16.sp,
                     )
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
                     item {
+                        val nv = cards.sumOf { it.verses }
                         Text(
-                            "${verses.size} verse${if (verses.size == 1) "" else "s"} · tap to drill",
+                            "${cards.size} card${if (cards.size == 1) "" else "s"} · " +
+                                "$nv verse${if (nv == 1) "" else "s"} · tap to drill",
                             color = palette.faded, fontSize = 12.sp,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                         )
                     }
-                    items(verses) { v ->
-                        val sp = v.ref.lastIndexOf(' ')
-                        val bookId = if (sp > 0) v.ref.substring(0, sp) else v.ref
-                        val chv = if (sp > 0) v.ref.substring(sp + 1) else ""
+                    items(cards) { v ->
+                        // The label carries the range ("Ps 23:1–6"); swap only the
+                        // OSIS book id for its display name.
+                        val shown = v.label.ifBlank { v.ref }
+                        val sp = shown.lastIndexOf(' ')
+                        val bookId = if (sp > 0) shown.substring(0, sp) else shown
+                        val chv = if (sp > 0) shown.substring(sp + 1) else ""
                         Row(
                             Modifier.fillMaxWidth()
                                 .clickable { onDrill(v.ref) }
@@ -334,7 +344,7 @@ private fun ReviewBody(
     // idx never runs past the end: advance() calls onFinish before it would.
     val curRef = due[idx]
 
-    val refDisplay = remember(curRef) {
+    val verseDisplay = remember(curRef) {
         runCatching {
             synchronized(engine) { engine.VerseJson(curRef) }
                 ?.let { parseWire<VerseData>(it).display }
@@ -348,6 +358,14 @@ private fun ReviewBody(
             synchronized(engine) { engine.MemoryDrillJson(curRef, level) }
                 ?.let { parseWire<MemoryDrill>(it) }
         }.getOrNull()
+    }
+    // A passage card is titled by its range ("Psalm 23:1–6"): take the drill's
+    // label and swap its OSIS id for the display name the verse lookup gives.
+    val refDisplay = remember(curRef, drill?.label, verseDisplay) {
+        val label = drill?.label.orEmpty()
+        val dash = label.indexOf('–')
+        if (dash < 0 || !label.startsWith(curRef)) verseDisplay
+        else verseDisplay + label.substring(dash)
     }
     val maxLevel = (drill?.maxLevel ?: 0).takeIf { it > 0 } ?: 4
     val promptText = when (mode) {

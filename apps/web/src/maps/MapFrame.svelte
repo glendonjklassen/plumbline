@@ -13,11 +13,38 @@
     height: number;
     onZoom?: (z: ZoomState) => void;
     pager?: { page: number; maxPage: number; onPage: (d: -1 | 1) => void } | null;
+    /** True while the map's model is still being computed — the frame paints
+     *  the wait instead of leaving blank paper. */
+    loading?: boolean;
     children: Snippet;
   }
-  let { title, caption = "", width, height, onZoom, pager = null, children }: Props = $props();
+  let {
+    title,
+    caption = "",
+    width,
+    height,
+    onZoom,
+    pager = null,
+    loading = false,
+    children,
+  }: Props = $props();
 
   const s = getSession();
+
+  // The first analytical map of a session pays for a corpus-wide sweep; the
+  // rest are instant. Blank paper for several seconds reads as broken
+  // (feedback 2026-07-27), so once the wait is real, name it and say it is
+  // one-time. See the twin in StudyPanel.svelte.
+  const SLOW_MAP_MS = 600;
+  let slow = $state(false);
+  $effect(() => {
+    if (!loading) {
+      slow = false;
+      return;
+    }
+    const t = setTimeout(() => (slow = true), SLOW_MAP_MS);
+    return () => clearTimeout(t);
+  });
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
@@ -41,6 +68,17 @@
     use:zoomable={(z) => onZoom?.(z)}
   >
     {@render children()}
+    {#if loading}
+      <div class="wait" aria-live="polite">
+        <span class="waitline">— building —</span>
+        {#if slow}
+          <span class="waitnote">
+            The first map of a session takes a few seconds: the whole text is being swept for this.
+            The maps you open after it appear at once.
+          </span>
+        {/if}
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -115,6 +153,39 @@
     max-height: 82vh;
     overflow: hidden;
     touch-action: none;
+  }
+  .wait {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 0 12%;
+    text-align: center;
+    /* The popup's own paper, so the canvas underneath never shows through. */
+    background: #f2eee6;
+  }
+  .waitline {
+    color: #8a8276;
+    font-size: 13.5px;
+    animation: waitpulse 1.1s ease-in-out infinite;
+  }
+  .waitnote {
+    color: #8a8276;
+    font-size: 12.5px;
+    line-height: 1.5;
+    max-width: 46ch;
+  }
+  @keyframes waitpulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+    }
   }
   .host :global(canvas) {
     position: absolute;

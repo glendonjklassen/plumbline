@@ -90,10 +90,18 @@ pub struct Review {
 
 // ── the card ─────────────────────────────────────────────────────────────────
 
-/// An SRS card for one verse: its SM-2 schedule plus every review.
+/// An SRS card for one verse — or, when `through` is set, for a passage read
+/// and recalled as one chunk: its SM-2 schedule plus every review.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Card {
     pub verse: VRef,
+    /// Last verse of the passage, inclusive — `None` for a single-verse card.
+    /// A card is keyed and filed by its FIRST verse, so this is additive: a
+    /// reader on an older build sees the passage card as a card on its opening
+    /// verse rather than losing it (`overlay-memory-v1` is frozen, §Data
+    /// formats). Always the same book and chapter as `verse` — see
+    /// [`Card::new_passage`].
+    pub through: Option<VRef>,
     pub tok_version: String,
     pub created: String,
     /// SM-2 ease factor (EF), ≥ 1.3.
@@ -114,6 +122,9 @@ struct CardRepr {
     format: String,
     #[serde(rename = "ref")]
     ref_key: String,
+    /// Additive (2026-07-27): the passage's last verse as a refKey.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    through: Option<String>,
     tokenization: String,
     created: String,
     ease: f32,
@@ -131,6 +142,7 @@ impl Card {
     pub fn new(vref: VRef, tok_version: &str, created: &str) -> Card {
         Card {
             verse: vref,
+            through: None,
             tok_version: tok_version.to_string(),
             created: created.to_string(),
             ease: EASE_START,
@@ -142,10 +154,46 @@ impl Card {
         }
     }
 
+    /// A fresh card for the passage `start`…`through` (inclusive), due
+    /// immediately. `through` is normalized: a different book, a different
+    /// chapter, or an end at/before `start` collapses to a single-verse card, so
+    /// a passage card always spans a real, forward, same-chapter run.
+    ///
+    /// (Same-chapter is the limit today — the field holds a full refKey, so
+    /// crossing a chapter boundary can be allowed later without a format
+    /// change.)
+    pub fn new_passage(start: VRef, through: &VRef, tok_version: &str, created: &str) -> Card {
+        let spans = through.book == start.book
+            && through.chapter == start.chapter
+            && through.verse > start.verse;
+        Card { through: spans.then(|| through.clone()), ..Card::new(start, tok_version, created) }
+    }
+
+    /// Every verse this card covers, in order — one entry for a single-verse
+    /// card, the whole inclusive run for a passage.
+    pub fn verses(&self) -> Vec<VRef> {
+        match &self.through {
+            Some(end) => (self.verse.verse..=end.verse)
+                .map(|v| VRef::new(self.verse.book.clone(), self.verse.chapter, v))
+                .collect(),
+            None => vec![self.verse.clone()],
+        }
+    }
+
+    /// How this card is named to the reader: `"Ps 23:1–6"` for a passage (en
+    /// dash, the way a passage is written), else the plain refKey `"Gen 1:7"`.
+    pub fn label(&self) -> String {
+        match &self.through {
+            Some(end) => format!("{}\u{2013}{}", self.verse.ref_key(), end.verse),
+            None => self.verse.ref_key(),
+        }
+    }
+
     fn to_repr(&self) -> CardRepr {
         CardRepr {
             format: FORMAT.to_string(),
             ref_key: self.verse.ref_key(),
+            through: self.through.as_ref().map(VRef::ref_key),
             tokenization: self.tok_version.clone(),
             created: self.created.clone(),
             ease: self.ease,
@@ -248,10 +296,22 @@ pub fn load_cards(home: impl AsRef<Path>) -> (HashMap<VRef, Card>, Vec<String>) 
             Ok(bytes) => match serde_json::from_slice::<CardRepr>(&bytes) {
                 Ok(r) if r.format == FORMAT => match VRef::parse_ref_key(&r.ref_key) {
                     Some(vref) => {
+                        // An unparseable or nonsensical `through` degrades to a
+                        // single-verse card rather than sinking the file.
+                        let through = r
+                            .through
+                            .as_deref()
+                            .and_then(VRef::parse_ref_key)
+                            .filter(|t| {
+                                t.book == vref.book
+                                    && t.chapter == vref.chapter
+                                    && t.verse > vref.verse
+                            });
                         cards.insert(
                             vref.clone(),
                             Card {
                                 verse: vref,
+                                through,
                                 tok_version: r.tokenization,
                                 created: r.created,
                                 ease: r.ease,
@@ -446,20 +506,63 @@ pub struct VerseCoverage {
 
 /// Per-verse coverage across every card — the spatial map "shaded by verses
 /// memorized and review depth/recency", in reading order.
+/// A passage card shades every verse it covers — the map answers "have I
+/// memorized this verse", and a verse learned inside a chunk has been.
 pub fn coverage(cards: &HashMap<VRef, Card>, now: &str) -> Vec<VerseCoverage> {
     let mut out: Vec<VerseCoverage> = cards
         .values()
-        .map(|c| VerseCoverage {
-            ref_key: c.verse.ref_key(),
-            mastery: mastery(c),
-            reps: c.reps,
-            lapses: c.lapses,
-            last_at: c.reviews.last().map(|r| r.at.clone()),
-            due: is_due(c, now),
+        .flat_map(|c| {
+            let (m, due) = (mastery(c), is_due(c, now));
+            c.verses().into_iter().map(move |v| VerseCoverage {
+                ref_key: v.ref_key(),
+                mastery: m,
+                reps: c.reps,
+                lapses: c.lapses,
+                last_at: c.reviews.last().map(|r| r.at.clone()),
+                due,
+            })
         })
         .collect();
     out.sort_by_key(|v| VRef::parse_ref_key(&v.ref_key).map(|r| r.reading_key()));
     out
+}
+
+/// One card as the memorize hub lists it — the row a reader drills or removes.
+/// Distinct from [`VerseCoverage`], which is per-verse shading: a passage card
+/// is ONE row here and every verse it covers there.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CardSummary {
+    /// The card's key — its first verse. Every card endpoint takes this.
+    #[serde(rename = "ref")]
+    pub ref_key: String,
+    /// What to show the reader: `"Ps 23:1–6"` or `"Gen 1:7"`.
+    pub label: String,
+    /// How many verses this card covers (1 unless it's a passage).
+    pub verses: u32,
+    pub mastery: Mastery,
+    pub reps: u32,
+    pub lapses: u32,
+    pub due: bool,
+}
+
+/// Every card, one entry each, in reading order — the memorize hub's list.
+pub fn card_list(cards: &HashMap<VRef, Card>, now: &str) -> Vec<CardSummary> {
+    let mut out: Vec<(_, CardSummary)> = cards
+        .values()
+        .map(|c| {
+            (c.verse.reading_key(), CardSummary {
+                ref_key: c.verse.ref_key(),
+                label: c.label(),
+                verses: c.verses().len() as u32,
+                mastery: mastery(c),
+                reps: c.reps,
+                lapses: c.lapses,
+                due: is_due(c, now),
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out.into_iter().map(|(_, s)| s).collect()
 }
 
 /// Reviews on one calendar day — the temporal activity heatmap.
@@ -492,9 +595,10 @@ pub fn activity_by_day(cards: &HashMap<VRef, Card>) -> Vec<DayActivity> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SectionCoverage {
     pub label: &'static str,
-    /// Verses with a card (being memorized) in this section.
+    /// Verses being memorized in this section — a passage card counts every
+    /// verse it covers, so this stays "how much of the section do I know".
     pub cards: u32,
-    /// Cards that have reached `Mature`.
+    /// Of those verses, the ones whose card has reached `Mature`.
     pub mature: u32,
     /// Total reviews logged against this section.
     pub reviews: u32,
@@ -510,10 +614,11 @@ pub fn coverage_by_section(cards: &HashMap<VRef, Card>) -> Vec<SectionCoverage> 
     for c in cards.values() {
         let Some(bi) = crate::canon::book_order(&c.verse.book) else { continue };
         if let Some(si) = CANON_SEGMENTS.iter().position(|(_, lo, hi)| bi >= *lo && bi <= *hi) {
-            acc[si].cards += 1;
+            let verses = c.verses().len() as u32;
+            acc[si].cards += verses;
             acc[si].reviews += c.reviews.len() as u32;
             if mastery(c) == Mastery::Mature {
-                acc[si].mature += 1;
+                acc[si].mature += verses;
             }
         }
     }
@@ -685,6 +790,89 @@ mod tests {
         let sec = coverage_by_section(&cards);
         let gospels = sec.iter().find(|s| s.label == "Gospels").unwrap();
         assert_eq!((gospels.cards, gospels.reviews), (1, 2));
+    }
+
+    #[test]
+    fn passage_card_spans_verses_and_normalizes_its_end() {
+        let ps1 = VRef::new("Ps", 23, 1);
+        let card = Card::new_passage(ps1.clone(), &VRef::new("Ps", 23, 6), "kjv1769-tok2", T0);
+        assert_eq!(card.label(), "Ps 23:1\u{2013}6");
+        assert_eq!(card.verses().len(), 6);
+        assert_eq!(card.verses().first().unwrap().ref_key(), "Ps 23:1");
+        assert_eq!(card.verses().last().unwrap().ref_key(), "Ps 23:6");
+
+        // A single verse keeps the plain refKey and one covered verse.
+        let one = Card::new(ps1.clone(), "kjv1769-tok2", T0);
+        assert_eq!(one.label(), "Ps 23:1");
+        assert_eq!(one.verses(), vec![ps1.clone()]);
+
+        // Nonsense ends collapse to a single-verse card rather than spanning
+        // backwards, across chapters, or across books.
+        for bad in [VRef::new("Ps", 23, 1), VRef::new("Ps", 24, 2), VRef::new("Prov", 23, 6)] {
+            let c = Card::new_passage(ps1.clone(), &bad, "kjv1769-tok2", T0);
+            assert_eq!(c.through, None, "{} should not span", bad.ref_key());
+            assert_eq!(c.verses(), vec![ps1.clone()]);
+        }
+    }
+
+    #[test]
+    fn passage_card_round_trips_and_shades_every_verse_it_covers() {
+        let home = std::env::temp_dir().join(format!("plumbline-passage-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let start = VRef::new("Ps", 23, 1);
+        let card = Card::new_passage(start.clone(), &VRef::new("Ps", 23, 4), "kjv1769-tok2", T0);
+        write_card(&home, &card).unwrap();
+
+        // The span survives the on-disk format (additive `through`).
+        let (loaded, errs) = load_cards(&home);
+        assert!(errs.is_empty());
+        assert_eq!(loaded.len(), 1, "one card, filed under its first verse");
+        assert_eq!(loaded[&start].through, Some(VRef::new("Ps", 23, 4)));
+        assert!(to_json(&card).unwrap().contains("\"through\": \"Ps 23:4\""));
+
+        // A single-verse card writes no `through` at all — old readers see the
+        // file they always saw.
+        assert!(!to_json(&Card::new(start.clone(), "kjv1769-tok2", T0)).unwrap().contains("through"));
+
+        // Grading the passage keeps it a passage.
+        grade_verse(&home, &loaded, &start, "kjv1769-tok2", Grade::Good, T0).unwrap();
+        let (loaded, _) = load_cards(&home);
+        assert_eq!(loaded[&start].through, Some(VRef::new("Ps", 23, 4)));
+        assert_eq!(loaded[&start].reps, 1);
+
+        // The coverage map shades all four verses; the queue still holds ONE card.
+        let cov = coverage(&loaded, "2026-01-10T00:00:00Z");
+        assert_eq!(
+            cov.iter().map(|v| v.ref_key.as_str()).collect::<Vec<_>>(),
+            ["Ps 23:1", "Ps 23:2", "Ps 23:3", "Ps 23:4"]
+        );
+        assert_eq!(due_queue(&loaded, "2026-01-10T00:00:00Z"), vec![start.clone()]);
+        let sec = coverage_by_section(&loaded);
+        let writings = sec.iter().find(|s| s.cards > 0).unwrap();
+        assert_eq!((writings.cards, writings.reviews), (4, 1), "4 verses, one review");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn a_through_the_reader_cannot_use_degrades_to_one_verse() {
+        // Hand-written/older files: `through` pointing outside the card's own
+        // chapter must not produce a card that claims verses it cannot render.
+        let home = std::env::temp_dir().join(format!("plumbline-badspan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("memory")).unwrap();
+        std::fs::write(
+            home.join("memory").join("ps-23-1.json"),
+            r#"{"format":"overlay-memory-v1","ref":"Ps 23:1","through":"Rev 22:21",
+                "tokenization":"kjv1769-tok2","created":"2026-01-01T00:00:00Z",
+                "ease":2.5,"intervalDays":0,"reps":0,"lapses":0,"due":"2026-01-01"}"#,
+        )
+        .unwrap();
+        let (loaded, errs) = load_cards(&home);
+        assert!(errs.is_empty());
+        let c = &loaded[&VRef::new("Ps", 23, 1)];
+        assert_eq!(c.through, None);
+        assert_eq!(c.verses().len(), 1);
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[test]

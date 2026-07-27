@@ -95,6 +95,25 @@
     return s.rndState === "loading" || s.rndDeferred;
   });
 
+  // A cold read is SLOW and a warm one is instant: the first definition of a
+  // session builds the occurrence index, the first analytical answer sweeps the
+  // corpus. A bare "— loading —" flashing for seconds reads as a hang
+  // (feedback 2026-07-27), so once a read outlasts a frame or two, say why and
+  // promise the rest are fast. Timed rather than flagged: whatever is cold, the
+  // wait itself is the honest signal.
+  const SLOW_READ_MS = 600;
+  let slowRead = $state(false);
+  $effect(() => {
+    // Re-arm per study: `blocks` null means the worker is still answering.
+    void s.panel;
+    if (blocks) {
+      slowRead = false;
+      return;
+    }
+    const t = setTimeout(() => (slowRead = true), SLOW_READ_MS);
+    return () => clearTimeout(t);
+  });
+
   // The reader's text-size setting scales the whole study surface too —
   // fixed 380px/13px chrome reads tiny on a 4K display (feedback 2026-07-25).
   // Everything inside multiplies by --uiScale (1 at the default 18px body).
@@ -158,6 +177,12 @@
         {:else}
           <!-- Never look frozen: the worker is answering. -->
           <p class="loading" aria-live="polite">— loading —</p>
+          {#if slowRead}
+            <p class="firstslow">
+              The first one takes a few seconds while the analysis is built for this text. Every
+              look after this is instant.
+            </p>
+          {/if}
         {/if}
       {/if}
     </div>
@@ -203,6 +228,15 @@
     padding: 22px 0;
     font-size: calc(13.5px * var(--uiScale, 1));
     animation: loadpulse 1.1s ease-in-out infinite;
+  }
+  /* Deliberately NOT pulsing — an explanation should sit still and be read. */
+  .firstslow {
+    color: var(--faded, #8a8276);
+    text-align: center;
+    padding: 0 10px 18px;
+    margin-top: -14px;
+    line-height: 1.45;
+    font-size: calc(12.5px * var(--uiScale, 1));
   }
   @keyframes loadpulse {
     0%,

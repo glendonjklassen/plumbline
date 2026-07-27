@@ -62,8 +62,13 @@
     mode = "first";
     qi++;
   }
-  function check(): void {
-    if (currentRef) score = s.engine.memoryScore(currentRef, typed);
+  // The engine lives in the worker, so scoring is a round trip. `s.engine` is
+  // the console/e2e proxy and returns a PROMISE — assigning it straight to
+  // `score` made every check read "0% recalled", even a perfect copy/paste
+  // (feedback 2026-07-27). Go through the cache like every other read.
+  async function check(): Promise<void> {
+    if (!currentRef) return;
+    score = await s.fetchQ("memoryScore", currentRef, typed);
   }
 
   const masteryColor: Record<string, string> = {
@@ -107,14 +112,18 @@
           </button>
           <button onclick={() => (s.memorize = { view: "stats" })}>Coverage & activity</button>
         </div>
-        {#if !coverage?.verses?.length}
+        <!-- One row per CARD, not per verse: a passage card is a single row
+             labelled "Ps 23:1–6" (its `ref` is the first verse, which every
+             card endpoint takes). -->
+        {#if !coverage?.cards?.length}
           <p class="empty">
-            No cards yet — long-press or right-click a verse and choose “Memorize this verse”.
+            No cards yet — long-press or right-click a verse and choose “Memorize this verse”, or
+            “Memorize passage…” for a whole section.
           </p>
         {:else}
-          {#each coverage.verses as v (v.ref)}
+          {#each coverage.cards as v (v.ref)}
             <div class="card">
-              <button class="ref" onclick={() => goRef(v.ref)}>{v.ref}</button>
+              <button class="ref" onclick={() => goRef(v.ref)}>{v.label ?? v.ref}</button>
               <span class="mastery" style:color={masteryColor[v.mastery] ?? "inherit"}>{v.mastery}</span>
               {#if v.due}<span class="due">due</span>{/if}
               <span class="spacer"></span>
@@ -138,7 +147,10 @@
             {queue.length === 0 ? "Nothing due — well kept." : "Done — every card reviewed."}
           </p>
         {:else if drill}
-          <p class="drillref">{currentRef} <span class="pos">{qi + 1} / {queue.length}</span></p>
+          <p class="drillref">
+            {drill.label ?? currentRef}
+            <span class="pos">{qi + 1} / {queue.length}</span>
+          </p>
           <div class="modes">
             <button class:checked={mode === "first"} onclick={() => (mode = "first")}>First letters</button>
             <button class:checked={mode === "blank"} onclick={() => (mode = "blank")}>Blank out</button>
@@ -151,7 +163,7 @@
             <input type="range" min="0" max={MAX_BLANK_LEVEL} bind:value={level} aria-label="Blank level" />
           {:else}
             <textarea rows="3" bind:value={typed} placeholder="Type the verse from memory…"></textarea>
-            <button class="checkbtn" onclick={check}>Check</button>
+            <button class="checkbtn" onclick={() => void check()}>Check</button>
             {#if score}
               <p class="drilltext">
                 {#each score.words as w, i (i)}<span

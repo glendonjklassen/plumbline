@@ -11,6 +11,7 @@
   import HistorySheet from "./HistorySheet.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
   import MemorizeHost from "../memorize/MemorizeHost.svelte";
+  import PassagePicker from "../memorize/PassagePicker.svelte";
   import PresentHost from "../present/PresentHost.svelte";
   import ConnectorsOverlay from "./ConnectorsOverlay.svelte";
   import MapsHost from "../maps/MapsHost.svelte";
@@ -312,6 +313,7 @@
 <TagPicker />
 <TagWeave />
 <MemorizeHost />
+<PassagePicker />
 <HistorySheet />
 <PresentHost />
 <SettingsDialog />

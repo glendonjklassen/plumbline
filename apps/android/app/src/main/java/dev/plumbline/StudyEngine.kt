@@ -113,6 +113,10 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
 
     fun TocJson(): String = take(ffi.plumbline_engine_toc_json(h))!!
     fun ChapterCount(book: String): Int = ffi.plumbline_engine_chapter_count(h, book)
+
+    /** Highest verse number in a chapter — the passage picker's range. */
+    fun ChapterVerseCount(book: String, chapter: Int): Int =
+        ffi.plumbline_engine_chapter_verse_count(h, book, chapter)
     fun VerseJson(reference: String): String? = take(ffi.plumbline_engine_verse_json(h, reference))
     fun TokenJson(reference: String, tokenIndex: Int): String? =
         take(ffi.plumbline_engine_token_json(h, reference, tokenIndex))
@@ -331,6 +335,12 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
      *  review is logged. Null = success. */
     fun MemoryAdd(verseRef: String, nowUtc: String): String? =
         take(ffi.plumbline_engine_memory_add(h, verseRef, nowUtc))
+
+    /** Start memorizing `startRef`…`throughRef` as ONE card — a whole section
+     *  recalled in one go. `throughRef` must be a later verse of the same
+     *  chapter; anything else seeds a plain single-verse card. Null = success. */
+    fun MemoryAddPassage(startRef: String, throughRef: String, nowUtc: String): String? =
+        take(ffi.plumbline_engine_memory_add_passage(h, startRef, throughRef, nowUtc))
 
     /** Stop memorizing a verse (remove its card). Null = success. */
     fun MemoryRemove(verseRef: String): String? =

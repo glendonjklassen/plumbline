@@ -159,6 +159,7 @@ fun VerseActionSheet(
     var end by remember(verseRef) { mutableStateOf(0) }
 
     var showNote by remember(verseRef) { mutableStateOf(false) }
+    var showPassage by remember(verseRef) { mutableStateOf(false) }
     var noteText by remember(verseRef) { mutableStateOf("") }
     var noteLoaded by remember(verseRef) { mutableStateOf(false) }
 
@@ -243,6 +244,28 @@ fun VerseActionSheet(
             Toast.makeText(
                 context,
                 if (err.isNullOrBlank()) "Added “$display” to your memory list" else err,
+                Toast.LENGTH_SHORT,
+            ).show()
+            hide()
+        }
+    }
+
+    /** Memorize a whole section as ONE card: the long-pressed verse starts it,
+     *  the reader taps the end verse in [PassageEndPicker]. */
+    fun memorizePassage(endVerse: Int) {
+        val parts = parseRef(verseRef) ?: return
+        val throughRef = "${parts.book} ${parts.chapter}:$endVerse"
+        scope.launch {
+            val err = withContext(Dispatchers.Default) {
+                runCatching {
+                    synchronized(engine) {
+                        engine.MemoryAddPassage(verseRef, throughRef, Instant.now().toString())
+                    }
+                }.getOrNull()
+            }
+            Toast.makeText(
+                context,
+                if (err.isNullOrBlank()) "Memorizing $display–$endVerse" else err,
                 Toast.LENGTH_SHORT,
             ).show()
             hide()
@@ -336,6 +359,7 @@ fun VerseActionSheet(
             ActionRow("Tag…", palette.ink) { onDismiss(); onTag(verseRef) }
             ActionRow("Note…", palette.ink) { showNote = true }
             ActionRow("Memorize this verse", palette.ink) { memorize() }
+            ActionRow("Memorize passage…", palette.ink) { showPassage = true }
             HorizontalDivider(color = palette.rule)
 
             // ── highlight: tones, then verse-then-trim (Tier 0 #4) ───────────
@@ -410,6 +434,130 @@ fun VerseActionSheet(
             onCancel = { showNote = false },
         )
     }
+
+    if (showPassage) {
+        PassageEndPicker(
+            engine = engine,
+            palette = palette,
+            startRef = verseRef,
+            startDisplay = display,
+            onPick = { showPassage = false; memorizePassage(it) },
+            onCancel = { showPassage = false },
+        )
+    }
+}
+
+/**
+ * Pick the end of a passage to memorize as one chunk (§Memorization).
+ *
+ * The convention (2026-07-27, both shells): the verse you long-pressed is the
+ * START, and you tap the LAST verse from a grid of that chapter's remaining
+ * verse numbers — the same tap-grid idiom as the passage navigator's chapter
+ * grid. No new gesture, identical under touch and mouse, and the grid only ever
+ * offers verses that exist, which makes the same-chapter limit self-evident.
+ */
+@Composable
+private fun PassageEndPicker(
+    engine: StudyEngine,
+    palette: ReaderPalette,
+    startRef: String,
+    startDisplay: String,
+    onPick: (Int) -> Unit,
+    onCancel: () -> Unit,
+) {
+    val parts = parseRef(startRef)
+    var picked by remember(startRef) { mutableStateOf<Int?>(null) }
+    // One round trip when the picker opens (not per tap).
+    var lastVerse by remember(startRef) { mutableStateOf(0) }
+    LaunchedEffect(startRef) {
+        if (parts == null) return@LaunchedEffect
+        lastVerse = withContext(Dispatchers.Default) {
+            runCatching {
+                synchronized(engine) { engine.ChapterVerseCount(parts.book, parts.chapter) }
+            }.getOrDefault(0)
+        }
+    }
+    // The text of the chunk as it will be drilled, so the reader sees what they
+    // are taking on before committing to it.
+    var preview by remember(startRef) { mutableStateOf("") }
+    LaunchedEffect(picked) {
+        val end = picked
+        if (parts == null || end == null) {
+            preview = ""
+            return@LaunchedEffect
+        }
+        preview = withContext(Dispatchers.Default) {
+            (parts.verse..end).mapNotNull { v ->
+                runCatching {
+                    synchronized(engine) { engine.VerseJson("${parts.book} ${parts.chapter}:$v") }
+                        ?.let { parseWire<VerseData>(it).body }
+                }.getOrNull()
+            }.joinToString(" ")
+        }
+    }
+
+    val ends = if (parts != null && lastVerse > parts.verse) (parts.verse + 1)..lastVerse else IntRange.EMPTY
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = {
+            Text(
+                "Memorize " + startDisplay + (picked?.let { "–$it" } ?: ""),
+                color = palette.ink,
+            )
+        },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                if (ends.isEmpty()) {
+                    Text(
+                        "$startDisplay is the last verse of its chapter — a passage has to end " +
+                            "on a later verse of the same chapter.",
+                        color = palette.inkFaded, fontSize = 13.sp,
+                    )
+                } else {
+                    Text(
+                        "Tap the verse this passage ends on.",
+                        color = palette.inkFaded, fontSize = 13.sp,
+                    )
+                    FlowRow(
+                        Modifier.fillMaxWidth().padding(top = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        for (v in ends) {
+                            val on = picked == v
+                            Text(
+                                v.toString(),
+                                color = if (on) palette.paper else palette.ink,
+                                fontSize = 15.sp,
+                                fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier
+                                    .padding(vertical = 3.dp)
+                                    .background(
+                                        if (on) palette.gold else palette.panelBg,
+                                        RoundedCornerShape(6.dp),
+                                    )
+                                    .clickable { picked = v }
+                                    .padding(horizontal = 13.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
+                    if (preview.isNotEmpty()) {
+                        HorizontalDivider(
+                            color = palette.rule,
+                            modifier = Modifier.padding(vertical = 10.dp),
+                        )
+                        Text(preview, color = palette.ink, fontSize = 14.sp, lineHeight = 21.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { picked?.let(onPick) }, enabled = picked != null) {
+                Text("Memorize", color = if (picked != null) palette.gold else palette.inkFaded)
+            }
+        },
+        dismissButton = { TextButton(onClick = onCancel) { Text("Cancel", color = palette.ink) } },
+        containerColor = palette.panelBg,
+    )
 }
 
 /** A full-width tappable action row (a touch-friendly menu item). */

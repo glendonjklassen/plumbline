@@ -85,6 +85,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -92,6 +93,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.window.layout.FoldingFeature
+import dev.plumbline.ChurchState
 import dev.plumbline.Hit
 import dev.plumbline.PaneRef1
 import dev.plumbline.Thread1
@@ -186,6 +188,11 @@ fun StudyScreen(
     var secondChapter by remember { mutableStateOf(lastPane?.chapter?.takeIf { it > 0 } ?: 3) }
 
     var studyBlocks by remember { mutableStateOf<String?>(null) }
+    // A study read is in flight. A COLD read is slow and a warm one is instant:
+    // the first definition builds the occurrence index, the first analytical
+    // answer sweeps the whole corpus. A bare flash of nothing reads as a hang
+    // (feedback 2026-07-27), so the pane says why, and that it is one-time.
+    var studyLoading by remember { mutableStateOf(false) }
     var studyCode by remember { mutableStateOf<String?>(null) }     // code behind the study → embedded maps
     var searchHits by remember { mutableStateOf<Set<String>>(emptySet()) }
     var searchText by remember { mutableStateOf("") }
@@ -218,6 +225,9 @@ fun StudyScreen(
     var showNotes by remember { mutableStateOf(false) }             // personal-notes browser
     var showHistory by remember { mutableStateOf(false) }           // reading-history sheet
     var showSettings by remember { mutableStateOf(false) }          // settings dialog
+    // Re-reading the welcome this reader was given, from the ⋮ menu — changes no
+    // settings, it just reads (2026-07-27). Holds "new"/"curious"; null closed.
+    var reopenIntro by remember { mutableStateOf<String?>(null) }
     var showWeaves by remember { mutableStateOf(false) }            // Weaves screen (All/Suggested filter)
     var bookNavPane by remember { mutableStateOf<Int?>(null) }      // passage navigator (0 primary, 1 second)
     var tagPickRef by remember { mutableStateOf<String?>(null) }    // tag-picker target verse
@@ -233,6 +243,14 @@ fun StudyScreen(
     var lineSpacing by remember { mutableStateOf((loadedCfg?.lineSpacing ?: 1.35).coerceIn(1.0, 2.2)) }
     var copyStyle by remember { mutableStateOf(loadedCfg?.copyStyle ?: "verseRef") }
     var history by remember { mutableStateOf(loadedCfg?.history ?: emptyList()) }
+    // The reader's home church — what their own shared links carry (2026-07-27,
+    // web parity). `intro` is which welcome they were given, so the Welcome
+    // button can show it again without a reinstall.
+    var church by remember { mutableStateOf(cleanChurch(loadedCfg?.church)) }
+    var presentSharesAsNew by remember { mutableStateOf(loadedCfg?.presentSharesAsNew != false) }
+    var introChoice by remember {
+        mutableStateOf(loadedCfg?.intro?.takeIf { it == "new" || it == "curious" })
+    }
 
     val gates = (if (humanAnalysis) 1 else 0) or (if (machineAnalysis) 2 else 0)
 
@@ -241,6 +259,7 @@ fun StudyScreen(
             bodySize = bodySize, sideMargin = sideMargin, lineSpacing = lineSpacing, copyStyle = copyStyle,
             openPanes = listOf(PaneRef1(book, chapter, firstVisibleVerse)), activePane = 0, history = history,
             theme = themeChoice, humanAnalysis = humanAnalysis, machineAnalysis = machineAnalysis,
+            church = church, presentSharesAsNew = presentSharesAsNew, intro = introChoice,
         )
         scope.launch { withContext(Dispatchers.Default) { runCatching { StudyConfig.SaveJson(PlumblineJson.encodeToString(cfg)) } } }
     }
@@ -301,11 +320,13 @@ fun StudyScreen(
     // lag. Reveal immediately (previous content stays until the new arrives).
     fun loadStudy(producer: () -> String?) {
         revealStudy()
+        studyLoading = true
         scope.launch {
             val b = withContext(Dispatchers.Default) {
                 runCatching { synchronized(engine) { producer() } }.getOrNull()
             }
             if (b != null) studyBlocks = b
+            studyLoading = false
         }
     }
 
@@ -468,7 +489,10 @@ fun StudyScreen(
     }
     val study: @Composable (Modifier) -> Unit = { m ->
         Box(m.background(palette.panelBg)) {
-            StudyPane(studyBlocks, palette, onLink = ::onLink, scale = studyScale, embed = studyEmbed)
+            StudyPane(
+                studyBlocks, palette, onLink = ::onLink, scale = studyScale, embed = studyEmbed,
+                loading = studyLoading,
+            )
         }
     }
 
@@ -498,6 +522,9 @@ fun StudyScreen(
                         onHistory = { showHistory = true },
                         onGuide = { openLibrary(Library.Guide) },
                         onSettings = { showSettings = true },
+                        church = church,
+                        intro = introChoice,
+                        onWelcome = { reopenIntro = introChoice },
                     )
                     HorizontalDivider(color = palette.rule)
 
@@ -585,6 +612,7 @@ fun StudyScreen(
                     thread = null,
                     onThread = { presentThread = it },
                     onClose = { showPresent = false },
+                    shareLink = shareUrl(PWA_URL, church, presentSharesAsNew),
                 )
             }
         }
@@ -633,7 +661,7 @@ fun StudyScreen(
         // ── overlays / sheets (parity features layered over the reader) ──────
         if (studySheet && mode == UiMode.FullscreenVertical) {
             // Swiping the study away also clears the tapped word's highlight.
-            StudySheet(studyBlocks, palette, studyScale, ::onLink, studyEmbed) {
+            StudySheet(studyBlocks, palette, studyScale, ::onLink, studyEmbed, studyLoading) {
                 studySheet = false
                 clearPinEpoch++
             }
@@ -697,6 +725,9 @@ fun StudyScreen(
                 lineSpacing = lineSpacing, onLineSpacing = { lineSpacing = it },
                 copyStyle = copyStyle, onCopyStyle = { copyStyle = it },
                 bundledOn = bundledOn, onToggleBundled = onToggleBundled,
+                church = church, onChurch = { church = it },
+                presentSharesAsNew = presentSharesAsNew,
+                onPresentSharesAsNew = { presentSharesAsNew = !presentSharesAsNew },
                 onDismiss = { showSettings = false; persistCfg() },
             )
         }
@@ -726,6 +757,10 @@ fun StudyScreen(
                 thread = presentThread,
                 onThread = { presentThread = it },
                 onClose = { presentThread = null; showPresent = false },
+                // Present is the screen you show someone face to face, so its
+                // link opens on the new-believer welcome by default (Settings
+                // can turn that off). The ordinary Share never carries it.
+                shareLink = shareUrl(PWA_URL, church, presentSharesAsNew),
             )
         }
 
@@ -735,10 +770,11 @@ fun StudyScreen(
             FirstRunOverlay(
                 engine,
                 palette,
-                onNewBeliever = { ref ->
+                onNewBeliever = { ref, which ->
                     humanAnalysis = false
                     machineAnalysis = false
                     showFirstRun = false
+                    introChoice = which
                     book = "John"; chapter = 1
                     pendingVerse = null; navEpoch++
                     dest = Dest.Read
@@ -778,6 +814,23 @@ fun StudyScreen(
                     showFirstRun = false
                     persistCfg()
                 },
+                onChurch = { church = it },
+            )
+        }
+        // Re-reading a welcome: the same page, no path chosen and no setting
+        // moved — a reader should not have to reinstall to read it twice.
+        reopenIntro?.let { which ->
+            FirstRunOverlay(
+                engine,
+                palette,
+                onNewBeliever = { ref, _ ->
+                    reopenIntro = null
+                    if (ref != null) goToRef(ref.refKey)
+                },
+                onSharing = { reopenIntro = null },
+                onEstablished = { _, _ -> reopenIntro = null },
+                reread = which,
+                onCloseReread = { reopenIntro = null },
             )
         }
     }
@@ -833,6 +886,11 @@ private fun TopBar(
     onHistory: () -> Unit,
     onGuide: () -> Unit,
     onSettings: () -> Unit,
+    /** The reader's home church — rides in the share sheet's link and QR. */
+    church: ChurchState?,
+    /** Which welcome this reader was given ("new"/"curious"), or null. */
+    intro: String?,
+    onWelcome: () -> Unit,
 ) {
     Surface(color = palette.paneNavBg) {
         Row(
@@ -859,7 +917,13 @@ private fun TopBar(
             IconButton(onClick = { shareApp = true }) {
                 Icon(Icons.Filled.Share, contentDescription = "Share the app", tint = palette.ink)
             }
-            if (shareApp) ShareAppDialog(onDismiss = { shareApp = false })
+            if (shareApp) {
+                ShareAppDialog(
+                    church = church,
+                    onDismiss = { shareApp = false },
+                    onWelcome = intro?.let { { shareApp = false; onWelcome() } },
+                )
+            }
 
             IconButton(onClick = onSearch) {
                 Icon(Icons.Filled.Search, contentDescription = "Search", tint = palette.ink)
@@ -883,6 +947,22 @@ private fun TopBar(
                     Icon(Icons.Filled.MoreVert, contentDescription = "Menu", tint = palette.ink)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    val context = LocalContext.current
+                    if (hasChurch(church)) {
+                        DropdownMenuItem(
+                            text = { Text("Church") },
+                            onClick = {
+                                menu = false
+                                visitChurch(context, church) { /* no site: the label said who */ }
+                            },
+                        )
+                    }
+                    if (intro != null) {
+                        DropdownMenuItem(
+                            text = { Text("Welcome") },
+                            onClick = { menu = false; onWelcome() },
+                        )
+                    }
                     DropdownMenuItem(text = { Text("History") }, onClick = { onHistory(); menu = false })
                     DropdownMenuItem(text = { Text("Guide & About") }, onClick = { onGuide(); menu = false })
                     DropdownMenuItem(text = { Text("Settings") }, onClick = { onSettings(); menu = false })
@@ -904,11 +984,15 @@ private fun StudySheet(
     scale: Float,
     onLink: (String) -> Unit,
     embed: (@Composable () -> Unit)?,
+    loading: Boolean,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = palette.panelBg) {
         Box(Modifier.fillMaxWidth().fillMaxHeight(0.94f)) {
-            StudyPane(blocksJson, palette, onLink = onLink, scale = scale, embed = embed)
+            StudyPane(
+                blocksJson, palette, onLink = onLink, scale = scale, embed = embed,
+                loading = loading,
+            )
         }
     }
 }
@@ -1139,6 +1223,10 @@ private fun SettingsDialog(
     onCopyStyle: (String) -> Unit,
     bundledOn: Boolean,
     onToggleBundled: () -> Unit,
+    church: ChurchState?,
+    onChurch: (ChurchState) -> Unit,
+    presentSharesAsNew: Boolean,
+    onPresentSharesAsNew: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -1199,6 +1287,48 @@ private fun SettingsDialog(
                         Text(label, color = palette.ink)
                     }
                 }
+                HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
+                // Your church — what this reader's own shared links carry. Web
+                // twin: SettingsDialog.svelte → "Your church". Held locally in
+                // edit state and pushed up on every change, so the config write
+                // is the same shape as every other setting here.
+                Text("Your church", color = palette.faded, fontSize = 12.sp)
+                Text(
+                    "Attached to every link and QR you share, so whoever you hand this to can find " +
+                        "your church. Leave it blank to share the Bible on its own.",
+                    color = palette.faded, fontSize = 12.sp,
+                )
+                val cc = cleanChurch(church)
+                var cName by remember { mutableStateOf(cc.name) }
+                var cInfo by remember { mutableStateOf(cc.info) }
+                var cUrl by remember { mutableStateOf(cc.url) }
+                fun pushChurch() = onChurch(cleanChurch(ChurchState(cName, cInfo, cUrl)))
+                OutlinedTextField(
+                    value = cName,
+                    onValueChange = { cName = it; pushChurch() },
+                    label = { Text("Church name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                )
+                OutlinedTextField(
+                    value = cInfo,
+                    onValueChange = { cInfo = it; pushChurch() },
+                    label = { Text("When and where you meet") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                )
+                OutlinedTextField(
+                    value = cUrl,
+                    onValueChange = { cUrl = it; pushChurch() },
+                    label = { Text("Website") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                )
+                SettingToggle(
+                    "Present shares as a new believer",
+                    "A link shared from Present opens on the welcome for someone meeting the Bible.",
+                    presentSharesAsNew, palette, onPresentSharesAsNew,
+                )
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 SettingToggle("Bundled study set", "Ship-with-app threads, tags, and weaves.", bundledOn, palette, onToggleBundled)
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))

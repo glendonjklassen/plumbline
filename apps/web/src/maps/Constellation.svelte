@@ -203,6 +203,7 @@
   caption={hover || model?.caption || ""}
   width={W}
   height={H}
+  loading={!model}
   onZoom={(z) => (zoom = z)}
   pager={model ? { page: model.page, maxPage: model.maxPage, onPage: (d) => (page = Math.min(Math.max(page + d, 0), model.maxPage)) } : null}
 >

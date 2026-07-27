@@ -6,8 +6,15 @@
 //                        phone: the passage opens with John 1 as the saved
 //                        start), then John 1 with both analysis tiers off —
 //                        just the text.
-//   sharing the gospel → straight into Present with the Romans Road.
-//   established        → the analysis-tier picker (text is always on).
+//   curious            → a way in for someone who is not sure what they
+//                        believe; same landing as the welcome (2026-07-27).
+//   sharing the gospel → the church step, then Present with the Romans Road.
+//   established        → their church + the analysis-tier picker (text always on).
+//
+// The two paths likely to hand the app on (established, sharing) are asked for
+// a home church: it travels in the links and QR codes they share, and nowhere
+// else. Which welcome a reader was given is remembered (`intro` in the shared
+// config) so the Welcome button can show it again without a reinstall.
 
 package dev.plumbline.ui
 
@@ -34,7 +41,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.LaunchedEffect
+import dev.plumbline.ChurchState
 import dev.plumbline.StudyEngine
 import dev.plumbline.VerseData
 import dev.plumbline.parseWire
@@ -71,15 +82,34 @@ private val KEPT = WelcomeRef("John 10:28–29", "John 10:28", listOf("John 10:2
 private val PERFECTED = WelcomeRef("Philippians 1:6", "Phil 1:6", listOf("Phil 1:6"))
 private val FORGIVEN = WelcomeRef("1 John 1:9", "1John 1:9", listOf("1John 1:9"))
 private val WISDOM = WelcomeRef("2 Timothy 3:16–17", "2Tim 3:16", listOf("2Tim 3:16", "2Tim 3:17"))
-private val ALL_QUOTED = listOf(LOVE, PURE, CHURCH, HEART, LOVED, KNOW, KEPT, PERFECTED, FORGIVEN, WISDOM)
+// The curious path's verses (web twin: REF.treasure / unbelief / ask / seek / struggle).
+private val TREASURE = WelcomeRef("Proverbs 2:4–5", "Prov 2:4", listOf("Prov 2:4", "Prov 2:5"))
+private val UNBELIEF = WelcomeRef("Mark 9:24", "Mark 9:24", listOf("Mark 9:24"))
+private val ASK = WelcomeRef("Matthew 7:7", "Matt 7:7", listOf("Matt 7:7"))
+private val SEEK = WelcomeRef("Jeremiah 29:13", "Jer 29:13", listOf("Jer 29:13"))
+private val STRUGGLE = WelcomeRef("Psalm 34:18", "Ps 34:18", listOf("Ps 34:18"))
+private val ALL_QUOTED = listOf(
+    LOVE, PURE, CHURCH, HEART, LOVED, KNOW, KEPT, PERFECTED, FORGIVEN, WISDOM,
+    TREASURE, UNBELIEF, ASK, SEEK, STRUGGLE,
+)
 
 @Composable
 fun FirstRunOverlay(
     engine: StudyEngine,
     palette: ReaderPalette,
-    onNewBeliever: (WelcomeRef?) -> Unit,
+    /** Chose a welcome path: the tapped reference (or null to just land in
+     *  John), and which welcome it was — "new" or "curious", remembered so it
+     *  can be re-read later. */
+    onNewBeliever: (WelcomeRef?, intro: String) -> Unit,
     onSharing: () -> Unit,
     onEstablished: (human: Boolean, machine: Boolean) -> Unit,
+    /** The church the reader gave, if any — saved to the shared config by the
+     *  shell so their shared links carry it. */
+    onChurch: (ChurchState) -> Unit = {},
+    /** Re-reading a welcome ("new"/"curious") rather than first run: no path is
+     *  chosen, no settings move, and the button just closes it. */
+    reread: String? = null,
+    onCloseReread: () -> Unit = {},
 ) {
     // The quoted verse bodies, fetched off-thread (keyed by refKey).
     var bodies by remember { mutableStateOf(mapOf<String, String>()) }
@@ -101,13 +131,37 @@ fun FirstRunOverlay(
         }.getOrElse { FontFamily.Serif }
     }
 
-    var stage by remember { mutableStateOf(0) } // 0 choose · 1 welcome · 2 tiers
+    // 0 choose · 1 welcome · 2 tiers · 3 curious · 4 church-before-sharing
+    var stage by remember {
+        mutableStateOf(
+            when (reread) {
+                "curious" -> 3
+                "new" -> 1
+                else -> 0
+            },
+        )
+    }
     var human by remember { mutableStateOf(true) }
     var machine by remember { mutableStateOf(true) }
+    // Asked on the two paths that hand the app on. Optional; pushed up only
+    // when a name was actually given.
+    var cName by remember { mutableStateOf("") }
+    var cInfo by remember { mutableStateOf("") }
+    var cUrl by remember { mutableStateOf("") }
+    fun saveChurchIfGiven() {
+        val c = cleanChurch(ChurchState(cName, cInfo, cUrl))
+        if (hasChurch(c)) onChurch(c)
+    }
 
-    // Back steps to the chooser; from the chooser it keeps the defaults
-    // (mirrors the web's click-away behaviour).
-    BackHandler { if (stage != 0) stage = 0 else onEstablished(human, machine) }
+    // Back closes a re-read; in first run it steps to the chooser, and from the
+    // chooser it keeps the defaults (mirrors the web's click-away behaviour).
+    BackHandler {
+        when {
+            reread != null -> onCloseReread()
+            stage != 0 -> stage = 0
+            else -> onEstablished(human, machine)
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(palette.paper)) {
         Column(
@@ -119,12 +173,35 @@ fun FirstRunOverlay(
         ) {
             Column(Modifier.widthIn(max = 560.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 when (stage) {
-                    0 -> Choose(palette, serif, onPath = { stage = it }, onSharing = onSharing)
-                    1 -> Welcome(palette, serif, bodies, onRef = { onNewBeliever(it) }, onStart = { onNewBeliever(null) })
+                    0 -> Choose(
+                        palette, serif,
+                        onPath = { stage = it },
+                        onSharing = { stage = 4 },
+                    )
+                    1 -> Welcome(
+                        palette, serif, bodies,
+                        onRef = { if (reread != null) onNewBeliever(it, "new") else onNewBeliever(it, "new") },
+                        onStart = { if (reread != null) onCloseReread() else onNewBeliever(null, "new") },
+                        closeLabel = if (reread != null) "Close" else null,
+                    )
+                    3 -> Curious(
+                        palette, serif, bodies,
+                        onRef = { onNewBeliever(it, "curious") },
+                        onStart = { if (reread != null) onCloseReread() else onNewBeliever(null, "curious") },
+                        closeLabel = if (reread != null) "Close" else null,
+                    )
+                    4 -> ChurchBeforeSharing(
+                        palette,
+                        cName, cInfo, cUrl,
+                        onName = { cName = it }, onInfo = { cInfo = it }, onUrl = { cUrl = it },
+                        onGo = { saveChurchIfGiven(); onSharing() },
+                    )
                     else -> Tiers(
                         palette, human, machine,
                         onHuman = { human = it }, onMachine = { machine = it },
-                        onStart = { onEstablished(human, machine) },
+                        cName, cInfo, cUrl,
+                        onName = { cName = it }, onInfo = { cInfo = it }, onUrl = { cUrl = it },
+                        onStart = { saveChurchIfGiven(); onEstablished(human, machine) },
                     )
                 }
             }
@@ -148,8 +225,12 @@ private fun Choose(palette: ReaderPalette, serif: FontFamily, onPath: (Int) -> U
     )
     Spacer(Modifier.height(22.dp))
     PathCard(palette, "New in the faith", "I've just put my faith in Jesus — where do I start?") { onPath(1) }
+    PathCard(palette, "Curious about the Bible", "I'm not sure what I believe — where do I start?") { onPath(3) }
     PathCard(palette, "Sharing the gospel", "Walk someone down the Romans Road, right now.", onSharing)
-    PathCard(palette, "Established believer", "Set up which layers of analysis sit alongside the text.") { onPath(2) }
+    PathCard(
+        palette, "Established believer",
+        "Set up your Bible for study and memorization, and prepare to share the good news with others.",
+    ) { onPath(2) }
 }
 
 @Composable
@@ -177,6 +258,8 @@ private fun Welcome(
     bodies: Map<String, String>,
     onRef: (WelcomeRef) -> Unit,
     onStart: () -> Unit,
+    /** Non-null when re-reading: the button closes instead of starting. */
+    closeLabel: String? = null,
 ) {
     @Composable
     fun Para(text: String) = Text(
@@ -265,7 +348,161 @@ private fun Welcome(
     Button(
         onClick = onStart,
         colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
-    ) { Text("Open the book of John", fontSize = 16.sp) }
+    ) { Text(closeLabel ?: "Open the book of John", fontSize = 16.sp) }
+}
+
+/**
+ * A way in for someone who is not sure what they believe (2026-07-27) — the
+ * copy is shared with the web twin verbatim. Same landing as the welcome: the
+ * book of John, both analysis tiers off.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Curious(
+    palette: ReaderPalette,
+    serif: FontFamily,
+    bodies: Map<String, String>,
+    onRef: (WelcomeRef) -> Unit,
+    onStart: () -> Unit,
+    closeLabel: String? = null,
+) {
+    @Composable
+    fun Para(text: String) = Text(
+        text, color = palette.ink, fontSize = 16.5.sp, lineHeight = 25.sp,
+        fontFamily = serif, modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
+    )
+
+    @Composable
+    fun Quote(vararg refs: WelcomeRef) {
+        val text = refs.flatMap { it.keys }.joinToString(" ") { bodies[it] ?: "" }.trim()
+        Column(Modifier.fillMaxWidth().padding(top = 6.dp, start = 14.dp, end = 6.dp)) {
+            if (text.isNotEmpty()) {
+                Text(
+                    "“$text”", color = palette.ink, fontSize = 15.5.sp, lineHeight = 23.sp,
+                    fontFamily = serif, fontStyle = FontStyle.Italic,
+                )
+            }
+            FlowRow(
+                Modifier.fillMaxWidth().padding(top = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                for (r in refs) {
+                    Text(
+                        r.label, color = palette.gold, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable { onRef(r) }.padding(vertical = 3.dp),
+                    )
+                }
+            }
+        }
+    }
+
+    Text(
+        "I'm glad you're curious about the Bible.",
+        color = palette.ink, fontSize = 22.sp, fontFamily = serif, fontWeight = FontWeight.Bold,
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+    )
+    Para(
+        "For thousands of years this text has been the foundation of civilizations and of the " +
+            "lives of individuals. People have been killed for reading it and for sharing it.",
+    )
+    Para(
+        "It contains the history of our world from its creation to the incarnation of its Creator " +
+            "here on earth with us. He came to save us because he loves us:",
+    )
+    Quote(LOVED)
+    Para(
+        "Whether you are just curious or returning to faith after a long time, there is treasure " +
+            "here for you:",
+    )
+    Quote(TREASURE)
+    Para(
+        "If you are having trouble believing, you're not alone — someone said exactly that to " +
+            "Jesus himself:",
+    )
+    Quote(UNBELIEF)
+    Para(
+        "I encourage you to read this book starting with the book of John, and to pray that if God " +
+            "is real, he would reveal himself to you. I've known many people for whom that prayer " +
+            "has been answered:",
+    )
+    Quote(ASK, SEEK)
+    Para("If you are in a difficult place in your life, ask God to help you with your struggles:")
+    Quote(STRUGGLE)
+    Spacer(Modifier.height(10.dp))
+    Text(
+        "Tap any verse reference to open it beside the book of John.",
+        color = palette.faded, fontSize = 12.5.sp, fontStyle = FontStyle.Italic,
+    )
+    Spacer(Modifier.height(16.dp))
+    Button(
+        onClick = onStart,
+        colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
+    ) { Text(closeLabel ?: "Open the book of John", fontSize = 16.sp) }
+}
+
+/** The three optional church fields, with the reason they are being asked. */
+@Composable
+private fun ChurchFields(
+    palette: ReaderPalette,
+    name: String,
+    info: String,
+    url: String,
+    onName: (String) -> Unit,
+    onInfo: (String) -> Unit,
+    onUrl: (String) -> Unit,
+) {
+    Text(
+        "Optional. If you add your church, the links and QR codes you share carry it, so whoever " +
+            "you hand the Bible to can also find your church. It stays on your device otherwise — " +
+            "nothing is sent anywhere.",
+        color = palette.faded, fontSize = 12.5.sp,
+    )
+    OutlinedTextField(
+        value = name, onValueChange = onName, label = { Text("Church name") },
+        singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    )
+    OutlinedTextField(
+        value = info, onValueChange = onInfo,
+        label = { Text("When and where you meet") },
+        singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+    )
+    OutlinedTextField(
+        value = url, onValueChange = onUrl, label = { Text("Website") },
+        singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+    )
+}
+
+/** Before walking someone down the Romans Road: this reader is the likeliest of
+ *  all to hand the app over, so ask how the recipient finds their way back. */
+@Composable
+private fun ChurchBeforeSharing(
+    palette: ReaderPalette,
+    name: String,
+    info: String,
+    url: String,
+    onName: (String) -> Unit,
+    onInfo: (String) -> Unit,
+    onUrl: (String) -> Unit,
+    onGo: () -> Unit,
+) {
+    Text(
+        "Before you share it", color = palette.ink, fontSize = 24.sp, fontWeight = FontWeight.SemiBold,
+    )
+    Spacer(Modifier.height(6.dp))
+    Text(
+        "You're about to walk someone down the Romans Road. If they keep the app afterwards, this " +
+            "is how they find their way back to you.",
+        color = palette.faded, fontSize = 14.sp,
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+    )
+    Spacer(Modifier.height(14.dp))
+    ChurchFields(palette, name, info, url, onName, onInfo, onUrl)
+    Spacer(Modifier.height(16.dp))
+    Button(
+        onClick = onGo,
+        colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
+    ) { Text("Open the Romans Road", fontSize = 16.sp) }
+    TextButton(onClick = onGo) { Text("Skip for now", color = palette.faded) }
 }
 
 @Composable
@@ -275,12 +512,22 @@ private fun Tiers(
     machine: Boolean,
     onHuman: (Boolean) -> Unit,
     onMachine: (Boolean) -> Unit,
+    cName: String,
+    cInfo: String,
+    cUrl: String,
+    onName: (String) -> Unit,
+    onInfo: (String) -> Unit,
+    onUrl: (String) -> Unit,
     onStart: () -> Unit,
 ) {
     Text(
         "Welcome to Plumbline", color = palette.ink, fontSize = 24.sp, fontWeight = FontWeight.SemiBold,
     )
-    Spacer(Modifier.height(6.dp))
+    Spacer(Modifier.height(10.dp))
+    Text("Your church", color = palette.ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+    Spacer(Modifier.height(4.dp))
+    ChurchFields(palette, cName, cInfo, cUrl, onName, onInfo, onUrl)
+    HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 14.dp))
     Text(
         "The Holy Bible is always on — reading, search, and your own tags, notes, " +
             "and threads. Choose which layers of analysis sit alongside it:",

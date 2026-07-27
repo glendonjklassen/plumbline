@@ -1,10 +1,14 @@
-// "Scan for the app": a pre-generated QR code of the hosted PWA, so a phone
-// held across a table (Present end card, or ⋮ → Share the app) carries the
-// app itself — free, offline, no account. The matrix is a build-time constant
-// (version 3, ECC M, 29×29) — no QR library, no network. Regenerate after a
-// URL change with:
-//   python3 -c "import qrcode; q=qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, border=0); q.add_data('<url>'); q.make(fit=True); print('\n'.join(''.join('1' if c else '0' for c in r) for r in q.modules))"
-// (pip install qrcode). Keep in sync with the web twin (QrCode.svelte).
+// "Scan for the app": a QR code of the hosted PWA, so a phone held across a
+// table (Present end card, or the Share button) carries the app itself — free,
+// offline, no account.
+//
+// Generated at RENDER time (2026-07-27), because the link is per-reader now: it
+// carries whatever church they set in Settings, so there is no one fixed URL to
+// bake in. That replaced a build-time constant 29×29 matrix. Keep in sync with
+// the web twin (QrCode.svelte), which does the same with qrcode-generator.
+//
+// Encoded as UTF-8 bytes explicitly — zxing defaults to ISO-8859-1 for byte
+// mode, and a church named "Iglesia Bíblica" would come back as mojibake.
 
 package dev.plumbline.ui
 
@@ -22,6 +26,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,52 +40,41 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import dev.plumbline.ChurchState
 
 const val PWA_URL = "https://plumblinebible.org/"
 
-private val MODULES = arrayOf(
-    "11111110101001101110101111111",
-    "10000010001001110101001000001",
-    "10111010010110100100101011101",
-    "10111010110110000010001011101",
-    "10111010110100000110001011101",
-    "10000010100010001101101000001",
-    "11111110101010101010101111111",
-    "00000000110001011110100000000",
-    "10001011110011000100111111001",
-    "00000100010011101000001111111",
-    "01111111000000001000011000001",
-    "11000001100110100101010011011",
-    "01110010010011111101110000010",
-    "10101001011100000010001111111",
-    "11100111010101110010100001101",
-    "01000001110001011110011000011",
-    "10000010011101000110110100010",
-    "10101000111001101110001111011",
-    "00101110111000001010010100101",
-    "00001000011110100111001010011",
-    "11010011100101111011111111001",
-    "00000000100010000111100010001",
-    "11111110111111110011101011101",
-    "10000010010011011001100010000",
-    "10111010101101000001111111001",
-    "10111010011101101010110000010",
-    "10111010000011101101010001111",
-    "10000010000111100110100101011",
-    "11111110100010011010101010010",
-)
+/** The QR modules for [text] as rows of booleans (true = dark), or null if it
+ *  could not be encoded (absurdly long input — never for our links). */
+internal fun qrModules(text: String): Array<BooleanArray>? = runCatching {
+    val hints = mapOf(
+        EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
+        EncodeHintType.CHARACTER_SET to "UTF-8",
+        // The writer pads to this size; 0 keeps the natural module count so we
+        // scale it ourselves and stay crisp at any dp.
+        EncodeHintType.MARGIN to 0,
+    )
+    val m = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 0, 0, hints)
+    Array(m.height) { y -> BooleanArray(m.width) { x -> m.get(x, y) } }
+}.getOrNull()
 
-/** Paint the PWA QR code, [size] square. Always dark-on-white regardless of
- *  theme — scanners want contrast; the white field is the quiet zone. */
+/** Paint a QR code for [text], [size] square. Always dark-on-white regardless
+ *  of theme — scanners want contrast; the white field is the quiet zone. */
 @Composable
-fun PwaQrCode(size: Dp, modifier: Modifier = Modifier) {
-    val n = MODULES.size
-    val quiet = 2 // quiet-zone modules on each side
+fun QrCode(text: String, size: Dp, modifier: Modifier = Modifier) {
+    val modules = remember(text) { qrModules(text) }
+    val n = modules?.size ?: 0
     Canvas(modifier.size(size)) {
-        val px = this.size.width / (n + 2 * quiet)
         drawRect(Color.White, size = this.size)
-        for (y in 0 until n) for (x in 0 until n) {
-            if (MODULES[y][x] == '1') {
+        if (modules == null || n == 0) return@Canvas
+        val quiet = 2 // quiet-zone modules on each side
+        val px = this.size.width / (n + 2 * quiet)
+        for (y in 0 until n) for (x in 0 until modules[y].size) {
+            if (modules[y][x]) {
                 drawRect(
                     Color(0xFF101010),
                     topLeft = Offset((x + quiet) * px, (y + quiet) * px),
@@ -92,20 +86,34 @@ fun PwaQrCode(size: Dp, modifier: Modifier = Modifier) {
     }
 }
 
-/** Fire the system share sheet with the PWA link. */
-fun sharePwaUrl(context: Context) {
+/** Fire the system share sheet with the link this reader hands over — the app
+ *  plus their church, when they have set one. */
+fun shareAppLink(context: Context, church: ChurchState?, startAsNewBeliever: Boolean = false) {
+    val url = shareUrl(PWA_URL, church, startAsNewBeliever)
+    val from = if (hasChurch(church)) " from ${cleanChurch(church).name}" else ""
     val send = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, "Plumbline — the Holy Bible, free and offline: $PWA_URL")
+        putExtra(Intent.EXTRA_TEXT, "Plumbline — the Holy Bible, free and offline$from: $url")
     }
     context.startActivity(Intent.createChooser(send, "Share Plumbline"))
 }
 
-/** ⋮ → Share the app: the QR big enough to scan across a table, plus the
- *  system share sheet for sending the link directly. */
+/**
+ * Share the app: the QR big enough to scan across a table, plus the system
+ * share sheet for sending the link directly. [church] rides in both.
+ *
+ * [onWelcome] re-opens the welcome this reader was given, when they had one —
+ * they should not have to reinstall to read it twice.
+ */
 @Composable
-fun ShareAppDialog(onDismiss: () -> Unit) {
+fun ShareAppDialog(
+    church: ChurchState?,
+    onDismiss: () -> Unit,
+    startAsNewBeliever: Boolean = false,
+    onWelcome: (() -> Unit)? = null,
+) {
     val context = LocalContext.current
+    val link = shareUrl(PWA_URL, church, startAsNewBeliever)
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier
@@ -117,15 +125,32 @@ fun ShareAppDialog(onDismiss: () -> Unit) {
             Text("Share Plumbline", color = Color(0xFF101010), fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
             Text(
-                "Free, offline, no account.",
+                if (hasChurch(church)) {
+                    "Free, offline, no account — and your church's details travel with it."
+                } else {
+                    "Free, offline, no account."
+                },
                 color = Color(0xFF5A564E), fontSize = 13.sp, textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(16.dp))
-            PwaQrCode(size = 220.dp)
+            QrCode(text = link, size = 220.dp)
             Spacer(Modifier.height(10.dp))
-            Text(PWA_URL, color = Color(0xFF5A564E), fontSize = 12.sp, textAlign = TextAlign.Center)
+            Text("plumblinebible.org", color = Color(0xFF5A564E), fontSize = 12.sp, textAlign = TextAlign.Center)
+            if (hasChurch(church)) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "with ${cleanChurch(church).name}",
+                    color = Color(0xFF101010), fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                )
+            }
             Spacer(Modifier.height(16.dp))
-            Button(onClick = { sharePwaUrl(context) }) { Text("Share the link") }
+            Button(onClick = { shareAppLink(context, church, startAsNewBeliever) }) {
+                Text("Share the link")
+            }
+            if (onWelcome != null) {
+                TextButton(onClick = onWelcome) { Text("Welcome") }
+            }
             TextButton(onClick = onDismiss) { Text("Close") }
         }
     }

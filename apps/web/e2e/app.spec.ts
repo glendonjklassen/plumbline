@@ -647,3 +647,56 @@ test("with no church shared, the welcome keeps its general advice", async ({ pag
   await expect(findChurch).toContainText("If someone shared this app with you");
   await expect(findChurch).not.toContainText("shared with you by");
 });
+
+// The Check button used to read the engine through `session.engine`, the
+// console/e2e proxy, which returns a PROMISE — so `score.accuracy` was
+// undefined and every check reported "0% recalled", even a verbatim
+// copy/paste (feedback 2026-07-27). Drives the real UI, so a regression in
+// either the wiring or the scoring fails here.
+test("checking a typed recall scores it (a perfect copy is 100%)", async ({ page }) => {
+  await boot(page);
+  // Seed a card for a known verse and drill it straight away.
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.engine.memoryAdd("John 3:16", new Date().toISOString());
+  });
+  await page.getByRole("button", { name: "Memorize" }).click();
+  await page.getByRole("button", { name: "Review due", exact: false }).click();
+  await page.getByRole("button", { name: "Type it" }).click();
+
+  // Reveal the verse and type back exactly what the drill asks for.
+  const drilled = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    return (await s.engine.memoryDrill("John 3:16", 0))?.text as string;
+  });
+  expect(drilled).toContain("For God so loved");
+  await page.locator("textarea").fill(drilled);
+  await page.getByRole("button", { name: "Check" }).click();
+  await expect(page.locator(".accuracy")).toHaveText("100% recalled");
+
+  // A wrong answer must still score — 0% is only ever a real miss.
+  await page.locator("textarea").fill("nothing like the verse at all");
+  await page.getByRole("button", { name: "Check" }).click();
+  await expect(page.locator(".accuracy")).not.toHaveText("100% recalled");
+});
+
+// A whole section as ONE card (2026-07-27): the hub lists one row labelled with
+// the range, and the drill covers every verse in it.
+test("a passage is memorized as one card, drilled whole", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.engine.memoryAddPassage("Ps 23:1", "Ps 23:3", new Date().toISOString());
+  });
+  await page.getByRole("button", { name: "Memorize" }).click();
+  // ONE row, named as a range — not three verse rows.
+  await expect(page.locator(".card .ref", { hasText: "Ps 23:1–3" })).toHaveCount(1);
+  const drill = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    return await s.engine.memoryDrill("Ps 23:1", 0);
+  });
+  expect(drill.label).toBe("Ps 23:1–3");
+  expect(drill.verses).toBe(3);
+  expect(drill.text).toContain("The LORD is my shepherd");
+  expect(drill.text).toContain("He restoreth my soul");
+});

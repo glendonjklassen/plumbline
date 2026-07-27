@@ -159,7 +159,14 @@
   }
 </script>
 
-<MapFrame title="Concept map — {code}" {caption} width={W} height={H} onZoom={(z) => (zoom = z)}>
+<MapFrame
+  title="Concept map — {code}"
+  {caption}
+  width={W}
+  height={H}
+  loading={!model}
+  onZoom={(z) => (zoom = z)}
+>
   <div class="fill" bind:this={host}>
     <canvas bind:this={canvas} onclick={onClick}></canvas>
   </div>

@@ -74,6 +74,13 @@
     void s.author("memoryAdd", ref, nowStamp()).then((err) => s.showToast(err ?? `Memorizing ${ref}`));
   }
 
+  /** A whole section as one card — this verse starts it, the picker ends it. */
+  function memorizePassage(): void {
+    const ref = menu!.refKey;
+    close();
+    s.memorizePassageFrom = ref;
+  }
+
   // Clamp the menu into the viewport.
   let el: HTMLDivElement | undefined = $state();
   const pos = $derived.by(() => {
@@ -115,6 +122,7 @@
     <button onclick={addThread}>Add to thread…</button>
     <hr />
     <button onclick={memorize}>Memorize this verse</button>
+    <button onclick={memorizePassage}>Memorize passage…</button>
   </div>
 {/if}
 

@@ -933,3 +933,52 @@ base-relative).
   `zoomable` clamps the offset so a map can't be flung off-screen; pinned at 1×).
   A memorize add shows a Toast. Desktop keeps its menu/right-click layout; these
   are phone form-factor deltas.
+
+- **Passage memorization + the church on Android (2026-07-27, both shells).**
+  A memory card can cover a **passage read and recalled as one chunk**, not only
+  a single verse: `Card.through` (additive in the frozen `overlay-memory-v1` —
+  an older reader sees the file as a card on its opening verse rather than
+  losing it) holds the inclusive last verse, always in the same book and
+  chapter. A card is still keyed and filed by its FIRST verse, so every existing
+  endpoint addresses it unchanged; `memory_add_passage` seeds one, and the drill
+  and the recall check run over the verses joined into one text
+  (`memory_span`). Two lists now differ on purpose: `coverage.verses` shades
+  **every verse** a card covers (the canon coverage map), while the new
+  `coverage.cards` is **one row per card** carrying `label` ("Ps 23:1–6") — the
+  hub lists cards, and a remove button on an inner verse would have removed
+  nothing. `coverage_by_section.cards`/`mature` count verses, so a section still
+  reads as "how much of it do I know".
+  **Selection UX (both shells):** the long-pressed verse is the START and the
+  reader taps the END from a grid of that chapter's remaining verse numbers
+  (`PassagePicker.svelte`, `PassageEndPicker` in `VerseActions.kt`) — the
+  tap-grid idiom the passage navigator already uses, no new gesture, and the grid
+  only offers verses that exist, which makes the same-chapter limit
+  self-evident. `chapter_verse_count` is the one round trip it costs, taken when
+  the picker opens.
+  **Church parity — the Compose shell caught up:** `ui/Church.kt` is the twin of
+  `shell/church.ts` (same readable `?church=…&churchInfo=…&churchUrl=…` link),
+  Settings gained **Your church** + "Present shares as a new believer", first run
+  gained the **Curious about the Bible** path and asks for the church on the two
+  paths that hand the app on, the welcome a reader was given is remembered
+  (`intro`) and re-readable, and Present's take-home QR + share text carry the
+  reader's link instead of a bare URL. The QR is generated at render time
+  (zxing-core, UTF-8 byte mode) — it was a build-time constant matrix for one
+  fixed URL, which cannot carry a church. **Delta (Android):** a reader SETS and
+  SHARES a church but never RECEIVES one — a plumblinebible.org link opens the
+  PWA, so `App.svelte`'s incoming-church capture has no Compose counterpart; and
+  Church/Welcome are overflow (⋮) items rather than top-bar buttons, because the
+  phone top bar is deliberately tight.
+- **Proper nouns are not concepts (2026-07-27, engine-wide).** The concept map's
+  neighbour rings and the concept card's collocate/community lists drop proper
+  nouns (`strongs::is_proper_noun`) — "faith" ringed by Ephraim, Jerusalem and
+  Shechem read as noise. Names stay fully reachable as map **centres**, in word
+  study, concordance and search; `CONCEPT_KEEP_NAMES` keeps the divine name and
+  Christ, which in this corpus are concepts rather than incidental names.
+  Candidates are over-fetched before filtering so a ring never comes back short.
+- **A cold read explains itself (2026-07-27, both shells).** The first
+  definition of a session builds the occurrence index and the first analytical
+  map sweeps the corpus; a bare flash of "loading" (or blank paper) for seconds
+  reads as a hang. Once a read outlasts ~600 ms, both shells add a still,
+  non-pulsing note that the wait is **one-time** and the rest are instant
+  (`StudyPanel.svelte`/`MapFrame.svelte`; `StudyPane.kt`/`Maps.kt`). Timed
+  rather than flagged: whatever index is cold, the wait itself is the signal.
