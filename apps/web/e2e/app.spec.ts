@@ -429,3 +429,40 @@ test("Settings can make the app completely offline, and says when it is", async 
   });
   expect(missing).toBe(0);
 });
+
+test("the welcome's verses are the 1769 text, verbatim and instant", async ({ page }) => {
+  // The welcome quotes scripture from literals rather than asking the engine
+  // for ten verses one at a time — they used to pop in a beat after the page
+  // (feedback 2026-07-27). A copy can drift, so this compares every quote on
+  // screen against the corpus itself.
+  await page.goto("/");
+  await page.getByRole("button", { name: "New in the faith" }).click({ timeout: 90_000 });
+  await expect(page.getByText("We're so glad you've put your faith in Jesus")).toBeVisible();
+
+  // The quotes are present in the very first paint of this screen, not filled
+  // in later: no blockquote may be empty at any point.
+  const quotes = await page.locator("blockquote .vq-text").allInnerTexts();
+  expect(quotes.length).toBeGreaterThan(5);
+  for (const q of quotes) expect(q.replace(/[“”]/g, "").trim().length).toBeGreaterThan(20);
+
+  const expected = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    const groups = [
+      ["Ps 12:6", "Ps 12:7"],
+      ["Heb 10:24", "Heb 10:25"],
+      ["Ps 119:11"],
+      ["Rom 5:8", "John 3:16"],
+      ["John 10:28", "1John 5:13"],
+      ["Phil 1:6", "1John 1:9"],
+      ["2Tim 3:16", "2Tim 3:17"],
+    ];
+    const out: string[] = [];
+    for (const g of groups) {
+      const parts: string[] = [];
+      for (const k of g) parts.push((await s.engine.verse(k))?.body ?? `MISSING ${k}`);
+      out.push(parts.join(" "));
+    }
+    return out;
+  });
+  expect(quotes.map((q) => q.replace(/[“”]/g, "").trim())).toEqual(expected);
+});

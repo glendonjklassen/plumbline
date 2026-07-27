@@ -16,27 +16,78 @@
   let human = $state(true);
   let machine = $state(true);
 
-  // The welcome's verse references (refKeys use OSIS book ids — canon.rs).
-  // `keys` are the verses QUOTED inline — the new believer reads scripture
-  // itself, not a row of links (product 2026-07-26).
+  // The welcome's verses (refKeys use OSIS book ids — canon.rs). The text is
+  // WRITTEN HERE, not fetched: this screen is the first thing a new believer
+  // sees, and asking the engine for ten verses one at a time made the quotes
+  // pop in a beat after the page (feedback 2026-07-27). The 1769 text is
+  // frozen, so a copy of thirteen verses cannot drift — each was taken
+  // verbatim from data/kjv.jsonl, rendered exactly as Verse::body() does.
   interface Ref {
     label: string;
     book: string;
     chapter: number;
     verse: number;
-    keys: string[];
+    text: string;
   }
   const REF: Record<string, Ref> = {
-    love: { label: "Romans 5:8", book: "Rom", chapter: 5, verse: 8, keys: ["Rom 5:8"] },
-    pure: { label: "Psalm 12:6–7", book: "Ps", chapter: 12, verse: 6, keys: ["Ps 12:6", "Ps 12:7"] },
-    church: { label: "Hebrews 10:24–25", book: "Heb", chapter: 10, verse: 24, keys: ["Heb 10:24", "Heb 10:25"] },
-    heart: { label: "Psalm 119:11", book: "Ps", chapter: 119, verse: 11, keys: ["Ps 119:11"] },
-    loved: { label: "John 3:16", book: "John", chapter: 3, verse: 16, keys: ["John 3:16"] },
-    know: { label: "1 John 5:13", book: "1John", chapter: 5, verse: 13, keys: ["1John 5:13"] },
-    kept: { label: "John 10:28–29", book: "John", chapter: 10, verse: 28, keys: ["John 10:28"] },
-    perfected: { label: "Philippians 1:6", book: "Phil", chapter: 1, verse: 6, keys: ["Phil 1:6"] },
-    forgiven: { label: "1 John 1:9", book: "1John", chapter: 1, verse: 9, keys: ["1John 1:9"] },
-    wisdom: { label: "2 Timothy 3:16–17", book: "2Tim", chapter: 3, verse: 16, keys: ["2Tim 3:16", "2Tim 3:17"] },
+    love: {
+      label: "Romans 5:8", book: "Rom", chapter: 5, verse: 8,
+      text: "But God commendeth his love toward us, in that, while we were yet sinners, Christ died for us.",
+    },
+    pure: {
+      label: "Psalm 12:6–7", book: "Ps", chapter: 12, verse: 6,
+      text:
+        "The words of the LORD are pure words: as silver tried in a furnace of earth, purified seven times. " +
+        "Thou shalt keep them, O LORD, thou shalt preserve them from this generation for ever.",
+    },
+    church: {
+      label: "Hebrews 10:24–25", book: "Heb", chapter: 10, verse: 24,
+      text:
+        "And let us consider one another to provoke unto love and to good works: " +
+        "Not forsaking the assembling of ourselves together, as the manner of some is; but exhorting one another: " +
+        "and so much the more, as ye see the day approaching.",
+    },
+    heart: {
+      label: "Psalm 119:11", book: "Ps", chapter: 119, verse: 11,
+      text: "Thy word have I hid in mine heart, that I might not sin against thee.",
+    },
+    loved: {
+      label: "John 3:16", book: "John", chapter: 3, verse: 16,
+      text:
+        "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him " +
+        "should not perish, but have everlasting life.",
+    },
+    know: {
+      label: "1 John 5:13", book: "1John", chapter: 5, verse: 13,
+      text:
+        "These things have I written unto you that believe on the name of the Son of God; that ye may know " +
+        "that ye have eternal life, and that ye may believe on the name of the Son of God.",
+    },
+    kept: {
+      label: "John 10:28–29", book: "John", chapter: 10, verse: 28,
+      text:
+        "And I give unto them eternal life; and they shall never perish, neither shall any man pluck them " +
+        "out of my hand.",
+    },
+    perfected: {
+      label: "Philippians 1:6", book: "Phil", chapter: 1, verse: 6,
+      text:
+        "Being confident of this very thing, that he which hath begun a good work in you will perform it " +
+        "until the day of Jesus Christ:",
+    },
+    forgiven: {
+      label: "1 John 1:9", book: "1John", chapter: 1, verse: 9,
+      text:
+        "If we confess our sins, he is faithful and just to forgive us our sins, and to cleanse us from all " +
+        "unrighteousness.",
+    },
+    wisdom: {
+      label: "2 Timothy 3:16–17", book: "2Tim", chapter: 3, verse: 16,
+      text:
+        "All scripture is given by inspiration of God, and is profitable for doctrine, for reproof, for " +
+        "correction, for instruction in righteousness: That the man of God may be perfect, throughly " +
+        "furnished unto all good works.",
+    },
   };
 
   function finish(h: boolean, m: boolean): void {
@@ -97,11 +148,7 @@
 
 {#snippet vquote(refs: Ref[])}
   <blockquote class="vq">
-    <span class="vq-text">“{refs
-      .flatMap((r) => r.keys)
-      .map((k) => s.q("verse", k)?.body ?? "")
-      .join(" ")
-      .trim()}”</span>
+    <span class="vq-text">“{refs.map((r) => r.text).join(" ")}”</span>
     <span class="vq-refs">{#each refs as r (r.label)}{@render refchip(r)}{/each}</span>
   </blockquote>
 {/snippet}
