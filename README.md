@@ -144,20 +144,19 @@ Scripture renders in EB Garamond (OFL, bundled).
 This application is built with the 1769 King James Version of the Bible, which
 translates the Masoretic Hebrew texts and the Textus Receptus. This is the same
 version that has been used for hundreds of years in English and has seen
-millions of souls saved and lives transformed. It is also the only version in
-English that satisfies the Bible's own promises about the preservation of
-Scripture (Psalm 12:6–7; Psalm 119:89, 152, 160; Proverbs 30:5–6; Isaiah 40:8;
-Matthew 5:18; Matthew 24:35; Luke 21:33; 1 Peter 1:23–25; Revelation 22:18–19).
-It is easily the most beautiful translation in English. It is also **public
-domain**.
+millions of souls saved and lives transformed. I argue that it is also the only
+version in English that satisfies the Bible's own promises about the
+preservation of Scripture (Psalm 12:6–7; Psalm 119:89, 152, 160; Proverbs
+30:5–6; Isaiah 40:8; Matthew 5:18; Matthew 24:35; Luke 21:33; 1 Peter 1:23–25;
+Revelation 22:18–19).
 
-However, even if I did not want to use this version, it's worth noting that I
-could not use any of the modern versions that so many churches use today. Below
-is a sampling of why that is the case:
+If I did not want to use this version, I could not use any of the modern
+versions that so many churches use today. Below is a sampling of why that is
+the case:
 
 | Version | Who holds it | The term that blocks an app like this |
 |---|---|---|
-| **NIV** | Biblica; North American commercial rights to HarperCollins Christian Publishing (News Corp) | 500 verses / 25% of the work / never a complete book. Beyond that, a negotiated commercial licence. Separately: *any* use "in connection with artificial intelligence, machine learning, large language models, chatbots, or similar technologies requires a valid license." [Terms](https://www.biblica.com/permissions/) |
+| **NIV** | Biblica; North American commercial rights to HarperCollins Christian Publishing (News Corp) | 500 verses / 25% of the work / never a complete book. Beyond that, a negotiated commercial license. Separately: *any* use "in connection with artificial intelligence, machine learning, large language models, chatbots, or similar technologies requires a valid license." [Terms](https://www.biblica.com/permissions/) |
 | **ESV** | Crossway | 500 verses / half a book / 25%. And: "The ESV text may not be quoted in any publication made available to the public by a Creative Commons license." Their API is online-only, non-commercial, and licensed "to organizations, not to individuals or solo developers." [Terms](https://www.esv.org/about/terms/) · [Permissions](https://www.crossway.org/permissions/) |
 | **NKJV** | Thomas Nelson → HarperCollins Christian → News Corp | 500 verses / 25%; the text is "not to be reproduced except as permitted in writing." [Permissions](https://www.harpercollinschristian.com/sales-and-rights/permissions/) |
 | **NASB** | The Lockman Foundation | 1,000 verses / 50% / never a complete book; beyond that, a signed request form. [Terms](https://www.lockman.org/permission-to-quote-copyright-trademark-information/) |
@@ -166,28 +165,51 @@ is a sampling of why that is the case:
 | **CSB** | Holman Bible Publishers / Lifeway | 1,000 verses / 50% / never a complete book. [Permissions](https://csbible.com/permissions/) |
 | **The Message** | Eugene Peterson estate / NavPress, licensed through Tyndale | 500 verses / 25%. [Permissions](https://www.tyndale.com/permissions) |
 | **NRSV** | National Council of Churches, via Friendship Press | Closed. Except for the Catholic Edition, the NRSV "is no longer available for new licenses or permission agreements." There is no price at which you may ship it. [Licensing](https://friendship-press.org/bible-licensing/) |
-| **NRSVue** | National Council of Churches; rights brokered by Petradi International Rights Services | Licence required, routed through an outside rights-management firm. [Guidelines](https://www.friendshippress.org/pages/nrsvue-quick-faq) |
-| **RSV** | National Council of Churches | Licence required, same channel. [Licensing](https://friendship-press.org/bible-licensing/) |
+| **NRSVue** | National Council of Churches; rights brokered by Petradi International Rights Services | License required, routed through an outside rights-management firm. [Guidelines](https://www.friendshippress.org/pages/nrsvue-quick-faq) |
+| **RSV** | National Council of Churches | License required, same channel. [Licensing](https://friendship-press.org/bible-licensing/) |
 | **Good News (GNT)** | American Bible Society | 500 verses / 50% of a book / 25% of the work. [Rights](https://www.americanbible.org/rights-and-permissions/) |
 | **CEV** | American Bible Society | Same terms. [Licensing](https://cev.bible/licensing/) |
 | **NABRE** | Confraternity of Christian Doctrine (the US bishops) | Under 5,000 words / 40% of a book / 40% of the work. Royalty income is an explicit purpose of the copyright. [Permissions](https://www.usccb.org/offices/new-american-bible/permissions) |
 | **NET** | Biblical Studies Press | The near miss: 500 verses free, but distributing the full text "in any form other than paper" requires written permission *and* compliance with their content-control guidelines. [Permissions](https://bible.org/permissions) |
 
-It is not lost on me, nor should it be lost on you, that five publishers hold
-the modern English Bibles anyone actually reads — HarperCollins Christian
-Publishing (the NIV in North America, and the NKJV), Crossway (the ESV), the
-Lockman Foundation (the NASB, the Amplified), Tyndale House (the NLT, The
-Message), and Holman/Lifeway (the CSB). Two of those are the same company: the
-best-selling English Bible in the world and the runner-up both answer to News
-Corp. The rest of the table is held by church bodies rather than corporations —
-the National Council of Churches, the American Bible Society, the US bishops —
-and not one of them would permit me to make an application like this to bolster
-my ability to study and share the Word.
-
 A worthy exercise I leave with the reader is to click on any one of the license
 agreements above and see how it reads when you replace the name of their
 intellectual property with "The Word of God". It did not sit well with me when
 I did.
+
+For these reasons, I have chosen to use the King James Version of the Bible.
+I have included Strong's Concordance and other study tools to help where a word
+might be unfamiliar, and if it remains a challenge for you, there are other
+Bible applications that will provide some of the versions listed above. I do,
+however, implore you to consider your translation selection carefully, as many
+parts of Scripture have been omitted or changed in modern versions, namely:
+
+- Matthew 17:21
+- Matthew 18:11
+- Matthew 23:14
+- Mark 7:16
+- Mark 9:44
+- Mark 9:46
+- Mark 11:26
+- Mark 15:28
+- Luke 17:36
+- Luke 23:17
+- John 5:4
+- Acts 8:37
+- Acts 15:34
+- Acts 24:7
+- Acts 28:29
+- Romans 16:24
+
+And the following passages are bracketed, footnoted, or marked as later
+additions:
+
+- Matthew 6:13b
+- Mark 16:9–20
+- Luke 22:43–44
+- Luke 23:34a
+- John 7:53–8:11
+- 1 John 5:7–8
 
 ## Final note
 
