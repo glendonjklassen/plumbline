@@ -139,11 +139,32 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
 - **The offline promise is a test, not a hope.** A first visit must leave the
   device able to boot with the network off. The SW cannot manage that alone:
   it isn't controlling the page while the shell loads and it claims the engine
-  worker mid-boot, so page and worker each stash their own downloads
-  (`engine/cache.ts`, `engine/precache.ts`). Cache lookups pass
-  `ignoreVary: true` — responses come back `Vary: Origin` and Vite's
-  `<script crossorigin>` requests carry an Origin that a plain fetch does not,
-  which otherwise hides an entry from the request it was stored for.
+  worker mid-boot, so app code stores its own downloads. **`engine/depot.ts` is
+  the only module that touches the Cache API** — pack, wasm and shell all go
+  through it, and the invariant is that nothing the engine worker needs may
+  depend on being SW-controlled (a bare `fetch()` for one of those works on a
+  desktop and fails offline on a phone). `ignoreVary: true` is baked into its
+  lookups: responses come back `Vary: Origin` and Vite's `<script crossorigin>`
+  requests carry an Origin that a plain fetch does not, which otherwise hides an
+  entry from the request it was stored for. Entries the depot writes are
+  Responses it constructs, so they carry no Vary at all.
+- **The data pack's manifest is the load spec** (`formatVersion: 2`). Each entry
+  carries `stage` (`text` | `study` | `analysis`), `seedOnce` for the stock study
+  set, `role: "corpusCache"`, and a per-file `hash` over the RAW bytes — raw
+  because some hosts serve `.gz` with `Content-Encoding: gzip`, so the loader
+  cannot know which form it received. The loader switches on those instead of
+  re-deriving tiers from filenames; `scripts/check-web-pack.mjs` (run by
+  `pack:data` and CI) validates the shape and re-derives every hash from the
+  shipped bytes. The corpus **idxcache must build byte-identically** — it is the
+  biggest file and the manifest hashes it, so a nondeterministic cache re-mints
+  every URL and re-downloads the whole pack on a release that changed no data.
+- **The in-memory home evicts read pack files, and only under `data/`.** The WASI
+  shim's `File` copies its input, so the home held a second copy of everything
+  (~45 MB). Eviction never touches the user subtree, because `persistUserData`
+  derives deletions by diffing that tree against IndexedDB — evicting there would
+  permanently delete the reader's data on their next write, and truncate the
+  backup zip. `data/kjv-notes.jsonl` can never be evicted either: `load_study`
+  re-reads it at every authoring site.
 
 ## Verification
 
