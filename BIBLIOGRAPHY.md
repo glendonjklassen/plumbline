@@ -11,6 +11,7 @@ analysis layer is a tool for studying the text, never an authority over it.
 | `data/kjv.jsonl` | KJV 1769 text, Strong's-tagged, tokenized (`kjv1769-tok2`) | eBible.org SWORD module `engKJV2006eb`, converted by the overlay import pipeline | KJV text: public domain (Crown patent applies in the UK) |
 | `data/strongs.json` | Strong's Hebrew + Greek dictionaries (14,197 entries) | [openscriptures/strongs](https://github.com/openscriptures/strongs) | CC-BY-SA |
 | `data/kjv-notes.jsonl` | The 1769 translators' margin notes | same import pipeline | public domain |
+| `data/akjv.jsonl` | Plain-English overlay: where the AKJV words a verse differently, keyed to KJV token spans (6.9% of tokens) | American King James Version, Michael Peter Engelbrite 1999, via [scrollmapper/bible_databases](https://github.com/scrollmapper/bible_databases); aligned by `scripts/build-akjv-delta.mjs` | **public domain** — released 1999-11-08, "copy it, sell it, modify it" |
 | `data/cross-references.tsv` | ~343k Treasury of Scripture Knowledge references with votes | [openbible.info](https://www.openbible.info/labs/cross-references/) | CC Attribution; TSK itself public domain |
 
 ## Morphology

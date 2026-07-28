@@ -23,6 +23,7 @@ All under the resolved data home (`core::home`) at `<home>/data/`:
 | `kjv.jsonl` | the reader | `core::corpus` | committed (SWORD import) |
 | `strongs.json` | Strong's + the **etymology bridge** | `core::strongs`, `rnd::bridge` | committed; bridge needs no extra data |
 | `kjv-notes.jsonl` | 1769 margin notes | `core::notes` | committed (import) |
+| `akjv.jsonl` | the plain-English overlay | `core::akjv` | deterministic align (no ML) |
 | `cross-references.tsv` | TSK topical tier | `core::crossref` | download (no ML) |
 | `concept-vectors.vec` (+ `.meta`, `.freq`) | concept neighbours + "verses like this" | `rnd::embed` | **train once** (CPU) |
 | `morphology.jsonl` | per-token parse | `rnd::morph` | deterministic projection |
@@ -110,3 +111,42 @@ cargo run -p plumbline-hydrate -- copy --from ../overlay --to ~/.local/share/plu
 morphology coverage; it exits non-zero only when a **required core** file is
 missing. It does not generate the artifacts — run the offline pipeline above for
 that — it assembles and validates them.
+
+
+## `akjv.jsonl` — the plain-English overlay
+
+    node scripts/build-akjv-delta.mjs --akjv <AKJV.json>
+
+Source: the **American King James Version** (Michael Peter Engelbrite, 1999),
+public domain, taken from `formats/json/AKJV.json` in
+[scrollmapper/bible_databases]. It is a modernisation of the same text — same
+31,102 verses, same versification — so no verse mapping is involved.
+
+**It is a delta, not a second corpus.** For each verse the aligner word-diffs
+the AKJV against the KJV's frozen tokens (LCS over case- and
+punctuation-normalised words) and emits only the runs that differ, as
+`[startTok, endTok, replacement]`. That keeps `kjv.jsonl` and the frozen
+`kjv1769-tok2` stamp untouched, lets the reader swap words at layout time,
+leaves every Strong's code attached to the KJV token that owns it, and makes
+"show me the word this replaced" free — the original is still in the corpus.
+
+Rendering rule for a span `[a,b]`: `pre(a) + replacement + post(b)`. The
+interior punctuation of the consumed tokens is dropped, because the
+replacement carries whatever the AKJV put between its own words (KJV
+"Verily, verily" → AKJV "Truly, truly").
+
+Two things the aligner is careful about, both found by looking at the output:
+
+- The AKJV text carries paragraph pilcrows as standalone words. The KJV corpus
+  carries paragraphs as a token *flag*, so a stray `¶` would read as an
+  inserted word and land a no-op delta on the last token of a verse.
+- A repeated word lets the LCS anchor on the other occurrence, pairing two
+  identical words as a "replacement" (`day` → `day`). Those are dropped, or the
+  reader would see a mark under a word that never changed.
+
+Measured over the whole Bible: **6.9% of tokens** re-rendered, in 66.7% of
+verses; 46,185 spans over 2,944 distinct replacements, dominated by
+`unto`→`to` (7,375), `thy`→`your` (3,986), `ye`→`you` (3,562), `thee`→`you`,
+`upon`→`on`, `hath`→`has`, `saith`→`says`. 1.35 MB raw, 210 KB gzipped.
+
+[scrollmapper/bible_databases]: https://github.com/scrollmapper/bible_databases
