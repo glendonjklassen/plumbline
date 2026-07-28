@@ -37,6 +37,9 @@ export interface VirtualHome {
   /** Insert read-only pack files into the live home (the WASI shim resolves
    *  paths on open, so the engine sees them immediately) — the late R&D pack. */
   addFiles(files: Map<string, Uint8Array>): void;
+  /** Drop pack files the engine has finished reading, freeing their bytes.
+   *  Returns how many bytes went. See `evict` below for the rules. */
+  evict(paths: string[]): number;
   /** Diff the user subtree against IndexedDB (call after authoring writes). */
   persistUserData(): Promise<void>;
   /** Persist the engine-built idxcache once, after a successful open. */
@@ -141,6 +144,52 @@ export async function buildHome(
     hadIdxcache: !!idxcache || pack.has(IDXCACHE),
     addFiles(files: Map<string, Uint8Array>) {
       for (const [path, bytes] of files) insertFile(root, path, bytes);
+    },
+    /** Drop a read pack file's bytes out of the in-memory home.
+     *
+     *  The engine holds its own parsed copy in wasm memory, and the WASI shim's
+     *  `File` constructor COPIES what it is given (`new Uint8Array(data)`), so
+     *  the node here is a genuine second copy of the bytes — 37 MB of it for the
+     *  corpus cache alone. Nothing re-opens these paths after the stage that
+     *  reads them, so the node is pure duplication once that stage is done.
+     *
+     *  TWO HARD RULES, both of which protect the reader's data:
+     *
+     *  1. `data/` ONLY. `persistUserData` works out deletions by diffing this
+     *     tree against IndexedDB, so evicting anything under tags/ threads/
+     *     weaves/ notes/ memory/ .config would make the reader's very next
+     *     authoring write DELETE it from IndexedDB — permanently. The backup zip
+     *     is built from the same tree, so it would quietly ship truncated. The
+     *     guard is a rule rather than care: user dirs are unreachable from here.
+     *  2. Only paths whose single reader has provably finished. Callers pass
+     *     those explicitly; nothing is inferred. `data/kjv-notes.jsonl` is NOT
+     *     among them and never can be — `load_study` re-reads it on every
+     *     authoring write, so evicting it empties the 1769 margin notes the
+     *     moment the reader saves a highlight. Nor is `data/cross-references.tsv`
+     *     or `bridge/*`: those load through lazy cells that can fire on an
+     *     arbitrary later tap, and there is no way to ask the engine whether they
+     *     already have.
+     *
+     *  Frees the steady state, NOT the peak. At boot the corpus cache exists as
+     *  the gunzip output, as this node's copy, as the shim's per-read `slice`,
+     *  and as the engine's parsed copy — roughly four times over, and the peak is
+     *  what runs a phone out of memory. Reducing that means not making the copies
+     *  in the first place, which is a separate piece of work. */
+    evict(paths: string[]): number {
+      const dataDir = root.get("data");
+      if (!(dataDir instanceof Directory)) return 0;
+      const contents = dataDir.contents as Map<string, Directory | File>;
+      let freed = 0;
+      for (const path of paths) {
+        const [dir, ...rest] = path.split("/");
+        // Rule 1, enforced rather than documented.
+        if (dir !== "data" || rest.length !== 1) continue;
+        const node = contents.get(rest[0]);
+        if (!(node instanceof File)) continue;
+        freed += (node as File).data.byteLength;
+        contents.delete(rest[0]);
+      }
+      return freed;
     },
     exportUserData() {
       const out = new Map<string, Uint8Array>();

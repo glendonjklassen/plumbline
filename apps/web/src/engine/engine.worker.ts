@@ -147,12 +147,35 @@ const firstLayout = new Promise<void>((r) => (firstLayoutServed = r));
 
 /** Warm the lazy indexes one per macrotask (idempotent; safe to re-run after
  *  the R&D pack lands — the SIF model only builds once the embedding is in). */
-async function warmChunked(): Promise<void> {
-  for (let step = 0; ; step++) {
-    await yieldTask();
-    const more = timedChunk(`warm step ${step}`, () => booted!.engine.warmStep(step));
-    if (!more) break;
-  }
+let warmRun: Promise<void> | null = null;
+function warmChunked(): Promise<void> {
+  // SINGLE-FLIGHTED, like the R&D load below. Two callers reach here: the
+  // background load, and the R&D load — which the first-run chooser kicks off via
+  // ensureRnd (FirstRun.svelte) while the background load is often still in
+  // flight, so both really do run at once on a normal first visit.
+  //
+  // NOT a throughput fix, and worth saying so plainly: the step counter each loop
+  // keeps is ignored by the engine (`plumbline_engine_warm_step` takes `_step`),
+  // and every call advances ONE shared phase counter — so two loops split the work
+  // rather than duplicating it. Measured before and after: ~1,198 warm steps
+  // either way. The steps are small on purpose, one budgeted slice per macrotask,
+  // which is what keeps layout and tap RPCs answerable.
+  //
+  // What it does buy is a well-defined re-warm. With two drivers the "run again
+  // after the R&D pack lands, to pick up the SIF model" pass was racy — whichever
+  // loop happened to still be alive absorbed the second call. Now the second
+  // caller joins the live pass, and because `warmRun` is cleared on completion a
+  // genuinely later call still gets a fresh one. The engine's tail phase goes back
+  // for the SIF model once an embedding is present, so joining mid-pass is safe.
+  return (warmRun ??= (async () => {
+    for (let step = 0; ; step++) {
+      await yieldTask();
+      const more = timedChunk(`warm step ${step}`, () => booted!.engine.warmStep(step));
+      if (!more) break;
+    }
+  })().finally(() => {
+    warmRun = null;
+  }));
 }
 
 /** Fetch + load the machine-tier pack, chunked, with progress events for the
@@ -180,6 +203,17 @@ function loadRndChunked(): Promise<void> {
       const more = timedChunk(`rnd load step ${step}`, () => booted!.engine.loadRndStep(step));
       if (!more) break;
     }
+    // The embedding and the morphology are parsed into wasm memory by the steps
+    // above and never re-read; the two vector sidecars are only ever arguments to
+    // that same parse, so they go as one unit with it.
+    const freedRnd = booted!.home.evict([
+      "data/concept-vectors.vecb",
+      "data/concept-vectors.vec.meta",
+      "data/concept-vectors.vec.freq",
+      "data/morphology.morphb",
+      "data/text-witness.json",
+    ]);
+    if (freedRnd) booted!.trace.push(["home evict after analysis (KB)", Math.round(freedRnd / 1024)]);
     await warmChunked();
     self.postMessage({ type: "rndReady" });
   })().catch((e) => {
@@ -229,6 +263,12 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
       booted!.home.addFiles(files);
       booted!.engine.loadCoreData();
     });
+    // Both are read exactly once, by loadCoreData, and the parsed forms live in
+    // the engine from here on. NOT the margin notes, which load_study re-reads on
+    // every authoring write, and NOT cross-references.tsv, whose lazy index can
+    // still be built on an arbitrary later tap.
+    const freedCore = booted!.home.evict(["data/strongs.json", "data/akjv.akjvb"]);
+    if (freedCore) booted!.trace.push(["home evict after stage 2 (KB)", Math.round(freedCore / 1024)]);
     self.postMessage({ type: "coreReady" });
     await warmChunked();
     if (await willAutoLoadRnd(machineOn, deferRnd)) await loadRndChunked();

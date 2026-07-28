@@ -95,6 +95,15 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
     }, 50);
   };
 
-  void home.persistIdxcache();
+  // ORDER MATTERS. persistIdxcache reads the cache back OUT of the home, so the
+  // eviction has to wait for it — evict first and the persist silently no-ops,
+  // and this device would re-download 3.3 MB on every launch forever.
+  await home.persistIdxcache();
+  // The corpus cache is the big one: `load_cache` does a single whole-file read
+  // and MOVES the bytes into the engine's own buffer, which every unvisited
+  // chapter is then decoded out of. The node here is a pure duplicate of ~37 MB.
+  const freed = home.evict(["data/kjv.jsonl.idxcache"]);
+  if (PERF && freed) trace.push(["home evict after open (KB)", Math.round(freed / 1024)]);
+
   return { engine, wasm, home, manifest, packVersion: manifest.version, trace };
 }

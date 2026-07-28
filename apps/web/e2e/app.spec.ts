@@ -623,6 +623,74 @@ test("a warm boot never asks the network for the pack or the engine", async ({ p
   ).toEqual([]);
 });
 
+test("read pack files are freed, and the reader can still author afterwards", async ({ page }) => {
+  // The engine parses each pack file into wasm memory, but the WASI shim's File
+  // constructor COPIES what it is handed, so the in-memory home kept a second
+  // copy of every byte forever — ~37 MB for the corpus cache alone, on a phone.
+  // Files whose single reader has finished are dropped.
+  //
+  // The safety half of this test is the important half. Eviction is restricted to
+  // data/ because `persistUserData` computes deletions by diffing the home
+  // against IndexedDB: anything evicted from a USER directory would be deleted
+  // from the reader's own storage on their next authoring write, permanently. And
+  // data/kjv-notes.jsonl must survive because `load_study` re-reads it on every
+  // one of those writes. So: author something, then check the margin notes and
+  // the stock set are still there.
+  await boot(page);
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async () =>
+          ((await (window as any).__plumbline.rpc.bootTrace()) ?? []).some(([l]: [string]) =>
+            l.startsWith("home evict after stage 2"),
+          ),
+        ),
+      { timeout: 90_000 },
+    )
+    .toBe(true);
+
+  const freedKb = await page.evaluate(async () => {
+    const trace: [string, number][] = await (window as any).__plumbline.rpc.bootTrace();
+    return trace.filter(([l]) => l.startsWith("home evict")).reduce((s, [, kb]) => s + kb, 0);
+  });
+  // The corpus cache alone is ~36 MB; Strong's and the overlay add ~3.7 MB.
+  expect(freedKb, "eviction freed suspiciously little — is it finding the nodes at all?").toBeGreaterThan(
+    30_000,
+  );
+
+  // Now author, which makes the engine reload ALL study data from the home, and
+  // confirm nothing the reader depends on was evicted out from under it.
+  const after = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    // Authoring makes load_study rebuild ALL study data from the home, which is
+    // the moment an over-eager eviction would show up.
+    await s.engine.userNoteSet("Gen 1:1", "eviction probe", "2026-07-28T00:00:00Z");
+    const [weaves, threads, mine, margin] = await Promise.all([
+      s.engine.weaves(),
+      s.engine.threads(),
+      s.engine.userNote("Gen 1:1"),
+      // The 1769 translators' margin notes come from data/kjv-notes.jsonl via
+      // load_study — the file eviction must never touch. Gen 1:4 has one.
+      s.engine.verseNotes("Gen 1:4"),
+    ]);
+    return {
+      weaves: weaves?.weaves?.length ?? 0,
+      threads: threads?.threads?.length ?? 0,
+      mine: JSON.stringify(mine ?? null),
+      margin: JSON.stringify(margin ?? null),
+    };
+  });
+  expect(after.weaves, "the stock weaves vanished — eviction reached a user directory").toBeGreaterThan(20);
+  expect(after.threads).toBeGreaterThanOrEqual(1);
+  expect(after.mine, "the reader's own note did not survive the study reload").toContain("eviction probe");
+  expect(after.margin, "the 1769 margin notes are gone — data/kjv-notes.jsonl was evicted").toContain("Heb.");
+
+  // And the text still pages: the corpus decodes out of wasm memory, not the
+  // node that was dropped.
+  await page.evaluate(() => (window as any).__plumbline.navigate(0, "Rev", 22));
+  await expect(page.locator(".subtitle")).toHaveText(/Revelation 22/, { timeout: 30_000 });
+});
+
 test("checking for an update cannot poison the cached shell", async ({ page }) => {
   // The live bug this pins: the update check fetched index.html as DATA, and the
   // service worker's network-first branch caches every ok response. So a session
