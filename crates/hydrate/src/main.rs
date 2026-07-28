@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use plumbline_core::canon::TOKENIZATION_VERSION;
-use plumbline_core::{corpus, crossref, home, notes, strongs};
+use plumbline_core::{akjv, corpus, crossref, home, notes, strongs};
 use plumbline_rnd::{bridge, embed, morph};
 
 /// The pack files, relative to a home. Core files gate the reader; the R&D
@@ -198,12 +198,52 @@ fn main() -> ExitCode {
                 }
             }
         }
+        "akjvb" => {
+            // Pack the plain-English overlay. 46k spans over only ~3k distinct
+            // replacement phrases, so interned it is three small integers each.
+            let Some(from) = flag("--from") else {
+                eprintln!("akjvb needs --from <akjv.jsonl> [--out <file>]");
+                return ExitCode::from(2);
+            };
+            let out = flag("--out").unwrap_or_else(|| akjv::akjvb_path(&from));
+            let text = match std::fs::read_to_string(&from) {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("akjvb: cannot read {}: {e}", from.display());
+                    return ExitCode::FAILURE;
+                }
+            };
+            let Some(bytes) = akjv::encode_akjv_bin(TOKENIZATION_VERSION, &text) else {
+                eprintln!("akjvb: {} is stale or too large to pack", from.display());
+                return ExitCode::FAILURE;
+            };
+            if let Err(e) = std::fs::write(&out, &bytes) {
+                eprintln!("akjvb: cannot write {}: {e}", out.display());
+                return ExitCode::FAILURE;
+            }
+            match akjv::parse_akjv_bin(TOKENIZATION_VERSION, &bytes) {
+                Some(a) => {
+                    println!(
+                        "wrote {} — {} verses ({} → {} bytes)",
+                        out.display(),
+                        a.verse_count(),
+                        text.len(),
+                        bytes.len()
+                    );
+                    ExitCode::SUCCESS
+                }
+                None => {
+                    eprintln!("akjvb: wrote {} but it does not load back", out.display());
+                    ExitCode::FAILURE
+                }
+            }
+        }
         "help" | "-h" | "--help" => {
             print!("{}", HELP);
             ExitCode::SUCCESS
         }
         other => {
-            eprintln!("unknown command '{other}'. Try: check | copy | web-cache | vecb | morphb | help");
+            eprintln!("unknown command '{other}'. Try: check | copy | web-cache | vecb | morphb | akjvb | help");
             ExitCode::from(2)
         }
     }
@@ -237,6 +277,11 @@ plumbline-hydrate — assemble + verify the Plumbline data pack
       launch reads it instead of running 31,091 JSON parses. The JSONL
       stays valid — a home without the packed sibling still works.
       Run by scripts/build-web-pack.mjs.
+
+  plumbline-hydrate akjvb --from <akjv.jsonl> [--out <file>]
+      Pack the plain-English overlay (the AKJV delta) into interned
+      fixed-width spans. The JSONL stays valid — a home without the packed
+      sibling still works. Run by scripts/build-web-pack.mjs.
 
 The R&D artifacts are produced offline (see data-prep/README.md); this tool
 places and checks them, it does not train or generate.

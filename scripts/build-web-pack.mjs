@@ -48,6 +48,11 @@ const VEC_PACKED = "concept-vectors.vecb";
 // to read AND ~230 KB smaller over the wire, so there is no trade here at all.
 const MORPH_TEXT = "morphology.jsonl";
 const MORPH_PACKED = "morphology.morphb";
+// The plain-English overlay (the AKJV delta). Core, not rnd: it is a reading
+// aid over the text itself, and it is small enough to ship on the boot path
+// rather than behind a download the reader has to think about.
+const AKJV_TEXT = "akjv.jsonl";
+const AKJV_PACKED = "akjv.akjvb";
 
 // (srcDir, homeDir, filter, stock) tuples for the home shipped to the browser.
 const SOURCES = [
@@ -59,7 +64,9 @@ const SOURCES = [
       n !== VEC_TEXT &&
       n !== VEC_PACKED &&
       n !== MORPH_TEXT &&
-      n !== MORPH_PACKED,
+      n !== MORPH_PACKED &&
+      n !== AKJV_TEXT &&
+      n !== AKJV_PACKED,
     false,
   ],
   [join(repo, "bridge"), "bridge", () => true, false],
@@ -152,6 +159,20 @@ files.push({
   gzBytes: morphGz.length,
   rnd: true,
 });
+
+const akjvTmp = join(tmpdir(), `plumbline-akjvb-${process.pid}`);
+execFileSync(
+  "cargo",
+  ["run", "--release", "-q", "-p", "plumbline-hydrate", "--", "akjvb",
+   "--from", join(repo, "data", AKJV_TEXT), "--out", akjvTmp],
+  { cwd: repo, stdio: ["ignore", "inherit", "inherit"] },
+);
+const akjvRaw = readFileSync(akjvTmp);
+rmSync(akjvTmp, { force: true });
+const akjvGz = gzipSync(akjvRaw, { level: 9 });
+writeFileSync(join(outRoot, "data", `${AKJV_PACKED}.gz`), akjvGz);
+hash.update("data").update(AKJV_PACKED).update(akjvRaw);
+files.push({ path: `data/${AKJV_PACKED}`, bytes: akjvRaw.length, gzBytes: akjvGz.length });
 
 const manifest = {
   version: hash.digest("hex").slice(0, 16),

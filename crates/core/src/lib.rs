@@ -11,6 +11,7 @@
 //! the separate, feature-gated `plumbline-rnd` crate so a simple-reader build can
 //! omit them entirely.
 
+pub mod akjv;
 pub mod canon;
 pub mod config;
 pub mod corpus;
