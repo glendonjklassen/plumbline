@@ -734,6 +734,23 @@ config round-trip incl. scroll-verse restore (flushed on tab hide — the
 ON_PAUSE twin), PWA (installable, offline after first visit; pack cached
 `?v=<content-hash>`).
 
+**Updating** (2026-07-27): `index.html` is network-first, so a relaunch with a
+connection already picks up a new build — the SW script itself rarely changes
+and is not the signal. Two gaps closed: (1) every versioned URL is
+content-addressed (`?v=<pack hash>` for the pack, `?v=<build id>` for the wasm,
+hashed filenames for JS/CSS), so an update ADDED an entry beside the old one and
+nothing ever removed the old — three data updates meant three whole ~12 MB packs
+stranded on the device. `cache::pruneStale` now sweeps, at idle after the shell
+is safely re-stored, anything stamped for a version this build isn't running;
+un-versioned entries (index.html, fonts, webmanifest) are never touched, so an
+interrupted update cannot leave a device holding neither copy. (2) a session
+that stays open — an installed PWA can sit for weeks — now compares the
+deployed `index.html`'s entry-bundle hash against the running one at idle and on
+resume (throttled to 15 min), and offers a toast with an Update button. Offered,
+never automatic: reloading someone mid-verse to save them a tap is not a
+kindness. **Delta (Android):** the APK has no auto-update at all — no Play
+Store, so a sideloader fetches the new release by hand.
+
 Web deltas: engine runs on the main thread (GTK-style; a worker is the
 escape hatch if jank shows — TODO #28's remaining stage). **Boot ships the
 core pack only** (2026-07-25, TODO #28): the `rnd`-marked artifacts

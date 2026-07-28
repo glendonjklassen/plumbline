@@ -306,6 +306,17 @@
 {#if s.toast}
   <div class="toast">{s.toast}</div>
 {/if}
+
+<!-- A deploy landed while this session was open (an installed PWA can sit for
+     weeks). Offered, never taken automatically — reloading someone mid-verse
+     to save them a tap is not a kindness. -->
+{#if s.updateReady}
+  <div class="toast update" role="status">
+    <span>A new version is ready.</span>
+    <button class="upd" onclick={() => s.applyUpdate()}>Update</button>
+    <button class="dismiss" aria-label="Not now" onclick={() => (s.updateReady = false)}>✕</button>
+  </div>
+{/if}
 <PromptDialog />
 <Shortcuts />
 <MapsHost />
@@ -570,5 +581,30 @@
     border-radius: 8px;
     font-size: 14px;
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  }
+  /* The update toast stays until acted on, so it carries its own buttons. */
+  .toast.update {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px 8px 16px;
+  }
+  .toast.update .upd {
+    background: var(--gold, #9e7d38);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .toast.update .dismiss {
+    background: none;
+    border: none;
+    color: inherit;
+    opacity: 0.7;
+    font-size: 14px;
+    cursor: pointer;
   }
 </style>

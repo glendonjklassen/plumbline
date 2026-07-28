@@ -10,7 +10,6 @@
   // 2026-07-26). Honest progress beats a decoy — the work now goes into
   // making the wait short rather than disguising it.
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
-  import { precacheShell } from "./engine/precache";
   import { churchFromQuery, hasChurch, sharedAtRef, startsAsNewBeliever } from "./shell/church";
   import { initSession, type Session } from "./state/session.svelte";
   import { dispatchLink } from "./study/links";
@@ -78,9 +77,19 @@
         s.bootTrace = t;
         console.table(t.map(([stage, ms]) => ({ stage, ms })));
       });
-      // Idle work: make this visit enough to run offline next time.
+      // Idle work: make this visit enough to run offline next time, sweep the
+      // versions we've moved off, and notice a deploy that landed since.
       const idle = globalThis.requestIdleCallback ?? ((f: () => void) => setTimeout(f, 1200));
-      idle(() => void precacheShell());
+      idle(() => {
+        void s.sweepCaches();
+        void s.checkForUpdate();
+      });
+      // An installed PWA is resumed far more often than it is launched, so
+      // coming back to the foreground is the moment worth re-checking (the
+      // check throttles itself).
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") void s.checkForUpdate();
+      });
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }

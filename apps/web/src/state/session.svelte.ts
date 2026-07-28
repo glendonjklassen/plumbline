@@ -6,6 +6,8 @@
 // Panels already tolerate a null block list, so "loading" is just a frame or
 // two of empty — never a frozen UI.
 
+import { precacheShell } from "../engine/precache";
+import { updateAvailable } from "../engine/update";
 import { EngineRpc, type BootInfo } from "../engine/worker-client";
 import { cleanChurch, PWA_URL, shareUrl, type Church } from "../shell/church";
 
@@ -284,6 +286,7 @@ export class Session {
     this.rpc = rpc;
     this.#palettes = palettes;
     this.bundledOn = bundledOn;
+    this.packVersion = boot.packVersion;
     this.engine = new Proxy(
       {},
       { get: (_, m: string) => (...args: unknown[]) => rpc.call(m, ...args) },
@@ -556,6 +559,40 @@ export class Session {
   showToast(msg: string): void {
     this.toast = msg;
     setTimeout(() => (this.toast = null), 2200);
+  }
+
+  /** The data pack version this session booted on — half of what `?v=` stamps
+   *  mean, and what the cache sweep keeps. */
+  packVersion = "";
+
+  /** Re-store this build's shell and sweep every superseded version. Runs at
+   *  idle after boot; also the seam the e2e sweep test drives. */
+  sweepCaches(): Promise<void> {
+    return precacheShell([__BUILD_ID__, this.packVersion]);
+  }
+
+  /** A newer build is deployed and this session is still on the old one. Shown
+   *  as a toast the reader can act on or ignore — never an automatic reload,
+   *  which would yank the page out from under someone mid-verse. */
+  updateReady = $state(false);
+  /** Don't re-ask within this long of the last check (visibility fires often). */
+  #lastUpdateCheck = 0;
+
+  async checkForUpdate(force = false): Promise<boolean> {
+    const now = performance.now();
+    if (!force && this.#lastUpdateCheck && now - this.#lastUpdateCheck < 15 * 60_000) {
+      return this.updateReady;
+    }
+    this.#lastUpdateCheck = now;
+    if (await updateAvailable()) this.updateReady = true;
+    return this.updateReady;
+  }
+
+  /** Take the update: the new index.html and its bundles are fetched on the
+   *  way back up (index.html is network-first), so a plain reload is enough. */
+  applyUpdate(): void {
+    this.updateReady = false;
+    location.reload();
   }
 }
 

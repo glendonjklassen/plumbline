@@ -12,12 +12,15 @@
 // all, with no asset list to keep in sync. The engine worker's downloads (the
 // pack, the wasm) are stashed by the worker itself as they land.
 
-import { CACHE } from "./cache";
+import { CACHE, pruneStale } from "./cache";
 
 /** The data pack is the engine worker's business, not the shell's. */
 const skip = (url: string) => url.includes("/pack/");
 
-export async function precacheShell(): Promise<void> {
+/** @param keepVersions the `?v=` stamps still in use — this build's id and the
+ *  pack version. Everything else versioned is swept once the shell is safely
+ *  stored (never before: prune must not be able to strand a half-updated app). */
+export async function precacheShell(keepVersions: string[] = []): Promise<void> {
   if (typeof caches === "undefined") return; // no Cache API (private mode, http)
   try {
     const base = new URL("./", location.href).href;
@@ -40,6 +43,7 @@ export async function precacheShell(): Promise<void> {
         });
       }),
     );
+    if (keepVersions.length) await pruneStale({ versions: keepVersions, assets: urls });
   } catch {
     /* storage blocked or full: the app still runs, it just isn't offline yet */
   }

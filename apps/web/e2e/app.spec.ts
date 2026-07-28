@@ -594,6 +594,100 @@ test("a shared passage link opens the reader at its verse", async ({ page }) => 
   expect(await page.evaluate(() => location.search)).toBe("");
 });
 
+// Every versioned URL is content-addressed, so an update ADDS an entry beside
+// the old one — and nothing used to remove the old. Three data updates meant
+// three whole ~12 MB packs stranded on the device (2026-07-27).
+test("updating sweeps the versions this build no longer uses", async ({ page }) => {
+  await boot(page);
+  // Let the real boot-time sweep finish first, so this test's seeding isn't
+  // racing it and the counts below are its own doing.
+  await page.evaluate(() => (window as any).__plumbline.sweepCaches());
+
+  const before = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    const c = await caches.open("plumbline-v1");
+    const put = (u: string) => c.put(new Request(u), new Response("x"));
+    // A whole previous pack, a previous wasm, and a superseded hashed bundle.
+    await put(location.origin + "/pack/data/kjv.jsonl.gz?v=OLDPACK");
+    await put(location.origin + "/pack/manifest.json?v=OLDPACK");
+    await put(location.origin + "/plumbline_ffi.wasm?v=OLDBUILD");
+    await put(location.origin + "/assets/index-DEADBEEF.js");
+    // Entries that must survive: un-versioned, and the CURRENT pack version.
+    await put(location.origin + "/index.html");
+    await put(location.origin + `/pack/data/keep.gz?v=${s.packVersion}`);
+    return (await c.keys()).map((r: Request) => r.url.replace(location.origin, ""));
+  });
+  expect(before).toContain("/pack/data/kjv.jsonl.gz?v=OLDPACK");
+  expect(before).toContain("/assets/index-DEADBEEF.js");
+
+  await page.evaluate(() => (window as any).__plumbline.sweepCaches());
+
+  const after = await page.evaluate(async () => {
+    const c = await caches.open("plumbline-v1");
+    return (await c.keys()).map((r: Request) => r.url.replace(location.origin, ""));
+  });
+  // Superseded versions gone...
+  expect(after).not.toContain("/pack/data/kjv.jsonl.gz?v=OLDPACK");
+  expect(after).not.toContain("/pack/manifest.json?v=OLDPACK");
+  expect(after).not.toContain("/plumbline_ffi.wasm?v=OLDBUILD");
+  expect(after).not.toContain("/assets/index-DEADBEEF.js");
+  // ...and nothing else was collateral. The un-versioned shell entry and the
+  // current pack version both stay, or the next launch is broken/offline-dead.
+  expect(after).toContain("/index.html");
+  const current = await page.evaluate(() => (window as any).__plumbline.packVersion);
+  expect(after).toContain(`/pack/data/keep.gz?v=${current}`);
+  // The bundle this page is actually running must still be cached.
+  const running = await page.evaluate(
+    () => document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/"]')!.src,
+  );
+  expect(after).toContain(new URL(running).pathname);
+});
+
+// The update toast: a deploy landed while this session stayed open. Driven
+// through the real checker with a stubbed index.html, so it exercises the
+// bundle comparison rather than just the flag.
+test("a new deploy offers an update, and only when the build really changed", async ({ page }) => {
+  await boot(page);
+  const realFetch = "__realFetch";
+  await page.evaluate((k) => {
+    (window as any)[k] = window.fetch.bind(window);
+  }, realFetch);
+
+  // Same build deployed → no toast. This is the guard that matters: a checker
+  // that always fires would nag every reader on every resume.
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    const mine = document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/"]')!.src;
+    const name = mine.split("/").pop();
+    window.fetch = async () => new Response(`<script type="module" src="/assets/${name}"><\/script>`);
+    await s.checkForUpdate(true);
+  });
+  await expect(page.locator(".toast.update")).toHaveCount(0);
+
+  // A different hashed bundle → the offer appears.
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    window.fetch = async () =>
+      new Response('<script type="module" src="/assets/index-NEWBUILD.js"><\/script>');
+    await s.checkForUpdate(true);
+  });
+  await expect(page.locator(".toast.update")).toBeVisible();
+  await expect(page.locator(".toast.update")).toContainText("A new version is ready");
+
+  // Dismissing leaves the reader where they were — no reload.
+  await page.locator(".toast.update .dismiss").click();
+  await expect(page.locator(".toast.update")).toHaveCount(0);
+
+  // Taking it reloads.
+  await page.evaluate(() => (window as any).__plumbline.checkForUpdate(true));
+  await expect(page.locator(".toast.update")).toBeVisible();
+  await Promise.all([
+    page.waitForEvent("framenavigated"),
+    page.locator(".toast.update .upd").click(),
+  ]);
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+});
+
 // A stranger's query string is untrusted input: a nonsense `at` must be rejected
 // OUTRIGHT, never handed to navigation. The reader staying on John proves little
 // on its own — the link dispatcher discards an unparseable ref anyway — so the
