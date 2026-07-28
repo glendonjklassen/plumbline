@@ -218,6 +218,11 @@
       // engine work invented a 25-second stall on a launch that did none.
       L.push(`  page hidden     ${Math.round(diag.stall.hiddenMs)} ms (excluded above)`);
       L.push("  (time this thread could not answer a tap, a layout, OR its own downloads)");
+      if (diag.slowCalls.length) {
+        L.push("");
+        L.push("SLOWEST ENGINE CALLS (worst first)");
+        for (const [name, ms] of diag.slowCalls) L.push(`  ${String(ms).padStart(7)} ms  ${name}`);
+      }
       if (diag.packFiles.length) {
         L.push("");
         L.push("PACK FILES        ours = wall clock · net = the browser's own timing");
@@ -519,6 +524,16 @@
               screen off or the tab in the background is excluded — the browser freezes both the
               engine and its downloads then, and counting it would read as a fault.
             </p>
+          {/if}
+          {#if diag?.slowCalls.length}
+            <p class="diag-sub">Slowest engine calls</p>
+            <table>
+              <tbody>
+                {#each diag.slowCalls as [name, ms], i (i)}
+                  <tr><td>{name}</td><td class="ms">{ms} ms</td></tr>
+                {/each}
+              </tbody>
+            </table>
           {/if}
           {#if diag?.packFiles.length}
             <p class="diag-sub">Pack files</p>

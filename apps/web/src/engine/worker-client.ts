@@ -27,6 +27,10 @@ export interface WorkerDiagnostics {
    *  network was slow" from "the download was queued behind our own arithmetic".
    *  See the stall meter in engine.worker.ts. */
   stall: { totalMs: number; worstMs: number; count: number; hiddenMs: number };
+  /** The most expensive ENGINE CALLS this session, worst first. Every request
+   *  the shell makes used to be untimed, so a single one could freeze the worker
+   *  for half a minute and leave no trace entry to find it by. */
+  slowCalls: [string, number][];
   packFiles: PackFileTrace[];
   packVersion: string | null;
   /** Whether stage 1 came entirely off this device, with no request at all. */

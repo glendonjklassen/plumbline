@@ -212,6 +212,43 @@ function layoutChapter(m: LayoutReq): LaidOut | null {
 /** Let queued messages (layout, taps) run before the next synchronous chunk. */
 const yieldTask = () => new Promise<void>((r) => setTimeout(r, 0));
 
+// ── engine calls ──────────────────────────────────────────────────────────────
+// EVERY engine request the shell makes arrives as `call` or `static`, and until
+// now not one of them was timed. That is the hole three days of traces kept
+// falling into: the boot stages, the warm chunks and the analysis chunks all
+// report themselves, so a trace looks complete — while a single `call` can hold
+// this thread for as long as it likes and leave no mark anywhere.
+//
+// It is not a hypothetical hole. `wordStudyBlocks` builds the occurrence index,
+// the rendering lens, the cross-references, the concept model and the bridge
+// SYNCHRONOUSLY when the reader taps a word before the warm has reached them —
+// 818 ms on a desktop, and a phone reported a 24,921 ms freeze that no timed
+// section accounted for (2026-07-28). A frozen thread also strands its own
+// in-flight downloads, which is how one 787 KB file came to be reported at
+// 34,448 ms beside a 3.3 MB file that took 475 ms.
+//
+// Cheap by construction: two clock reads per call, and only calls that actually
+// cost something are kept.
+const SLOW_CALL_MS = 30;
+const SLOW_CALLS_KEPT = 25;
+/** The most expensive engine calls this session, worst first. */
+let slowCalls: [string, number][] = [];
+
+function timedCall<T>(name: string, f: () => T): T {
+  if (!PERF) return f();
+  const t0 = performance.now();
+  try {
+    return f();
+  } finally {
+    const ms = Math.round(performance.now() - t0);
+    if (ms >= SLOW_CALL_MS) {
+      slowCalls.push([name, ms]);
+      slowCalls.sort((a, b) => b[1] - a[1]);
+      if (slowCalls.length > SLOW_CALLS_KEPT) slowCalls.length = SLOW_CALLS_KEPT;
+    }
+  }
+}
+
 /** Run one synchronous chunk, timing it into the boot trace. */
 function timedChunk<T>(label: string, f: () => T): T {
   const t0 = performance.now();
@@ -535,13 +572,13 @@ self.onmessage = async (ev: MessageEvent) => {
       }
       case "call": {
         const e = booted!.engine as unknown as Record<string, (...a: any[]) => unknown>;
-        reply(e[m.method](...m.args));
+        reply(timedCall(m.method, () => e[m.method](...m.args)));
         // The overlay changes the words, so the turn cache has to know.
         if (m.method === "setAkjvOverlay") akjvOn = m.args[0] === true;
         break;
       }
       case "static": {
-        reply(statics()[m.fn](...m.args));
+        reply(timedCall(m.fn, () => statics()[m.fn](...m.args)));
         // Config writes land in the in-memory WASI home; mirror them to
         // IndexedDB like any authoring write. Before this, config persisted
         // only when an authoring write happened to follow — a pure reader's
@@ -550,7 +587,7 @@ self.onmessage = async (ev: MessageEvent) => {
         break;
       }
       case "layout": {
-        reply(layoutChapter(m));
+        reply(timedCall(`layout ${m.book} ${m.chapter}`, () => layoutChapter(m)));
         break;
       }
       case "prefetch": {
@@ -601,6 +638,7 @@ self.onmessage = async (ev: MessageEvent) => {
           trace: booted ? [...booted.trace] : [],
           turn: [...lastTurn],
           stall: { ...stall },
+          slowCalls: [...slowCalls],
           packFiles: takePackTrace(),
           packVersion: booted?.packVersion ?? null,
           fromPin: booted?.fromPin ?? null,
