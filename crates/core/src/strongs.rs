@@ -46,13 +46,24 @@ pub struct OccurrenceIx {
     map: HashMap<String, Vec<VRef>>,
 }
 
-impl OccurrenceIx {
-    /// Build the index in one fold over the corpus. Ported from
-    /// `occurrenceIndex`: within a verse, each distinct Strong's ref counts
-    /// once; postings stay in canonical order.
-    pub fn build(corpus: &Corpus) -> Self {
-        let mut map: HashMap<String, Vec<VRef>> = HashMap::new();
-        for v in corpus.verses_iter() {
+/// [`OccurrenceIx::build`] sliced. The web builds this on ONE worker thread
+/// that also answers layout and taps, and it used to run whole on the reader's
+/// first word click — every session, because the built index cannot outlive the
+/// tab (feedback 2026-07-27). Fed in slices, boot can warm it between yields.
+/// Mirrors [`crate::search::SearchIxBuilder`].
+#[derive(Debug, Default)]
+pub struct OccurrenceIxBuilder {
+    map: HashMap<String, Vec<VRef>>,
+    /// Next canonical verse ordinal to fold in.
+    next: usize,
+}
+
+impl OccurrenceIxBuilder {
+    /// Fold in up to `n` more verses. Returns true while work remains.
+    pub fn feed(&mut self, corpus: &Corpus, n: usize) -> bool {
+        let end = (self.next + n).min(corpus.len());
+        for i in self.next..end {
+            let Some(v) = corpus.verse_at(i) else { continue };
             let refs: BTreeSet<&str> = v
                 .tokens
                 .iter()
@@ -62,15 +73,32 @@ impl OccurrenceIx {
             for r in refs {
                 // Allocate the key String only on first sight of a code (~14k
                 // distinct) rather than once per (verse, code) pair (~10^5–10^6).
-                match map.get_mut(r) {
+                match self.map.get_mut(r) {
                     Some(postings) => postings.push(vr.clone()),
                     None => {
-                        map.insert(r.to_string(), vec![vr.clone()]);
+                        self.map.insert(r.to_string(), vec![vr.clone()]);
                     }
                 }
             }
         }
-        OccurrenceIx { map }
+        self.next = end;
+        end < corpus.len()
+    }
+
+    pub fn finish(self) -> OccurrenceIx {
+        OccurrenceIx { map: self.map }
+    }
+}
+
+impl OccurrenceIx {
+    /// Build the index in one fold over the corpus. Ported from
+    /// `occurrenceIndex`: within a verse, each distinct Strong's ref counts
+    /// once; postings stay in canonical order.
+    pub fn build(corpus: &Corpus) -> Self {
+        // One code path with the sliced builder, so the two cannot drift.
+        let mut b = OccurrenceIxBuilder::default();
+        b.feed(corpus, corpus.len());
+        b.finish()
     }
 
     /// The verses carrying a Strong's ref, in canonical order.
@@ -174,6 +202,34 @@ fn capitalized_word(w: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    /// The sliced fold must equal the one-shot fold at every slice size —
+    /// postings stay in canonical order and no verse is counted twice.
+    #[test]
+    fn sliced_occurrence_build_matches_the_one_shot_build() {
+        const SAMPLE: &str = concat!(
+            r#"{"format":"x","tokenization":"kjv1769-tok2","verses":3}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"v":1,"t":[["","In","",["H7225"],0],["","God","",["H430"],0]]}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"v":2,"t":[["","God","",["H430"],0],["","moved","",["H7363"],0]]}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"v":3,"t":[["","God","",["H430","H430"],0]]}"#,
+        );
+        let corpus = corpus::from_str(SAMPLE).unwrap();
+        let whole = OccurrenceIx::build(&corpus);
+        for n in 1..=corpus.len() + 2 {
+            let mut b = OccurrenceIxBuilder::default();
+            while b.feed(&corpus, n) {}
+            let sliced = b.finish();
+            for code in ["H430", "H7225", "H7363", "H9999"] {
+                assert_eq!(whole.verses(code), sliced.verses(code), "slice {n} changed {code}");
+            }
+        }
+        // A code repeated within one verse still counts that verse once.
+        assert_eq!(whole.verses("H430").len(), 3);
+    }
+
     use super::*;
     use crate::corpus;
 

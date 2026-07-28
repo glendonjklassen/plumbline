@@ -77,10 +77,35 @@ impl Renderings {
     /// [`OccurrenceIx::build`](crate::strongs::OccurrenceIx::build): one pass
     /// over `corpus.verses_iter()`, postings kept in canonical order.
     pub fn build(corpus: &Corpus) -> Renderings {
-        let mut by_code: HashMap<String, HashMap<String, Bucket>> = HashMap::new();
-        let mut by_word: HashMap<String, HashMap<String, usize>> = HashMap::new();
+        // One code path with the sliced builder, so the two cannot drift.
+        let mut b = RenderingsBuilder::default();
+        b.feed(corpus, corpus.len());
+        b.finish()
+    }
+}
 
-        for v in corpus.verses_iter() {
+/// [`Renderings::build`] sliced. The heaviest of the lazily-built indexes
+/// (~196ms native, multiples of that in wasm on a phone) and it ran on the
+/// reader's FIRST word click, every session — the built lens cannot outlive the
+/// tab (feedback 2026-07-27). Mirrors [`crate::search::SearchIxBuilder`].
+#[derive(Default)]
+pub struct RenderingsBuilder {
+    by_code: HashMap<String, HashMap<String, Bucket>>,
+    by_word: HashMap<String, HashMap<String, usize>>,
+    /// Next canonical verse ordinal to fold in.
+    next: usize,
+}
+
+impl RenderingsBuilder {
+    /// Fold in up to `n` more verses. Returns true while work remains. Every
+    /// run opened inside a verse is also closed inside it, so a slice boundary
+    /// can never split one.
+    pub fn feed(&mut self, corpus: &Corpus, n: usize) -> bool {
+        let end = (self.next + n).min(corpus.len());
+        for i in self.next..end {
+            let Some(v) = corpus.verse_at(i) else { continue };
+            let by_code = &mut self.by_code;
+            let by_word = &mut self.by_word;
             let vr = v.vref();
             let last = v.tokens.len().saturating_sub(1) as u16;
             // Runs open on the current token, keyed by code → (start index,
@@ -133,7 +158,7 @@ impl Renderings {
                     .collect();
                 for code in to_close {
                     let (start, surface) = open.remove(&code).unwrap();
-                    record(&mut by_code, &code, surface, RenderingOcc {
+                    record(by_code, &code, surface, RenderingOcc {
                         vref: vr.clone(),
                         span: (start, idx - 1),
                     });
@@ -155,16 +180,22 @@ impl Renderings {
 
             // Close whatever is still open at verse end.
             for (code, (start, surface)) in open.drain() {
-                record(&mut by_code, &code, surface, RenderingOcc {
+                record(by_code, &code, surface, RenderingOcc {
                     vref: vr.clone(),
                     span: (start, last),
                 });
             }
         }
+        self.next = end;
+        end < corpus.len()
+    }
 
-        // Finalize: pick each rendering's display label (most common surface,
-        // ties broken lexicographically for determinism) and drop the tallies.
-        let by_code = by_code
+    /// Everything the fold has seen, finished into a usable lens.
+    pub fn finish(self) -> Renderings {
+        // Pick each rendering's display label (most common surface, ties broken
+        // lexicographically for determinism) and drop the tallies.
+        let by_code = self
+            .by_code
             .into_iter()
             .map(|(code, inner)| {
                 let inner = inner
@@ -177,9 +208,11 @@ impl Renderings {
             })
             .collect();
 
-        Renderings { by_code, by_word }
+        Renderings { by_code, by_word: self.by_word }
     }
+}
 
+impl Renderings {
     /// Every distinct rendering of a code, most frequent first (ties by label).
     pub fn renderings(&self, code: &str) -> Vec<RenderingView<'_>> {
         let mut out: Vec<RenderingView<'_>> = self
@@ -299,6 +332,29 @@ mod tests {
 
     fn build() -> Renderings {
         Renderings::build(&corpus::from_str(SAMPLE).unwrap())
+    }
+
+    /// Slicing must not change the answer. Boot feeds this a few hundred verses
+    /// at a time; a slice boundary landing mid-verse (or a run left open across
+    /// one) would silently produce different renderings from the one-shot build.
+    /// Every slice size from 1 upward is checked against the whole-corpus fold.
+    #[test]
+    fn sliced_build_matches_the_one_shot_build() {
+        let corpus = corpus::from_str(SAMPLE).unwrap();
+        let whole = Renderings::build(&corpus);
+        for n in 1..=corpus.len() + 2 {
+            let mut b = RenderingsBuilder::default();
+            while b.feed(&corpus, n) {}
+            let sliced = b.finish();
+            for code in ["G26", "G3114", "G25", "G5368", "H430", "H999"] {
+                let a: Vec<_> = whole.renderings(code).iter().map(|r| (r.label, r.count)).collect();
+                let c: Vec<_> = sliced.renderings(code).iter().map(|r| (r.label, r.count)).collect();
+                assert_eq!(a, c, "slice size {n} changed {code}");
+            }
+            for word in ["god", "love", "charity"] {
+                assert_eq!(whole.word_codes(word), sliced.word_codes(word), "slice {n}, word {word}");
+            }
+        }
     }
 
     #[test]

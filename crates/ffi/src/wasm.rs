@@ -68,7 +68,13 @@ pub unsafe extern "C" fn plumbline_engine_warm_step(engine: *const PlumblineEngi
     // ~2k verses a slice: enough that the per-call overhead disappears, short
     // enough that a tap waits milliseconds rather than seconds.
     const SLICE: usize = 2048;
-    guard(0, || e.warm_search_slice(SLICE))
+    // Search first (it answers the search box), then the two indexes a WORD
+    // CLICK needs. Those two used to be built whole on the reader's first click
+    // — every session, since nothing survives the tab — which is the "it loads
+    // for a while, every time" report of 2026-07-27. Warming them here costs
+    // the same work, but off the critical path and in slices, so a tap landing
+    // mid-warm waits milliseconds.
+    guard(0, || e.warm_next(SLICE))
 }
 
 /// Load ONE machine-tier artifact: step 0 the concept embedding, step 1 the

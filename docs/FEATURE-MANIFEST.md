@@ -734,6 +734,31 @@ config round-trip incl. scroll-verse restore (flushed on tab hide — the
 ON_PAUSE twin), PWA (installable, offline after first visit; pack cached
 `?v=<content-hash>`).
 
+**The boot warm covers every index a study needs** (2026-07-27). Nothing an
+engine builds survives the tab, and the warm used to cover only the SEARCH
+index — so the occurrence index, the rendering lens, cross-refs, concepts,
+leitwort, the fused bridge and the SIF model were all built on the reader's
+FIRST word click, in every session, forever ("wipe data, click a word, it
+thinks; close and reopen, click a word, it thinks again"). `warm_next` walks
+eight phases off one macrotask each: the three biggest are fed in verse slices
+(`OccurrenceIxBuilder`, `RenderingsBuilder`, both mirroring the existing
+`SearchIxBuilder`, both with tests pinning sliced == one-shot at every slice
+size), the rest are single builds. The phase counter is explicit so the walk
+terminates even when a build cannot happen yet — the SIF model needs an
+embedding the R&D pack may never bring, and the warm re-enters that phase once
+(and only once) if the pack lands later. Measured in wasm: first study after a
+relaunch **1235ms → 13ms**, with a regression test budgeted at 250ms from both
+measured ends. Known cost: the heaviest single warm chunk is ~640ms
+(co-occurrence), which is background but not sliced — the next thing to cut.
+
+**Version in About** (2026-07-27): the web build had no idea which release it
+was, so a screenshot could not be dated and "have you relaunched yet?" was
+unanswerable. `PLUMBLINE_VERSION` (the tag) is stamped by the release workflow
+into `__APP_VERSION__`; About shows it with the engine version, the pack
+version and the build id, selectable for pasting into a bug report. Android
+reads its versionName from the package manager. **Delta:** Android's footer
+notes that sideloaded builds do not auto-update.
+
 **Updating** (2026-07-27): `index.html` is network-first, so a relaunch with a
 connection already picks up a new build — the SW script itself rarely changes
 and is not the signal. Two gaps closed: (1) every versioned URL is

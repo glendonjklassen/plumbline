@@ -188,6 +188,8 @@ fun StudyScreen(
     var secondChapter by remember { mutableStateOf(lastPane?.chapter?.takeIf { it > 0 } ?: 3) }
 
     var studyBlocks by remember { mutableStateOf<String?>(null) }
+    /** The About/Guide card is showing — it gets the build stamp footer. */
+    var studyIsAbout by remember { mutableStateOf(false) }
     // A study read is in flight. A COLD read is slow and a warm one is instant:
     // the first definition builds the occurrence index, the first analytical
     // answer sweeps the whole corpus. A bare flash of nothing reads as a hang
@@ -373,6 +375,7 @@ fun StudyScreen(
     // into the study surface — StudyPane renders each block list identically.
     fun openLibrary(which: Library) {
         studyCode = null
+        studyIsAbout = which == Library.Guide || which == Library.About
         loadStudy {
             when (which) {
                 Library.Threads -> engine.ThreadsBlocksJson()
@@ -392,7 +395,9 @@ fun StudyScreen(
     fun onLink(uri: String) {
         val j = runCatching { StudyEngine.RouteLinkJson(uri) }.getOrNull() ?: return
         val link = runCatching { parseWire<PanelLinkData>(j) }.getOrNull() ?: return
+        // Every routed card clears the About footer; the `about` verb re-sets it.
         fun show(blocks: String?) {
+            studyIsAbout = false
             if (blocks != null) { studyBlocks = blocks; revealStudy() }
         }
         when (link.verb) {
@@ -419,7 +424,7 @@ fun StudyScreen(
             // (default all), name it, chain it through the canon.
             "makeWeave" -> link.tag?.let { makeWeaveTag = it }
             "guide" -> { studyCode = null; show(StudyEngine.GuideBlocksJson()) }
-            "about" -> { studyCode = null; show(StudyEngine.AboutBlocksJson()) }
+            "about" -> { studyCode = null; show(StudyEngine.AboutBlocksJson()); studyIsAbout = true }
             // Tagging offers the existing tags first; freetext is the secondary
             // path inside the picker (product call, 2026-07-24).
             "addTag" -> link.refKey?.let { ref -> tagPickRef = ref }
@@ -492,6 +497,11 @@ fun StudyScreen(
             StudyPane(
                 studyBlocks, palette, onLink = ::onLink, scale = studyScale, embed = studyEmbed,
                 loading = studyLoading,
+                footer = if (studyIsAbout) {
+                    { VersionFooter(palette, studyScale) }
+                } else {
+                    null
+                },
             )
         }
     }

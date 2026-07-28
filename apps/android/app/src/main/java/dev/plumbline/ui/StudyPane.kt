@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
@@ -78,6 +79,8 @@ fun StudyPane(
     embed: (@Composable () -> Unit)? = null,
     /** A study read is in flight — see [loading] handling below. */
     loading: Boolean = false,
+    /** Rendered after the blocks — About uses it for the build stamp. */
+    footer: (@Composable () -> Unit)? = null,
 ) {
     val blocks = remember(blocksJson) {
         blocksJson?.let {
@@ -137,7 +140,35 @@ fun StudyPane(
             }
         }
         if (embedAt == blocks.size) embed!!()
+        footer?.invoke()
     }
+}
+
+/** The build stamp under About. Which build is this? Neither the maintainer nor
+ *  a reader could answer that from a screenshot (feedback 2026-07-27), and
+ *  "have you relaunched yet?" is a terrible way to debug. Web twin:
+ *  StudyPanel.svelte's `.version`. */
+@Composable
+fun VersionFooter(palette: ReaderPalette, scale: Float) {
+    val context = LocalContext.current
+    val name = remember {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: "dev"
+    }
+    HorizontalDivider(color = palette.rule, modifier = Modifier.padding(top = 10.dp))
+    Text(
+        "Plumbline $name",
+        color = palette.ink,
+        fontSize = (13 * scale).sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+    Text(
+        "Android · sideloaded builds do not auto-update",
+        color = palette.faded,
+        fontSize = (11.5f * scale).sp,
+    )
 }
 
 /** A spaced, muted-gold section header + an optional tier-mark glyph. */

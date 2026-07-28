@@ -287,6 +287,7 @@ export class Session {
     this.#palettes = palettes;
     this.bundledOn = bundledOn;
     this.packVersion = boot.packVersion;
+    this.engineVersion = boot.version;
     this.engine = new Proxy(
       {},
       { get: (_, m: string) => (...args: unknown[]) => rpc.call(m, ...args) },
@@ -562,8 +563,11 @@ export class Session {
   }
 
   /** The data pack version this session booted on — half of what `?v=` stamps
-   *  mean, and what the cache sweep keeps. */
+   *  mean, and what the cache sweep keeps. Shown in About: the DATA moves
+   *  independently of the code, so a bug report needs both. */
   packVersion = "";
+  /** The wasm engine's own version string (About / boot diagnostics). */
+  engineVersion = "";
 
   /** Re-store this build's shell and sweep every superseded version. Runs at
    *  idle after boot; also the seam the e2e sweep test drives. */

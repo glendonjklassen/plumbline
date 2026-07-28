@@ -162,6 +162,10 @@ jobs:
           node scripts/copy-wasm.mjs
           npm run build
         working-directory: apps/web
+        env:
+          # Stamped into About, so a bug report can name its build. Without it
+          # a deployed PWA cannot tell you which release it is (2026-07-27).
+          PLUMBLINE_VERSION: ${{ github.ref_name }}
 
       - uses: actions/configure-pages@v5
         with:

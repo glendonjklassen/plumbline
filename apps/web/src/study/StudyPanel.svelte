@@ -177,6 +177,17 @@
         {/if}
         {#if blocks}
           <BlockList {blocks} {onLink} />
+          <!-- Which build is this? Neither of us could answer that from a
+               screenshot (feedback 2026-07-27), and "have you relaunched yet"
+               is a terrible way to debug. The release tag identifies the code,
+               the pack version identifies the DATA (it moves independently),
+               and the build id separates two deploys of the same tag. -->
+          {#if s.panel.kind === "about"}
+            <p class="version">
+              Plumbline <strong>{__APP_VERSION__}</strong><br />
+              <span class="vsub">engine {s.engineVersion} · data {s.packVersion.slice(0, 8)} · build {__BUILD_ID__}</span>
+            </p>
+          {/if}
         {:else}
           <!-- Never look frozen: the worker is answering. -->
           <p class="loading" aria-live="polite">— loading —</p>
@@ -237,6 +248,23 @@
     animation: loadpulse 1.1s ease-in-out infinite;
   }
   /* Deliberately NOT pulsing — an explanation should sit still and be read. */
+.version {
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px solid var(--rule, #d8cba8);
+    font-size: calc(13px * var(--uiScale));
+    color: var(--faded, #8a8276);
+    /* Read off a screen and typed into a bug report — let it be selected. */
+    user-select: text;
+  }
+  .version strong {
+    color: var(--ink, #211f1a);
+    font-weight: 600;
+  }
+  .vsub {
+    font-size: calc(11.5px * var(--uiScale));
+    font-variant-numeric: tabular-nums;
+  }
   .firstslow {
     color: var(--faded, #8a8276);
     text-align: center;

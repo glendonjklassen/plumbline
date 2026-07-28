@@ -55,7 +55,7 @@ use std::sync::OnceLock;
 use plumbline_core::config;
 use plumbline_core::corpus::{self, Corpus};
 use plumbline_core::crossref::{self, XRefIx};
-use plumbline_core::renderings::Renderings;
+use plumbline_core::renderings::{self, Renderings};
 use plumbline_core::search::{self, Notes, SearchIx};
 use plumbline_core::strongs::{self, OccurrenceIx, StrongsDict};
 use plumbline_core::memory;
@@ -123,6 +123,21 @@ pub struct PlumblineEngine {
     /// (`plumbline_engine_warm_step`). A Mutex because Android may call the
     /// ABI from more than one thread; the web worker is single-threaded.
     search_partial: std::sync::Mutex<Option<search::SearchIxBuilder>>,
+    /// Sliced builders for the two indexes a WORD CLICK needs. Warmed at boot
+    /// the same way the search index is; before that they were built whole on
+    /// the first click of every session (feedback 2026-07-27).
+    occ_partial: std::sync::Mutex<Option<strongs::OccurrenceIxBuilder>>,
+    renderings_partial: std::sync::Mutex<Option<renderings::RenderingsBuilder>>,
+    /// How far the chunked warm has got. An explicit phase (rather than
+    /// "build the next thing that is missing") guarantees the loop terminates
+    /// even when a build legitimately cannot happen yet — the SIF model, for
+    /// instance, needs an embedding the R&D pack may never bring.
+    warm_phase: std::sync::atomic::AtomicUsize,
+    /// Whether the SIF model has been attempted since an embedding arrived.
+    /// The warm re-runs after the R&D pack lands, and the phase counter is
+    /// monotonic, so without this the model is never warmed and the reader's
+    /// first click builds it.
+    sif_attempted: std::sync::atomic::AtomicBool,
     occ_ix: OnceLock<OccurrenceIx>,
     /// The rendering lens: code → English renderings and surface word → codes,
     /// both corpus-derived and immutable after open (like `occ_ix`).
@@ -188,6 +203,10 @@ impl PlumblineEngine {
             strongs: strongs_cell,
             search_ix: OnceLock::new(),
             search_partial: std::sync::Mutex::new(None),
+            occ_partial: std::sync::Mutex::new(None),
+            renderings_partial: std::sync::Mutex::new(None),
+            warm_phase: std::sync::atomic::AtomicUsize::new(0),
+            sif_attempted: std::sync::atomic::AtomicBool::new(false),
             occ_ix: OnceLock::new(),
             renderings: OnceLock::new(),
             home,
@@ -326,9 +345,106 @@ impl PlumblineEngine {
         0
     }
 
-    /// The occurrence index, built on first use.
+    /// The occurrence index, built on first use (or warmed in slices below).
     fn occ_ix(&self) -> &OccurrenceIx {
         self.occ_ix.get_or_init(|| OccurrenceIx::build(&self.corpus))
+    }
+
+    /// Fold `n` more verses into the occurrence index. 1 while work remains.
+    fn warm_occ_slice(&self, n: usize) -> i32 {
+        if self.occ_ix.get().is_some() {
+            return 0;
+        }
+        let Ok(mut guard) = self.occ_partial.lock() else {
+            return 0; // poisoned: leave it to the build-on-first-use path
+        };
+        let b = guard.get_or_insert_with(strongs::OccurrenceIxBuilder::default);
+        if b.feed(&self.corpus, n) {
+            return 1;
+        }
+        let _ = self.occ_ix.set(guard.take().expect("builder present").finish());
+        0
+    }
+
+    /// One macrotask of warm-up. Returns 1 while work remains, 0 when the
+    /// indexes a study needs are all in.
+    ///
+    /// This is the whole point of the boot warm: every one of these is built on
+    /// FIRST USE otherwise, and none of them survives the tab, so the reader's
+    /// first word click of every session paid for all of them at once — "it
+    /// loads for a while, every time I reopen it" (feedback 2026-07-27). The
+    /// three sliced phases come first because they are the biggest; the rest
+    /// are single builds, one per call, so a tap between them is still
+    /// answered. Re-running after the R&D pack lands picks up the SIF model.
+    fn warm_next(&self, slice: usize) -> i32 {
+        use std::sync::atomic::Ordering;
+        loop {
+            let phase = self.warm_phase.load(Ordering::Relaxed);
+            let more = match phase {
+                0 => self.warm_search_slice(slice),
+                1 => self.warm_occ_slice(slice),
+                2 => self.warm_renderings_slice(slice),
+                3 => {
+                    self.xref_ix();
+                    0
+                }
+                4 => {
+                    self.concept();
+                    0
+                }
+                5 => {
+                    self.leitwort();
+                    0
+                }
+                6 => {
+                    self.bridge();
+                    0
+                }
+                7 => {
+                    // Needs the embedding. With the R&D pack absent this is a
+                    // no-op and the phase still advances — the tail below comes
+                    // back to it if the pack lands later.
+                    if self.embedding.get().is_some() {
+                        self.verse_sim();
+                        self.sif_attempted.store(true, Ordering::Relaxed);
+                    }
+                    0
+                }
+                _ => {
+                    // The R&D pack landed after the warm had run out of phases:
+                    // go back for the SIF model, at most once.
+                    if self.embedding.get().is_some() && !self.sif_attempted.load(Ordering::Relaxed) {
+                        self.warm_phase.store(7, Ordering::Relaxed);
+                        continue;
+                    }
+                    return 0;
+                }
+            };
+            if more == 1 {
+                return 1; // same phase, more slices to feed
+            }
+            self.warm_phase.store(phase + 1, Ordering::Relaxed);
+            // A single-shot phase did real work — yield now and come back.
+            if phase >= 3 {
+                return 1;
+            }
+        }
+    }
+
+    /// Fold `n` more verses into the rendering lens. 1 while work remains.
+    fn warm_renderings_slice(&self, n: usize) -> i32 {
+        if self.renderings.get().is_some() {
+            return 0;
+        }
+        let Ok(mut guard) = self.renderings_partial.lock() else {
+            return 0;
+        };
+        let b = guard.get_or_insert_with(renderings::RenderingsBuilder::default);
+        if b.feed(&self.corpus, n) {
+            return 1;
+        }
+        let _ = self.renderings.set(guard.take().expect("builder present").finish());
+        0
     }
 
     /// The rendering lens, built on first use.

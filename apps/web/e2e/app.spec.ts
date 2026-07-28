@@ -182,6 +182,52 @@ test("a loading study explains itself once, not twice", async ({ page }) => {
   await expect(page.locator(".firstslow")).toBeVisible();
 });
 
+// THE relaunch complaint (feedback 2026-07-27, with a repro): wipe data, open,
+// click a word — it thinks for a second, fine. Close the tab, reopen, click a
+// word — it thinks all over again. Every launch, forever. Nothing an engine
+// builds survives the tab, and the boot warm only covered the SEARCH index, so
+// the occurrence index, the rendering lens, cross-refs, concepts, leitwort,
+// bridge and the SIF model were all built on that first click.
+//
+// Budget grounded in measurement on this machine, both sides: a cold first
+// click was ~1250ms, a warm one ~10ms. 250ms is 25x the warm path and 5x under
+// the cold one, so it discriminates without being flaky on a slower box.
+test("after a relaunch, the first word study is already warm", async ({ page }) => {
+  await boot(page);
+  await page.reload();
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+
+  // The pack first: the trace goes quiet DURING the R&D download, which the
+  // settle check below would otherwise read as "warm finished" — and the SIF
+  // model, which only builds once the embedding is in, would still be waiting
+  // to ambush the first click.
+  await page.waitForFunction(() => (window as any).__plumbline.rndState === "ready", null, {
+    timeout: 90_000,
+  });
+  // Then wait for the warm to actually finish rather than guessing a duration:
+  // the boot trace stops growing when it is done.
+  await page.waitForFunction(
+    async () => {
+      const s = (window as any).__plumbline;
+      const n = (await s.rpc.bootTrace()).length;
+      const prev = (window as any).__warmLen ?? -1;
+      (window as any).__warmLen = n;
+      return n === prev && n > 10;
+    },
+    null,
+    { timeout: 90_000, polling: 700 },
+  );
+
+  const ms = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    const t = performance.now();
+    const b = await s.engine.wordStudyBlocks("John 3:16", 1, s.gates);
+    if (!b?.blocks?.length) throw new Error("no study blocks came back");
+    return performance.now() - t;
+  });
+  expect(ms).toBeLessThan(250);
+});
+
 test("menus open promptly after boot (freeze regression)", async ({ page }) => {
   await boot(page);
   // The analytics warm-up must happen behind the splash — if it leaks past
