@@ -549,6 +549,80 @@ test("boots offline after ONE visit — the whole promise of the thing", async (
   }
 });
 
+test("a warm boot never asks the network for the pack or the engine", async ({ page }) => {
+  // The offline test above cannot tell depot-served from service-worker-served:
+  // with both in play it passes either way, so it would go green against a boot
+  // that secretly still depends on the SW being in the request path. That
+  // dependency is what the depot exists to remove — on a first visit the SW is
+  // not controlling the page while the shell loads, and it claims the engine
+  // worker mid-boot, so whether the pack reached the cache was a race.
+  //
+  // The sharp observable is the REQUEST, not the response. A bare fetch that the
+  // SW happens to answer from its cache still issues a request; bytes the depot
+  // already holds are read from storage and no request is made at all. So
+  // counting requests on a warm boot separates the two, with the SW left
+  // registered and doing its real job (serving the document).
+  //
+  // page.on("request") is the mechanism deliberately: it reports requests made
+  // inside the ENGINE WORKER, which is where all of this happens. CDP does not —
+  // a dedicated worker is a separate target.
+  await boot(page);
+  // Let the background stages finish on the FIRST visit, so their bytes are in
+  // the depot before the warm boot we actually measure. `stage2 load` appearing
+  // in the trace is the signal that stage 2 landed, rather than a guessed sleep.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async () =>
+          ((await (window as any).__plumbline?.rpc?.bootTrace()) ?? []).some(([l]: [string]) =>
+            l.startsWith("stage2 load"),
+          ),
+        ),
+      { timeout: 90_000 },
+    )
+    .toBe(true);
+  await page.waitForTimeout(1_500); // the shell precache runs at the next idle
+
+  const asked: string[] = [];
+  const listener = (r: { url: () => string }) => {
+    const u = new URL(r.url());
+    // The manifest is EXEMPT, and only the manifest: it is the one pack file
+    // with no version in its URL, so it is fetched network-first on purpose to
+    // notice a data update. It leaves the boot path when the pinned manifest
+    // lands; until then this test pins down everything else.
+    if (u.pathname.endsWith("/pack/manifest.json")) return;
+    if (u.pathname.includes("/pack/") || u.pathname.endsWith(".wasm")) asked.push(u.pathname);
+  };
+  page.on("request", listener);
+  try {
+    await page.reload();
+    await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/);
+    // Wait for the warm boot's background stages too — they must be depot hits
+    // as well, or the reader pays for Strong's and the cross-references again on
+    // every single launch.
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(async () =>
+            ((await (window as any).__plumbline?.rpc?.bootTrace()) ?? []).some(([l]: [string]) =>
+              l.startsWith("stage2 load"),
+            ),
+          ),
+        { timeout: 90_000 },
+      )
+      .toBe(true);
+  } finally {
+    page.off("request", listener);
+  }
+
+  expect(
+    asked,
+    "a warm boot re-requested pack bytes or the wasm — the depot is not serving them, so this boot " +
+      "depends on the service worker winning a race it does not always win",
+  ).toEqual([]);
+});
+
 test("a first visit never parses the corpus — the pack ships the cache", async ({ page }) => {
   // Every test starts on empty storage, so this IS a first visit. The engine
   // used to parse ~19 MB of JSONL here: 8.4 s on a real phone. The pack now
@@ -659,16 +733,33 @@ test("Settings can make the app completely offline, and says when it is", async 
   if (await download.isVisible().catch(() => false)) await download.click();
   await expect(page.getByText("Everything is on this device")).toBeVisible({ timeout: 120_000 });
 
-  // Not just a label: the survey must agree that nothing is missing.
-  const missing = await page.evaluate(async () => {
+  // Not just a label: every file the app actually READS must be on the device.
+  //
+  // `data/kjv.jsonl` is excluded, and its absence is asserted below rather than
+  // ignored. The pack ships it, but with a parsed-corpus cache present no stage
+  // ever fetches it — so counting it made the device permanently "incomplete"
+  // and made this very button spend 2.4 MB on a file nothing opens.
+  const { missing, rawJsonlCached } = await page.evaluate(async () => {
     const manifest = await (await fetch("pack/manifest.json")).json();
     const cache = await caches.open("plumbline-v1");
+    const hasCache = manifest.files.some((f: { cache?: boolean }) => f.cache);
+    const key = (p: string) => `pack/${p}.gz?v=${manifest.version}`;
     let missing = 0;
-    for (const f of manifest.files)
-      if (!(await cache.match(`pack/${f.path}.gz?v=${manifest.version}`, { ignoreVary: true }))) missing++;
-    return missing;
+    for (const f of manifest.files) {
+      if (f.path === "data/kjv.jsonl" && hasCache) continue;
+      if (!(await cache.match(key(f.path), { ignoreVary: true }))) missing++;
+    }
+    return {
+      missing,
+      rawJsonlCached: hasCache
+        ? !!(await cache.match(key("data/kjv.jsonl"), { ignoreVary: true }))
+        : false,
+    };
   });
   expect(missing).toBe(0);
+  expect(rawJsonlCached, "the raw JSONL is superseded by the corpus cache — downloading it wastes 2.4 MB").toBe(
+    false,
+  );
 });
 
 test("the welcome's verses are the corpus text, verbatim and instant", async ({ page }) => {

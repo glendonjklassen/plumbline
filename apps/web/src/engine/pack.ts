@@ -1,11 +1,14 @@
 // Fetch the read-only data pack (built by scripts/build-web-pack.mjs):
 // manifest first, then the gzipped files, decompressed with the browser's
-// DecompressionStream. Every download is stashed in the app's Cache bucket as
-// it lands — on a first visit the service worker isn't controlling this
-// worker yet, so leaving it to the SW meant the pack might not be cached at
-// all and the next launch couldn't boot offline (see engine/cache.ts).
+// DecompressionStream.
+//
+// Every read goes through the DEPOT (engine/depot.ts), which serves the
+// device's copy when it has one and stores what it downloads. That is not an
+// optimisation — it is what makes the pack independent of whether the service
+// worker happens to be controlling this worker, which on a first visit is a
+// race (see the depot's header).
 
-import { stash } from "./cache";
+import { depotBytes, depotGet, depotPut } from "./depot";
 
 export interface PackManifest {
   version: string;
@@ -44,10 +47,21 @@ export function assetUrl(path: string): string {
 
 export async function fetchManifest(): Promise<PackManifest> {
   const url = new URL("pack/manifest.json", assetBase).href;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`data pack manifest: HTTP ${res.status}`);
-  void stash(url, res.clone());
-  return res.json();
+  // Network first, depot as the fallback: the manifest is the one pack file
+  // with no version in its URL, so a cached copy can be stale and we want the
+  // live one when there is a network. Offline, the stored copy is what lets the
+  // rest of the pack be found at all.
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    void depotPut(url, bytes, "application/json");
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch (e) {
+    const hit = await depotGet(url);
+    if (!hit) throw new Error(`data pack manifest: ${e instanceof Error ? e.message : String(e)}`);
+    return hit.json();
+  }
 }
 
 async function gunzip(body: ArrayBuffer): Promise<Uint8Array> {
@@ -71,43 +85,28 @@ async function fetchFiles(
   // whole download on a phone (2026-07-27).
   let received = 0;
   const out = new Map<string, Uint8Array>();
-  // Fetch a few files concurrently; decompression overlaps the network.
+  // A few files concurrently; decompression overlaps the network.
   const queue = [...files];
   const workers = Array.from({ length: 4 }, async () => {
     for (let f = queue.shift(); f; f = queue.shift()) {
-      const url = `${packUrl(f.path)}.gz?v=${version}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`data pack file ${f.path}: HTTP ${res.status}`);
-      void stash(url, res.clone());
-      const reader = res.body?.getReader();
-      if (!reader) {
-        // No streaming body (very old engines): fall back to whole-file.
-        out.set(f.path, await gunzip(await res.arrayBuffer()));
-        received += f.gzBytes;
+      const url = packFileUrl(f, version);
+      const body = await depotBytes(url, (n) => {
+        received += n;
         onProgress?.({ fraction: Math.min(1, received / totalGz), currentFile: f.path });
-        continue;
-      }
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        size += value.length;
-        received += value.length;
-        onProgress?.({ fraction: Math.min(1, received / totalGz), currentFile: f.path });
-      }
-      const body = new Uint8Array(size);
-      let at = 0;
-      for (const c of chunks) {
-        body.set(c, at);
-        at += c.length;
-      }
+      }).catch((e) => {
+        throw new Error(`data pack file ${f.path}: ${e instanceof Error ? e.message : String(e)}`);
+      });
       out.set(f.path, await gunzip(body.buffer as ArrayBuffer));
     }
   });
   await Promise.all(workers);
   return out;
+}
+
+/** The depot key for a pack file. One function, so the loader, the offline
+ *  survey and the cache sweep cannot disagree about what a file is called. */
+export function packFileUrl(f: PackManifest["files"][number], version: string): string {
+  return `${packUrl(f.path)}.gz?v=${version}`;
 }
 
 /** Stage 1 — the FASTEST path to text on screen: the text, plus the tiny stock

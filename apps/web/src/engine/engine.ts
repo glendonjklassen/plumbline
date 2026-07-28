@@ -3,7 +3,7 @@
 // binding lives in StudyEngine.ts (the TS sibling of StudyEngine.kt /
 // Plumbline.cs); this module owns the runtime plumbing only.
 
-import { stash } from "./cache";
+import { depotResponse } from "./depot";
 import { assetUrl } from "./pack";
 import { PERF } from "./perf";
 import {
@@ -54,12 +54,17 @@ export async function instantiate(homeRoot: Map<string, Directory | File>): Prom
   let measure: (text: string) => number = (t) => t.length * 8;
   let measureCalls = 0;
 
-  // Stash the module bytes as they land: on a first visit this worker may not
-  // be SW-controlled yet, and an uncached engine means no offline launch.
+  // Through the depot: on a first visit this worker may not be SW-controlled
+  // yet, and an uncached engine means no offline launch.
   const wasmUrl = assetUrl(`plumbline_ffi.wasm?v=${__BUILD_ID__}`);
-  const wasmRes = await fetch(wasmUrl);
-  void stash(wasmUrl, wasmRes.clone());
-  const source = await WebAssembly.compileStreaming(wasmRes);
+  const wasmRes = await depotResponse(wasmUrl);
+  // compileStreaming refuses a response that isn't `application/wasm` — the
+  // depot sets that explicitly, but a copy served by the service worker or a
+  // host with a thin MIME table may not, so fall back to a buffered compile
+  // rather than failing to boot over a header.
+  const source = await WebAssembly.compileStreaming(wasmRes.clone()).catch(async () =>
+    WebAssembly.compile(await wasmRes.arrayBuffer()),
+  );
   const instance = await WebAssembly.instantiate(source, {
     wasi_snapshot_preview1: wasi.wasiImport,
     plumbline: {

@@ -12,7 +12,7 @@
 // all, with no asset list to keep in sync. The engine worker's downloads (the
 // pack, the wasm) are stashed by the worker itself as they land.
 
-import { CACHE, pruneStale } from "./cache";
+import { DEPOT, pruneStale } from "./depot";
 
 /** The data pack is the engine worker's business, not the shell's. */
 const skip = (url: string) => url.includes("/pack/");
@@ -30,7 +30,7 @@ export async function precacheShell(keepVersions: string[] = []): Promise<void> 
       if (!url.startsWith(location.origin) || skip(url)) continue;
       urls.add(url);
     }
-    const cache = await caches.open(CACHE);
+    const cache = await caches.open(DEPOT);
     await Promise.all(
       [...urls].map(async (url) => {
         // Never re-download what the SW already stored on a later visit.

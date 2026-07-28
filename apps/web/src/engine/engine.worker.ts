@@ -28,8 +28,8 @@
 // boot message carries the resolved font URL.
 
 import { boot, type BootResult } from "./boot";
-import { fetchRndPack, fetchStage2Pack, packUrl, setAssetBase } from "./pack";
-import { CACHE } from "./cache";
+import { fetchRndPack, fetchStage2Pack, packFileUrl, setAssetBase } from "./pack";
+import { depotHas } from "./depot";
 import { PERF } from "./perf";
 import { measureFor, readerFont, fontExtent } from "../reader/measure";
 import {
@@ -201,19 +201,12 @@ const saveData = (): boolean => (navigator as any).connection?.saveData === true
  *  reader's data and their first paint; neither is at stake once the bytes are
  *  cached (feedback 2026-07-27). */
 async function rndAlreadyCached(): Promise<boolean> {
-  if (typeof caches === "undefined") return false;
   const files = booted!.manifest.files.filter((f) => f.rnd);
   if (!files.length) return false;
-  try {
-    const c = await caches.open(CACHE);
-    for (const f of files) {
-      const url = `${packUrl(f.path)}.gz?v=${booted!.manifest.version}`;
-      if (!(await c.match(url, { ignoreVary: true }))) return false;
-    }
-    return true;
-  } catch {
-    return false;
+  for (const f of files) {
+    if (!(await depotHas(packFileUrl(f, booted!.manifest.version)))) return false;
   }
+  return true;
 }
 
 /** Whether this session will fetch the machine tier by itself. Phones defer it
