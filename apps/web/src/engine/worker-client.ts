@@ -8,6 +8,8 @@ export interface BootInfo {
   config: any;
   version: string;
   bundledOn: boolean;
+  /** This session fetches the machine tier by itself — don't offer a button. */
+  rndAuto: boolean;
 }
 
 export interface WorkerProgress {

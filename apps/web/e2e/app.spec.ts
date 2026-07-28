@@ -126,6 +126,62 @@ test("the deferred machine-tier pack loads after boot", async ({ page }) => {
   expect(neighbours).toBeGreaterThan(0);
 });
 
+// A PHONE must never be asked to approve the analysis pack. Deferring it keeps
+// it off the boot path; it was also keeping it out of the session entirely, so
+// every launch put a "one-time ~4 MB download / Load analysis" button in front
+// of a reader who had already taken that download — and, on the same screen, a
+// second notice underneath about a slow first read (feedback 2026-07-27, with a
+// screenshot). It loads itself now.
+test("a phone is never asked to approve the analysis pack", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 }); // before goto: deferRnd is read at boot
+  await boot(page);
+  expect(await page.evaluate(() => (window as any).__plumbline.rndDeferred)).toBe(false);
+
+  // It arrives without anyone tapping anything.
+  await page.waitForFunction(() => (window as any).__plumbline.rndState === "ready", null, {
+    timeout: 90_000,
+  });
+  const neighbours = await page.evaluate(
+    async () => ((await (window as any).__plumbline.engine.conceptNeighbours("G2316", 3))?.near ?? []).length,
+  );
+  expect(neighbours).toBeGreaterThan(0);
+
+  // And the offer never appeared.
+  await expect(page.getByRole("button", { name: "Load analysis" })).toHaveCount(0);
+  await expect(page.getByText("one-time ~4 MB download")).toHaveCount(0);
+});
+
+// The two stacked notices in that screenshot: the pack's own progress line, and
+// underneath it the "first one takes a few seconds" note. One wait deserves one
+// explanation. The study must genuinely be STUCK for this to mean anything —
+// the slow-read note only arms after 600ms of unanswered blocks, so a version
+// of this test that asserted straight away passed with the guard removed. A
+// null refKey leaves the read unanswered for real.
+test("a loading study explains itself once, not twice", async ({ page }) => {
+  await boot(page);
+  // Let the background load settle FIRST — otherwise it lands mid-test and
+  // flips rndState back to "ready" under us, which is what made an earlier
+  // version of this test fail for the wrong reason.
+  await page.waitForFunction(() => (window as any).__plumbline.rndState === "ready", null, {
+    timeout: 90_000,
+  });
+  await page.evaluate(() => {
+    const s = (window as any).__plumbline;
+    s.rndState = "loading";
+    s.rndDeferred = true;
+    s.panel = { kind: "wordStudy", refKey: null, tokenIndex: 0 };
+  });
+  await expect(page.locator(".rnd-note")).toBeVisible();
+  await page.waitForTimeout(1200); // well past SLOW_READ_MS
+  await expect(page.locator(".loading")).toBeVisible(); // still unanswered, so
+  await expect(page.locator(".firstslow")).toHaveCount(0); // ...and only ONE notice
+
+  // Control: the same stuck read DOES explain itself once the pack is in — the
+  // guard suppresses the note during the download, it doesn't delete it.
+  await page.evaluate(() => ((window as any).__plumbline.rndState = "ready"));
+  await expect(page.locator(".firstslow")).toBeVisible();
+});
+
 test("menus open promptly after boot (freeze regression)", async ({ page }) => {
   await boot(page);
   // The analytics warm-up must happen behind the splash — if it leaks past

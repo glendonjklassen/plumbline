@@ -28,7 +28,8 @@
 // boot message carries the resolved font URL.
 
 import { boot, type BootResult } from "./boot";
-import { fetchRndPack, fetchStage2Pack, setAssetBase } from "./pack";
+import { fetchRndPack, fetchStage2Pack, packUrl, setAssetBase } from "./pack";
+import { CACHE } from "./cache";
 import { PERF } from "./perf";
 import { measureFor, readerFont, fontExtent } from "../reader/measure";
 import {
@@ -184,6 +185,39 @@ function loadRndChunked(): Promise<void> {
  *  on screen is the north star): stage-2 core files (Strong's, cross-refs,
  *  margin notes) → warm → the R&D pack unless deferred (phones defer; the
  *  shell offers an explicit "load analysis" action instead). */
+/** Data Saver — the one setting that still means "ask me before you spend". */
+const saveData = (): boolean => (navigator as any).connection?.saveData === true;
+
+/** Is the machine-tier pack already on this device? Then loading it costs no
+ *  network at all, and putting a "one-time ~4 MB download" button in front of a
+ *  download that will not happen is theatre. The deferral exists to protect the
+ *  reader's data and their first paint; neither is at stake once the bytes are
+ *  cached (feedback 2026-07-27). */
+async function rndAlreadyCached(): Promise<boolean> {
+  if (typeof caches === "undefined") return false;
+  const files = booted!.manifest.files.filter((f) => f.rnd);
+  if (!files.length) return false;
+  try {
+    const c = await caches.open(CACHE);
+    for (const f of files) {
+      const url = `${packUrl(f.path)}.gz?v=${booted!.manifest.version}`;
+      if (!(await c.match(url, { ignoreVary: true }))) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether this session will fetch the machine tier by itself. Phones defer it
+ *  out of the BOOT path, never out of the session — the reader should not have
+ *  to ask for it again on every launch. */
+async function willAutoLoadRnd(machineOn: boolean, deferRnd: boolean): Promise<boolean> {
+  if (!machineOn) return false;
+  if (!deferRnd) return true;
+  return (await rndAlreadyCached()) || !saveData();
+}
+
 async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<void> {
   await Promise.race([firstLayout, new Promise((r) => setTimeout(r, 2500))]);
   try {
@@ -197,7 +231,7 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
     });
     self.postMessage({ type: "coreReady" });
     await warmChunked();
-    if (machineOn && !deferRnd) await loadRndChunked();
+    if (await willAutoLoadRnd(machineOn, deferRnd)) await loadRndChunked();
   } catch {
     /* offline — the Settings toggle or next boot retries */
   }
@@ -263,12 +297,17 @@ self.onmessage = async (ev: MessageEvent) => {
           self.postMessage({ type: "authored" });
         };
         const cfg = configLoad(booted.wasm) ?? {};
-        void backgroundLoad(cfg.machineAnalysis !== false, m.deferRnd === true);
+        const machineOn = cfg.machineAnalysis !== false;
+        // Tell the shell up front, so it never offers a "Load analysis" button
+        // for a load that is already on its way (feedback 2026-07-27).
+        const rndAuto = await willAutoLoadRnd(machineOn, m.deferRnd === true);
+        void backgroundLoad(machineOn, m.deferRnd === true);
         reply({
           packVersion: booted.packVersion,
           config: cfg,
           version: engineVersion(booted.wasm),
           bundledOn: booted.home.bundledOn,
+          rndAuto,
         });
         break;
       }

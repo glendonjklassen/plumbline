@@ -84,10 +84,13 @@
     void dispatchLink(s, uri, ev);
   }
 
-  // The "load analysis" offer (phones defer the machine-tier auto-download):
-  // shown on the studies that gain machine sections, while the tier is on
-  // but the pack isn't in yet. The loading state shows for desktops too —
-  // their auto-download announces itself the same way.
+  // The "load analysis" offer — now a LAST RESORT, not the phone default. The
+  // tier loads itself in every session (engine.worker willAutoLoadRnd), so this
+  // button only appears for a reader on Data Saver who hasn't got the pack yet;
+  // `rndDeferred` is false whenever the load is already coming. Before that,
+  // every phone launch put a "one-time ~4 MB download" button in front of
+  // someone who had already taken the download (feedback 2026-07-27).
+  // The loading state shows for everyone — the download announces itself.
   const rndOffer = $derived.by(() => {
     const k = s.panel?.kind;
     if (!(k === "wordStudy" || k === "codeStudy" || k === "concordance")) return false;
@@ -177,7 +180,11 @@
         {:else}
           <!-- Never look frozen: the worker is answering. -->
           <p class="loading" aria-live="polite">— loading —</p>
-          {#if slowRead}
+          <!-- ONE explanation for one wait. While the analysis pack is coming
+               in, the note above it already says so, and stacking a second
+               notice under it read as two separate problems (feedback
+               2026-07-27). -->
+          {#if slowRead && s.rndState !== "loading"}
             <p class="firstslow">
               The first one takes a few seconds while the analysis is built for this text. Every
               look after this is instant.

@@ -66,7 +66,7 @@
       if (hasChurch(shared) && !s.showFirstRun) {
         s.showToast(`Home church set to ${shared.name} — tap Church to visit them`);
       }
-      s.rndDeferred = deferRnd;
+      s.rndDeferred = deferRnd && !info.rndAuto;
       s.tones = tones?.tones ?? [];
       await Promise.all([s.fetchQ("toc"), s.fetchQ("canonSegments")]);
       session = s;

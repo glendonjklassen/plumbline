@@ -759,7 +759,14 @@ core pack only** (2026-07-25, TODO #28): the `rnd`-marked artifacts
 at idle / on the first-run machine choice / on the Settings toggle, with
 `studyEpoch` refreshing any open panel; until they land, the machine tiers
 are simply absent, exactly like an Android install (which never bundles
-them). Both machine-tier artifacts ship **packed**, because the browser cannot
+them). Phones defer the tier out of the BOOT path only — **not out of the
+session** (revised 2026-07-27 from the 2026-07-26 defer-until-asked rule): it
+loads itself once first paint is behind us, so the reader is never asked twice.
+The explicit "Load analysis" offer survives for exactly one case, a device on
+Data Saver that hasn't got the pack yet; when the pack is already cached the
+load costs no network at all and asking about a "~4 MB download" that will not
+happen is theatre. A study waiting on it says so ONCE — the pack's own progress
+line, with the generic slow-first-read note suppressed underneath it. Both machine-tier artifacts ship **packed**, because the browser cannot
 keep a parsed artifact between launches and so repeated the whole parse on
 every start (2026-07-27):
 
