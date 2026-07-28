@@ -274,6 +274,13 @@ export class StudyEngine {
   warmStep(step: number): boolean {
     return ((this.#w.exports.plumbline_engine_warm_step as Function)(this.#engine, step) as number) === 1;
   }
+  /** Tell the engine we warm in SLICES, so it must never build an index inside
+   *  a reader's request (wasm-only export). Call it right after open — the warm
+   *  itself starts only after stage 2 lands, and a tap in that window would
+   *  otherwise build everything at once and freeze this thread. */
+  deferBuilds(on: boolean): void {
+    (this.#w.exports.plumbline_engine_defer_builds as Function)(this.#engine, on ? 1 : 0);
+  }
   /** Load the R&D artifacts from the home if they arrived after open (the
    *  deferred pack); no-op when already loaded or still missing. */
   loadRndData(): string | null {

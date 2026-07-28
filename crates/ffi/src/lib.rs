@@ -423,6 +423,21 @@ impl PlumblineEngine {
         self.defer_builds.load(std::sync::atomic::Ordering::Relaxed)
     }
 
+    /// Declare that this shell warms in slices, so nothing may be built inside a
+    /// reader's request.
+    ///
+    /// MUST BE SET AT OPEN, not when the warm happens to start. Arming it on the
+    /// first `warm_next` looked equivalent and was not: the web's warm begins only
+    /// after stage 2 has been fetched and parsed, which on a phone is ~550 ms
+    /// after text appears — and a reader taps a word inside that window. The flag
+    /// was still false, the tap built everything, and the freeze it was written to
+    /// prevent happened anyway: 26,042 ms, on the very build that shipped the fix
+    /// (2026-07-28). A desktop hid it because stage 2 there takes 40 ms and the
+    /// warm won the race.
+    pub(crate) fn set_defer_builds(&self, on: bool) {
+        self.defer_builds.store(on, std::sync::atomic::Ordering::Relaxed);
+    }
+
     // ── "ready" accessors ─────────────────────────────────────────────────────
     // Each returns the index only if using it costs nothing. Under a sliced warm
     // that means "only if already built"; otherwise it is the ordinary

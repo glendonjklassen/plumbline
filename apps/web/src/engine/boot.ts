@@ -109,6 +109,16 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
     () => StudyEngine.open(wasm, "/home"),
   );
 
+  // BEFORE the reader can touch anything. This shell warms in slices, so the
+  // engine must never build an index inside a tap — that is the 26,042 ms freeze
+  // of 2026-07-28, which also strands every download in flight behind it.
+  //
+  // Here, and not when the warm starts: the warm begins only after stage 2 is
+  // fetched and parsed (~550 ms after text on a phone), and the reader taps
+  // inside that window. Deriving the flag from the first warm step shipped once
+  // and fixed nothing.
+  engine.deferBuilds(true);
+
   // Persistence choreography: any authoring write mirrors the user subtree.
   let pending = false;
   engine.onAuthored = () => {

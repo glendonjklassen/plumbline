@@ -79,6 +79,31 @@ pub unsafe extern "C" fn plumbline_engine_warm_step(engine: *const PlumblineEngi
     guard(0, || e.warm_next(SLICE))
 }
 
+/// Declare that this shell warms the indexes in SLICES, so the engine must never
+/// build one inside a reader's request — it answers with what is ready and the
+/// shell re-asks once the warm has filled the rest in.
+///
+/// Call it immediately after open. Deriving it from the first
+/// [`plumbline_engine_warm_step`] call instead is a race the reader wins: the
+/// web's warm starts only after stage 2 is fetched and parsed, ~550 ms after text
+/// appears on a phone, and the first tap lands inside that window. That cost a
+/// whole release — the fix shipped, and the phone still froze for 26,042 ms
+/// inside one `wordStudyBlocks` (2026-07-28).
+///
+/// Web-only, hence wasm-only: Android warms through
+/// [`plumbline_engine_warm_indexes`](crate::plumbline_engine_warm_indexes), which
+/// builds everything up front in well under a second, and wants the ordinary
+/// build-on-demand behaviour.
+///
+/// # Safety
+/// `engine` is a live engine or null.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_defer_builds(engine: *const PlumblineEngine, on: i32) {
+    if let Some(e) = unsafe { engine.as_ref() } {
+        guard((), || e.set_defer_builds(on != 0));
+    }
+}
+
 /// Load ONE machine-tier artifact: step 0 the concept embedding, step 1 the
 /// morphology sidecar. Returns 1 while steps remain, 0 when done (or on a null
 /// engine). Idempotent — an artifact already loaded, or still missing from the

@@ -51,6 +51,7 @@ fn generate_c_header(crate_dir: &str) {
                 "plumbline_web_measure_fnptr",
                 "plumbline_engine_warm_step",
                 "plumbline_engine_load_rnd_step",
+                "plumbline_engine_defer_builds",
             ]
             .iter()
             .map(|s| s.to_string())

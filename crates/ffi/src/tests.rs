@@ -1835,6 +1835,63 @@ fn a_tap_never_builds_indexes_under_a_sliced_warm() {
     }
 }
 
+/// The window the first attempt at this fix missed entirely.
+///
+/// v0.29.0 armed the no-building rule on the first `warm_next` call, which reads
+/// as equivalent and is not. The web's warm starts only after stage 2 has been
+/// fetched AND parsed — ~550 ms after text appears on a phone — and a reader taps
+/// a word inside that gap. So the flag was still off, the tap built all five
+/// indexes, and the phone froze for 26,042 ms on the very build that shipped the
+/// fix. A desktop could not reproduce it: stage 2 there takes 40 ms and the warm
+/// happens to win the race.
+///
+/// The rule is therefore declared AT OPEN, and this pins the case the previous
+/// version passed while failing: no warm has run at all, not one slice.
+#[test]
+fn a_tap_before_the_warm_has_even_started_builds_nothing() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-tapearly-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), generated_kjv(150, 20)).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null() && !e.is_null());
+        let eng = &*e;
+        // What the web shell does the instant the engine opens — and NOTHING
+        // else. No stage 2, no warm slice, no layout.
+        eng.set_defer_builds(true);
+        eng.load_core_data();
+
+        let blocks = take(plumbline_engine_word_study_blocks2_json(e, c"Ps 1:2".as_ptr(), 1, 3))
+            .expect("the tap answered");
+
+        for (built, what) in [
+            (eng.occ_ix.get().is_some(), "the occurrence index"),
+            (eng.renderings.get().is_some(), "the rendering lens"),
+            (eng.xref_ix.get().is_some(), "the cross-reference index"),
+            (eng.concept.get().is_some(), "the concept model"),
+            (eng.leitwort.get().is_some(), "the leitwort scan"),
+            (eng.bridge.get().is_some(), "the bridge"),
+        ] {
+            assert!(
+                !built,
+                "a tap in the gap BEFORE the warm starts built {what} — this is the exact window \
+                 that froze a phone for 26 seconds on the release that claimed to fix it"
+            );
+        }
+        let v: Value = serde_json::from_str(&blocks).unwrap();
+        assert!(!v["blocks"].as_array().unwrap().is_empty(), "and it still answered");
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
 /// The control for the test above: WITHOUT a sliced warm — the Android path,
 /// which calls `plumbline_engine_warm_indexes` and builds everything up front —
 /// a tap still builds on demand exactly as it always has. The deferral is scoped
