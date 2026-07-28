@@ -20,6 +20,27 @@ self.addEventListener("activate", (e) =>
   ),
 );
 
+/** The one key the app shell is stored under. */
+const shellKey = () => new URL("./index.html", location.href).href;
+
+/** Whether a successful network response may be written to the cache.
+ *
+ *  Two refusals, both of which were white-screen bugs:
+ *
+ *  1. `cache: "no-store"` requests. The update check asks for a small manifest
+ *     with no-store precisely because it wants the deployed truth rather than our
+ *     copy; caching that answer defeats the request and, when it was index.html,
+ *     stored a shell whose bundles did not exist yet.
+ *  2. index.html fetched as DATA (not a navigation). Same shape: a newer document
+ *     written into the cache while `/assets/*` for that build are absent, so the
+ *     next offline launch is served a shell that asks for a bundle nobody has. */
+function mayCache(req, url) {
+  if (req.cache === "no-store" || req.cache === "no-cache") return false;
+  const isShellDoc = url.href === shellKey() || url.href === new URL("./", location.href).href;
+  if (isShellDoc && req.mode !== "navigate") return false;
+  return true;
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
@@ -68,12 +89,19 @@ self.addEventListener("fetch", (event) => {
             fetch(req),
             new Promise((_, reject) => setTimeout(() => reject(new Error("sw-timeout")), 3500)),
           ]);
-          if (res.ok) {
+          if (res.ok && mayCache(req, url)) {
             // Clone SYNCHRONOUSLY, before the page consumes the body — a
             // deferred clone throws "already used" and silently left the
             // manifest uncached, so the offline fallback never had it.
             const copy = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(req, copy));
+            // Navigations are stored under the CANONICAL shell key, never under
+            // the URL that was requested. Storing `req` meant every distinct deep
+            // link (`/?at=Ps 23:1`, `/?church=…`) accumulated its own copy of
+            // index.html that the sweep never touched — and offline, one of those
+            // stale copies would be served for that exact link, naming a bundle
+            // that had since been pruned. White screen, shared links only.
+            const key = req.mode === "navigate" ? shellKey() : req;
+            caches.open(CACHE).then((cache) => cache.put(key, copy));
           }
           return res;
         } catch {

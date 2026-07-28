@@ -623,6 +623,65 @@ test("a warm boot never asks the network for the pack or the engine", async ({ p
   ).toEqual([]);
 });
 
+test("checking for an update cannot poison the cached shell", async ({ page }) => {
+  // The live bug this pins: the update check fetched index.html as DATA, and the
+  // service worker's network-first branch caches every ok response. So a session
+  // that merely ASKED whether an update existed wrote a newer shell into the
+  // cache while that build's /assets/* were absent — and the next offline launch
+  // was served a document asking for a bundle nobody had. A white screen on a
+  // device holding all of scripture.
+  //
+  // Two rules now hold: no-store responses are never cached, and index.html is
+  // only cached for an actual navigation.
+  await boot(page);
+  await page.waitForTimeout(1_500);
+
+  const { noStoreCached, dataDocCached } = await page.evaluate(async () => {
+    const cache = await caches.open("plumbline-v1");
+    // A no-store request for something not otherwise stored.
+    const probe = new URL("icon.svg?no-store-probe", location.href).href;
+    await fetch(probe, { cache: "no-store" }).catch(() => {});
+    // index.html asked for as data, the exact shape the update check used.
+    const asData = new URL("index.html?as-data-probe", location.href).href;
+    await fetch(asData).catch(() => {});
+    return {
+      noStoreCached: !!(await cache.match(probe, { ignoreVary: true })),
+      dataDocCached: !!(await cache.match(asData, { ignoreVary: true })),
+    };
+  });
+  expect(noStoreCached, "a no-store response was cached — the request asked not to be answered from cache").toBe(
+    false,
+  );
+  expect(dataDocCached, "index.html fetched as data was cached — this is the white-screen vector").toBe(false);
+});
+
+test("a shared deep link does not strand its own copy of the shell", async ({ page }) => {
+  // Navigations were cached under the URL REQUESTED, so every distinct deep link
+  // (`/?at=Ps 23:1`, `/?church=…`) accumulated its own index.html that the sweep
+  // never touched — un-versioned entries are exempt. Offline, one of those stale
+  // copies would be served for that exact link, naming a bundle since pruned:
+  // a white screen for shared links only, while the plain app worked fine.
+  // The deep-link navigation has to be one the SERVICE WORKER actually sees, or
+  // this proves nothing: on a first visit the SW is not controlling the page yet,
+  // so the navigation never reaches its fetch handler and no entry is written
+  // whatever the key logic says. Boot once to get the worker installed and in
+  // control, THEN follow the shared link.
+  await boot(page);
+  await expect
+    .poll(async () => page.evaluate(() => !!navigator.serviceWorker.controller), { timeout: 30_000 })
+    .toBe(true);
+
+  await page.goto("/?at=Ps+23:1");
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+  await page.waitForTimeout(1_500);
+
+  const queried = await page.evaluate(async () => {
+    const cache = await caches.open("plumbline-v1");
+    return (await cache.keys()).map((r) => r.url).filter((u) => u.includes("at=") || u.includes("church="));
+  });
+  expect(queried, "a deep link stored its own shell copy under its query string").toEqual([]);
+});
+
 test("the whole shell is stored after one visit, not just what this page loaded", async ({ page }) => {
   // The precache used to be driven by this page's resource timeline, so it stored
   // whatever happened to load. A chunk imported lazily — for a screen the reader
@@ -990,20 +1049,22 @@ test("a new deploy offers an update, and only when the build really changed", as
 
   // Same build deployed → no toast. This is the guard that matters: a checker
   // that always fires would nag every reader on every resume.
+  //
+  // The signal is the shell manifest's `buildId`, not a regex over index.html.
+  // Scraping the document meant the SW cached a newer shell whose bundles did not
+  // exist yet — a white screen on a device holding all of scripture.
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    const mine = document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/"]')!.src;
-    const name = mine.split("/").pop();
-    window.fetch = async () => new Response(`<script type="module" src="/assets/${name}"><\/script>`);
+    const live = await (await (window as any).__realFetch("shell-manifest.json")).json();
+    window.fetch = async () => new Response(JSON.stringify(live));
     await s.checkForUpdate(true);
   });
   await expect(page.locator(".toast.update")).toHaveCount(0);
 
-  // A different hashed bundle → the offer appears.
+  // A different build id → the offer appears.
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
-    window.fetch = async () =>
-      new Response('<script type="module" src="/assets/index-NEWBUILD.js"><\/script>');
+    window.fetch = async () => new Response(JSON.stringify({ buildId: "NEWBUILD", files: [] }));
     await s.checkForUpdate(true);
   });
   await expect(page.locator(".toast.update")).toBeVisible();
