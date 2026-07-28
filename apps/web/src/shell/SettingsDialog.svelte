@@ -173,6 +173,25 @@
   <div class="dialog" role="dialog" aria-modal="true">
     <h2>Settings</h2>
     <div class="content">
+      {#if s.akjvAvailable}
+        <!-- A reading aid over the SAME text, not a version picker: the words
+             stay the KJV's everywhere it matters (memorize, Present, copy,
+             share), and every marked word tells you what it replaced. -->
+        <label class="toggle">
+          <span class="body">
+            <span class="name">Plain-English overlay</span>
+            <span class="desc">
+              Show where the American King James Version words a verse differently — marked with a
+              dotted underline; tap one to see the KJV word it replaced.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={s.config.akjvOverlay === true}
+            onchange={(e) => void s.setAkjvOverlay(e.currentTarget.checked)}
+          />
+        </label>
+      {/if}
       <label class="toggle">
         <span class="body">
           <span class="name">Scholars' analysis</span>

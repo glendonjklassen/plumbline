@@ -10,6 +10,9 @@ export const MARGIN = 28; // top/bottom text margin (manifest constant)
 export const FLAG_ADDED = 1;
 export const FLAG_DIVINE = 2;
 export const FLAG_TITLE = 4;
+/** Display-only (core::akjv): this word is an AKJV re-rendering. Never in
+ *  `kjv.jsonl` — the overlay sets it on the display list on the way past. */
+export const FLAG_RERENDERED = 16;
 
 export interface LayoutItem {
   x: number;
@@ -213,6 +216,24 @@ export function paintChapter(
       ctx.moveTo(x, uy);
       ctx.lineTo(x + it.w, uy);
       ctx.stroke();
+    }
+    if (it.flags & FLAG_RERENDERED) {
+      // The AKJV overlay's mark: DOTTED, and a little below the Strong's rule
+      // so a word can carry both — most re-rendered words are tagged. Dotted
+      // rather than bold or grey because weight and colour are already spoken
+      // for (italics mean "supplied by the translator") and because at 6.9% of
+      // words a heavier mark would read as a ransom note rather than as text.
+      // It also survives a highlight wash, which a background tint would not.
+      ctx.save();
+      ctx.strokeStyle = withAlpha(gold, 0.75);
+      ctx.lineWidth = 1;
+      ctx.setLineDash([1.5, 2.5]);
+      ctx.beginPath();
+      const dy = y + fontPx + 5.5;
+      ctx.moveTo(x, dy);
+      ctx.lineTo(x + it.w, dy);
+      ctx.stroke();
+      ctx.restore();
     }
   }
 }

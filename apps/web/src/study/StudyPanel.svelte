@@ -80,6 +80,16 @@
     }
   });
 
+  // What the overlay does to the tapped word. Read only while the overlay is
+  // ON: with it off the reader is looking at the KJV and there is nothing to
+  // explain. Above the Strong's, because the codes are keyed to the KJV word —
+  // the original has to be read before the lexicon detail, not after it.
+  const akjvWord = $derived.by(() => {
+    const p = s.panel;
+    if (!s.config.akjvOverlay || p?.kind !== "wordStudy") return null;
+    return s.q("akjvToken", p.refKey, p.tokenIndex);
+  });
+
   function onLink(uri: string, ev: MouseEvent): void {
     void dispatchLink(s, uri, ev);
   }
@@ -175,6 +185,12 @@
         {#if studyCode}
           <EmbedMaps code={studyCode} />
         {/if}
+        {#if akjvWord}
+          <p class="akjv">
+            <span class="akjv-now">{akjvWord.akjv}</span>
+            <span class="akjv-was">KJV: {akjvWord.kjv}</span>
+          </p>
+        {/if}
         {#if blocks}
           <BlockList {blocks} {onLink} />
           <!-- Which build is this? Neither of us could answer that from a
@@ -264,6 +280,20 @@
   .vsub {
     font-size: calc(11.5px * var(--uiScale));
     font-variant-numeric: tabular-nums;
+  }
+  /* The overlay's answer, directly under the headword and above the Strong's. */
+  .akjv {
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px dotted var(--gold, #9e7d38);
+    font-size: calc(15px * var(--uiScale));
+  }
+  .akjv-now {
+    font-weight: 600;
+  }
+  .akjv-was {
+    margin-left: 8px;
+    color: var(--faded, #8a8276);
   }
   .firstslow {
     color: var(--faded, #8a8276);

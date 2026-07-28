@@ -228,6 +228,57 @@ test("after a relaunch, the first word study is already warm", async ({ page }) 
   expect(ms).toBeLessThan(250);
 });
 
+// The plain-English overlay (2026-07-27): the AKJV's wording laid over the KJV's
+// own tokens, off until asked. The text stays the KJV — this is a reading aid,
+// and the rest of the app must not notice it exists.
+test("the AKJV overlay re-words the reader, and only the reader", async ({ page }) => {
+  await boot(page);
+  await page.waitForFunction(() => (window as any).__plumbline.akjvAvailable === true, null, {
+    timeout: 90_000,
+  });
+
+  // Off by default: the reader is looking at the KJV.
+  expect(await page.evaluate(() => (window as any).__plumbline.config.akjvOverlay)).toBeFalsy();
+
+  await page.evaluate(() => (window as any).__plumbline.setAkjvOverlay(true));
+
+  // A multi-token run answers from ANY word inside it — "Verily, verily" is one
+  // re-rendering, and tapping either half must explain the same thing.
+  const spans = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    const out: any[] = [];
+    for (const i of [4, 6, 7]) out.push(await s.engine.akjvToken("John 3:3", i));
+    return out;
+  });
+  expect(spans[0]).toEqual({ akjv: "to", kjv: "unto" });
+  expect(spans[1]).toEqual({ akjv: "Truly, truly", kjv: "Verily, verily," });
+  expect(spans[2]).toEqual(spans[1]);
+  // A word the AKJV left alone has no answer at all.
+  expect(await page.evaluate(() => (window as any).__plumbline.engine.akjvToken("John 3:3", 0))).toBeNull();
+
+  // INTEGRITY. The overlay is applied on the way into the layout and nowhere
+  // else, so everything that leaves the reader is still the KJV. A modernised
+  // word on a memory card or in a hand-off would make this a second
+  // translation, whatever the About page says.
+  const kept = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    return {
+      verse: (await s.engine.verse("John 3:3"))?.body,
+      copied: await s.engine.copyText("John 3:3", "verse"),
+      drill: (await s.engine.memoryDrill("John 3:3", 0))?.text,
+    };
+  });
+  expect(kept.verse).toContain("Verily, verily");
+  expect(kept.verse).not.toContain("Truly");
+  expect(kept.copied).toContain("Verily, verily");
+  expect(kept.copied).not.toContain("Truly");
+  expect(kept.drill).toContain("Verily, verily");
+
+  // And it turns back off.
+  await page.evaluate(() => (window as any).__plumbline.setAkjvOverlay(false));
+  expect(await page.evaluate(() => (window as any).__plumbline.config.akjvOverlay)).toBe(false);
+});
+
 test("menus open promptly after boot (freeze regression)", async ({ page }) => {
   await boot(page);
   // The analytics warm-up must happen behind the splash — if it leaks past

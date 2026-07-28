@@ -213,6 +213,26 @@ export class StudyEngine {
     return this.#json("plumbline_engine_canon_segments_json");
   }
 
+  // ── the plain-English overlay (the AKJV delta) ───────────────────────────────
+
+  /** Switch the overlay on/off. Reader only — memorize, Present, copy and share
+   *  stay KJV whatever this says. */
+  setAkjvOverlay(on: boolean): void {
+    (this.#w.exports.plumbline_engine_set_akjv_overlay as Function)(this.#engine, on ? 1 : 0);
+  }
+  /** Whether this home carries a usable overlay (false until stage 2 lands). */
+  akjvAvailable(): boolean {
+    return !!(this.#w.exports.plumbline_engine_akjv_available as Function)(this.#engine);
+  }
+  /** `{akjv, kjv}` for a re-rendered token, else null. */
+  akjvToken(refKey: string, tokenIndex: number): any {
+    const s = this.#call(
+      (r) => this.#w.takeStr((this.#w.exports.plumbline_engine_akjv_token_json as Function)(this.#engine, r, tokenIndex) as number),
+      [refKey],
+    );
+    return s === null ? null : JSON.parse(s);
+  }
+
   // ── R&D tier ────────────────────────────────────────────────────────────────
 
   conceptNeighbours(code: string, k: number): any {

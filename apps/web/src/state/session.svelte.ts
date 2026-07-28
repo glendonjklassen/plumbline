@@ -331,6 +331,18 @@ export class Session {
       // Strong's + margin notes just arrived — panels re-fetch.
       this.invalidate();
       this.studyEpoch++;
+      // The overlay rides in on the same stage. Only now can we say whether
+      // this home has one, and only now can the reader's saved preference be
+      // handed to the engine — it opens with the overlay off, always.
+      void this.rpc.call("akjvAvailable").then((yes) => {
+        this.akjvAvailable = !!yes;
+        if (yes && this.config.akjvOverlay === true) {
+          void this.rpc.call("setAkjvOverlay", true).then(() => {
+            this.invalidate();
+            this.studyEpoch++;
+          });
+        }
+      });
     };
     rpc.onRndPreparing = () => {
       this.rndProgress = 1;
@@ -560,6 +572,22 @@ export class Session {
   showToast(msg: string): void {
     this.toast = msg;
     setTimeout(() => (this.toast = null), 2200);
+  }
+
+  /** Whether this home carries a usable overlay — the toggle hides without it
+   *  rather than offering a switch that does nothing. Set once stage 2 lands. */
+  akjvAvailable = $state(false);
+
+  /** Turn the plain-English overlay on or off. Engine state, so two panes can
+   *  never disagree; persisted like any other reader preference; and the layout
+   *  is dropped so the chapter re-lays with the new words. Reader ONLY —
+   *  memorize, Present, copy and share stay KJV (core::akjv). */
+  async setAkjvOverlay(on: boolean): Promise<void> {
+    this.config.akjvOverlay = on;
+    this.saveConfig();
+    await this.rpc.call("setAkjvOverlay", on);
+    this.invalidate();
+    this.studyEpoch++;
   }
 
   /** The data pack version this session booted on — half of what `?v=` stamps
