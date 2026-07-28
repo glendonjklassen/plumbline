@@ -420,33 +420,384 @@ fn add_into(acc: &mut [f32], x: &[f32]) {
     }
 }
 
-/// The top principal component of `xs` (assumed mean-centred) by power
-/// iteration — a genuine PCA direction, no linear-algebra dependency.
-fn top_principal_component(dim: usize, xs: &[Vec<f32>]) -> Vec<f32> {
-    let is_zero = |v: &[f32]| v.iter().all(|&x| x == 0.0);
-    let mut v = match xs.iter().find(|x| !is_zero(x)) {
-        Some(seed) => {
-            let mut s = seed.clone();
-            normalize(&mut s);
-            s
+fn is_zero(v: &[f32]) -> bool {
+    v.iter().all(|&x| x == 0.0)
+}
+
+/// Row `i` of a row-major `dim`-wide matrix.
+fn row_of(rows: &[f32], dim: usize, i: usize) -> &[f32] {
+    &rows[i * dim..(i + 1) * dim]
+}
+
+/// How many power iterations before the current direction is accepted.
+const SIF_PC_ITERS: usize = 100;
+
+/// PCA over a row-major matrix, mean-centred ON READ.
+///
+/// This used to be `top_principal_component(dim, xs: &[Vec<f32>])`, handed a
+/// freshly materialised copy of the centred matrix — a second ~12 MB as ~31k
+/// separate 400-byte allocations, built and dropped once per testament. Up to
+/// [`SIF_PC_ITERS`] power iterations then walked it, so every iteration
+/// pointer-chased scattered heap instead of streaming one contiguous buffer.
+///
+/// That is the whole explanation for a SIF build costing 226 ms on a desktop and
+/// **54,859 ms on a phone** (maintainer's boot trace, 2026-07-28) — a ~240x gap
+/// where the CPUs differ by ~6-10x. The arithmetic was never the cost; the layout
+/// was, and a desktop's caches hid it.
+///
+/// The subtraction moved from build time to read time in the SAME order, so every
+/// float result is unchanged. `verse_sim_ties_break_in_corpus_order` pins an exact
+/// bit-for-bit tie and would catch any reassociation here.
+struct Pca<'a> {
+    dim: usize,
+    rows: &'a [f32],
+    /// The rows this component is fitted over — one testament's verses.
+    idx: &'a [u32],
+    mu: &'a [f32],
+}
+
+impl Pca<'_> {
+    /// Centred row `idx[k]`, into `out`.
+    fn centred(&self, k: usize, out: &mut [f32]) {
+        let x = row_of(self.rows, self.dim, self.idx[k] as usize);
+        for (o, (xi, m)) in out.iter_mut().zip(x.iter().zip(self.mu)) {
+            *o = xi - m;
         }
-        None => return vec![0.0; dim],
-    };
-    for _ in 0..100 {
-        let mut next = vec![0.0f32; dim];
-        for x in xs {
-            let c = dot(x, &v);
-            for (n, xi) in next.iter_mut().zip(x) {
+    }
+
+    /// The starting direction: the first non-zero centred row, normalised.
+    /// `None` when every row is zero — the caller reports no component at all.
+    fn seed(&self) -> Option<Vec<f32>> {
+        let mut buf = vec![0.0f32; self.dim];
+        for k in 0..self.idx.len() {
+            self.centred(k, &mut buf);
+            if !is_zero(&buf) {
+                normalize(&mut buf);
+                return Some(buf);
+            }
+        }
+        None
+    }
+
+    /// ONE power iteration. Split out from the loop so the web can spend a
+    /// macrotask per iteration rather than holding the worker for all hundred.
+    fn iterate(&self, v: &[f32]) -> Vec<f32> {
+        let mut next = vec![0.0f32; self.dim];
+        let mut x = vec![0.0f32; self.dim];
+        for k in 0..self.idx.len() {
+            self.centred(k, &mut x);
+            let c = dot(&x, v);
+            for (n, xi) in next.iter_mut().zip(&x) {
                 *n += c * xi;
             }
         }
         normalize(&mut next);
-        if is_zero(&next) || 1.0 - dot(&v, &next).abs() < 1.0e-10 {
-            return next;
-        }
-        v = next;
+        next
     }
-    v
+}
+
+/// Whether power iteration has settled, or collapsed to nothing.
+fn pca_settled(v: &[f32], next: &[f32]) -> bool {
+    is_zero(next) || 1.0 - dot(v, next).abs() < 1.0e-10
+}
+
+/// Sliced construction of the SIF model — one budgeted slice per call.
+///
+/// Phase 7 of the web's chunked warm was the one heavy phase that never got
+/// sliced (all the others were, 2026-07-27), so it ran as a single synchronous
+/// block: **54,859 ms on a real phone**, during which the engine worker answers
+/// no layout, no tap and no word study, because it is the only thread that can.
+/// That is the "it says loading and the first one takes longer, every time I
+/// reopen it" report of 2026-07-28.
+///
+/// Stages, each resumable, in the order the maths requires:
+///
+/// | stage | unit of work | why it must be its own stage |
+/// |-------|--------------|------------------------------|
+/// | `Rows`   | verses | needs the whole corpus before any mean exists |
+/// | `Means`  | rows   | a mean is only a mean once every row is in |
+/// | `Pc*`    | one power iteration | each iteration reads every row of a testament |
+/// | `Adjust` | rows   | needs both means and both components |
+///
+/// SLICING MUST NOT CHANGE THE ANSWER, and that is not obvious for floating
+/// point: a different accumulation order gives different last bits.
+/// `sliced_build_matches_one_shot` steps this one verse at a time and compares
+/// bit-for-bit against a whole-corpus budget.
+pub struct VerseSimBuilder {
+    stage: SifStage,
+    /// Position within the current stage's unit of work.
+    cursor: usize,
+    dim: usize,
+    aligned: bool,
+    /// `a / (a + p(concept))` per code, precomputed once: the frequency table is
+    /// walked here rather than on every step.
+    weights: HashMap<String, f32>,
+    refs: Vec<VRef>,
+    nt: Vec<bool>,
+    /// Row-major, `refs.len() * dim`. ONE contiguous buffer — see [`Pca`] for why
+    /// that is the whole fix and not a tidiness preference.
+    rows: Vec<f32>,
+    /// Row indices per testament, so a component is fitted over one of them.
+    hebrew: Vec<u32>,
+    greek: Vec<u32>,
+    mu_h: Vec<f32>,
+    mu_g: Vec<f32>,
+    pc_h: Vec<f32>,
+    pc_g: Vec<f32>,
+    /// Power-iteration state for whichever testament is being fitted now.
+    pc_v: Option<Vec<f32>>,
+    pc_iter: usize,
+    out: Option<VerseSim>,
+}
+
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+enum SifStage {
+    Rows,
+    Means,
+    PcHebrew,
+    PcGreek,
+    Adjust,
+    Done,
+}
+
+impl VerseSimBuilder {
+    /// The weights are the only thing that needs the corpus up front, and only
+    /// when the embedding shipped no trained frequency table (the packs do ship
+    /// one, so this normally reads `emb.freq` and never walks the corpus).
+    pub fn new(emb: &Embedding, corpus: &Corpus) -> VerseSimBuilder {
+        let (counts, total): (HashMap<&str, u64>, f64) = match &emb.freq {
+            Some(fm) if !fm.is_empty() => {
+                let t = fm.values().sum::<u64>().max(1) as f64;
+                (fm.iter().map(|(k, v)| (k.as_str(), *v)).collect(), t)
+            }
+            _ => {
+                let mut c: HashMap<&str, u64> = HashMap::new();
+                for v in corpus.verses_iter() {
+                    for t in &v.tokens {
+                        for s in &t.strongs {
+                            *c.entry(s.as_str()).or_insert(0) += 1;
+                        }
+                    }
+                }
+                let t = c.values().sum::<u64>().max(1) as f64;
+                (c, t)
+            }
+        };
+        // Exactly the expression the one-shot build used, evaluated per code
+        // instead of per (verse, code): `as f64 as f32` and the division order are
+        // preserved deliberately, because the tie test compares bits.
+        let weights = counts
+            .iter()
+            .map(|(k, &c)| ((*k).to_string(), SIF_A / (SIF_A + c as f64 as f32 / total as f32)))
+            .collect();
+        let d = emb.dim;
+        VerseSimBuilder {
+            stage: SifStage::Rows,
+            cursor: 0,
+            dim: d,
+            aligned: emb.aligned,
+            weights,
+            refs: Vec::new(),
+            nt: Vec::new(),
+            rows: Vec::new(),
+            hebrew: Vec::new(),
+            greek: Vec::new(),
+            mu_h: vec![0.0; d],
+            mu_g: vec![0.0; d],
+            pc_h: vec![0.0; d],
+            pc_g: vec![0.0; d],
+            pc_v: None,
+            pc_iter: 0,
+            out: None,
+        }
+    }
+
+    /// The finished model, once `step` has returned false.
+    pub fn take(&mut self) -> Option<VerseSim> {
+        self.out.take()
+    }
+
+    /// A code's SIF weight. Absent from the table means `p = 0`, which the
+    /// one-shot form evaluated to `SIF_A / SIF_A` — exactly 1.0.
+    fn weight(&self, code: &str) -> f32 {
+        self.weights.get(code).copied().unwrap_or(1.0)
+    }
+
+    /// Do up to `budget` units of the next stage. Returns true while work remains.
+    pub fn step(&mut self, emb: &Embedding, corpus: &Corpus, budget: usize) -> bool {
+        let budget = budget.max(1);
+        match self.stage {
+            SifStage::Rows => {
+                let len = corpus.len();
+                let end = self.cursor.saturating_add(budget).min(len);
+                let mut acc = vec![0.0f32; self.dim];
+                for i in self.cursor..end {
+                    let Some(v) = corpus.verse_at(i) else { continue };
+                    // The SIF-weighted mean of this verse's in-vocabulary concept
+                    // vectors, straight into a reused scratch buffer. The one-shot
+                    // form built a `Vec<String>` of cloned codes per verse purely
+                    // to hand them to a closure — ~31k allocations and as many
+                    // String clones, for nothing.
+                    acc.fill(0.0);
+                    let mut n = 0usize;
+                    let mut greek = false;
+                    let mut first = true;
+                    for t in &v.tokens {
+                        for s in &t.strongs {
+                            if first {
+                                greek = s.starts_with('G');
+                                first = false;
+                            }
+                            if let Some(cv) = emb.concept_vector(s) {
+                                let w = self.weight(s);
+                                for (a, x) in acc.iter_mut().zip(cv) {
+                                    *a += w * x;
+                                }
+                                n += 1;
+                            }
+                        }
+                    }
+                    if n == 0 {
+                        continue; // no in-vocabulary concept: this verse has no vector
+                    }
+                    let inv = 1.0 / n as f32;
+                    for a in acc.iter_mut() {
+                        *a *= inv;
+                    }
+                    let row = self.refs.len() as u32;
+                    if greek {
+                        self.greek.push(row);
+                    } else {
+                        self.hebrew.push(row);
+                    }
+                    self.refs.push(v.vref());
+                    self.nt.push(greek);
+                    self.rows.extend_from_slice(&acc);
+                }
+                self.cursor = end;
+                if end < len {
+                    return true;
+                }
+                self.enter(SifStage::Means)
+            }
+            SifStage::Means => {
+                // Both sums in one pass, each in its own testament's row order —
+                // the division by the count waits for the last row, so the result
+                // matches summing the testaments separately.
+                let end = self.cursor.saturating_add(budget).min(self.refs.len());
+                for i in self.cursor..end {
+                    let row = row_of(&self.rows, self.dim, i);
+                    if self.nt[i] {
+                        add_into(&mut self.mu_g, row);
+                    } else {
+                        add_into(&mut self.mu_h, row);
+                    }
+                }
+                self.cursor = end;
+                if end < self.refs.len() {
+                    return true;
+                }
+                for (mu, n) in [(&mut self.mu_h, self.hebrew.len()), (&mut self.mu_g, self.greek.len())] {
+                    if n == 0 {
+                        continue; // stays all-zero, as the one-shot `mean_of` did
+                    }
+                    let inv = 1.0 / n as f32;
+                    for a in mu.iter_mut() {
+                        *a *= inv;
+                    }
+                }
+                self.enter(SifStage::PcHebrew)
+            }
+            SifStage::PcHebrew => self.pc_step(false),
+            SifStage::PcGreek => self.pc_step(true),
+            SifStage::Adjust => {
+                let end = self.cursor.saturating_add(budget).min(self.refs.len());
+                for i in self.cursor..end {
+                    let (mu, pc) = if self.nt[i] {
+                        (&self.mu_g, &self.pc_g)
+                    } else {
+                        (&self.mu_h, &self.pc_h)
+                    };
+                    // In place: subtract the mean, remove the component's
+                    // projection, normalise. The one-shot form allocated a fresh
+                    // `Vec<f32>` per verse here and copied it into the output.
+                    let row = &mut self.rows[i * self.dim..(i + 1) * self.dim];
+                    for (x, m) in row.iter_mut().zip(mu) {
+                        *x -= m;
+                    }
+                    let proj = dot(row, pc);
+                    for (x, p) in row.iter_mut().zip(pc) {
+                        *x -= proj * p;
+                    }
+                    normalize(row);
+                }
+                self.cursor = end;
+                if end < self.refs.len() {
+                    return true;
+                }
+                let refs = std::mem::take(&mut self.refs);
+                let ix = refs.iter().cloned().zip(0..).collect();
+                self.out = Some(VerseSim {
+                    dim: self.dim,
+                    refs,
+                    nt: std::mem::take(&mut self.nt),
+                    vecs: std::mem::take(&mut self.rows),
+                    ix,
+                    aligned: self.aligned,
+                });
+                self.enter(SifStage::Done)
+            }
+            SifStage::Done => false,
+        }
+    }
+
+    /// One power iteration for a testament, or its whole set-up/tear-down.
+    /// Below [`SIF_PC_MIN_VERSES`] the component stays zero — a direction fitted
+    /// to a handful of verses is noise, and mean subtraction still runs.
+    fn pc_step(&mut self, greek: bool) -> bool {
+        let next_stage = if greek { SifStage::Adjust } else { SifStage::PcGreek };
+        let (idx, mu) = if greek {
+            (&self.greek, &self.mu_g)
+        } else {
+            (&self.hebrew, &self.mu_h)
+        };
+        if idx.len() < SIF_PC_MIN_VERSES {
+            return self.enter(next_stage);
+        }
+        let pca = Pca { dim: self.dim, rows: &self.rows, idx, mu };
+        let v = match self.pc_v.take() {
+            Some(v) => v,
+            None => match pca.seed() {
+                Some(seed) => seed,
+                None => return self.enter(next_stage), // every row zero: no component
+            },
+        };
+        let next = pca.iterate(&v);
+        let settled = pca_settled(&v, &next);
+        self.pc_iter += 1;
+        if settled || self.pc_iter >= SIF_PC_ITERS {
+            // `settled` accepts `next`; running out of iterations accepts the
+            // direction we came in with, exactly as the old loop's fallthrough did.
+            let pc = if settled { next } else { v };
+            if greek {
+                self.pc_g = pc;
+            } else {
+                self.pc_h = pc;
+            }
+            return self.enter(next_stage);
+        }
+        self.pc_v = Some(next);
+        true
+    }
+
+    /// Move to `stage` with a fresh cursor. Returns whether work remains.
+    fn enter(&mut self, stage: SifStage) -> bool {
+        self.stage = stage;
+        self.cursor = 0;
+        self.pc_v = None;
+        self.pc_iter = 0;
+        stage != SifStage::Done
+    }
 }
 
 impl VerseSim {
@@ -464,126 +815,22 @@ impl VerseSim {
     }
 
     /// Build the SIF model from an embedding and the corpus. Pure but heavy (one
-    /// vector per verse); build it once at startup. The `a/(a+p)` weights use
-    /// the trainer's own frequency table when the artifact shipped one, else a
-    /// fresh count over the corpus.
+    /// vector per verse); build it once at startup.
+    ///
+    /// The native shells' one-shot path. It runs [`VerseSimBuilder`] to
+    /// completion rather than having a second implementation, so the sliced build
+    /// the web uses and this one cannot drift apart.
     pub fn build(emb: &Embedding, corpus: &Corpus) -> VerseSim {
-        let d = emb.dim;
-        let verses: Vec<&plumbline_core::corpus::Verse> = corpus.verses_iter().collect();
-
-        // Frequency table + total.
-        let (counts, total): (HashMap<&str, u64>, f64) = match &emb.freq {
-            Some(fm) if !fm.is_empty() => {
-                let t = fm.values().sum::<u64>().max(1) as f64;
-                (fm.iter().map(|(k, v)| (k.as_str(), *v)).collect(), t)
-            }
-            _ => {
-                let mut c: HashMap<&str, u64> = HashMap::new();
-                for v in &verses {
-                    for t in &v.tokens {
-                        for s in &t.strongs {
-                            *c.entry(s.as_str()).or_insert(0) += 1;
-                        }
-                    }
-                }
-                let t = c.values().sum::<u64>().max(1) as f64;
-                (c, t)
-            }
-        };
-        let w_of = |s: &str| SIF_A / (SIF_A + counts.get(s).copied().unwrap_or(0) as f64 as f32 / total as f32);
-
-        // SIF-weighted average of a verse's in-vocabulary concept vectors.
-        let raw_of = |strongs: &[String]| -> Option<Vec<f32>> {
-            let mut acc = vec![0.0f32; d];
-            let mut n = 0usize;
-            for s in strongs {
-                if let Some(cv) = emb.concept_vector(s) {
-                    let w = w_of(s);
-                    for (a, x) in acc.iter_mut().zip(cv) {
-                        *a += w * x;
-                    }
-                    n += 1;
-                }
-            }
-            if n == 0 {
-                return None;
-            }
-            let inv = 1.0 / n as f32;
-            for a in acc.iter_mut() {
-                *a *= inv;
-            }
-            Some(acc)
-        };
-
-        // (ref, is_greek, raw-vector) per verse that had any in-vocab concept.
-        struct Entry {
-            reference: VRef,
-            greek: bool,
-            raw: Vec<f32>,
-        }
-        let mut entries: Vec<Entry> = Vec::new();
-        for v in verses {
-            let strongs: Vec<String> =
-                v.tokens.iter().flat_map(|t| t.strongs.iter().cloned()).collect();
-            let greek = strongs.first().is_some_and(|s| s.starts_with('G'));
-            if let Some(raw) = raw_of(&strongs) {
-                entries.push(Entry { reference: v.vref(), greek, raw });
-            }
-        }
-
-        // Per-testament mean + top principal component.
-        let mean_of = |greek: bool| -> Vec<f32> {
-            let rows: Vec<&Vec<f32>> = entries.iter().filter(|e| e.greek == greek).map(|e| &e.raw).collect();
-            if rows.is_empty() {
-                return vec![0.0; d];
-            }
-            let mut acc = vec![0.0f32; d];
-            for r in &rows {
-                add_into(&mut acc, r);
-            }
-            let inv = 1.0 / rows.len() as f32;
-            for a in acc.iter_mut() {
-                *a *= inv;
-            }
-            acc
-        };
-        let (mu_h, mu_g) = (mean_of(false), mean_of(true));
-        let centered = |greek: bool, mu: &[f32]| -> Vec<Vec<f32>> {
-            entries
-                .iter()
-                .filter(|e| e.greek == greek)
-                .map(|e| e.raw.iter().zip(mu).map(|(x, m)| x - m).collect())
-                .collect()
-        };
-        let pc_of = |rows: &[Vec<f32>]| -> Vec<f32> {
-            if rows.len() >= SIF_PC_MIN_VERSES {
-                top_principal_component(d, rows)
-            } else {
-                vec![0.0; d]
-            }
-        };
-        let pc_h = pc_of(&centered(false, &mu_h));
-        let pc_g = pc_of(&centered(true, &mu_g));
-
-        // Adjust each raw vector: subtract the mean, remove the PC projection,
-        // normalise.
-        let mut refs = Vec::with_capacity(entries.len());
-        let mut nt = Vec::with_capacity(entries.len());
-        let mut vecs = Vec::with_capacity(entries.len() * d);
-        for e in &entries {
-            let (mu, pc) = if e.greek { (&mu_g, &pc_g) } else { (&mu_h, &pc_h) };
-            let mut c: Vec<f32> = e.raw.iter().zip(mu).map(|(x, m)| x - m).collect();
-            let proj = dot(&c, pc);
-            for (ci, p) in c.iter_mut().zip(pc) {
-                *ci -= proj * p;
-            }
-            normalize(&mut c);
-            refs.push(e.reference.clone());
-            nt.push(e.greek);
-            vecs.extend_from_slice(&c);
-        }
-        let ix = refs.iter().cloned().zip(0..).collect();
-        VerseSim { dim: d, refs, nt, vecs, ix, aligned: emb.aligned }
+        let mut b = VerseSimBuilder::new(emb, corpus);
+        while b.step(emb, corpus, usize::MAX) {}
+        b.take().unwrap_or_else(|| VerseSim {
+            dim: emb.dim,
+            refs: Vec::new(),
+            nt: Vec::new(),
+            vecs: Vec::new(),
+            ix: HashMap::new(),
+            aligned: emb.aligned,
+        })
     }
 
     /// Scores by verse index and clones only the `k` winners' refs — one VRef
@@ -791,18 +1038,96 @@ mod tests {
 
     #[test]
     fn power_iteration_finds_the_dominant_axis() {
-        // Points strung along the x-axis (with y jitter) → top PC ≈ ±x.
-        let xs: Vec<Vec<f32>> = vec![
-            vec![3.0, 0.1],
-            vec![-2.0, -0.1],
-            vec![5.0, 0.05],
-            vec![-4.0, 0.0],
-            vec![1.0, -0.05],
-        ];
-        let pc = top_principal_component(2, &xs);
-        assert!(pc[0].abs() > 0.98, "dominant axis should be x, got {pc:?}");
-        assert!(pc[1].abs() < 0.2);
+        // Points strung along the x-axis (with y jitter) → top PC ≈ ±x. Row-major
+        // and flat now, with a zero mean so this still tests the maths rather
+        // than the centring.
+        let rows: Vec<f32> = vec![3.0, 0.1, -2.0, -0.1, 5.0, 0.05, -4.0, 0.0, 1.0, -0.05];
+        let idx: Vec<u32> = (0..5).collect();
+        let mu = vec![0.0f32; 2];
+        let pca = Pca { dim: 2, rows: &rows, idx: &idx, mu: &mu };
+        let mut v = pca.seed().expect("a non-zero row to seed from");
+        for _ in 0..SIF_PC_ITERS {
+            let next = pca.iterate(&v);
+            let settled = pca_settled(&v, &next);
+            v = next;
+            if settled {
+                break;
+            }
+        }
+        assert!(v[0].abs() > 0.98, "dominant axis should be x, got {v:?}");
+        assert!(v[1].abs() < 0.2);
         // Unit length.
-        assert!((pc.iter().map(|v| v * v).sum::<f32>() - 1.0).abs() < 1e-4);
+        assert!((v.iter().map(|x| x * x).sum::<f32>() - 1.0).abs() < 1e-4);
+    }
+
+    /// A corpus of `n` Hebrew verses then `n` Greek ones over the fixture vocab.
+    /// Canonical order is enforced by the loader, so Genesis comes first and each
+    /// book's verses are contiguous.
+    fn two_testament_corpus(n: usize) -> Corpus {
+        let mut jsonl = format!("{{\"tokenization\":\"kjv1769-tok2\",\"verses\":{}}}\n", n * 2);
+        for i in 0..n {
+            let h = if i % 3 == 0 { "H1" } else { "H2" };
+            jsonl.push_str(&format!(
+                "{{\"b\":\"Gen\",\"c\":1,\"v\":{},\"t\":[[\"\",\"w\",\"\",[\"{h}\"],0]]}}\n",
+                i + 1
+            ));
+        }
+        for i in 0..n {
+            let g = if i % 2 == 0 { "G1" } else { "G2" };
+            jsonl.push_str(&format!(
+                "{{\"b\":\"John\",\"c\":1,\"v\":{},\"t\":[[\"\",\"w\",\"\",[\"{g}\"],0]]}}\n",
+                i + 1
+            ));
+        }
+        plumbline_core::corpus::from_str(&jsonl).unwrap()
+    }
+
+    /// Slicing must not change the ANSWER.
+    ///
+    /// Not a formality: floating-point addition is not associative, so "the same
+    /// maths in smaller chunks" is a claim that has to be tested rather than
+    /// assumed — and the sliced path is the one the web actually runs, while every
+    /// other test in this file exercises the one-shot `build`. A builder that
+    /// finalised a mean before its last row, or restarted a power iteration on
+    /// resume, would pass every other test here and quietly serve different
+    /// neighbours on the web than on Android.
+    #[test]
+    fn sliced_build_matches_one_shot() {
+        // Above SIF_PC_MIN_VERSES per testament, so the power iteration really
+        // runs — below it the component is zeroed and the interesting stage is
+        // skipped entirely, which would make this test vacuous.
+        let corpus = two_testament_corpus(SIF_PC_MIN_VERSES + 20);
+        let e = emb();
+
+        let one_shot = VerseSim::build(&e, &corpus);
+
+        // A verse at a time: every stage boundary is crossed mid-work.
+        let mut b = VerseSimBuilder::new(&e, &corpus);
+        let mut steps = 0;
+        while b.step(&e, &corpus, 1) {
+            steps += 1;
+            assert!(steps < 100_000, "sliced build did not terminate");
+        }
+        let sliced = b.take().expect("the sliced build produced a model");
+
+        assert!(steps > 10, "the slicing was not actually exercised ({steps} steps)");
+        assert_eq!(sliced.count(), one_shot.count());
+        assert_eq!(sliced.dim, one_shot.dim);
+        assert_eq!(sliced.nt, one_shot.nt);
+        assert_eq!(sliced.refs, one_shot.refs);
+        assert_eq!(sliced.aligned, one_shot.aligned);
+        // BIT-for-bit, not approximately: an epsilon comparison here would hide
+        // exactly the reassociation this test exists to catch.
+        assert_eq!(sliced.vecs, one_shot.vecs, "sliced vectors differ from the one-shot build");
+
+        // And the thing a reader would notice: the same neighbours, in the same
+        // order, for a query in each testament.
+        for q in [VRef::new("John", 1, 1), VRef::new("Gen", 1, 1)] {
+            assert_eq!(
+                sliced.similar_verses_in(&q, 5),
+                one_shot.similar_verses_in(&q, 5),
+                "neighbours differ for {q:?}"
+            );
+        }
     }
 }

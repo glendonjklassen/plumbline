@@ -102,6 +102,17 @@ pub const OCCURRENCE_CAP: usize = 500;
 /// `tests.rs`.
 pub const PLUMBLINE_WIRE_VERSION: u32 = 1;
 
+/// Verses per warm slice on the web's chunked warm-up
+/// (`plumbline_engine_warm_step`). Lives here rather than in `wasm.rs` so the
+/// slicing tests, which cannot call the wasm-only export, drive the same size the
+/// shell does — a test with its own copy of this number can pass at a slice size
+/// the product never uses.
+///
+/// `allow(dead_code)` because its two callers are the wasm-only export and the
+/// tests, and a plain host build compiles neither.
+#[allow(dead_code)]
+pub(crate) const WARM_SLICE: usize = 2048;
+
 // ── opaque handles ────────────────────────────────────────────────────────────
 
 /// The loaded, immutable study core: corpus + Strong's dictionary + the search
@@ -130,6 +141,10 @@ pub struct PlumblineEngine {
     occ_partial: std::sync::Mutex<Option<strongs::OccurrenceIxBuilder>>,
     renderings_partial: std::sync::Mutex<Option<renderings::RenderingsBuilder>>,
     concept_partial: std::sync::Mutex<Option<concept::ConceptBuilder>>,
+    /// Sliced builder for the SIF model — the LAST heavy warm phase to get one.
+    /// As a single-shot build it held the web's engine worker for 54,859 ms on a
+    /// real phone (2026-07-28 boot trace), answering no layout or tap throughout.
+    verse_sim_partial: std::sync::Mutex<Option<embed::VerseSimBuilder>>,
     /// How far the chunked warm has got. An explicit phase (rather than
     /// "build the next thing that is missing") guarantees the loop terminates
     /// even when a build legitimately cannot happen yet — the SIF model, for
@@ -216,6 +231,7 @@ impl PlumblineEngine {
             occ_partial: std::sync::Mutex::new(None),
             renderings_partial: std::sync::Mutex::new(None),
             concept_partial: std::sync::Mutex::new(None),
+            verse_sim_partial: std::sync::Mutex::new(None),
             warm_phase: std::sync::atomic::AtomicUsize::new(0),
             sif_attempted: std::sync::atomic::AtomicBool::new(false),
             occ_ix: OnceLock::new(),
@@ -399,6 +415,9 @@ impl PlumblineEngine {
     /// One macrotask of warm-up. Returns 1 while work remains, 0 when the
     /// indexes a study needs are all in.
     ///
+    /// `slice` is [`WARM_SLICE`] on every shipped path; it is a parameter only so
+    /// tests can drive smaller steps.
+    ///
     /// This is the whole point of the boot warm: every one of these is built on
     /// FIRST USE otherwise, and none of them survives the tab, so the reader's
     /// first word click of every session paid for all of them at once — "it
@@ -431,11 +450,18 @@ impl PlumblineEngine {
                     // Needs the embedding. With the R&D pack absent this is a
                     // no-op and the phase still advances — the tail below comes
                     // back to it if the pack lands later.
-                    if self.embedding.get().is_some() {
-                        self.verse_sim();
-                        self.sif_attempted.store(true, Ordering::Relaxed);
+                    if self.embedding.get().is_none() {
+                        0
+                    } else {
+                        // SLICED, unlike every previous version of this arm. It
+                        // called `verse_sim()` — the whole build, in one call, on
+                        // the only thread that can answer a tap.
+                        let more = self.warm_verse_sim_slice(slice);
+                        if more == 0 {
+                            self.sif_attempted.store(true, Ordering::Relaxed);
+                        }
+                        more
                     }
-                    0
                 }
                 _ => {
                     // The R&D pack landed after the warm had run out of phases:
@@ -475,6 +501,39 @@ impl PlumblineEngine {
         }
         if let Some(model) = b.take() {
             let _ = self.concept.set(model);
+        }
+        *guard = None;
+        0
+    }
+
+    /// Advance the SIF model by one budgeted slice. 1 while work remains.
+    ///
+    /// The phase this replaces was a bare `verse_sim()` call: the entire model in
+    /// one synchronous block, which measured **54,859 ms** on the maintainer's
+    /// phone against a ~300 ms median warm chunk (boot trace, 2026-07-28). For all
+    /// of it the engine worker — the only thread that answers layout, taps and
+    /// word studies — was unavailable, which is what a reader experiences as "it
+    /// says loading and the first one takes longer, every time I reopen it".
+    ///
+    /// Slicing does not make the work smaller; it makes the thread answerable
+    /// between the pieces. The work itself got smaller separately, in
+    /// [`embed::VerseSimBuilder`], by not copying the matrix twice per build.
+    fn warm_verse_sim_slice(&self, n: usize) -> i32 {
+        if self.verse_sim.get().is_some() {
+            return 0;
+        }
+        let Some(emb) = self.embedding.get() else {
+            return 0; // no artifact: nothing to build from
+        };
+        let Ok(mut guard) = self.verse_sim_partial.lock() else {
+            return 0; // poisoned: leave it to the build-on-first-use path
+        };
+        let b = guard.get_or_insert_with(|| embed::VerseSimBuilder::new(emb, &self.corpus));
+        if b.step(emb, &self.corpus, n) {
+            return 1;
+        }
+        if let Some(model) = b.take() {
+            let _ = self.verse_sim.set(model);
         }
         *guard = None;
         0

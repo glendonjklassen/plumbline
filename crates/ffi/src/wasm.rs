@@ -66,8 +66,10 @@ pub unsafe extern "C" fn plumbline_engine_warm_step(engine: *const PlumblineEngi
         return 0;
     };
     // ~2k verses a slice: enough that the per-call overhead disappears, short
-    // enough that a tap waits milliseconds rather than seconds.
-    const SLICE: usize = 2048;
+    // enough that a tap waits milliseconds rather than seconds. Defined in
+    // lib.rs so the slicing tests drive exactly the size the shell does — a test
+    // with its own slice constant can pass at a size the product never uses.
+    use crate::WARM_SLICE as SLICE;
     // Search first (it answers the search box), then the two indexes a WORD
     // CLICK needs. Those two used to be built whole on the reader's first click
     // — every session, since nothing survives the tab — which is the "it loads

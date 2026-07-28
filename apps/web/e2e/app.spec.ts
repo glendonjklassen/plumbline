@@ -19,6 +19,30 @@ async function boot(page: Page): Promise<void> {
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
 }
 
+/// Wait out the WHOLE background pipeline: the analysis tier ready, then the boot
+/// trace stops growing (every warm/analysis chunk appends one timed entry, and
+/// the trace goes quiet only when the last one has run).
+///
+/// Where this is called is the entire point. On the FIRST visit it is legitimate
+/// setup — get the device into the state a returning reader is in. Called after a
+/// RELAUNCH it destroys the measurement, because the interval it waits out is the
+/// interval every relaunch complaint has been about.
+async function settleBackground(page: Page): Promise<void> {
+  await page.waitForFunction(() => (window as any).__plumbline?.rndState === "ready", null, {
+    timeout: 120_000,
+  });
+  await page.waitForFunction(
+    async () => {
+      const n = ((await (window as any).__plumbline.rpc.bootTrace()) ?? []).length;
+      const prev = (window as any).__settleLen ?? -1;
+      (window as any).__settleLen = n;
+      return n === prev && n > 10;
+    },
+    null,
+    { timeout: 120_000, polling: 700 },
+  );
+}
+
 test("boots to the reader with the stock set seeded", async ({ page }) => {
   await boot(page);
   await expect(page.locator("canvas").first()).toBeVisible();
@@ -182,50 +206,93 @@ test("a loading study explains itself once, not twice", async ({ page }) => {
   await expect(page.locator(".firstslow")).toBeVisible();
 });
 
-// THE relaunch complaint (feedback 2026-07-27, with a repro): wipe data, open,
-// click a word — it thinks for a second, fine. Close the tab, reopen, click a
-// word — it thinks all over again. Every launch, forever. Nothing an engine
-// builds survives the tab, and the boot warm only covered the SEARCH index, so
-// the occurrence index, the rendering lens, cross-refs, concepts, leitwort,
-// bridge and the SIF model were all built on that first click.
+// THE relaunch complaint: wipe data, open, click a word — it thinks for a
+// second, fine. Close the tab, reopen, click a word — it thinks all over again.
+// Every launch, forever. Reported 2026-07-27, and AGAIN on 2026-07-28 with a boot
+// trace off the device, because the fix worked and this test did not.
 //
-// Budget grounded in measurement on this machine, both sides: a cold first
-// click was ~1250ms, a warm one ~10ms. 250ms is 25x the warm path and 5x under
-// the cold one, so it discriminates without being flaky on a slower box.
+// WHAT THIS TEST USED TO DO, and why it is worth spelling out. It reloaded, then
+// waited for `rndState === "ready"` and for the boot trace to stop growing —
+// up to 180 s of waiting — and only then timed a click, against a budget of
+// 250 ms. `rndReady` is posted at engine.worker.ts:227, after `await
+// warmChunked()`; so that first wait alone guaranteed a fully settled engine.
+// There is no engine state in which that measurement is slow. It waited out
+// precisely the interval the reader was complaining about and then reported that
+// the far side of it was fast. It passed, green, against the live bug.
+//
+// That is the third test in this suite to pass against the bug it was written
+// for (see CLAUDE.md: page.route() bypassing service workers; a fixed ms ceiling
+// a whole un-chunked warm fit inside). The pattern in all three is the same —
+// the instrument was chosen after the mechanism, so it could only agree.
+//
+// The settle wait now happens on the FIRST visit, where it is honest setup:
+// visit one pays for everything, visit two clicks a word the moment there is
+// text. Two assertions, because either alone is cheatable:
+//   - FAST, against a budget derived from this machine's own settled click
+//     rather than a constant;
+//   - and the SAME ANSWER as the settled engine gave, because an engine that
+//     replies before Strong's / the occurrence index / the concept model are in
+//     returns a thinner study, and "instant but hollow" must not read as warm.
 test("after a relaunch, the first word study is already warm", async ({ page }) => {
+  // KNOWN FAILING, DELIBERATELY, as of 2026-07-28. Read this before "fixing" it.
+  //
+  // `test.fail()` means "this MUST fail" — Playwright reports it as an expected
+  // failure, and errors the run if it ever PASSES. So the open bug stays visible
+  // in every run and this marker clears itself the moment the work lands, which
+  // is the opposite of skipping it.
+  //
+  // What is still broken: the reader's first word study after a relaunch costs
+  // ~830ms on a desktop (a settled engine answers the same call in ~10ms). Almost
+  // all of it is spent INSIDE the study call, building the occurrence index, the
+  // rendering lens, the cross-references, the concept model and the bridge —
+  // because the reader clicks before the chunked warm reaches them, and nothing
+  // an engine builds survives the tab. Fixing it means shipping those prebuilt in
+  // the data pack the way `kjv.jsonl.idxcache` already is, so no launch rebuilds
+  // them at all.
+  //
+  // What was fixed and is NOT what this test measures: warm phase 7, the SIF
+  // model, which was a single unsliced block costing 54,859ms on a phone. That has
+  // its own guards — `sif_model_is_built_in_slices` in plumbline-ffi and
+  // "no single background chunk may monopolise the engine worker" below.
+  test.fail();
   await boot(page);
-  await page.reload();
-  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+  await settleBackground(page);
 
-  // The pack first: the trace goes quiet DURING the R&D download, which the
-  // settle check below would otherwise read as "warm finished" — and the SIF
-  // model, which only builds once the embedding is in, would still be waiting
-  // to ambush the first click.
-  await page.waitForFunction(() => (window as any).__plumbline.rndState === "ready", null, {
-    timeout: 90_000,
-  });
-  // Then wait for the warm to actually finish rather than guessing a duration:
-  // the boot trace stops growing when it is done.
-  await page.waitForFunction(
-    async () => {
-      const s = (window as any).__plumbline;
-      const n = (await s.rpc.bootTrace()).length;
-      const prev = (window as any).__warmLen ?? -1;
-      (window as any).__warmLen = n;
-      return n === prev && n > 10;
-    },
-    null,
-    { timeout: 90_000, polling: 700 },
-  );
-
-  const ms = await page.evaluate(async () => {
+  // The reference: what a fully warm engine answers, and how quickly.
+  const settled = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     const t = performance.now();
     const b = await s.engine.wordStudyBlocks("John 3:16", 1, s.gates);
-    if (!b?.blocks?.length) throw new Error("no study blocks came back");
-    return performance.now() - t;
+    return { ms: performance.now() - t, blocks: b?.blocks?.length ?? 0 };
   });
-  expect(ms).toBeLessThan(250);
+  expect(settled.blocks, "the settled engine answers a word study at all").toBeGreaterThan(0);
+
+  await page.reload();
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+
+  // NOTHING between text appearing and the click. This is the reader.
+  const relaunch = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    const t = performance.now();
+    const b = await s.engine.wordStudyBlocks("John 3:16", 1, s.gates);
+    return { ms: performance.now() - t, blocks: b?.blocks?.length ?? 0 };
+  });
+
+  // Derived from the settled click on this same machine, so a loaded CI box
+  // moves both sides together. A constant is the wrong instrument here and was
+  // part of how the old version stayed green.
+  const budget = Math.max(250, settled.ms * 5);
+  expect(
+    relaunch.ms,
+    `a relaunch spent ${Math.round(relaunch.ms)}ms answering the reader's first word study ` +
+      `(a settled engine answers the same call in ${Math.round(settled.ms)}ms). Nothing was ` +
+      `downloaded — this is the engine rebuilding indexes it already built last launch.`,
+  ).toBeLessThan(budget);
+  expect(
+    relaunch.blocks,
+    "the relaunched engine answered FAST but with a thinner study than the settled one — " +
+      "it replied before its data was in, which is not the same thing as being warm",
+  ).toBe(settled.blocks);
 });
 
 // The plain-English overlay (2026-07-27): the AKJV's wording laid over the KJV's
@@ -846,6 +913,59 @@ test("background loading never starves the reader (worker-thread scheduling)", a
   // (mutation-tested 2026-07-26 — worst was 311 ms chunked vs 917 ms as one
   // block, with the driver chunk at 357 ms and 223 ms respectively).
   expect(worst).toBeLessThan(Math.max(400, chunk * 2.5));
+});
+
+// The companion to the test above, and the reason it needed one: that test's
+// budget is `Math.max(400, chunk * 2.5)` where `chunk` is
+// `Math.max(...warm steps)`. The budget is derived from the WORST chunk — so a
+// phase that isn't sliced at all raises its own ceiling and the test can never
+// fail on it. On the maintainer's phone (2026-07-28) the worst chunk was
+// 54,859 ms, which set that budget to 137,147 ms.
+//
+// So: derive from the MEDIAN chunk instead. A slice is meant to be a budgeted
+// slice; one chunk many times the typical one is not a slice, it is a block, and
+// while it runs this thread answers no layout, no tap and no word study.
+//
+// HONEST ABOUT ITS REACH. The offender here was warm phase 7, the SIF model —
+// 54,859 ms on that phone against a ~300 ms median, and only ~226 ms against a
+// ~6 ms median on a desktop, because its cost was allocation churn rather than
+// arithmetic and a desktop absorbs that. The floor below keeps this test from
+// flaking on a GC spike, and a desktop's 226 ms sits under it. That is why the
+// deterministic guard for slicing lives in Rust
+// (`plumbline-ffi`: sif_model_is_built_in_slices) where it needs no device to be
+// slow to notice. This one catches the next unsliced phase on whatever hardware
+// runs it, and it is the only one of the two that sees the whole system.
+test("no single background chunk may monopolise the engine worker", async ({ page }) => {
+  await boot(page);
+  await settleBackground(page);
+
+  const { worst, worstLabel, median, count } = await page.evaluate(async () => {
+    const trace: [string, number][] = await (window as any).__plumbline.rpc.bootTrace();
+    // Only the stages that CLAIM to be sliced. The stage-2 Strong's parse is one
+    // synchronous block by construction and is a separate question.
+    const chunks = trace.filter(
+      ([l]) => l.startsWith("warm step") || l.startsWith("rnd load step"),
+    );
+    const sorted = chunks.map(([, ms]) => ms).sort((a, b) => a - b);
+    let worst = -1;
+    let worstLabel = "";
+    for (const [l, ms] of chunks) if (ms > worst) ((worst = ms), (worstLabel = l));
+    return {
+      worst,
+      worstLabel,
+      median: sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0,
+      count: chunks.length,
+    };
+  });
+
+  expect(count, "no sliced background stages ran at all — this test measured nothing").toBeGreaterThan(5);
+  const budget = Math.max(400, median * 6);
+  expect(
+    worst,
+    `"${worstLabel}" held the engine worker for ${worst}ms against a ${median}ms median chunk ` +
+      `(${count} chunks). A warm phase that is not sliced blocks every layout and tap RPC ` +
+      `queued behind it for its whole duration.`,
+  ).toBeLessThan(budget);
 });
 
 test("the reader scrolls natively, and the pane follows both ways", async ({ page }) => {

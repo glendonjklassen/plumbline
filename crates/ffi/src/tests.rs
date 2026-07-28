@@ -1614,6 +1614,129 @@ fn rnd_data_loads_after_open() {
     }
 }
 
+/// A corpus of `chapters * per` verses over Psalms, every verse carrying codes
+/// the test embedding covers. Deliberately bigger than one warm slice — see
+/// `sif_model_is_built_in_slices` for why that is the whole point.
+fn generated_kjv(chapters: u16, per: u16) -> String {
+    const CODES: [&str; 4] = ["G2316", "G25", "G4100", "H7225"];
+    let mut out = format!(
+        r#"{{"format":"x","tokenization":"kjv1769-tok2","verses":{}}}"#,
+        chapters as usize * per as usize
+    );
+    for c in 1..=chapters {
+        for v in 1..=per {
+            let code = CODES[(c as usize + v as usize) % CODES.len()];
+            out.push('\n');
+            out.push_str(&format!(
+                r#"{{"b":"Ps","c":{c},"v":{v},"t":[["","the","",[],0],["","word","",["{code}"],0]]}}"#
+            ));
+        }
+    }
+    out
+}
+
+/// The SIF model must be built in SLICES, like every other heavy warm phase.
+///
+/// It was the one that wasn't. Phase 7 of `warm_next` was a single-shot
+/// `verse_sim()` call, and on a real phone that held the engine worker for
+/// **54,859 ms in one synchronous block** (maintainer's boot trace, 2026-07-28)
+/// — during which the worker answers no layout, no tap and no word study, which
+/// is exactly the "it says loading and the first one takes longer, every time I
+/// reopen it" report. Every other heavy phase was sliced on 2026-07-27; this one
+/// was missed because the same build is ~226 ms on a desktop and vanishes into
+/// the noise there. The ratio is ~240x, not the ~6-10x a phone's CPU explains,
+/// because the build's cost was allocation churn rather than arithmetic.
+///
+/// THE CORPUS HERE IS BIGGER THAN ONE SLICE ON PURPOSE. With the two-verse
+/// fixture the rest of this file uses, a single call finishes the model whether
+/// or not the code slices anything — so that version of this test would pass
+/// against the very bug it is named after. Guarding a slicing property requires
+/// more work than one slice can do.
+///
+/// The probe reads `verse_sim` directly rather than calling
+/// `similar_verses_json`, because that entry point builds the model on demand:
+/// asking "is it built yet?" through the public API would BUILD it and the
+/// assertion would be measuring its own side effect.
+///
+/// It drives `warm_next(WARM_SLICE)` rather than `plumbline_engine_warm_step`,
+/// which is compiled only for wasm32. That export is a one-line
+/// `guard(0, || e.warm_next(WARM_SLICE))` wrapper over exactly this call, and the
+/// slice size is shared, so nothing about the slicing behaviour is bypassed.
+#[test]
+fn sif_model_is_built_in_slices() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-sifslice-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        // 150 x 20 = 3,000 verses: more than the 2,048-verse warm slice.
+        std::fs::write(home.join("data").join("kjv.jsonl"), generated_kjv(150, 20)).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null() && !e.is_null(), "engine opened");
+        let eng = &*e;
+
+        // Warm to completion with NO embedding present. Phase 7 is reached and
+        // does nothing, leaving `sif_attempted` false — the same state a web boot
+        // is in when the analysis pack has not landed yet.
+        let mut calls = 0;
+        while eng.warm_next(crate::WARM_SLICE) == 1 {
+            calls += 1;
+            assert!(calls < 10_000, "warm never terminated");
+        }
+        assert!(eng.verse_sim.get().is_none(), "no embedding: nothing to build from");
+
+        // The analysis pack arrives.
+        std::fs::write(
+            home.join("data").join("concept-vectors.vec"),
+            "4 2\nG2316 1 0\nG25 0.9 0.1\nG4100 0.2 1\nH7225 0.95 0.05\n",
+        )
+        .unwrap();
+        std::fs::write(
+            home.join("data").join("concept-vectors.vec.meta"),
+            r#"{"tokenization":"kjv1769-tok2","aligned":"procrustes"}"#,
+        )
+        .unwrap();
+        assert!(plumbline_engine_load_rnd_data(e).is_null());
+
+        // ONE slice. Over 3,000 verses this cannot be the whole model — and if it
+        // is, the phase is a monolithic block and a phone pays for it in one go.
+        assert_eq!(eng.warm_next(crate::WARM_SLICE), 1, "a slice leaves work behind");
+        assert!(
+            eng.verse_sim.get().is_none(),
+            "one warm slice built the ENTIRE SIF model: phase 7 is not sliced, so the engine \
+             worker is held for the whole build and answers no layout or tap while it runs"
+        );
+
+        // ...and driving it out finishes, so slicing did not merely defer forever.
+        let mut more = 1;
+        let mut slices = 1;
+        while more == 1 {
+            more = eng.warm_next(crate::WARM_SLICE);
+            slices += 1;
+            assert!(slices < 10_000, "sliced warm never terminated");
+        }
+        assert!(eng.verse_sim.get().is_some(), "the sliced build completes");
+
+        // And the model it produced actually answers — a builder that terminates
+        // with a hollow model would satisfy everything above.
+        let s: Value = serde_json::from_str(
+            &take(plumbline_engine_similar_verses_json(e, c"Ps 1:2".as_ptr(), 5)).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            !s["in"].as_array().unwrap().is_empty(),
+            "the sliced SIF model returned no neighbours: {s}"
+        );
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
 /// The web's stage-1 boot (TODO #28): open on the corpus ALONE — text first —
 /// then strongs.json arrives and `load_core_data` lights the dictionary up.
 #[test]
