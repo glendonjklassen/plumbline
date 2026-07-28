@@ -81,6 +81,8 @@ fun StudyPane(
     loading: Boolean = false,
     /** Rendered after the blocks — About uses it for the build stamp. */
     footer: (@Composable () -> Unit)? = null,
+    /** Rendered BEFORE the blocks: the overlay's answer for the tapped word. */
+    header: (@Composable () -> Unit)? = null,
 ) {
     val blocks = remember(blocksJson) {
         blocksJson?.let {
@@ -126,6 +128,7 @@ fun StudyPane(
         }
         // Refreshing over existing content: the note still explains a long wait.
         if (loading && slowRead) FirstRunSlowNote(palette, scale)
+        header?.invoke()
         val embedAt = if (embed == null) {
             -1
         } else {
@@ -142,6 +145,22 @@ fun StudyPane(
         if (embedAt == blocks.size) embed!!()
         footer?.invoke()
     }
+}
+
+/** The overlay's answer for the tapped word: what the AKJV says, and the KJV
+ *  words it replaced. Above the Strong's, because the codes are keyed to the
+ *  KJV word — the original has to be read before the lexicon detail. Web twin:
+ *  StudyPanel.svelte's `.akjv`. */
+@Composable
+fun AkjvHeader(palette: ReaderPalette, scale: Float, akjv: String, kjv: String) {
+    Text(
+        akjv,
+        color = palette.ink,
+        fontSize = (15 * scale).sp,
+        fontWeight = FontWeight.SemiBold,
+    )
+    Text("KJV: $kjv", color = palette.faded, fontSize = (13 * scale).sp)
+    HorizontalDivider(color = palette.goldFaint, modifier = Modifier.padding(top = 6.dp, bottom = 2.dp))
 }
 
 /** The build stamp under About. Which build is this? Neither the maintainer nor

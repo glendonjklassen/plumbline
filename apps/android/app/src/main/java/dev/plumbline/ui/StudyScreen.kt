@@ -93,6 +93,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.window.layout.FoldingFeature
+import dev.plumbline.AkjvToken
 import dev.plumbline.ChurchState
 import dev.plumbline.Hit
 import dev.plumbline.PaneRef1
@@ -190,6 +191,8 @@ fun StudyScreen(
     var studyBlocks by remember { mutableStateOf<String?>(null) }
     /** The About/Guide card is showing — it gets the build stamp footer. */
     var studyIsAbout by remember { mutableStateOf(false) }
+    /** The overlay's answer for the tapped word (null when it re-rendered none). */
+    var studyAkjv by remember { mutableStateOf<AkjvToken?>(null) }
     // A study read is in flight. A COLD read is slow and a warm one is instant:
     // the first definition builds the occurrence index, the first analytical
     // answer sweeps the whole corpus. A bare flash of nothing reads as a hang
@@ -250,8 +253,20 @@ fun StudyScreen(
     // button can show it again without a reinstall.
     var church by remember { mutableStateOf(cleanChurch(loadedCfg?.church)) }
     var presentSharesAsNew by remember { mutableStateOf(loadedCfg?.presentSharesAsNew != false) }
+    // The plain-English overlay (the AKJV delta). Off unless asked; only
+    // offered once stage 2 has actually brought one into the engine.
+    var akjvOverlay by remember { mutableStateOf(loadedCfg?.akjvOverlay == true) }
+    var akjvAvailable by remember { mutableStateOf(false) }
     var introChoice by remember {
         mutableStateOf(loadedCfg?.intro?.takeIf { it == "new" || it == "curious" })
+    }
+
+    // Does this home carry an overlay at all? Asked once the engine is up; the
+    // toggle stays hidden if not, rather than doing nothing when tapped.
+    LaunchedEffect(Unit) {
+        akjvAvailable = withContext(Dispatchers.Default) {
+            runCatching { synchronized(engine) { engine.AkjvAvailable() } }.getOrDefault(false)
+        }
     }
 
     val gates = (if (humanAnalysis) 1 else 0) or (if (machineAnalysis) 2 else 0)
@@ -262,6 +277,7 @@ fun StudyScreen(
             openPanes = listOf(PaneRef1(book, chapter, firstVisibleVerse)), activePane = 0, history = history,
             theme = themeChoice, humanAnalysis = humanAnalysis, machineAnalysis = machineAnalysis,
             church = church, presentSharesAsNew = presentSharesAsNew, intro = introChoice,
+            akjvOverlay = akjvOverlay,
         )
         scope.launch { withContext(Dispatchers.Default) { runCatching { StudyConfig.SaveJson(PlumblineJson.encodeToString(cfg)) } } }
     }
@@ -337,6 +353,17 @@ fun StudyScreen(
     // canon heatmap cards inside the study pane.
     fun onWord(hit: Hit) {
         studyCode = hit.strongs.firstOrNull()
+        // What the overlay did to this word, if anything — shown under the
+        // headword and above the Strong's, because the codes are keyed to the
+        // KJV word. Only while the overlay is on: with it off there is nothing
+        // to explain.
+        studyAkjv = if (akjvOverlay) {
+            runCatching {
+                synchronized(engine) { engine.AkjvTokenJson(hit.verse, hit.tokenIndex.toInt()) }
+            }.getOrNull()?.let { runCatching { parseWire<AkjvToken>(it) }.getOrNull() }
+        } else {
+            null
+        }
         loadStudy { engine.WordStudyBlocks2Json(hit.verse, hit.tokenIndex.toInt(), gates) }
     }
 
@@ -472,6 +499,7 @@ fun StudyScreen(
                 onVerseLongPress = { verse -> actionVerse = verse },
                 onSwipeChapter = { dir -> val (nb, nc) = step(b, c, dir); setPane(nb, nc) },
                 highlightEpoch = highlightEpoch,
+                akjvOverlay = akjvOverlay,
                 targetVerse = if (isSecond) null else pendingVerse,
                 targetEpoch = if (isSecond) 0 else navEpoch,
                 clearPinEpoch = clearPinEpoch,
@@ -497,6 +525,7 @@ fun StudyScreen(
             StudyPane(
                 studyBlocks, palette, onLink = ::onLink, scale = studyScale, embed = studyEmbed,
                 loading = studyLoading,
+                header = studyAkjv?.let { a -> { AkjvHeader(palette, studyScale, a.akjv, a.kjv) } },
                 footer = if (studyIsAbout) {
                     { VersionFooter(palette, studyScale) }
                 } else {
@@ -736,6 +765,9 @@ fun StudyScreen(
                 copyStyle = copyStyle, onCopyStyle = { copyStyle = it },
                 bundledOn = bundledOn, onToggleBundled = onToggleBundled,
                 church = church, onChurch = { church = it },
+                akjvAvailable = akjvAvailable,
+                akjvOverlay = akjvOverlay,
+                onToggleAkjv = { akjvOverlay = !akjvOverlay },
                 presentSharesAsNew = presentSharesAsNew,
                 onPresentSharesAsNew = { presentSharesAsNew = !presentSharesAsNew },
                 onDismiss = { showSettings = false; persistCfg() },
@@ -1221,6 +1253,9 @@ private fun SettingsDialog(
     onToggleHuman: () -> Unit,
     machineAnalysis: Boolean,
     onToggleMachine: () -> Unit,
+    akjvAvailable: Boolean,
+    akjvOverlay: Boolean,
+    onToggleAkjv: () -> Unit,
     themeChoice: String,
     onTheme: (String) -> Unit,
     bodySize: Double,
@@ -1256,6 +1291,19 @@ private fun SettingsDialog(
                     "Similar concepts, appears-alongside, verses-like-this, concept maps.",
                     machineAnalysis, palette, onToggleMachine,
                 )
+                // A reading aid over the SAME text, not a version picker: the
+                // words stay the KJV's everywhere it matters (memorize,
+                // Present, copy, share), and every marked word tells you what
+                // it replaced. Hidden when the home carries no overlay rather
+                // than offering a switch that does nothing.
+                if (akjvAvailable) {
+                    SettingToggle(
+                        "Plain-English overlay",
+                        "Show where the American King James Version words a verse differently — " +
+                            "dotted underline; tap one to see the KJV word it replaced.",
+                        akjvOverlay, palette, onToggleAkjv,
+                    )
+                }
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 Text("Theme", color = palette.faded, fontSize = 12.sp)
                 val themes = listOf(

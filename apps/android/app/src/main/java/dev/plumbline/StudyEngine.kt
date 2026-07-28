@@ -38,6 +38,8 @@ object PlumblineFlags {
     const val DIVINE = 2  // the divine name
     const val TITLE = 4   // psalm superscription
     const val PARA = 8    // a paragraph mark (¶) precedes the word
+    /** Display only (core::akjv): an AKJV re-rendering. Never in kjv.jsonl. */
+    const val RERENDERED = 16
 }
 
 /** Take ownership of a `char*` the ABI returned: copy it to a Kotlin string and
@@ -330,6 +332,17 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
      *  SRS card on first review; SM-2 reschedules. Null = success, else error. */
     fun MemoryGrade(verseRef: String, grade: String, nowUtc: String): String? =
         take(ffi.plumbline_engine_memory_grade(h, verseRef, grade, nowUtc))
+
+    /** Switch the plain-English overlay on/off. Reader only: memorize, Present,
+     *  copy and share stay KJV whatever this says. */
+    fun SetAkjvOverlay(on: Boolean) = ffi.plumbline_engine_set_akjv_overlay(h, on)
+
+    /** Whether this home carries a usable overlay (false until stage 2). */
+    fun AkjvAvailable(): Boolean = ffi.plumbline_engine_akjv_available(h)
+
+    /** `{akjv, kjv}` for a re-rendered token, else null. */
+    fun AkjvTokenJson(refKey: String, tokenIndex: Int): String? =
+        take(ffi.plumbline_engine_akjv_token_json(h, refKey, tokenIndex))
 
     /** Start memorizing a verse — seed its SRS card (due now) if absent; no
      *  review is logged. Null = success. */

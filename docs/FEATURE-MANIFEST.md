@@ -189,6 +189,47 @@ The `PanelSource` trait (implemented by both the GTK `State` and the FFI
 `similar_verses`/`verse_xrefs`/`verse_notes`/…), so the same producer runs
 Rust→Rust for GTK and behind the endpoints for WinUI/Compose.
 
+## Plain-English overlay (the AKJV delta, 2026-07-27, both shells)
+
+Where the **American King James Version** (Michael Peter Engelbrite, 1999,
+public domain) words a verse differently from the KJV, the reader can see it —
+off by default, behind a Settings toggle that hides itself when the home has no
+overlay.
+
+**A delta, never a second corpus.** `data/akjv.jsonl` keys each difference to a
+run of KJV tokens: `[startTok, endTok, "you shall"]`. Same 31,102 verses either
+way, so no versification mapping. Built by `scripts/build-akjv-delta.mjs`
+(LCS word-diff, case- and punctuation-normalised); packed to `.akjvb` by
+`plumbline-hydrate akjvb`; read by `core::akjv`. 6.9% of tokens in 66.7% of
+verses; 179 KB gzipped, shipped as a stage-2 core file.
+
+- **Token indices survive the overlay.** A run's first token takes the whole
+  replacement and a display-only `FLAG_RERENDERED` (bit 16 — never in
+  `kjv.jsonl`, whose bitfield is frozen); interior tokens are BLANKED, not
+  removed, and the layout skips whatever renders to nothing. Rebuilding the
+  vector would shift every later index and silently open the wrong Strong's
+  entry on a tap.
+- **Render rule:** `pre(a) + replacement + post(b)`. Edges belong to the KJV
+  tokens framing the run; interior punctuation belongs to the replacement
+  ("Verily, verily" → "Truly, truly"). `data-prep/README.md` states it too,
+  because the producer has to agree with the consumer.
+- **The mark is a DOTTED gold underline**, below the Strong's rule so a word can
+  carry both. Not bold and not grey: italic already means "supplied by the
+  translator", a grey word is a de-emphasised one when the overlay makes it the
+  word you are reading, and at 6.9% density a heavy mark reads as a ransom note.
+  Dotted also survives a highlight wash and works in greyscale.
+- **Tapping** a marked word shows the AKJV wording and `KJV: …` under the
+  headword, ABOVE the Strong's, because the codes are keyed to the KJV word. A
+  multi-token run answers from any word inside it.
+- **Integrity — this is what keeps "KJV-only" true.** The overlay is applied in
+  exactly ONE place, on the way into `layout_chapter`. Verse text, copied text,
+  memory drills, Present and shared links are the KJV by construction, and an
+  e2e test asserts it with the overlay ON. A modernised word on a memory card
+  would make this a second translation whatever About says.
+- Applied engine-side (`plumbline_engine_set_akjv_overlay`) rather than per
+  layout call, so two panes can never disagree; Android sets it inside the same
+  lock as the layout for the same reason.
+
 ## Authority tiers — provenance marks on evidence
 
 Ported from overlay `Bridge.hs` `Tier` + `Panels.hs` `provIcon`/`tierMarks`.

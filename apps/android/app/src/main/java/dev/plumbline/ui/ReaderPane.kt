@@ -124,6 +124,9 @@ fun ReaderPane(
     // Bump to force a highlight re-fetch after an add/trim/remove that didn't
     // change book/chapter (the verse-action sheet edits highlights in place).
     highlightEpoch: Int = 0,
+    /** The plain-English overlay (the AKJV delta). A layout INPUT: it changes
+     *  the words on the page, so the chapter re-lays when it flips. */
+    akjvOverlay: Boolean = false,
     // Scroll this verse number into view once the layout lands; bump the epoch
     // to re-apply for the same verse (the book navigator's verse tap).
     targetVerse: Int? = null,
@@ -184,7 +187,7 @@ fun ReaderPane(
 
         // (Re)lay out the chapter whenever an input that affects it changes
         // (margin/spacing change the column width + rhythm, so re-lay out too).
-        LaunchedEffect(book, chapter, widthPx, fontPx, versePerLine, sideMargin, lineSpacing) {
+        LaunchedEffect(book, chapter, widthPx, fontPx, versePerLine, sideMargin, lineSpacing, akjvOverlay) {
             if (widthPx < 60f) return@LaunchedEffect
             val cfg = PlumblineLayoutConfig.ByValue().apply {
                 width = column
@@ -204,6 +207,10 @@ fun ReaderPane(
                 runCatching {
                     // Serialise engine access: two panes may lay out concurrently.
                     synchronized(engine) {
+                        // Set inside the lock and immediately before the layout:
+                        // the overlay is engine state, so a pane laying out
+                        // concurrently must not see a half-applied toggle.
+                        engine.SetAkjvOverlay(akjvOverlay)
                         val chap = engine.LayoutChapter(book, chapter, cfg) { t ->
                             measurePaint.measureText(t)
                         }
@@ -441,6 +448,19 @@ fun ReaderPane(
                     // A faint gold underline marks a Strong's-tagged word.
                     if (it.strongs.isNotEmpty()) {
                         drawRect(palette.goldFaint, Offset(it.x, it.y + it.h - 3f), Size(it.w, 1f))
+                    }
+                    // The AKJV overlay's mark: DOTTED, below the Strong's rule
+                    // so a word can carry both (most re-rendered words are
+                    // tagged). Not bold or grey — italic already means
+                    // "supplied by the translator", and at 6.9% of words a
+                    // heavy mark reads as a ransom note. Web twin: paint.ts.
+                    if (flags and PlumblineFlags.RERENDERED != 0) {
+                        var dx = it.x
+                        val dy = it.y + it.h - 0.5f
+                        while (dx < it.x + it.w) {
+                            drawRect(palette.gold, Offset(dx, dy), Size(1.5f, 1f))
+                            dx += 4f
+                        }
                     }
                 }
             }

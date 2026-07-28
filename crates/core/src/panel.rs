@@ -1351,7 +1351,14 @@ fn about_body(out: &mut Vec<Block>) {
         sz::BODY,
         Color::Ink,
     )]));
-    guide_section(out, "THE TEXT", &["The Holy Bible — the traditional English text, in the public domain."]);
+    guide_section(
+        out,
+        "THE TEXT",
+        &[
+            "The Holy Bible — the traditional English text, in the public domain.",
+            "The text is the KJV, always. An optional plain-English overlay marks where the American King James Version (1999, public domain) words a verse differently — a dotted underline; tap one to see the KJV word it replaced. It is a reading aid over the same text, not a second translation: what you memorize, present, copy and share is the KJV whether the overlay is on or off.",
+        ],
+    );
     guide_section(
         out,
         "PROVENANCE",

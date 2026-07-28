@@ -449,6 +449,8 @@ data class ConfigState(
     val church: ChurchState? = null,
     /** Present-screen shares open as a new believer (additive, 2026-07-27). */
     val presentSharesAsNew: Boolean? = null,
+    /** The plain-English overlay (the AKJV delta). Off unless asked. */
+    val akjvOverlay: Boolean? = null,
     /** The welcome this reader was given, "new" | "curious" (additive). */
     val intro: String? = null,
 )
@@ -696,3 +698,7 @@ data class RecallScore(val accuracy: Float = 0f, val words: List<WordHit> = empt
 
 @Serializable
 data class WordHit(val word: String = "", val ok: Boolean = false)
+
+/** What the AKJV overlay does to one token (`plumbline_engine_akjv_token_json`). */
+@Serializable
+data class AkjvToken(val akjv: String = "", val kjv: String = "")
