@@ -1381,6 +1381,7 @@ fn timing_harness_open_parts() {
     let t = Instant::now();
     let x = crossref::load_cross_refs(crossref::cross_refs_path(&repo));
     println!("crossref parse:   {:?} (entries: {})", t.elapsed(), x.len());
+
 }
 
 /// Companion to [`timing_harness`]: concept-build internals + core index builds.
@@ -1430,6 +1431,12 @@ fn timing_harness_concept_parts() {
     let t = Instant::now();
     let comms = concept::communities(30, &knn);
     println!("communities:      {:?} ({} groups)", t.elapsed(), comms.len());
+
+    // The warm phases that are still ONE call each (2026-07-27): whichever is
+    // worst is the next slice to cut.
+    let t = Instant::now();
+    let lw = burst::discover_leitworter(&burst::BurstParams::default(), &corpus);
+    println!("leitwort:         {:?} ({} found)", t.elapsed(), lw.len());
 }
 
 /// The web boot order (TODO #28): open on the core pack only, warm, then the

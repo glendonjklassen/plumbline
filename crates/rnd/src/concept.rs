@@ -96,7 +96,6 @@ struct IdGraph {
     co: HashMap<u64, u32>,
     /// id → distinct-verse frequency.
     df: Vec<u32>,
-    n_verses: usize,
 }
 
 fn pack(a: u32, b: u32) -> u64 {
@@ -140,7 +139,7 @@ fn intern_corpus(corpus: &Corpus) -> IdGraph {
             }
         }
     }
-    IdGraph { names: sorted.into_iter().map(String::from).collect(), co, df, n_verses: corpus.len() }
+    IdGraph { names: sorted.into_iter().map(String::from).collect(), co, df }
 }
 
 /// Intern a String-pair edge map for the public wrappers (ids lexicographic,
@@ -185,7 +184,11 @@ fn mutual_knn_ids(k: usize, n_ids: usize, edges: &HashMap<u64, f32>) -> HashMap<
     let top: Vec<HashSet<u32>> = nbrs
         .into_iter()
         .map(|mut list| {
-            list.sort_by(|x, y| y.1.total_cmp(&x.1));
+            // Weight first, then id: without the id tie-break the truncation
+            // depended on HashMap iteration order, so two runs over identical
+            // data could keep different neighbours (2026-07-27). Id order is
+            // string order, so this matches the rest of the pipeline.
+            list.sort_by(|x, y| y.1.total_cmp(&x.1).then_with(|| x.0.cmp(&y.0)));
             list.truncate(k);
             list.into_iter().map(|(n, _)| n).collect()
         })
@@ -329,38 +332,12 @@ const KNN: usize = 10;
 const COMMUNITY_ROUNDS: usize = 30;
 
 impl Concept {
+    /// Build the whole model in one call. Runs the resumable [`ConceptBuilder`]
+    /// to completion so there is exactly one implementation of the pipeline.
     pub fn build(corpus: &Corpus) -> Concept {
-        let ix = build_concept_ix(corpus);
-        // The whole pipeline stays in id space (see the module note on
-        // interning); only the small retained results become Strings.
-        let IdGraph { names, co, df, n_verses } = intern_corpus(corpus);
-        let edges = ppmi_ids(n_verses, &df, &co);
-        drop(co); // free the dense count matrix
-        let knn = mutual_knn_ids(KNN, names.len(), &edges);
-        drop(edges);
-        let comm_ids = communities_ids(COMMUNITY_ROUNDS, names.len(), &knn);
-
-        let mut collocates: HashMap<String, Vec<(String, f32)>> = HashMap::new();
-        for (&key, &w) in &knn {
-            let (a, b) = unpack(key);
-            let (a, b) = (&names[a as usize], &names[b as usize]);
-            collocates.entry(a.clone()).or_default().push((b.clone(), w));
-            collocates.entry(b.clone()).or_default().push((a.clone(), w));
-        }
-        for list in collocates.values_mut() {
-            list.sort_by(|x, y| y.1.total_cmp(&x.1));
-        }
-        let communities: Vec<Vec<String>> = comm_ids
-            .into_iter()
-            .map(|g| g.into_iter().map(|i| names[i as usize].clone()).collect())
-            .collect();
-        let mut community_of = HashMap::new();
-        for (i, grp) in communities.iter().enumerate() {
-            for code in grp {
-                community_of.insert(code.clone(), i);
-            }
-        }
-        Concept { ix, collocates, communities, community_of }
+        let mut b = ConceptBuilder::default();
+        while b.step(corpus, usize::MAX) {}
+        b.take().expect("a finished builder yields a model")
     }
 
     pub fn stat(&self, code: &str) -> Option<&ConceptStat> {
@@ -459,6 +436,97 @@ mod tests {
         pairs.iter().map(|(a, b, w)| ((a.to_string(), b.to_string()), *w)).collect()
     }
 
+    /// A corpus with enough shape to exercise every stage: shared codes across
+    /// verses (co-occurrence), a tie in edge weight (the kNN truncation rule),
+    /// an isolated code with no edges (must not join a community), and codes
+    /// spread over two books (dispersion).
+    const GRAPH: &str = concat!(
+        r#"{"format":"x","tokenization":"kjv1769-tok2","verses":6}"#, "\n",
+        r#"{"b":"Gen","c":1,"v":1,"t":[["","a","",["H1"],0],["","b","",["H2"],0],["","c","",["H3"],0]]}"#, "\n",
+        r#"{"b":"Gen","c":1,"v":2,"t":[["","a","",["H1"],0],["","b","",["H2"],0]]}"#, "\n",
+        r#"{"b":"Gen","c":1,"v":3,"t":[["","a","",["H1"],0],["","c","",["H3"],0]]}"#, "\n",
+        r#"{"b":"John","c":1,"v":1,"t":[["","d","",["G4"],0],["","e","",["G5"],0]]}"#, "\n",
+        r#"{"b":"John","c":1,"v":2,"t":[["","d","",["G4"],0],["","e","",["G5"],0],["","f","",["G6"],0]]}"#, "\n",
+        r#"{"b":"John","c":1,"v":3,"t":[["","z","",["G9"],0]]}"#,
+    );
+
+    /// Slicing must not change the model. The builder carries a cursor through
+    /// twelve stages — corpus folds, PPMI, kNN, label propagation — and a
+    /// boundary landing anywhere inside one would otherwise be free to produce
+    /// a different graph. Every budget from 1 upward is compared against the
+    /// one-shot build, field by field.
+    #[test]
+    fn sliced_concept_build_matches_the_one_shot_build() {
+        let corpus = plumbline_core::corpus::from_str(GRAPH).unwrap();
+        let whole = Concept::build(&corpus);
+        for budget in 1..=24 {
+            let mut b = ConceptBuilder::default();
+            let mut guard = 0;
+            while b.step(&corpus, budget) {
+                guard += 1;
+                assert!(guard < 10_000, "budget {budget} did not terminate");
+            }
+            let sliced = b.take().expect("finished");
+            for code in ["H1", "H2", "H3", "G4", "G5", "G6", "G9", "H404"] {
+                assert_eq!(
+                    sliced.stat(code).map(|s| (s.total, s.by_book.clone())),
+                    whole.stat(code).map(|s| (s.total, s.by_book.clone())),
+                    "budget {budget}: stat {code}",
+                );
+                assert_eq!(sliced.collocates(code, 10), whole.collocates(code, 10), "budget {budget}: collocates {code}");
+                assert_eq!(sliced.community(code), whole.community(code), "budget {budget}: community {code}");
+            }
+            assert_eq!(sliced.community_count(), whole.community_count(), "budget {budget}: community count");
+        }
+    }
+
+    /// The builder must be usable more than once and yield nothing before it is
+    /// finished — the warm loop relies on both.
+    #[test]
+    fn a_builder_yields_nothing_until_it_is_done() {
+        let corpus = plumbline_core::corpus::from_str(GRAPH).unwrap();
+        let mut b = ConceptBuilder::default();
+        assert!(b.take().is_none(), "nothing before the first step");
+        b.step(&corpus, 1);
+        assert!(b.take().is_none(), "nothing mid-build");
+        while b.step(&corpus, 1) {}
+        assert!(b.take().is_some());
+        assert!(b.take().is_none(), "taken once only");
+    }
+
+    /// Where the warm's time actually goes, per stage, on the real corpus.
+    /// `cargo test -p plumbline-rnd --features concept -- --ignored --nocapture
+    /// concept_slice_profile`
+    #[test]
+    #[ignore]
+    fn concept_slice_profile() {
+        use std::time::Instant;
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let Ok(corpus) = plumbline_core::corpus::load_corpus(repo.join("data/kjv.jsonl")) else {
+            println!("no data pack; skipping");
+            return;
+        };
+        let mut b = ConceptBuilder::default();
+        let mut worst: HashMap<&'static str, (u128, usize)> = HashMap::new();
+        loop {
+            let stage = b.stage_label();
+            let t = Instant::now();
+            let more = b.step(&corpus, 2048);
+            let us = t.elapsed().as_micros();
+            let e = worst.entry(stage).or_insert((0, 0));
+            e.0 = e.0.max(us);
+            e.1 += 1;
+            if !more {
+                break;
+            }
+        }
+        let mut rows: Vec<_> = worst.into_iter().collect();
+        rows.sort_by_key(|(_, (us, _))| std::cmp::Reverse(*us));
+        for (stage, (us, steps)) in rows {
+            println!("{stage:>12}: worst slice {:>7.2}ms over {steps} steps", us as f64 / 1000.0);
+        }
+    }
+
     #[test]
     fn top_books_and_split() {
         let mut s = ConceptStat::default();
@@ -539,5 +607,382 @@ mod tests {
         let comms = communities(20, &edges);
         assert_eq!(comms.len(), 1);
         assert_eq!(comms[0], vec!["A".to_string(), "B".to_string(), "C".to_string()]);
+    }
+}
+
+// ── the resumable build ────────────────────────────────────────────────────────
+//
+// The whole model used to be one synchronous call. On the web that call runs on
+// the ONE worker thread that also answers layout and taps, and it is the single
+// heaviest thing the boot warm does — ~640ms in wasm, during which a tap waits
+// (feedback 2026-07-27). Nothing here is slower than it was; it is the same
+// pipeline with a cursor at every expensive step, so the shell can come back
+// between slices.
+//
+// Every stage that costs real time walks an INDEXABLE collection: the corpus by
+// verse ordinal, and the intermediate maps materialised into vectors at the
+// stage boundary that produces them. That keeps a cursor meaningful across
+// calls, which a HashMap's iteration order cannot promise.
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Stage {
+    /// Per-code totals and per-book dispersion (corpus fold).
+    Ix,
+    /// Collect the vocabulary (corpus fold), then order it into ids.
+    Vocab,
+    SortVocab,
+    /// Co-occurrence counts and document frequency (corpus fold).
+    Co,
+    /// Materialise `co` so PPMI can walk it with a cursor.
+    CoToVec,
+    Ppmi,
+    /// kNN: gather each node's neighbours, keep its top-k, then keep the
+    /// mutual pairs.
+    KnnGather,
+    KnnTop,
+    KnnMutual,
+    /// Label propagation over the kNN graph.
+    CommAdj,
+    CommRound,
+    Assemble,
+    Done,
+}
+
+/// [`Concept::build`] with a cursor. Drive it with [`step`](Self::step) until it
+/// returns false, then [`take`](Self::take) the model.
+pub struct ConceptBuilder {
+    stage: Stage,
+    cursor: usize,
+    round: usize,
+    ix: ConceptIx,
+    vocab: std::collections::HashSet<String>,
+    names: Vec<String>,
+    id_of: HashMap<String, u32>,
+    co: HashMap<u64, u32>,
+    co_vec: Vec<(u64, u32)>,
+    df: Vec<u32>,
+    edges: Vec<(u64, f32)>,
+    nbrs: Vec<Vec<(u32, f32)>>,
+    top: Vec<HashSet<u32>>,
+    knn: Vec<(u64, f32)>,
+    adj: Vec<Vec<(u32, f32)>>,
+    labels: Vec<u32>,
+    next_labels: Vec<u32>,
+    changed: bool,
+    out: Option<Concept>,
+}
+
+impl Default for ConceptBuilder {
+    fn default() -> Self {
+        ConceptBuilder {
+            stage: Stage::Ix,
+            cursor: 0,
+            round: 0,
+            ix: HashMap::new(),
+            vocab: std::collections::HashSet::new(),
+            names: Vec::new(),
+            id_of: HashMap::new(),
+            co: HashMap::new(),
+            co_vec: Vec::new(),
+            df: Vec::new(),
+            edges: Vec::new(),
+            nbrs: Vec::new(),
+            top: Vec::new(),
+            knn: Vec::new(),
+            adj: Vec::new(),
+            labels: Vec::new(),
+            next_labels: Vec::new(),
+            changed: false,
+            out: None,
+        }
+    }
+}
+
+impl ConceptBuilder {
+    /// Do up to `budget` units of the next stage (verses, entries, or nodes,
+    /// depending on the stage). Returns true while work remains.
+    pub fn step(&mut self, corpus: &Corpus, budget: usize) -> bool {
+        let budget = budget.max(1);
+        match self.stage {
+            Stage::Ix => {
+                let end = self.advance(corpus.len(), budget);
+                for i in self.cursor..end {
+                    let Some(v) = corpus.verse_at(i) else { continue };
+                    for t in &v.tokens {
+                        for s in &t.strongs {
+                            let e = self.ix.entry(s.clone()).or_default();
+                            e.total += 1;
+                            *e.by_book.entry(v.book.clone()).or_insert(0) += 1;
+                        }
+                    }
+                }
+                self.finish_span(end, corpus.len(), Stage::Vocab)
+            }
+            Stage::Vocab => {
+                let end = self.advance(corpus.len(), budget);
+                for i in self.cursor..end {
+                    let Some(v) = corpus.verse_at(i) else { continue };
+                    for t in &v.tokens {
+                        for s in &t.strongs {
+                            if !self.vocab.contains(s.as_str()) {
+                                self.vocab.insert(s.clone());
+                            }
+                        }
+                    }
+                }
+                self.finish_span(end, corpus.len(), Stage::SortVocab)
+            }
+            Stage::SortVocab => {
+                let mut sorted: Vec<String> = std::mem::take(&mut self.vocab).into_iter().collect();
+                sorted.sort_unstable();
+                self.id_of = sorted.iter().enumerate().map(|(i, s)| (s.clone(), i as u32)).collect();
+                self.df = vec![0u32; sorted.len()];
+                self.names = sorted;
+                self.to_stage(Stage::Co)
+            }
+            Stage::Co => {
+                let end = self.advance(corpus.len(), budget);
+                let mut present: Vec<u32> = Vec::new();
+                for i in self.cursor..end {
+                    let Some(v) = corpus.verse_at(i) else { continue };
+                    present.clear();
+                    present.extend(
+                        v.tokens.iter().flat_map(|t| &t.strongs).map(|s| self.id_of[s.as_str()]),
+                    );
+                    present.sort_unstable(); // id order == string order
+                    present.dedup();
+                    for (j, &a) in present.iter().enumerate() {
+                        self.df[a as usize] += 1;
+                        for &b in &present[j + 1..] {
+                            *self.co.entry(pack(a, b)).or_insert(0) += 1;
+                        }
+                    }
+                }
+                self.finish_span(end, corpus.len(), Stage::CoToVec)
+            }
+            Stage::CoToVec => {
+                self.co_vec = std::mem::take(&mut self.co).into_iter().collect();
+                // NOT sorted: determinism comes from the explicit tie-breaks
+                // downstream (kNN truncation by weight-then-id, collocates by
+                // weight-then-code, communities by summed weight then smallest
+                // label), so edge order cannot reach the output. Sorting 600k
+                // pairs to get the same answer cost a 259ms chunk — the single
+                // worst thing the warm did (2026-07-27).
+                self.to_stage(Stage::Ppmi)
+            }
+            Stage::Ppmi => {
+                let n = (corpus.len().max(1)) as f64;
+                let end = self.advance(self.co_vec.len(), budget);
+                for i in self.cursor..end {
+                    let (key, c) = self.co_vec[i];
+                    let (a, b) = unpack(key);
+                    let df_of = |i: u32| f64::from(self.df.get(i as usize).copied().unwrap_or(1).max(1));
+                    let v = (f64::from(c) * n / (df_of(a) * df_of(b))).ln();
+                    if v > 0.0 {
+                        self.edges.push((key, v as f32));
+                    }
+                }
+                let len = self.co_vec.len();
+                let more = self.finish_span(end, len, Stage::KnnGather);
+                if !more || self.stage == Stage::KnnGather {
+                    self.co_vec = Vec::new(); // the dense counts are spent
+                    self.nbrs = vec![Vec::new(); self.names.len()];
+                }
+                more
+            }
+            Stage::KnnGather => {
+                let end = self.advance(self.edges.len(), budget);
+                for i in self.cursor..end {
+                    let (key, w) = self.edges[i];
+                    let (a, b) = unpack(key);
+                    self.nbrs[a as usize].push((b, w));
+                    self.nbrs[b as usize].push((a, w));
+                }
+                let len = self.edges.len();
+                self.finish_span(end, len, Stage::KnnTop)
+            }
+            Stage::KnnTop => {
+                if self.top.is_empty() {
+                    self.top = vec![HashSet::new(); self.nbrs.len()];
+                }
+                let end = self.advance(self.nbrs.len(), budget);
+                for i in self.cursor..end {
+                    let mut list = std::mem::take(&mut self.nbrs[i]);
+                    // Same rule as the one-shot: weight, then id.
+                    list.sort_by(|x, y| y.1.total_cmp(&x.1).then_with(|| x.0.cmp(&y.0)));
+                    list.truncate(KNN);
+                    self.top[i] = list.into_iter().map(|(n, _)| n).collect();
+                }
+                let len = self.nbrs.len();
+                self.finish_span(end, len, Stage::KnnMutual)
+            }
+            Stage::KnnMutual => {
+                let end = self.advance(self.edges.len(), budget);
+                for i in self.cursor..end {
+                    let (key, w) = self.edges[i];
+                    let (a, b) = unpack(key);
+                    if self.top[a as usize].contains(&b) && self.top[b as usize].contains(&a) {
+                        self.knn.push((key, w));
+                    }
+                }
+                let len = self.edges.len();
+                let more = self.finish_span(end, len, Stage::CommAdj);
+                if self.stage == Stage::CommAdj {
+                    self.edges = Vec::new();
+                    self.nbrs = Vec::new();
+                    self.top = Vec::new();
+                    self.adj = vec![Vec::new(); self.names.len()];
+                    self.labels = (0..self.names.len() as u32).collect();
+                }
+                more
+            }
+            Stage::CommAdj => {
+                let end = self.advance(self.knn.len(), budget);
+                for i in self.cursor..end {
+                    let (key, w) = self.knn[i];
+                    let (a, b) = unpack(key);
+                    self.adj[a as usize].push((b, w));
+                    self.adj[b as usize].push((a, w));
+                }
+                let len = self.knn.len();
+                self.finish_span(end, len, Stage::CommRound)
+            }
+            Stage::CommRound => {
+                // Label propagation, sliced BY NODE rather than by round. A
+                // round over 14k nodes was the single worst chunk left in the
+                // warm (~256ms in wasm). The update stays synchronous — every
+                // node in a round reads the labels as they were when the round
+                // began, and `next_labels` is swapped in only at the end — so
+                // slicing cannot change the result.
+                let n_ids = self.names.len();
+                if self.cursor == 0 {
+                    self.next_labels = self.labels.clone();
+                    self.changed = false;
+                }
+                let end = self.advance(n_ids, budget);
+                for v in self.cursor..end {
+                    if self.adj[v].is_empty() {
+                        continue;
+                    }
+                    let mut pull: HashMap<u32, f32> = HashMap::new();
+                    for &(u, w) in &self.adj[v] {
+                        *pull.entry(self.labels[u as usize]).or_insert(0.0) += w;
+                    }
+                    let best = pull.values().copied().fold(f32::MIN, f32::max);
+                    let chosen = pull
+                        .iter()
+                        .filter(|(_, w)| **w >= best)
+                        .map(|(l, _)| *l)
+                        .min()
+                        .unwrap_or(self.labels[v]);
+                    if chosen != self.next_labels[v] {
+                        self.next_labels[v] = chosen;
+                        self.changed = true;
+                    }
+                }
+                self.cursor = end;
+                if end < n_ids {
+                    return true; // mid-round
+                }
+                self.cursor = 0;
+                self.round += 1;
+                if self.changed {
+                    self.labels = std::mem::take(&mut self.next_labels);
+                }
+                if !self.changed || self.round >= COMMUNITY_ROUNDS {
+                    return self.to_stage(Stage::Assemble);
+                }
+                true
+            }
+            Stage::Assemble => {
+                let names = std::mem::take(&mut self.names);
+                let mut collocates: HashMap<String, Vec<(String, f32)>> = HashMap::new();
+                for &(key, w) in &self.knn {
+                    let (a, b) = unpack(key);
+                    let (a, b) = (&names[a as usize], &names[b as usize]);
+                    collocates.entry(a.clone()).or_default().push((b.clone(), w));
+                    collocates.entry(b.clone()).or_default().push((a.clone(), w));
+                }
+                for list in collocates.values_mut() {
+                    // Weight, then code: the same tie-break the rest of the
+                    // pipeline uses, so a tie cannot depend on arrival order.
+                    list.sort_by(|x, y| y.1.total_cmp(&x.1).then_with(|| x.0.cmp(&y.0)));
+                }
+                let mut grouped: HashMap<u32, Vec<u32>> = HashMap::new();
+                for v in 0..names.len() {
+                    if !self.adj[v].is_empty() {
+                        grouped.entry(self.labels[v]).or_default().push(v as u32);
+                    }
+                }
+                let mut comm_ids: Vec<Vec<u32>> = grouped.into_values().collect();
+                for g in comm_ids.iter_mut() {
+                    g.sort_unstable();
+                }
+                comm_ids.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.first().cmp(&b.first())));
+                let communities: Vec<Vec<String>> = comm_ids
+                    .into_iter()
+                    .map(|g| g.into_iter().map(|i| names[i as usize].clone()).collect())
+                    .collect();
+                let mut community_of = HashMap::new();
+                for (i, grp) in communities.iter().enumerate() {
+                    for code in grp {
+                        community_of.insert(code.clone(), i);
+                    }
+                }
+                self.out = Some(Concept {
+                    ix: std::mem::take(&mut self.ix),
+                    collocates,
+                    communities,
+                    community_of,
+                });
+                self.to_stage(Stage::Done)
+            }
+            Stage::Done => false,
+        }
+    }
+
+    /// Which stage the cursor is in — for the warm's own diagnostics, and for
+    /// pinning down which slice is the expensive one.
+    pub fn stage_label(&self) -> &'static str {
+        match self.stage {
+            Stage::Ix => "ix",
+            Stage::Vocab => "vocab",
+            Stage::SortVocab => "sortVocab",
+            Stage::Co => "co",
+            Stage::CoToVec => "coToVec",
+            Stage::Ppmi => "ppmi",
+            Stage::KnnGather => "knnGather",
+            Stage::KnnTop => "knnTop",
+            Stage::KnnMutual => "knnMutual",
+            Stage::CommAdj => "commAdj",
+            Stage::CommRound => "commRound",
+            Stage::Assemble => "assemble",
+            Stage::Done => "done",
+        }
+    }
+
+    /// The finished model, once [`step`](Self::step) has returned false.
+    pub fn take(&mut self) -> Option<Concept> {
+        self.out.take()
+    }
+
+    fn advance(&self, len: usize, budget: usize) -> usize {
+        (self.cursor + budget).min(len)
+    }
+
+    /// Move the cursor; when the span is exhausted, enter `next` with a fresh
+    /// cursor. Returns true while any work remains.
+    fn finish_span(&mut self, end: usize, len: usize, next: Stage) -> bool {
+        self.cursor = end;
+        if end >= len {
+            self.to_stage(next);
+        }
+        true
+    }
+
+    fn to_stage(&mut self, next: Stage) -> bool {
+        self.stage = next;
+        self.cursor = 0;
+        next != Stage::Done
     }
 }

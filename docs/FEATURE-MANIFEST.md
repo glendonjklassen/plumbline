@@ -748,8 +748,17 @@ terminates even when a build cannot happen yet — the SIF model needs an
 embedding the R&D pack may never bring, and the warm re-enters that phase once
 (and only once) if the pack lands later. Measured in wasm: first study after a
 relaunch **1235ms → 13ms**, with a regression test budgeted at 250ms from both
-measured ends. Known cost: the heaviest single warm chunk is ~640ms
-(co-occurrence), which is background but not sliced — the next thing to cut.
+measured ends. The concept model is sliced too (2026-07-27): `ConceptBuilder` carries a cursor
+through twelve stages — two corpus folds, PPMI, kNN gather/top/mutual, label
+propagation by node, assemble — with `Concept::build` reduced to "run it out",
+so there is one implementation. Its worst slice is 16ms native, and slicing it
+took the worst warm chunk in wasm from ~640ms to ~256ms. It also fixed a real
+nondeterminism found while testing: edge order came out of a HashMap and broke
+weight TIES, so two builds over identical data could disagree about a concept's
+neighbours — the kNN truncation and the collocate lists now tie-break on the
+code, matching the rest of the pipeline. **Still owed:** four warm phases are
+still one call each — `xref_ix`, `leitwort` (82ms native, the likely ~256ms
+chunk), `bridge`, and the SIF model.
 
 **Version in About** (2026-07-27): the web build had no idea which release it
 was, so a screenshot could not be dated and "have you relaunched yet?" was

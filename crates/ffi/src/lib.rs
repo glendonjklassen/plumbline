@@ -128,6 +128,7 @@ pub struct PlumblineEngine {
     /// the first click of every session (feedback 2026-07-27).
     occ_partial: std::sync::Mutex<Option<strongs::OccurrenceIxBuilder>>,
     renderings_partial: std::sync::Mutex<Option<renderings::RenderingsBuilder>>,
+    concept_partial: std::sync::Mutex<Option<concept::ConceptBuilder>>,
     /// How far the chunked warm has got. An explicit phase (rather than
     /// "build the next thing that is missing") guarantees the loop terminates
     /// even when a build legitimately cannot happen yet — the SIF model, for
@@ -205,6 +206,7 @@ impl PlumblineEngine {
             search_partial: std::sync::Mutex::new(None),
             occ_partial: std::sync::Mutex::new(None),
             renderings_partial: std::sync::Mutex::new(None),
+            concept_partial: std::sync::Mutex::new(None),
             warm_phase: std::sync::atomic::AtomicUsize::new(0),
             sif_attempted: std::sync::atomic::AtomicBool::new(false),
             occ_ix: OnceLock::new(),
@@ -388,10 +390,7 @@ impl PlumblineEngine {
                     self.xref_ix();
                     0
                 }
-                4 => {
-                    self.concept();
-                    0
-                }
+                4 => self.warm_concept_slice(slice),
                 5 => {
                     self.leitwort();
                     0
@@ -429,6 +428,28 @@ impl PlumblineEngine {
                 return 1;
             }
         }
+    }
+
+    /// Advance the concept model by one budgeted stage-slice. 1 while work
+    /// remains. The heaviest thing the warm does — twelve stages over the
+    /// corpus, the co-occurrence counts, PPMI, kNN and label propagation — and
+    /// as one call it blocked the worker for ~640ms (feedback 2026-07-27).
+    fn warm_concept_slice(&self, n: usize) -> i32 {
+        if self.concept.get().is_some() {
+            return 0;
+        }
+        let Ok(mut guard) = self.concept_partial.lock() else {
+            return 0; // poisoned: leave it to the build-on-first-use path
+        };
+        let b = guard.get_or_insert_with(concept::ConceptBuilder::default);
+        if b.step(&self.corpus, n) {
+            return 1;
+        }
+        if let Some(model) = b.take() {
+            let _ = self.concept.set(model);
+        }
+        *guard = None;
+        0
     }
 
     /// Fold `n` more verses into the rendering lens. 1 while work remains.
