@@ -623,6 +623,30 @@ test("a warm boot never asks the network for the pack or the engine", async ({ p
   ).toEqual([]);
 });
 
+test("the whole shell is stored after one visit, not just what this page loaded", async ({ page }) => {
+  // The precache used to be driven by this page's resource timeline, so it stored
+  // whatever happened to load. A chunk imported lazily — for a screen the reader
+  // had not opened — never appeared, and was simply missing offline. The build
+  // now emits the shell's exact file list, and this asserts the depot holds ALL
+  // of it, which the scrape could never guarantee.
+  await boot(page);
+  await page.waitForTimeout(1_500); // the precache runs at the first idle
+
+  const { missing, total } = await page.evaluate(async () => {
+    const manifest = await (await fetch("shell-manifest.json")).json();
+    const cache = await caches.open("plumbline-v1");
+    const missing: string[] = [];
+    for (const f of manifest.files) {
+      if (!(await cache.match(new URL(f, location.href).href, { ignoreVary: true }))) missing.push(f);
+    }
+    return { missing, total: manifest.files.length };
+  });
+  expect(total, "the shell manifest should list the bundles, the fonts and the icons").toBeGreaterThan(8);
+  expect(missing, "these shell files are not on the device — an offline launch would white-screen").toEqual(
+    [],
+  );
+});
+
 test("the engine worker measures with the real reader font, not a fallback", async ({ page }) => {
   // Layout is measured in the WORKER over an OffscreenCanvas; the shell paints
   // the resulting display list here. So the worker needs the real EB Garamond in

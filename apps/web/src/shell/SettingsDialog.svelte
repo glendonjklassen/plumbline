@@ -359,6 +359,17 @@
               ? ` Using ${mb(offline.bytesOnDevice)}.`
               : ""}
           </span>
+          <!-- "It is all downloaded" and "it will still be there" are different
+               claims, and only the first one is ours to make: browsers evict
+               storage under pressure. Say which of the two is true. -->
+          {#if offline?.persisted === false}
+            <span class="off-note">
+              Your browser may still clear it if the device runs low on space. Installing Plumbline
+              to your home screen usually makes it permanent.
+            </span>
+          {:else if offline?.persisted}
+            <span class="off-note">Marked permanent — your browser won't clear it to save space.</span>
+          {/if}
         {:else}
           <span class="off-note">{offlineSummary}</span>
           <button class="off-go" onclick={downloadEverything}>Download everything</button>
