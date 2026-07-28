@@ -152,6 +152,14 @@ jobs:
         working-directory: apps/web
       - name: Build the data pack
         run: node scripts/build-web-pack.mjs
+      # The manifest IS the load spec, and the producer lives outside apps/web's
+      # tsconfig — so `npm run check` validates the loader's view of the shape
+      # without ever seeing the code that writes it. This closes that gap: entry
+      # shape, closed stage set, the invariants the loader depends on, and every
+      # hash re-derived from the shipped bytes. Without it a producer/consumer
+      # mismatch surfaces only as an e2e boot timeout with no diagnostic.
+      - name: Check the data pack against the loader's contract
+        run: node scripts/check-web-pack.mjs
       - name: Build the engine (wasm32-wasip1)
         run: cargo build --locked -p plumbline-ffi --release --target wasm32-wasip1
       - name: Build the app

@@ -8,12 +8,23 @@
 //
 //   node scripts/build-web-pack.mjs
 //
-// The pack version is a content hash, so the service worker / Cache API can
-// invalidate exactly when the data actually changes.
+// THE MANIFEST IS THE SPEC (formatVersion 2). Every entry carries:
 //
-// Heavy machine-tier artifacts are marked `rnd` (TODO #28): the app boots on
-// the core files (what the Android APK bundles) and fetches the rnd set in
-// the background after first paint — see apps/web/src/engine/boot.ts.
+//   path, bytes, gzBytes — as before
+//   hash      — sha256 of the RAW bytes, 16 hex chars. Per-file, so a release
+//               that changes one weave invalidates one URL instead of all 44.
+//   stage     — "text" | "study" | "analysis": when the loader fetches it.
+//   seedOnce  — the bundled stock study set, seeded into the reader's own files
+//               once, after which their copies rule.
+//   role      — "corpusCache" for the one file the fast open depends on.
+//
+// The loader switches on these instead of re-deriving tiers from filenames, and
+// scripts/check-web-pack.mjs asserts the shape so producer and consumer cannot
+// drift apart silently — the failure mode otherwise is a boot timeout with no
+// diagnostic.
+//
+// `version` stays a rolling content hash over the whole pack: it is the single
+// "which pack is this" identity that About reports and that `?v=` stamps today.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -26,14 +37,39 @@ const repo = dirname(dirname(fileURLToPath(import.meta.url)));
 const outRoot = join(repo, "apps/web/public/pack");
 const STOCK = join(repo, "apps/android/app/src/main/assets/stock");
 
-// The machine-tier artifacts deferred out of the boot path. Everything else
-// under data/ matches the Android APK's bundled core set.
-const RND = new Set([
-  "data/morphology.morphb",
-  "data/concept-vectors.vecb",
-  "data/concept-vectors.vec.freq",
-  "data/concept-vectors.vec.meta",
-]);
+// ── the stage table: THE spec ────────────────────────────────────────────────
+//
+// Which stage a file loads in was expressed in four places that could disagree
+// (a `RND` set here, three filter predicates in the web loader, and hardcoded
+// filenames in the Rust). This table is now the only one; the loader switches on
+// the `stage` the manifest carries, and scripts/check-web-pack.mjs asserts the
+// stages partition the pack so a new file cannot be silently unreachable.
+//
+//   text     — needed before the reader can see a word. Stage 1.
+//   study    — Strong's, the margin notes, cross-references, the overlay, the
+//              bridge witnesses. Fetched right after the reader hands over.
+//   analysis — the machine tier. Background, and deferred behind an explicit
+//              action on phones.
+//
+// Anything under data/ or bridge/ not named here defaults to `study`, which is
+// the safe default: it loads, just not on the boot path.
+const STAGE = {
+  "data/kjv.jsonl.idxcache": "text",
+  "data/morphology.morphb": "analysis",
+  "data/concept-vectors.vecb": "analysis",
+  "data/concept-vectors.vec.freq": "analysis",
+  "data/concept-vectors.vec.meta": "analysis",
+  // No runtime reader anywhere in the tree: the only code that opens it is
+  // witness.rs's own tests, and the fused bridge does not consume it. Staged out
+  // of the boot path rather than dropped, because crates/hydrate lists it as an
+  // intended R&D artifact — that disagreement is the maintainer's to settle.
+  "data/text-witness.json": "analysis",
+};
+
+/** The stock study set seeds into the reader's own files once, then their copies
+ *  rule. Kept in the pack forever even so: re-enabling the bundled set clears
+ *  the seeded marker and the NEXT boot re-seeds from these bytes. */
+const SEED_ONCE_DIRS = new Set(["threads", "tags", "weaves"]);
 
 // The concept vectors ship PACKED (`.vecb`, built below), never as the 6.4 MB
 // text: the browser cannot keep a parsed embedding between launches, so the text
@@ -54,13 +90,23 @@ const MORPH_PACKED = "morphology.morphb";
 const AKJV_TEXT = "akjv.jsonl";
 const AKJV_PACKED = "akjv.akjvb";
 
-// (srcDir, homeDir, filter, stock) tuples for the home shipped to the browser.
+// The raw corpus JSONL is NOT shipped. The parsed idxcache below supersedes it
+// (core opens straight from the cache when no source file is present), so 2.4 MB
+// gzipped was downloaded by nobody — and it was worse than dead weight: with the
+// JSONL in the home, `source_stamp` succeeds, and a cache the stamp rejects makes
+// the engine parse 19 MB and write a fresh 37 MB idxcache back into data/. On the
+// web that is a boot that hangs for seconds and then blows the storage budget.
+// The cache is the text now; the JSONL stays a data-prep input.
+const KJV_TEXT = "kjv.jsonl";
+
+// (srcDir, homeDir, filter, seedOnce) tuples for the home shipped to the browser.
 const SOURCES = [
   [
     join(repo, "data"),
     "data",
     (n) =>
       !n.endsWith(".idxcache") &&
+      n !== KJV_TEXT &&
       n !== VEC_TEXT &&
       n !== VEC_PACKED &&
       n !== MORPH_TEXT &&
@@ -78,22 +124,55 @@ const SOURCES = [
 rmSync(outRoot, { recursive: true, force: true });
 const files = [];
 const hash = createHash("sha256");
-for (const [src, dir, keep, stock] of SOURCES) {
+
+/** Fold a file into the rolling pack hash. Length-prefixed: plain concatenation
+ *  meant ("data","x.json") and ("datax",".json") fed the same byte stream. */
+function fold(dir, name, raw) {
+  hash.update(`${dir.length}:${dir}${name.length}:${name}${raw.length}:`).update(raw);
+}
+
+/** The per-file content hash, over the RAW bytes — never the gzip.
+ *
+ *  Raw, for a decisive reason: the loader cannot know which of the two it
+ *  received. Some hosts see the `.gz` extension and serve it with
+ *  `Content-Encoding: gzip`, so the browser hands the app already-decompressed
+ *  bytes (pack.ts sniffs the gzip magic for exactly this). A hash over the
+ *  compressed form would be unverifiable on those hosts. Raw also survives a
+ *  zlib version change, which would otherwise make an unchanged file look
+ *  changed on a CI rebuild. */
+const contentHash = (raw) => createHash("sha256").update(raw).digest("hex").slice(0, 16);
+
+/** Emit one pack file: write the gz, fold it, and return its manifest entry. */
+function emit(dir, name, raw, { stage, seedOnce = false, role } = {}) {
+  const gz = gzipSync(raw, { level: 9 });
+  mkdirSync(join(outRoot, dir), { recursive: true });
+  writeFileSync(join(outRoot, dir, `${name}.gz`), gz);
+  fold(dir, name, raw);
+  const path = `${dir}/${name}`;
+  const entry = {
+    path,
+    bytes: raw.length,
+    gzBytes: gz.length,
+    hash: contentHash(raw),
+    stage: stage ?? STAGE[path] ?? "study",
+  };
+  if (seedOnce) entry.seedOnce = true;
+  if (role) entry.role = role;
+  files.push(entry);
+  return entry;
+}
+
+for (const [src, dir, keep, seedOnce] of SOURCES) {
   if (!existsSync(src)) continue;
   const names = readdirSync(src, { withFileTypes: true })
     .filter((d) => d.isFile() && keep(d.name))
     .map((d) => d.name)
     .sort();
   for (const name of names) {
-    const raw = readFileSync(join(src, name));
-    const gz = gzipSync(raw, { level: 9 });
-    mkdirSync(join(outRoot, dir), { recursive: true });
-    writeFileSync(join(outRoot, dir, `${name}.gz`), gz);
-    hash.update(dir).update(name).update(raw);
-    const entry = { path: `${dir}/${name}`, bytes: raw.length, gzBytes: gz.length };
-    if (stock) entry.stock = true;
-    if (RND.has(entry.path)) entry.rnd = true;
-    files.push(entry);
+    // The stock set is tiny and needed AT OPEN so it can seed, so it rides
+    // stage 1 with the text.
+    const stage = seedOnce || SEED_ONCE_DIRS.has(dir) ? "text" : undefined;
+    emit(dir, name, readFileSync(join(src, name)), { stage, seedOnce });
   }
 }
 // The web-stamped corpus idxcache: the PWA's FIRST boot takes the cache fast
@@ -117,10 +196,10 @@ execFileSync(
 );
 const cacheRaw = readFileSync(cacheTmp);
 rmSync(cacheTmp, { force: true });
-const cacheGz = gzipSync(cacheRaw, { level: 9 });
-writeFileSync(join(outRoot, "data", "kjv.jsonl.idxcache.gz"), cacheGz);
-hash.update("data").update("kjv.jsonl.idxcache").update(cacheRaw);
-files.push({ path: "data/kjv.jsonl.idxcache", bytes: cacheRaw.length, gzBytes: cacheGz.length, cache: true });
+// role: the loader has to be able to FIND the corpus cache, not merely know it
+// is stage-1 — it is the one file whose presence decides whether the engine
+// takes the fast open or parses the JSONL that is no longer shipped.
+emit("data", "kjv.jsonl.idxcache", cacheRaw, { stage: "text", role: "corpusCache" });
 
 // The concept vectors as packed f32 (`.vecb`) instead of word2vec text. The
 // engine reads the rows with a copy rather than 742,600 atof calls — measured
@@ -137,15 +216,7 @@ execFileSync(
 );
 const vecbRaw = readFileSync(vecbTmp);
 rmSync(vecbTmp, { force: true });
-const vecbGz = gzipSync(vecbRaw, { level: 9 });
-writeFileSync(join(outRoot, "data", `${VEC_PACKED}.gz`), vecbGz);
-hash.update("data").update(VEC_PACKED).update(vecbRaw);
-files.push({
-  path: `data/${VEC_PACKED}`,
-  bytes: vecbRaw.length,
-  gzBytes: vecbGz.length,
-  rnd: true,
-});
+emit("data", VEC_PACKED, vecbRaw);
 
 const morphTmp = join(tmpdir(), `plumbline-morphb-${process.pid}`);
 execFileSync(
@@ -156,15 +227,7 @@ execFileSync(
 );
 const morphRaw = readFileSync(morphTmp);
 rmSync(morphTmp, { force: true });
-const morphGz = gzipSync(morphRaw, { level: 9 });
-writeFileSync(join(outRoot, "data", `${MORPH_PACKED}.gz`), morphGz);
-hash.update("data").update(MORPH_PACKED).update(morphRaw);
-files.push({
-  path: `data/${MORPH_PACKED}`,
-  bytes: morphRaw.length,
-  gzBytes: morphGz.length,
-  rnd: true,
-});
+emit("data", MORPH_PACKED, morphRaw);
 
 const akjvTmp = join(tmpdir(), `plumbline-akjvb-${process.pid}`);
 execFileSync(
@@ -175,12 +238,15 @@ execFileSync(
 );
 const akjvRaw = readFileSync(akjvTmp);
 rmSync(akjvTmp, { force: true });
-const akjvGz = gzipSync(akjvRaw, { level: 9 });
-writeFileSync(join(outRoot, "data", `${AKJV_PACKED}.gz`), akjvGz);
-hash.update("data").update(AKJV_PACKED).update(akjvRaw);
-files.push({ path: `data/${AKJV_PACKED}`, bytes: akjvRaw.length, gzBytes: akjvGz.length });
+emit("data", AKJV_PACKED, akjvRaw);
 
+// Sorted so the manifest's own bytes do not depend on emission order, and so a
+// human diff between two packs is readable.
+files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 const manifest = {
+  // Bumped on any NON-additive change to the entry shape, so a loader that does
+  // not understand a pack fails loudly instead of quietly mis-tiering files.
+  formatVersion: 2,
   version: hash.digest("hex").slice(0, 16),
   files,
 };
@@ -188,4 +254,9 @@ writeFileSync(join(outRoot, "manifest.json"), JSON.stringify(manifest, null, 2))
 const mb = (n) => (n / 1048576).toFixed(1);
 const total = files.reduce((s, f) => s + f.bytes, 0);
 const totalGz = files.reduce((s, f) => s + f.gzBytes, 0);
+const byStage = (st) => files.filter((f) => f.stage === st);
+const stageLine = ["text", "study", "analysis"]
+  .map((st) => `${st} ${byStage(st).length}/${mb(byStage(st).reduce((s, f) => s + f.gzBytes, 0))}MB`)
+  .join(", ");
 console.log(`pack ${manifest.version}: ${files.length} files, ${mb(total)}MB raw -> ${mb(totalGz)}MB gzipped`);
+console.log(`  stages: ${stageLine}`);

@@ -65,7 +65,7 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   );
 
   onPhase({ phase: "prepare" });
-  const stockPaths = new Set(manifest.files.filter((f) => f.stock).map((f) => f.path));
+  const stockPaths = new Set(manifest.files.filter((f) => f.seedOnce).map((f) => f.path));
   const home = await timed("virtual home build", () =>
     buildHome(pack, stockPaths, persistedIdx, manifest.version),
   );

@@ -161,7 +161,7 @@ async function warmChunked(): Promise<void> {
 let rndRun: Promise<void> | null = null;
 function loadRndChunked(): Promise<void> {
   return (rndRun ??= (async () => {
-    if (!booted!.manifest.files.some((f) => f.rnd)) return;
+    if (!booted!.manifest.files.some((f) => f.stage === "analysis")) return;
     const t0 = performance.now();
     const files = await fetchRndPack(booted!.manifest, (p) =>
       self.postMessage({ type: "rndProgress", fraction: p.fraction }),
@@ -201,7 +201,7 @@ const saveData = (): boolean => (navigator as any).connection?.saveData === true
  *  reader's data and their first paint; neither is at stake once the bytes are
  *  cached (feedback 2026-07-27). */
 async function rndAlreadyCached(): Promise<boolean> {
-  const files = booted!.manifest.files.filter((f) => f.rnd);
+  const files = booted!.manifest.files.filter((f) => f.stage === "analysis");
   if (!files.length) return false;
   for (const f of files) {
     if (!(await depotHas(packFileUrl(f, booted!.manifest.version)))) return false;

@@ -10,19 +10,46 @@
 
 import { depotBytes, depotGet, depotPut } from "./depot";
 
-export interface PackManifest {
-  version: string;
-  files: {
-    path: string;
-    bytes: number;
-    gzBytes: number;
-    stock?: boolean;
-    rnd?: boolean;
-    /** The pack-shipped corpus idxcache — fetched only when IndexedDB
-     *  doesn't already hold a persisted one (see boot.ts). */
-    cache?: boolean;
-  }[];
+/** When the loader fetches a file. The manifest carries this per entry — it is
+ *  NOT re-derived from filenames here, which is how four places ended up able to
+ *  disagree about which tier a file belonged to. `scripts/build-web-pack.mjs`
+ *  owns the assignment; `scripts/check-web-pack.mjs` guards the shape. */
+export type PackStage =
+  /** Needed before the reader sees a word: the corpus cache + the stock set. */
+  | "text"
+  /** Strong's, margin notes, cross-references, the overlay, bridge witnesses. */
+  | "study"
+  /** The machine tier — background, and deferred behind an action on phones. */
+  | "analysis";
+
+export interface PackFile {
+  path: string;
+  bytes: number;
+  gzBytes: number;
+  /** sha256 of the RAW (decompressed) bytes, 16 hex chars. Raw because a host
+   *  may serve `.gz` with `Content-Encoding: gzip`, in which case the app never
+   *  sees the compressed form at all (see `gunzip` below). */
+  hash: string;
+  stage: PackStage;
+  /** The bundled stock study set: seeded into the reader's own files once, and
+   *  their copies rule afterwards. */
+  seedOnce?: true;
+  /** The parsed-corpus cache — the one file the fast open depends on, fetched
+   *  only when IndexedDB doesn't already hold a usable copy (see boot.ts). */
+  role?: "corpusCache";
 }
+
+export interface PackManifest {
+  /** Bumped on any non-additive change to the entry shape. */
+  formatVersion: number;
+  version: string;
+  files: PackFile[];
+}
+
+/** The entry shape this build understands. A pack from the future is refused
+ *  rather than mis-tiered: an unknown `stage` would silently make files
+ *  unreachable, which surfaces as a boot that hangs with no explanation. */
+const SUPPORTED_FORMAT = 2;
 
 export interface PackProgress {
   /** 0..1 across the whole pack download, weighted by gzipped size. */
@@ -56,12 +83,22 @@ export async function fetchManifest(): Promise<PackManifest> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const bytes = new Uint8Array(await res.arrayBuffer());
     void depotPut(url, bytes, "application/json");
-    return JSON.parse(new TextDecoder().decode(bytes));
+    return checked(JSON.parse(new TextDecoder().decode(bytes)));
   } catch (e) {
     const hit = await depotGet(url);
     if (!hit) throw new Error(`data pack manifest: ${e instanceof Error ? e.message : String(e)}`);
-    return hit.json();
+    return checked(await hit.json());
   }
+}
+
+function checked(m: PackManifest): PackManifest {
+  if (m.formatVersion !== SUPPORTED_FORMAT) {
+    throw new Error(
+      `data pack format ${m.formatVersion} — this build understands ${SUPPORTED_FORMAT}. ` +
+        `Rebuild the pack (npm run pack:data) or update the app.`,
+    );
+  }
+  return m;
 }
 
 async function gunzip(body: ArrayBuffer): Promise<Uint8Array> {
@@ -76,7 +113,7 @@ async function gunzip(body: ArrayBuffer): Promise<Uint8Array> {
 
 async function fetchFiles(
   version: string,
-  files: PackManifest["files"],
+  files: PackFile[],
   onProgress?: (p: PackProgress) => void,
 ): Promise<Map<string, Uint8Array>> {
   const totalGz = files.reduce((s, f) => s + f.gzBytes, 0);
@@ -105,51 +142,44 @@ async function fetchFiles(
 
 /** The depot key for a pack file. One function, so the loader, the offline
  *  survey and the cache sweep cannot disagree about what a file is called. */
-export function packFileUrl(f: PackManifest["files"][number], version: string): string {
+export function packFileUrl(f: PackFile, version: string): string {
   return `${packUrl(f.path)}.gz?v=${version}`;
 }
 
-/** Stage 1 — the FASTEST path to text on screen: the text, plus the tiny stock
- *  study set.
+/** Stage 1 — the FASTEST path to text on screen: the parsed corpus cache plus
+ *  the tiny stock study set (which has to be present AT OPEN so it can seed).
  *
- *  "The text" means the pack's parsed-corpus cache, NOT `kjv.jsonl`: the cache
- *  supersedes it (core opens straight from it when no source file is present),
- *  so shipping both would be 2.5 MB of download nothing ever reads. When this
- *  device already has a usable cache in IndexedDB, neither is fetched. The
- *  raw JSONL is the fallback only for a pack that predates the cache. */
+ *  "The text" is the cache, not `kjv.jsonl`: the cache supersedes it, core opens
+ *  straight from it, and the raw JSONL is no longer shipped at all. When this
+ *  device already holds a usable cache in IndexedDB, `needText: false` skips it
+ *  and only the stock set is fetched. */
 export function fetchPack(
   manifest: PackManifest,
   onProgress?: (p: PackProgress) => void,
   opts: { needText?: boolean } = {},
 ): Promise<Map<string, Uint8Array>> {
-  const packCache = manifest.files.find((f) => f.cache);
-  const text = (f: PackManifest["files"][number]) =>
-    packCache ? f.cache === true : f.path === "data/kjv.jsonl";
   return fetchFiles(
     manifest.version,
-    manifest.files.filter((f) => f.stock || (opts.needText !== false && text(f))),
+    manifest.files.filter(
+      (f) => f.stage === "text" && (opts.needText !== false || f.role !== "corpusCache"),
+    ),
     onProgress,
   );
 }
 
-/** Stage 2 — the rest of the core pack (Strong's, cross-references, margin
- *  notes, bridge witnesses), fetched right after the reader hands over. */
+/** Stage 2 — Strong's, cross-references, margin notes, the overlay and the
+ *  bridge witnesses, fetched right after the reader hands over. */
 export function fetchStage2Pack(
   manifest: PackManifest,
   onProgress?: (p: PackProgress) => void,
 ): Promise<Map<string, Uint8Array>> {
-  return fetchFiles(
-    manifest.version,
-    manifest.files.filter((f) => !f.rnd && !f.stock && !f.cache && f.path !== "data/kjv.jsonl"),
-    onProgress,
-  );
+  return fetchFiles(manifest.version, manifest.files.filter((f) => f.stage === "study"), onProgress);
 }
 
-/** Load the deferred machine-tier (`rnd`) files — fetched in the background
- *  after first paint, never on the boot path (TODO #28). */
+/** The machine tier — background after first paint, never on the boot path. */
 export function fetchRndPack(
   manifest: PackManifest,
   onProgress?: (p: PackProgress) => void,
 ): Promise<Map<string, Uint8Array>> {
-  return fetchFiles(manifest.version, manifest.files.filter((f) => f.rnd), onProgress);
+  return fetchFiles(manifest.version, manifest.files.filter((f) => f.stage === "analysis"), onProgress);
 }

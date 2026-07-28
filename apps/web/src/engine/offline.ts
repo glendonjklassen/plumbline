@@ -13,7 +13,7 @@
 // manifest lists against the offline cache and re-fetches what is missing.
 
 import { depotBytes, depotHas, requestPersistence } from "./depot";
-import { fetchManifest, packFileUrl, type PackManifest } from "./pack";
+import { fetchManifest, packFileUrl } from "./pack";
 
 export interface OfflineSurvey {
   /** Pack files not in the offline cache, with their download size. */
@@ -34,21 +34,15 @@ export interface OfflineSurvey {
 /** Everything the manifest promises that the app will actually READ, as depot
  *  keys.
  *
- *  `data/kjv.jsonl` is excluded deliberately. The pack ships it (2.4 MB gz) but
- *  no stage fetches it — the parsed-corpus idxcache supersedes it, and core
- *  opens straight from that. Counting it made Settings report the device
- *  permanently "incomplete" and made "Download everything" pull 2.4 MB that
- *  nothing ever opens. */
+ *  Every file the manifest lists is now a file some stage fetches — the manifest
+ *  IS the spec, and `scripts/check-web-pack.mjs` refuses a pack carrying anything
+ *  unreachable. It used to also list `data/kjv.jsonl`, which no stage wanted
+ *  (the parsed-corpus cache supersedes it), so the device read as permanently
+ *  "incomplete" and "Download everything" spent 2.4 MB on a file nothing opens.
+ *  That file has left the pack; this is now a straight walk. */
 async function packEntries(): Promise<{ url: string; gzBytes: number }[]> {
   const manifest = await fetchManifest();
-  const consumed = manifest.files.filter((f) => !isUnreadFallback(f, manifest));
-  return consumed.map((f) => ({ url: packFileUrl(f, manifest.version), gzBytes: f.gzBytes }));
-}
-
-/** The raw JSONL is a fallback for a pack that predates the corpus cache: with
- *  a cache present it is never fetched, so it is not part of "complete". */
-function isUnreadFallback(f: PackManifest["files"][number], manifest: PackManifest): boolean {
-  return f.path === "data/kjv.jsonl" && manifest.files.some((o) => o.cache);
+  return manifest.files.map((f) => ({ url: packFileUrl(f, manifest.version), gzBytes: f.gzBytes }));
 }
 
 export async function surveyOffline(): Promise<OfflineSurvey> {
