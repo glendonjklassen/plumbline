@@ -292,6 +292,12 @@ function warmChunked(): Promise<void> {
       const more = timedChunk(`warm step ${step}`, () => booted!.engine.warmStep(step));
       if (!more) break;
     }
+    // The engine refuses to build an index inside a reader's tap while this warm
+    // is running (see `defer_builds` in crates/ffi), so a study opened mid-warm
+    // comes back with only the sections that were ready. Tell the shell the rest
+    // exist now, or it shows that thinner answer until something unrelated
+    // happens to re-fetch.
+    self.postMessage({ type: "warmReady" });
   })().finally(() => {
     warmRun = null;
   }));

@@ -345,6 +345,14 @@ export class Session {
         }
       });
     };
+    rpc.onWarmReady = () => {
+      // A study opened while the warm was still running answered with only the
+      // sections whose indexes existed — the engine will not build one inside a
+      // tap any more, because doing so froze the worker for 22 seconds on a
+      // phone (2026-07-28). They exist now; re-fetch so the panel fills in.
+      this.invalidate();
+      this.studyEpoch++;
+    };
     rpc.onRndPreparing = () => {
       this.rndProgress = 1;
       this.rndPreparing = true;

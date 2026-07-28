@@ -150,6 +150,26 @@ pub struct PlumblineEngine {
     /// even when a build legitimately cannot happen yet — the SIF model, for
     /// instance, needs an embedding the R&D pack may never bring.
     warm_phase: std::sync::atomic::AtomicUsize,
+    /// Whether a SLICED warm is driving this engine. Set by the first
+    /// `warm_next` call and never cleared.
+    ///
+    /// While it is set, a reader's tap must never BUILD a missing index. The
+    /// whole point of slicing is that the work is spread across macrotasks so the
+    /// one thread that answers taps and layouts stays answerable — and a
+    /// `get_or_init` inside a study call throws every bit of that away in a
+    /// single blocking lump. Measured on a phone: **21,966 ms inside one
+    /// `wordStudyBlocks`**, which froze the worker so completely that it also
+    /// stranded its own in-flight downloads (a 2.6 MB file the network delivered
+    /// in 1,673 ms was collected 23,825 ms later). 2026-07-28.
+    ///
+    /// So the study answers with what is READY. The warm keeps going in the
+    /// background and the shell re-fetches as each index lands, which is the same
+    /// fill-in-later path Strong's has always used before stage 2 arrives.
+    ///
+    /// Android never calls `warm_next` — it uses `plumbline_engine_warm_indexes`,
+    /// which builds everything up front in well under a second — so this stays
+    /// false there and nothing about that shell changes.
+    defer_builds: std::sync::atomic::AtomicBool,
     /// Whether the SIF model has been attempted since an embedding arrived.
     /// The warm re-runs after the R&D pack lands, and the phase counter is
     /// monotonic, so without this the model is never warmed and the reader's
@@ -233,6 +253,7 @@ impl PlumblineEngine {
             concept_partial: std::sync::Mutex::new(None),
             verse_sim_partial: std::sync::Mutex::new(None),
             warm_phase: std::sync::atomic::AtomicUsize::new(0),
+            defer_builds: std::sync::atomic::AtomicBool::new(false),
             sif_attempted: std::sync::atomic::AtomicBool::new(false),
             occ_ix: OnceLock::new(),
             renderings: OnceLock::new(),
@@ -396,6 +417,77 @@ impl PlumblineEngine {
         self.occ_ix.get_or_init(|| OccurrenceIx::build(&self.corpus))
     }
 
+    /// Whether a sliced warm is running and on-demand builds are therefore
+    /// forbidden. See [`PlumblineEngine::defer_builds`].
+    fn deferring(&self) -> bool {
+        self.defer_builds.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    // ── "ready" accessors ─────────────────────────────────────────────────────
+    // Each returns the index only if using it costs nothing. Under a sliced warm
+    // that means "only if already built"; otherwise it is the ordinary
+    // build-on-first-use accessor and behaviour is unchanged.
+    //
+    // EVERY reader-facing panel path goes through these rather than the builders
+    // above. A single one left pointing at a builder reintroduces the whole
+    // freeze, because a study touches most of them in one call.
+
+    fn occ_ix_ready(&self) -> Option<&OccurrenceIx> {
+        if self.deferring() {
+            self.occ_ix.get()
+        } else {
+            Some(self.occ_ix())
+        }
+    }
+
+    fn renderings_ready(&self) -> Option<&Renderings> {
+        if self.deferring() {
+            self.renderings.get()
+        } else {
+            Some(self.renderings())
+        }
+    }
+
+    fn xref_ix_ready(&self) -> Option<&XRefIx> {
+        if self.deferring() {
+            self.xref_ix.get()
+        } else {
+            Some(self.xref_ix())
+        }
+    }
+
+    fn concept_ready(&self) -> Option<&concept::Concept> {
+        if self.deferring() {
+            self.concept.get()
+        } else {
+            Some(self.concept())
+        }
+    }
+
+    fn leitwort_ready(&self) -> Option<&std::collections::HashMap<String, burst::Burst>> {
+        if self.deferring() {
+            self.leitwort.get()
+        } else {
+            Some(self.leitwort())
+        }
+    }
+
+    fn bridge_ready(&self) -> Option<&bridge::FusedBridge> {
+        if self.deferring() {
+            self.bridge.get()
+        } else {
+            self.bridge()
+        }
+    }
+
+    fn verse_sim_ready(&self) -> Option<&embed::VerseSim> {
+        if self.deferring() {
+            self.verse_sim.get()
+        } else {
+            self.verse_sim()
+        }
+    }
+
     /// Fold `n` more verses into the occurrence index. 1 while work remains.
     fn warm_occ_slice(&self, n: usize) -> i32 {
         if self.occ_ix.get().is_some() {
@@ -427,6 +519,10 @@ impl PlumblineEngine {
     /// answered. Re-running after the R&D pack lands picks up the SIF model.
     fn warm_next(&self, slice: usize) -> i32 {
         use std::sync::atomic::Ordering;
+        // A shell that warms in slices has promised to keep this thread
+        // answerable, so from here on nothing may be built inside a reader's tap.
+        // See `defer_builds`.
+        self.defer_builds.store(true, Ordering::Relaxed);
         loop {
             let phase = self.warm_phase.load(Ordering::Relaxed);
             let more = match phase {
@@ -2374,7 +2470,7 @@ impl PanelSource for PlumblineEngine {
         md.gloss(&v, token)
     }
     fn occurrence_count(&self, code: &str) -> usize {
-        self.occ_ix().verses(code).len()
+        self.occ_ix_ready().map_or(0, |ix| ix.verses(code).len())
     }
     fn strongs(&self, code: &str) -> Option<panel::StrongsView> {
         let e = self.strongs().get(code)?;
@@ -2398,8 +2494,8 @@ impl PanelSource for PlumblineEngine {
         }
     }
     fn renderings(&self, code: &str) -> Vec<panel::RenderingView> {
-        self.renderings()
-            .renderings(code)
+        let Some(rx) = self.renderings_ready() else { return Vec::new() };
+        rx.renderings(code)
             .into_iter()
             .map(|r| panel::RenderingView { rendering: r.label.to_string(), total: r.count as u32 })
             .collect()
@@ -2407,7 +2503,7 @@ impl PanelSource for PlumblineEngine {
     fn rendering_refs(&self, code: &str, rendering: &str) -> Option<panel::RenderingRefsView> {
         let key = plumbline_core::renderings::normalize(rendering);
         let r = self
-            .renderings()
+            .renderings_ready()?
             .renderings(code)
             .into_iter()
             .find(|r| plumbline_core::renderings::normalize(r.label) == key)?;
@@ -2418,17 +2514,22 @@ impl PanelSource for PlumblineEngine {
         })
     }
     fn word_codes(&self, word: &str) -> Vec<String> {
-        self.renderings().word_codes(word).into_iter().map(|(c, _)| c.to_string()).collect()
+        self.renderings_ready()
+            .map(|rx| rx.word_codes(word).into_iter().map(|(c, _)| c.to_string()).collect())
+            .unwrap_or_default()
     }
     fn occurrences(&self, code: &str) -> panel::OccurrencesView {
-        let all = self.occ_ix().verses(code);
+        let Some(ix) = self.occ_ix_ready() else {
+            return panel::OccurrencesView { total: 0, verses: Vec::new() };
+        };
+        let all = ix.verses(code);
         panel::OccurrencesView {
             total: all.len() as u32,
             verses: all.iter().take(PANEL_OCC_CAP).map(|v| (v.ref_key(), v.display())).collect(),
         }
     }
     fn bridge_partners(&self, code: &str) -> Vec<panel::BridgePartnerView> {
-        self.bridge()
+        self.bridge_ready()
             .map(|b| b.partners(code))
             .unwrap_or_default()
             .into_iter()
@@ -2450,10 +2551,10 @@ impl PanelSource for PlumblineEngine {
         }
     }
     fn concept(&self, code: &str) -> Option<panel::ConceptView> {
-        let ce = self.concept();
+        let ce = self.concept_ready()?;
         ce.stat(code)?;
         let (ot, nt) = ce.testament_split(code);
-        let leitwort = self.leitwort().get(code).map(|b| panel::LeitwortView {
+        let leitwort = self.leitwort_ready().and_then(|l| l.get(code)).map(|b| panel::LeitwortView {
             n: b.n,
             win_count: b.win_count,
             score: b.score,
@@ -2481,7 +2582,7 @@ impl PanelSource for PlumblineEngine {
     }
     fn study_xrefs(&self, verse: &str) -> Vec<panel::StudyXrefView> {
         let Some(v) = VRef::parse_ref_key(verse) else { return Vec::new() };
-        match self.xref_ix().get(&v) {
+        match self.xref_ix_ready().and_then(|ix| ix.get(&v)) {
             Some(rs) => rs
                 .iter()
                 .map(|r| panel::StudyXrefView {
@@ -2495,7 +2596,7 @@ impl PanelSource for PlumblineEngine {
         }
     }
     fn similar_verses(&self, verse: &str, k: usize) -> (Vec<panel::SimilarView>, Vec<panel::SimilarView>) {
-        let (Some(vs), Some(v)) = (self.verse_sim(), VRef::parse_ref_key(verse)) else {
+        let (Some(vs), Some(v)) = (self.verse_sim_ready(), VRef::parse_ref_key(verse)) else {
             return (Vec::new(), Vec::new());
         };
         let map = |items: Vec<(VRef, f32)>| {
@@ -2940,7 +3041,8 @@ const GLOSS_SAMPLE: usize = 80;
 /// verbatim from the GTK shell so every shell shows the same chips.
 fn english_gloss(e: &PlumblineEngine, code: &str) -> Option<String> {
     let mut tally: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
-    for r in e.occ_ix().verses(code).iter().take(GLOSS_SAMPLE) {
+    let occ = e.occ_ix_ready()?;
+    for r in occ.verses(code).iter().take(GLOSS_SAMPLE) {
         if let Some(v) = e.corpus.verse(r) {
             for t in &v.tokens {
                 // Skip translator-supplied words: they render nothing original.

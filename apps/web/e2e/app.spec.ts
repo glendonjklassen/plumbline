@@ -241,19 +241,28 @@ test("after a relaunch, the first word study is already warm", async ({ page }) 
   // in every run and this marker clears itself the moment the work lands, which
   // is the opposite of skipping it.
   //
-  // What is still broken: the reader's first word study after a relaunch costs
-  // ~830ms on a desktop (a settled engine answers the same call in ~10ms). Almost
-  // all of it is spent INSIDE the study call, building the occurrence index, the
-  // rendering lens, the cross-references, the concept model and the bridge —
-  // because the reader clicks before the chunked warm reaches them, and nothing
-  // an engine builds survives the tab. Fixing it means shipping those prebuilt in
-  // the data pack the way `kjv.jsonl.idxcache` already is, so no launch rebuilds
-  // them at all.
+  // WHAT IS STILL BROKEN, and it is no longer the same thing it was this morning.
+  // The tap is FAST now; the answer is THIN. Measured on this machine:
   //
-  // What was fixed and is NOT what this test measures: warm phase 7, the SIF
-  // model, which was a single unsliced block costing 54,859ms on a phone. That has
-  // its own guards — `sif_model_is_built_in_slices` in plumbline-ffi and
-  // "no single background chunk may monopolise the engine worker" below.
+  //     settled                        11 ms · 64 blocks
+  //     relaunch, tapped immediately   10 ms · 12 blocks   <- fails here
+  //     relaunch, after warm finishes    9 ms · 64 blocks
+  //
+  // The engine no longer builds an index inside a reader's tap (it froze a phone
+  // for 21,966 ms doing exactly that), so a study opened mid-warm returns only
+  // the sections whose indexes exist, and fills in when `warmReady` lands. Better
+  // than a frozen app by any measure, and still not "already warm": a relaunch
+  // rebuilds every one of those indexes from scratch because nothing an engine
+  // builds survives the tab.
+  //
+  // The fix is to stop rebuilding them — build once, keep the result, load it
+  // back — the way `kjv.jsonl.idxcache` already spares the corpus. Until that
+  // lands this test fails on the BLOCK COUNT, not the clock.
+  //
+  // Two things already fixed that this test does NOT measure, each with its own
+  // guard: warm phase 7 (the SIF model, a single unsliced 54,859 ms block on a
+  // phone) is covered by `sif_model_is_built_in_slices` in plumbline-ffi, and the
+  // tap-builds-nothing rule by `a_tap_never_builds_indexes_under_a_sliced_warm`.
   test.fail();
   await boot(page);
   await settleBackground(page);

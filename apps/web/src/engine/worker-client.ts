@@ -53,6 +53,9 @@ export class EngineRpc {
   onAuthored: () => void = () => {};
   /** Stage-2 core data landed (Strong's, margin notes, cross-refs). */
   onCoreReady: () => void = () => {};
+  /** A warm pass finished, so the indexes a study opened mid-warm had to skip
+   *  are available now — anything on screen should re-fetch. */
+  onWarmReady: () => void = () => {};
   /** The deferred R&D pack finished loading — machine tiers just lit up. */
   onRndReady: () => void = () => {};
   /** R&D pack download progress (0..1) — drives the "load analysis" UI. */
@@ -79,6 +82,7 @@ export class EngineRpc {
       if (m.type === "progress") return this.onProgress(m);
       if (m.type === "authored") return this.onAuthored();
       if (m.type === "coreReady") return this.onCoreReady();
+      if (m.type === "warmReady") return this.onWarmReady();
       if (m.type === "rndReady") return this.onRndReady();
       if (m.type === "rndProgress") return this.onRndProgress(m.fraction ?? 0);
       if (m.type === "rndPreparing") return this.onRndPreparing();

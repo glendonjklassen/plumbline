@@ -1737,6 +1737,138 @@ fn sif_model_is_built_in_slices() {
     }
 }
 
+/// A reader's tap must never BUILD an index while a sliced warm is running.
+///
+/// This is the bug the whole 2026-07-28 investigation was chasing, and it hid for
+/// three days because `call` — the op every engine request arrives on in the web
+/// shell — was not timed. Once it was, the phone named it immediately:
+///
+///     SLOWEST ENGINE CALLS
+///        21966 ms  wordStudyBlocks
+///        11352 ms  wordStudyBlocks
+///     worst single stall   21984 ms
+///
+/// Tap a word before the chunked warm reaches them and `wordStudyBlocks` built
+/// the occurrence index, the rendering lens, the cross-references, the concept
+/// model and the bridge in ONE synchronous lump — 22 seconds during which the
+/// only thread that can answer a tap answered nothing, including its own
+/// downloads (a 2.6 MB file the network delivered in 1,673 ms was collected
+/// 23,825 ms later). Slicing the warm is pointless if a tap can undo it.
+///
+/// Both halves matter, so both are asserted: the tap builds NOTHING, and the tap
+/// still answers. An engine that returned an error, or empty blocks, would
+/// satisfy the first half and be useless.
+#[test]
+fn a_tap_never_builds_indexes_under_a_sliced_warm() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-tapbuild-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        // Bigger than one warm slice, so the warm is genuinely mid-flight when
+        // the tap lands — which is the situation being tested.
+        std::fs::write(home.join("data").join("kjv.jsonl"), generated_kjv(150, 20)).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null() && !e.is_null());
+        let eng = &*e;
+        eng.load_core_data();
+
+        // ONE slice: the shell declaring that it drives a chunked warm.
+        assert_eq!(eng.warm_next(crate::WARM_SLICE), 1, "the warm is mid-flight");
+        assert!(eng.occ_ix.get().is_none(), "precondition: nothing built yet");
+
+        // The reader taps a word.
+        let blocks = take(plumbline_engine_word_study_blocks2_json(
+            e,
+            c"Ps 1:2".as_ptr(),
+            1,
+            3, // human + machine: every tier on, the most a tap can ask for
+        ))
+        .expect("the tap answered");
+
+        for (built, what) in [
+            (eng.occ_ix.get().is_some(), "the occurrence index"),
+            (eng.renderings.get().is_some(), "the rendering lens"),
+            (eng.xref_ix.get().is_some(), "the cross-reference index"),
+            (eng.concept.get().is_some(), "the concept model"),
+            (eng.leitwort.get().is_some(), "the leitwort scan"),
+            (eng.bridge.get().is_some(), "the bridge"),
+        ] {
+            assert!(
+                !built,
+                "a tap BUILT {what} while a sliced warm was running — that is the 22-second \
+                 freeze, and it strands every download in flight with it"
+            );
+        }
+
+        // ...and it still said something. A tap that answers nothing is not a fix.
+        let v: Value = serde_json::from_str(&blocks).unwrap();
+        assert!(
+            !v["blocks"].as_array().unwrap().is_empty(),
+            "the tap built nothing AND answered nothing: {blocks}"
+        );
+
+        // Once the warm finishes, the same tap is fully furnished — the sections
+        // that were skipped are not skipped forever.
+        let mut n = 0;
+        while eng.warm_next(crate::WARM_SLICE) == 1 {
+            n += 1;
+            assert!(n < 10_000, "warm never terminated");
+        }
+        assert!(eng.occ_ix.get().is_some(), "the warm built the occurrence index");
+        assert!(eng.renderings.get().is_some(), "the warm built the rendering lens");
+        let after: Value = serde_json::from_str(
+            &take(plumbline_engine_word_study_blocks2_json(e, c"Ps 1:2".as_ptr(), 1, 3)).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            after["blocks"].as_array().unwrap().len() > v["blocks"].as_array().unwrap().len(),
+            "the warm added nothing to the study — the deferred sections never filled in"
+        );
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
+/// The control for the test above: WITHOUT a sliced warm — the Android path,
+/// which calls `plumbline_engine_warm_indexes` and builds everything up front —
+/// a tap still builds on demand exactly as it always has. The deferral is scoped
+/// to shells that promised to slice, and this pins that scope.
+#[test]
+fn a_tap_still_builds_on_demand_when_no_sliced_warm_is_running() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-tapeager-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), generated_kjv(150, 20)).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null() && !e.is_null());
+        let eng = &*e;
+        eng.load_core_data();
+        assert!(eng.occ_ix.get().is_none());
+
+        // No warm_next call: nothing has promised to slice anything.
+        let _ = take(plumbline_engine_word_study_blocks2_json(e, c"Ps 1:2".as_ptr(), 1, 3));
+        assert!(
+            eng.occ_ix.get().is_some(),
+            "a tap on a shell that does NOT slice must still build what it needs"
+        );
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
 /// The web's stage-1 boot (TODO #28): open on the corpus ALONE — text first —
 /// then strongs.json arrives and `load_core_data` lights the dictionary up.
 #[test]
