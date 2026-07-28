@@ -136,6 +136,17 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
   millisecond ceiling that a whole un-chunked warm still fit inside (budgets
   for worker-scheduling tests must be **derived from the machine's own
   measured chunk cost**, not a constant).
+- **A warm boot must make ZERO network requests before text.** The pin
+  (`engine/pin.ts`) is a manifest stored in the depot, written only after every
+  file it names is verified present — so boot never asks the network anything it
+  already has. Pack URLs are content-addressed per file (`?h=<hash of raw bytes>`)
+  and stored EXPLICITLY in the pin, which is what makes a release that changes one
+  file download one file. The pin is a CLAIM, NOT A PROOF: browsers evict, so
+  every read is "try the depot, else fall back to the cold path" — and the cold
+  path IS the repair, because the read-through only downloads what is absent.
+  `sw.js` no longer touches `/pack/`, the wasm or the pin; those get an early
+  `return`, so nothing the engine needs depends on the service worker winning its
+  first-visit race.
 - **The offline promise is a test, not a hope.** A first visit must leave the
   device able to boot with the network off. The SW cannot manage that alone:
   it isn't controlling the page while the shell loads and it claims the engine
