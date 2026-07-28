@@ -623,6 +623,24 @@ test("a warm boot never asks the network for the pack or the engine", async ({ p
   ).toEqual([]);
 });
 
+test("the engine worker measures with the real reader font, not a fallback", async ({ page }) => {
+  // Layout is measured in the WORKER over an OffscreenCanvas; the shell paints
+  // the resulting display list here. So the worker needs the real EB Garamond in
+  // its own FontFaceSet — with a fallback face it measures different advance
+  // widths than the main thread paints, and lines wrap where they are not drawn.
+  //
+  // The failure is silent by design (a dead worker is worse than serif metrics),
+  // which is exactly why it needs a test. This also pins down that the worker's
+  // FontFace path accepts woff2 at all, which is what the faces became when they
+  // were subsetted from 1.6 MB of TTF to 219 KB.
+  await boot(page);
+  const faces = await page.evaluate(async () => {
+    const trace: [string, number][] = await (window as any).__plumbline.rpc.bootTrace();
+    return trace.find(([l]) => l === "worker font faces")?.[1];
+  });
+  expect(faces, "the worker must load BOTH reader faces (roman + italic)").toBe(2);
+});
+
 test("a first visit never parses the corpus — the pack ships the cache", async ({ page }) => {
   // Every test starts on empty storage, so this IS a first visit. The engine
   // used to parse ~19 MB of JSONL here: 8.4 s on a real phone. The pack now

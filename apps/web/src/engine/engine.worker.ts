@@ -239,11 +239,12 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
 
 // ── statics ───────────────────────────────────────────────────────────────────
 
-async function loadFonts(fontUrl: string, italicUrl: string): Promise<void> {
+async function loadFonts(fontUrl: string, italicUrl: string): Promise<number> {
   // Workers have their own FontFaceSet; measurement must see the real
   // Garamond metrics or lines would wrap differently than they paint.
   const scope = self as unknown as { fonts?: FontFaceSet };
-  if (!scope.fonts) return; // very old engines: fall back to serif metrics
+  if (!scope.fonts) return 0; // very old engines: fall back to serif metrics
+  let loaded = 0;
   for (const [url, style] of [
     [fontUrl, "normal"],
     [italicUrl, "italic"],
@@ -252,10 +253,15 @@ async function loadFonts(fontUrl: string, italicUrl: string): Promise<void> {
       const face = new FontFace("EB Garamond", `url(${url})`, { style, weight: "400 700" });
       await face.load();
       scope.fonts.add(face);
+      loaded++;
     } catch {
       /* platform-serif metrics still beat a dead worker */
     }
   }
+  // Counted, not just attempted: a silent failure here is invisible until a
+  // reader notices text wrapping oddly, so the count is reported to the shell
+  // and asserted by an e2e test.
+  return loaded;
 }
 
 function statics(): Record<string, (...a: any[]) => any> {
@@ -281,10 +287,10 @@ self.onmessage = async (ev: MessageEvent) => {
       case "boot": {
         setAssetBase(m.base);
         const t0 = performance.now();
-        await loadFonts(m.fontUrl, m.italicUrl);
+        const fontFaces = await loadFonts(m.fontUrl, m.italicUrl);
         const fontsMs = Math.round(performance.now() - t0);
         booted = await boot((p) => self.postMessage({ type: "progress", ...p }));
-        booted.trace.unshift(["worker fonts", fontsMs]);
+        booted.trace.unshift(["worker fonts", fontsMs], ["worker font faces", fontFaces]);
         let persistPending = false;
         booted.engine.onAuthored = () => {
           if (!persistPending) {
@@ -308,6 +314,7 @@ self.onmessage = async (ev: MessageEvent) => {
           version: engineVersion(booted.wasm),
           bundledOn: booted.home.bundledOn,
           rndAuto,
+          fontFaces,
         });
         break;
       }

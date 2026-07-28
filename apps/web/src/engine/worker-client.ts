@@ -3,6 +3,8 @@
 // nothing here ever blocks — the reactive read-through cache lives in
 // session.svelte.ts, this module only moves messages.
 
+import { READER_FONT_FILES } from "./fonts.generated";
+
 export interface BootInfo {
   packVersion: string;
   config: any;
@@ -10,6 +12,10 @@ export interface BootInfo {
   bundledOn: boolean;
   /** This session fetches the machine tier by itself — don't offer a button. */
   rndAuto: boolean;
+  /** Reader faces the WORKER actually loaded (expected 2). A failed load is
+   *  silent otherwise, and it degrades to platform-serif METRICS while the main
+   *  thread paints real Garamond — wrong wrap points, no error. */
+  fontFaces: number;
 }
 
 export interface WorkerProgress {
@@ -68,8 +74,12 @@ export class EngineRpc {
     return this.#send({
       op: "boot",
       base,
-      fontUrl: new URL("fonts/EBGaramond.ttf", base).href,
-      italicUrl: new URL("fonts/EBGaramond-Italic.ttf", base).href,
+      // From the generated module, so the face the worker MEASURES with is by
+      // construction the same file public/fonts.css gives the document to PAINT
+      // with. Two hardcoded paths could drift, and the symptom would be lines
+      // wrapping where they are not drawn.
+      fontUrl: new URL(READER_FONT_FILES.normal, base).href,
+      italicUrl: new URL(READER_FONT_FILES.italic, base).href,
       deferRnd: opts.deferRnd === true,
     });
   }

@@ -9,6 +9,7 @@
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "pack:data": "node ../../scripts/build-web-pack.mjs && node ../../scripts/check-web-pack.mjs",
     "pack:wasm": "node scripts/copy-wasm.mjs",
+    "pack:fonts": "node scripts/subset-fonts.mjs",
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "pack:check": "node ../../scripts/check-web-pack.mjs"

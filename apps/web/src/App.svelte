@@ -34,6 +34,16 @@
         document.fonts.load('italic 18px "EB Garamond"'),
         document.fonts.load('bold 18px "EB Garamond"'),
       ]);
+      // The worker measures layout with its OWN FontFaceSet. If its load failed
+      // it would silently measure platform-serif metrics while this thread
+      // paints real Garamond, and lines would wrap where they are not drawn —
+      // so say so in the console rather than let it pass as a rendering quirk.
+      if (info.fontFaces !== 2) {
+        console.warn(
+          `[plumbline] engine worker loaded ${info.fontFaces}/2 reader faces — ` +
+            `layout is being measured with fallback metrics`,
+        );
+      }
       // Prime what synchronous readers need on their first frame: the theme
       // palettes, highlight tones, and the TOC/canon shape.
       const [light, dark, night, tones] = await Promise.all([
@@ -149,6 +159,13 @@
     background: var(--paper, #fcf9f4);
   }
   .splash {
+    /* A system serif ON PURPOSE, not an oversight. This screen exists to say
+       "we are working on it", and it inherited EB Garamond from body — which is
+       render-blocking, so with font-display: block the splash painted NOTHING
+       until 1.6 MB of font arrived. Asking for a face that is already on the
+       device means it appears immediately, and nothing swaps under the reader
+       here (the reader itself is a canvas, painted after the font resolves). */
+    font-family: Georgia, "Times New Roman", serif;
     height: 100%;
     display: flex;
     flex-direction: column;
