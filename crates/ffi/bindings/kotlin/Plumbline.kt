@@ -193,6 +193,11 @@ internal interface PlumblineNative : Library {
     // ── stage-2 core load (web boots on the corpus alone; see the header) ──
     fun plumbline_engine_load_core_data(engine: Pointer): Pointer?
 
+    // ── the plain-English overlay (the AKJV delta) ──────────────────────────
+    fun plumbline_engine_set_akjv_overlay(engine: Pointer, on: Boolean)
+    fun plumbline_engine_akjv_available(engine: Pointer): Boolean
+    fun plumbline_engine_akjv_token_json(engine: Pointer, refKey: String, tokenIndex: Int): Pointer?
+
     // ── memorization (Tier 2 #15): SRS cards, drills, coverage + activity ────
     fun plumbline_engine_memory_grade(
         engine: Pointer, verseRef: String, grade: String, now: String,

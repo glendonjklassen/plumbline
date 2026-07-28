@@ -173,6 +173,10 @@ pub struct PlumblineEngine {
     /// A READING aid: it re-words the reader's view and nothing else — never a
     /// memory card, a Present hand-off, or copied text.
     akjv: OnceLock<akjv::Akjv>,
+    /// Whether the reader has the overlay switched on. Engine state rather than
+    /// a layout argument so a shell cannot end up with one pane modernised and
+    /// the next not; OFF until asked, because the text is the KJV.
+    akjv_on: std::sync::atomic::AtomicBool,
     /// The symbolic concept engine (collocations, distribution, communities)
     /// and the leitwort scan — corpus-wide sweeps, built lazily like the SIF
     /// model and cached for the engine's lifetime.
@@ -224,6 +228,7 @@ impl PlumblineEngine {
             verse_sim: OnceLock::new(),
             xref_ix: OnceLock::new(),
             akjv: OnceLock::new(),
+            akjv_on: std::sync::atomic::AtomicBool::new(false),
             concept: OnceLock::new(),
             leitwort: OnceLock::new(),
         }
@@ -332,6 +337,11 @@ impl PlumblineEngine {
     /// The overlay, if this home has one and it matches the tokenization.
     fn akjv(&self) -> Option<&akjv::Akjv> {
         self.akjv.get()
+    }
+
+    /// The overlay only when the reader has actually asked for it.
+    fn akjv_view(&self) -> Option<&akjv::Akjv> {
+        self.akjv_on.load(std::sync::atomic::Ordering::Relaxed).then(|| self.akjv()).flatten()
     }
 
     /// The search index, built on first use; the reader's notes attach then
@@ -951,6 +961,66 @@ pub unsafe extern "C" fn plumbline_engine_token_json(
     })
 }
 
+// ── the plain-English overlay ────────────────────────────────────────────────────
+
+/// Switch the AKJV overlay on or off for this engine. Off by default: the text
+/// is the KJV, and the overlay is a reading aid the reader opts into.
+///
+/// Affects the READER only. Memory cards, Present, copied text and shared links
+/// are the KJV whatever this says — a modernised word must never end up on
+/// someone's memory card or in a hand-off, or the overlay has quietly become a
+/// second translation.
+///
+/// # Safety
+/// `engine` is a live engine or null.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_set_akjv_overlay(engine: *const PlumblineEngine, on: bool) {
+    if let Some(e) = engine.as_ref() {
+        e.akjv_on.store(on, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// Whether this home actually carries a usable overlay — a shell hides the
+/// toggle when it doesn't, rather than offering a switch that does nothing.
+/// False until the stage-2 load has run.
+///
+/// # Safety
+/// `engine` is a live engine or null.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_akjv_available(engine: *const PlumblineEngine) -> bool {
+    engine.as_ref().is_some_and(|e| e.akjv().is_some())
+}
+
+/// What the AKJV does to one token, as `{"akjv":"you shall","kjv":"thou shalt"}`
+/// — the line a word study shows under the headword. Null when the token is not
+/// re-rendered, or on a bad ref. `kjv` is the run's ORIGINAL words, which is the
+/// whole point: the reader can always see what was replaced.
+///
+/// # Safety
+/// `engine` is valid; `ref_key` is null or a valid NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_akjv_token_json(
+    engine: *const PlumblineEngine,
+    ref_key: *const c_char,
+    token_index: u32,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(rk)) = (engine.as_ref(), opt_str(ref_key)) else {
+            return ptr::null_mut();
+        };
+        let (Some(a), Some(v)) = (e.akjv(), VRef::parse_ref_key(rk)) else {
+            return ptr::null_mut();
+        };
+        let Ok(tok) = u16::try_from(token_index) else { return ptr::null_mut() };
+        let Some(span) = a.span_at(&v, tok) else { return ptr::null_mut() };
+        let Some(verse) = e.corpus.verse(&v) else { return ptr::null_mut() };
+        let kjv = plumbline_core::corpus::render_tokens(
+            verse.tokens.iter().take(span.end as usize + 1).skip(span.start as usize),
+        );
+        out_json(&wire::AkjvTokenWire { akjv: span.text.clone(), kjv: kjv.trim().to_string() })
+    })
+}
+
 // ── layout + hit-testing ─────────────────────────────────────────────────────────
 
 /// Lay out a chapter into a display list, measuring text through `measure`
@@ -990,6 +1060,21 @@ pub unsafe extern "C" fn plumbline_engine_layout_chapter(
             return ptr::null_mut();
         }
         let m = FfiMeasure { f: measure, ctx: measure_ctx };
+        // The overlay is applied HERE, on the way into the layout, so the
+        // corpus itself is never touched and a verse the AKJV leaves alone
+        // costs nothing (`overlay_verse` returns None and the original is laid
+        // out in place).
+        let overlaid: Vec<plumbline_core::corpus::Verse>;
+        let verses = match engine.akjv_view() {
+            Some(a) => {
+                overlaid = verses
+                    .iter()
+                    .map(|v| a.overlay_verse(v).unwrap_or_else(|| v.clone()))
+                    .collect();
+                &overlaid[..]
+            }
+            None => verses,
+        };
         let dl = layout_chapter(verses, &m, &cfg.into());
         Box::into_raw(Box::new(PlumblineDisplayList { inner: dl }))
     })

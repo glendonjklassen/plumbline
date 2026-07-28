@@ -1489,6 +1489,73 @@ fn akjv_overlay_loads_with_stage_two() {
     }
 }
 
+/// The overlay end to end: off by default, on when asked, and the layout it
+/// produces still hit-tests back to the right corpus token.
+#[test]
+fn akjv_overlay_relays_the_chapter_and_keeps_hit_testing() {
+    use std::ffi::CString;
+    const OVERLAY: &str = concat!(
+        r#"{"format":"overlay-akjv-v1","tokenization":"kjv1769-tok2","source":"AKJV"}"#,
+        "\n",
+        // "the world." -> "the earth." : token 5 of John 3:16 in the fixture.
+        r#"{"b":"John","c":3,"v":16,"d":[[5,5,"earth"]]}"#,
+    );
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-akjvlay-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+        std::fs::write(home.join("data").join("akjv.jsonl"), OVERLAY).unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(!e.is_null());
+        (*e).load_core_data();
+        assert!(plumbline_engine_akjv_available(e), "the home carries one");
+
+        let words = |e: *const PlumblineEngine| -> Vec<String> {
+            let dl = plumbline_engine_layout_chapter(
+                e, c"John".as_ptr(), 3, cfg(), Some(mono_measure), ptr::null_mut(),
+            );
+            assert!(!dl.is_null());
+            let json = take(plumbline_layout_to_json(dl)).unwrap();
+            plumbline_layout_free(dl);
+            let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+            v["items"].as_array().unwrap().iter()
+                .filter(|i| i["kind"] == "word")
+                .map(|i| i["text"].as_str().unwrap().trim().to_string())
+                .collect()
+        };
+
+        // Off by default: the text is the KJV.
+        let plain = words(e);
+        assert!(plain.contains(&"world.".to_string()), "KJV by default: {plain:?}");
+
+        plumbline_engine_set_akjv_overlay(e, true);
+        let over = words(e);
+        assert!(over.contains(&"earth.".to_string()), "overlaid: {over:?}");
+        assert!(!over.contains(&"world.".to_string()));
+        // Same number of painted words — a swap, not an insertion.
+        assert_eq!(plain.len(), over.len());
+
+        // The tap answer: what it says now, and what it replaced.
+        let j = take(plumbline_engine_akjv_token_json(e, c"John 3:16".as_ptr(), 5)).unwrap();
+        let t: serde_json::Value = serde_json::from_str(&j).unwrap();
+        assert_eq!(t["akjv"], "earth");
+        assert_eq!(t["kjv"], "world.");
+        // A word the AKJV left alone has no answer at all.
+        assert!(plumbline_engine_akjv_token_json(e, c"John 3:16".as_ptr(), 1).is_null());
+
+        plumbline_engine_set_akjv_overlay(e, false);
+        assert!(words(e).contains(&"world.".to_string()), "toggles back off");
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
 #[test]
 fn rnd_data_loads_after_open() {
     use std::ffi::CString;

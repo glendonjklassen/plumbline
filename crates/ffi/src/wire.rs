@@ -1577,3 +1577,12 @@ pub struct WireMemoryDrill {
     pub level: u8,
     pub max_level: u8,
 }
+
+/// What the AKJV does to one token (`plumbline_engine_akjv_token_json`).
+#[derive(serde::Serialize)]
+pub struct AkjvTokenWire {
+    /// The AKJV's wording for the run this token belongs to.
+    pub akjv: String,
+    /// The KJV words it replaced — what the reader tapped to see.
+    pub kjv: String,
+}

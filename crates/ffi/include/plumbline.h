@@ -163,6 +163,37 @@ char *plumbline_engine_token_json(const struct PlumblineEngine *engine,
                                   const char *ref_key,
                                   uint32_t token_index);
 
+// Switch the AKJV overlay on or off for this engine. Off by default: the text
+// is the KJV, and the overlay is a reading aid the reader opts into.
+//
+// Affects the READER only. Memory cards, Present, copied text and shared links
+// are the KJV whatever this says — a modernised word must never end up on
+// someone's memory card or in a hand-off, or the overlay has quietly become a
+// second translation.
+//
+// # Safety
+// `engine` is a live engine or null.
+void plumbline_engine_set_akjv_overlay(const struct PlumblineEngine *engine, bool on);
+
+// Whether this home actually carries a usable overlay — a shell hides the
+// toggle when it doesn't, rather than offering a switch that does nothing.
+// False until the stage-2 load has run.
+//
+// # Safety
+// `engine` is a live engine or null.
+bool plumbline_engine_akjv_available(const struct PlumblineEngine *engine);
+
+// What the AKJV does to one token, as `{"akjv":"you shall","kjv":"thou shalt"}`
+// — the line a word study shows under the headword. Null when the token is not
+// re-rendered, or on a bad ref. `kjv` is the run's ORIGINAL words, which is the
+// whole point: the reader can always see what was replaced.
+//
+// # Safety
+// `engine` is valid; `ref_key` is null or a valid NUL-terminated UTF-8 string.
+char *plumbline_engine_akjv_token_json(const struct PlumblineEngine *engine,
+                                       const char *ref_key,
+                                       uint32_t token_index);
+
 // Lay out a chapter into a display list, measuring text through `measure`
 // (called with `measure_ctx`). Returns an opaque handle to release with
 // [`plumbline_layout_free`], or null on a null engine, a null callback, or an

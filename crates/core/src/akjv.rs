@@ -26,7 +26,15 @@ use std::path::Path;
 
 use serde::Deserialize;
 
+use crate::corpus::Verse;
 use crate::reference::VRef;
+
+/// Display-only token flag: this word is an AKJV re-rendering. Lives beside the
+/// corpus `FLAG_*` bits in meaning but NEVER in `kjv.jsonl`, whose bitfield is a
+/// frozen contract — the overlay sets it on the display list on the way past, so
+/// a shell can mark the word (a dotted underline) with the same mechanism it
+/// already uses for the KJV's italics.
+pub const FLAG_RERENDERED: u32 = 16;
 
 /// A run of KJV tokens the AKJV words differently. `text` empty = the AKJV
 /// drops the run.
@@ -79,6 +87,51 @@ impl Akjv {
     /// twice: to know a word is marked, and to answer "what did this replace?".
     pub fn span_at(&self, vref: &VRef, tok: u16) -> Option<&AkjvSpan> {
         self.spans(vref).iter().find(|s| s.start <= tok && tok <= s.end)
+    }
+
+    /// This verse as the AKJV words it, or `None` when it re-renders nothing
+    /// (the caller then lays out the corpus verse untouched, allocating
+    /// nothing).
+    ///
+    /// **Token indices are preserved.** The run's first token takes the whole
+    /// replacement and the [`FLAG_RERENDERED`] bit; the interior tokens are
+    /// blanked rather than removed, and the layout skips anything that renders
+    /// to nothing. Rebuilding the vector instead would shift every index after
+    /// the first re-rendering, and `token_index` is what carries a tap back to
+    /// the corpus — so every Strong's lookup on the rest of the verse would
+    /// quietly resolve to the wrong word.
+    ///
+    /// The run renders as `pre(a) + replacement + post(b)`: the edges stay with
+    /// the KJV tokens that frame the run, and the interior punctuation goes,
+    /// because the replacement carries whatever the AKJV put between its own
+    /// words.
+    pub fn overlay_verse(&self, verse: &Verse) -> Option<Verse> {
+        let spans = self.spans(&verse.vref());
+        if spans.is_empty() {
+            return None;
+        }
+        let mut out = verse.clone();
+        for s in spans {
+            let (a, b) = (s.start as usize, s.end as usize);
+            if a >= out.tokens.len() || b >= out.tokens.len() {
+                continue; // an overlay wider than the verse: ignore, never panic
+            }
+            let post = out.tokens[b].post.clone();
+            let t = &mut out.tokens[a];
+            t.word = s.text.clone();
+            t.post = post;
+            t.flags |= FLAG_RERENDERED;
+            for i in a + 1..=b {
+                let t = &mut out.tokens[i];
+                t.pre.clear();
+                t.word.clear();
+                t.post.clear();
+                // Cleared so a blanked token cannot break a paragraph or read
+                // as an added word on the way through the layout.
+                t.flags = 0;
+            }
+        }
+        Some(out)
     }
 
     /// Parse the JSONL form (header line, then one object per verse). `None` on
@@ -323,6 +376,76 @@ mod tests {
         assert!(a.spans(&VRef::new("Rev", 1, 1)).is_empty());
         // An empty replacement is a DROP, not an absent span.
         assert_eq!(a.span_at(&VRef::new("Ps", 23, 1), 2).map(|s| s.text.as_str()), Some(""));
+    }
+
+    /// The property the whole design rests on: an overlaid verse reads as the
+    /// AKJV, but every surviving token keeps its CORPUS index, so a tap still
+    /// resolves to the right Strong's entry. A rebuilt token vector would shift
+    /// every index after the first re-rendering and be wrong in silence.
+    #[test]
+    fn overlaying_a_verse_keeps_corpus_token_indices() {
+        use crate::corpus;
+        // "For God so loved the world." — the overlay rewords tokens 2..3 as one
+        // phrase and token 5 on its own.
+        const KJV: &str = concat!(
+            r#"{"format":"x","tokenization":"kjv1769-tok2","verses":1}"#, "\n",
+            r#"{"b":"John","c":3,"v":16,"t":[["","For","",[],0],["","God","",["G2316"],0],"#,
+            r#"["","so","",[],0],["","loved",",",["G25"],0],["","the","",[],0],"#,
+            r#"["","world",".",["G2889"],0]]}"#,
+        );
+        const OV: &str = concat!(
+            r#"{"format":"overlay-akjv-v1","tokenization":"kjv1769-tok2","source":"AKJV"}"#, "\n",
+            r#"{"b":"John","c":3,"v":16,"d":[[2,3,"so much loved"],[5,5,"earth"]]}"#,
+        );
+        let c = corpus::from_str(KJV).unwrap();
+        let v = c.verse_at(0).unwrap();
+        let a = Akjv::parse("kjv1769-tok2", OV).unwrap();
+        let o = a.overlay_verse(v).expect("this verse is re-rendered");
+
+        // Same length: interior tokens are blanked, never removed.
+        assert_eq!(o.tokens.len(), v.tokens.len());
+        // Untouched tokens are untouched, at their own indices.
+        assert_eq!(o.tokens[0].word, "For");
+        assert_eq!(o.tokens[1].word, "God");
+        assert_eq!(o.tokens[1].strongs, vec!["G2316".to_string()]);
+        // The run's first token carries the whole phrase, the mark, and — by the
+        // render rule — the END token's punctuation.
+        assert_eq!(o.tokens[2].word, "so much loved");
+        assert_eq!(o.tokens[2].post, ",");
+        assert!(o.tokens[2].has_flag(FLAG_RERENDERED));
+        // Its interior token renders to nothing, so the layout drops it.
+        assert_eq!(o.tokens[3].render(), "");
+        // And CRUCIALLY the Strong's codes never moved: G25 is still on index 3
+        // and G2889 still on index 5, where a tap will look for them.
+        assert_eq!(o.tokens[3].strongs, vec!["G25".to_string()]);
+        assert_eq!(o.tokens[5].strongs, vec!["G2889".to_string()]);
+        assert_eq!(o.tokens[5].word, "earth");
+        assert!(o.tokens[5].has_flag(FLAG_RERENDERED));
+        // A word the AKJV left alone is not marked.
+        assert!(!o.tokens[4].has_flag(FLAG_RERENDERED));
+
+        // A verse with no entry allocates nothing.
+        let plain = corpus::from_str(KJV.replace("John", "Rev").as_str()).unwrap();
+        assert!(a.overlay_verse(plain.verse_at(0).unwrap()).is_none());
+    }
+
+    /// A malformed overlay must never panic the reader out of scripture.
+    #[test]
+    fn a_span_past_the_end_of_the_verse_is_ignored() {
+        use crate::corpus;
+        const KJV: &str = concat!(
+            r#"{"format":"x","tokenization":"kjv1769-tok2","verses":1}"#, "\n",
+            r#"{"b":"Gen","c":1,"v":1,"t":[["","In","",[],0],["","the","",[],0]]}"#,
+        );
+        const OV: &str = concat!(
+            r#"{"format":"overlay-akjv-v1","tokenization":"kjv1769-tok2","source":"x"}"#, "\n",
+            r#"{"b":"Gen","c":1,"v":1,"d":[[0,0,"At"],[7,9,"nonsense"]]}"#,
+        );
+        let c = corpus::from_str(KJV).unwrap();
+        let a = Akjv::parse("kjv1769-tok2", OV).unwrap();
+        let o = a.overlay_verse(c.verse_at(0).unwrap()).unwrap();
+        assert_eq!(o.tokens[0].word, "At"); // the sane span still applies
+        assert_eq!(o.tokens.len(), 2);
     }
 
     #[test]

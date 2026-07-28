@@ -226,6 +226,15 @@ pub fn layout_chapter<M: Measure>(verses: &[Verse], m: &M, cfg: &LayoutConfig) -
                 }
             };
 
+            // A token that renders to nothing paints nothing, and must not
+            // consume a space. The AKJV overlay blanks the interior tokens of a
+            // re-rendered run (its first token carries the whole replacement)
+            // rather than removing them, so that `ti` stays the CORPUS token
+            // index and every Strong's lookup still resolves.
+            if text.is_empty() {
+                continue;
+            }
+
             if pen.line_started && pen.x + w > cfg.width {
                 pen.newline(cfg);
             }
