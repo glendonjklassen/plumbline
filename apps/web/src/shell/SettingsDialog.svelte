@@ -213,12 +213,19 @@
       L.push("ENGINE THREAD UNAVAILABLE (the stall meter)");
       L.push(`  total           ${Math.round(diag.stall.totalMs)} ms across ${diag.stall.count} stalls`);
       L.push(`  worst single    ${Math.round(diag.stall.worstMs)} ms`);
+      // Reported, and EXCLUDED from the numbers above. A hidden tab has its
+      // timers and its downloads frozen by the browser, and counting that as
+      // engine work invented a 25-second stall on a launch that did none.
+      L.push(`  page hidden     ${Math.round(diag.stall.hiddenMs)} ms (excluded above)`);
       L.push("  (time this thread could not answer a tap, a layout, OR its own downloads)");
       if (diag.packFiles.length) {
         L.push("");
-        L.push("PACK FILES");
+        L.push("PACK FILES        ours = wall clock · net = the browser's own timing");
         for (const f of diag.packFiles) {
-          L.push(`  ${f.from.padEnd(7)} ${String(f.ms).padStart(6)} ms  ${(f.gzBytes / 1024).toFixed(0).padStart(6)} KB  ${f.path}`);
+          const net = f.netMs == null ? "     -" : `${f.netMs}`.padStart(6);
+          L.push(
+            `  ${f.from.padEnd(7)} ours ${String(f.ms).padStart(6)} ms · net ${net} ms  ${(f.gzBytes / 1024).toFixed(0).padStart(6)} KB  ${f.path}`,
+          );
         }
       }
       L.push("");
@@ -504,10 +511,13 @@
                   <td class="ms">{Math.round(diag.stall.totalMs)} ms</td>
                 </tr>
                 <tr><td>worst single stall</td><td class="ms">{Math.round(diag.stall.worstMs)} ms</td></tr>
+                <tr><td>page hidden (not counted)</td><td class="ms">{Math.round(diag.stall.hiddenMs)} ms</td></tr>
               </tbody>
             </table>
             <p class="diag-note">
-              Time the engine could not answer a tap, a layout, or its own downloads.
+              Time the engine could not answer a tap, a layout, or its own downloads. Time with the
+              screen off or the tab in the background is excluded — the browser freezes both the
+              engine and its downloads then, and counting it would read as a fault.
             </p>
           {/if}
           {#if diag?.packFiles.length}
@@ -517,7 +527,7 @@
                 {#each diag.packFiles as f, i (i)}
                   <tr>
                     <td>{f.from === "depot" ? "on device" : "downloaded"} · {f.path}</td>
-                    <td class="ms">{f.ms} ms</td>
+                    <td class="ms">{f.ms} ms{f.netMs == null ? "" : ` · net ${f.netMs}`}</td>
                   </tr>
                 {/each}
               </tbody>

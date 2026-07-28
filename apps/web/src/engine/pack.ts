@@ -133,11 +133,36 @@ export interface PackFileTrace {
   ms: number;
   /** A depot hit costs no network at all; a miss is a real download. */
   from: "depot" | "network";
+  /** What the BROWSER'S OWN network stack says this request took, and how many
+   *  bytes crossed the wire — independent of when our thread got around to
+   *  reading them.
+   *
+   *  This is the whole argument-settler. Our `ms` above is wall clock around an
+   *  `await`, so a frozen thread inflates it without limit: a phone reported
+   *  34,448 ms for a 787 KB file sitting beside a 3,304 KB file that took 475 ms
+   *  (2026-07-28). If `netMs` is small while `ms` is huge, the bytes arrived on
+   *  time and we were late collecting them — which is a scheduling bug, not a
+   *  bandwidth one, and no amount of shrinking the pack would touch it. */
+  netMs?: number;
+  transferBytes?: number;
 }
 
 let packTrace: PackFileTrace[] = [];
 export function takePackTrace(): PackFileTrace[] {
   return [...packTrace];
+}
+
+/** What the browser's network stack says a request cost, as opposed to what our
+ *  wall clock around the `await` says. The gap between the two is time the bytes
+ *  existed and this thread had not collected them yet. */
+function netTiming(url: string): { netMs?: number; transferBytes?: number } {
+  try {
+    const e = performance.getEntriesByName(url).at(-1) as PerformanceResourceTiming | undefined;
+    if (!e) return {};
+    return { netMs: Math.round(e.duration), transferBytes: e.transferSize };
+  } catch {
+    return {}; // no resource timing here: the rest of the row still stands
+  }
 }
 
 async function fetchFiles(
@@ -178,6 +203,7 @@ async function fetchFiles(
           gzBytes: f.gzBytes,
           ms: Math.round(performance.now() - t0),
           from: src.fromDepot ? "depot" : "network",
+          ...netTiming(url),
         });
       }
     }

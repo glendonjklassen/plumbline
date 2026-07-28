@@ -26,7 +26,7 @@ export interface WorkerDiagnostics {
   /** How long this thread was UNAVAILABLE — the number that separates "the
    *  network was slow" from "the download was queued behind our own arithmetic".
    *  See the stall meter in engine.worker.ts. */
-  stall: { totalMs: number; worstMs: number; count: number };
+  stall: { totalMs: number; worstMs: number; count: number; hiddenMs: number };
   packFiles: PackFileTrace[];
   packVersion: string | null;
   /** Whether stage 1 came entirely off this device, with no request at all. */
@@ -58,6 +58,18 @@ export class EngineRpc {
 
   constructor() {
     this.#w = new Worker(new URL("./engine.worker.ts", import.meta.url), { type: "module" });
+    // The worker has no `document`, so it cannot tell "I was busy" from "the
+    // phone was asleep" — and its stall meter billed the second as the first
+    // until it was told (2026-07-28). Send the current state now and on every
+    // change; `pagehide` covers the screen going off, which does not always
+    // raise visibilitychange first.
+    if (typeof document !== "undefined") {
+      const send = () => this.#w.postMessage({ op: "visibility", hidden: document.hidden });
+      send();
+      document.addEventListener("visibilitychange", send);
+      addEventListener("pagehide", () => this.#w.postMessage({ op: "visibility", hidden: true }));
+      addEventListener("pageshow", () => this.#w.postMessage({ op: "visibility", hidden: false }));
+    }
     this.#w.onmessage = (ev: MessageEvent) => {
       const m = ev.data;
       if (m.type === "progress") return this.onProgress(m);

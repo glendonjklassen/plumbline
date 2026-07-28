@@ -75,11 +75,42 @@ let lastTurn: [string, number][] = [];
 // and how late it actually was. Total lateness during boot IS the time this
 // thread spent unavailable — no division, no inference, no assumption about
 // anyone's wifi.
+// A LATE TIMER IS NOT ALWAYS A BUSY THREAD, and the first version of this meter
+// could not tell the difference. It reported a 24,921 ms "stall" on a launch
+// where every byte came off the device and the largest measured chunk was 886 ms
+// — arithmetic that cannot block for 25 seconds. The cause was the tab going to
+// the background: Chrome freezes a hidden page's timers AND its in-flight
+// requests, so the meter billed the reader's screen turning off as engine work,
+// and on the launch before it billed a backgrounded download as a 34-second
+// fetch of a 787 KB file (2026-07-28).
+//
+// A measurement that cannot distinguish "we were busy" from "the phone was
+// asleep" is worse than none: it invents a crisis and points at the wrong code.
+// So the page tells the worker when it is hidden, hidden time is excluded rather
+// than counted, and it is reported separately — because "you were away for 25 s"
+// is also a thing a reader of this report needs to know.
 const STALL_TICK = 50;
 /** Lateness under this is timer jitter, not a stall worth counting. */
 const STALL_FLOOR = 20;
-const stall = { totalMs: 0, worstMs: 0, count: 0 };
+const stall = { totalMs: 0, worstMs: 0, count: 0, hiddenMs: 0 };
 let stallLast = 0;
+let pageHidden = false;
+let hiddenSince = 0;
+
+/** The page's visibility, forwarded from the main thread (a worker has no
+ *  `document` and cannot see this for itself). */
+function setPageHidden(hidden: boolean): void {
+  if (hidden === pageHidden) return;
+  const now = performance.now();
+  pageHidden = hidden;
+  if (hidden) {
+    hiddenSince = now;
+    return;
+  }
+  stall.hiddenMs += now - hiddenSince;
+  // Do not bill the gap we were away for as lateness.
+  stallLast = now;
+}
 
 function startStallMeter(): void {
   stallLast = performance.now();
@@ -90,7 +121,9 @@ function startStallMeter(): void {
     // tick, which is exactly the quantity wanted.
     const late = now - stallLast - STALL_TICK;
     stallLast = now;
-    if (late <= STALL_FLOOR) return;
+    // Hidden: the clock kept running but this thread was not being asked to do
+    // anything, and the timer itself was throttled. Not a stall.
+    if (pageHidden || late <= STALL_FLOOR) return;
     stall.totalMs += late;
     stall.worstMs = Math.max(stall.worstMs, late);
     stall.count++;
@@ -555,6 +588,11 @@ self.onmessage = async (ev: MessageEvent) => {
       case "bootTrace": {
         reply(booted ? [...booted.trace] : []);
         break;
+      }
+      case "visibility": {
+        // Fire-and-forget from the main thread: no id, no reply.
+        setPageHidden(m.hidden === true);
+        return;
       }
       case "diagnostics": {
         // Everything the worker knows, in one round trip, so a report cannot be
