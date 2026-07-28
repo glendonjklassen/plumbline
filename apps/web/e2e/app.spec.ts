@@ -1196,6 +1196,18 @@ test("a shared passage link opens the reader at its verse", async ({ page }) => 
 // three whole ~12 MB packs stranded on the device (2026-07-27).
 test("updating sweeps the versions this build no longer uses", async ({ page }) => {
   await boot(page);
+  // The pin names EVERY file in the manifest and is written the moment the
+  // engine opens — long before stage 2 and the analysis pack have finished
+  // downloading. The last assertion here ("every file the pin names survived the
+  // sweep") is therefore meaningless until they are actually on the device: a
+  // file that never arrived is missing from the depot for reasons that have
+  // nothing to do with prune, and the failure reads as "prune deleted a pinned
+  // pack file", which is a lie.
+  //
+  // This test has always depended on the downloads happening to win that race,
+  // and it lost the moment anything slowed them slightly (2026-07-28). Waiting is
+  // the fix; the race was never part of what it means to test.
+  await settleBackground(page);
   // Let the real boot-time sweep finish first, so this test's seeding isn't
   // racing it and the counts below are its own doing.
   await page.evaluate(() => (window as any).__plumbline.sweepCaches());

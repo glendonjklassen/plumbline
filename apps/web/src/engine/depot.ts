@@ -135,13 +135,22 @@ export async function depotBytes(
   url: string,
   onChunk?: (bytes: number) => void,
   contentType = "application/octet-stream",
+  /** Filled in with which side of the read-through answered. Diagnostics only.
+   *
+   *  Reported from the read that ACTUALLY HAPPENED rather than from a separate
+   *  `depotHas` probe beforehand: a probe costs a storage round trip per file on
+   *  the very path we are trying to make fast (44 of them on a phone), and it can
+   *  disagree with the read it is supposed to describe. */
+  source?: { fromDepot: boolean },
 ): Promise<Uint8Array> {
   const hit = await depotGet(url);
   if (hit) {
+    if (source) source.fromDepot = true;
     const bytes = new Uint8Array(await hit.arrayBuffer());
     onChunk?.(bytes.length);
     return bytes;
   }
+  if (source) source.fromDepot = false;
 
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);

@@ -9,6 +9,7 @@
 // race (see the depot's header).
 
 import { depotBytes, depotDelete, depotGet, depotPut } from "./depot";
+import { PERF } from "./perf";
 
 /** When the loader fetches a file. The manifest carries this per entry — it is
  *  NOT re-derived from filenames here, which is how four places ended up able to
@@ -117,6 +118,28 @@ async function gunzip(body: ArrayBuffer): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
+/** Per-file download detail, for the diagnostics panel.
+ *
+ *  The trace used to carry ONE number per stage — "stage2 fetch+gunzip" — which
+ *  conflates three unrelated things: bytes off the network, bytes off this
+ *  device, and time the thread simply wasn't available to receive either. On a
+ *  phone that read 33,993 ms where a desktop over localhost read 907 ms, and
+ *  dividing the byte count by it produced a "connection speed" that was pure
+ *  invention (2026-07-28). Never again from one number: record what each file
+ *  cost and WHERE IT CAME FROM. */
+export interface PackFileTrace {
+  path: string;
+  gzBytes: number;
+  ms: number;
+  /** A depot hit costs no network at all; a miss is a real download. */
+  from: "depot" | "network";
+}
+
+let packTrace: PackFileTrace[] = [];
+export function takePackTrace(): PackFileTrace[] {
+  return [...packTrace];
+}
+
 async function fetchFiles(
   version: string,
   files: PackFile[],
@@ -133,13 +156,30 @@ async function fetchFiles(
   const workers = Array.from({ length: 4 }, async () => {
     for (let f = queue.shift(); f; f = queue.shift()) {
       const url = packFileUrl(f, version);
-      const body = await depotBytes(url, (n) => {
-        received += n;
-        onProgress?.({ fraction: Math.min(1, received / totalGz), currentFile: f.path });
-      }).catch((e) => {
+      // Which side of the read-through answered, taken from the read itself so
+      // it adds no work to the load path.
+      const src = { fromDepot: false };
+      const t0 = performance.now();
+      const body = await depotBytes(
+        url,
+        (n) => {
+          received += n;
+          onProgress?.({ fraction: Math.min(1, received / totalGz), currentFile: f.path });
+        },
+        undefined,
+        PERF ? src : undefined,
+      ).catch((e) => {
         throw new Error(`data pack file ${f.path}: ${e instanceof Error ? e.message : String(e)}`);
       });
       out.set(f.path, await gunzip(body.buffer as ArrayBuffer));
+      if (PERF) {
+        packTrace.push({
+          path: f.path,
+          gzBytes: f.gzBytes,
+          ms: Math.round(performance.now() - t0),
+          from: src.fromDepot ? "depot" : "network",
+        });
+      }
     }
   });
   await Promise.all(workers);

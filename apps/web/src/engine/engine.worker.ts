@@ -36,6 +36,7 @@ import {
   fetchStage2Pack,
   packFileUrl,
   setAssetBase,
+  takePackTrace,
   verifyStored,
 } from "./pack";
 import { depotBytes, depotDelete, depotHas, depotKeys } from "./depot";
@@ -56,6 +57,45 @@ import {
 let booted: BootResult | null = null;
 /** Cost split of the most recent chapter layout — Settings → diagnostics. */
 let lastTurn: [string, number][] = [];
+
+// ── the stall meter ───────────────────────────────────────────────────────────
+// This thread is the only one that can answer layout, taps and word studies, so
+// anything synchronous it runs blocks all of them. It also blocks its OWN
+// downloads: a response body is read one `await` at a time, and every one of
+// those continuations needs the event loop, so a file can finish arriving at the
+// radio and then sit in a queue behind a quarter-second of arithmetic.
+//
+// That second effect is INVISIBLE in a wall-clock timer, and it burned us: a
+// phone reported "stage2 fetch+gunzip: 33993 ms" where a desktop over localhost
+// reported 907 ms, and dividing bytes by seconds produced a confident, invented
+// "200 KB/s connection" (2026-07-28). The bytes-per-second of a starved reader
+// measures the starvation, not the network.
+//
+// So measure the starvation directly. A heartbeat that should fire every tick,
+// and how late it actually was. Total lateness during boot IS the time this
+// thread spent unavailable — no division, no inference, no assumption about
+// anyone's wifi.
+const STALL_TICK = 50;
+/** Lateness under this is timer jitter, not a stall worth counting. */
+const STALL_FLOOR = 20;
+const stall = { totalMs: 0, worstMs: 0, count: 0 };
+let stallLast = 0;
+
+function startStallMeter(): void {
+  stallLast = performance.now();
+  setInterval(() => {
+    const now = performance.now();
+    // Browsers COALESCE a repeating timer whose thread was blocked — one late
+    // callback, not a burst of missed ones — so this is the lateness of this
+    // tick, which is exactly the quantity wanted.
+    const late = now - stallLast - STALL_TICK;
+    stallLast = now;
+    if (late <= STALL_FLOOR) return;
+    stall.totalMs += late;
+    stall.worstMs = Math.max(stall.worstMs, late);
+    stall.count++;
+  }, STALL_TICK);
+}
 
 // ── the turn cache ────────────────────────────────────────────────────────────
 // Laid-out chapters, keyed by everything the layout depends on. Highlights,
@@ -425,6 +465,9 @@ self.onmessage = async (ev: MessageEvent) => {
     switch (m.op) {
       case "boot": {
         setAssetBase(m.base);
+        // Before anything else, so the meter covers the whole boot — including
+        // the downloads, which is the window the numbers are argued over.
+        if (PERF) startStallMeter();
         const t0 = performance.now();
         const fontFaces = await loadFonts(m.fontUrl, m.italicUrl);
         const fontsMs = Math.round(performance.now() - t0);
@@ -511,6 +554,19 @@ self.onmessage = async (ev: MessageEvent) => {
       }
       case "bootTrace": {
         reply(booted ? [...booted.trace] : []);
+        break;
+      }
+      case "diagnostics": {
+        // Everything the worker knows, in one round trip, so a report cannot be
+        // assembled from readings taken at different moments.
+        reply({
+          trace: booted ? [...booted.trace] : [],
+          turn: [...lastTurn],
+          stall: { ...stall },
+          packFiles: takePackTrace(),
+          packVersion: booted?.packVersion ?? null,
+          fromPin: booted?.fromPin ?? null,
+        });
         break;
       }
       case "export": {

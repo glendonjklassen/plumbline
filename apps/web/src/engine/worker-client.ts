@@ -4,6 +4,7 @@
 // session.svelte.ts, this module only moves messages.
 
 import { READER_FONT_FILES } from "./fonts.generated";
+import type { PackFileTrace } from "./pack";
 
 export interface BootInfo {
   packVersion: string;
@@ -16,6 +17,20 @@ export interface BootInfo {
    *  silent otherwise, and it degrades to platform-serif METRICS while the main
    *  thread paints real Garamond — wrong wrap points, no error. */
   fontFaces: number;
+}
+
+/** One snapshot of everything the engine worker measured about this boot. */
+export interface WorkerDiagnostics {
+  trace: [string, number][];
+  turn: [string, number][];
+  /** How long this thread was UNAVAILABLE — the number that separates "the
+   *  network was slow" from "the download was queued behind our own arithmetic".
+   *  See the stall meter in engine.worker.ts. */
+  stall: { totalMs: number; worstMs: number; count: number };
+  packFiles: PackFileTrace[];
+  packVersion: string | null;
+  /** Whether stage 1 came entirely off this device, with no request at all. */
+  fromPin: boolean | null;
 }
 
 export interface WorkerProgress {
@@ -127,6 +142,11 @@ export class EngineRpc {
   /** Cost split of the most recent chapter layout, measured on-device. */
   layoutTrace(): Promise<[string, number][]> {
     return this.#send({ op: "layoutTrace" });
+  }
+  /** Everything the worker knows about this boot, in ONE round trip — so a
+   *  report can't be stitched together from readings taken seconds apart. */
+  diagnostics(): Promise<WorkerDiagnostics> {
+    return this.#send({ op: "diagnostics" });
   }
   exportUserData(): Promise<[string, Uint8Array][]> {
     return this.#send({ op: "export" });

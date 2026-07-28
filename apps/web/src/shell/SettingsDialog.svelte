@@ -5,6 +5,7 @@
   import { completeOffline, surveyOffline, type OfflineSurvey } from "../engine/offline";
   import { cleanChurch } from "./church";
   import { PERF } from "../engine/perf";
+  import type { WorkerDiagnostics } from "../engine/worker-client";
   import { zipRead, zipWrite } from "../engine/zip";
   import { idbApply } from "../engine/idb";
   import { nowStamp } from "../engine/StudyEngine";
@@ -114,15 +115,31 @@
   let offlineBusy = $state(false);
   let offlineProgress = $state(0);
   const mb = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
-  const offlineComplete = $derived(!!offline && offline.missing.length === 0 && s.rndState === "ready");
+  // "On this device" is a claim about BYTES, and only about bytes. It used to
+  // also require `rndState === "ready"`, which is a claim about whether this
+  // SESSION has finished preparing what it already downloaded — so a phone
+  // holding every byte was told "Still to download: the analysis pack" for the
+  // whole time the engine was busy parsing it (feedback 2026-07-28, with a
+  // screenshot, on a launch whose own trace showed the analysis pack coming off
+  // the device in 115 ms). Downloading and preparing are different waits and the
+  // reader is owed the difference.
+  const offlineComplete = $derived(!!offline && offline.missing.length === 0);
   /** What is still missing, in a sentence — the text itself never is. */
   const offlineSummary = $derived.by(() => {
     const files = offline?.missing.length ?? 0;
-    const pack = s.rndState !== "ready" ? "the analysis pack" : "";
-    const rest = files ? `${files} data file${files === 1 ? "" : "s"} (${mb(offline!.missingBytes)})` : "";
-    const both = [pack, rest].filter(Boolean).join(" and ");
-    return `The Holy Bible is already on this device. Still to download: ${both || "nothing"}.`;
+    if (files) {
+      return `The Holy Bible is already on this device. Still to download: ${files} data file${
+        files === 1 ? "" : "s"
+      } (${mb(offline!.missingBytes)}).`;
+    }
+    return "The Holy Bible is already on this device. Still to download: nothing.";
   });
+  /** Preparing is not downloading; say so separately or not at all. */
+  const preparingNote = $derived(
+    offlineComplete && s.rndState !== "ready"
+      ? "The analysis is already downloaded and is being prepared — that finishes on its own."
+      : "",
+  );
 
   $effect(() => {
     if (s.showSettings && !offlineBusy) void surveyOffline().then((r) => (offline = r));
@@ -148,11 +165,91 @@
   // appending to the boot trace (Strong's, warm steps, the analysis pack),
   // and the turn split describes whichever chapter was last laid out — turn
   // a few pages, then open this.
+  let diag = $state<WorkerDiagnostics | null>(null);
+  let copied = $state(false);
   $effect(() => {
     if (!PERF || !s.showSettings) return;
-    void s.rpc.bootTrace().then((t) => (s.bootTrace = t));
-    void s.rpc.layoutTrace().then((t) => (s.turnTrace = t));
+    // ONE round trip, so the trace, the stall total and the per-file costs are
+    // all from the same instant. Three separate reads drift while the background
+    // load is still running, which is exactly when someone is reading this.
+    void s.rpc.diagnostics().then((d) => {
+      diag = d;
+      s.bootTrace = d.trace;
+      s.turnTrace = d.turn;
+    });
   });
+
+  /** kilobytes, counts and milliseconds all shared one " ms" suffix, so the
+   *  panel confidently reported `home evict after open (KB)  36367 ms`. */
+  function unitOf(label: string): string {
+    if (/\(KB\)$/.test(label)) return " KB";
+    if (/^(worker font faces|items|wasm→JS)/.test(label)) return "";
+    return " ms";
+  }
+
+  /** The whole diagnostic picture as plain text, for pasting into a bug report.
+   *  Screenshots of this panel cost a round trip every time and cut off exactly
+   *  the rows that mattered (2026-07-28). */
+  function report(): string {
+    const nav = navigator as any;
+    const c = nav.connection ?? {};
+    const L: string[] = [];
+    L.push(`Plumbline ${__APP_VERSION__} · build ${__BUILD_ID__} · engine ${s.engineVersion}`);
+    L.push(`data pack ${diag?.packVersion ?? "?"}${diag?.fromPin ? " (warm: stage 1 off the device)" : ""}`);
+    L.push("");
+    L.push("DEVICE");
+    L.push(`  ua              ${navigator.userAgent}`);
+    // The browser's OWN estimate. Recorded so nobody ever again derives a
+    // connection speed by dividing a byte count by a wall clock that was mostly
+    // this thread being busy.
+    L.push(`  connection      ${c.effectiveType ?? "?"} · downlink ${c.downlink ?? "?"} Mbps · rtt ${c.rtt ?? "?"} ms · saveData ${c.saveData ?? false}`);
+    L.push(`  cpu threads     ${navigator.hardwareConcurrency ?? "?"}`);
+    L.push(`  device memory   ${nav.deviceMemory ?? "?"} GB`);
+    L.push(`  screen          ${screen.width}x${screen.height} @${devicePixelRatio}`);
+    L.push(`  storage used    ${offline?.bytesOnDevice ? mb(offline.bytesOnDevice) : "?"} · persisted ${offline?.persisted ?? "?"}`);
+    L.push(`  pack files      ${offline?.totalFiles ?? "?"} · missing ${offline?.missing.length ?? "?"}`);
+    if (diag) {
+      L.push("");
+      L.push("ENGINE THREAD UNAVAILABLE (the stall meter)");
+      L.push(`  total           ${Math.round(diag.stall.totalMs)} ms across ${diag.stall.count} stalls`);
+      L.push(`  worst single    ${Math.round(diag.stall.worstMs)} ms`);
+      L.push("  (time this thread could not answer a tap, a layout, OR its own downloads)");
+      if (diag.packFiles.length) {
+        L.push("");
+        L.push("PACK FILES");
+        for (const f of diag.packFiles) {
+          L.push(`  ${f.from.padEnd(7)} ${String(f.ms).padStart(6)} ms  ${(f.gzBytes / 1024).toFixed(0).padStart(6)} KB  ${f.path}`);
+        }
+      }
+      L.push("");
+      L.push("BOOT");
+      for (const [k, v] of diag.trace) L.push(`  ${k.padEnd(34)} ${v}${unitOf(k)}`);
+      if (diag.turn.length) {
+        L.push("");
+        L.push("LAST CHAPTER TURN");
+        for (const [k, v] of diag.turn) L.push(`  ${k.padEnd(34)} ${v}${unitOf(k)}`);
+      }
+    }
+    return L.join("\n");
+  }
+
+  async function copyDiagnostics(): Promise<void> {
+    const text = report();
+    try {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+      setTimeout(() => (copied = false), 2000);
+    } catch {
+      // Clipboard needs a secure context and a user gesture, and some phone
+      // browsers refuse anyway. Falling back to a share sheet beats a dead
+      // button, and failing that the reader can still select the text.
+      try {
+        await navigator.share?.({ text });
+      } catch {
+        s.showToast("Couldn't copy — select the text and copy it by hand.");
+      }
+    }
+  }
 
   const themes = [
     ["system", "Follow system"],
@@ -359,6 +456,9 @@
               ? ` Using ${mb(offline.bytesOnDevice)}.`
               : ""}
           </span>
+          {#if preparingNote}
+            <span class="off-note">{preparingNote}</span>
+          {/if}
           <!-- "It is all downloaded" and "it will still be there" are different
                claims, and only the first one is ours to make: browsers evict
                storage under pressure. Say which of the two is true. -->
@@ -392,10 +492,42 @@
         <hr />
         <details class="diag">
           <summary>Boot diagnostics — this device</summary>
+          <button class="action copy-diag" onclick={copyDiagnostics}>
+            {copied ? "Copied ✓" : "Copy diagnostics"}
+          </button>
+          {#if diag}
+            <p class="diag-sub">Engine thread unavailable</p>
+            <table>
+              <tbody>
+                <tr>
+                  <td>total, across {diag.stall.count} stalls</td>
+                  <td class="ms">{Math.round(diag.stall.totalMs)} ms</td>
+                </tr>
+                <tr><td>worst single stall</td><td class="ms">{Math.round(diag.stall.worstMs)} ms</td></tr>
+              </tbody>
+            </table>
+            <p class="diag-note">
+              Time the engine could not answer a tap, a layout, or its own downloads.
+            </p>
+          {/if}
+          {#if diag?.packFiles.length}
+            <p class="diag-sub">Pack files</p>
+            <table>
+              <tbody>
+                {#each diag.packFiles as f, i (i)}
+                  <tr>
+                    <td>{f.from === "depot" ? "on device" : "downloaded"} · {f.path}</td>
+                    <td class="ms">{f.ms} ms</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          {/if}
+          <p class="diag-sub">Boot</p>
           <table>
             <tbody>
-              {#each s.bootTrace as [stage, ms], i (i)}
-                <tr><td>{stage}</td><td class="ms">{ms} ms</td></tr>
+              {#each s.bootTrace as [stage, n], i (i)}
+                <tr><td>{stage}</td><td class="ms">{n}{unitOf(stage)}</td></tr>
               {/each}
             </tbody>
           </table>
@@ -404,7 +536,7 @@
             <table>
               <tbody>
                 {#each s.turnTrace as [stage, n], i (i)}
-                  <tr><td>{stage}</td><td class="ms">{n}{stage.startsWith("items") || stage.startsWith("wasm") ? "" : " ms"}</td></tr>
+                  <tr><td>{stage}</td><td class="ms">{n}{unitOf(stage)}</td></tr>
                 {/each}
               </tbody>
             </table>
@@ -533,6 +665,16 @@
     text-align: right;
     font-variant-numeric: tabular-nums;
     color: var(--ink, #211f1a);
+  }
+  .copy-diag {
+    margin-top: 8px;
+    align-self: flex-start;
+  }
+  .diag-note {
+    margin-top: 4px;
+    font-size: 11.5px;
+    line-height: 1.35;
+    color: var(--faded, #8a8276);
   }
   .content {
     overflow-y: auto;
