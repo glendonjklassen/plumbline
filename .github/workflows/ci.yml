@@ -33,6 +33,19 @@ jobs:
         run: cargo test --locked -p plumbline-core -p plumbline-layout -p plumbline-rnd -p plumbline-ffi -p plumbline-hydrate
       - name: Test the R&D features
         run: cargo test --locked -p plumbline-rnd --features "bridge embeddings morphology concept"
+      # The corpus idxcache must be REPRODUCIBLE. It is the biggest file in the
+      # web pack and the pack manifest hashes it, so a cache that differs run to
+      # run re-mints every `?v=` URL and makes every reader re-download the whole
+      # pack on a release that changed no data. The unit tests assert the
+      # invariant on a fixture; this asserts it on the real 19 MB corpus, which
+      # is the artifact that actually ships.
+      - name: The idxcache builds byte-identically
+        run: |
+          cargo run --release --locked -q -p plumbline-hydrate -- \
+            web-cache --data data/kjv.jsonl --out /tmp/idxcache.a
+          cargo run --release --locked -q -p plumbline-hydrate -- \
+            web-cache --data data/kjv.jsonl --out /tmp/idxcache.b
+          cmp /tmp/idxcache.a /tmp/idxcache.b
 
   # Test plumbline-rnd with NO features in isolation: a single -p plumbline-rnd
   # invocation in its own job, so feature unification from sibling -p flags

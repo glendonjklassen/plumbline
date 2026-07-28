@@ -102,10 +102,16 @@ for (const [src, dir, keep, stock] of SOURCES) {
 // the hydrate CLI; RAW bincode — the wire gzip below covers transport, and
 // the engine reads it with zero in-wasm inflation. Marked `cache` so the
 // loader fetches it only when IndexedDB doesn't already hold one.
+//
+// `--locked` on all four generated artifacts, deliberately: their bytes ARE
+// bincode's encoding, so an unpinned serde/bincode bump would silently change
+// the biggest file in the pack — and every reader would re-download it with no
+// data having changed. The pack version is a content hash; it can only mean
+// something if the content is a function of the inputs alone.
 const cacheTmp = join(tmpdir(), `plumbline-idxcache-${process.pid}`);
 execFileSync(
   "cargo",
-  ["run", "--release", "-q", "-p", "plumbline-hydrate", "--", "web-cache",
+  ["run", "--release", "--locked", "-q", "-p", "plumbline-hydrate", "--", "web-cache",
    "--data", join(repo, "data/kjv.jsonl"), "--out", cacheTmp],
   { cwd: repo, stdio: ["ignore", "inherit", "inherit"] },
 );
@@ -125,7 +131,7 @@ files.push({ path: "data/kjv.jsonl.idxcache", bytes: cacheRaw.length, gzBytes: c
 const vecbTmp = join(tmpdir(), `plumbline-vecb-${process.pid}`);
 execFileSync(
   "cargo",
-  ["run", "--release", "-q", "-p", "plumbline-hydrate", "--", "vecb",
+  ["run", "--release", "--locked", "-q", "-p", "plumbline-hydrate", "--", "vecb",
    "--from", join(repo, "data", VEC_TEXT), "--out", vecbTmp],
   { cwd: repo, stdio: ["ignore", "inherit", "inherit"] },
 );
@@ -144,7 +150,7 @@ files.push({
 const morphTmp = join(tmpdir(), `plumbline-morphb-${process.pid}`);
 execFileSync(
   "cargo",
-  ["run", "--release", "-q", "-p", "plumbline-hydrate", "--", "morphb",
+  ["run", "--release", "--locked", "-q", "-p", "plumbline-hydrate", "--", "morphb",
    "--from", join(repo, "data", MORPH_TEXT), "--out", morphTmp],
   { cwd: repo, stdio: ["ignore", "inherit", "inherit"] },
 );
@@ -163,7 +169,7 @@ files.push({
 const akjvTmp = join(tmpdir(), `plumbline-akjvb-${process.pid}`);
 execFileSync(
   "cargo",
-  ["run", "--release", "-q", "-p", "plumbline-hydrate", "--", "akjvb",
+  ["run", "--release", "--locked", "-q", "-p", "plumbline-hydrate", "--", "akjvb",
    "--from", join(repo, "data", AKJV_TEXT), "--out", akjvTmp],
   { cwd: repo, stdio: ["ignore", "inherit", "inherit"] },
 );

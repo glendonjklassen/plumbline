@@ -332,27 +332,48 @@ fn read_cache_v1(bytes: &[u8]) -> Option<CorpusCache> {
 /// decoded out of them on demand, and inflating ~18 MB inside wasm on every
 /// launch cost real seconds on a phone.
 fn encode_dir_cache(corpus: &Corpus, src_len: u64, src_mtime: i64) -> Result<Vec<u8>, Error> {
-    let mut payload: Vec<u8> = Vec::new();
-    let mut chapters = Vec::with_capacity(corpus.slots.len());
-    for (book, by_chapter) in &corpus.chapter_ix {
-        for (&chapter, &ix) in by_chapter {
-            let verses = corpus.slots[ix].verses(&corpus.raw);
-            let blob = bincode::serialize(verses).map_err(|e| Error::Parse(e.to_string()))?;
-            chapters.push((
-                book.clone(),
-                chapter,
-                verses.len() as u32,
-                payload.len() as u32,
-                blob.len() as u32,
-            ));
-            payload.extend_from_slice(&blob);
-        }
-    }
-    // Canonical order, so a rebuilt cache is byte-identical and the slots line
-    // up with the verse ordinals the JSONL path produces.
-    chapters.sort_by_key(|(book, chapter, ..)| {
-        (crate::canon::BOOKS.iter().position(|b| b.id == book).unwrap_or(usize::MAX), *chapter)
+    // Canonical order FIRST — the payload is laid out in it too, so a rebuilt
+    // cache is byte-identical and the slots line up with the verse ordinals the
+    // JSONL path produces.
+    //
+    // Sorting the directory AFTER writing the payload (as this did until
+    // 2026-07-28) canonicalizes the entries but NOT the offsets baked into
+    // them: those were captured from `chapter_ix`, a HashMap whose iteration
+    // order std randomizes per map instance. So every build emitted a
+    // semantically identical but byte-different cache — three runs, three
+    // pack versions — and because the pack manifest hashes this file, every
+    // release re-minted every `?v=` URL and re-downloaded the whole pack.
+    // The sort masked the bug from inspection: the directory looked perfectly
+    // canonical while the payload behind it did not.
+    let mut order: Vec<(&String, u16, usize)> = corpus
+        .chapter_ix
+        .iter()
+        .flat_map(|(book, by_chapter)| by_chapter.iter().map(move |(&chapter, &ix)| (book, chapter, ix)))
+        .collect();
+    order.sort_by(|&(ba, ca, _), &(bb, cb, _)| {
+        let pos = |id: &String| {
+            crate::canon::BOOKS.iter().position(|b| b.id == id.as_str()).unwrap_or(usize::MAX)
+        };
+        // The book id breaks ties: every non-canonical book shares
+        // `usize::MAX`, and a stable sort would otherwise fall back to the
+        // HashMap order that this function exists to eliminate.
+        (pos(ba), ba.as_str(), ca).cmp(&(pos(bb), bb.as_str(), cb))
     });
+
+    let mut payload: Vec<u8> = Vec::new();
+    let mut chapters = Vec::with_capacity(order.len());
+    for (book, chapter, ix) in order {
+        let verses = corpus.slots[ix].verses(&corpus.raw);
+        let blob = bincode::serialize(verses).map_err(|e| Error::Parse(e.to_string()))?;
+        chapters.push((
+            book.clone(),
+            chapter,
+            verses.len() as u32,
+            payload.len() as u32,
+            blob.len() as u32,
+        ));
+        payload.extend_from_slice(&blob);
+    }
     let dir = bincode::serialize(&DirCache {
         src_len,
         src_mtime,
@@ -657,6 +678,119 @@ mod tests {
         write_dir_cache(&cache_path(&src), &a, lg + 999, mg).unwrap();
         assert!(load_corpus(&src).is_err(), "stale-stamp cache rejected → garbage source errors");
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A corpus wide enough for ordering to be observable: eight books fed in
+    /// neither canonical nor alphabetical order, three chapters each. Twenty-four
+    /// directory entries means a HashMap traversal that happens to match
+    /// canonical order is a 1-in-24! accident, so the two tests below fail on
+    /// the unsorted-payload bug every run rather than most runs.
+    fn many_books_jsonl() -> String {
+        // Deliberately not canonical order, and not sorted: this is the order
+        // the builder registers them in, which is what the old code leaked.
+        const FEED: [&str; 8] = ["Rev", "Ps", "Gen", "Matt", "Exod", "John", "Isa", "Lev"];
+        let mut verses = 0;
+        let mut body = String::new();
+        for book in FEED {
+            for chapter in 1..=3u16 {
+                for v in 1..=2u16 {
+                    body.push_str(&format!(
+                        r#"{{"b":"{book}","c":{chapter},"t":[["","{book}","",[],0],["","word","",["H430"],0],["","{v}","",[],0]],"v":{v}}}"#,
+                    ));
+                    body.push('\n');
+                    verses += 1;
+                }
+            }
+        }
+        format!(
+            "{}\n{body}",
+            format_args!(
+                r#"{{"format":"overlay-kjv-canonical","tokenization":"kjv1769-tok2","verses":{verses}}}"#
+            )
+        )
+    }
+
+    /// Split an encoded cache into its directory and payload halves.
+    fn split_cache(bytes: &[u8]) -> (DirCache, &[u8]) {
+        let head = DIR_CACHE_MAGIC.len();
+        let dir_len = u32::from_le_bytes(bytes[head..head + 4].try_into().unwrap()) as usize;
+        let dir: DirCache = bincode::deserialize(&bytes[head + 4..head + 4 + dir_len]).unwrap();
+        (dir, &bytes[head + 4 + dir_len..])
+    }
+
+    #[test]
+    fn cache_payload_follows_directory_order() {
+        // THE structural invariant. The directory is emitted in canonical order;
+        // the payload must be laid out in that SAME order, because each entry's
+        // offset is captured while the payload is written. Sorting the directory
+        // afterwards (what this code did until 2026-07-28) reorders the entries
+        // without relocating the blobs they point at, so the offsets come out in
+        // HashMap-traversal order — randomly seeded per map instance, hence a
+        // different cache on every build and a fresh pack version every release.
+        //
+        // Reading offsets in directory order and requiring them to ascend
+        // contiguously catches that in a single run: it is exactly the property
+        // "the payload is in the order the directory advertises".
+        let corpus = from_str(&many_books_jsonl()).unwrap();
+        let bytes = encode_dir_cache(&corpus, 0, 0).unwrap();
+        let (dir, payload) = split_cache(&bytes);
+        assert_eq!(dir.chapters.len(), 24, "eight books, three chapters each");
+
+        let mut at = 0u32;
+        for (book, chapter, _verses, offset, len) in &dir.chapters {
+            assert_eq!(
+                *offset, at,
+                "{book} {chapter}: payload offset {offset} is not where directory order puts it ({at}) \
+                 — the payload was written in a different order than the directory lists",
+            );
+            at += len;
+        }
+        assert_eq!(at as usize, payload.len(), "payload has gaps or trailing slack");
+
+        // And the directory really is canonical, so the check above is anchored
+        // to canon order rather than to whatever order happened to be emitted.
+        let canonical: Vec<(String, u16)> = {
+            let mut v: Vec<(String, u16)> =
+                dir.chapters.iter().map(|(b, c, ..)| (b.clone(), *c)).collect();
+            v.sort_by_key(|(b, c)| {
+                (crate::canon::BOOKS.iter().position(|k| k.id == b.as_str()).unwrap(), *c)
+            });
+            v
+        };
+        let emitted: Vec<(String, u16)> =
+            dir.chapters.iter().map(|(b, c, ..)| (b.clone(), *c)).collect();
+        assert_eq!(emitted, canonical, "directory is not in canonical order");
+    }
+
+    #[test]
+    fn cache_bytes_are_deterministic() {
+        // The property the pack manifest depends on: same text in, same bytes
+        // out. Two SEPARATE parses, because std seeds each HashMap instance
+        // independently — one corpus encoded twice would pass even with the bug.
+        let src = many_books_jsonl();
+        let a = encode_dir_cache(&from_str(&src).unwrap(), 0, 0).unwrap();
+        let b = encode_dir_cache(&from_str(&src).unwrap(), 0, 0).unwrap();
+        assert_eq!(a.len(), b.len(), "two builds of one corpus differ in length");
+        assert!(
+            a == b,
+            "two builds of one corpus produced different bytes — the cache is not reproducible, \
+             so every release re-mints every pack URL and re-downloads the whole pack",
+        );
+
+        // Determinism must not have been bought by making the cache wrong: it
+        // still round-trips to the same text.
+        let dir = std::env::temp_dir().join(format!("plumbline-corpus-det-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cache = dir.join("kjv.jsonl.idxcache");
+        std::fs::write(&cache, &a).unwrap();
+        let loaded = load_cache(&cache, None).expect("the deterministic cache still opens");
+        assert_eq!(loaded.len(), 48);
+        assert_eq!(loaded.verse(&VRef::new("Gen", 2, 1)).unwrap().body(), "Gen word 1");
+        assert_eq!(loaded.verse(&VRef::new("Rev", 3, 2)).unwrap().body(), "Rev word 2");
+        assert_eq!(loaded.verse_at(0).unwrap().vref(), VRef::new("Gen", 1, 1));
+        assert_eq!(loaded.verses_iter().count(), 48);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
