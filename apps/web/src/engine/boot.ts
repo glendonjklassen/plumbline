@@ -13,8 +13,9 @@
 // milliseconds actually go on a phone" (surfaced via the bootTrace RPC).
 
 import { instantiate, type WasmEngine } from "./engine";
-import { buildHome, loadPersistedIdxcache, type VirtualHome } from "./home";
-import { fetchManifest, fetchPack, type PackManifest } from "./pack";
+import { buildHome, dropLegacyIdxcache, type VirtualHome } from "./home";
+import { assetUrl, fetchManifest, fetchPack, fetchStageLocal, type PackManifest } from "./pack";
+import { manifestFromPin, readPin, writePin } from "./pin";
 import { PERF } from "./perf";
 import { StudyEngine } from "./StudyEngine";
 
@@ -33,6 +34,8 @@ export interface BootResult {
   packVersion: string;
   /** Per-stage wall-clock in ms, in execution order (label, ms). */
   trace: [string, number][];
+  /** Whether stage 1 came entirely from the depot, with no network request. */
+  fromPin: boolean;
 }
 
 export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult> {
@@ -46,28 +49,50 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   };
 
   onPhase({ phase: "download", fraction: 0 });
-  // The text arrives as the parsed-corpus cache — the pack's copy on a first
-  // visit, this device's own copy afterwards. Either way the engine never
-  // parses JSONL (8.4 s on a 2026 flagship phone; 2026-07-26 trace) and never
-  // downloads it.
-  const [manifest, persisted] = await Promise.all([
-    timed("manifest", fetchManifest),
-    timed("idxcache probe (IndexedDB)", loadPersistedIdxcache),
-  ]);
-  // A persisted cache belongs to the pack that produced it. After a data
-  // update its verses are the OLD text, and the tokenization stamp alone
-  // wouldn't catch that — so it's only reused while the versions agree.
-  const persistedIdx = persisted?.version === manifest.version ? persisted.bytes : undefined;
-  const pack = await timed(persistedIdx ? "stage1 fetch+gunzip (stock only)" : "stage1 fetch+gunzip (text)", () =>
-    fetchPack(manifest, (p) => onPhase({ phase: "download", fraction: p.fraction, detail: p.currentFile }), {
-      needText: !persistedIdx,
-    }),
-  );
+  // THE LADDER. First rung that works, wins.
+  //
+  //  1. A pin whose stage-1 files are all in the depot → zero network requests.
+  //     This is the warm boot, and it is the common case.
+  //  2. Anything else → the cold path: fetch the manifest, download what is
+  //     missing, write a fresh pin.
+  //
+  // There is deliberately no "repair" rung between them. The depot read-through
+  // already downloads only what it does not have, so the cold path IS the repair
+  // — one manifest fetch, then just the absent bytes. A partially-evicted device
+  // therefore gets one coherent decision instead of a per-file mix.
+  const base = assetUrl("");
+  let pinned = await timed("pin read (depot)", () => readPin(base));
+  let manifest: PackManifest | null = null;
+  let pack: Map<string, Uint8Array> | null = null;
+  let fromPin = false;
+
+  if (pinned) {
+    const m = manifestFromPin(pinned);
+    const local = await timed("stage1 read (depot, no network)", () => fetchStageLocal(m, "text"));
+    if (local) {
+      manifest = m;
+      pack = local;
+      fromPin = true;
+    }
+  }
+
+  if (!manifest || !pack) {
+    // The text arrives as the parsed-corpus cache — the pack's copy on a first
+    // visit, this device's own copy afterwards. Either way the engine never
+    // parses JSONL (8.4 s on a 2026 flagship phone; 2026-07-26 trace) and never
+    // downloads it.
+    const live = await timed("manifest (network)", fetchManifest);
+    manifest = live;
+    pack = await timed("stage1 fetch+gunzip (text)", () =>
+      fetchPack(live, (p) => onPhase({ phase: "download", fraction: p.fraction, detail: p.currentFile })),
+    );
+    pinned = null; // stale: a fresh pin is written below, once the open succeeds
+  }
 
   onPhase({ phase: "prepare" });
   const stockPaths = new Set(manifest.files.filter((f) => f.seedOnce).map((f) => f.path));
   const home = await timed("virtual home build", () =>
-    buildHome(pack, stockPaths, persistedIdx, manifest.version),
+    buildHome(pack, stockPaths),
   );
   const wasm = await timed("wasm compile+instantiate", () => instantiate(home.root));
 
@@ -95,15 +120,24 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
     }, 50);
   };
 
-  // ORDER MATTERS. persistIdxcache reads the cache back OUT of the home, so the
-  // eviction has to wait for it — evict first and the persist silently no-ops,
-  // and this device would re-download 3.3 MB on every launch forever.
-  await home.persistIdxcache();
+  // PIN ONLY AFTER A SUCCESSFUL OPEN. The pin's value is that the next launch can
+  // act on it without asking the network, so it must never name a pack that could
+  // not actually boot this one. Cold path only — on the fast path it already
+  // describes exactly this pack.
+  if (!fromPin) await writePin(manifest, base);
+
   // The corpus cache is the big one: `load_cache` does a single whole-file read
   // and MOVES the bytes into the engine's own buffer, which every unvisited
   // chapter is then decoded out of. The node here is a pure duplicate of ~37 MB.
   const freed = home.evict(["data/kjv.jsonl.idxcache"]);
   if (PERF && freed) trace.push(["home evict after open (KB)", Math.round(freed / 1024)]);
 
-  return { engine, wasm, home, manifest, packVersion: manifest.version, trace };
+  // Reclaim the legacy IndexedDB copy of the corpus cache, but only now — after
+  // an open that PROVED the depot can supply the text. Deleting it before that
+  // would take away the one copy a device with an evicted depot still had.
+  void dropLegacyIdxcache().then((n) => {
+    if (PERF && n) trace.push(["legacy IDB idxcache dropped (KB)", Math.round(n / 1024)]);
+  });
+
+  return { engine, wasm, home, manifest, packVersion: manifest.version, trace, fromPin };
 }

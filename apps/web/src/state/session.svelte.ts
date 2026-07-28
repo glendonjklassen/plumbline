@@ -610,8 +610,11 @@ export class Session {
 
   /** Re-store this build's shell and sweep every superseded version. Runs at
    *  idle after boot; also the seam the e2e sweep test drives. */
-  sweepCaches(): Promise<void> {
-    return precacheShell([__BUILD_ID__, this.packVersion]);
+  async sweepCaches(): Promise<void> {
+    // Store the shell first, then let the WORKER reclaim: it holds the pin, which
+    // is the authority on which pack files this device should still have.
+    const shell = await precacheShell();
+    if (shell.length) await this.rpc.prune(shell);
   }
 
   /** A newer build is deployed and this session is still on the old one. Shown

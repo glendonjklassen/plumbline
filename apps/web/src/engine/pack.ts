@@ -8,7 +8,7 @@
 // worker happens to be controlling this worker, which on a first visit is a
 // race (see the depot's header).
 
-import { depotBytes, depotGet, depotPut } from "./depot";
+import { depotBytes, depotDelete, depotGet, depotPut } from "./depot";
 
 /** When the loader fetches a file. The manifest carries this per entry — it is
  *  NOT re-derived from filenames here, which is how four places ended up able to
@@ -37,6 +37,12 @@ export interface PackFile {
   /** The parsed-corpus cache — the one file the fast open depends on, fetched
    *  only when IndexedDB doesn't already hold a usable copy (see boot.ts). */
   role?: "corpusCache";
+  /** Where these bytes live, relative to the app base. Present on files that came
+   *  from a PIN, absent on a manifest straight off the network (where it is
+   *  derived). Storing it lets two pack generations coexist in the depot: an
+   *  unchanged file keeps its URL across a version bump, so re-pinning costs no
+   *  bytes. See pin.ts. */
+  url?: string;
 }
 
 export interface PackManifest {
@@ -141,9 +147,68 @@ async function fetchFiles(
 }
 
 /** The depot key for a pack file. One function, so the loader, the offline
- *  survey and the cache sweep cannot disagree about what a file is called. */
+ *  survey and the cache sweep cannot disagree about what a file is called.
+ *
+ *  A pinned file carries its own URL — content-addressed on its hash, so one
+ *  changed weave invalidates one URL. A manifest fresh off the network has none
+ *  yet, and gets the same scheme derived from the same hash. */
 export function packFileUrl(f: PackFile, version: string): string {
-  return `${packUrl(f.path)}.gz?v=${version}`;
+  if (f.url) return assetUrl(f.url);
+  return f.hash ? `${packUrl(f.path)}.gz?h=${f.hash}` : `${packUrl(f.path)}.gz?v=${version}`;
+}
+
+/** sha256 of raw bytes, first 16 hex chars — the same form the manifest carries.
+ *  Returns null where `crypto.subtle` is unavailable (it needs a secure context,
+ *  so a plain-http origin has none). Callers treat null as "unverified" rather
+ *  than "bad": refusing to load on a host that cannot hash would be worse than
+ *  loading unverified, which is exactly what every previous build did. */
+export async function sha16(raw: Uint8Array): Promise<string | null> {
+  try {
+    const buf = raw.slice().buffer as ArrayBuffer;
+    const d = await crypto.subtle.digest("SHA-256", buf);
+    return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
+  } catch {
+    return null;
+  }
+}
+
+/** Check a freshly-stored pack file against the hash the manifest claims, and
+ *  delete it if it does not match.
+ *
+ *  Nothing verified downloaded content before this beyond `res.ok`, so a CDN error
+ *  page served with a 200, or a truncated body, was stored as a permanently valid
+ *  file — and the engine then failed to parse it on every launch with no recovery
+ *  path. This is what makes the per-file hash load-bearing rather than decorative. */
+export async function verifyStored(f: PackFile, version: string): Promise<boolean> {
+  if (!f.hash) return true;
+  const url = packFileUrl(f, version);
+  const hit = await depotGet(url);
+  if (!hit) return false;
+  const raw = await gunzip(await hit.arrayBuffer());
+  const got = await sha16(raw);
+  if (got === null) return true; // no crypto here: unverified, not rejected
+  if (got === f.hash) return true;
+  await depotDelete(url);
+  return false;
+}
+
+/** Read a stage entirely from the DEPOT, or give up. No network, at all — this is
+ *  what makes a warm boot cost zero requests, and returning null rather than
+ *  falling back to the network is deliberate: the caller decides whether to take
+ *  the cold path, so a partially-evicted device gets one coherent decision
+ *  instead of a per-file mix of local reads and downloads. */
+export async function fetchStageLocal(
+  manifest: PackManifest,
+  stage: PackFile["stage"],
+): Promise<Map<string, Uint8Array> | null> {
+  const out = new Map<string, Uint8Array>();
+  for (const f of manifest.files) {
+    if (f.stage !== stage) continue;
+    const hit = await depotGet(packFileUrl(f, manifest.version));
+    if (!hit) return null;
+    out.set(f.path, await gunzip(await hit.arrayBuffer()));
+  }
+  return out;
 }
 
 /** Stage 1 — the FASTEST path to text on screen: the parsed corpus cache plus

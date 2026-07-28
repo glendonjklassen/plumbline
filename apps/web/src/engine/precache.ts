@@ -21,7 +21,7 @@
 //
 // A build-emitted list is exact, complete, and identical on every page.
 
-import { DEPOT, depotHas, pruneStale, requestPersistence } from "./depot";
+import { DEPOT, depotHas, requestPersistence } from "./depot";
 import { assetUrl } from "./pack";
 
 export interface ShellManifest {
@@ -47,13 +47,12 @@ export async function fetchShellManifest(): Promise<ShellManifest | null> {
   }
 }
 
-/** Store this build's shell, then sweep superseded versions.
- *
- *  @param keepVersions the `?v=` stamps still in use — this build's id and the
- *  pack version. Sweeping runs only AFTER the shell is safely stored, never
- *  before: a prune must not be able to strand a half-updated app. */
-export async function precacheShell(keepVersions: string[] = []): Promise<void> {
-  if (typeof caches === "undefined") return; // no Cache API (private mode, http)
+/** Store this build's shell. Returns the shell file list, so the caller can hand
+ *  it to the worker's prune — which owns reclamation now, because the pin lives
+ *  there and the pin is the authority on what to keep. Pruning happens only AFTER
+ *  this resolves, never before: it must not be able to strand a half-updated app. */
+export async function precacheShell(): Promise<string[]> {
+  if (typeof caches === "undefined") return []; // no Cache API (private mode, http)
   try {
     const manifest = await fetchShellManifest();
     const base = new URL("./", location.href).href;
@@ -81,8 +80,9 @@ export async function precacheShell(keepVersions: string[] = []): Promise<void> 
     // granted on. Nothing downstream assumes it was granted.
     void requestPersistence();
 
-    if (keepVersions.length) await pruneStale({ versions: keepVersions, assets: urls });
+    return manifest?.files ?? [];
   } catch {
     /* storage blocked or full: the app still runs, it just isn't offline yet */
+    return [];
   }
 }

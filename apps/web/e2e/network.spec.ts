@@ -102,3 +102,139 @@ test("a stalled navigation still reaches the reader (app shell from cache)", asy
     await origin.close();
   }
 });
+
+/** A forwarding origin that rewrites `pack/manifest.json` on the way past —
+ *  `mutate` receives the parsed manifest and returns the one to serve. Everything
+ *  else is proxied verbatim. This is how a "new deploy" is simulated without a
+ *  second server: page.route() would bypass the service worker AND cannot see
+ *  requests the engine worker makes at all. */
+function rewritingOrigin(): Promise<{
+  url: string;
+  mutate: (f: ((m: any) => any) | null) => void;
+  close: () => Promise<void>;
+}> {
+  let mutate: ((m: any) => any) | null = null;
+  const server = http.createServer((req, res) => {
+    const isManifest = req.url?.startsWith("/pack/manifest.json");
+    // Identity encoding when we intend to REWRITE the body: vite preview
+    // compresses JSON, and parsing gzip bytes as text fails silently — the
+    // rewrite is skipped and the test appears to prove the opposite of what it
+    // claims. (It did, for one run.)
+    const headers = { ...req.headers, host: "localhost:4173" };
+    if (isManifest) {
+      // A body we intend to REWRITE has to arrive as plain, complete text.
+      // Two things prevent that by default, and both made this fake silently
+      // serve the ORIGINAL manifest while the test looked like it was testing
+      // the rewrite:
+      //   - vite preview gzips JSON, so parsing the bytes as text fails;
+      //   - a reload sends If-None-Match, upstream answers 304 with NO body,
+      //     and the browser then serves its own cached copy.
+      headers["accept-encoding"] = "identity";
+      delete headers["if-none-match"];
+      delete headers["if-modified-since"];
+    }
+    const up = http.request(
+      UPSTREAM + req.url,
+      { method: req.method, headers },
+      (ur) => {
+        if (!(isManifest && mutate)) {
+          res.writeHead(ur.statusCode ?? 502, ur.headers);
+          ur.pipe(res);
+          return;
+        }
+        const chunks: Buffer[] = [];
+        ur.on("data", (c) => chunks.push(c));
+        ur.on("end", () => {
+          const upHeaders = { ...ur.headers };
+          delete upHeaders["content-length"];
+          delete upHeaders["content-encoding"];
+          delete upHeaders["etag"];
+          delete upHeaders["last-modified"];
+          let body: string;
+          try {
+            body = JSON.stringify(mutate!(JSON.parse(Buffer.concat(chunks).toString("utf8"))));
+          } catch {
+            body = Buffer.concat(chunks).toString("utf8");
+          }
+          res.writeHead(ur.statusCode ?? 502, {
+            ...upHeaders,
+            "content-type": "application/json",
+            // So the browser cannot answer a later request for this from its own
+            // HTTP cache and hide the rewrite.
+            "cache-control": "no-store",
+          });
+          res.end(body);
+        });
+      },
+    );
+    up.on("error", () => res.destroy());
+    req.pipe(up);
+  });
+  return new Promise((resolve) => {
+    server.listen(0, () => {
+      const { port } = server.address() as AddressInfo;
+      resolve({
+        url: `http://localhost:${port}/`,
+        mutate: (f) => (mutate = f),
+        close: () => new Promise((done) => server.close(() => done())),
+      });
+    });
+  });
+}
+
+test("a data update re-pins without re-downloading what did not change", async ({ page }) => {
+  // The whole point of per-file content hashes. A release rotates the pack
+  // version, but every file whose bytes are unchanged keeps its `?h=` URL — so the
+  // reconciler should find them all already on the device and download NOTHING,
+  // then re-pin to the new version.
+  //
+  // Before this, one whole-pack `?v=` stamp meant a version bump invalidated all
+  // 44 URLs and every reader re-downloaded 10 MB for a release that might have
+  // changed one weave.
+  const origin = await rewritingOrigin();
+  try {
+    await firstVisit(page, origin.url);
+    const before = await page.evaluate(async () => {
+      const hit = await caches.match(new URL("__depot/pack-pin.json", location.href).href, {
+        ignoreVary: true,
+      });
+      return (await hit!.json()).packVersion as string;
+    });
+
+    // "Deploy": same files, new version stamp. Nothing's content changed.
+    origin.mutate((m) => ({ ...m, version: "beefbeefbeefbeef" }));
+
+    const packRequests: string[] = [];
+    page.on("request", (r) => {
+      const u = new URL(r.url());
+      if (u.pathname.includes("/pack/") && !u.pathname.endsWith("manifest.json")) {
+        packRequests.push(u.pathname);
+      }
+    });
+    await page.reload();
+    await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+
+    // The reconciler runs after the reader is served — the poll waits it out
+    // rather than guessing a duration.
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(async () => {
+            const hit = await caches.match(new URL("__depot/pack-pin.json", location.href).href, {
+              ignoreVary: true,
+            });
+            return hit ? ((await hit.json()).packVersion as string) : null;
+          }),
+        { timeout: 90_000 },
+      )
+      .toBe("beefbeefbeefbeef");
+
+    expect(before).not.toBe("beefbeefbeefbeef");
+    expect(
+      packRequests,
+      "a version bump with no content change re-downloaded pack files — per-file hashing is not working",
+    ).toEqual([]);
+  } finally {
+    await origin.close();
+  }
+});

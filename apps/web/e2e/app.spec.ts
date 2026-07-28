@@ -586,21 +586,28 @@ test("a warm boot never asks the network for the pack or the engine", async ({ p
   const asked: string[] = [];
   const listener = (r: { url: () => string }) => {
     const u = new URL(r.url());
-    // The manifest is EXEMPT, and only the manifest: it is the one pack file
-    // with no version in its URL, so it is fetched network-first on purpose to
-    // notice a data update. It leaves the boot path when the pinned manifest
-    // lands; until then this test pins down everything else.
-    if (u.pathname.endsWith("/pack/manifest.json")) return;
+    // NOTHING is exempt any more. The manifest used to be — it is the one pack
+    // file with no version in its URL, so boot had to ask the network for it, and
+    // on a stalled radio that cost up to the service worker's 3.5 s timebox before
+    // a device holding all of scripture would open. The PIN replaced it: a
+    // manifest stored on the device, written only after every file it names was
+    // verified present. The live manifest is still fetched once per session by the
+    // reconciler, but off the boot path, which is why this test measures only up
+    // to the point the reader has text.
     if (u.pathname.includes("/pack/") || u.pathname.endsWith(".wasm")) asked.push(u.pathname);
   };
   page.on("request", listener);
+  let untilText: string[] = [];
   try {
     await page.reload();
     await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 60_000 });
     await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/);
-    // Wait for the warm boot's background stages too — they must be depot hits
-    // as well, or the reader pays for Strong's and the cross-references again on
-    // every single launch.
+    // Snapshot HERE: text is on screen, and everything up to this point had to
+    // come from storage. What the reconciler fetches afterwards is deliberate and
+    // off the critical path.
+    untilText = [...asked];
+    // The background stages must be depot hits too, or the reader pays for
+    // Strong's and the cross-references again on every single launch.
     await expect
       .poll(
         async () =>
@@ -615,6 +622,12 @@ test("a warm boot never asks the network for the pack or the engine", async ({ p
   } finally {
     page.off("request", listener);
   }
+
+  expect(
+    untilText,
+    "a warm boot asked the network for something before it could show text — including the manifest, " +
+      "which the pin exists to remove from the boot path",
+  ).toEqual([]);
 
   expect(
     asked,
@@ -908,27 +921,29 @@ test("Settings can make the app completely offline, and says when it is", async 
   // ignored. The pack ships it, but with a parsed-corpus cache present no stage
   // ever fetches it — so counting it made the device permanently "incomplete"
   // and made this very button spend 2.4 MB on a file nothing opens.
-  const { missing, rawJsonlCached } = await page.evaluate(async () => {
+  // Checked against the URLs the app itself uses — read from the manifest and
+  // keyed the same way the loader keys them (per-file content hash), rather than
+  // hand-rolled here. A test that rebuilds the URL scheme independently just
+  // asserts that two copies of the scheme agree.
+  const { missing, rawJsonlShipped } = await page.evaluate(async () => {
     const manifest = await (await fetch("pack/manifest.json")).json();
     const cache = await caches.open("plumbline-v1");
-    const hasCache = manifest.files.some((f: { cache?: boolean }) => f.cache);
-    const key = (p: string) => `pack/${p}.gz?v=${manifest.version}`;
-    let missing = 0;
+    const key = (f: { path: string; hash: string }) => `pack/${f.path}.gz?h=${f.hash}`;
+    const missing: string[] = [];
     for (const f of manifest.files) {
-      if (f.path === "data/kjv.jsonl" && hasCache) continue;
-      if (!(await cache.match(key(f.path), { ignoreVary: true }))) missing++;
+      if (!(await cache.match(new URL(key(f), location.href).href, { ignoreVary: true }))) {
+        missing.push(f.path);
+      }
     }
     return {
       missing,
-      rawJsonlCached: hasCache
-        ? !!(await cache.match(key("data/kjv.jsonl"), { ignoreVary: true }))
-        : false,
+      rawJsonlShipped: manifest.files.some((f: { path: string }) => f.path === "data/kjv.jsonl"),
     };
   });
-  expect(missing).toBe(0);
-  expect(rawJsonlCached, "the raw JSONL is superseded by the corpus cache — downloading it wastes 2.4 MB").toBe(
-    false,
-  );
+  expect(missing, "these pack files are not on the device").toEqual([]);
+  // The raw JSONL left the pack: the corpus cache supersedes it, and with the
+  // JSONL in the home the engine would parse 19 MB and write a 37 MB cache back.
+  expect(rawJsonlShipped, "data/kjv.jsonl is back in the pack").toBe(false);
 });
 
 test("the welcome's verses are the corpus text, verbatim and instant", async ({ page }) => {
@@ -1074,9 +1089,9 @@ test("updating sweeps the versions this build no longer uses", async ({ page }) 
     await put(location.origin + "/pack/manifest.json?v=OLDPACK");
     await put(location.origin + "/plumbline_ffi.wasm?v=OLDBUILD");
     await put(location.origin + "/assets/index-DEADBEEF.js");
-    // Entries that must survive: un-versioned, and the CURRENT pack version.
+    // Entries that must survive: the un-versioned shell.
     await put(location.origin + "/index.html");
-    await put(location.origin + `/pack/data/keep.gz?v=${s.packVersion}`);
+    void s;
     return (await c.keys()).map((r: Request) => r.url.replace(location.origin, ""));
   });
   expect(before).toContain("/pack/data/kjv.jsonl.gz?v=OLDPACK");
@@ -1093,11 +1108,23 @@ test("updating sweeps the versions this build no longer uses", async ({ page }) 
   expect(after).not.toContain("/pack/manifest.json?v=OLDPACK");
   expect(after).not.toContain("/plumbline_ffi.wasm?v=OLDBUILD");
   expect(after).not.toContain("/assets/index-DEADBEEF.js");
-  // ...and nothing else was collateral. The un-versioned shell entry and the
-  // current pack version both stay, or the next launch is broken/offline-dead.
+  // ...and nothing else was collateral. The shell and every file the PIN names
+  // must survive, or the next launch is broken or offline-dead.
+  //
+  // The keep-set is now the pin plus the shell manifest, not "entries whose ?v=
+  // matches the current pack". That is what lets per-file hashes work at all, and
+  // it also reclaims a file dropped from the pack entirely — which the old rule
+  // could never do, because nothing referenced its version any more.
   expect(after).toContain("/index.html");
-  const current = await page.evaluate(() => (window as any).__plumbline.packVersion);
-  expect(after).toContain(`/pack/data/keep.gz?v=${current}`);
+  const pinned = await page.evaluate(async () => {
+    const hit = await caches.match(new URL("__depot/pack-pin.json", location.href).href, {
+      ignoreVary: true,
+    });
+    const pin = hit ? await hit.json() : null;
+    return (pin?.files ?? []).map((f: { url: string }) => "/" + f.url);
+  });
+  expect(pinned.length, "there should be a pin naming the pack after a boot").toBeGreaterThan(40);
+  for (const u of pinned) expect(after, `prune deleted a pinned pack file: ${u}`).toContain(u);
   // The bundle this page is actually running must still be cached.
   const running = await page.evaluate(
     () => document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/"]')!.src,

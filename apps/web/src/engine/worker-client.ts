@@ -115,6 +115,11 @@ export class EngineRpc {
   loadRnd(): Promise<void> {
     return this.#send({ op: "loadRnd" });
   }
+  /** Reclaim superseded packs and shell assets. Runs in the WORKER, because that
+   *  is where the pin lives, and the pin is the authority on what to keep. */
+  prune(shell: string[]): Promise<number> {
+    return this.#send({ op: "prune", shell });
+  }
   /** Per-stage boot timings ([label, ms]) measured on-device. */
   bootTrace(): Promise<[string, number][]> {
     return this.#send({ op: "bootTrace" });

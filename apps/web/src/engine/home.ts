@@ -20,12 +20,24 @@ const IDXCACHE = "data/kjv.jsonl.idxcache";
  *  notice. */
 const IDXCACHE_VERSION = "meta:idxcacheVersion";
 
-/** This device's persisted idxcache and the pack version it came from — boot
- *  checks it BEFORE the stage-1 fetch to decide whether to download the text
- *  at all. */
-export async function loadPersistedIdxcache(): Promise<{ bytes: Uint8Array; version: string } | undefined> {
-  const [bytes, version] = await Promise.all([idbGet("cache", IDXCACHE), idbGet("cache", IDXCACHE_VERSION)]);
-  return bytes && version ? { bytes, version: dec.decode(version) } : undefined;
+/** Delete the LEGACY IndexedDB copy of the corpus cache.
+ *
+ *  It used to be the fast path: boot probed IndexedDB before fetching, to avoid
+ *  re-downloading 3.3 MB. It was never actually buying that — the depot has held
+ *  the same file since the first visit, so the "download" it avoided was already
+ *  a local read. What it did cost was real: `persistIdxcache` wrote 37 MB back
+ *  into IndexedDB on EVERY launch, including launches that had just read those
+ *  same bytes out of it, and it kept a second full copy of the corpus on disk.
+ *
+ *  Deleted BY KEY, never by clearing the store: `meta:stockSeeded` and
+ *  `meta:bundled` live in there too, and they are decisions rather than data —
+ *  losing stockSeeded re-seeds the stock set on the next boot, which resurrects
+ *  every stock weave the reader deliberately threw away. */
+export async function dropLegacyIdxcache(): Promise<number> {
+  const existing = await idbGet("cache", IDXCACHE);
+  if (!existing) return 0;
+  await idbApply("cache", new Map(), [IDXCACHE, IDXCACHE_VERSION]);
+  return existing.byteLength;
 }
 
 export interface VirtualHome {
@@ -42,8 +54,6 @@ export interface VirtualHome {
   evict(paths: string[]): number;
   /** Diff the user subtree against IndexedDB (call after authoring writes). */
   persistUserData(): Promise<void>;
-  /** Persist the engine-built idxcache once, after a successful open. */
-  persistIdxcache(): Promise<void>;
   /** Snapshot of the authored files (for the backup zip). */
   exportUserData(): Map<string, Uint8Array>;
   /** Stop ALL persistence (a restore is pending reload — nothing may write). */
@@ -93,8 +103,6 @@ function collectFiles(prefix: string, dir: Directory, out: Map<string, Uint8Arra
 export async function buildHome(
   pack: Map<string, Uint8Array>,
   stockPaths: Set<string> = new Set(),
-  idxcache?: Uint8Array,
-  packVersion = "",
 ): Promise<VirtualHome> {
   const root = new Map<string, Directory | File>();
   const [userFiles, seededFlag, bundledFlag] = await Promise.all([
@@ -117,11 +125,9 @@ export async function buildHome(
   for (const d of USER_DIRS) ensureDir(root, d);
   ensureDir(root, "weaves/suggested");
 
-  // Restore the user's files and the corpus cache from previous sessions
-  // (user copies overwrite freshly-seeded stock — theirs is newer; the
-  // persisted idxcache overwrites the pack-shipped copy the same way).
+  // Restore the user's files from previous sessions (their copies overwrite
+  // freshly-seeded stock — theirs is newer).
   for (const [path, bytes] of userFiles) insertFile(root, path, bytes);
-  if (idxcache) insertFile(root, IDXCACHE, idxcache);
 
   // Snapshot of what IndexedDB currently holds, for cheap diffs on persist.
   let synced = new Set(userFiles.keys());
@@ -141,7 +147,7 @@ export async function buildHome(
 
   return {
     root,
-    hadIdxcache: !!idxcache || pack.has(IDXCACHE),
+    hadIdxcache: pack.has(IDXCACHE),
     addFiles(files: Map<string, Uint8Array>) {
       for (const [path, bytes] of files) insertFile(root, path, bytes);
     },
@@ -226,21 +232,6 @@ export async function buildHome(
       // authoring event is cheaper than tracking per-file dirty bits.
       await idbApply("user", current, deletes);
       synced = new Set(current.keys());
-    },
-    async persistIdxcache() {
-      const dataDir = root.get("data");
-      if (!(dataDir instanceof Directory)) return;
-      const cache = (dataDir.contents as Map<string, Directory | File>).get("kjv.jsonl.idxcache");
-      if (!(cache instanceof File)) return;
-      // Stamped with the pack it came from, so the next launch can tell
-      // whether it still describes the shipped text.
-      await idbApply(
-        "cache",
-        new Map([
-          [IDXCACHE, (cache as File).data],
-          [IDXCACHE_VERSION, enc.encode(packVersion)],
-        ]),
-      );
     },
   };
 }

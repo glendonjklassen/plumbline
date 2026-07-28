@@ -28,8 +28,17 @@
 // boot message carries the resolved font URL.
 
 import { boot, type BootResult } from "./boot";
-import { fetchRndPack, fetchStage2Pack, packFileUrl, setAssetBase } from "./pack";
-import { depotHas } from "./depot";
+import { pinnedUrls, writePin } from "./pin";
+import {
+  assetUrl,
+  fetchManifest,
+  fetchRndPack,
+  fetchStage2Pack,
+  packFileUrl,
+  setAssetBase,
+  verifyStored,
+} from "./pack";
+import { depotBytes, depotDelete, depotHas, depotKeys } from "./depot";
 import { PERF } from "./perf";
 import { measureFor, readerFont, fontExtent } from "../reader/measure";
 import {
@@ -252,6 +261,46 @@ async function willAutoLoadRnd(machineOn: boolean, deferRnd: boolean): Promise<b
   return (await rndAlreadyCached()) || !saveData();
 }
 
+/** Notice a data update, download only what changed, and re-pin — all of it OFF
+ *  the boot path.
+ *
+ *  This is where the manifest fetch went. Boot no longer asks the network
+ *  anything on a warm launch; the live manifest is fetched once here, after the
+ *  reader already has text on screen, and diffed against the pin.
+ *
+ *  Because URLs are content-addressed on each file's own hash, a release that
+ *  changes one weave downloads one weave — and unchanged files keep their URLs, so
+ *  re-pinning copies nothing. The new bytes land BESIDE the old ones and the pin
+ *  is rewritten only after every file it will name is verified present, so an
+ *  interrupted update leaves the previous generation intact and bootable.
+ *
+ *  The new pack applies at the NEXT launch, deliberately. This session's engine
+ *  has its text in wasm memory and the reader is mid-verse; swapping the corpus
+ *  under them would be worse than waiting. */
+async function reconcilePack(): Promise<void> {
+  const live = await fetchManifest();
+  if (live.version === booted!.packVersion) return; // nothing deployed since
+  const t0 = performance.now();
+  let fetched = 0;
+  for (const f of live.files) {
+    const url = packFileUrl(f, live.version);
+    if (await depotHas(url)) continue; // unchanged: same hash, same URL, already here
+    await depotBytes(url);
+    // Verify what just arrived. A hash mismatch means a truncated body or an error
+    // page served 200 — store that unchecked and the engine fails to parse it on
+    // every launch with no way out. Bail and keep the pin we have.
+    if (!(await verifyStored(f, live.version))) return;
+    fetched++;
+  }
+  // Verify before committing. Cheap — a metadata lookup per file, no bodies read.
+  for (const f of live.files) {
+    if (!(await depotHas(packFileUrl(f, live.version)))) return; // incomplete: keep the old pin
+  }
+  await writePin(live, assetUrl(""));
+  booted!.trace.push([`reconciled to ${live.version} (${fetched} files)`, Math.round(performance.now() - t0)]);
+  self.postMessage({ type: "packUpdated", version: live.version });
+}
+
 async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<void> {
   await Promise.race([firstLayout, new Promise((r) => setTimeout(r, 2500))]);
   try {
@@ -275,6 +324,52 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
   } catch {
     /* offline — the Settings toggle or next boot retries */
   }
+  // Last, and in its own try: a failed update must not cost the reader anything
+  // they already have, and being offline here is the normal case, not an error.
+  try {
+    await reconcilePack();
+  } catch {
+    /* offline or a stalled manifest — the pin stands, and the next launch retries */
+  }
+}
+
+/** Reclaim everything the device no longer needs.
+ *
+ *  An ALLOWLIST, not a denylist: keep what the pin (and the generation before it)
+ *  names, plus the shell this build is made of, and delete the rest. The old rule
+ *  was "delete versioned entries whose `?v=` is not the current pack" — which
+ *  could not see per-file hashes, and could not reclaim a file dropped from the
+ *  pack entirely, because nothing referenced its version any more.
+ *
+ *  HARD PRECONDITION: prune only runs with a readable pin AND a non-empty shell
+ *  list. Without both, the keep-set is incomplete and an allowlist would delete
+ *  the app. Skipping costs nothing but disk; getting it wrong costs the reader
+ *  their offline copy.
+ *
+ *  TWO generations are kept, and prune runs at the START of a session rather than
+ *  the end. That buys "one generation of grace" with no cross-tab coordination
+ *  and no lock: a tab still reading the previous pack keeps working, and the worst
+ *  case is one superseded pack lingering until the next launch — against the old
+ *  behaviour, which was unbounded and had stranded three whole packs. */
+async function pruneToPin(shell: string[]): Promise<number> {
+  const base = assetUrl("");
+  const keep = await pinnedUrls(base);
+  if (keep.size <= 2 || !shell.length) return 0; // no pin, or no shell list: refuse
+  for (const f of shell) keep.add(assetUrl(f));
+  keep.add(base);
+  keep.add(assetUrl("index.html"));
+  keep.add(assetUrl("shell-manifest.json"));
+  keep.add(assetUrl("pack/manifest.json"));
+  // The engine binary is versioned by build id rather than listed in the shell
+  // manifest (it is the worker's to fetch, and far too big for a shell list).
+  keep.add(assetUrl(`plumbline_ffi.wasm?v=${__BUILD_ID__}`));
+
+  let gone = 0;
+  for (const url of await depotKeys()) {
+    if (keep.has(url)) continue;
+    if (await depotDelete(url)) gone++;
+  }
+  return gone;
 }
 
 // ── statics ───────────────────────────────────────────────────────────────────
@@ -404,6 +499,10 @@ self.onmessage = async (ev: MessageEvent) => {
       case "loadRnd": {
         await loadRndChunked();
         reply(null);
+        break;
+      }
+      case "prune": {
+        reply(await pruneToPin(m.shell ?? []));
         break;
       }
       case "bootTrace": {
