@@ -154,6 +154,16 @@ jobs:
       - name: Build the data pack
         run: node scripts/build-web-pack.mjs
 
+      # The pack is generated fresh in THIS job and then deployed to readers, so
+      # this is the last place it can be checked and the only place it really
+      # matters. CI validates the same thing on every push, but a release can be
+      # tagged from any commit — and a pack that violates the loader's contract
+      # surfaces as a boot that hangs with no diagnostic, on everyone's device at
+      # once. Entry shape, closed stage set, and every hash re-derived from the
+      # bytes about to ship.
+      - name: Check the data pack against the loader's contract
+        run: node scripts/check-web-pack.mjs
+
       - name: Build the engine (wasm32-wasip1)
         run: cargo build --locked -p plumbline-ffi --release --target wasm32-wasip1
 

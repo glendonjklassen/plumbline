@@ -56,6 +56,15 @@ function stallableOrigin(): Promise<{
   });
 }
 
+/** Reload and return how long it took to get text on screen. */
+async function timedReload(page: Page): Promise<number> {
+  const t0 = Date.now();
+  await page.reload();
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 45_000 });
+  await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/);
+  return Date.now() - t0;
+}
+
 /** First visit through the given origin, first-run dismissed, reader up. */
 async function firstVisit(page: Page, url: string): Promise<void> {
   await page.goto(url);
@@ -84,14 +93,26 @@ test("a stalled network cannot hang the boot (service-worker timebox)", async ({
     // stalling it would prove nothing and this test would pass while the timebox
     // rotted. fonts.css is the remaining render-blocking unversioned file, and it
     // stalls exactly the same way.
+    // MEASURE THIS MACHINE FIRST. The budget below is derived from an unstalled
+    // reload rather than being a constant: a fixed millisecond ceiling passed
+    // here for weeks and then failed inside a loaded full run, which is exactly
+    // the trap CLAUDE.md records. Under load the baseline and the stalled boot
+    // inflate together, so the DIFFERENCE between them is the stable quantity —
+    // and the difference is what the timebox governs.
+    const baseline = await timedReload(page);
+
     origin.stall("fonts.css");
-    const t0 = Date.now();
-    await page.reload();
-    await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 45_000 });
-    await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/);
-    // The SW gives the network 3.5 s before serving its stored copy; the whole
-    // boot should land well inside that plus a normal warm boot.
-    expect(Date.now() - t0).toBeLessThan(20_000);
+    const stalled = await timedReload(page);
+
+    // The stall may cost the 3.5 s timebox, and generous slack on top for the
+    // extra paint. What it must NOT cost is forever — which is the bug, and which
+    // the reload above would have failed on outright by never showing the canvas.
+    const TIMEBOX = 3500;
+    expect(
+      stalled - baseline,
+      `a stalled fonts.css cost ${stalled - baseline}ms over a ${baseline}ms baseline — ` +
+        `the service worker's ${TIMEBOX}ms timebox is not bounding it`,
+    ).toBeLessThan(TIMEBOX * 3);
   } finally {
     await origin.close();
   }
@@ -189,6 +210,10 @@ function rewritingOrigin(): Promise<{
   });
 }
 
+// Two full boots plus a background reconcile, so it needs more than the suite
+// default: it passed alone and timed out inside a loaded full run, which is a
+// flake, not a finding.
+test.setTimeout(240_000);
 test("a data update re-pins without re-downloading what did not change", async ({ page }) => {
   // The whole point of per-file content hashes. A release rotates the pack
   // version, but every file whose bytes are unchanged keeps its `?h=` URL — so the

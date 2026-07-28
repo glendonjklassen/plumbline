@@ -320,16 +320,20 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
     if (freedCore) booted!.trace.push(["home evict after stage 2 (KB)", Math.round(freedCore / 1024)]);
     self.postMessage({ type: "coreReady" });
     await warmChunked();
+    // BEFORE the analysis pack, not after. Reconciling is normally one 5 KB
+    // manifest fetch and a pile of hash comparisons; queueing it behind ~4 MB of
+    // optional analytics meant a device could sit on a stale pin for the length
+    // of that download, and pick the update up a launch later than it needed to.
+    // In its own try: a failed update must not cost the reader anything they
+    // already have, and being offline here is the normal case, not an error.
+    try {
+      await reconcilePack();
+    } catch {
+      /* offline or a stalled manifest — the pin stands, the next launch retries */
+    }
     if (await willAutoLoadRnd(machineOn, deferRnd)) await loadRndChunked();
   } catch {
     /* offline — the Settings toggle or next boot retries */
-  }
-  // Last, and in its own try: a failed update must not cost the reader anything
-  // they already have, and being offline here is the normal case, not an error.
-  try {
-    await reconcilePack();
-  } catch {
-    /* offline or a stalled manifest — the pin stands, and the next launch retries */
   }
 }
 
