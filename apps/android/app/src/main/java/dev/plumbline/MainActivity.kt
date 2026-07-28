@@ -69,7 +69,12 @@ class MainActivity : ComponentActivity() {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     val home = filesDir
-                    val corpus = File(home, ".data-v1")
+                    // v2: the bundled set gained akjv.akjvb (the plain-English
+                    // overlay). An install that already holds .data-v1 would
+                    // never re-extract, so the overlay would reach new installs
+                    // only — the marker is what carries a data change to a
+                    // device that already has the app.
+                    val corpus = File(home, ".data-v2")
                     if (!corpus.exists()) {
                         copyAsset("data", File(home, "data"))
                         if ((assets.list("bridge")?.size ?: 0) > 0) {

@@ -163,7 +163,13 @@ tasks.register<Copy>("syncData") {
     description = "Copy data/*.jsonl + strongs.json into app assets for OpenFromBytes."
     group = "plumbline"
     from(rootProject.file("../../data")) {
-        include("kjv.jsonl", "strongs.json", "kjv-notes.jsonl", "cross-references.tsv")
+        // akjv.akjvb is the PACKED overlay, not the JSONL: core's load_akjv
+        // prefers the packed sibling, it is 578 KB against 1.35 MB, and it
+        // parses without going through serde_json. Same choice the web pack
+        // makes. Without it the engine reports the overlay unavailable and the
+        // Android toggle correctly hides itself — the feature was fully wired
+        // in Kotlin but invisible on device, because the data never shipped.
+        include("kjv.jsonl", "strongs.json", "kjv-notes.jsonl", "cross-references.tsv", "akjv.akjvb")
     }
     into(layout.projectDirectory.dir("src/main/assets/data"))
 }
