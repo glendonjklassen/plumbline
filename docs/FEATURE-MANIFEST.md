@@ -66,8 +66,11 @@ by both desktop shells). Each shell wires it to the window/taskbar:
   `space_width` measured, `verse_num_gap = space·1.4`,
   `para_indent = line_height·0.9`, `para_spacing = line_height·0.45`.
 - Paint: verse numbers **bold gold**; FLAG_ADDED italic gray; FLAG_DIVINE /
-  FLAG_TITLE colors above; Strong's-tagged words underlined gold α0.30 width 1
-  at baseline+2.5. Hit-testing: `hit_test(x − margin_x, y − MARGIN)`.
+  FLAG_TITLE colors above. Hit-testing: `hit_test(x − margin_x, y − MARGIN)`.
+  **No mark for a Strong's-tagged word** (both shells, 2026-07-28): there was a
+  faint gold rule under every one, and since most words carry a Strong's number
+  it amounted to underlining the Bible. Whether a word answers when tapped is
+  learned once; the page does not need to keep saying it.
 - **Highlight band** (search/goto target): gold α0.12 rect over the verse's
   lines, x from `margin−6`, width `col+12`; persists until that pane next
   navigates (M:2720–2740).
@@ -213,8 +216,9 @@ verses; 179 KB gzipped, shipped as a stage-2 core file.
   tokens framing the run; interior punctuation belongs to the replacement
   ("Verily, verily" → "Truly, truly"). `data-prep/README.md` states it too,
   because the producer has to agree with the consumer.
-- **The mark is a DOTTED gold underline**, below the Strong's rule so a word can
-  carry both. Not bold and not grey: italic already means "supplied by the
+- **The mark is a DOTTED gold underline**, at the natural underline depth — it
+  sat 3px lower while it had to clear the Strong's rule above it, and moved up
+  when that rule was removed (2026-07-28). Not bold and not grey: italic already means "supplied by the
   translator", a grey word is a de-emphasised one when the overlay makes it the
   word you are reading, and at 6.9% density a heavy mark reads as a ransom note.
   Dotted also survives a highlight wash and works in greyscale.
@@ -402,10 +406,24 @@ the config for older readers of the shared file.
 
 **Reworked 2026-07-26 (web): destinations vs utilities.** The web header now
 mirrors the Compose IA — Read is the base layer; **Explore · Present ·
-Memorize** are first-class header buttons (narrow screens fold them into ≡
-above a divider), plus search, a first-class **Share** button, and a ≡ menu
-holding utilities only (History · Guide & about · Keyboard shortcuts ·
-Settings). Threads/Tags/Weaves live inside Explore, as on Android. The
+Memorize** are first-class header buttons, plus search, a first-class **Share**
+button, and a ≡ menu holding utilities only (History · Guide & about · Keyboard
+shortcuts · Settings).
+
+**Phone parity 2026-07-28 (web): the bottom nav bar.** Narrow screens used to
+fold the three destinations into the ≡ menu above a divider, which put the whole
+information architecture two taps away behind a glyph. The web now draws the
+same **bottom nav bar Android has** — Read · Explore · Present · Memorize, in
+thumb reach — using the very same Material paths the Compose shell does
+(`ui/NavIcons.kt` → the `NAV` table in `Shell.svelte`), with gold on the current
+tab and Compose's α0.14 gold pill behind its icon. The ≡ menu is utilities only
+at every width now. Read is not a destination so much as the absence of one: the
+reader is always mounted underneath, so its tap clears whatever is layered over
+it. **Delta:** Android's four destinations are mutually exclusive because it
+shows one screen at a time; the web layers, and on a desktop the study panel is
+a sidebar, so switching to Present or Memorize leaves an open Explore panel
+behind it to return to. The highlighted tab always names the surface actually in
+front of the reader. Threads/Tags/Weaves live inside Explore, as on Android. The
 subtitle is just the passage ("John 3" — no edition suffix; the e2e boot
 signal matches `/\w+ \d+/`). **Share the app** (2026-07-25, both shells)
 opens the hosted PWA's QR code (pre-generated matrix, no QR dependency —
@@ -932,7 +950,9 @@ lines would wrap where they are not drawn.)
     split. **Delta (GTK/WinUI):** both still present coverage/activity as
     separate popups with the bar-chart activity.
   - Phone-idiom (no desktop port intended): **bottom nav bar** (Read · Explore
-    · Present · Memorize, one-handed reach; `ui/NavIcons.kt`), the **passage
+    · Present · Memorize, one-handed reach; `ui/NavIcons.kt` — **ported to the
+    web's narrow layout 2026-07-28**, same icon paths, so it is a phone idiom in
+    both shells rather than an Android one), the **passage
     navigator** (`ui/BookNav.kt`: OT/NT → book → chapter tap grids, replacing
     the book dropdown — **both shells**, and there is no verse stage since
     2026-07-26: sizing that grid meant probing the engine for the chapter's

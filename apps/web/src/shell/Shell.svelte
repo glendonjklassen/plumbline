@@ -91,6 +91,63 @@
     };
   }
 
+  // The bottom bar's four destinations. Icon paths are copied verbatim from the
+  // Compose shell's NavIcons.kt (standard Material Symbols: book, explore,
+  // present_to_all, school) so both shells draw the same glyphs.
+  const NAV = [
+    {
+      key: "read",
+      label: "Read",
+      path:
+        "M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" +
+        "M6 4h5v8l-2.5-1.5L6 12V4z",
+      // Read clears the layers rather than opening anything: `go` already drops
+      // memorize, history, settings and the maps, so this only has to close the
+      // study panel and Present.
+      go: () => {
+        s.showPresent = false;
+        s.panel = null;
+      },
+    },
+    {
+      key: "explore",
+      label: "Explore",
+      path:
+        "M12 10.9c-.61 0-1.1.49-1.1 1.1s.49 1.1 1.1 1.1c.61 0 1.1-.49 1.1-1.1s-.49-1.1-1.1-1.1z" +
+        "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" +
+        "m2.19 12.19L6 18l3.81-8.19L18 6l-3.81 8.19z",
+      go: () => {
+        s.showPresent = false;
+        s.panel = { kind: "explore" };
+      },
+    },
+    {
+      key: "present",
+      label: "Present",
+      path:
+        "M21 3H3c-1.11 0-2 .89-2 2v14c0 1.11.89 2 2 2h18c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2z" +
+        "m0 16.02H3V4.98h18v14.04zM10 12H8l4-4 4 4h-2v4h-4v-4z",
+      go: () => (s.showPresent = true),
+    },
+    {
+      key: "memorize",
+      label: "Memorize",
+      path: "M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 11-6-11-6z",
+      // `go` clears s.memorize first, so this has to set it after.
+      go: () => {
+        s.showPresent = false;
+        s.memorize = { view: "hub" };
+      },
+    },
+  ] as const;
+
+  // Which tab reads as current. Present wins because it covers everything, then
+  // Memorize, then Explore — matching the layering, so the highlighted tab is
+  // always the surface actually in front of the reader. Read is what is left.
+  const dest = $derived(
+    s.showPresent ? "present" : s.memorize ? "memorize" : s.panel?.kind === "explore" ? "explore" : "read",
+  );
+
   // The church button opens their site; with no site to open it at least
   // tells the reader who and when, which is all we were given.
   const churchTitle = $derived(
@@ -248,11 +305,9 @@
         <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
         <div class="backdrop" onclick={() => (menuOpen = false)}></div>
         <div class="menu">
-          <!-- Narrow screens: the header destinations fold in here. -->
-          <button class="narrow-only" onclick={go(() => (s.panel = { kind: "explore" }))}>Explore</button>
-          <button class="narrow-only" onclick={go(() => (s.showPresent = true))}>Present</button>
-          <button class="narrow-only" onclick={go(() => (s.memorize = { view: "hub" }))}>Memorize</button>
-          <div class="menu-rule narrow-only"></div>
+          <!-- UTILITIES ONLY, at every width. The destinations used to fold in
+               here on narrow screens; they live in the bottom bar now, in thumb
+               reach, which is where Android has always had them. -->
           <button onclick={go(() => (s.showHistory = true))}>History</button>
           <button onclick={go(() => (s.panel = { kind: "guide" }))}>Guide & about</button>
           <button onclick={go(() => (s.showShortcuts = true))}>Keyboard shortcuts</button>
@@ -274,6 +329,29 @@
     </div>
     <StudyPanel />
   </div>
+
+  <!-- THE BOTTOM BAR (narrow only) — Android's IA, in thumb reach: Read ·
+       Explore · Present · Memorize. Android has had this since it shipped; the
+       web folded the same four into the ≡ menu, which put the whole information
+       architecture two taps away behind a glyph. The icons are the very same
+       Material paths the Compose shell draws (apps/android/.../NavIcons.kt), so
+       the two shells look like one product rather than two interpretations.
+
+       Read is not a destination so much as the absence of one: the reader is
+       always mounted underneath, so its tap just clears whatever is layered
+       over it. -->
+  <nav class="bottom-nav" aria-label="Destinations">
+    {#each NAV as item (item.key)}
+      <button
+        class:on={dest === item.key}
+        aria-current={dest === item.key ? "page" : undefined}
+        onclick={go(item.go)}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d={item.path} /></svg>
+        <span>{item.label}</span>
+      </button>
+    {/each}
+  </nav>
 </div>
 
 {#if shareApp}
@@ -384,11 +462,57 @@
   .share-first:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
   }
-  .menu .narrow-only,
-  .menu-rule {
+  /* The bottom bar is a PHONE affordance: on a wide screen the destinations are
+     already first-class in the top bar, and a nav bar pinned to the bottom of a
+     desktop window is just a strip of wasted height. */
+  .bottom-nav {
     display: none;
   }
   @media (max-width: 700px) {
+    .bottom-nav {
+      display: flex;
+      background: var(--paneNavBg, #efeae1);
+      border-top: 1px solid var(--rule, #d8cba8);
+      /* Above the surface backdrops, like the header — the destinations have to
+         stay reachable from whatever is open, since tapping one closes it.
+         Present (60) still deliberately covers the whole chrome. */
+      position: relative;
+      z-index: 46;
+      /* Clear of the home indicator / gesture bar on a notched phone. */
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    .bottom-nav button {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      padding: 7px 0 5px;
+      color: var(--faded, #8a8276);
+      /* A comfortable thumb target: Material's bottom-nav height, and taller
+         than the 44px minimum on its own. */
+      min-height: 52px;
+    }
+    .bottom-nav svg {
+      width: 24px;
+      height: 24px;
+      fill: currentColor;
+      /* The selected pill, Compose's indicatorColor (gold α0.14). */
+      border-radius: 999px;
+      padding: 2px 14px;
+      box-sizing: content-box;
+    }
+    .bottom-nav button.on {
+      color: var(--gold, #9e7d38);
+    }
+    .bottom-nav button.on svg {
+      background: color-mix(in srgb, var(--gold, #9e7d38) 14%, transparent);
+    }
+    .bottom-nav span {
+      font-size: 11px;
+      letter-spacing: 0.01em;
+    }
     .browse,
     .subtitle {
       display: none;
@@ -418,14 +542,6 @@
     header:has(.search.open) .church-btn,
     header:has(.search.open) .share-first {
       display: none;
-    }
-    .menu .narrow-only {
-      display: block;
-    }
-    .menu .menu-rule {
-      display: block;
-      border-top: 1px solid var(--rule, #d8cba8);
-      margin: 4px 2px;
     }
   }
   .spacer {

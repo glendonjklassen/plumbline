@@ -567,5 +567,11 @@
     /* Vertical panning belongs to the browser (momentum for free); we keep
        taps, long-press, and the horizontal chapter swipe. */
     touch-action: pan-y;
+    /* A canvas has no selectable text, but a tap-drag on one can still start a
+       selection of the surrounding document — which on a phone shows up as the
+       page tinting under your thumb mid-scroll. The tap highlight itself is
+       killed globally in app.css. */
+    user-select: none;
+    -webkit-user-select: none;
   }
 </style>

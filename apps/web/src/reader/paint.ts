@@ -207,29 +207,25 @@ export function paintChapter(
       ctx.fillStyle = p.ink ?? "#211f1a";
     }
     ctx.fillText(it.text, x, y);
-    if (it.strongs.length) {
-      // Strong's-tagged: gold underline at baseline+2.5 (α0.30, width 1).
-      ctx.strokeStyle = withAlpha(gold, 0.3);
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      const uy = y + fontPx + 2.5;
-      ctx.moveTo(x, uy);
-      ctx.lineTo(x + it.w, uy);
-      ctx.stroke();
-    }
+    // NO mark for a Strong's-tagged word. There used to be a faint gold rule
+    // under every one of them, and since most words carry a Strong's number it
+    // amounted to underlining the Bible: visual noise that told the reader
+    // nothing they act on. Whether a word answers when tapped is something you
+    // learn once, not something the page needs to keep saying (2026-07-28).
     if (it.flags & FLAG_RERENDERED) {
-      // The AKJV overlay's mark: DOTTED, and a little below the Strong's rule
-      // so a word can carry both — most re-rendered words are tagged. Dotted
-      // rather than bold or grey because weight and colour are already spoken
-      // for (italics mean "supplied by the translator") and because at 6.9% of
-      // words a heavier mark would read as a ransom note rather than as text.
-      // It also survives a highlight wash, which a background tint would not.
+      // The AKJV overlay's mark: DOTTED, at the natural underline depth — it sat
+      // 3px lower while it had to clear the Strong's rule above it, and moved up
+      // when that went. Dotted rather than bold or grey because weight and colour
+      // are already spoken for (italics mean "supplied by the translator") and
+      // because at 6.9% of words a heavier mark would read as a ransom note
+      // rather than as text. It also survives a highlight wash, which a
+      // background tint would not.
       ctx.save();
       ctx.strokeStyle = withAlpha(gold, 0.75);
       ctx.lineWidth = 1;
       ctx.setLineDash([1.5, 2.5]);
       ctx.beginPath();
-      const dy = y + fontPx + 5.5;
+      const dy = y + fontPx + 2.5;
       ctx.moveTo(x, dy);
       ctx.lineTo(x + it.w, dy);
       ctx.stroke();

@@ -25,7 +25,8 @@ data class ReaderPalette(
     val divine: Color,
     val titleInk: Color,
     val gold: Color,
-    val goldFaint: Color,  // Strong's underline (α0.30 of gold)
+    val goldFaint: Color,  // α0.30 of gold — study-panel rules (was the
+                           // Strong's underline, removed 2026-07-28)
     val band: Color,       // search-hit / goto band (α0.12 of gold)
     val gutterDot: Color,  // weave-partner gutter mark (α0.75 of gold)
     val pinBand: Color,    // pinned span (blue Pin α0.22)

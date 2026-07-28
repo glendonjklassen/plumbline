@@ -445,18 +445,21 @@ fun ReaderPane(
                     val paint = if (added) italic else regular
                     paint.color = color.toArgbInt()
                     canvas.drawText(it.text, it.x, baseline, paint)
-                    // A faint gold underline marks a Strong's-tagged word.
-                    if (it.strongs.isNotEmpty()) {
-                        drawRect(palette.goldFaint, Offset(it.x, it.y + it.h - 3f), Size(it.w, 1f))
-                    }
-                    // The AKJV overlay's mark: DOTTED, below the Strong's rule
-                    // so a word can carry both (most re-rendered words are
-                    // tagged). Not bold or grey — italic already means
-                    // "supplied by the translator", and at 6.9% of words a
-                    // heavy mark reads as a ransom note. Web twin: paint.ts.
+                    // NO mark for a Strong's-tagged word. There used to be a
+                    // faint gold rule under every one, and since most words
+                    // carry a Strong's number it amounted to underlining the
+                    // Bible: noise that told the reader nothing they act on.
+                    // Whether a word answers when tapped is learned once, not
+                    // repeated by the page (2026-07-28). Web twin: paint.ts.
+                    //
+                    // The AKJV overlay's mark: DOTTED, at the natural underline
+                    // depth — it sat lower while it had to clear the Strong's
+                    // rule, and moved up when that went. Not bold or grey —
+                    // italic already means "supplied by the translator", and at
+                    // 6.9% of words a heavy mark reads as a ransom note.
                     if (flags and PlumblineFlags.RERENDERED != 0) {
                         var dx = it.x
-                        val dy = it.y + it.h - 0.5f
+                        val dy = it.y + it.h - 3f
                         while (dx < it.x + it.w) {
                             drawRect(palette.gold, Offset(dx, dy), Size(1.5f, 1f))
                             dx += 4f
