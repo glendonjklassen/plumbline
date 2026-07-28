@@ -1,9 +1,33 @@
-// Plumbline service worker: the app works offline after the first visit.
-// - Versioned resources (?v=… pack files, the build-stamped wasm) and Vite's
-//   content-hashed assets are cache-first — they never change under one URL.
-// - Everything else same-origin (index.html, manifest.json, fonts) is
-//   network-first with cache fallback, so updates land when online and the
-//   app still boots when not.
+// Plumbline service worker: serves the app SHELL offline, and nothing else.
+//
+// WHAT IT DOES NOT TOUCH, and why that is the point. The data pack, the wasm
+// engine and the pin are owned by app code (src/engine/depot.ts) and are read
+// straight out of the same Cache bucket by the engine worker. They get an early
+// `return` below, so this file is not in their request path at all.
+//
+// That is not tidiness — it removes a race. On a first visit the service worker
+// is not controlling the page while the shell loads, and it claims clients
+// somewhere in the middle of boot, so whether the ~10 MB pack passed through a
+// fetch handler was a coin toss (measured 2026-07-26: the wasm landed in the
+// cache, the pack did not, and the app could not boot offline afterwards). A
+// dedicated worker also inherits its creator's controller at creation, so the
+// engine worker spawned during an uncontrolled load is itself uncontrolled.
+// Nothing the engine needs may depend on winning that race.
+//
+// What is left is the part only a service worker can do: answer a navigation
+// when there is no network.
+//
+//   - Vite's content-hashed assets and the content-hashed fonts: cache-first.
+//     They never change under one URL.
+//   - Navigations and the unversioned public files (index.html, fonts.css,
+//     manifest.webmanifest, icons): network-first with a 3.5 s timebox, then the
+//     stored copy. `fonts.css` is render-blocking, and a navigation can stall on
+//     a dozing radio, so the timebox still earns its keep here even though the
+//     pack — what it was originally written for — has left.
+//
+// ONE bucket, shared with the depot, deliberately: `activate` deletes every
+// bucket it does not recognise, so a second name is a bucket an older service
+// worker can wipe. Separation is enforced by the early return, not by storage.
 const CACHE = "plumbline-v1";
 
 self.addEventListener("install", () => self.skipWaiting());
@@ -47,15 +71,27 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
 
-  const immutable =
-    url.searchParams.has("v") || url.pathname.includes("/assets/") || url.pathname.includes("/fonts/");
+  // THE DEPOT'S TERRITORY. App code reads these from the Cache API itself, so
+  // being here would make this a SECOND writer of the same entries — and the
+  // reconciler's guarantee is that a pin is only written once every file it names
+  // is verified present, which a background writer could quietly undermine.
+  // Also: `?h=` and `?v=` URLs are all depot URLs now, which is why the old
+  // "anything versioned is cache-first" rule goes with them.
+  if (url.pathname.includes("/pack/") || url.pathname.includes("/__depot/")) return;
+  if (url.pathname.endsWith("plumbline_ffi.wasm")) return;
 
-  // `ignoreVary` on every lookup: these are our own same-origin files, keyed
-  // by URL (pack files carry ?v=). Responses come back `Vary: Origin`, and
-  // Vite's <script crossorigin> asset requests DO send Origin while a plain
-  // precache fetch does not — honouring Vary made a cached entry invisible to
-  // the very request it was stored for, and the app failed to boot offline
-  // with everything already on disk (2026-07-26).
+  // Content-hashed under a stable name: Vite's bundles, and the subsetted reader
+  // faces (which carry their hash IN the filename, so this path rule is safe —
+  // before they were hashed, a font replaced under the same name would have been
+  // served from cache forever).
+  const immutable = url.pathname.includes("/assets/") || url.pathname.includes("/fonts/");
+
+  // `ignoreVary` on every lookup: these are our own same-origin files, keyed by
+  // URL. Responses come back `Vary: Origin`, and Vite's <script crossorigin>
+  // asset requests DO send Origin while a plain precache fetch does not —
+  // honouring Vary made a cached entry invisible to the very request it was
+  // stored for, and the app failed to boot offline with everything already on
+  // disk (2026-07-26).
   const MATCH = { ignoreVary: true };
 
   if (immutable) {
@@ -78,9 +114,11 @@ self.addEventListener("fetch", (event) => {
       }),
     );
   } else {
-    // Network-first, TIMEBOXED (2026-07-26): a stalled mobile connection must
-    // never hang boot — the manifest fetch used to pend forever and the app
-    // sat on the "preparing your study tools" preview. After 3.5s the cached
+    // Network-first, TIMEBOXED (2026-07-26): a stalled connection must never hang
+    // the app. It was written for the pack manifest, which used to pend forever
+    // while the app sat on a loading screen; the manifest has since left both this
+    // file and the boot path, but the classes that remain here can stall the same
+    // way — a navigation, and render-blocking `fonts.css`. After 3.5 s the stored
     // copy is served; updates land on the next healthy load.
     event.respondWith(
       (async () => {

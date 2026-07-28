@@ -77,13 +77,20 @@ test("a stalled network cannot hang the boot (service-worker timebox)", async ({
 
     // The radio dozes / the network hands over mid-reconnect: the request is
     // accepted and then simply never answered. Everything needed is cached.
-    origin.stall("pack/manifest.json");
+    //
+    // Stalls `fonts.css`, NOT the pack manifest. The manifest was the original
+    // repro, but it is no longer in the service worker's path (the depot owns
+    // /pack/) and no longer on the boot path at all (the pin replaced it) — so
+    // stalling it would prove nothing and this test would pass while the timebox
+    // rotted. fonts.css is the remaining render-blocking unversioned file, and it
+    // stalls exactly the same way.
+    origin.stall("fonts.css");
     const t0 = Date.now();
     await page.reload();
     await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 45_000 });
     await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/);
-    // The SW gives the network 3.5 s before serving its copy; the whole boot
-    // should land well inside that plus a normal cached boot.
+    // The SW gives the network 3.5 s before serving its stored copy; the whole
+    // boot should land well inside that plus a normal warm boot.
     expect(Date.now() - t0).toBeLessThan(20_000);
   } finally {
     await origin.close();
