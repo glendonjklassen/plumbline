@@ -1443,6 +1443,52 @@ fn timing_harness_concept_parts() {
 /// R&D artifacts arrive late — `load_rnd_data` + a re-warm must light up the
 /// embedding/morphology tiers, and the early warm must NOT have pinned the
 /// SIF model empty.
+/// The overlay rides in with stage 2 (beside Strong's), and is refused when it
+/// was aligned to a different tokenization — an overlay over the wrong text
+/// points every span at the wrong word, quietly, in scripture.
+#[test]
+fn akjv_overlay_loads_with_stage_two() {
+    use std::ffi::CString;
+    const OVERLAY: &str = concat!(
+        r#"{"format":"overlay-akjv-v1","tokenization":"kjv1769-tok2","source":"AKJV"}"#,
+        "\n",
+        r#"{"b":"John","c":3,"v":16,"d":[[4,4,"this"]]}"#,
+    );
+    for (stamp, expect) in [("kjv1769-tok2", true), ("kjv1611-tok1", false)] {
+        unsafe {
+            let home = std::env::temp_dir()
+                .join(format!("plumbline-ffi-akjv-{}-{stamp}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&home);
+            std::fs::create_dir_all(home.join("data")).unwrap();
+            std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+            std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+            std::fs::write(
+                home.join("data").join("akjv.jsonl"),
+                OVERLAY.replace("kjv1769-tok2", stamp),
+            )
+            .unwrap();
+
+            let home_c = CString::new(home.to_str().unwrap()).unwrap();
+            let mut err: *mut c_char = ptr::null_mut();
+            let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+            assert!(!e.is_null(), "engine opened");
+            let eng = &*e;
+            // Not there until stage 2 runs — the boot path is the text alone.
+            assert!(eng.akjv().is_none(), "overlay is not on the boot path");
+            eng.load_core_data();
+            let got = eng.akjv();
+            assert_eq!(got.is_some(), expect, "stamp {stamp}");
+            if let Some(a) = got {
+                let v = VRef::new("John", 3, 16);
+                assert_eq!(a.span_at(&v, 4).map(|s| s.text.as_str()), Some("this"));
+                assert_eq!(a.span_at(&v, 3), None);
+            }
+            plumbline_engine_free(e);
+            let _ = std::fs::remove_dir_all(&home);
+        }
+    }
+}
+
 #[test]
 fn rnd_data_loads_after_open() {
     use std::ffi::CString;

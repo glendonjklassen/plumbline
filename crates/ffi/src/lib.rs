@@ -55,6 +55,7 @@ use std::sync::OnceLock;
 use plumbline_core::config;
 use plumbline_core::corpus::{self, Corpus};
 use plumbline_core::crossref::{self, XRefIx};
+use plumbline_core::akjv;
 use plumbline_core::renderings::{self, Renderings};
 use plumbline_core::search::{self, Notes, SearchIx};
 use plumbline_core::strongs::{self, OccurrenceIx, StrongsDict};
@@ -168,6 +169,10 @@ pub struct PlumblineEngine {
     /// TSK topical cross-references (parsed lazily from the home — an 8.5 MB
     /// TSV nobody should pay for at every open).
     xref_ix: OnceLock<XRefIx>,
+    /// The plain-English overlay (the AKJV delta), when the home carries one.
+    /// A READING aid: it re-words the reader's view and nothing else — never a
+    /// memory card, a Present hand-off, or copied text.
+    akjv: OnceLock<akjv::Akjv>,
     /// The symbolic concept engine (collocations, distribution, communities)
     /// and the leitwort scan — corpus-wide sweeps, built lazily like the SIF
     /// model and cached for the engine's lifetime.
@@ -218,6 +223,7 @@ impl PlumblineEngine {
             morph,
             verse_sim: OnceLock::new(),
             xref_ix: OnceLock::new(),
+            akjv: OnceLock::new(),
             concept: OnceLock::new(),
             leitwort: OnceLock::new(),
         }
@@ -313,7 +319,19 @@ impl PlumblineEngine {
                 let _ = self.strongs.set(sd);
             }
         }
+        if self.akjv.get().is_none() {
+            // Stage 2, beside Strong's: small, and wanted the moment the reader
+            // flips the toggle rather than after a download they must approve.
+            if let Some(a) = akjv::load_akjv(canon::TOKENIZATION_VERSION, h.join("data").join("akjv.jsonl")) {
+                let _ = self.akjv.set(a);
+            }
+        }
         *self.study_write() = load_study(&self.home);
+    }
+
+    /// The overlay, if this home has one and it matches the tokenization.
+    fn akjv(&self) -> Option<&akjv::Akjv> {
+        self.akjv.get()
     }
 
     /// The search index, built on first use; the reader's notes attach then
