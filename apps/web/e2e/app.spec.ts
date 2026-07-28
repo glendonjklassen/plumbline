@@ -279,6 +279,55 @@ test("the AKJV overlay re-words the reader, and only the reader", async ({ page 
   expect(await page.evaluate(() => (window as any).__plumbline.config.akjvOverlay)).toBe(false);
 });
 
+// The toggle must change the PAGE, not just the setting. The reader's layout
+// has its own trigger and does not track the config, so the first version
+// flipped the flag and left the old words on screen until something else
+// happened to re-lay the chapter (feedback 2026-07-27, "isn't live").
+test("flipping the overlay re-lays the page immediately", async ({ page }) => {
+  await boot(page);
+  await page.waitForFunction(() => (window as any).__plumbline.akjvAvailable === true, null, {
+    timeout: 90_000,
+  });
+  // What the reader can actually see: the words in the display list.
+  const wordsOnScreen = async () =>
+    page.evaluate(async () => {
+      const s = (window as any).__plumbline;
+      const raw = await s.rpc.layout("John", 3, { font: 18, width: 700, lineSpacing: 1.35, versePerLine: false });
+      return (raw?.items ?? []).filter((i: any) => i.kind === "word").map((i: any) => i.text).join(" ");
+    });
+
+  const before = await wordsOnScreen();
+  expect(before).toContain("Verily");
+
+  await page.evaluate(() => (window as any).__plumbline.setAkjvOverlay(true));
+  const after = await wordsOnScreen();
+  expect(after).toContain("Truly");
+  expect(after).not.toContain("Verily");
+
+  await page.evaluate(() => (window as any).__plumbline.setAkjvOverlay(false));
+  expect(await wordsOnScreen()).toContain("Verily");
+
+  // The above proves the ENGINE re-lays. This proves the READER asks it to:
+  // the pane's layout effect has its own trigger and does not track the
+  // setting, so without the layout epoch the toggle changes nothing on screen
+  // until a resize or a chapter turn happens to re-lay it.
+  const layouts = await page.evaluate(() => {
+    const s = (window as any).__plumbline;
+    (window as any).__layoutCalls = 0;
+    const real = s.rpc.layout.bind(s.rpc);
+    s.rpc.layout = (...a: unknown[]) => {
+      (window as any).__layoutCalls++;
+      return real(...a);
+    };
+    return (window as any).__layoutCalls;
+  });
+  expect(layouts).toBe(0);
+  await page.evaluate(() => (window as any).__plumbline.setAkjvOverlay(true));
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__layoutCalls), { timeout: 10_000 })
+    .toBeGreaterThan(0);
+});
+
 test("menus open promptly after boot (freeze regression)", async ({ page }) => {
   await boot(page);
   // The analytics warm-up must happen behind the splash — if it leaks past

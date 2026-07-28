@@ -86,6 +86,11 @@
   let layoutSeq = 0;
   $effect(() => {
     if (!pane || cssW <= 0) return;
+    // Re-lay when the WORDS change, not just the geometry — the AKJV overlay
+    // swaps them engine-side, so nothing about this pane's own inputs moves.
+    // An epoch rather than the setting itself, so the re-layout happens strictly
+    // after the engine has been told (see Session.setAkjvOverlay).
+    void s.layoutEpoch;
     const seq = ++layoutSeq;
     // Moving to a DIFFERENT chapter drops the old display list at once. The
     // nav strip and header change the instant the reader taps, so holding the

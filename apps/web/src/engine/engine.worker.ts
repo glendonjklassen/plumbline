@@ -57,6 +57,13 @@ let lastTurn: [string, number][] = [];
 const TURN_CACHE_MAX = 8;
 type LaidOut = { items: unknown[]; height: number };
 const turnCache = new Map<string, LaidOut>();
+/** Whether the AKJV overlay is on. Tracked HERE because it changes the words a
+ *  chapter lays out to, and the turn cache is keyed on everything that does —
+ *  without it, flipping the toggle served the cached KJV display list straight
+ *  back and the page never changed (feedback 2026-07-27, "isn't live").
+ *  Keeping it in the key rather than clearing the cache means toggling back and
+ *  forth stays free, which is exactly what someone comparing wordings does. */
+let akjvOn = false;
 
 interface LayoutReq {
   book: string;
@@ -68,7 +75,7 @@ interface LayoutReq {
 }
 
 function layoutChapter(m: LayoutReq): LaidOut | null {
-  const key = `${m.book} ${m.chapter}|${m.font}|${m.width}|${m.lineSpacing}|${m.versePerLine}`;
+  const key = `${m.book} ${m.chapter}|${m.font}|${m.width}|${m.lineSpacing}|${m.versePerLine}|${akjvOn}`;
   const hit = turnCache.get(key);
   if (hit) {
     turnCache.delete(key); // re-insert to keep LRU order
@@ -314,6 +321,8 @@ self.onmessage = async (ev: MessageEvent) => {
       case "call": {
         const e = booted!.engine as unknown as Record<string, (...a: any[]) => unknown>;
         reply(e[m.method](...m.args));
+        // The overlay changes the words, so the turn cache has to know.
+        if (m.method === "setAkjvOverlay") akjvOn = m.args[0] === true;
         break;
       }
       case "static": {

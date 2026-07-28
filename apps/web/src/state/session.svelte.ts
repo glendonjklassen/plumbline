@@ -338,6 +338,7 @@ export class Session {
         this.akjvAvailable = !!yes;
         if (yes && this.config.akjvOverlay === true) {
           void this.rpc.call("setAkjvOverlay", true).then(() => {
+            this.layoutEpoch++;
             this.invalidate();
             this.studyEpoch++;
           });
@@ -577,6 +578,9 @@ export class Session {
   /** Whether this home carries a usable overlay — the toggle hides without it
    *  rather than offering a switch that does nothing. Set once stage 2 lands. */
   akjvAvailable = $state(false);
+  /** Bumped when something that changes the WORDS on the page changes. The
+   *  reader's layout effect tracks it; `studyEpoch` only refreshes panels. */
+  layoutEpoch = $state(0);
 
   /** Turn the plain-English overlay on or off. Engine state, so two panes can
    *  never disagree; persisted like any other reader preference; and the layout
@@ -585,7 +589,14 @@ export class Session {
   async setAkjvOverlay(on: boolean): Promise<void> {
     this.config.akjvOverlay = on;
     this.saveConfig();
+    // ORDER MATTERS. The engine flag has to be set before anything re-lays, or
+    // the new layout is measured against the old setting and the page keeps the
+    // words it already had (feedback 2026-07-27 — the toggle "wasn't live").
+    // The reader deliberately does NOT track `config.akjvOverlay`: doing that
+    // would fire a layout the instant the line above runs, which is one RPC
+    // AHEAD of the call below, and it would race to the worker first.
     await this.rpc.call("setAkjvOverlay", on);
+    this.layoutEpoch++;
     this.invalidate();
     this.studyEpoch++;
   }
