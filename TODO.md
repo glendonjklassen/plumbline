@@ -69,10 +69,14 @@ ride 1.0.x patches (the PWA auto-updates).
   (usernote, tag, thread, weave, memory, reading, config) and round-trip it, with
   tests. Without this, any v1.1 field is stripped the first time a v1.0 build
   rewrites the file.
-- [ ] **[FABLE]** Stable-id decision: threads/tags/weaves are name-keyed with ordinal
-  wire refs — sync/merge is permanently blocked and rename loses identity. Decide
-  now whether ids ship as an additive field early in 1.0.x (depends on the flatten
-  item landing in 1.0 so old builds don't strip them).
+- [x] **[FABLE]** Stable-id decision: DECIDED 2026-07-29 — ids ship additively in
+  the first 1.0.x, after the flatten item lands in v1.0. Full design (id/updated
+  fields, identity semantics, wire evolution, sequencing, required tests) in
+  [docs/STABLE-IDS.md](docs/STABLE-IDS.md).
+- [ ] **[opus]** Implement stable ids per [docs/STABLE-IDS.md](docs/STABLE-IDS.md)
+  (first 1.0.x, NOT before the flatten item ships in v1.0): `id` + `updated` on
+  Thread/Tag/Weave, lazy assignment on save, duplicate-id resolution, the four
+  required tests.
 
 ## C. Live wire-drift bugs
 
