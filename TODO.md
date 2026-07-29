@@ -45,7 +45,7 @@ ride 1.0.x patches (the PWA auto-updates).
 - [x] **[opus]** Android note-save discards the engine's error and closes the sheet:
   `ui/VerseActions.kt:231-238`, `ui/Notes.kt:146`, `ui/Memorize.kt:387`. Surface the
   returned error, don't close on failure.
-- [ ] **[opus]** Android stock re-seed overwrites user-edited stock items (web
+- [x] **[opus]** Android stock re-seed overwrites user-edited stock items (web
   preserves): `seedStock` must skip existing destinations, and `copyAsset` must
   write temp+rename (`MainActivity.kt:163-189`).
 - [ ] **[opus]** Web `backup()` is unguarded while `restore()` right below has

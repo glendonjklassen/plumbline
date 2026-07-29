@@ -33,6 +33,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.io.InputStream
+import java.util.concurrent.atomic.AtomicLong
 
 class MainActivity : ComponentActivity() {
 
@@ -143,10 +147,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Seed the committed stock study set (threads / weaves / tags) into the home. */
+    /** Seed the committed stock study set (threads / weaves / tags) into the home.
+     *  A file that is already there is the reader's and is left alone — see
+     *  [shouldSeed]. */
     private fun seedStock(home: File) {
         for (kind in listOf("weaves", "threads", "tags")) {
-            if ((assets.list("stock/$kind")?.size ?: 0) > 0) copyAsset("stock/$kind", File(home, kind))
+            if ((assets.list("stock/$kind")?.size ?: 0) > 0) {
+                copyAsset("stock/$kind", File(home, kind), keepExisting = true)
+            }
         }
     }
 
@@ -176,15 +184,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Recursively copy an asset path (file or directory) into [dest]. */
-    private fun copyAsset(path: String, dest: File) {
+    /** Recursively copy an asset path (file or directory) into [dest]. Every file
+     *  lands through [writeThroughTemp], so an interrupted copy can never leave a
+     *  truncated one. With [keepExisting] a file already at the destination is
+     *  left exactly as the reader left it ([shouldSeed]). */
+    private fun copyAsset(path: String, dest: File, keepExisting: Boolean = false) {
         val children = assets.list(path) ?: emptyArray()
         if (children.isEmpty()) {
+            if (keepExisting && !shouldSeed(dest)) return
             dest.parentFile?.mkdirs()
-            assets.open(path).use { input -> dest.outputStream().use { input.copyTo(it) } }
+            assets.open(path).use { input -> writeThroughTemp(dest, input) }
         } else {
             dest.mkdirs()
-            for (c in children) copyAsset("$path/$c", File(dest, c))
+            for (c in children) copyAsset("$path/$c", File(dest, c), keepExisting)
         }
     }
 
@@ -211,5 +223,45 @@ private fun ErrorScreen(message: String) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Startup failed: $message")
         }
+    }
+}
+
+// ---- Seeding rules. Kept as free functions so they can be unit-tested without
+// an Activity or an AssetManager: src/test/java/dev/plumbline/StockSeedTest.kt.
+
+/** Does this seed pass write [dest]? Only when nothing is there.
+ *
+ *  Existence IS the per-file seeded-once marker, which is the web shell's rule
+ *  too (`engine/home.ts` buildHome lays the reader's saved copies over the
+ *  freshly-seeded stock, and skips the stock paths outright once the seeded flag
+ *  is set). Android had no such rule: every launch re-copied the bundled bytes
+ *  over the destination, so a stock thread the reader had renamed or re-noted was
+ *  silently reverted. What is on disk is theirs. */
+internal fun shouldSeed(dest: File): Boolean = !dest.exists()
+
+/** The unique-per-copy part of a temp name. The core's `store::write_atomic_bytes`
+ *  uses the pid; there is one process here, so a counter gives the same
+ *  collision-freedom. */
+private val tempSeq = AtomicLong()
+
+/** Copy [input] into [dest] through a hidden temp sibling, then rename — so an
+ *  interrupted copy leaves either the old file or the whole new one, never a
+ *  half-written one. Same shape as the core's `store::write_atomic_bytes`: a
+ *  sibling temp (rename is only atomic within one filesystem), flushed to disk
+ *  before the rename, and cleaned up best-effort if anything throws. The name is
+ *  dotted and `.tmp`-suffixed so a stranded one is ignorable. */
+internal fun writeThroughTemp(dest: File, input: InputStream) {
+    val tmp = File(dest.absoluteFile.parentFile, ".${dest.name}.${tempSeq.incrementAndGet()}.tmp")
+    try {
+        FileOutputStream(tmp).use { out ->
+            input.copyTo(out)
+            out.flush()
+            out.fd.sync()
+        }
+        // POSIX rename replaces the destination in one step.
+        if (!tmp.renameTo(dest)) throw IOException("could not move ${tmp.name} onto $dest")
+    } catch (t: Throwable) {
+        tmp.delete()
+        throw t
     }
 }
