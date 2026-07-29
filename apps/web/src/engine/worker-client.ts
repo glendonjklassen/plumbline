@@ -51,6 +51,8 @@ export class EngineRpc {
   onProgress: (p: WorkerProgress) => void = () => {};
   /** An authoring write landed (worker persisted it) — re-fetch study data. */
   onAuthored: () => void = () => {};
+  /** A dwell report landed — the reading map changed and nothing else did. */
+  onReadingWrote: () => void = () => {};
   /** Stage-2 core data landed (Strong's, margin notes, cross-refs). */
   onCoreReady: () => void = () => {};
   /** A warm pass finished, so the indexes a study opened mid-warm had to skip
@@ -81,6 +83,7 @@ export class EngineRpc {
       const m = ev.data;
       if (m.type === "progress") return this.onProgress(m);
       if (m.type === "authored") return this.onAuthored();
+      if (m.type === "readingWrote") return this.onReadingWrote();
       if (m.type === "coreReady") return this.onCoreReady();
       if (m.type === "warmReady") return this.onWarmReady();
       if (m.type === "rndReady") return this.onRndReady();

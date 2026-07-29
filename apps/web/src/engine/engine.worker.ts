@@ -21,6 +21,7 @@
 //   out: { id, result } | { id, error }
 //   out: { type: "progress", phase, fraction?, detail? }   (during boot)
 //   out: { type: "authored" }                       (any authoring write landed)
+//   out: { type: "readingWrote" }                   (a dwell report landed)
 //   out: { type: "coreReady" } / { type: "rndReady" } / { type: "rndProgress", fraction }
 //
 // Layout measure runs HERE over an OffscreenCanvas (measure.ts adapts), so
@@ -626,9 +627,14 @@ self.onmessage = async (ev: MessageEvent) => {
           }
           self.postMessage({ type: "authored" });
         };
-        // Dwell reports persist ONLY the reading dir — see onReadingWrite.
+        // Dwell reports persist ONLY the reading dir — see onReadingWrite — and
+        // announce themselves SEPARATELY from `authored`. The shell has to drop
+        // its cached reading reads or the navigator keeps painting the map it
+        // fetched hours ago; it must not drop everything else with them, which is
+        // the same reason this does not just fire `authored`.
         booted.engine.onReadingWrite = () => {
           void booted!.home.persistUserDir("reading");
+          self.postMessage({ type: "readingWrote" });
         };
         const cfg = configLoad(booted.wasm) ?? {};
         // Opt-in: absent means off, so a first visit does NOT pull the analysis
