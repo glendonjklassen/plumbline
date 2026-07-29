@@ -65,13 +65,20 @@ async function timedReload(page: Page): Promise<number> {
   return Date.now() - t0;
 }
 
-/** First visit through the given origin, first-run dismissed, reader up. */
+/** First visit through the given origin, first-run dismissed, reader up.
+ *
+ *  The analysis tiers are ticked on the way through: they became opt-in
+ *  2026-07-28, and the pack-update tests below are about a device that HAS the
+ *  analysis pack — without this they would be asserting over a pack the app
+ *  correctly never downloaded. */
 async function firstVisit(page: Page, url: string): Promise<void> {
   await page.goto(url);
   const established = page.getByRole("button", { name: "Established believer" });
   await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
   if (await established.isVisible().catch(() => false)) {
     await established.click();
+    for (const box of await page.locator(".dialog label.card input[type=checkbox]").all())
+      if (!(await box.isChecked())) await box.check();
     await page.getByRole("button", { name: "Start reading" }).click();
   }
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });

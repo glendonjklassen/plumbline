@@ -150,8 +150,9 @@ impl Default for Config {
             side_margin: 28.0,
             line_spacing: 1.35,
             history: Vec::new(),
-            human_analysis: true,
-            machine_analysis: true,
+            // Opt-in: see the note on `from_wire` below.
+            human_analysis: false,
+            machine_analysis: false,
             church: Church::default(),
             present_shares_as_new: true,
             intro: String::new(),
@@ -283,8 +284,11 @@ impl Config {
             // Absent in an older file → on. (Deriving from studyMode would
             // surprise-hide the tiers on devices whose shell defaulted to Full
             // without persisting it — the gates are opt-OUT switches.)
-            human_analysis: w.human_analysis.unwrap_or(true),
-            machine_analysis: w.machine_analysis.unwrap_or(true),
+            // Absent = off. The tiers are opt-in (2026-07-28): a first-time
+            // reader should inherit the text, not a study apparatus. A reader
+            // who switched one on has an explicit `true` here and keeps it.
+            human_analysis: w.human_analysis.unwrap_or(false),
+            machine_analysis: w.machine_analysis.unwrap_or(false),
             // Trimmed on the way in: these arrive from a shared link's query
             // string, where trailing spaces are an accident of copy-paste.
             present_shares_as_new: w.present_shares_as_new.unwrap_or(true),

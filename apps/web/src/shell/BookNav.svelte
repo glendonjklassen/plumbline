@@ -11,11 +11,28 @@
   // Everything this dialog needs is the TOC, prefetched at boot — so the
   // grids are synchronous, and Joel's chapter count is on screen instantly.
   import { getSession } from "../state/session.svelte";
+  import { tintStyle, tintTitle, type ReadingHeat } from "./readingTint";
 
   const s = getSession();
 
   const toc = $derived(s.q("toc"));
   const seg = $derived(s.q("canonSegments"));
+
+  // The reading map (core::reading): each tile tinted by where you stand and
+  // how long it has been. Read through the cache like every other engine
+  // query, so the grids stay synchronous and the tint fills in a beat later
+  // without moving anything on screen.
+  const nowStamp = () => new Date().toISOString();
+  const bookHeat = $derived.by(() => {
+    if (!open) return new Map<string, ReadingHeat>();
+    const r = s.q("readingBooks", nowStamp().slice(0, 10) + "T12:00:00Z");
+    return new Map<string, ReadingHeat>((r?.books ?? []).map((b: any) => [b.book, b as ReadingHeat]));
+  });
+  const chapterHeat = $derived.by(() => {
+    if (!book) return new Map<number, ReadingHeat>();
+    const r = s.q("readingChapters", book, nowStamp().slice(0, 10) + "T12:00:00Z");
+    return new Map<number, ReadingHeat>((r?.chapters ?? []).map((c: any) => [c.chapter, c as ReadingHeat]));
+  });
 
   let book = $state<string | null>(null);
 
@@ -57,20 +74,32 @@
         <p class="sect">Old Testament</p>
         <div class="grid books">
           {#each otBooks as b (b.id)}
-            <button onclick={() => (book = b.id)}>{b.name ?? b.id}</button>
+            <button
+              onclick={() => (book = b.id)}
+              style={tintStyle(bookHeat.get(b.id))}
+              title={tintTitle(b.name ?? b.id, bookHeat.get(b.id))}
+            >{b.name ?? b.id}</button>
           {/each}
         </div>
         <p class="sect">New Testament</p>
         <div class="grid books">
           {#each ntBooks as b (b.id)}
-            <button onclick={() => (book = b.id)}>{b.name ?? b.id}</button>
+            <button
+              onclick={() => (book = b.id)}
+              style={tintStyle(bookHeat.get(b.id))}
+              title={tintTitle(b.name ?? b.id, bookHeat.get(b.id))}
+            >{b.name ?? b.id}</button>
           {/each}
         </div>
       {:else}
         <p class="sect">{s.bookName(book)} — chapter</p>
         <div class="grid nums">
           {#each Array.from({ length: chapterCount }, (_, i) => i + 1) as c (c)}
-            <button onclick={() => go(c)}>{c}</button>
+            <button
+              onclick={() => go(c)}
+              style={tintStyle(chapterHeat.get(c))}
+              title={tintTitle(`${s.bookName(book)} ${c}`, chapterHeat.get(c))}
+            >{c}</button>
           {/each}
         </div>
       {/if}

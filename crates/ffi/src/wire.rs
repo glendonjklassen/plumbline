@@ -16,6 +16,7 @@ use plumbline_core::theme::ThemeChoice;
 use plumbline_core::corpus::{Corpus, Token, Verse};
 use plumbline_core::crossref::CrossRef;
 use plumbline_core::memory;
+use plumbline_core::reading;
 use plumbline_core::reference::VRef;
 use plumbline_core::search::{SearchAnswer, SearchHit};
 use plumbline_core::strongs::StrongsEntry;
@@ -1379,8 +1380,9 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
             .iter()
             .map(|p| PaneRef { book: p.book.clone(), chapter: p.chapter.max(1), verse: None })
             .collect(),
-        human_analysis: w.human_analysis.unwrap_or(true),
-        machine_analysis: w.machine_analysis.unwrap_or(true),
+        // Absent = off; the tiers are opt-in (core::config::from_wire).
+        human_analysis: w.human_analysis.unwrap_or(false),
+        machine_analysis: w.machine_analysis.unwrap_or(false),
         present_shares_as_new: w.present_shares_as_new.unwrap_or(true),
         intro: match w.intro.as_deref() {
             Some("new") => "new".to_string(),
@@ -1540,6 +1542,35 @@ pub fn memory_card_to_wire(c: &memory::Card) -> WireMemoryCard {
 #[derive(Serialize)]
 pub struct WireMemoryDue {
     pub refs: Vec<String>,
+}
+
+// ── the reading map (the navigator's glow) ───────────────────────────────────
+
+/// Every book's standing, plus the tuning and the reader's start date, so one
+/// call gives a shell everything the book grid needs.
+#[derive(Serialize)]
+pub struct WireReadingBooks {
+    pub books: Vec<reading::BookHeat>,
+    /// The date this reader started — the glow anchor for anything unread.
+    pub since: String,
+    pub spec: reading::Spec,
+}
+
+/// One book's chapters, for the chapter grid.
+#[derive(Serialize)]
+pub struct WireReadingChapters {
+    pub book: String,
+    pub chapters: Vec<reading::ChapterHeat>,
+    pub since: String,
+    pub spec: reading::Spec,
+}
+
+/// What a dwell report did — a shell repaints the chapter's tile off this, and
+/// `completed` is its cue to say so.
+#[derive(Serialize)]
+pub struct WireReadingRecorded {
+    #[serde(flatten)]
+    pub recorded: reading::Recorded,
 }
 
 /// The coverage-map data: per-verse standing plus the 8-section rollup.

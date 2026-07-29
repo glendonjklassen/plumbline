@@ -5,6 +5,15 @@ import { expect, test, type Page } from "@playwright/test";
 // path is chosen — 2026-07-26); take the established path. The title check
 // also pins the product branding — index.html, the manifest and the shell
 // header must agree.
+//
+// The tier checkboxes are TICKED here (2026-07-28). The analysis tiers became
+// opt-in that day — they used to be on unless switched off — so an untouched
+// first run now lands a reader with the text and nothing else, and every test
+// below that is about the analysis pack (it arrives without approval, a relaunch
+// is already warm, no chunk monopolises the worker, updates sweep old versions)
+// would otherwise sit waiting for a download that is correctly never requested.
+// Ticking them keeps those tests measuring what they were written to measure: a
+// reader who HAS the analysis on. `optOutOfAnalysis` is the other side of it.
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
   await expect(page).toHaveTitle("Plumbline Bible");
@@ -14,6 +23,8 @@ async function boot(page: Page): Promise<void> {
   await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
   if (await established.isVisible().catch(() => false)) {
     await established.click();
+    for (const box of await page.locator(".dialog label.card input[type=checkbox]").all())
+      if (!(await box.isChecked())) await box.check();
     await page.getByRole("button", { name: "Start reading" }).click();
   }
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });

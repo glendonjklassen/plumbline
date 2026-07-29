@@ -13,6 +13,7 @@
 
 pub mod akjv;
 pub mod canon;
+pub mod civil;
 pub mod config;
 pub mod corpus;
 pub mod crossref;
@@ -21,6 +22,7 @@ pub mod home;
 pub mod memory;
 pub mod notes;
 pub mod panel;
+pub mod reading;
 pub mod reference;
 pub mod renderings;
 pub mod search;

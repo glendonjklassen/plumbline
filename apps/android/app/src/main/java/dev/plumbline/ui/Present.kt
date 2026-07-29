@@ -64,13 +64,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -143,14 +141,9 @@ fun PresentOverlay(
     shareLink: String = PWA_URL,
 ) {
     val context = LocalContext.current
-    val serif = remember {
-        runCatching {
-            FontFamily(
-                Font("fonts/EBGaramond-Regular.ttf", context.assets),
-                Font("fonts/EBGaramond-Italic.ttf", context.assets, style = FontStyle.Italic),
-            )
-        }.getOrElse { FontFamily.Serif }
-    }
+    // One shared family for the whole app (ui/Typography.kt) — it also drives the
+    // Material typography, so chrome and body text are the same face.
+    val serif = rememberSerifFamily()
 
     var threads by remember { mutableStateOf<List<Thread1>?>(null) }
     var entries by remember { mutableStateOf<List<PresentEntry>>(emptyList()) }

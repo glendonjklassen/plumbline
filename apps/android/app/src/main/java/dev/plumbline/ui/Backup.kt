@@ -27,8 +27,10 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
-/** Authored dirs, home-relative — what a backup carries. */
-private val BACKUP_DIRS = listOf("tags", "threads", "weaves", "notes", "memory")
+/** Authored dirs, home-relative — what a backup carries. Must stay in step with
+ *  the web shell's USER_DIRS (apps/web/src/engine/home.ts): the archive layout is
+ *  shared, so a dir missing here is a dir that silently doesn't cross devices. */
+private val BACKUP_DIRS = listOf("tags", "threads", "weaves", "notes", "memory", "reading")
 
 /** Archives written before the Plumbline rename carry the config under
  *  "pure-study/"; the live home uses "plumbline/". Restore-side only — nothing

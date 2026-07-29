@@ -184,7 +184,32 @@
       s.activePane = paneIdx;
     }
     pane.scrollY = top;
+    trackReached();
   }
+
+  /** The reading map's high-water mark: the deepest verse whose text has come
+   *  fully into view. Only ever rises within a chapter — reading back up does not
+   *  un-read anything, and reporting a fall would put pointless writes on the
+   *  scroll path. A verse counts once its LAST word is above the fold. */
+  function trackReached(): void {
+    if (!items.length || cssH <= 0) return;
+    const bottom = pane.scrollY + cssH - MARGIN;
+    let deepest = 0;
+    for (const it of items) {
+      if (it.kind !== "word" || it.y + it.h > bottom) continue;
+      const v = it.verse ? Number(it.verse.slice(it.verse.lastIndexOf(":") + 1)) : 0;
+      if (v > deepest) deepest = v;
+    }
+    if (deepest > (pane.reached ?? 0)) pane.reached = deepest;
+  }
+
+  // Re-evaluate when a fresh layout lands (a new chapter starts at zero) and
+  // when the pane is resized — both change what is above the fold.
+  $effect(() => {
+    void items;
+    void cssH;
+    trackReached();
+  });
   $effect(() => {
     const y = pane.scrollY;
     void contentH; // re-push once the spacer can actually hold the offset

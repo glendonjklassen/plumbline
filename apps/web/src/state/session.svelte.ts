@@ -21,6 +21,10 @@ export interface PaneState {
   scrollY: number;
   back: { book: string; chapter: number }[];
   fwd: { book: string; chapter: number }[];
+  /** Deepest verse the reader has scrolled to in THIS chapter — the reading
+   *  map's high-water mark (core::reading). Monotonic within a chapter: reading
+   *  back up does not un-read anything. Reset on navigate. */
+  reached?: number;
 }
 
 /** Descriptor of what the study surface is showing (sidebar or sheet). */
@@ -78,6 +82,8 @@ export class Session {
   contextMenu = $state<{ x: number; y: number; refKey: string } | null>(null);
   /** Tag-picker sheet target (refKey), Android TagPickerSheet parity. */
   tagPickFor = $state<string | null>(null);
+  /** Thread-picker sheet target (refKey), Android ThreadPickerSheet parity. */
+  threadPickFor = $state<string | null>(null);
   /** Tag→weave sheet target (tag ordinal) — the makeweave: verb. */
   tagWeaveFor = $state<number | null>(null);
   /** Passage-memorize picker: the start verse, whose chapter's later verse
@@ -91,6 +97,9 @@ export class Session {
   showSettings = $state(false);
   /** Passage navigator (OT/NT → book → chapter → verse grids); pane index. */
   bookNavFor = $state<number | null>(null);
+  /** "Mark chapter read…" dialog target — the by-hand date for a paper-Bible
+   *  read (core::reading::mark_read). */
+  markReadFor = $state<{ book: string; chapter: number } | null>(null);
   /** Present mode — fullscreen, high-contrast thread presentation. */
   showPresent = $state(false);
   /** Present opens straight into this thread when set (first-run "Sharing
@@ -144,7 +153,8 @@ export class Session {
   /** Per-tier content gates (bit 0 = human/scholars, bit 1 = machine); the
    *  text and the reader's own data are always on (2026-07-25 product). */
   get gates(): number {
-    return (this.config.humanAnalysis !== false ? 1 : 0) | (this.config.machineAnalysis !== false ? 2 : 0);
+    // `=== true`, not `!== false`: the tiers are opt-in, so absent means off.
+    return (this.config.humanAnalysis === true ? 1 : 0) | (this.config.machineAnalysis === true ? 2 : 0);
   }
 
   #saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -511,6 +521,7 @@ export class Session {
     pane.targetVerse = verse;
     pane.pendingScroll = verse != null;
     pane.scrollY = 0;
+    pane.reached = 0; // a new chapter is a new reading pass
     this.activePane = paneIdx;
     this.#pushHistory(book, chapter);
     this.saveConfig();
@@ -526,6 +537,7 @@ export class Session {
     pane.book = entry.book;
     pane.chapter = entry.chapter;
     pane.targetVerse = null;
+    pane.reached = 0;
     pane.pendingScroll = false;
     pane.scrollY = 0;
     this.activePane = paneIdx;

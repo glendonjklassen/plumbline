@@ -198,7 +198,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun LoadingScreen() {
-    MaterialTheme {
+    MaterialTheme(typography = dev.plumbline.ui.rememberSerifTypography()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
@@ -207,7 +207,7 @@ private fun LoadingScreen() {
 
 @Composable
 private fun ErrorScreen(message: String) {
-    MaterialTheme {
+    MaterialTheme(typography = dev.plumbline.ui.rememberSerifTypography()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Startup failed: $message")
         }

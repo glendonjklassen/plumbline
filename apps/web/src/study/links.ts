@@ -50,16 +50,18 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       s.panel = { kind: "about" };
       break;
 
-    case "addTag": {
-      const name = await s.askText("Tag this verse — tag name");
-      if (name?.trim()) report(s, s.author("tagAdd", name.trim(), "verse", link.refKey, null, nowStamp()));
+    case "addTag":
+      // Same reasoning as addThread below: pick from what exists, freetext only
+      // for something new. The context menu already opened the picker; this is
+      // the study panel's route into the same thing.
+      s.tagPickFor = link.refKey;
       break;
-    }
-    case "addThread": {
-      const name = await s.askText("Add to thread — thread name");
-      if (name?.trim()) report(s, s.author("threadAdd", name.trim(), link.refKey, null, nowStamp()));
+    case "addThread":
+      // Pick from the threads that exist, or name a new one. A bare prompt made
+      // you retype an existing name exactly, and a typo forked a second thread
+      // instead of failing (2026-07-28 feedback).
+      s.threadPickFor = link.refKey;
       break;
-    }
     case "untag": {
       // The wire carries the tag ordinal; authoring wants the name.
       const tag = (await s.fetchQ("tags"))?.tags?.[link.tag];

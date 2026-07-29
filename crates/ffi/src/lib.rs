@@ -60,6 +60,7 @@ use plumbline_core::renderings::{self, Renderings};
 use plumbline_core::search::{self, Notes, SearchIx};
 use plumbline_core::strongs::{self, OccurrenceIx, StrongsDict};
 use plumbline_core::memory;
+use plumbline_core::reading;
 use plumbline_core::tag::{self, LoadedTag, TagTarget};
 use plumbline_core::thread::{self, LoadedThread, ThreadEntry};
 use plumbline_core::weave::{self, Link, LoadedWeave, WeaveKind};
@@ -69,6 +70,7 @@ use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure};
 use plumbline_rnd::{bridge, burst, concept, embed, morph};
 
 mod wire;
+pub mod reading_map;
 
 // ── token flag bits (mirror `plumbline_core::corpus::FLAG_*`; exported to bindings)──
 //
@@ -217,6 +219,10 @@ pub struct PlumblineEngine {
     /// model and cached for the engine's lifetime.
     concept: OnceLock<concept::Concept>,
     leitwort: OnceLock<std::collections::HashMap<String, burst::Burst>>,
+    /// Words per chapter for the whole canon — the reading map's denominators.
+    /// Built on first use and cached: the navigator asks for all 1,189 chapters
+    /// every time it opens, and re-walking 31,102 verses per open buys nothing.
+    reading_words: OnceLock<reading::ChapterWords>,
 }
 
 impl PlumblineEngine {
@@ -268,6 +274,7 @@ impl PlumblineEngine {
             akjv_on: std::sync::atomic::AtomicBool::new(false),
             concept: OnceLock::new(),
             leitwort: OnceLock::new(),
+            reading_words: OnceLock::new(),
         }
     }
 
@@ -1761,6 +1768,39 @@ pub unsafe extern "C" fn plumbline_engine_thread_add(
         };
         let mut study = engine.study_write();
         match thread::add_to_thread(&home, &study.threads, name, canon::TOKENIZATION_VERSION, entry) {
+            Ok(_) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Delete the thread named `name` — its file and every entry on it. Matched
+/// case-insensitively, like `plumbline_engine_thread_add`. A name with no thread
+/// is a success (the caller wanted it gone; it is gone). Null on success, else an
+/// owned error string.
+///
+/// # Safety
+/// `engine` is valid; `name` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_thread_remove(
+    engine: *mut PlumblineEngine,
+    name: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        if engine.home.is_none() {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        }
+        let Some(name) = opt_str(name) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let mut study = engine.study_write();
+        match thread::remove_thread(&study.threads, name) {
             Ok(_) => {
                 *study = load_study(&engine.home);
                 ptr::null_mut()

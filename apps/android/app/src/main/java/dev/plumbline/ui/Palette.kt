@@ -43,6 +43,11 @@ data class ReaderPalette(
     val tierHuman: Color,
     val tierMachine: Color,
     val tierResearch: Color,
+    // The reading map's three hues (core::reading::Standing) — the navigator's
+    // tiles. The bloom is these same colours at rising alpha; see readingTint.
+    val readUnread: Color,
+    val readPartial: Color,
+    val readDone: Color,
 ) {
     /** A verse-highlight wash: the tag tone at a soft alpha behind the text
      *  (mirrors WinUI `Palette.Wash`: α64 dark / α92 light). */
@@ -108,6 +113,9 @@ data class ReaderPalette(
                 tierHuman = hex(p.tierHuman),
                 tierMachine = hex(p.tierMachine),
                 tierResearch = hex(p.tierResearch),
+                readUnread = hex(p.readUnread),
+                readPartial = hex(p.readPartial),
+                readDone = hex(p.readDone),
             )
         }
 
@@ -146,6 +154,9 @@ data class ReaderPalette(
                 tierHuman = c(0x6F, 0x8F, 0x6A),
                 tierMachine = c(0x99, 0x99, 0x99),
                 tierResearch = c(0xB0, 0x4A, 0x3A),
+                readUnread = c(0x6B, 0x7A, 0x8F),
+                readPartial = c(0xC9, 0x8A, 0x2E),
+                readDone = c(0x6F, 0x8F, 0x6A),
             )
         }
     }

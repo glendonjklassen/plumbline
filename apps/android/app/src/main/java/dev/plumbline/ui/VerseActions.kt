@@ -48,8 +48,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -78,6 +83,8 @@ import dev.plumbline.HighlightTones
 import dev.plumbline.StudyEngine
 import dev.plumbline.Tag1
 import dev.plumbline.Tags
+import dev.plumbline.Thread1
+import dev.plumbline.Threads
 import dev.plumbline.UserNote
 import dev.plumbline.VerseData
 import dev.plumbline.parseWire
@@ -85,6 +92,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 /** The refKey split into its book id / chapter / verse (`"1John 3:16"` →
  *  book "1John", ch 3, v 16). Book ids carry no space (OSIS: `canon.rs`), so the
@@ -160,6 +169,7 @@ fun VerseActionSheet(
 
     var showNote by remember(verseRef) { mutableStateOf(false) }
     var showPassage by remember(verseRef) { mutableStateOf(false) }
+    var showMarkRead by remember(verseRef) { mutableStateOf(false) }
     var noteText by remember(verseRef) { mutableStateOf("") }
     var noteLoaded by remember(verseRef) { mutableStateOf(false) }
 
@@ -360,6 +370,14 @@ fun VerseActionSheet(
             ActionRow("Note…", palette.ink) { showNote = true }
             ActionRow("Memorize this verse", palette.ink) { memorize() }
             ActionRow("Memorize passage…", palette.ink) { showPassage = true }
+            // Log a paper-Bible read, on the chapter's FIRST verse only. Kept to
+            // verse 1 on purpose: the affordance should be findable when wanted
+            // and too fiddly to do across a whole Bible, which is exactly the
+            // balance asked for — it exists for "I read Judges on paper last
+            // Tuesday", not for backfilling a reading history wholesale.
+            if (parseRef(verseRef)?.verse == 1) {
+                ActionRow("Mark chapter read…", palette.ink) { showMarkRead = true }
+            }
             HorizontalDivider(color = palette.rule)
 
             // ── highlight: tones, then verse-then-trim (Tier 0 #4) ───────────
@@ -444,6 +462,108 @@ fun VerseActionSheet(
             onPick = { showPassage = false; memorizePassage(it) },
             onCancel = { showPassage = false },
         )
+    }
+
+    if (showMarkRead) {
+        parseRef(verseRef)?.let { parts ->
+            MarkReadDialog(
+                palette = palette,
+                label = "$display".substringBeforeLast(':'),
+                onPick = { date ->
+                    showMarkRead = false
+                    scope.launch {
+                        val err = withContext(Dispatchers.Default) {
+                            runCatching {
+                                synchronized(engine) {
+                                    engine.ReadingMarkRead(parts.book, parts.chapter, date)
+                                }
+                            }.getOrNull()
+                        }
+                        Toast.makeText(
+                            context,
+                            if (err.isNullOrBlank()) "Marked read — $date" else err,
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                        hide()
+                    }
+                },
+                onClear = {
+                    showMarkRead = false
+                    scope.launch {
+                        withContext(Dispatchers.Default) {
+                            runCatching {
+                                synchronized(engine) { engine.ReadingForget(parts.book, parts.chapter) }
+                            }
+                        }
+                        Toast.makeText(context, "Reading history cleared", Toast.LENGTH_SHORT).show()
+                        hide()
+                    }
+                },
+                onCancel = { showMarkRead = false },
+            )
+        }
+    }
+}
+
+/**
+ * Set the date a chapter was last read — the by-hand entry for reading done in a
+ * paper Bible.
+ *
+ * Material's DatePicker, with the future closed off (you cannot have read
+ * something tomorrow) and shortcuts for the answers people actually give:
+ * "today", "yesterday", "last week". Clearing is offered here too, because this
+ * dialog is the only place a wrong date can be undone.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MarkReadDialog(
+    palette: ReaderPalette,
+    label: String,
+    onPick: (String) -> Unit,
+    onClear: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val todayUtc = LocalDate.now(ZoneOffset.UTC)
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = todayUtc.toEpochDay() * 86_400_000L,
+        selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                utcTimeMillis <= todayUtc.toEpochDay() * 86_400_000L
+        },
+    )
+
+    fun pickDaysAgo(n: Long) = onPick(todayUtc.minusDays(n).toString())
+
+    DatePickerDialog(
+        onDismissRequest = onCancel,
+        colors = DatePickerDefaults.colors(containerColor = palette.panelBg),
+        confirmButton = {
+            TextButton(onClick = {
+                val ms = state.selectedDateMillis
+                if (ms != null) onPick(LocalDate.ofEpochDay(ms / 86_400_000L).toString()) else onCancel()
+            }) { Text("Set", color = palette.gold) }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onClear) { Text("Clear", color = palette.faded) }
+                TextButton(onClick = onCancel) { Text("Cancel", color = palette.faded) }
+            }
+        },
+    ) {
+        Text(
+            "When did you last read $label?",
+            color = palette.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp),
+        )
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            TextButton(onClick = { pickDaysAgo(0) }) { Text("Today", color = palette.gold, fontSize = 13.sp) }
+            TextButton(onClick = { pickDaysAgo(1) }) { Text("Yesterday", color = palette.gold, fontSize = 13.sp) }
+            TextButton(onClick = { pickDaysAgo(7) }) { Text("Last week", color = palette.gold, fontSize = 13.sp) }
+        }
+        DatePicker(state = state, colors = DatePickerDefaults.colors(containerColor = palette.panelBg))
     }
 }
 
@@ -717,4 +837,160 @@ private fun NoteDialog(
         },
         containerColor = palette.panelBg,
     )
+}
+
+/**
+ * Pick which thread a verse joins — an existing one, or a new one by name.
+ *
+ * It used to be a bare text field (2026-07-28 feedback: "a nightmare"). A
+ * freetext-only prompt makes the common case — adding a fifth passage to the
+ * thread you have been building all week — require you to retype its name
+ * exactly, and a typo silently forks a second thread instead of failing. So this
+ * mirrors [TagPickerSheet] exactly: what exists is a list you tap, and freetext
+ * is only for something genuinely new.
+ *
+ * Deleting lives here too, for the same reason it does for a date set by mistake:
+ * a thread you started by typo had no way out before.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ThreadPickerSheet(
+    engine: StudyEngine,
+    palette: ReaderPalette,
+    verseRef: String,
+    onDismiss: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var threads by remember { mutableStateOf<List<Thread1>?>(null) }
+    var newMode by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+    var confirmDelete by remember { mutableStateOf<String?>(null) }
+    var reloadEpoch by remember { mutableStateOf(0) }
+
+    LaunchedEffect(reloadEpoch) {
+        threads = withContext(Dispatchers.Default) {
+            runCatching { synchronized(engine) { engine.ThreadsJson() } }.getOrNull()
+                ?.let { runCatching { parseWire<Threads>(it).threads }.getOrNull() }
+        } ?: emptyList()
+    }
+
+    fun apply(name: String) {
+        val t = name.trim()
+        if (t.isEmpty()) return
+        scope.launch {
+            val err = withContext(Dispatchers.Default) {
+                runCatching {
+                    synchronized(engine) { engine.ThreadAdd(t, verseRef, null, Instant.now().toString()) }
+                }.getOrNull()
+            }
+            Toast.makeText(
+                context,
+                if (err.isNullOrBlank()) "Added to $t" else err,
+                Toast.LENGTH_SHORT,
+            ).show()
+            onDismiss()
+        }
+    }
+
+    fun delete(name: String) {
+        scope.launch {
+            val err = withContext(Dispatchers.Default) {
+                runCatching { synchronized(engine) { engine.ThreadRemove(name) } }.getOrNull()
+            }
+            confirmDelete = null
+            if (err.isNullOrBlank()) {
+                reloadEpoch++
+                Toast.makeText(context, "Deleted $name", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = palette.panelBg) {
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                .navigationBarsPadding().padding(horizontal = 16.dp),
+        ) {
+            Text(
+                "Add $verseRef to a thread",
+                color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(vertical = 8.dp),
+            )
+            HorizontalDivider(color = palette.rule)
+
+            val list = threads
+            if (list == null) {
+                Text("…", color = palette.faded, modifier = Modifier.padding(vertical = 12.dp))
+            } else {
+                for (t in list.sortedBy { it.name.lowercase() }) {
+                    Row(
+                        Modifier.fillMaxWidth().clickable { apply(t.name) }
+                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(t.name, color = palette.ink, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                        Text(
+                            "${t.entries.size} passage${if (t.entries.size == 1) "" else "s"}",
+                            color = palette.faded, fontSize = 12.sp,
+                        )
+                        Text(
+                            "Delete",
+                            color = palette.disputed, fontSize = 12.sp,
+                            modifier = Modifier
+                                .clickable { confirmDelete = t.name }
+                                .padding(start = 14.dp, top = 4.dp, bottom = 4.dp),
+                        )
+                    }
+                }
+                if (list.isEmpty()) {
+                    Text(
+                        "No threads yet — name your first below.",
+                        color = palette.faded, fontSize = 14.sp,
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                }
+            }
+
+            HorizontalDivider(color = palette.rule)
+            if (!newMode) {
+                ActionRow("New thread…", palette.ink) { newMode = true }
+            } else {
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        placeholder = { Text("Thread name") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { apply(newName) }) { Text("Add", color = palette.gold) }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+
+    confirmDelete?.let { name ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            containerColor = palette.panelBg,
+            title = { Text("Delete “$name”?", color = palette.ink) },
+            text = {
+                Text(
+                    "The thread and every passage on it go. The verses themselves are untouched.",
+                    color = palette.faded,
+                )
+            },
+            confirmButton = { TextButton(onClick = { delete(name) }) { Text("Delete", color = palette.disputed) } },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = null }) { Text("Cancel", color = palette.faded) }
+            },
+        )
+    }
 }

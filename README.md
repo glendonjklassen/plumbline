@@ -102,6 +102,30 @@ The reading pane holds focus (click it if a dropdown steals it):
 | `Ctrl`+click a word (or double-click) | open its Strong's study panel |
 | `Esc` | close the study panel / any popup (clicking outside a popup also closes it) |
 
+## Threads and weaves
+
+**A weave is something you find. A thread is something you make.**
+
+Weaves are already in the Bible. When Matthew quotes Isaiah, when the same
+event is told in three Gospels, when a Psalm turns up on the lips of Christ at
+the cross — those connections were put there. You didn't invent them, you
+noticed them. A weave is how you write down what you noticed, and once it's
+written down the app draws the connection for you every time you're reading
+either end of it. Nobody owns a weave: two people studying carefully will find
+the same ones.
+
+Threads are yours. A thread is a set of passages you gathered because *you* had
+a reason — the sermon you're preaching Sunday, the case you want to walk a
+friend through, a question you're chasing across the canon. The order matters,
+because the order is your argument. The Romans Road is a thread: 3:23, then
+6:23, then 5:8. It's a thread precisely *because* Paul didn't write it that way
+— someone assembled it, on purpose, to explain the gospel to someone else.
+
+So: **if the connection is in the text, weave it. If the connection is your
+point, thread it.** Weaves are ambient and unordered, and you'll stumble back
+into them for years. Threads are walked start to finish, and they carry your
+notes as you go.
+
 ## Weaves — parallel passages
 
 A **weave** ties parallel passages together (a Gospel harmony, a prophecy and

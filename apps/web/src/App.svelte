@@ -76,7 +76,13 @@
       if (hasChurch(shared) && !s.showFirstRun) {
         s.showToast(`Home church set to ${shared.name} — tap Church to visit them`);
       }
-      s.rndDeferred = deferRnd && !info.rndAuto;
+      // "Deferred" has to mean the reader WANTS the machine tier and its download
+      // was held back — not merely that no download happened. Since the tiers
+      // became opt-in (2026-07-28) those two came apart: with the tier off,
+      // `rndAuto` is correctly false on every device, and without the last clause
+      // every phone would be shown StudyPanel's "Load analysis" offer for a tier
+      // its reader had never asked for.
+      s.rndDeferred = deferRnd && !info.rndAuto && s.config.machineAnalysis === true;
       s.tones = tones?.tones ?? [];
       await Promise.all([s.fetchQ("toc"), s.fetchQ("canonSegments")]);
       session = s;
