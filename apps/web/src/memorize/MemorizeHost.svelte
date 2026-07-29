@@ -39,6 +39,19 @@
   const coverage = $derived(open ? s.q("memoryCoverage", stamp) : null);
   const dueRefs = $derived(open ? ((s.q("memoryDue", stamp)?.refs ?? []) as string[]) : []);
 
+  /** Drop a memorization card — the schedule and its whole review log with it,
+   *  which is why it asks first. */
+  async function removeCard(ref: string, label: string): Promise<void> {
+    const ok = await s.askConfirm(
+      `Stop memorizing ${label}?`,
+      "The card goes, along with its review history and everything it had learned about how well you know it. The verse itself is untouched.",
+      "Remove card",
+    );
+    if (!ok) return;
+    const err = await s.author("memoryRemove", ref);
+    s.showToast(err ?? `Removed ${label}`);
+  }
+
   function close(): void {
     // A destination closes by going home — leaving `screen` on "memorize" with no
     // view would render an empty screen with no way out.
@@ -156,10 +169,7 @@
               <button
                 class="remove"
                 title="Remove card"
-                onclick={() =>
-                  void s.author("memoryRemove", v.ref).then((err) => {
-                    if (err) s.showToast(err);
-                  })}>✕</button
+                onclick={() => void removeCard(v.ref, v.label ?? v.ref)}>✕</button
               >
             </div>
           {/each}

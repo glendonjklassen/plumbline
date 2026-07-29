@@ -44,8 +44,14 @@
 
   async function clear(): Promise<void> {
     const t = target;
-    close();
     if (!t) return;
+    const ok = await s.askConfirm(
+      `Clear the reading history for ${label}?`,
+      "It goes back to unread — including a date you set here by hand, which nothing else records.",
+      "Clear history",
+    );
+    if (!ok) return;
+    close();
     const err = await s.author("readingForget", t.book, t.chapter);
     s.showToast(err ?? "Reading history cleared");
   }

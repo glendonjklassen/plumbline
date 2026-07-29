@@ -65,7 +65,17 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
     case "untag": {
       // The wire carries the tag ordinal; authoring wants the name.
       const tag = (await s.fetchQ("tags"))?.tags?.[link.tag];
-      if (tag) report(s, s.author("tagRemove", tag.name, "verse", link.refKey));
+      if (!tag) break;
+      if (
+        !(await s.askConfirm(
+          `Remove ${link.refKey} from “${tag.name}”?`,
+          "The verse leaves this tag. The tag and its other verses stay as they are.",
+          "Remove",
+        ))
+      ) {
+        break;
+      }
+      report(s, s.author("tagRemove", tag.name, "verse", link.refKey));
       break;
     }
     case "makeWeave":
@@ -76,6 +86,15 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       report(s, s.author("weaveApprove", link.index));
       break;
     case "reject":
+      if (
+        !(await s.askConfirm(
+          "Reject this suggested weave?",
+          "It is deleted, not hidden — it will not come back for review.",
+          "Reject",
+        ))
+      ) {
+        break;
+      }
       report(s, s.author("weaveReject", link.index));
       break;
     case "editThreadNotes": {
