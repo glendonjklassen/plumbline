@@ -14,7 +14,7 @@
 {#if s.showHistory}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={() => (s.showHistory = false)}></div>
-  <div class="dialog" role="dialog" aria-modal="true">
+  <div class="dialog" role="dialog" aria-modal="true" data-surface="history">
     <h2>Recently read</h2>
     {#if history.length === 0}
       <p class="empty">Nothing yet.</p>
@@ -41,7 +41,7 @@
     left: 50%;
     transform: translateX(-50%);
     width: min(320px, 90vw);
-    max-height: 60vh;
+    max-height: calc(60vh - var(--bottomNavH, 0px));
     overflow-y: auto;
     background: var(--popupPaper, #f2eee6);
     border: 1px solid var(--rule, #d8cba8);

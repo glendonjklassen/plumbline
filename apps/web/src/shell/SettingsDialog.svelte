@@ -285,7 +285,7 @@
 {#if s.showSettings}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={() => (s.showSettings = false)}></div>
-  <div class="dialog" role="dialog" aria-modal="true">
+  <div class="dialog" role="dialog" aria-modal="true" data-surface="settings">
     <h2>Settings</h2>
     <div class="content">
       {#if s.akjvAvailable}
@@ -593,7 +593,8 @@
     left: 50%;
     transform: translateX(-50%);
     width: min(440px, 94vw);
-    max-height: 84vh;
+    /* Less the destination bar, or the last setting sits under it. */
+    max-height: calc(84vh - var(--bottomNavH, 0px));
     display: flex;
     flex-direction: column;
     background: var(--popupPaper, #f2eee6);

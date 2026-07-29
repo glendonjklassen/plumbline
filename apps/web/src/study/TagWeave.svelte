@@ -99,7 +99,12 @@
   @media (max-width: 900px) {
     .sheet {
       top: auto;
-      bottom: 0;
+      /* Stop ABOVE the destination bar, never under it. `--bottomNavH` is
+         measured and published by Shell (0 at desktop widths, where there is no
+         bar), so this never restates a height that would drift. Getting it wrong
+         hides the bottom of the sheet — which for a picker is the "New …" field
+         and its Add button, i.e. the whole point of opening it (2026-07-29). */
+      bottom: var(--bottomNavH, 0px);
       left: 0;
       transform: none;
       width: 100%;

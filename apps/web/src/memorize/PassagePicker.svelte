@@ -70,7 +70,7 @@
 {#if start}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={close}></div>
-  <div class="sheet" role="dialog" aria-modal="true" aria-label="Memorize a passage">
+  <div class="sheet" role="dialog" aria-modal="true" aria-label="Memorize a passage" data-surface="passage picker">
     <div class="bar">
       <span class="title">Memorize {label}</span>
       <span class="spacer"></span>
@@ -117,7 +117,7 @@
     top: 50%;
     transform: translate(-50%, -50%);
     width: min(520px, calc(100vw - 24px));
-    max-height: min(80vh, 640px);
+    max-height: calc(min(80vh, 640px) - var(--bottomNavH, 0px));
     display: flex;
     flex-direction: column;
     background: var(--popupPaper, #f2eee6);

@@ -54,7 +54,7 @@
 {#if target}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={close}></div>
-  <div class="dialog" role="dialog" aria-modal="true" aria-label="Mark chapter read">
+  <div class="dialog" role="dialog" aria-modal="true" aria-label="Mark chapter read" data-surface="mark read">
     <h2>When did you last read {label}?</h2>
     <p class="sub">
       For reading you did somewhere else — a paper Bible, or another app. It counts as a full read
@@ -92,6 +92,10 @@
     left: 50%;
     transform: translateX(-50%);
     width: min(420px, 94vw);
+    /* Auto height, but never past the destination bar — the Set/Clear/Cancel row
+       lives at the bottom and has to stay tappable. */
+    max-height: calc(86vh - var(--bottomNavH, 0px));
+    overflow-y: auto;
     padding: 18px 20px 14px;
     background: var(--popupPaper, #f2eee6);
     border: 1px solid var(--rule, #d8cba8);

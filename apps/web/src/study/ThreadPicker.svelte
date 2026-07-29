@@ -47,7 +47,7 @@
 {#if s.threadPickFor}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={close}></div>
-  <div class="sheet" role="dialog" aria-modal="true">
+  <div class="sheet" role="dialog" aria-modal="true" data-surface="thread picker">
     <h2>Add {s.threadPickFor} to a thread</h2>
     <div class="list">
       {#each threads as t (t.name)}
@@ -109,7 +109,12 @@
   @media (max-width: 900px) {
     .sheet {
       top: auto;
-      bottom: 0;
+      /* Stop ABOVE the destination bar, never under it. `--bottomNavH` is
+         measured and published by Shell (0 at desktop widths, where there is no
+         bar), so this never restates a height that would drift. Getting it wrong
+         hides the bottom of the sheet — which for a picker is the "New …" field
+         and its Add button, i.e. the whole point of opening it (2026-07-29). */
+      bottom: var(--bottomNavH, 0px);
       left: 0;
       transform: none;
       width: 100%;

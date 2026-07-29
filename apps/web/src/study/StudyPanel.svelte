@@ -126,7 +126,7 @@
 </script>
 
 {#if s.panel}
-  <aside class="panel" style:--uiScale={uiScale}>
+  <aside class="panel" style:--uiScale={uiScale} data-surface="study panel">
     <div class="bar">
       <div class="grip" aria-hidden="true"></div>
       <button class="close" onclick={() => (s.panel = null)} aria-label="Close panel">✕</button>
@@ -333,7 +333,12 @@
       position: fixed;
       left: 0;
       right: 0;
-      bottom: 0;
+      /* Stop ABOVE the destination bar, never under it. `--bottomNavH` is
+         measured and published by Shell (0 at desktop widths, where there is no
+         bar), so this never restates a height that would drift. Getting it wrong
+         hides the bottom of the sheet — which for a picker is the "New …" field
+         and its Add button, i.e. the whole point of opening it (2026-07-29). */
+      bottom: var(--bottomNavH, 0px);
       top: auto;
       width: auto;
       min-width: 0;
