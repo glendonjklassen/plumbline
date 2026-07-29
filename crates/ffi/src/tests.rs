@@ -2058,7 +2058,9 @@ fn reading_map_round_trip_via_abi() {
         assert_eq!(books["spec"]["completeAt"], 0.9);
         let john = books["books"].as_array().unwrap().iter().find(|b| b["book"] == "John").unwrap();
         assert_eq!(john["standing"], "unread");
-        assert_eq!(john["glow"], 0.0, "a brand-new reader must not be shouted at");
+        // Unread glows from the FIRST launch: the map's job on day one is to show
+        // a reader where to go, and one that starts dark shows nothing.
+        assert_eq!(john["glow"], 1.0, "unread must invite immediately");
 
         // The anchor is written once and must not move on a later call.
         let later: Value = serde_json::from_str(
@@ -2066,11 +2068,11 @@ fn reading_map_round_trip_via_abi() {
         )
         .unwrap();
         assert_eq!(later["since"], "2026-07-28", "the start date is stamped once");
-        // Half a year on, the unread canon has begun to glow. (Only John is in
-        // this toy corpus, so it is the only book with any words to weight.)
+        // And it does not fade or build with time — unread is unread, whenever
+        // you look. (Only John is in this toy corpus, so it is the only book with
+        // any words to weight.)
         let john = later["books"].as_array().unwrap().iter().find(|b| b["book"] == "John").unwrap();
-        let g = john["glow"].as_f64().unwrap();
-        assert!(g > 0.3 && g < 1.0, "unread ramps from the start date, got {g}");
+        assert_eq!(john["glow"], 1.0, "unread does not ramp; it is lit throughout");
 
         // A dwell report that is all scroll and no time credits nothing.
         let rec: Value = serde_json::from_str(

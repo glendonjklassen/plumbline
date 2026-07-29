@@ -159,11 +159,16 @@ pub struct Palette {
     /// The reading map's three hues (see `crate::reading::Standing`) — the
     /// navigator's book/chapter tiles. Shells own the bloom: the glow is these
     /// same colours at rising alpha and spread, so it follows the theme for free.
-    /// A chapter never read.
+    ///
+    /// A chapter never read. GOLD, and glowing from the first launch: unopened
+    /// scripture should read as treasure worth going after, not as a gap in a
+    /// checklist (2026-07-29 — it was a cold slate that "doesn't feel like a
+    /// treasure I want to explore", and it was right).
     pub read_unread: String,
-    /// A chapter partway through.
+    /// A chapter partway through — copper, clearly darker than the unread gold so
+    /// "started" never reads as "untouched".
     pub read_partial: String,
-    /// A chapter read all the way through.
+    /// A chapter read all the way through — sage, settled.
     pub read_done: String,
 }
 
@@ -214,11 +219,8 @@ pub fn palette(theme: Theme) -> Palette {
             pane_nav_bg: "#efeae1".into(),
             strip_bg: "#ebe6db".into(),
             pin: "#4073bf".into(),
-            // Slate reads as "not started" without competing with the gold
-            // accent that means "you are here"; amber is in progress; sage is
-            // the same green the human tier already uses for settled.
-            read_unread: "#6b7a8f".into(),
-            read_partial: "#c98a2e".into(),
+            read_unread: "#c9a227".into(),
+            read_partial: "#a8642c".into(),
             read_done: "#6f8f6a".into(),
         },
         // Candlelight-warm dark: a dark brown-charcoal paper, warm off-white ink,
@@ -248,8 +250,8 @@ pub fn palette(theme: Theme) -> Palette {
             pane_nav_bg: "#262019".into(),
             strip_bg: "#262019".into(),
             pin: "#6a9bd8".into(),
-            read_unread: "#7f8ea3".into(),
-            read_partial: "#d9a04a".into(),
+            read_unread: "#e0bb45".into(),
+            read_partial: "#c07a3c".into(),
             read_done: "#8fb389".into(),
         },
         // True-black night (OLED): pure-black paper, everything else tuned for it.
@@ -276,8 +278,8 @@ pub fn palette(theme: Theme) -> Palette {
             pane_nav_bg: "#0a0a08".into(),
             strip_bg: "#0a0a08".into(),
             pin: "#5f92cf".into(),
-            read_unread: "#75839a".into(),
-            read_partial: "#cf9743".into(),
+            read_unread: "#d8b23e".into(),
+            read_partial: "#b87338".into(),
             read_done: "#86ac82".into(),
         },
     }

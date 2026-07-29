@@ -77,7 +77,7 @@ private const val OT_BOOKS = 39
  * now that the navigator stops at the chapter — and the caller closes it.
  *
  * Both grids carry the **reading map** (core::reading): the tile's hue is where
- * that book or chapter stands (slate unread, amber partway, sage read through)
+ * that book or chapter stands (gold unopened, copper partway, sage read through)
  * and its bloom is how long it has been. See [readingTint].
  */
 @Composable
@@ -221,7 +221,7 @@ private fun Modifier.readingGlow(tint: ReadingTint?, radius: Dp): Modifier {
         val rings = 3
         for (i in rings downTo 1) {
             val spread = (i * 2.5f).dp.toPx()
-            val alpha = tint.glow * 0.20f / i
+            val alpha = tint.glow * 0.26f / i
             drawRoundRect(
                 color = tint.border.copy(alpha = alpha),
                 topLeft = Offset(-spread, -spread),

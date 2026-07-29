@@ -133,13 +133,18 @@
   .bar {
     display: flex;
     align-items: center;
-    padding: 10px 14px;
+    padding: 12px 14px;
     border-bottom: 1px solid var(--rule, #d8cba8);
   }
   .crumb,
   .crumb-title {
     font-weight: 600;
+    font-size: 17px;
     color: var(--gold, #9e7d38);
+  }
+  .crumb {
+    padding: 8px 6px;
+    min-height: 44px;
   }
   .crumb-title {
     color: var(--ink, #211f1a);
@@ -149,13 +154,16 @@
   }
   .close {
     color: var(--faded, #8a8276);
+    font-size: 18px;
+    padding: 8px 12px;
+    min-height: 44px;
   }
   .content {
     overflow-y: auto;
     padding: 12px 14px 20px;
   }
   .sect {
-    font-size: 12px;
+    font-size: 13.5px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--section, #a0894a);
@@ -168,18 +176,23 @@
     display: grid;
     gap: 6px;
   }
+  /* Bigger targets throughout (feedback 2026-07-29). This is the grid a reader
+     uses to get anywhere in the Bible, on a phone, one-handed; Android's version
+     is a full screen of big tiles and this is now sized to match rather than to
+     fit the most tiles per screen. */
   .grid.books {
-    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
   }
   .grid.nums {
-    grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
   }
   .grid button {
-    padding: 8px 4px;
+    padding: 14px 6px;
+    min-height: 52px;
     border: 1px solid var(--rule, #d8cba8);
-    border-radius: 7px;
+    border-radius: 8px;
     background: var(--paper, #fcf9f4);
-    font-size: 14px;
+    font-size: 16px;
   }
   .grid button:hover {
     border-color: var(--gold, #9e7d38);

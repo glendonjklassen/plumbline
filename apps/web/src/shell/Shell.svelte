@@ -7,6 +7,7 @@
   import PromptDialog from "./PromptDialog.svelte";
   import Shortcuts from "./Shortcuts.svelte";
   import BookNav from "./BookNav.svelte";
+  import ExploreScreen from "./ExploreScreen.svelte";
   import MarkReadDialog from "./MarkReadDialog.svelte";
   import CanonStrip from "./CanonStrip.svelte";
   import HistorySheet from "./HistorySheet.svelte";
@@ -34,7 +35,7 @@
   $effect(() =>
     startReadingTracker({
       target: () => {
-        if (s.showPresent || s.memorize || s.mapPopup) return null;
+        if (s.showPresent || s.screen !== "read" || s.mapPopup) return null;
         const p = s.panes[0];
         return p ? { book: p.book, chapter: p.chapter } : null;
       },
@@ -103,16 +104,15 @@
   // Surfaces are exclusive: picking a destination closes the others
   // (Memorize left open over Explore was disorienting). Shared by the
   // header's destination buttons and the ≡ utilities.
+  //
+  // The closing list used to live here and named five surfaces. There are
+  // thirteen, so every one added since — the note editor above all — could not be
+  // escaped by tapping a destination (feedback 2026-07-29). `dismissTransient`
+  // owns it now, beside the declarations it has to keep up with.
   function go(action: () => void): () => void {
     return () => {
       menuOpen = false;
-      s.memorize = null;
-      s.showHistory = false;
-      s.showSettings = false;
-      s.bookNavFor = null;
-      // A destination tap also dismisses the fullscreen maps — on the chord
-      // map, hitting Explore previously did nothing (feedback 2026-07-26).
-      s.mapPopup = null;
+      s.dismissTransient();
       action();
     };
   }
@@ -127,13 +127,9 @@
       path:
         "M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" +
         "M6 4h5v8l-2.5-1.5L6 12V4z",
-      // Read clears the layers rather than opening anything: `go` already drops
-      // memorize, history, settings and the maps, so this only has to close the
-      // study panel and Present.
-      go: () => {
-        s.showPresent = false;
-        s.panel = null;
-      },
+      // Read opens nothing — `dismissTransient` has already cleared every layer,
+      // which IS arriving at the text.
+      go: () => {},
     },
     {
       key: "explore",
@@ -142,10 +138,7 @@
         "M12 10.9c-.61 0-1.1.49-1.1 1.1s.49 1.1 1.1 1.1c.61 0 1.1-.49 1.1-1.1s-.49-1.1-1.1-1.1z" +
         "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" +
         "m2.19 12.19L6 18l3.81-8.19L18 6l-3.81 8.19z",
-      go: () => {
-        s.showPresent = false;
-        s.panel = { kind: "explore" };
-      },
+      go: () => (s.screen = "explore"),
     },
     {
       key: "present",
@@ -159,9 +152,9 @@
       key: "memorize",
       label: "Memorize",
       path: "M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 11-6-11-6z",
-      // `go` clears s.memorize first, so this has to set it after.
+      // `dismissTransient` resets the screen first, so these set it after.
       go: () => {
-        s.showPresent = false;
+        s.screen = "memorize";
         s.memorize = { view: "hub" };
       },
     },
@@ -197,9 +190,9 @@
     };
   });
 
-  const dest = $derived(
-    s.showPresent ? "present" : s.memorize ? "memorize" : s.panel?.kind === "explore" ? "explore" : "read",
-  );
+  // Which tab reads as current. Present wins because it covers everything; below
+  // it, `s.screen` IS the destination now that Explore and Memorize are screens.
+  const dest = $derived(s.showPresent ? "present" : s.screen);
 
   // The church button opens their site; with no site to open it at least
   // tells the reader who and when, which is all we were given.
@@ -285,18 +278,25 @@
         if (e.ctrlKey) s.setZoom(fontPx - 1);
         else return;
         break;
+      // Escape peels ONE layer, outermost first, so it never skips past something
+      // the reader can see. The destination screens are the last layer before the
+      // text, which is why they come after the panel: Escape out of a study panel
+      // opened from Explore should land back in Explore, not in Genesis.
       case "Escape":
         if (shareApp) shareApp = false;
+        else if (s.promptReq) s.cancelPrompt();
         else if (s.mapPopup) s.mapPopup = null;
         else if (s.bookNavFor !== null) s.bookNavFor = null;
+        else if (s.markReadFor) s.markReadFor = null;
+        else if (s.threadPickFor) s.threadPickFor = null;
+        else if (s.tagPickFor) s.tagPickFor = null;
         else if (s.showSettings) s.showSettings = false;
-        else if (s.memorize) s.memorize = null;
         else if (s.showHistory) s.showHistory = false;
         else if (s.showShortcuts) s.showShortcuts = false;
         else if (s.panel) {
           s.panel = null;
           s.searchQuery = "";
-        }
+        } else if (s.screen !== "read") s.goRead();
         break;
       case "?":
       case "F1":
@@ -320,9 +320,14 @@
          the ≡ menu holds utilities only. Threads/Tags/Weaves live inside
          Explore, as on Android. -->
     <nav class="browse">
-        <button onclick={go(() => (s.panel = { kind: "explore" }))}>Explore</button>
+        <button onclick={go(() => (s.screen = "explore"))}>Explore</button>
         <button onclick={go(() => (s.showPresent = true))}>Present</button>
-        <button onclick={go(() => (s.memorize = { view: "hub" }))}>Memorize</button>
+        <button
+          onclick={go(() => {
+            s.screen = "memorize";
+            s.memorize = { view: "hub" };
+          })}>Memorize</button
+        >
       </nav>
     <span class="spacer"></span>
     <button class="glass" class:searching={searchOpen} onclick={openSearch} aria-label="Open search">⌕</button>
@@ -370,16 +375,25 @@
     </div>
   </header>
 
+  <!-- One destination at a time, Android's model: a screen REPLACES the reader
+       rather than sliding over it. The study panel still layers on top, because it
+       is a panel about the verse you are looking at, not a place you go. -->
   <div class="body">
-    <div class="reading">
-      <div class="panes">
-        {#each s.panes as _, i (i)}
-          <ReaderPane paneIdx={i} onWordStudy={openWordStudy} />
-        {/each}
-        <ConnectorsOverlay />
+    {#if s.screen === "explore"}
+      <ExploreScreen />
+    {:else if s.screen === "memorize"}
+      <MemorizeHost />
+    {:else}
+      <div class="reading">
+        <div class="panes">
+          {#each s.panes as _, i (i)}
+            <ReaderPane paneIdx={i} onWordStudy={openWordStudy} />
+          {/each}
+          <ConnectorsOverlay />
+        </div>
+        <CanonStrip />
       </div>
-      <CanonStrip />
-    </div>
+    {/if}
     <StudyPanel />
   </div>
 
@@ -454,7 +468,6 @@
 <ContextMenu />
 <TagPicker />
 <TagWeave />
-<MemorizeHost />
 <PassagePicker />
 <HistorySheet />
 <PresentHost />
@@ -470,11 +483,16 @@
     flex-direction: column;
     background: var(--paper, #fcf9f4);
   }
+  /* The top bar was too small to use comfortably (feedback 2026-07-29). Android
+     sets the standard here: 48dp touch targets and text you do not lean in for.
+     Every control below is sized off that rather than off how little room it can
+     be squeezed into — this bar holds the passage the reader taps most. */
   header {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 6px 12px;
+    padding: 10px 14px;
+    min-height: 52px;
     background: var(--paneNavBg, #efeae1);
     border-bottom: 1px solid var(--rule, #d8cba8);
     flex-wrap: wrap;
@@ -487,10 +505,11 @@
   .title {
     font-weight: 600;
     letter-spacing: 0.03em;
+    font-size: 18px;
   }
   .subtitle {
     color: var(--faded, #8a8276);
-    font-size: 14px;
+    font-size: 16px;
   }
   .browse {
     display: flex;
@@ -498,17 +517,18 @@
     margin-left: 8px;
   }
   .browse button {
-    font-size: 13.5px;
-    padding: 3px 9px;
-    border-radius: 5px;
+    font-size: 16px;
+    padding: 8px 13px;
+    min-height: 44px;
+    border-radius: 6px;
     color: var(--gold, #9e7d38);
   }
   .browse button:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
   }
   .share-first {
-    font-size: 13.5px;
-    padding: 4px 12px;
+    font-size: 15px;
+    padding: 9px 14px;
     border: 1px solid var(--gold, #9e7d38);
     border-radius: 6px;
     color: var(--gold, #9e7d38);

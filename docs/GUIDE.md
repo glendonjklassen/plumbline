@@ -132,13 +132,14 @@ matters, because the order is your point.
 ## The reading map
 
 The book and chapter grids in **Go to…** tint themselves by how you have read:
-slate for never, amber for partway, sage for read through. A book takes the
+gold for never, copper for partway, sage for read through. A book takes the
 word-weighted blend of its chapters, so the chapters always add up to it.
 
-On top of the hue, a chapter **glows** the longer it has been since you read it —
-nothing for the first month, full at a year. That is the point of the feature: it
-shows where you have not been lately. Chapters you have never read ramp the same
-way from the day you started, so a new install begins quiet and fills in.
+On top of the hue, a chapter **glows** — and the glow says one of two things. On
+something you have read, it means *you have been away a while*: nothing for the
+first month, building to full at a year. On something you have never read, it is
+lit from the moment you install, because that is treasure you have not opened yet.
+Either way the glow is an invitation, never a scolding, and nobody sees it but you.
 
 Reading is counted generously: a chapter fills as you move through it at a natural
 pace (flipping past credits nothing, and neither does leaving it open), and 90%
