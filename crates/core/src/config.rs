@@ -377,7 +377,9 @@ pub fn config_path() -> Option<PathBuf> {
 /// Load the config at `path`, returning `(config, first_run)` where `first_run`
 /// is true when no file existed yet (the caller should present the chooser). A
 /// present-but-unreadable file loads as the default with `first_run = false`
-/// (we do not re-prompt someone whose file merely got damaged).
+/// (we do not re-prompt someone whose file merely got damaged) — and an
+/// unparseable one is moved aside first, so the next save cannot quietly write
+/// defaults over it (see [`move_damaged_aside`]).
 pub fn load_from(path: impl AsRef<Path>) -> (Config, bool) {
     let path = path.as_ref();
     match std::fs::read(path) {
@@ -385,9 +387,43 @@ pub fn load_from(path: impl AsRef<Path>) -> (Config, bool) {
         Err(_) => (Config::default(), false),
         Ok(bytes) => match serde_json::from_slice::<ConfigWire>(&bytes) {
             Ok(w) => (Config::from_wire(w), false),
-            Err(_) => (Config::default(), false),
+            Err(_) => {
+                move_damaged_aside(path, &bytes);
+                (Config::default(), false)
+            }
         },
     }
+}
+
+/// Move an unparseable config to `<name>.bad` before anything writes defaults
+/// over it. One bad byte otherwise costs the reader their reading history,
+/// their pane layout and their church; this leaves them a file to fix by hand
+/// (and on the web shell `.config/` is user data, so the rescue is persisted
+/// and rides along in the backup zip).
+///
+/// If a `.bad` is already there we KEEP IT and leave the new damage where it
+/// is. The first rescue is the one worth having — a second failure is nearly
+/// always the same damage read and saved back out — and numbered `.bad.2`,
+/// `.bad.3` files would pile up in a directory nobody ever prunes.
+///
+/// Best-effort by design: an empty (truncated) file has nothing in it to
+/// recover, so it doesn't spend the single slot real damage will need, and a
+/// rename we cannot do still loads as the default — there is nothing else we
+/// could do about it.
+fn move_damaged_aside(path: &Path, bytes: &[u8]) {
+    if bytes.trim_ascii().is_empty() {
+        return;
+    }
+    let mut name = match path.file_name() {
+        Some(n) => n.to_os_string(),
+        None => return,
+    };
+    name.push(".bad");
+    let bad = path.with_file_name(name);
+    if bad.exists() {
+        return;
+    }
+    let _ = std::fs::rename(path, &bad);
 }
 
 /// Atomically write the config to `path`.
@@ -460,6 +496,87 @@ mod tests {
         assert!(!first);
         assert_eq!(back, cfg);
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// A scratch config dir for one test (unique per test + process).
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("plumbline-cfg-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// AUDIT 2026-07-29 data loss: a damaged config used to load as the default
+    /// and then be *overwritten* by the next save, taking the reader's history,
+    /// panes and church with it. It has to be moved aside first.
+    #[test]
+    fn damaged_config_is_moved_aside_before_the_next_save() {
+        let dir = scratch("rescue");
+        let path = dir.join("config.json");
+        let bad = dir.join("config.json.bad");
+        // Truncated mid-write: valid prefix, no closing brace.
+        let damaged = r#"{"studyMode":"full","history":[{"book":"Ps","chapter":11"#;
+        std::fs::write(&path, damaged).unwrap();
+
+        let (cfg, first_run) = load_from(&path);
+        assert!(!first_run);
+        assert_eq!(cfg, Config::default());
+        assert_eq!(
+            std::fs::read_to_string(&bad).ok().as_deref(),
+            Some(damaged),
+            "the damaged bytes must be recoverable at config.json.bad"
+        );
+
+        // The save that used to destroy them now writes a fresh, valid file.
+        save_to(&path, &cfg).unwrap();
+        assert_eq!(std::fs::read_to_string(&bad).unwrap(), damaged, "the save clobbered the rescue");
+        let (back, first_run) = load_from(&path);
+        assert!(!first_run);
+        assert_eq!(back, cfg);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The rescue is the ORIGINAL one: a second failure is usually the same
+    /// damage saved back out, so it must not replace the copy that still has
+    /// the reader's data in it.
+    #[test]
+    fn an_existing_rescue_is_kept() {
+        let dir = scratch("rescue-twice");
+        let path = dir.join("config.json");
+        let bad = dir.join("config.json.bad");
+        let first_damage = r#"{"studyMode":"full","church":{"name":"Grace Bible Chur"#;
+        std::fs::write(&bad, first_damage).unwrap();
+        std::fs::write(&path, "{{{").unwrap();
+
+        let (cfg, first_run) = load_from(&path);
+        assert!(!first_run);
+        assert_eq!(std::fs::read_to_string(&bad).unwrap(), first_damage, "the first rescue was lost");
+        save_to(&path, &cfg).unwrap();
+        assert_eq!(std::fs::read_to_string(&bad).unwrap(), first_damage);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An empty file has nothing in it to recover, so it must not spend the one
+    /// `.bad` slot that real damage will need.
+    #[test]
+    fn an_empty_config_does_not_spend_the_rescue_slot() {
+        let dir = scratch("rescue-empty");
+        let path = dir.join("config.json");
+        let bad = dir.join("config.json.bad");
+
+        std::fs::write(&path, "\n").unwrap();
+        let (_, first_run) = load_from(&path);
+        assert!(!first_run);
+        assert!(!bad.exists(), "an empty config is not worth rescuing");
+
+        let damaged = r#"{"bodySize":21.5,"#;
+        std::fs::write(&path, damaged).unwrap();
+        load_from(&path);
+        assert_eq!(std::fs::read_to_string(&bad).unwrap(), damaged);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

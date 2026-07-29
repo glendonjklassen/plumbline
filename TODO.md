@@ -50,7 +50,7 @@ ride 1.0.x patches (the PWA auto-updates).
   write temp+rename (`MainActivity.kt:163-189`).
 - [ ] **[opus]** Web `backup()` is unguarded while `restore()` right below has
   try/catch + toast (`SettingsDialog.svelte:31-45`). Same shape.
-- [ ] **[opus]** Damaged config is replaced with defaults on next save (loses history/
+- [x] **[opus]** Damaged config is replaced with defaults on next save (loses history/
   panes/church): rename to `config.json.bad` first (`config.rs:386-390`).
 - [ ] **[opus]** Stranded `.tmp` files in user dirs get persisted and shipped in backup
   zips: filter dot/`.tmp` names in `collectFiles` and `zipWrite`
