@@ -295,6 +295,19 @@ export class Session {
     this.cacheEpoch++;
   }
 
+  /** Drop cached reads for NAMED engine methods only.
+   *
+   *  `invalidate()` wipes everything but the immutables, which is right after an
+   *  authoring write and wrong on a timer: the reading map reports dwell every 30
+   *  seconds while somebody reads, and throwing away their open word study and
+   *  every thread/tag read along with it would make the reader pay for a
+   *  bookkeeping tick they never asked for. */
+  invalidateOnly(...methods: string[]): void {
+    for (const key of [...this.#cache.keys()])
+      if (methods.some((m) => key.startsWith(`${m}\0`))) this.#cache.delete(key);
+    this.cacheEpoch++;
+  }
+
   /** The reader's home church — what their own shared links carry. */
   get church(): Church {
     return cleanChurch(this.config.church);
@@ -394,6 +407,11 @@ export class Session {
       this.invalidate();
       this.studyEpoch++;
     };
+    // A dwell report changed the reading map and nothing else. Without this the
+    // navigator kept showing the map from whenever it was first asked — the
+    // per-day cache key meant a chapter finished mid-session did not appear until
+    // the next launch (2026-07-29).
+    rpc.onReadingWrote = () => this.invalidateOnly("readingBooks", "readingChapters");
     rpc.onCoreReady = () => {
       // Strong's + margin notes just arrived — panels re-fetch.
       this.invalidate();
