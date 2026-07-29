@@ -124,28 +124,47 @@ fun NotesScreen(
 
     editing?.let { n ->
         var text by remember(n) { mutableStateOf(n.text) }
+        // A save that failed keeps this dialog — and the rewritten note in it —
+        // and says why. Closing on the way in (as this did) meant a refused write
+        // took the reader's edit with it and looked identical to a good one.
+        var error by remember(n) { mutableStateOf<String?>(null) }
         AlertDialog(
             onDismissRequest = { editing = null },
             title = { Text("Note on ${n.display}", color = palette.ink) },
             text = {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    placeholder = { Text("Your note (leave empty to remove)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3,
-                )
+                Column {
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        placeholder = { Text("Your note (leave empty to remove)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                    )
+                    error?.let {
+                        Text(
+                            it, color = palette.disputed, fontSize = 13.sp,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
                     val ref = n.verse
-                    editing = null
-                    notes = null
+                    val written = text
+                    error = null
                     scope.launch {
-                        withContext(Dispatchers.Default) {
-                            runCatching { synchronized(engine) { engine.UserNoteSet(ref, text, nowUtc()) } }
+                        val outcome = withContext(Dispatchers.Default) {
+                            saveOutcome(
+                                runCatching { synchronized(engine) { engine.UserNoteSet(ref, written, nowUtc()) } },
+                            )
                         }
-                        reload++
+                        when (outcome) {
+                            // Only a write the engine took closes the editor and
+                            // re-reads the list.
+                            is SaveOutcome.Saved -> { editing = null; notes = null; reload++ }
+                            is SaveOutcome.Failed -> error = noteSaveFailedLine(outcome.message)
+                        }
                     }
                 }) { Text("Save") }
             },

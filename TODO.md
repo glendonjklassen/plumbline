@@ -42,7 +42,7 @@ ride 1.0.x patches (the PWA auto-updates).
 - [ ] **[opus]** A failed restore leaves the session frozen forever: on `idbApply`
   rejection, reload anyway (or un-freeze + clear `restoring`) with a blocking error
   (`SettingsDialog.svelte:62-70`).
-- [ ] **[opus]** Android note-save discards the engine's error and closes the sheet:
+- [x] **[opus]** Android note-save discards the engine's error and closes the sheet:
   `ui/VerseActions.kt:231-238`, `ui/Notes.kt:146`, `ui/Memorize.kt:387`. Surface the
   returned error, don't close on failure.
 - [ ] **[opus]** Android stock re-seed overwrites user-edited stock items (web

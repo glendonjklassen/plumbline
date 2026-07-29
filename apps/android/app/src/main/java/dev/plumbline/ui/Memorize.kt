@@ -340,6 +340,9 @@ private fun ReviewBody(
     var level by remember { mutableStateOf(0) }
     var typed by remember { mutableStateOf("") }
     var result by remember { mutableStateOf("") }
+    // A grade the engine refused. Shown by the grade buttons and cleared when the
+    // next card comes up.
+    var gradeError by remember { mutableStateOf("") }
 
     // idx never runs past the end: advance() calls onFinish before it would.
     val curRef = due[idx]
@@ -378,14 +381,21 @@ private fun ReviewBody(
     fun advance() {
         typed = ""
         result = ""
+        gradeError = ""
         mode = Prompt.FirstLetters
         level = 0
         if (idx + 1 >= due.size) onFinish() else idx += 1
     }
 
+    /** Grade and move on — but only on a grade the engine recorded. A refused write
+     *  used to advance anyway, so the reader believed they had rescheduled a card
+     *  that in fact never moved, and the next card buried the reason. */
     fun grade(g: String) {
-        runCatching { synchronized(engine) { engine.MemoryGrade(curRef, g, nowUtc()) } }
-        advance()
+        val outcome = saveOutcome(runCatching { synchronized(engine) { engine.MemoryGrade(curRef, g, nowUtc()) } })
+        when (outcome) {
+            is SaveOutcome.Saved -> advance()
+            is SaveOutcome.Failed -> gradeError = "Not saved — ${outcome.message}. This card is still due."
+        }
     }
 
     fun check() {
@@ -453,6 +463,10 @@ private fun ReviewBody(
             TextButton(onClick = { check() }) { Text("Check", color = palette.ink) }
         }
         if (result.isNotEmpty()) Text(result, color = palette.ink, fontSize = 14.sp)
+
+        if (gradeError.isNotEmpty()) {
+            Text(gradeError, color = palette.disputed, fontSize = 14.sp)
+        }
 
         // Grade buttons (SM-2's four). Again resets to relearning (destructive
         // tone); Easy carries the strongest accent — GTK's suggested-action.

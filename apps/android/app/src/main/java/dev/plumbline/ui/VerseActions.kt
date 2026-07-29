@@ -102,6 +102,43 @@ private fun parseRef(ref: String): RefParts? {
 }
 
 /**
+ * What a write the engine answered means for the surface that asked for it.
+ *
+ * Every authoring endpoint's contract is "null = success, else an error message"
+ * (StudyEngine), and a `runCatching` around one can come back holding a thrown
+ * exception instead (a dead native library). Dropping either and closing anyway
+ * makes a save that failed — disk full, a refused write, a bad ref — look exactly
+ * like one that worked, and the reader's words leave with the sheet. So the
+ * decision is one value: close, or stay open and say why (v1.0 audit, 2026-07-29).
+ */
+sealed interface SaveOutcome {
+    /** The engine wrote it: the surface may close (or advance). */
+    data object Saved : SaveOutcome
+
+    /** It did not land. Keep the surface open, with the reader's text still in the
+     *  field, and put [message] where they are looking. */
+    data class Failed(val message: String) : SaveOutcome
+}
+
+/** Read one engine write — `runCatching { engine.Something(…) }` — as a
+ *  [SaveOutcome]. A blank message counts as success (the ABI answers null, but an
+ *  empty string means the same thing); an exception with no message of its own
+ *  still gets human copy, because a reason-less "not saved" reads as a glitch. */
+fun saveOutcome(attempt: Result<String?>): SaveOutcome {
+    val thrown = attempt.exceptionOrNull()
+    if (thrown != null) {
+        return SaveOutcome.Failed(thrown.message?.takeIf { it.isNotBlank() } ?: "the engine stopped answering")
+    }
+    val err = attempt.getOrNull()
+    return if (err.isNullOrBlank()) SaveOutcome.Saved else SaveOutcome.Failed(err)
+}
+
+/** The note editor's failure line: the engine's own words, then what the dialog is
+ *  doing about it — it is still open, so the note can be retried or lifted out. */
+fun noteSaveFailedLine(message: String): String =
+    "Not saved — $message. Your note is still here; try again, or copy it out."
+
+/**
  * The verse-action sheet. Opened by the reader's long-press with the verse
  * [verseRef] (a refKey, e.g. `"John 3:16"`) and, optionally, its [tokenCount]; a
  * non-positive [tokenCount] is resolved from the engine. [onDismiss] tears the
@@ -136,6 +173,9 @@ fun VerseActionSheet(
     var showMarkRead by remember(verseRef) { mutableStateOf(false) }
     var noteText by remember(verseRef) { mutableStateOf("") }
     var noteLoaded by remember(verseRef) { mutableStateOf(false) }
+    // The note dialog's last failure, shown inside it. It stays until the next
+    // attempt, because until then it is still true: the note is not saved.
+    var noteError by remember(verseRef) { mutableStateOf<String?>(null) }
 
     // The highest valid token index — from the fetched tokens, else the hint param.
     val lastTok = if (tokens.isNotEmpty()) tokens.lastIndex else tokenCount - 1
@@ -194,12 +234,17 @@ fun VerseActionSheet(
 
     fun memorize() {
         scope.launch {
-            val err = withContext(Dispatchers.Default) {
-                runCatching { synchronized(engine) { engine.MemoryAdd(verseRef, Instant.now().toString()) } }.getOrNull()
+            val outcome = withContext(Dispatchers.Default) {
+                saveOutcome(
+                    runCatching { synchronized(engine) { engine.MemoryAdd(verseRef, Instant.now().toString()) } },
+                )
             }
             Toast.makeText(
                 context,
-                if (err.isNullOrBlank()) "Added “$display” to your memory list" else err,
+                when (outcome) {
+                    is SaveOutcome.Saved -> "Added “$display” to your memory list"
+                    is SaveOutcome.Failed -> "Not added — ${outcome.message}"
+                },
                 Toast.LENGTH_SHORT,
             ).show()
             hide()
@@ -212,29 +257,53 @@ fun VerseActionSheet(
         val parts = parseRef(verseRef) ?: return
         val throughRef = "${parts.book} ${parts.chapter}:$endVerse"
         scope.launch {
-            val err = withContext(Dispatchers.Default) {
-                runCatching {
-                    synchronized(engine) {
-                        engine.MemoryAddPassage(verseRef, throughRef, Instant.now().toString())
-                    }
-                }.getOrNull()
+            val outcome = withContext(Dispatchers.Default) {
+                saveOutcome(
+                    runCatching {
+                        synchronized(engine) {
+                            engine.MemoryAddPassage(verseRef, throughRef, Instant.now().toString())
+                        }
+                    },
+                )
             }
             Toast.makeText(
                 context,
-                if (err.isNullOrBlank()) "Memorizing $display–$endVerse" else err,
+                when (outcome) {
+                    is SaveOutcome.Saved -> "Memorizing $display–$endVerse"
+                    is SaveOutcome.Failed -> "Not added — ${outcome.message}"
+                },
                 Toast.LENGTH_SHORT,
             ).show()
             hide()
         }
     }
 
+    /** Write the note. Only a write the engine took closes anything — a failed save
+     *  keeps the dialog, and the reader's words in it, so they can retry or copy
+     *  them out. Their text is the one thing in this sheet that cannot be fetched
+     *  again. */
     fun saveNote(text: String) {
+        noteError = null
         scope.launch {
-            withContext(Dispatchers.Default) {
-                runCatching { synchronized(engine) { engine.UserNoteSet(verseRef, text, Instant.now().toString()) } }
+            val outcome = withContext(Dispatchers.Default) {
+                saveOutcome(
+                    runCatching {
+                        synchronized(engine) { engine.UserNoteSet(verseRef, text, Instant.now().toString()) }
+                    },
+                )
             }
-            showNote = false
-            hide()
+            when (outcome) {
+                is SaveOutcome.Saved -> {
+                    showNote = false
+                    hide()
+                }
+                // Hold their text as the dialog's `initial` too, so it comes back
+                // with what they wrote if it is ever recomposed from scratch.
+                is SaveOutcome.Failed -> {
+                    noteText = text
+                    noteError = noteSaveFailedLine(outcome.message)
+                }
+            }
         }
     }
 
@@ -290,6 +359,7 @@ fun VerseActionSheet(
         NoteDialog(
             initial = noteText,
             palette = palette,
+            error = noteError,
             onSave = { saveNote(it) },
             onCancel = { showNote = false },
         )
@@ -314,16 +384,21 @@ fun VerseActionSheet(
                 onPick = { date ->
                     showMarkRead = false
                     scope.launch {
-                        val err = withContext(Dispatchers.Default) {
-                            runCatching {
-                                synchronized(engine) {
-                                    engine.ReadingMarkRead(parts.book, parts.chapter, date)
-                                }
-                            }.getOrNull()
+                        val outcome = withContext(Dispatchers.Default) {
+                            saveOutcome(
+                                runCatching {
+                                    synchronized(engine) {
+                                        engine.ReadingMarkRead(parts.book, parts.chapter, date)
+                                    }
+                                },
+                            )
                         }
                         Toast.makeText(
                             context,
-                            if (err.isNullOrBlank()) "Marked read — $date" else err,
+                            when (outcome) {
+                                is SaveOutcome.Saved -> "Marked read — $date"
+                                is SaveOutcome.Failed -> "Not marked — ${outcome.message}"
+                            },
                             Toast.LENGTH_SHORT,
                         ).show()
                         hide()
@@ -332,12 +407,21 @@ fun VerseActionSheet(
                 onClear = {
                     showMarkRead = false
                     scope.launch {
-                        withContext(Dispatchers.Default) {
-                            runCatching {
-                                synchronized(engine) { engine.ReadingForget(parts.book, parts.chapter) }
-                            }
+                        val outcome = withContext(Dispatchers.Default) {
+                            saveOutcome(
+                                runCatching {
+                                    synchronized(engine) { engine.ReadingForget(parts.book, parts.chapter) }
+                                },
+                            )
                         }
-                        Toast.makeText(context, "Reading history cleared", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            when (outcome) {
+                                is SaveOutcome.Saved -> "Reading history cleared"
+                                is SaveOutcome.Failed -> "Not cleared — ${outcome.message}"
+                            },
+                            Toast.LENGTH_SHORT,
+                        ).show()
                         hide()
                     }
                 },
@@ -647,11 +731,14 @@ fun TagPickerSheet(
     }
 }
 
-/** The personal-note editor. Empty text clears the note (UserNoteSet contract). */
+/** The personal-note editor. Empty text clears the note (UserNoteSet contract).
+ *  [error] is a save that did not land, shown under the field — the dialog stays
+ *  open on failure, so the reason belongs next to the words it is about. */
 @Composable
 private fun NoteDialog(
     initial: String,
     palette: ReaderPalette,
+    error: String? = null,
     onSave: (String) -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -662,13 +749,22 @@ private fun NoteDialog(
         dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
         title = { Text("Note", color = palette.ink) },
         text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                placeholder = { Text("Your note (leave empty to clear)") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
-            )
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    placeholder = { Text("Your note (leave empty to clear)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                )
+                if (error != null) {
+                    Text(
+                        error,
+                        color = palette.disputed, fontSize = 13.sp,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
         },
         containerColor = palette.panelBg,
     )
