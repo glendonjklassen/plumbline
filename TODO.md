@@ -37,7 +37,7 @@ ride 1.0.x patches (the PWA auto-updates).
 - [x] **[opus]** Engine worker death hangs everything silently: add
   `onerror`/`onmessageerror` rejecting all `#waiting`, plus a ~60 s boot watchdog
   surfacing the existing error UI (`engine/worker-client.ts:82-98`).
-- [ ] **[opus]** Web zip restore: bounds-check `dataAt + csize` and verify CRC-32
+- [x] **[opus]** Web zip restore: bounds-check `dataAt + csize` and verify CRC-32
   against the central directory in `zipRead` (`engine/zip.ts:104-124`).
 - [ ] **[opus]** A failed restore leaves the session frozen forever: on `idbApply`
   rejection, reload anyway (or un-freeze + clear `restoring`) with a blocking error
