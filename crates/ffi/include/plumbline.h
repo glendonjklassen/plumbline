@@ -782,76 +782,12 @@ char *plumbline_engine_user_note_set(struct PlumblineEngine *engine,
                                      const char *text,
                                      const char *stamp);
 
-// Set (or clear, with a null `color`) the swatch colour of the tag named
-// `name`, then reload. Drives highlighting (a colour-bearing tag washes its
-// verses). Null on success, else an owned error.
-//
-// # Safety
-// `engine` is a live engine; the string args are null or valid NUL-terminated
-// UTF-8 for the call.
-char *plumbline_engine_tag_set_color(struct PlumblineEngine *engine,
-                                     const char *name,
-                                     const char *color);
-
-// Add a word-precise highlight range to the tag named `name` (created on first
-// use, taking `color` as its tone). The range runs from `start_ref`+`start_tok`
-// to `end_ref`+`end_tok` (inclusive token indices under `kjv1769-tok2`);
-// endpoints are ordered canonically here, so a backwards drag is fine. `color`
-// may be null (the range then inherits the tag's colour). `added` is a
-// caller-supplied UTC timestamp. Null on success, else an owned error.
-//
-// # Safety
-// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
-char *plumbline_engine_highlight_add(struct PlumblineEngine *engine,
-                                     const char *name,
-                                     const char *color,
-                                     const char *start_ref,
-                                     uint32_t start_tok,
-                                     const char *end_ref,
-                                     uint32_t end_tok,
-                                     const char *added);
-
-// Remove the highlight range with these endpoints from the tag named `name`.
-// Endpoints are ordered canonically to match how they were stored. A missing
-// range is a no-op; a missing tag is an error. Null on success, else an error.
-//
-// # Safety
-// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
-char *plumbline_engine_highlight_remove(struct PlumblineEngine *engine,
-                                        const char *name,
-                                        const char *start_ref,
-                                        uint32_t start_tok,
-                                        const char *end_ref,
-                                        uint32_t end_tok);
-
-// Drop every highlight range covering `verse_ref` from all tags, then reload —
-// the drag-remove path (a whole range goes even if only one of its verses was
-// targeted). Null on success, else an owned error.
-//
-// # Safety
-// `engine` is valid; `verse_ref` is null or valid NUL-terminated UTF-8.
-char *plumbline_engine_highlight_clear_verse(struct PlumblineEngine *engine, const char *verse_ref);
-
-// The highlight washes for a chapter as JSON (`{book,chapter,verses:[{verse,
-// color}]}`): each verse that belongs to a colour-bearing tag, with the tone
-// the shell washes behind it. Never null on a live engine (none → empty list).
-//
-// # Safety
-// `engine` is a live engine; `book` is null or valid NUL-terminated UTF-8.
-char *plumbline_engine_chapter_highlights_json(const struct PlumblineEngine *engine,
-                                               const char *book,
-                                               uint32_t chapter);
-
 // The colour palette for a theme (`light`/`dark`/`night`; unknown → light) as
 // JSON — every semantic role as a `#rrggbb` hex. Engine-independent. Never null.
 //
 // # Safety
 // `theme` is null or valid NUL-terminated UTF-8 for the call.
 char *plumbline_theme_palette_json(const char *theme);
-
-// The fixed highlight tones (`{tones:[{name,hex}]}`) — the shell's swatch menu.
-// Engine-independent. Never null.
-char *plumbline_theme_highlight_tones_json(void);
 
 // Force the lazy analytics indexes (concept engine, leitwort scan, SIF verse
 // similarity) to build now — call once on a background thread at startup in

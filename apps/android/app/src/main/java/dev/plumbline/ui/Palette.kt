@@ -2,7 +2,7 @@
 // core::theme, fetched as JSON via StudyEngine.PaletteJson). Mirrors the WinUI
 // `Palette` (apps/windows/PureStudyWin/ReaderView.cs): the same semantic roles,
 // the same derived alpha variants (goldFaint α0.30, band α0.12, gutterDot α0.75,
-// pinBand from Pin α0.22), and the same `wash()` alpha. Light is the default so
+// pinBand from Pin α0.22). Light is the default so
 // the reader looks right before a theme is applied; dark/night resolve on demand.
 //
 // Author D (Compose UI).
@@ -49,10 +49,6 @@ data class ReaderPalette(
     val readPartial: Color,
     val readDone: Color,
 ) {
-    /** A verse-highlight wash: the tag tone at a soft alpha behind the text
-     *  (mirrors WinUI `Palette.Wash`: α64 dark / α92 light). */
-    fun wash(tone: Color): Color = tone.copy(alpha = (if (dark) 64 else 92) / 255f)
-
     /** A semantic panel-run role → a palette colour (mirrors StudyPanel.ColorOf).
      *  Every shell maps these identically so the study panel reads the same. */
     fun role(name: String?): Color = when (name) {

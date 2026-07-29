@@ -14,7 +14,7 @@
     ["Ctrl+wheel · Ctrl+± · Ctrl+0", "Zoom text / reset"],
     ["Shift+wheel", "Scroll all panes together"],
     ["Click a word", "Word study"],
-    ["Right-click / long-press a verse", "Copy · note · highlight · tag"],
+    ["Right-click / long-press a verse", "Copy · note · tag · thread"],
     ["Shift+click a verse link", "Open in the other pane"],
     ["Esc", "Close panel / popup"],
     ["? / F1", "This overlay"],

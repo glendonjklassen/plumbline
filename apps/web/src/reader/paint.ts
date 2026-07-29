@@ -1,6 +1,6 @@
 // The reader's chapter painter — the web twin of the GTK/WinUI canvas paint
 // (manifest §Reader core): verse numbers bold gold; FLAG_ADDED italic gray;
-// FLAG_DIVINE / FLAG_TITLE inks; Strong's underline; highlight bands, washes,
+// FLAG_DIVINE / FLAG_TITLE inks; Strong's underline; search/goto bands,
 // word-precise runs, pinned spans, and the weave/note gutter marks.
 
 import { READER_FONT_FAMILY } from "./measure";
@@ -29,24 +29,11 @@ export interface LayoutItem {
   strongs: string[];
 }
 
-export interface WordRun {
-  verse: number;
-  lo: number;
-  hi: number;
-  color: string;
-}
-
 export interface PaintOverlays {
   /** Verse number to band (search/goto target) — gold wash over its lines. */
   bandVerse?: number | null;
   /** Verses with search hits — banded like the target (manifest Tier-0 #8). */
   hitVerses?: Set<number>;
-  /** Whole-verse highlight washes: verse number → tone hex. */
-  washes?: Map<number, string>;
-  /** Word-precise highlight runs (drag ranges decomposed per verse). */
-  runs?: WordRun[];
-  /** Live drag preview (per-verse runs), painted in the default tone. */
-  dragPreview?: WordRun[] | null;
   /** Verses with weave partners — gold gutter dot by the verse number. */
   weaveDotVerses?: Set<number>;
   /** Verses with a personal note — square gutter mark left of the dot. */
@@ -73,7 +60,7 @@ export function itemVerse(it: LayoutItem): number | null {
   return null;
 }
 
-/** Per-verse vertical extents (layout coords), for bands and washes. */
+/** Per-verse vertical extents (layout coords), for the bands. */
 /** Hit-test a layout point against the word rectangles — the TS twin of
  *  plumbline_layout_hit_test_json, so hover/tap never crosses to the worker
  *  (TODO #28). Coordinates are layout-space (caller subtracts margins). */
@@ -125,18 +112,10 @@ export function paintChapter(
   const visible = (top: number, bottom: number) => yOf(bottom) >= 0 && yOf(top) <= viewportH;
   const extents = verseExtents(items);
 
-  // ── verse-band washes: tone washes under, then hit/target bands over ──
+  // ── hit / goto bands ──
   const bandRect = (e: { top: number; bottom: number }) =>
     [marginX - 6, yOf(e.top), columnWidth + 12, e.bottom - e.top] as const;
 
-  if (ov.washes)
-    for (const [v, tone] of ov.washes) {
-      const e = extents.get(v);
-      if (e && visible(e.top, e.bottom)) {
-        ctx.fillStyle = withAlpha(tone, 0.45);
-        ctx.fillRect(...bandRect(e));
-      }
-    }
   const gold = p.gold ?? "#9e7d38";
   const bandVerses = new Set<number>(ov.hitVerses ?? []);
   if (ov.bandVerse != null) bandVerses.add(ov.bandVerse);
@@ -147,20 +126,6 @@ export function paintChapter(
       ctx.fillRect(...bandRect(e));
     }
   }
-
-  // ── word-precise runs (highlight ranges, drag preview) ──
-  const paintRun = (run: WordRun, color: string, alpha: number) => {
-    for (const it of items) {
-      if (it.kind !== "word" || itemVerse(it) !== run.verse) continue;
-      const t = it.tokenIndex ?? -1;
-      if (t < run.lo || t > run.hi) continue;
-      if (!visible(it.y, it.y + it.h)) continue;
-      ctx.fillStyle = withAlpha(color, alpha);
-      ctx.fillRect(marginX + it.x - 1, yOf(it.y), it.w + 2, it.h);
-    }
-  };
-  if (ov.runs) for (const r of ov.runs) paintRun(r, r.color, 0.45);
-  if (ov.dragPreview) for (const r of ov.dragPreview) paintRun(r, r.color, 0.35);
 
   // ── gutter marks: weave dot + note square beside the verse number ──
   for (const [v, e] of extents) {
@@ -218,7 +183,7 @@ export function paintChapter(
       // when that went. Dotted rather than bold or grey because weight and colour
       // are already spoken for (italics mean "supplied by the translator") and
       // because at 6.9% of words a heavier mark would read as a ransom note
-      // rather than as text. It also survives a highlight wash, which a
+      // rather than as text. It also survives a band, which a
       // background tint would not.
       ctx.save();
       ctx.strokeStyle = withAlpha(gold, 0.75);

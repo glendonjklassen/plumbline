@@ -1400,7 +1400,7 @@ pub fn guide_blocks() -> Vec<Block> {
         &mut out,
         "Collect a topic over time",
         &[
-            "Tags are labelled sets of verses and concepts — the slow way a topic accumulates as you keep running into it. Give a tag a colour and its verses get a highlight wash, so the tags browser doubles as your highlight browser.",
+            "Tags are labelled sets of verses and concepts — the slow way a topic accumulates as you keep running into it. Tag a verse whenever you run into the idea again, and the tag becomes the list you wished you had kept.",
         ],
     );
 
@@ -1417,9 +1417,9 @@ pub fn guide_blocks() -> Vec<Block> {
         &mut out,
         "MAKE IT YOURS",
         &[
-            "Right-click a verse to copy it (plain, with a reference, or as markdown), copy the chapter, tag it, thread it, highlight it, or write a note in your own words. Your notes get a gutter mark and a “your note” line in the study panel.",
+            "Right-click a verse to copy it, copy the chapter, tag it, add it to a thread, or write a note in your own words. Your notes get a gutter mark and a “your note” line in the study panel.",
             "The theme button cycles light, a candlelight-warm dark, a true-black night, and follow-system. Your theme, text size, margins and last reading position are all remembered.",
-            "Everything you write is yours and stays on your device. Settings ▸ Back up (.zip) exports all of it — notes, highlights, tags, threads, weaves, memory work and your reading history — and the same archive restores on a phone or in a browser.",
+            "Everything you write is yours and stays on your device. Settings ▸ Back up (.zip) exports all of it — notes, tags, threads, weaves, memory work and your reading history — and the same archive restores on a phone or in a browser.",
         ],
     );
 
@@ -1461,7 +1461,7 @@ fn about_body(out: &mut Vec<Block>) {
         out,
         "THE COVENANT",
         &[
-            "Yours forever: no account, no ads, no tracking, nothing sent anywhere. Your library — highlights, notes, tags, threads — is saved as ordinary files on your device that you can back up or move. The app is free.",
+            "Yours forever: no account, no ads, no tracking, nothing sent anywhere. Your library — notes, tags, threads — is saved as ordinary files on your device that you can back up or move. The app is free.",
         ],
     );
 }

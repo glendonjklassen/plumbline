@@ -213,7 +213,7 @@ fun StudyScreen(
     var conceptCode by remember { mutableStateOf<String?>(null) }   // conceptmap:CODE
     var showConstellation by remember { mutableStateOf(false) }
     var showChord by remember { mutableStateOf(false) }
-    var highlightEpoch by remember { mutableStateOf(0) }            // repaint after highlight/note edits
+    var noteEpoch by remember { mutableStateOf(0) }            // repaint the note marks after a note edit
     // Per-tier content gates (2026-07-25): the text is always on; curated and
     // machine analysis are independently switchable. Persisted in the config.
     // Opt-in (2026-07-28): absent means off, so a first-time reader gets the text
@@ -518,7 +518,7 @@ fun StudyScreen(
                 onWordTap = ::onWord,
                 onVerseLongPress = { verse -> actionVerse = verse },
                 onSwipeChapter = { dir -> val (nb, nc) = step(b, c, dir); setPane(nb, nc) },
-                highlightEpoch = highlightEpoch,
+                noteEpoch = noteEpoch,
                 akjvOverlay = akjvOverlay,
                 targetVerse = if (isSecond) null else pendingVerse,
                 targetEpoch = if (isSecond) 0 else navEpoch,
@@ -809,7 +809,7 @@ fun StudyScreen(
                     TextButton(onClick = {
                         p.onConfirm(text)
                         prompt = null
-                        highlightEpoch++ // note indicators / washes re-fetch
+                        noteEpoch++ // note indicators / washes re-fetch
                     }) { Text("Save") }
                 },
                 dismissButton = { TextButton(onClick = { prompt = null }) { Text("Cancel") } },

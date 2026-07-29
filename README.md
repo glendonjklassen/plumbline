@@ -53,8 +53,8 @@ Then:
    note first, then the dictionary entry and whichever analysis tiers you
    keep on. Every claim is marked with its provenance (✝ the text ·
    † scholarship · ≈ machine).
-3. **Long-press a verse** (right-click on desktop) — copy, share, note,
-   highlight, **tag**, add to a thread, or memorize it.
+3. **Long-press a verse** (right-click on desktop) — copy, share, write a
+   note, **tag** it, add it to a thread, or memorize it.
 4. **Tag as you go, weave later.** Tag passages by topic ("Rapture") over
    weeks; open the tag and hit **⇔ make weave** to chain them through the
    canon. Point two panes at linked passages and the connectors draw
@@ -148,7 +148,7 @@ leaves its connector pinned at the pane edge as a hint.
 
 ## Your data
 
-Your notes, highlights, tags, threads, weaves, and memory work are yours, and
+Your notes, tags, threads, weaves, reading history and memory work are yours, and
 they stay on your device. **Settings → Back up (.zip)** exports all of it, and
 **Restore from backup…** loads it on any device — the archive layout is shared
 between the phone and the browser, so a phone backup restores in the browser

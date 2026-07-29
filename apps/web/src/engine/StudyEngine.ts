@@ -63,7 +63,7 @@ export class StudyEngine {
   onAuthored: () => void = () => {};
   /** A reading-map write landed. Deliberately NOT `onAuthored`: dwell is
    *  reported on a timer while somebody reads, and `onAuthored` runs a full
-   *  user-subtree diff into IndexedDB — fine for a highlight, wasteful every 30
+   *  user-subtree diff into IndexedDB — fine for a note, wasteful every 30
    *  seconds on the one thread that also answers taps. The worker binds this to
    *  `home.persistUserDir("reading")` instead. */
   onReadingWrite: () => void = () => {};
@@ -497,31 +497,7 @@ export class StudyEngine {
   userNoteSet(refKey: string, text: string, stamp: string): string | null {
     return this.#author("plumbline_engine_user_note_set", (f, ...p) => f(this.#engine, ...p), [refKey, text, stamp]);
   }
-  tagSetColor(name: string, color: string): string | null {
-    return this.#author("plumbline_engine_tag_set_color", (f, ...p) => f(this.#engine, ...p), [name, color]);
-  }
-  highlightAdd(
-    name: string, color: string,
-    startRef: string, startTok: number, endRef: string, endTok: number, added: string,
-  ): string | null {
-    return this.#author(
-      "plumbline_engine_highlight_add",
-      (f, n, c, s, e, a) => f(this.#engine, n, c, s, startTok, e, endTok, a),
-      [name, color, startRef, endRef, added],
-    );
-  }
-  highlightRemove(name: string, startRef: string, startTok: number, endRef: string, endTok: number): string | null {
-    return this.#author(
-      "plumbline_engine_highlight_remove",
-      (f, n, s, e) => f(this.#engine, n, s, startTok, e, endTok),
-      [name, startRef, endRef],
-    );
-  }
-  highlightClearVerse(verseRef: string): string | null {
-    return this.#author("plumbline_engine_highlight_clear_verse", (f, ...p) => f(this.#engine, ...p), [verseRef]);
-  }
-
-  // ── user notes / highlights / copy ─────────────────────────────────────────
+  // ── user notes / copy ──────────────────────────────────────────────────────
 
   copyText(refKey: string, kind: string): string | null {
     return this.#text("plumbline_engine_copy_text", refKey, kind);
@@ -532,14 +508,6 @@ export class StudyEngine {
   userNotes(): any {
     return this.#json("plumbline_engine_user_notes_json");
   }
-  chapterHighlights(book: string, chapter: number): any {
-    const s = this.#call(
-      (b) => this.#w.takeStr((this.#w.exports.plumbline_engine_chapter_highlights_json as Function)(this.#engine, b, chapter) as number),
-      [book],
-    );
-    return s === null ? null : JSON.parse(s);
-  }
-
   // ── memorization ────────────────────────────────────────────────────────────
 
   memoryAdd(verseRef: string, now: string): string | null {
@@ -646,11 +614,6 @@ export function themePalette(w: WasmEngine, theme: string): any {
   const p = w.inStr(theme);
   const s = w.takeStr((w.exports.plumbline_theme_palette_json as Function)(p) as number);
   w.freeStr(p);
-  return s === null ? null : JSON.parse(s);
-}
-
-export function highlightTones(w: WasmEngine): any {
-  const s = w.takeStr((w.exports.plumbline_theme_highlight_tones_json as Function)() as number);
   return s === null ? null : JSON.parse(s);
 }
 

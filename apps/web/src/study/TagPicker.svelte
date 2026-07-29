@@ -1,7 +1,7 @@
 <script lang="ts">
-  // Tag picker sheet (Android TagPickerSheet parity): existing tags first —
-  // plain before coloured tone tags — with freetext "New tag…" secondary.
-  // Tags stay colourless unless explicitly coloured elsewhere.
+  // Tag picker sheet (Android TagPickerSheet parity): existing tags first, with
+  // freetext "New tag…" secondary. Every tag is a topic now that highlight tones
+  // are gone, so plain alphabetical is the whole ordering.
   import { getSession } from "../state/session.svelte";
   import { nowStamp } from "../engine/StudyEngine";
 
@@ -11,7 +11,7 @@
     void s.studyEpoch;
     if (!s.tagPickFor) return [];
     const all: any[] = s.q("tags")?.tags ?? [];
-    return [...all.filter((t) => !t.color), ...all.filter((t) => t.color)];
+    return [...all].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
   });
 
   let newName = $state("");
@@ -37,7 +37,6 @@
     <div class="list">
       {#each tags as t (t.name)}
         <button class="tag" onclick={() => pick(t.name)}>
-          {#if t.color}<span class="dot" style:background={t.color}></span>{/if}
           {t.name}
           <span class="count">{t.members?.length ?? 0}</span>
         </button>
@@ -113,12 +112,6 @@
   }
   .tag:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
-  }
-  .dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    border: 1px solid rgba(0, 0, 0, 0.12);
   }
   .count {
     margin-left: auto;

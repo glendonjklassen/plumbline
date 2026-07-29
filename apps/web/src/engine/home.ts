@@ -178,7 +178,7 @@ export async function buildHome(
      *     those explicitly; nothing is inferred. `data/kjv-notes.jsonl` is NOT
      *     among them and never can be — `load_study` re-reads it on every
      *     authoring write, so evicting it empties the 1769 margin notes the
-     *     moment the reader saves a highlight. Nor is `data/cross-references.tsv`
+     *     moment the reader saves a note. Nor is `data/cross-references.tsv`
      *     or `bridge/*`: those load through lazy cells that can fire on an
      *     arbitrary later tap, and there is no way to ask the engine whether they
      *     already have.
@@ -244,7 +244,7 @@ export async function buildHome(
       if (frozen) return;
       // A guard, not politeness: an unknown directory here would write paths
       // `persistUserData` never collects, and its diff would then delete them
-      // on the reader's next highlight.
+      // on the reader's next authoring write.
       if (!USER_DIRS.includes(d)) return;
       const current = new Map<string, Uint8Array>();
       const dir = root.get(d);

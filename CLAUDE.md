@@ -190,6 +190,14 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
 - Web: `cd apps/web && npm run check && npm run build`. Full pipeline:
   `npm run pack:data`, `cargo build -p plumbline-ffi --release --target
   wasm32-wasip1`, `npm run pack:wasm`, `npm run build`, `npm run preview`.
+- **Touched a Rust crate? The web suite needs the wasm rebuilt, not just the
+  bundle.** `npm run build` only re-bundles TypeScript; the engine — and with it
+  the theme palette, every core behaviour, and the whole ABI — lives in
+  `dist/plumbline_ffi.wasm`. Run `cargo build -p plumbline-ffi --release --target
+  wasm32-wasip1 && npm run pack:wasm` before `npm run build`, or Playwright will
+  test the last engine you packed and report failures that are stale by
+  construction. This has cost time twice (2026-07-29): once on a theme colour that
+  looked unchanged, once on removed ABI endpoints that looked still-present.
 - No 3k-line source files.
 
 ## Releases

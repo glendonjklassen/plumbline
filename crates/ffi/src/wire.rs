@@ -376,7 +376,6 @@ pub struct WireTags {
 #[serde(rename_all = "camelCase")]
 pub struct WireTag {
     pub name: String,
-    pub color: Option<String>,
     pub created: String,
     pub members: Vec<WireTagMember>,
 }
@@ -404,7 +403,6 @@ pub fn tags_to_wire(loaded: &[LoadedTag]) -> WireTags {
                 let t = &lt.tag;
                 WireTag {
                     name: t.name.clone(),
-                    color: t.color.clone(),
                     created: t.created.clone(),
                     members: t
                         .members
@@ -1444,61 +1442,6 @@ pub struct WireUserNotes {
     pub notes: Vec<WireUserNote>,
 }
 
-// ── highlight washes (Tier 0 #4) ───────────────────────────────────────────────
-
-/// The highlight colour for one verse in a chapter (member of a colour-bearing
-/// tag). `color` is a `#rrggbb` tone the shell washes behind the verse.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireVerseHighlight {
-    pub verse: String,
-    pub color: String,
-}
-
-/// One word-precise wash run within a verse: inclusive token indices `[lo, hi]`
-/// plus the tone. Additive companion to the whole-verse `verses` list, carrying
-/// cross-verse drag highlights (Tier 0 #4). A range's interior verses arrive as
-/// a full run (`lo` 0 … last token); its first/last as partial runs.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireHighlightRun {
-    pub verse: String,
-    pub lo: u16,
-    pub hi: u16,
-    pub color: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireChapterHighlights {
-    pub book: String,
-    pub chapter: u16,
-    pub verses: Vec<WireVerseHighlight>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub runs: Vec<WireHighlightRun>,
-}
-
-/// One selectable highlight tone (`name`, `#rrggbb`) — the shell's swatch menu.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireHighlightTone {
-    pub name: &'static str,
-    pub hex: &'static str,
-}
-
-#[derive(Serialize)]
-pub struct WireHighlightTones {
-    pub tones: Vec<WireHighlightTone>,
-}
-
-pub fn highlight_tones_to_wire() -> WireHighlightTones {
-    WireHighlightTones {
-        tones: plumbline_core::theme::HIGHLIGHT_TONES
-            .iter()
-            .map(|&(name, hex)| WireHighlightTone { name, hex })
-            .collect(),
-    }
-}
 
 // ── memorization (Tier 2 #15) — SRS cards, coverage/activity, drills ─────────
 

@@ -9,13 +9,10 @@
   //   * THREE copy variants collapsed into one "Copy" that honours the reader's
   //     chosen shape (Settings ▸ Copy format), which is what Android always did.
   //     A menu is not the place to re-ask a question the settings already answer.
-  //   * The highlight tone swatches and "Remove highlight". Colour-washing verses
-  //     was noise nobody wanted, and a row of six circles was the loudest thing in
-  //     a menu opened to copy a verse.
-  //
-  // Existing highlights still RENDER — the washes come from coloured tags, and a
-  // reader's tags are their data, not ours to delete. There is simply no longer a
-  // way to make a new one from here.
+  //   * The highlight tone swatches and "Remove highlight". Highlighting was then
+  //     removed from the product outright — tags, notes and threads are the better
+  //     way to annotate and tie scripture together, and three ways to mark a verse
+  //     was two too many.
   import { getSession } from "../state/session.svelte";
   import { nowStamp } from "../engine/StudyEngine";
   import { dispatchLink } from "../study/links";

@@ -6,7 +6,7 @@
 // hit-test. No study logic lives in Kotlin.
 //
 // This file is the low-level [PlumblineNative] interface only — it mirrors
-// every function in `crates/ffi/include/plumbline.h` (87 of them). The safe
+// every function in `crates/ffi/include/plumbline.h`. The safe
 // wrappers (StudyEngine / Chapter / StudyConfig) live in the Compose shell
 // (`apps/android/app/src/main/java/dev/plumbline/StudyEngine.kt`), PascalCase to
 // match `crates/ffi/bindings/csharp/PureStudy.cs` method-for-method. So there is
@@ -163,27 +163,16 @@ internal interface PlumblineNative : Library {
     fun plumbline_config_load_json(): Pointer?
     fun plumbline_config_save_json(json: String?): Pointer?
 
-    // ── Tier 0: copy, personal notes, tag colour, highlights, warming ───────
+    // ── Tier 0: copy, personal notes, warming ───────────────────────────────
     fun plumbline_engine_copy_text(engine: Pointer, refKey: String, kind: String): Pointer?
     fun plumbline_engine_user_note_json(engine: Pointer, refKey: String): Pointer?
     fun plumbline_engine_user_notes_json(engine: Pointer): Pointer?
     fun plumbline_engine_user_note_set(
         engine: Pointer, refKey: String, text: String, stamp: String,
     ): Pointer?
-    fun plumbline_engine_tag_set_color(engine: Pointer, name: String, color: String?): Pointer?
-    fun plumbline_engine_highlight_add(
-        engine: Pointer, name: String, color: String?,
-        startRef: String, startTok: Int, endRef: String, endTok: Int, added: String,
-    ): Pointer?
-    fun plumbline_engine_highlight_remove(
-        engine: Pointer, name: String, startRef: String, startTok: Int, endRef: String, endTok: Int,
-    ): Pointer?
-    fun plumbline_engine_highlight_clear_verse(engine: Pointer, verseRef: String): Pointer?
-    fun plumbline_engine_chapter_highlights_json(engine: Pointer, book: String, chapter: Int): Pointer?
 
-    // ── theme palettes / highlight tones (engine-independent) ────────────────
+    // ── theme palettes (engine-independent) ─────────────────────────────────
     fun plumbline_theme_palette_json(theme: String?): Pointer?
-    fun plumbline_theme_highlight_tones_json(): Pointer?
 
     // ── warm lazy indexes ───────────────────────────────────────────────────
     fun plumbline_engine_warm_indexes(engine: Pointer): Pointer?

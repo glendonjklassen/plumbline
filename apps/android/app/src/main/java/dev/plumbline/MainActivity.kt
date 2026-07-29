@@ -59,7 +59,7 @@ class MainActivity : ComponentActivity() {
         runCatching { System.loadLibrary("plumbline_ffi") }
         bundledOn = !File(filesDir, ".no-bundle").exists()
 
-        // Open from a WRITABLE home so authored study data — notes, highlights,
+        // Open from a WRITABLE home so authored study data — notes, tags,
         // tags, threads, weaves, memorization — persists (a bytes-opened engine
         // has no home and rejects every write). Extract the bundled read-only
         // reference data into the app's private filesDir once, then open FROM

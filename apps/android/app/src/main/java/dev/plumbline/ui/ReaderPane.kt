@@ -44,7 +44,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.plumbline.Chapter
-import dev.plumbline.ChapterHighlights
 import dev.plumbline.DisplayItem
 import dev.plumbline.DisplayList
 import dev.plumbline.Hit
@@ -69,9 +68,6 @@ private const val MAX_COLUMN_DP = 720f // GTK MAX_COLUMN
 /** A pinned word span (single tap sets a one-word anchor; parity-lite with the
  *  desktop pin — full widen-on-second-tap is a TODO). */
 private data class PinSpan(val verse: String, val lo: Int, val hi: Int)
-
-/** A word-precise wash run resolved to a colour. */
-private data class HighlightRunUi(val verse: String, val lo: Int, val hi: Int, val color: Color)
 
 private data class ReaderTypefaces(val regular: Typeface, val italic: Typeface, val bold: Typeface)
 
@@ -121,9 +117,9 @@ fun ReaderPane(
     // A horizontal fling steps the chapter: +1 (swipe left → next), -1 (swipe
     // right → previous).
     onSwipeChapter: (Int) -> Unit = {},
-    // Bump to force a highlight re-fetch after an add/trim/remove that didn't
-    // change book/chapter (the verse-action sheet edits highlights in place).
-    highlightEpoch: Int = 0,
+    // Bump to force a re-fetch of the per-verse note marks after a note edit
+    // that didn't change book/chapter.
+    noteEpoch: Int = 0,
     /** The plain-English overlay (the AKJV delta). A layout INPUT: it changes
      *  the words on the page, so the chapter re-lays when it flips. */
     akjvOverlay: Boolean = false,
@@ -168,8 +164,6 @@ fun ReaderPane(
     var dl by remember { mutableStateOf<DisplayList?>(null) }
     var chapterHandle by remember { mutableStateOf<Chapter?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
-    var highlights by remember { mutableStateOf<Map<String, Color>>(emptyMap()) }
-    var runs by remember { mutableStateOf<List<HighlightRunUi>>(emptyList()) }
     var pin by remember { mutableStateOf<PinSpan?>(null) }
     var noteVerses by remember { mutableStateOf<Set<Int>>(emptySet()) }
 
@@ -232,27 +226,10 @@ fun ReaderPane(
             }
         }
 
-        // Fetch this chapter's highlight washes (whole-verse members + word runs).
-        LaunchedEffect(book, chapter, highlightEpoch) {
-            val hj = withContext(Dispatchers.Default) {
-                runCatching { synchronized(engine) { engine.ChapterHighlightsJson(book, chapter) } }
-                    .getOrNull()
-            }
-            if (hj != null) {
-                val ch = runCatching { parseWire<ChapterHighlights>(hj) }.getOrNull()
-                highlights = ch?.verses?.associate { it.verse to ReaderPalette.hex(it.color) } ?: emptyMap()
-                runs = ch?.runs?.map {
-                    HighlightRunUi(it.verse, it.lo.toInt(), it.hi.toInt(), ReaderPalette.hex(it.color))
-                } ?: emptyList()
-            } else {
-                highlights = emptyMap(); runs = emptyList()
-            }
-        }
-
         // Which verses carry a personal note — the reader's own words get a
         // visible mark (a gutter dot by the verse number). Re-fetched with the
-        // highlights epoch (note edits bump it).
-        LaunchedEffect(book, chapter, highlightEpoch) {
+        // note epoch (a note edit bumps it).
+        LaunchedEffect(book, chapter, noteEpoch) {
             val prefix = "$book $chapter:"
             noteVerses = withContext(Dispatchers.Default) {
                 runCatching { synchronized(engine) { engine.UserNotesJson() } }.getOrNull()
@@ -395,28 +372,7 @@ fun ReaderPane(
                 // chrome above the pane on scroll. clipToBounds is the safety net.
                 fun onScreen(item: DisplayItem) = item.y + item.h >= top && item.y <= top + viewH
 
-                // 1. Whole-verse highlight washes — underneath everything.
-                if (highlights.isNotEmpty()) {
-                    list.items.filter { highlights.containsKey(it.refOf(book, chapter)) && onScreen(it) }
-                        .groupBy { it.refOf(book, chapter) }
-                        .forEach { (rk, items) ->
-                            val wash = palette.wash(highlights.getValue(rk))
-                            items.groupBy { it.y }.forEach { (y, line) ->
-                                drawRect(wash, Offset(-6f, y), Size(column + 12f, line.first().h))
-                            }
-                        }
-                }
-
-                // 2. Word-precise cross-verse runs — per-word rects.
-                for (run in runs) {
-                    val wash = palette.wash(run.color)
-                    list.items.filter {
-                        it.verse == run.verse && onScreen(it) &&
-                            it.tokenIndex?.toInt()?.let { t -> t in run.lo..run.hi } == true
-                    }.forEach { drawRect(wash, Offset(it.x - 1.5f, it.y), Size(it.w + 3f, it.h)) }
-                }
-
-                // 3. Search hits — a soft band per line.
+                // 1. Search hits — a soft band per line.
                 if (searchHits.isNotEmpty()) {
                     list.items.filter { it.refOf(book, chapter) in searchHits && onScreen(it) }
                         .groupBy { it.y }
