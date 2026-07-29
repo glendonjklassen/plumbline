@@ -34,7 +34,7 @@ ride 1.0.x patches (the PWA auto-updates).
 - [x] **[opus]** `reading.rs:263-269` and `memory.rs:358` treat unparseable/future-format
   files as empty and then overwrite them. Copy the refuse-to-clobber guard from
   `thread.rs:196-199` into both.
-- [ ] **[opus]** Engine worker death hangs everything silently: add
+- [x] **[opus]** Engine worker death hangs everything silently: add
   `onerror`/`onmessageerror` rejecting all `#waiting`, plus a ~60 s boot watchdog
   surfacing the existing error UI (`engine/worker-client.ts:82-98`).
 - [ ] **[opus]** Web zip restore: bounds-check `dataAt + csize` and verify CRC-32

@@ -43,10 +43,33 @@ export interface WorkerProgress {
   detail?: string;
 }
 
+/** How long boot may go with NO word from the worker before we call it dead.
+ *  Every message the worker sends rearms it, so this is a silence budget for one
+ *  stage — not for the whole boot. A cold first visit downloads ~19 MB and then
+ *  opens the text, minutes of work on a slow phone, and reports progress the
+ *  whole way; being slow must never be mistaken for being gone. */
+const BOOT_SILENCE_MS = 60_000;
+
+/** Where boot had got to, in the reader's words — the same stages the splash
+ *  names, so the error can say which one went quiet. */
+const STAGE_WORDS: Record<WorkerProgress["phase"], string> = {
+  download: "fetching the scripture data",
+  prepare: "preparing the study engine",
+  open: "opening the text",
+  warm: "building the analytics",
+};
+
 export class EngineRpc {
   #w: Worker;
   #next = 1;
   #waiting = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
+  /** Why the worker is gone. Set once; every later call rejects with it rather
+   *  than queueing into a corpse. */
+  #dead: Error | null = null;
+  #watchdog: ReturnType<typeof setTimeout> | null = null;
+  #silenceMs: number;
+  /** The last boot stage the worker reported, for the watchdog's message. */
+  #stage: WorkerProgress["phase"] | null = null;
   /** Boot progress (drives the splash). */
   onProgress: (p: WorkerProgress) => void = () => {};
   /** An authoring write landed (worker persisted it) — re-fetch study data. */
@@ -64,9 +87,23 @@ export class EngineRpc {
   onRndProgress: (fraction: number) => void = () => {};
   /** Download finished; the engine is now parsing it (seconds on a phone). */
   onRndPreparing: () => void = () => {};
+  /** The worker is gone — crashed, out of memory, or silent through a whole boot
+   *  stage. Every pending call has already been rejected with this error, which
+   *  is how the splash learns about a death during boot (App.svelte awaits
+   *  `boot()`); this hook is for saying so AFTER boot, when nothing may be in
+   *  flight to carry the news. */
+  onFatal: (e: Error) => void = () => {};
 
-  constructor() {
-    this.#w = new Worker(new URL("./engine.worker.ts", import.meta.url), { type: "module" });
+  /** `opts` are test seams, and the shell passes none: `workerUrl` points the
+   *  client at a worker that dies for real, `bootSilenceMs` shortens the boot
+   *  watchdog so a test need not wait a minute for it. */
+  constructor(opts: { workerUrl?: string | URL; bootSilenceMs?: number } = {}) {
+    this.#silenceMs = opts.bootSilenceMs ?? BOOT_SILENCE_MS;
+    // The literal `new Worker(new URL(...))` stays intact: that exact shape is
+    // what Vite matches to bundle the worker.
+    this.#w = opts.workerUrl
+      ? new Worker(opts.workerUrl, { type: "module" })
+      : new Worker(new URL("./engine.worker.ts", import.meta.url), { type: "module" });
     // The worker has no `document`, so it cannot tell "I was busy" from "the
     // phone was asleep" — and its stall meter billed the second as the first
     // until it was told (2026-07-28). Send the current state now and on every
@@ -79,9 +116,26 @@ export class EngineRpc {
       addEventListener("pagehide", () => this.#w.postMessage({ op: "visibility", hidden: true }));
       addEventListener("pageshow", () => this.#w.postMessage({ op: "visibility", hidden: false }));
     }
+    // A dead worker was the quietest failure in the app: `#waiting` simply never
+    // settled, so the splash sat on its last phase — or the reader on a spinner —
+    // for as long as they were willing to wait, with no error and nothing to
+    // retry. An uncaught throw in the worker, an OOM kill on a phone and a reply
+    // that will not structured-clone all land here instead.
+    this.#w.onerror = (ev: ErrorEvent) => {
+      this.#die(new Error(`The study engine stopped unexpectedly — ${ev.message || "no reason given"}.`));
+    };
+    this.#w.onmessageerror = () => {
+      this.#die(new Error("The study engine sent a reply this browser could not read."));
+    };
     this.#w.onmessage = (ev: MessageEvent) => {
+      // Any word at all proves the thread is alive and pumping, so it buys boot
+      // another silence window.
+      if (this.#watchdog) this.#rearm();
       const m = ev.data;
-      if (m.type === "progress") return this.onProgress(m);
+      if (m.type === "progress") {
+        this.#stage = m.phase;
+        return this.onProgress(m);
+      }
       if (m.type === "authored") return this.onAuthored();
       if (m.type === "readingWrote") return this.onReadingWrote();
       if (m.type === "coreReady") return this.onCoreReady();
@@ -98,6 +152,9 @@ export class EngineRpc {
   }
 
   #send(msg: Record<string, unknown>): Promise<any> {
+    // Nothing will ever answer, so say so now instead of adding another promise
+    // that can only hang.
+    if (this.#dead) return Promise.reject(this.#dead);
     const id = this.#next++;
     return new Promise((resolve, reject) => {
       this.#waiting.set(id, { resolve, reject });
@@ -105,10 +162,49 @@ export class EngineRpc {
     });
   }
 
+  /** (Re)start the boot silence timer. */
+  #rearm(): void {
+    if (this.#silenceMs <= 0) return;
+    if (this.#watchdog) clearTimeout(this.#watchdog);
+    this.#watchdog = setTimeout(() => {
+      this.#watchdog = null;
+      const where = this.#stage ? ` It got as far as ${STAGE_WORDS[this.#stage]}.` : "";
+      this.#die(
+        new Error(
+          `The study engine went quiet for ${Math.round(this.#silenceMs / 1000)}s ` +
+            `and never finished starting.${where}`,
+        ),
+      );
+    }, this.#silenceMs);
+  }
+
+  #disarm(): void {
+    if (this.#watchdog) clearTimeout(this.#watchdog);
+    this.#watchdog = null;
+  }
+
+  /** The worker is gone: settle every pending call and refuse new ones. */
+  #die(e: Error): void {
+    if (this.#dead) return;
+    this.#dead = e;
+    this.#disarm();
+    const pending = [...this.#waiting.values()];
+    this.#waiting.clear();
+    // Rejecting the boot promise IS the report while the splash is up — App.svelte
+    // renders whatever `boot()` throws, with a Retry.
+    for (const p of pending) p.reject(e);
+    console.error("[plumbline]", e.message);
+    this.onFatal(e);
+  }
+
   /** `deferRnd` skips the automatic machine-tier download (phones: the shell
    *  offers an explicit "load analysis" action instead — 2026-07-26). */
   boot(opts: { deferRnd?: boolean } = {}): Promise<BootInfo> {
     const base = new URL(import.meta.env.BASE_URL, location.href).href;
+    // Armed for the whole boot, rearmed by every message, dropped the moment boot
+    // settles either way. A boot that never comes back is otherwise indistinguishable
+    // from one that is nearly there.
+    this.#rearm();
     return this.#send({
       op: "boot",
       base,
@@ -119,7 +215,7 @@ export class EngineRpc {
       fontUrl: new URL(READER_FONT_FILES.normal, base).href,
       italicUrl: new URL(READER_FONT_FILES.italic, base).href,
       deferRnd: opts.deferRnd === true,
-    });
+    }).finally(() => this.#disarm());
   }
   /** A StudyEngine method by name — reads AND authoring calls alike. */
   call(method: string, ...args: unknown[]): Promise<any> {
