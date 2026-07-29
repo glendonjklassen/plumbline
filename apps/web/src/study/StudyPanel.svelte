@@ -94,18 +94,27 @@
     void dispatchLink(s, uri, ev);
   }
 
-  // The "load analysis" offer — now a LAST RESORT, not the phone default. The
-  // tier loads itself in every session (engine.worker willAutoLoadRnd), so this
-  // button only appears for a reader on Data Saver who hasn't got the pack yet;
-  // `rndDeferred` is false whenever the load is already coming. Before that,
-  // every phone launch put a "one-time ~4 MB download" button in front of
-  // someone who had already taken the download (feedback 2026-07-27).
-  // The loading state shows for everyone — the download announces itself.
+  // The "load analysis" offer — a LAST RESORT, and no longer a progress bar.
+  //
+  // The bar and its percentage are gone (feedback 2026-07-28). They existed to
+  // explain a wait the reader was made to sit through: the analysis load used to
+  // block the one thread that answers taps, so the panel had to account for
+  // itself. It does not block anything now — sections appear as their data
+  // arrives — and a progress bar over a study that is already usable narrates a
+  // problem the reader does not have.
+  //
+  // What remains is the one case that is a genuine ASK rather than a status: a
+  // reader on Data Saver who has not got the pack, where downloading it is their
+  // decision to make. `rndDeferred` is false whenever the load is already coming,
+  // so this stays invisible for everyone else — before that, every phone launch
+  // put a "one-time ~4 MB download" button in front of someone who had already
+  // taken the download (feedback 2026-07-27).
   const rndOffer = $derived.by(() => {
     const k = s.panel?.kind;
     if (!(k === "wordStudy" || k === "codeStudy" || k === "concordance")) return false;
     if (!(s.gates & 2) || s.rndState === "ready") return false;
-    return s.rndState === "loading" || s.rndDeferred;
+    // Only the ask. A load already under way says nothing and shows nothing.
+    return s.rndDeferred && s.rndState !== "loading";
   });
 
   // GONE: "The first one takes a few seconds… Every look after this is instant."
@@ -162,19 +171,8 @@
       {:else}
         {#if rndOffer}
           <div class="rnd-offer">
-            {#if s.rndState === "loading"}
-              <span class="rnd-note">
-                {s.rndPreparing
-                  ? "Preparing the analysis — this takes a moment on a phone…"
-                  : `Downloading the analysis pack — ${Math.round(s.rndProgress * 100)}%`}
-              </span>
-              <div class="rnd-bar">
-                <div class="rnd-fill" class:indeterminate={s.rndPreparing} style:width={`${s.rndProgress * 100}%`}></div>
-              </div>
-            {:else}
-              <span class="rnd-note">Similar concepts, verses-like-this, and concept maps are a one-time ~4 MB download.</span>
-              <button class="rnd-load" onclick={() => void s.ensureRnd()}>Load analysis</button>
-            {/if}
+            <span class="rnd-note">Similar concepts, verses-like-this, and concept maps are a one-time ~4 MB download.</span>
+            <button class="rnd-load" onclick={() => void s.ensureRnd()}>Load analysis</button>
           </div>
         {/if}
         {#if studyCode}
@@ -373,30 +371,6 @@
   .rnd-load:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
   }
-  .rnd-bar {
-    height: 4px;
-    border-radius: 2px;
-    background: color-mix(in srgb, var(--gold, #9e7d38) 18%, transparent);
-    overflow: hidden;
-  }
-  .rnd-fill {
-    height: 100%;
-    background: var(--gold, #9e7d38);
-    transition: width 0.2s ease;
-  }
-  .rnd-fill.indeterminate {
-    animation: rndpulse 1.2s ease-in-out infinite;
-  }
-  @keyframes rndpulse {
-    0%,
-    100% {
-      opacity: 0.4;
-    }
-    50% {
-      opacity: 1;
-    }
-  }
-
   /* Narrow screens: bottom sheet (Compose-phone pattern). */
   @media (max-width: 900px) {
     .panel {

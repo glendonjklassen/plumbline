@@ -144,6 +144,33 @@
   // Which tab reads as current. Present wins because it covers everything, then
   // Memorize, then Explore — matching the layering, so the highlighted tab is
   // always the surface actually in front of the reader. Read is what is left.
+  // How much room the bottom bar takes, published as `--bottomNavH` so a
+  // full-screen surface can stop above it instead of underlapping it.
+  //
+  // MEASURED, not restated. The first version wrote the height into a CSS
+  // constant — `calc(52px + safe-area)` — and was wrong by 5px on the first
+  // device it met, because the bar is a button min-height plus padding plus a
+  // border, and none of those are the number anyone would think to copy. Two
+  // declarations of one length drift the moment either side is touched; an
+  // observer cannot.
+  //
+  // Zero when the bar is `display: none` (desktop widths), which is exactly what
+  // a surface wants there.
+  let navEl = $state<HTMLElement | null>(null);
+  $effect(() => {
+    const el = navEl;
+    if (!el) return;
+    const publish = () =>
+      document.documentElement.style.setProperty("--bottomNavH", `${el.offsetHeight}px`);
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty("--bottomNavH");
+    };
+  });
+
   const dest = $derived(
     s.showPresent ? "present" : s.memorize ? "memorize" : s.panel?.kind === "explore" ? "explore" : "read",
   );
@@ -340,7 +367,7 @@
        Read is not a destination so much as the absence of one: the reader is
        always mounted underneath, so its tap just clears whatever is layered
        over it. -->
-  <nav class="bottom-nav" aria-label="Destinations">
+  <nav class="bottom-nav" aria-label="Destinations" bind:this={navEl}>
     {#each NAV as item (item.key)}
       <button
         class:on={dest === item.key}
@@ -475,7 +502,11 @@
       border-top: 1px solid var(--rule, #d8cba8);
       /* Above the surface backdrops, like the header — the destinations have to
          stay reachable from whatever is open, since tapping one closes it.
-         Present (60) still deliberately covers the whole chrome. */
+         Present used to be the exception, covering the whole chrome; it now stops
+         above this bar instead (`--bottomNavH`, published from the measured
+         height here), so nothing needs to out-stack it. Raising this to 70 was
+         tried first and mutation-testing showed it changed nothing once the
+         geometry was right — one mechanism, not two. */
       position: relative;
       z-index: 46;
       /* Clear of the home indicator / gesture bar on a notched phone. */

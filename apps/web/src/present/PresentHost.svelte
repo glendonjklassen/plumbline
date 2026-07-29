@@ -220,7 +220,15 @@
   /* Sunlight palette — deliberately fixed light, maximum contrast. */
   .present {
     position: fixed;
-    inset: 0;
+    /* Stops ABOVE the bottom bar rather than covering it — both the picker and
+       the passage being presented. Present was the one surface that took the
+       whole screen, which left a reader mid-presentation with no destinations
+       and only a ✕ to find (feedback 2026-07-28). `--bottomNavH` is 0 at desktop
+       widths, where there is no bar, so this is `inset: 0` there. */
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: var(--bottomNavH, 0px);
     z-index: 60;
     background: #fcf9f4;
     color: #211f1a;

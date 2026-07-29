@@ -206,9 +206,23 @@ test("a study that cannot answer yet says so, and never looks frozen", async ({ 
     s.rndDeferred = true;
     s.panel = { kind: "wordStudy", refKey: null, tokenIndex: 0 };
   });
-  await expect(page.locator(".rnd-note")).toBeVisible();
   await page.waitForTimeout(1200);
   await expect(page.locator(".loading")).toBeVisible();
+
+  // A load ALREADY UNDER WAY narrates nothing: no note, no bar, no percentage.
+  // Those existed to account for a wait the reader was made to sit through, back
+  // when the analysis load blocked the one thread that answers taps. It does not
+  // block anything now — sections appear as their data arrives — and a progress
+  // bar over a study that is already usable invents a problem (2026-07-28).
+  await expect(page.locator(".rnd-note")).toHaveCount(0);
+  await expect(page.locator(".rnd-bar")).toHaveCount(0);
+  await expect(page.getByText(/Downloading the analysis pack/i)).toHaveCount(0);
+
+  // What survives is the one case that is a genuine ASK rather than a status:
+  // nothing is coming, and spending ~4 MB is the reader's decision.
+  await page.evaluate(() => ((window as any).__plumbline.rndState = "off"));
+  await expect(page.locator(".rnd-note")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Load analysis" })).toBeVisible();
 
   // And nothing promises the reader anything about how long it will take, or
   // that it will not happen again. Both were untrue for a year.
