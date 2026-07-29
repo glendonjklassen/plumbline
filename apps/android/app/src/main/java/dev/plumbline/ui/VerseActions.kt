@@ -700,7 +700,7 @@ fun ThreadPickerSheet(
     var threads by remember { mutableStateOf<List<Thread1>?>(null) }
     var newMode by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
-    var confirmDelete by remember { mutableStateOf<String?>(null) }
+    var confirmDelete by remember { mutableStateOf<ConfirmRequest?>(null) }
     var reloadEpoch by remember { mutableStateOf(0) }
 
     LaunchedEffect(reloadEpoch) {
@@ -733,7 +733,6 @@ fun ThreadPickerSheet(
             val err = withContext(Dispatchers.Default) {
                 runCatching { synchronized(engine) { engine.ThreadRemove(name) } }.getOrNull()
             }
-            confirmDelete = null
             if (err.isNullOrBlank()) {
                 reloadEpoch++
                 Toast.makeText(context, "Deleted $name", Toast.LENGTH_SHORT).show()
@@ -741,6 +740,17 @@ fun ThreadPickerSheet(
                 Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    /** Ask before deleting, through the shared confirmation (ui/Confirm.kt) rather
+     *  than an AlertDialog written out here — every destructive action in the app
+     *  asks the same way now. */
+    fun askDelete(name: String) {
+        confirmDelete = ConfirmRequest(
+            title = "Delete “$name”?",
+            body = "The thread and every passage on it go. The verses themselves are untouched.",
+            verb = "Delete thread",
+        ) { delete(name) }
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = palette.panelBg) {
@@ -774,7 +784,7 @@ fun ThreadPickerSheet(
                             "Delete",
                             color = palette.disputed, fontSize = 12.sp,
                             modifier = Modifier
-                                .clickable { confirmDelete = t.name }
+                                .clickable { askDelete(t.name) }
                                 .padding(start = 14.dp, top = 4.dp, bottom = 4.dp),
                         )
                     }
@@ -811,21 +821,5 @@ fun ThreadPickerSheet(
         }
     }
 
-    confirmDelete?.let { name ->
-        AlertDialog(
-            onDismissRequest = { confirmDelete = null },
-            containerColor = palette.panelBg,
-            title = { Text("Delete “$name”?", color = palette.ink) },
-            text = {
-                Text(
-                    "The thread and every passage on it go. The verses themselves are untouched.",
-                    color = palette.faded,
-                )
-            },
-            confirmButton = { TextButton(onClick = { delete(name) }) { Text("Delete", color = palette.disputed) } },
-            dismissButton = {
-                TextButton(onClick = { confirmDelete = null }) { Text("Cancel", color = palette.faded) }
-            },
-        )
-    }
+    ConfirmDialog(confirmDelete, palette) { confirmDelete = null }
 }

@@ -22,12 +22,10 @@
   });
 
   let newName = $state("");
-  let confirming = $state<string | null>(null);
 
   function close(): void {
     s.threadPickFor = null;
     newName = "";
-    confirming = null;
   }
 
   function pick(name: string): void {
@@ -38,9 +36,17 @@
     close();
   }
 
-  function remove(name: string): void {
-    confirming = null;
-    void s.author("threadRemove", name).then((err) => s.showToast(err ?? `Deleted ${name}`));
+  async function remove(name: string): Promise<void> {
+    // The shared confirmation (s.askConfirm), not an inline one of its own: every
+    // destructive action in the app asks the same way now.
+    const ok = await s.askConfirm(
+      `Delete “${name}”?`,
+      "The thread and every passage on it go. The verses themselves are untouched.",
+      "Delete thread",
+    );
+    if (!ok) return;
+    const err = await s.author("threadRemove", name);
+    s.showToast(err ?? `Deleted ${name}`);
   }
 </script>
 
@@ -56,20 +62,12 @@
             {t.name}
             <span class="count">{t.entries?.length ?? 0}</span>
           </button>
-          <button class="del" title="Delete this thread" onclick={() => (confirming = t.name)}>✕</button>
+          <button class="del" title="Delete this thread" onclick={() => void remove(t.name)}>✕</button>
         </div>
       {:else}
         <p class="empty">No threads yet — name your first below.</p>
       {/each}
     </div>
-    {#if confirming}
-      <p class="confirm">
-        Delete <b>{confirming}</b>? The thread and every passage on it go — the verses themselves
-        are untouched.
-        <button class="danger" onclick={() => remove(confirming!)}>Delete</button>
-        <button onclick={() => (confirming = null)}>Cancel</button>
-      </p>
-    {/if}
     <form
       class="new"
       onsubmit={(e) => {
@@ -173,24 +171,6 @@
     font-size: 14px;
     color: var(--faded, #8a8276);
     margin: 8px 4px;
-  }
-  .confirm {
-    font-size: 13px;
-    line-height: 1.5;
-    color: var(--ink, #211f1a);
-    margin: 10px 0 0;
-  }
-  .confirm button {
-    margin-left: 6px;
-    padding: 4px 10px;
-    border: 1px solid var(--rule, #d8cba8);
-    border-radius: 6px;
-    font-size: 13px;
-    color: var(--faded, #8a8276);
-  }
-  .confirm .danger {
-    color: var(--tierResearch, #b04a3a);
-    border-color: var(--tierResearch, #b04a3a);
   }
   .new {
     display: flex;

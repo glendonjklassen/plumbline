@@ -174,6 +174,10 @@ export class Session {
   dismissTransient(): void {
     this.screen = "read";
     this.cancelPrompt();
+    // A pending confirmation resolves NO. Anything else would leave a caller
+    // awaiting a promise that never settles, or worse, destroy something because
+    // the reader navigated away.
+    this.cancelConfirm();
     this.panel = null;
     this.mapPopup = null;
     this.memorize = null;
@@ -191,6 +195,36 @@ export class Session {
     this.showPresent = false;
     // NOT showFirstRun: a reader who has never chosen a path must not be able to
     // tab past the question. It closes by being answered.
+  }
+
+  /** An open confirmation. One mechanism for every destructive action, so that
+   *  "does this ask first?" is answered in one place instead of per button —
+   *  deleting a memorize card asked nothing at all while deleting a thread had its
+   *  own bespoke inline prompt (2026-07-29). */
+  confirmReq = $state<{
+    title: string;
+    body: string;
+    verb: string;
+    resolve: (ok: boolean) => void;
+  } | null>(null);
+
+  /**
+   * Ask before destroying something. Resolves true only if the reader says so.
+   *
+   * `verb` is the button's label, and it should name the ACT rather than say
+   * "OK" — "Delete thread", "Remove card". A reader who half-read the sentence
+   * still knows what the button does.
+   */
+  askConfirm(title: string, body: string, verb = "Delete"): Promise<boolean> {
+    return new Promise((resolve) => {
+      this.confirmReq = { title, body, verb, resolve };
+    });
+  }
+
+  /** Dismiss an open confirmation as a "no" — the promise must always settle. */
+  cancelConfirm(): void {
+    this.confirmReq?.resolve(false);
+    this.confirmReq = null;
   }
 
   /** Dismiss an open text prompt, resolving its promise so the caller that is

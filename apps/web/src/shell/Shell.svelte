@@ -9,6 +9,7 @@
   import BookNav from "./BookNav.svelte";
   import ExploreScreen from "./ExploreScreen.svelte";
   import MarkReadDialog from "./MarkReadDialog.svelte";
+  import ConfirmDialog from "./ConfirmDialog.svelte";
   import CanonStrip from "./CanonStrip.svelte";
   import HistorySheet from "./HistorySheet.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
@@ -475,6 +476,7 @@
 <BookNav />
 <MarkReadDialog />
 <ThreadPicker />
+<ConfirmDialog />
 
 <style>
   .frame {

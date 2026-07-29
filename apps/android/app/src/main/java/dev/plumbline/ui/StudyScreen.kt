@@ -245,6 +245,7 @@ fun StudyScreen(
     var bookNavPane by remember { mutableStateOf<Int?>(null) }      // passage navigator (0 primary, 1 second)
     var tagPickRef by remember { mutableStateOf<String?>(null) }    // tag-picker target verse
     var threadPickRef by remember { mutableStateOf<String?>(null) } // thread-picker target verse
+    var confirmAction by remember { mutableStateOf<ConfirmRequest?>(null) } // pending destructive act
     var prompt by remember { mutableStateOf<AuthorPrompt?>(null) }   // text-input authoring dialog
 
     // The navigator's verse target: ReaderPane scrolls it into view on layout.
@@ -486,7 +487,15 @@ fun StudyScreen(
                 prompt = AuthorPrompt("Note on $ref", cur) { text -> engine.UserNoteSet(ref, text, nowUtc()) }
             }
             "approve" -> link.index?.let { engine.WeaveApprove(it); openLibrary(Library.Suggested) }
-            "reject" -> link.index?.let { engine.WeaveReject(it); openLibrary(Library.Suggested) }
+            // Rejecting DELETES the suggestion — it does not come back for review
+            // — so it asks first, like every other destructive action (2026-07-29).
+            "reject" -> link.index?.let { idx ->
+                confirmAction = ConfirmRequest(
+                    title = "Reject this suggested weave?",
+                    body = "It is deleted, not hidden — it will not come back for review.",
+                    verb = "Reject",
+                ) { engine.WeaveReject(idx); openLibrary(Library.Suggested) }
+            }
             // editThreadNotes / editWeaveNotes / editEntryNote / untag need an
             // index→name lookup — a documented follow-up (rarer authoring).
         }
@@ -751,6 +760,7 @@ fun StudyScreen(
         threadPickRef?.let { ref ->
             ThreadPickerSheet(engine, palette, ref, onDismiss = { threadPickRef = null })
         }
+        ConfirmDialog(confirmAction, palette) { confirmAction = null }
         if (showSearch) {
             SearchOverlay(
                 engine, palette, studyScale, searchText,
