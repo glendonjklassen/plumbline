@@ -25,10 +25,12 @@ ride 1.0.x patches (the PWA auto-updates).
   `engine/home.ts:230-241`). Propagate failure → `persistFailed` message → sticky
   toast + retry with backoff. Add an `{op:"flush"}` RPC called on
   pagehide/visibilitychange-hidden to close the 50 ms debounce window.
-- [ ] **[FABLE]** Multi-tab: whole-subtree last-writer-wins destroys the other tab's
-  edits and resurrects deletions (`engine/home.ts:230-242`). Design the fix —
-  `navigator.locks` + re-read/merge inside the lock, or single-writer tab election.
-  Merge semantics must not resurrect deletions.
+- [x] **[FABLE]** Multi-tab: whole-subtree last-writer-wins destroys the other tab's
+  edits and resurrects deletions. DONE — design chosen: per-file content
+  fingerprints in `engine/home.ts` (a tab writes only what it changed, deletes
+  only what it removed; IndexedDB's per-store transaction serialisation makes a
+  cross-tab lock unnecessary). Same-file edits stay last-writer-wins by design.
+  Regression test: `e2e/multitab.spec.ts`.
 - [ ] **[opus]** `reading.rs:263-269` and `memory.rs:358` treat unparseable/future-format
   files as empty and then overwrite them. Copy the refuse-to-clobber guard from
   `thread.rs:196-199` into both.

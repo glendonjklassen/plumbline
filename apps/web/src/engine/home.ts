@@ -52,7 +52,9 @@ export interface VirtualHome {
   /** Drop pack files the engine has finished reading, freeing their bytes.
    *  Returns how many bytes went. See `evict` below for the rules. */
   evict(paths: string[]): number;
-  /** Diff the user subtree against IndexedDB (call after authoring writes). */
+  /** Diff the user subtree against IndexedDB (call after authoring writes).
+   *  Writes only files THIS session changed and deletes only files it removed,
+   *  so concurrent tabs can't clobber each other — see the contract inline. */
   persistUserData(): Promise<void>;
   /** Persist ONE user directory, additively — no whole-subtree diff and no
    *  deletions. For writes that fire on a TIMER rather than on a human action:
@@ -107,6 +109,38 @@ function collectFiles(prefix: string, dir: Directory, out: Map<string, Uint8Arra
   }
 }
 
+/** Content fingerprint for the dirty-file check (FNV-1a folded with length).
+ *  Computed fresh from the live bytes on every use — never a reference to the
+ *  shim's `File.data`, which the engine mutates in place. A collision would
+ *  skip one write of one changed file, and needs the same length AND the same
+ *  32-bit hash across an edit of the same small JSON file (~2⁻³² per edit). */
+function fingerprint(bytes: Uint8Array): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < bytes.length; i++) {
+    h ^= bytes[i];
+    h = Math.imul(h, 0x01000193);
+  }
+  return `${bytes.length}:${h >>> 0}`;
+}
+
+/** The subset of `current` whose bytes differ from what `synced` recorded —
+ *  the files THIS session changed (or created), with their new fingerprints. */
+function changedFiles(
+  current: Map<string, Uint8Array>,
+  synced: Map<string, string>,
+): { puts: Map<string, Uint8Array>; prints: Map<string, string> } {
+  const puts = new Map<string, Uint8Array>();
+  const prints = new Map<string, string>();
+  for (const [path, bytes] of current) {
+    const print = fingerprint(bytes);
+    if (synced.get(path) !== print) {
+      puts.set(path, bytes);
+      prints.set(path, print);
+    }
+  }
+  return { puts, prints };
+}
+
 export async function buildHome(
   pack: Map<string, Uint8Array>,
   stockPaths: Set<string> = new Set(),
@@ -136,8 +170,11 @@ export async function buildHome(
   // freshly-seeded stock — theirs is newer).
   for (const [path, bytes] of userFiles) insertFile(root, path, bytes);
 
-  // Snapshot of what IndexedDB currently holds, for cheap diffs on persist.
-  let synced = new Set(userFiles.keys());
+  // What this session last saw in IndexedDB: path → content fingerprint.
+  // The fingerprints are the multi-tab contract — persists compare against
+  // them so a file another tab wrote is never overwritten by our stale copy.
+  const synced = new Map<string, string>();
+  for (const [path, bytes] of userFiles) synced.set(path, fingerprint(bytes));
   let frozen = false;
 
   if (seedStock) {
@@ -149,7 +186,8 @@ export async function buildHome(
     }
     await idbApply("user", seeded);
     await idbApply("cache", new Map([[STOCK_SEEDED, enc.encode("1")]]));
-    synced = new Set(seeded.keys());
+    synced.clear();
+    for (const [path, bytes] of seeded) synced.set(path, fingerprint(bytes));
   }
 
   return {
@@ -234,11 +272,30 @@ export async function buildHome(
         const dir = root.get(d);
         if (dir instanceof Directory) collectFiles(d, dir, current);
       }
-      const deletes = [...synced].filter((k) => !current.has(k));
-      // Files are small (per-verse/per-tag JSON); rewriting the subtree on an
-      // authoring event is cheaper than tracking per-file dirty bits.
-      await idbApply("user", current, deletes);
-      synced = new Set(current.keys());
+      // THE MULTI-TAB CONTRACT. Two tabs share one IndexedDB but each holds its
+      // own in-memory home, snapshotted at ITS boot. This used to write the
+      // whole subtree, which made every persist an assertion about files this
+      // tab had never touched — the slower tab's stale copies overwrote the
+      // faster tab's edits, and a file deleted over there was resurrected by
+      // any write over here. So:
+      //
+      //  * write ONLY files whose bytes differ from what we last synced —
+      //    a file we didn't change is a file we have no opinion about;
+      //  * delete ONLY files WE removed (in `synced`, gone from our tree) —
+      //    absence elsewhere is someone else's decision, not ours.
+      //
+      // Both tabs editing the SAME file stays last-writer-wins per file: the
+      // engine can't reload another tab's state mid-session, and IndexedDB
+      // already serialises readwrite transactions per store, so no cross-tab
+      // lock is needed — the transaction below is atomic either way.
+      const { puts, prints } = changedFiles(current, synced);
+      const deletes = [...synced.keys()].filter((k) => !current.has(k));
+      if (puts.size === 0 && deletes.length === 0) return;
+      await idbApply("user", puts, deletes);
+      // Only after the transaction commits — a failed persist must leave every
+      // dirty file dirty, so the next write retries the whole backlog.
+      for (const k of deletes) synced.delete(k);
+      for (const [k, p] of prints) synced.set(k, p);
     },
     async persistUserDir(d: string) {
       if (frozen) return;
@@ -250,9 +307,13 @@ export async function buildHome(
       const dir = root.get(d);
       if (dir instanceof Directory) collectFiles(d, dir, current);
       // Additive only. Deletions belong to the diffing path — a timer-driven
-      // write has no business deciding something else is gone.
-      await idbApply("user", current);
-      for (const k of current.keys()) synced.add(k);
+      // write has no business deciding something else is gone. Same dirty-only
+      // rule as persistUserData: on the 30 s dwell tick that means one book's
+      // file, not the whole reading dir.
+      const { puts, prints } = changedFiles(current, synced);
+      if (puts.size === 0) return;
+      await idbApply("user", puts);
+      for (const [k, p] of prints) synced.set(k, p);
     },
   };
 }
