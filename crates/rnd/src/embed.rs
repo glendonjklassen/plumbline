@@ -501,6 +501,124 @@ fn pca_settled(v: &[f32], next: &[f32]) -> bool {
     is_zero(next) || 1.0 - dot(v, next).abs() < 1.0e-10
 }
 
+// ── the SIF model, saved ──────────────────────────────────────────────────────
+//
+// Building this model is the single most expensive thing a launch does: 11.2 s of
+// phone CPU, 41 sweeps of the whole corpus, repeated on EVERY launch because
+// nothing an engine builds survives the tab (2026-07-28). It is a pure function
+// of the embedding and the corpus, so it never needed to be computed twice.
+//
+// Hand-rolled rather than bincode, matching `.vecb` right above: `VRef` carries
+// no serde derives and this crate has no bincode, and adding both to persist one
+// struct would be a bigger change than the format itself.
+//
+//   0..8     magic "PLSIF001"
+//   8..12    dim       u32 LE
+//   12..16   count     u32 LE
+//   16..17   aligned   u8
+//   17..21   stamp_len u32 LE
+//   21..     stamp bytes  — what this model was built FROM
+//   then     per verse: nt u8, book_len u8, book bytes, chapter u16 LE, verse u16 LE
+//   then     count*dim f32 LE, row-major
+//
+// THE STAMP IS THE WHOLE SAFETY STORY. A cached model is verse vectors keyed to a
+// particular corpus and a particular embedding; serve it against different ones
+// and every "verses like this" answer is quietly wrong — wrong in a way no
+// exception surfaces and no reader can detect. The caller passes a stamp
+// combining the tokenization version and the data pack version, and a mismatch is
+// treated as no cache at all rather than as something to repair.
+const SIF_MAGIC: &[u8; 8] = b"PLSIF001";
+
+impl VerseSim {
+    /// Serialise for storage, stamped with what it was built from.
+    pub fn encode(&self, stamp: &str) -> Vec<u8> {
+        let mut out = Vec::with_capacity(64 + self.refs.len() * 16 + self.vecs.len() * 4);
+        out.extend_from_slice(SIF_MAGIC);
+        out.extend_from_slice(&(self.dim as u32).to_le_bytes());
+        out.extend_from_slice(&(self.refs.len() as u32).to_le_bytes());
+        out.push(self.aligned as u8);
+        out.extend_from_slice(&(stamp.len() as u32).to_le_bytes());
+        out.extend_from_slice(stamp.as_bytes());
+        for (r, &greek) in self.refs.iter().zip(&self.nt) {
+            out.push(greek as u8);
+            let b = r.book.as_bytes();
+            // Book ids are short canon abbreviations; a byte of length is plenty
+            // and anything longer is not a book id we wrote.
+            out.push(b.len().min(255) as u8);
+            out.extend_from_slice(&b[..b.len().min(255)]);
+            out.extend_from_slice(&r.chapter.to_le_bytes());
+            out.extend_from_slice(&r.verse.to_le_bytes());
+        }
+        for v in &self.vecs {
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        out
+    }
+
+    /// Restore a saved model, or `None`.
+    ///
+    /// `None` for a different stamp, a different format, or bytes that are
+    /// truncated or otherwise not what they claim — every one of which is
+    /// "rebuild it" rather than an error, because a wrong model here is
+    /// undetectable downstream. Never panics on hostile input: storage can hand
+    /// back anything.
+    pub fn decode(bytes: &[u8], stamp: &str) -> Option<VerseSim> {
+        let u32_at = |o: usize| -> Option<u32> {
+            Some(u32::from_le_bytes(bytes.get(o..o + 4)?.try_into().ok()?))
+        };
+        if !bytes.starts_with(SIF_MAGIC) {
+            return None;
+        }
+        let dim = u32_at(8)? as usize;
+        let count = u32_at(12)? as usize;
+        let aligned = *bytes.get(16)? != 0;
+        let stamp_len = u32_at(17)? as usize;
+        let mut at = 21;
+        if bytes.get(at..at + stamp_len)? != stamp.as_bytes() {
+            return None; // built from something else
+        }
+        at += stamp_len;
+        if dim == 0 {
+            return None;
+        }
+        // A COUNT IS A CLAIM FROM STORAGE, NOT A FACT, and it is about to size an
+        // allocation. Every row costs at least 6 bytes of reference (nt, a length
+        // byte, chapter, verse) plus `dim * 4` of vector, so a count the file
+        // cannot possibly back is refused BEFORE it is believed. Without this,
+        // `Vec::with_capacity` on a header claiming `u32::MAX` rows asked the
+        // allocator for 137 GB and aborted the process — found by the
+        // damaged-input test, which is the entire reason it exists.
+        let per_row = 6usize.checked_add(dim.checked_mul(4)?)?;
+        if count.checked_mul(per_row)? > bytes.len().saturating_sub(at) {
+            return None;
+        }
+
+        let mut refs = Vec::with_capacity(count);
+        let mut nt = Vec::with_capacity(count);
+        for _ in 0..count {
+            let greek = *bytes.get(at)? != 0;
+            let blen = *bytes.get(at + 1)? as usize;
+            let book = std::str::from_utf8(bytes.get(at + 2..at + 2 + blen)?).ok()?;
+            let ch = u16::from_le_bytes(bytes.get(at + 2 + blen..at + 4 + blen)?.try_into().ok()?);
+            let vs = u16::from_le_bytes(bytes.get(at + 4 + blen..at + 6 + blen)?.try_into().ok()?);
+            at += 6 + blen;
+            refs.push(VRef::new(book, ch, vs));
+            nt.push(greek);
+        }
+
+        let need = count.checked_mul(dim)?.checked_mul(4)?;
+        let raw = bytes.get(at..at + need)?;
+        let mut vecs = Vec::with_capacity(count * dim);
+        for c in raw.chunks_exact(4) {
+            vecs.push(f32::from_le_bytes([c[0], c[1], c[2], c[3]]));
+        }
+        // `ix` is derived rather than stored — it is exactly this, and storing it
+        // would be a second copy that could disagree with the refs it indexes.
+        let ix = refs.iter().cloned().zip(0..).collect();
+        Some(VerseSim { dim, refs, nt, vecs, ix, aligned })
+    }
+}
+
 /// Sliced construction of the SIF model — one budgeted slice per call.
 ///
 /// Phase 7 of the web's chunked warm was the one heavy phase that never got
@@ -1082,6 +1200,79 @@ mod tests {
         plumbline_core::corpus::from_str(&jsonl).unwrap()
     }
 
+    /// A saved model must answer exactly like the one it was saved from.
+    ///
+    /// Checked through the API a reader actually reaches — the neighbours, in
+    /// order, for queries in both testaments — and not by re-encoding and
+    /// comparing bytes, which would only prove `encode` is deterministic while
+    /// saying nothing about whether `decode` reconstructed a working model.
+    #[test]
+    fn a_saved_sif_model_answers_exactly_like_the_built_one() {
+        let corpus = two_testament_corpus(SIF_PC_MIN_VERSES + 20);
+        let e = emb();
+        let built = VerseSim::build(&e, &corpus);
+
+        let bytes = built.encode("kjv1769-tok2/packv1");
+        let back = VerseSim::decode(&bytes, "kjv1769-tok2/packv1").expect("round-trips");
+
+        assert_eq!(back.count(), built.count());
+        assert_eq!(back.dim, built.dim);
+        assert_eq!(back.aligned(), built.aligned());
+        assert_eq!(back.refs, built.refs);
+        assert_eq!(back.nt, built.nt);
+        assert_eq!(back.vecs, built.vecs, "f32 round-trip is exact or it is not a cache");
+        for q in [VRef::new("John", 1, 1), VRef::new("Gen", 1, 1), VRef::new("Gen", 1, 7)] {
+            assert_eq!(
+                back.similar_verses_in(&q, 5),
+                built.similar_verses_in(&q, 5),
+                "same-testament neighbours differ for {q:?}"
+            );
+            assert_eq!(
+                back.similar_verses_cross(&q, 5),
+                built.similar_verses_cross(&q, 5),
+                "cross-testament neighbours differ for {q:?}"
+            );
+        }
+    }
+
+    /// A model saved against different data must be REFUSED, not served.
+    ///
+    /// This is the failure mode that has no symptom: the vectors decode fine and
+    /// every "verses like this" answer is quietly keyed to a corpus the reader is
+    /// not reading. Nothing throws, nothing looks wrong, and the answers are
+    /// simply the wrong verses. A stamp mismatch is therefore "no cache", never
+    /// "a cache to repair".
+    #[test]
+    fn a_sif_model_from_other_data_is_refused() {
+        let corpus = two_testament_corpus(SIF_PC_MIN_VERSES + 20);
+        let bytes = VerseSim::build(&emb(), &corpus).encode("kjv1769-tok2/packv1");
+
+        assert!(VerseSim::decode(&bytes, "kjv1769-tok2/packv2").is_none(), "newer pack");
+        assert!(VerseSim::decode(&bytes, "kjv1611-tok1/packv1").is_none(), "other tokenization");
+        assert!(VerseSim::decode(&bytes, "").is_none(), "no stamp at all");
+        assert!(VerseSim::decode(&bytes, "kjv1769-tok2/packv1").is_some(), "the right one still works");
+    }
+
+    /// Storage hands back whatever it hands back. Truncation, a foreign file and
+    /// a lying header must all be `None` rather than a panic or a wrong model.
+    #[test]
+    fn a_damaged_sif_model_is_none_not_garbage() {
+        let corpus = two_testament_corpus(SIF_PC_MIN_VERSES + 20);
+        let good = VerseSim::build(&emb(), &corpus).encode("s");
+
+        assert!(VerseSim::decode(&[], "s").is_none(), "empty");
+        assert!(VerseSim::decode(b"not a sif model at all", "s").is_none(), "foreign bytes");
+        // Every truncation point, so no length is trusted without being checked.
+        for cut in [8, 12, 17, 21, 40, good.len() / 3, good.len() / 2, good.len() - 1] {
+            assert!(VerseSim::decode(&good[..cut], "s").is_none(), "truncated at {cut}");
+        }
+        // A header claiming far more rows than the body carries.
+        let mut lying = good.clone();
+        lying[12..16].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(VerseSim::decode(&lying, "s").is_none(), "a count the body cannot back");
+        assert!(VerseSim::decode(&good, "s").is_some(), "and the intact one still loads");
+    }
+
     /// Slicing must not change the ANSWER.
     ///
     /// Not a formality: floating-point addition is not associative, so "the same
@@ -1131,3 +1322,4 @@ mod tests {
         }
     }
 }
+

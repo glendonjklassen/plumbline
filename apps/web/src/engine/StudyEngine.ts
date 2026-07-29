@@ -281,6 +281,60 @@ export class StudyEngine {
   deferBuilds(on: boolean): void {
     (this.#w.exports.plumbline_engine_defer_builds as Function)(this.#engine, on ? 1 : 0);
   }
+  /** The built "verses like this" model as storable bytes, or null if it hasn't
+   *  been built yet (wasm-only export).
+   *
+   *  Worth storing because rebuilding it is the most expensive thing a launch
+   *  does — 11.2 s of phone CPU, 41 sweeps of the whole corpus — for a model that
+   *  is a pure function of data already on the device (2026-07-28).
+   *
+   *  `stamp` records what it was built FROM and is checked on load. */
+  verseSimSave(stamp: string): Uint8Array | null {
+    const lenPtr = (this.#w.exports.plumbline_web_alloc as Function)(4) as number;
+    const sPtr = this.#w.inStr(stamp);
+    try {
+      const ptr = (this.#w.exports.plumbline_engine_verse_sim_save as Function)(
+        this.#engine,
+        sPtr,
+        lenPtr,
+      ) as number;
+      if (!ptr) return null;
+      const len = new DataView(this.#w.exports.memory.buffer).getUint32(lenPtr, true);
+      // COPY before returning: this is a view into wasm linear memory, which is
+      // freed on the next line and can be moved wholesale by any later
+      // allocation that grows it.
+      const bytes = new Uint8Array(this.#w.exports.memory.buffer, ptr, len).slice();
+      (this.#w.exports.plumbline_web_free as Function)(ptr, len);
+      return bytes;
+    } finally {
+      this.#w.freeStr(sPtr);
+      (this.#w.exports.plumbline_web_free as Function)(lenPtr, 4);
+    }
+  }
+
+  /** Install a saved "verses like this" model. False when the bytes were built
+   *  from other data, are damaged, or one is already loaded — every one of which
+   *  means "build it instead". */
+  verseSimLoad(bytes: Uint8Array, stamp: string): boolean {
+    const ptr = (this.#w.exports.plumbline_web_alloc as Function)(bytes.length) as number;
+    const sPtr = this.#w.inStr(stamp);
+    try {
+      if (!ptr) return false;
+      new Uint8Array(this.#w.exports.memory.buffer, ptr, bytes.length).set(bytes);
+      return (
+        ((this.#w.exports.plumbline_engine_verse_sim_load as Function)(
+          this.#engine,
+          ptr,
+          bytes.length,
+          sPtr,
+        ) as number) === 1
+      );
+    } finally {
+      if (ptr) (this.#w.exports.plumbline_web_free as Function)(ptr, bytes.length);
+      this.#w.freeStr(sPtr);
+    }
+  }
+
   /** Load the R&D artifacts from the home if they arrived after open (the
    *  deferred pack); no-op when already loaded or still missing. */
   loadRndData(): string | null {

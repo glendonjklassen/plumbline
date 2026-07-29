@@ -39,7 +39,7 @@ import {
   takePackTrace,
   verifyStored,
 } from "./pack";
-import { depotBytes, depotDelete, depotHas, depotKeys } from "./depot";
+import { depotBytes, depotDelete, depotGet, depotHas, depotKeys, depotPut } from "./depot";
 import { PERF } from "./perf";
 import { measureFor, readerFont, fontExtent } from "../reader/measure";
 import {
@@ -212,6 +212,62 @@ function layoutChapter(m: LayoutReq): LaidOut | null {
 /** Let queued messages (layout, taps) run before the next synchronous chunk. */
 const yieldTask = () => new Promise<void>((r) => setTimeout(r, 0));
 
+// ── the saved "verses like this" model ────────────────────────────────────────
+// The most expensive thing a launch does — 11.2 s of phone CPU, 41 sweeps of the
+// whole corpus (2026-07-28) — for a model that is a pure function of the corpus
+// and the embedding, both of which the device already holds. It was recomputed
+// on every single open because nothing an engine builds survives the tab.
+//
+// It lives in the DEPOT rather than IndexedDB, by the rule that governs both: the
+// depot holds what can be re-derived, IndexedDB holds what cannot. This can be
+// rebuilt from bytes already on the device, so losing it to eviction costs one
+// slow launch and nothing else.
+const SIF_URL = "__depot/verse-sim.simb";
+
+/** What the model was built FROM. A cached model served against a different
+ *  corpus or embedding answers with the WRONG VERSES and nothing throws — so the
+ *  stamp is the whole safety story, and a mismatch means rebuild, never repair. */
+function sifStamp(): string {
+  return `sif1/${booted!.packVersion}`;
+}
+
+/** Restore the saved model, if this device has a matching one. */
+async function loadSavedVerseSim(): Promise<boolean> {
+  try {
+    const hit = await depotGet(assetUrl(SIF_URL));
+    if (!hit) return false;
+    const bytes = new Uint8Array(await hit.arrayBuffer());
+    const t0 = performance.now();
+    const ok = booted!.engine.verseSimLoad(bytes, sifStamp());
+    booted!.trace.push([
+      ok ? "verses-like-this RESTORED (no rebuild)" : "verses-like-this cache refused",
+      Math.round(performance.now() - t0),
+    ]);
+    return ok;
+  } catch {
+    return false; // storage blocked or unreadable: build it, same as a first run
+  }
+}
+
+/** Save it, once, after the warm has built it. */
+async function saveVerseSim(): Promise<void> {
+  try {
+    const t0 = performance.now();
+    const bytes = booted!.engine.verseSimSave(sifStamp());
+    if (!bytes) return; // not built (no analysis pack on this device)
+    const stored = await depotPut(assetUrl(SIF_URL), bytes, "application/octet-stream");
+    if (PERF && stored) {
+      booted!.trace.push([
+        `verses-like-this saved (KB)`,
+        Math.round(bytes.length / 1024),
+      ]);
+      booted!.trace.push(["verses-like-this save", Math.round(performance.now() - t0)]);
+    }
+  } catch {
+    /* quota or blocked storage: the reader just pays the rebuild next launch */
+  }
+}
+
 // ── engine calls ──────────────────────────────────────────────────────────────
 // EVERY engine request the shell makes arrives as `call` or `static`, and until
 // now not one of them was timed. That is the hole three days of traces kept
@@ -339,7 +395,14 @@ function loadRndChunked(): Promise<void> {
       "data/text-witness.json",
     ]);
     if (freedRnd) booted!.trace.push(["home evict after analysis (KB)", Math.round(freedRnd / 1024)]);
+    // The saved model, before the warm would rebuild it. The embedding has just
+    // landed, which is the earliest moment a stored model can be installed — and
+    // installing it makes the warm's SIF phase a no-op instead of 11 seconds.
+    const restored = await loadSavedVerseSim();
     await warmChunked();
+    // Built for the first time on this device: keep it. Off the critical path,
+    // after the reader already has everything.
+    if (!restored) await saveVerseSim();
     self.postMessage({ type: "rndReady" });
   })().catch((e) => {
     rndRun = null; // offline — the Settings toggle or next boot retries
@@ -483,6 +546,11 @@ async function pruneToPin(shell: string[]): Promise<number> {
   // The engine binary is versioned by build id rather than listed in the shell
   // manifest (it is the worker's to fetch, and far too big for a shell list).
   keep.add(assetUrl(`plumbline_ffi.wasm?v=${__BUILD_ID__}`));
+  // The saved "verses like this" model. Prune is an ALLOWLIST, so anything not
+  // named here is deleted — and this was, on the very next launch, which is why
+  // the first version of it re-saved 12 MB every open and never once restored.
+  // Its own stamp handles staleness; prune must not second-guess that.
+  keep.add(assetUrl(SIF_URL));
 
   let gone = 0;
   for (const url of await depotKeys()) {

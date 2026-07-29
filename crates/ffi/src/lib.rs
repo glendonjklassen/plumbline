@@ -423,6 +423,35 @@ impl PlumblineEngine {
         self.defer_builds.load(std::sync::atomic::Ordering::Relaxed)
     }
 
+    /// The built SIF model as storable bytes, stamped with what it was built
+    /// from. `None` until it exists — there is nothing to save before then.
+    pub(crate) fn verse_sim_encode(&self, stamp: &str) -> Option<Vec<u8>> {
+        Some(self.verse_sim.get()?.encode(stamp))
+    }
+
+    /// Install a saved SIF model instead of building one. False when the bytes
+    /// are for other data, are damaged, or a model is already present.
+    ///
+    /// This is the 11.2 s of a launch that never needed to happen twice: the model
+    /// is a pure function of the embedding and the corpus, and the phone was
+    /// recomputing it on every open (2026-07-28).
+    pub(crate) fn verse_sim_load(&self, bytes: &[u8], stamp: &str) -> bool {
+        if self.verse_sim.get().is_some() {
+            return false;
+        }
+        match embed::VerseSim::decode(bytes, stamp) {
+            Some(vs) => {
+                let ok = self.verse_sim.set(vs).is_ok();
+                if ok {
+                    // Nothing left for the warm's tail to come back for.
+                    self.sif_attempted.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                ok
+            }
+            None => false,
+        }
+    }
+
     /// Declare that this shell warms in slices, so nothing may be built inside a
     /// reader's request.
     ///
