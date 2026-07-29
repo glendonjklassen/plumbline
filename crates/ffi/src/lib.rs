@@ -1365,7 +1365,11 @@ pub unsafe extern "C" fn plumbline_engine_strongs_occurrences_json(
         let (Some(engine), Some(code)) = (engine.as_ref(), opt_str(code)) else {
             return ptr::null_mut();
         };
-        let all = engine.occ_ix().verses(code);
+        // Not ready under a sliced warm: null, and the shell re-asks on warmReady.
+        let Some(occ) = engine.occ_ix_ready() else {
+            return ptr::null_mut();
+        };
+        let all = occ.verses(code);
         let total = all.len();
         let verses: Vec<String> = all.iter().take(OCCURRENCE_CAP).map(|v| v.ref_key()).collect();
         out_json(&wire::Occurrences {
@@ -1665,7 +1669,7 @@ pub unsafe extern "C" fn plumbline_engine_similar_verses_json(
         let (Some(e), Some(rk)) = (engine.as_ref(), opt_str(ref_key)) else {
             return ptr::null_mut();
         };
-        let (Some(vs), Some(vref)) = (e.verse_sim(), VRef::parse_ref_key(rk)) else {
+        let (Some(vs), Some(vref)) = (e.verse_sim_ready(), VRef::parse_ref_key(rk)) else {
             return ptr::null_mut();
         };
         let k = k as usize;
@@ -2164,7 +2168,7 @@ pub unsafe extern "C" fn plumbline_engine_study_xrefs_json(
         let Some(vref) = VRef::parse_ref_key(rk) else {
             return ptr::null_mut();
         };
-        match e.xref_ix().get(&vref) {
+        match e.xref_ix_ready().and_then(|ix| ix.get(&vref)) {
             Some(rs) if !rs.is_empty() => out_json(&wire::study_xrefs_to_wire(&vref, rs)),
             _ => ptr::null_mut(),
         }
@@ -2281,12 +2285,14 @@ pub unsafe extern "C" fn plumbline_engine_concept_json(
         let (Some(e), Some(code)) = (engine.as_ref(), opt_str(code)) else {
             return ptr::null_mut();
         };
-        let ce = e.concept();
+        let Some(ce) = e.concept_ready() else {
+            return ptr::null_mut();
+        };
         let Some(stat) = ce.stat(code) else {
             return ptr::null_mut();
         };
         let (ot, nt) = ce.testament_split(code);
-        let leitwort = e.leitwort().get(code).map(|b| wire::WireLeitwort {
+        let leitwort = e.leitwort_ready().and_then(|l| l.get(code)).map(|b| wire::WireLeitwort {
             n: b.n,
             win_count: b.win_count,
             score: b.score,
@@ -2388,7 +2394,11 @@ pub unsafe extern "C" fn plumbline_engine_concept_map_json(
             .take(CONCEPT_MAP_SPOKES)
             .collect();
         let near: Vec<String> = near_scored.iter().map(|(c, _)| c.clone()).collect();
-        let ce = e.concept();
+        // THE 10,205 ms CALL. `conceptMap` reached straight past the panel's
+        // "ready" accessors and built the concept model inside the request.
+        let Some(ce) = e.concept_ready() else {
+            return ptr::null_mut();
+        };
         let community: Vec<String> =
             ce.community(code).into_iter().filter(|c| !name_noise(e, c)).collect();
         let spokes = concept::radial_spokes(&near, &community, CONCEPT_MAP_SPOKES)
@@ -2407,7 +2417,7 @@ pub unsafe extern "C" fn plumbline_engine_concept_map_json(
             .unwrap_or_else(|| vec![0; canon::BOOKS.len()]);
         // Cross-testament bridge row: the strongest other-testament partners and
         // their unioned dispersion (so Christ reveals where Messiah occurs).
-        let partners = e.bridge().map(|b| b.partners(code)).unwrap_or_default();
+        let partners = e.bridge_ready().map(|b| b.partners(code)).unwrap_or_default();
         let bridge = (!partners.is_empty()).then(|| {
             let top: Vec<&bridge::Partner> =
                 partners.iter().take(concept::BRIDGE_ROW_PARTNERS).collect();

@@ -1892,6 +1892,74 @@ fn a_tap_before_the_warm_has_even_started_builds_nothing() {
     }
 }
 
+/// NO reader-facing export may build a lazy index. Not one.
+///
+/// Gating only the word-study path was whack-a-mole and it lost the very next
+/// round: with `wordStudyBlocks` fixed, the phone's slowest call became
+///
+///     10205 ms  conceptMap
+///
+/// — a different door into the same room, because `plumbline_engine_concept_map_json`
+/// reached straight past the panel's "ready" accessors and called `e.concept()`.
+/// Every export below can be triggered by an ordinary reader before the warm has
+/// finished, so every one of them is walked here and the whole engine is checked
+/// afterwards. A new export that forgets the rule fails this test rather than the
+/// maintainer's phone.
+///
+/// `search` is deliberately NOT in this list: it is an explicit query where an
+/// empty answer would be a wrong answer rather than a partial one, and the warm
+/// builds its index first for exactly that reason.
+#[test]
+fn no_reader_facing_export_builds_an_index_under_a_sliced_warm() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-noexport-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), generated_kjv(150, 20)).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null() && !e.is_null());
+        let eng = &*e;
+        eng.set_defer_builds(true);
+        eng.load_core_data();
+
+        let vref = c"Ps 1:2";
+        let code = c"G2316";
+        // Every one of these is reachable from a tap, a panel, or a map the reader
+        // can open in the first seconds of a launch.
+        let _ = take(plumbline_engine_word_study_blocks2_json(e, vref.as_ptr(), 1, 3));
+        let _ = take(plumbline_engine_concept_map_json(e, code.as_ptr()));
+        let _ = take(plumbline_engine_concept_json(e, code.as_ptr()));
+        let _ = take(plumbline_engine_strongs_occurrences_json(e, code.as_ptr()));
+        let _ = take(plumbline_engine_similar_verses_json(e, vref.as_ptr(), 5));
+        let _ = take(plumbline_engine_study_xrefs_json(e, vref.as_ptr()));
+
+        for (built, what) in [
+            (eng.occ_ix.get().is_some(), "the occurrence index"),
+            (eng.renderings.get().is_some(), "the rendering lens"),
+            (eng.xref_ix.get().is_some(), "the cross-reference index"),
+            (eng.concept.get().is_some(), "the concept model"),
+            (eng.leitwort.get().is_some(), "the leitwort scan"),
+            (eng.bridge.get().is_some(), "the bridge"),
+            (eng.verse_sim.get().is_some(), "the SIF model"),
+        ] {
+            assert!(
+                !built,
+                "a reader-facing export built {what} while a sliced warm was running — that is a \
+                 multi-second freeze of the only thread that answers taps, and it strands every \
+                 download in flight behind it"
+            );
+        }
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
 /// The control for the test above: WITHOUT a sliced warm — the Android path,
 /// which calls `plumbline_engine_warm_indexes` and builds everything up front —
 /// a tap still builds on demand exactly as it always has. The deferral is scoped
