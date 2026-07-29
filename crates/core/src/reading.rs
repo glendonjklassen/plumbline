@@ -29,25 +29,33 @@
 //!
 //! ## What gets stored
 //!
-//! Two numbers and a date per chapter — [`ChapterReading`]. `reached` and
+//! Two numbers and two dates per chapter — [`ChapterReading`]. `reached` and
 //! `dwell` describe the pass **currently under way** and are reset when it
-//! completes; `last_read` is the only long-lived fact, and it is what the glow
-//! is measured from. Partial dwell *within* a verse is not persisted at all: the
-//! shell holds it for the session and it is no loss if it evaporates.
+//! completes; `last_read` is the last COMPLETED pass and `touched` the last
+//! contact of any kind. Partial dwell *within* a verse is not persisted at all:
+//! the shell holds it for the session and it is no loss if it evaporates.
 //!
 //! One file per book under `home/reading/`, plus `_since.json` holding the date
 //! the reader started (see [`ensure_since`]).
 //!
-//! ## Two different invitations
+//! ## The glow, and what silences it
 //!
-//! The glow does not mean one thing. For a chapter you have READ it means
-//! *you have been away a while* — flat for [`FRESH_DAYS`], full at
-//! [`STALE_DAYS`]. For a chapter you have NEVER read it means *there is
+//! The glow does not mean one thing. For a chapter you have READ it means *you
+//! have been away a while*. For one you have NEVER read it means *there is
 //! something here you have not seen*, and it is full from the first launch
 //! (revised 2026-07-29: it used to ramp from the reader's start date, which made
 //! the map calm on precisely the day a reader most wants showing where to go, and
 //! dressed "you have never opened this" up as "not due yet"). A part-read chapter
-//! glows in proportion to what is LEFT, so the invitation shrinks as you fill it.
+//! glows in proportion to what is LEFT.
+//!
+//! Over all of that sits one rule: **recency outranks coverage.** The glow ramps
+//! from the most recent CONTACT — `touched` or `last_read`, whichever is later —
+//! and that ramp is flat zero for [`FRESH_DAYS`], reaching full at
+//! [`STALE_DAYS`]. So a chapter you were in this morning says nothing, whether you
+//! finished it or stopped halfway, and a chapter you finished last year but dipped
+//! into today says nothing either. Without this rule, reading a chapter and not
+//! quite crossing the 90% bar left it glowing at you the moment you closed it,
+//! which is a map arguing with the person holding it.
 //!
 //! Personal study data, so it rides in the backup zip like `memory/` and
 //! `notes/` do.
@@ -66,11 +74,17 @@ use crate::Error;
 /// inheriting the `overlay-` prefix its siblings are frozen into.
 pub const FORMAT: &str = "plumbline-reading-v1";
 
-/// The reading speed dwell is converted at. Set **generously** — quick for
-/// careful KJV prose on purpose, because its job is to refuse credit to someone
-/// flipping through, not to hold a reader to a pace. A reader who is genuinely
-/// slower still reaches 100%; they simply reach it by spending the time.
-pub const READING_WORDS_PER_MINUTE: f32 = 220.0;
+/// The reading speed dwell is converted at. Set **generously**, and raised from
+/// 220 on 2026-07-29 after a real read of Jude came out `Partial`: at 220 its 613
+/// words wanted 2.8 minutes of credited dwell, which a brisk reader beats, so
+/// "I just read this" showed as "you are partway through".
+///
+/// The dwell gate is not a pace to hold a reader to — its ONLY job is to refuse
+/// credit to someone flipping through, and [`GRACE_SECONDS`] plus the high-water
+/// mark already do that work: a flip banks no seconds at all. So this can afford
+/// to be fast, and being fast is the difference between a map that agrees with the
+/// reader and one that argues with them.
+pub const READING_WORDS_PER_MINUTE: f32 = 300.0;
 
 /// Coverage at or above which a pass counts as a full read and snaps to 1.0.
 pub const COMPLETE_AT: f32 = 0.90;
@@ -162,6 +176,17 @@ pub struct ChapterReading {
     /// When the chapter was last read through, `YYYY-MM-DD`. `None` = never.
     #[serde(rename = "lastRead", skip_serializing_if = "Option::is_none", default)]
     pub last_read: Option<String>,
+    /// When this chapter last had ANY of the reader's attention — a partial pass
+    /// counts, a completed one counts, `None` means never. Additive (2026-07-29).
+    ///
+    /// It exists because recency has to be able to silence the glow on its own.
+    /// Before it, only a COMPLETED chapter had an anchor, so a chapter you read
+    /// most of an hour ago glowed at you like one you had never opened: "I just
+    /// read the book of Jude and it now shows a bronze glow — bit of a false
+    /// positive." Quite so. Being in a chapter recently is the whole thing the map
+    /// is supposed to notice.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub touched: Option<String>,
 }
 
 /// A book's file: `home/reading/<book>.json`.
@@ -395,9 +420,9 @@ pub struct Heat {
     /// Coverage, 0.0–1.0. Snapped to 1.0 once a full pass has happened.
     pub pct: f32,
     pub standing: Standing,
-    /// Attention, 0.0–1.0. For a chapter you have read: 0 for [`FRESH_DAYS`]
-    /// after it, ramping to 1 at [`STALE_DAYS`]. For one you have not: 1 at
-    /// once, less only in proportion to how far in you already are.
+    /// Attention, 0.0–1.0. Zero for [`FRESH_DAYS`] after ANY contact with the
+    /// chapter, then ramping to full at [`STALE_DAYS`]; a chapter never opened is
+    /// 1 from the start, and a part-read one tops out at what is left of it.
     pub glow: f32,
     /// Days since the last full read — `None` if it has never had one.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -460,21 +485,52 @@ fn heat_of(
     now: &str,
 ) -> Heat {
     let last_read = r.and_then(|r| r.last_read.clone());
+    let touched = r.and_then(|r| r.touched.clone());
+
+    // RECENCY OUTRANKS EVERYTHING. The most recent contact of any kind — a
+    // completed pass, or just time spent in the chapter — anchors the ramp, and
+    // inside FRESH_DAYS that ramp is flat zero. So a chapter you were in this
+    // morning is silent whatever its coverage says, which is the only honest
+    // answer: the map's question is "where have you not been lately", and you
+    // were just there. (2026-07-29: reading Jude and being shown a bronze glow
+    // for it was this rule missing.)
+    let contact = [last_read.as_deref(), touched.as_deref()]
+        .into_iter()
+        .flatten()
+        .filter_map(date_to_days)
+        .max();
+    // UPGRADE AMNESTY. `touched` is additive, so a pass that was under way before
+    // it existed has progress and no date — and would glow as if the reader had
+    // never been there, which is the very complaint this rule answers. A record
+    // with dwell banked and no contact date is read as contact NOW.
+    //
+    // Charitable rather than precise, and deliberately so: every such record was
+    // written within a day of the field landing, so "now" is very nearly true for
+    // all of them, and any that really were abandoned go quiet for a month and then
+    // come back. The alternative — leaving them lit — makes the fix look like it
+    // did not work on exactly the chapters that prompted it.
+    let has_progress = r.is_some_and(|r| r.dwell > 0.0);
+    let ramp = match contact {
+        Some(d) => glow_for_days((date_to_days(now).unwrap_or(d) - d).max(0)),
+        None if has_progress => 0.0,
+        None => 1.0,
+    };
+
     match &last_read {
-        // Read through at least once: full coverage, and the glow counts from
-        // then. A re-read in progress doesn't dim it — only finishing does.
+        // Read through at least once: full coverage, and the glow is the ramp from
+        // the last time the reader was here at all.
         Some(from) => {
             let elapsed = days_between(from, now).unwrap_or(0).max(0);
-            let glow = glow_for_days(elapsed);
-            Heat { pct: 1.0, standing: Standing::Read, glow, days: Some(elapsed), last_read }
+            Heat { pct: 1.0, standing: Standing::Read, glow: ramp, days: Some(elapsed), last_read }
         }
         None => {
             let pct = r.map_or(0.0, |r| pass_pct(corpus, book, r, words));
             let standing = if pct > 0.0 { Standing::Partial } else { Standing::Unread };
-            // Unread glows AT ONCE, and fully. A part-read chapter glows in
-            // proportion to what is LEFT, so the invitation shrinks as it fills.
-            // See the module docs for why this is not the staleness ramp.
-            let glow = if pct > 0.0 { (1.0 - pct).clamp(0.0, 1.0) } else { 1.0 };
+            // Never opened: lit at once, and fully — nothing to be recent about.
+            // Part-read: the invitation is what is LEFT, faded by how recently you
+            // were in it, so it goes quiet when you put it down and comes back if
+            // you never pick it up again.
+            let glow = if pct > 0.0 { (1.0 - pct).clamp(0.0, 1.0) * ramp } else { 1.0 };
             Heat { pct, standing, glow, days: None, last_read: None }
         }
     }
@@ -601,11 +657,17 @@ pub fn record(
     let rec = &mut list[idx];
     rec.reached = rec.reached.max(reached);
     rec.dwell += seconds.max(0.0);
+    // Any credited second is contact with the chapter, whether or not the pass
+    // ever finishes. This is what lets a part-read chapter go quiet.
+    if seconds > 0.0 {
+        rec.touched = Some(day_of(now));
+    }
 
     let pct = pass_pct(corpus, book, rec, total);
     let completed = pct >= COMPLETE_AT && total > 0;
     if completed {
         rec.last_read = Some(day_of(now));
+        rec.touched = Some(day_of(now));
         rec.reached = 0;
         rec.dwell = 0.0;
     }
@@ -630,7 +692,8 @@ pub fn mark_read(home: impl AsRef<Path>, book: &str, chapter: u16, date: &str) -
     let day = day_of(date);
     match list.iter_mut().find(|r| r.chapter == chapter) {
         Some(r) => {
-            r.last_read = Some(day);
+            r.last_read = Some(day.clone());
+            r.touched = Some(day);
             r.reached = 0;
             r.dwell = 0.0;
         }
@@ -638,7 +701,8 @@ pub fn mark_read(home: impl AsRef<Path>, book: &str, chapter: u16, date: &str) -
             chapter,
             reached: 0,
             dwell: 0.0,
-            last_read: Some(day),
+            last_read: Some(day.clone()),
+            touched: Some(day),
         }),
     }
     write_book(&home, book, &list)
@@ -773,19 +837,21 @@ mod tests {
         let c = toy();
         let w = ChapterWords::build(&c);
         let home = scratch("accumulate");
-        // Gen 2 is 20 words ≈ 5.5s at 220 wpm. Two sips of time, scrolling as we
-        // go: 4s buys 14.7 words of the 20, so the pass is still open.
-        for (reached, secs) in [(1u16, 2.0f32), (2, 2.0)] {
+        // Gen 2 is 20 words. Sip time in thirds of what those words cost, so this
+        // test states its intent in the rate's own terms and survives a change to
+        // READING_WORDS_PER_MINUTE (which caught it once, at 220 → 300).
+        let third = seconds_for_words(20) / 3.0;
+        for (reached, secs) in [(1u16, third), (2, third)] {
             let r = record(&home, &c, &w, "Gen", 2, reached, secs, NOW).unwrap();
-            assert!(!r.completed);
+            assert!(!r.completed, "two thirds of the words is short of the 90% bar");
         }
         let (store, _) = load(&home);
         let rec = &store["Gen"][0];
-        assert_eq!(rec.dwell, 4.0, "seconds carry over between calls");
+        assert!((rec.dwell - third * 2.0).abs() < 1e-3, "seconds carry over between calls");
         assert_eq!(rec.reached, 2);
-        // A third sip pushes dwell past the chapter's whole word count, and the
-        // scroll had already reached the end — so this is the call that lands it.
-        let r = record(&home, &c, &w, "Gen", 2, 2, 2.0, NOW).unwrap();
+        // The third sip covers the chapter, and the scroll had already reached the
+        // end — so this is the call that lands it.
+        let r = record(&home, &c, &w, "Gen", 2, 2, third, NOW).unwrap();
         assert!(r.completed);
         let _ = std::fs::remove_dir_all(&home);
     }
@@ -795,11 +861,98 @@ mod tests {
         let c = toy();
         let w = ChapterWords::build(&c);
         let home = scratch("high-water");
-        record(&home, &c, &w, "Gen", 1, 5, 1.0, NOW).unwrap();
-        record(&home, &c, &w, "Gen", 1, 1, 1.0, NOW).unwrap();
+        // Well short of completing (which would legitimately reset `reached`):
+        // a fifth of Gen 1's ten words, twice.
+        let sip = seconds_for_words(2);
+        let a = record(&home, &c, &w, "Gen", 1, 5, sip, NOW).unwrap();
+        let b = record(&home, &c, &w, "Gen", 1, 1, sip, NOW).unwrap();
+        assert!(!a.completed && !b.completed, "the pass must stay open for this to mean anything");
         let (store, _) = load(&home);
-        assert_eq!(store["Gen"][0].reached, 5);
+        assert_eq!(store["Gen"][0].reached, 5, "scrolling back up keeps the ground gained");
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn a_chapter_you_just_read_is_quiet_even_when_it_did_not_complete() {
+        let c = toy();
+        let w = ChapterWords::build(&c);
+        let home = scratch("just-read");
+
+        // The Jude case (2026-07-29). Read most of a chapter, but not past the 90%
+        // bar, so it stands as Partial — and it must NOT glow, because the reader
+        // was in it moments ago. "If I just read a chapter it doesn't need to show
+        // glowing… bit of a false positive."
+        let r = record(&home, &c, &w, "Gen", 2, 1, seconds_for_words(10), NOW).unwrap();
+        assert!(!r.completed, "half of Gen 2 is short of the bar");
+        let (store, _) = load(&home);
+        let ch = &book_chapters(&c, &w, &store, "Gen", NOW)[1];
+        assert_eq!(ch.heat.standing, Standing::Partial);
+        assert!(ch.heat.pct > 0.0 && ch.heat.pct < 1.0);
+        assert_eq!(ch.heat.glow, 0.0, "just read, so the map says nothing about it");
+
+        // Put it down and leave it. A year later the unfinished half is an
+        // invitation again — faded by how much of it is already behind you.
+        let later = "2027-07-28T12:00:00Z";
+        let ch = &book_chapters(&c, &w, &store, "Gen", later)[1];
+        assert_eq!(ch.heat.standing, Standing::Partial);
+        let expected = 1.0 - ch.heat.pct;
+        assert!(
+            (ch.heat.glow - expected).abs() < 1e-6,
+            "a long-abandoned partial glows by what is left: want {expected}, got {}",
+            ch.heat.glow,
+        );
+
+        // A chapter never opened is unaffected by any of this — nothing to be
+        // recent about, so it stays lit.
+        let ch1 = &book_chapters(&c, &w, &store, "Gen", NOW)[2];
+        assert_eq!(ch1.heat.standing, Standing::Unread);
+        assert_eq!(ch1.heat.glow, 1.0);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn a_pass_from_before_touched_existed_is_treated_as_recent() {
+        let c = toy();
+        let w = ChapterWords::build(&c);
+        let mut store = Store::new();
+        // What v0.33.0 wrote: progress banked, no contact date, because the field
+        // did not exist yet. It must NOT glow — these records are a day old, and
+        // reading the amnesty the other way would leave the glow on precisely the
+        // chapters whose glow was reported as a false positive.
+        store.insert(
+            "Gen".into(),
+            vec![ChapterReading { chapter: 1, reached: 4, dwell: 600.0, ..Default::default() }],
+        );
+        let ch = &book_chapters(&c, &w, &store, "Gen", NOW)[0];
+        assert_eq!(ch.heat.standing, Standing::Partial);
+        assert_eq!(ch.heat.glow, 0.0, "an undated pass is read as recent, not as never");
+
+        // A record with no progress AND no date is simply unread, and still lit.
+        store.insert("Gen".into(), vec![ChapterReading { chapter: 1, ..Default::default() }]);
+        let ch = &book_chapters(&c, &w, &store, "Gen", NOW)[0];
+        assert_eq!(ch.heat.standing, Standing::Unread);
+        assert_eq!(ch.heat.glow, 1.0);
+    }
+
+    #[test]
+    fn a_completed_chapter_dipped_into_again_goes_quiet() {
+        let c = toy();
+        let w = ChapterWords::build(&c);
+        let mut store = Store::new();
+        // Read through a year ago — so, on its own, fully stale and glowing.
+        store.insert(
+            "Gen".into(),
+            vec![ChapterReading { chapter: 1, last_read: Some("2025-07-28".into()), ..Default::default() }],
+        );
+        assert_eq!(book_chapters(&c, &w, &store, "Gen", NOW)[0].heat.glow, 1.0);
+
+        // Then the reader spends a little time in it today. They have BEEN here;
+        // the map has nothing to tell them, even though the last full pass is old.
+        store.get_mut("Gen").unwrap()[0].touched = Some("2026-07-28".into());
+        let ch = &book_chapters(&c, &w, &store, "Gen", NOW)[0];
+        assert_eq!(ch.heat.standing, Standing::Read, "a dip does not undo a full read");
+        assert_eq!(ch.heat.glow, 0.0);
+        assert_eq!(ch.heat.days, Some(365), "`days` still reports the last full read");
     }
 
     #[test]
@@ -841,7 +994,16 @@ mod tests {
             "Gen".into(),
             // Gen 1 is 10 words over 5 verses; reached verse 4 (8 words) with
             // ample dwell = 80% covered, so 20% of the invitation remains.
-            vec![ChapterReading { chapter: 1, reached: 4, dwell: 600.0, last_read: None }],
+            // Touched long ago and abandoned: fully stale, so nothing damps the
+            // invitation. (An abandoned pass with NO date at all is the upgrade
+            // amnesty — covered separately below.)
+            vec![ChapterReading {
+                chapter: 1,
+                reached: 4,
+                dwell: 600.0,
+                last_read: None,
+                touched: Some("2020-01-01".into()),
+            }],
         );
         let ch = &book_chapters(&c, &w, &part, "Gen", NOW)[0];
         assert_eq!(ch.heat.standing, Standing::Partial);

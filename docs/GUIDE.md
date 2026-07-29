@@ -145,7 +145,11 @@ On top of the hue, a chapter **glows** — and the glow says one of two things. 
 something you have read, it means *you have been away a while*: nothing for the
 first month, building to full at a year. On something you have never read, it is
 lit from the moment you install, because that is treasure you have not opened yet.
-Either way the glow is an invitation, never a scolding, and nobody sees it but you.
+
+Whichever it is, **being there recently silences it.** A chapter you read this
+morning says nothing, whether or not you got to the end of it — the map's question
+is where you have *not* been lately, and you were just there. The glow is an
+invitation, never a scolding, and nobody sees it but you.
 
 Reading is counted generously: a chapter fills as you move through it at a natural
 pace (flipping past credits nothing, and neither does leaving it open), and 90%

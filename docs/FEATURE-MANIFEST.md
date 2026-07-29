@@ -800,22 +800,31 @@ Create/OpenDocument + java.util.zip; restore recreates the activity.
 `plumbline_core::reading` (`plumbline-reading-v1`, one file per book under
 `home/reading/`, plus `_since.json` for the reader's start date). Coverage of a
 chapter is a **percentage**, gated two ways at once:
-`min(words above the furthest verse reached, dwell × 220 wpm) ÷ chapter words`.
+`min(words above the furthest verse reached, dwell × 300 wpm) ÷ chapter words`.
 Scrolling to the bottom instantly credits nothing; sitting on verse 1 credits only
 verse 1. Dwell is **aggregate, not per-verse** — time over verse 3 pays for verse
 30 once you get there — and a pass completes at **90%** and snaps to 1.0, so there
 is never a trailing verse to chase. Stored per chapter: `reached`, `dwell`
-(both belong to the pass under way, cleared when it completes) and `lastRead`.
+(both belong to the pass under way, cleared when it completes), `lastRead` and
+`touched`. The reading rate went 220 → 300 wpm the same day: at 220, Jude's 613
+words wanted 2.8 minutes of dwell, which a brisk reader beats, so a real read came
+out `Partial`. The grace period and the high-water mark are what refuse a
+flip-through; the rate does not need to be slow as well.
 
 Two signals in the navigator's grids: **hue** = `Standing` (unread gold
 `readUnread` / partial copper `readPartial` / read sage `readDone`, all three in
-`core::theme`), **bloom** = the invitation, and it means two different things
-(revised 2026-07-29). For a chapter you have READ it is staleness: flat zero for
-30 days, ramping to full at 365 from the last full read. For one you have NEVER
-read it is full **from the first launch** — it used to ramp from the reader's start
-date, which left the map dark on precisely the day it is most use, and dressed "you
-have never opened this" up as "not due yet". A part-read chapter glows in proportion
-to what is LEFT, so the invitation shrinks as it fills. Books are the
+`core::theme`), **bloom** = the invitation.
+
+The bloom ramps from the most recent **contact** — `touched` (any credited
+reading) or `lastRead` (a completed pass), whichever is later — flat zero for 30
+days, full at 365. **Recency outranks coverage**: a chapter you were in this
+morning is silent whether you finished it or stopped halfway, and one finished a
+year ago but dipped into today is silent too. Without that rule a chapter read but
+left short of the 90% bar glowed the moment you closed it (2026-07-29: "I just read
+the book of Jude and it now shows a bronze glow — bit of a false positive"). A
+chapter never opened is lit **from the first launch** (it used to ramp from the
+reader's start date, which left the map dark on precisely the day it is most use);
+a part-read one tops out at what is LEFT of it. Books are the
 **word-weighted** roll-up of their chapters, so chapters visibly sum to the book;
 a book's `days` is the exception and reports its most recent read.
 
