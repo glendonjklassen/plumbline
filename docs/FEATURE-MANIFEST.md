@@ -233,6 +233,14 @@ verses; 179 KB gzipped, shipped as a stage-2 core file.
 - Applied engine-side (`plumbline_engine_set_akjv_overlay`) rather than per
   layout call, so two panes can never disagree; Android sets it inside the same
   lock as the layout for the same reason.
+- **`plumbline_engine_open` does NOT load the overlay** — only
+  `load_core_data` does, and the toggle hides itself while `akjv_available` is
+  false. The web calls it in its background stage; **Android calls it straight
+  after open**, before the engine reaches the UI, because every file is on local
+  disk there and staging would only add a race. Android had every piece of this
+  feature — binding, dotted mark, tap header, Settings toggle — and shipped it
+  invisible from 2026-07-27 to 2026-07-28 because nothing called that one
+  function, so this line is here to keep the requirement next to the claim.
 
 ## Authority tiers — provenance marks on evidence
 

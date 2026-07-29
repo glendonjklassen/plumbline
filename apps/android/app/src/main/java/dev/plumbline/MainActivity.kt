@@ -89,7 +89,28 @@ class MainActivity : ComponentActivity() {
                         seedStock(home)
                         stock.createNewFile()
                     }
-                    StudyEngine.Open(home.absolutePath)
+                    val opened = StudyEngine.Open(home.absolutePath)
+                    // STAGE 2, such as it is. `plumbline_engine_open` loads the
+                    // corpus and Strong's, but the plain-English overlay arrives
+                    // only through `load_core_data` — which the web calls in its
+                    // background stage and this shell never called at all.
+                    //
+                    // So every piece of the Android overlay was built and wired —
+                    // the engine binding, the dotted mark in ReaderPane, the
+                    // AkjvHeader on a tap, the Settings toggle — and none of it
+                    // could ever appear, because the toggle hides itself unless
+                    // `AkjvAvailable()` is true and nothing had loaded an overlay
+                    // for it to find (2026-07-28). A whole feature held shut by a
+                    // missing call.
+                    //
+                    // Here, before the engine is handed to the UI, rather than as
+                    // a background stage: Android has every file on local disk at
+                    // open, so there is nothing to stage and nothing to race. That
+                    // also makes `AkjvAvailable()` deterministic by the time
+                    // StudyScreen asks it, instead of a question whose answer
+                    // depends on which finished first.
+                    opened.LoadCoreData()
+                    opened
                 }
             }
             result.onSuccess { e ->
