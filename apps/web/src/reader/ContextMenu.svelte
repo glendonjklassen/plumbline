@@ -1,19 +1,35 @@
 <script lang="ts">
-  // Verse context menu (Tier-0 #1): copy shapes · Note… · highlight tones ·
-  // Remove highlight · (Full) Tag… / Add to thread… · Memorize. Opened by
-  // right-click or long-press; the target verse rides in session state.
+  // Verse context menu (Tier-0 #1): Copy · Copy chapter · Note… · Tag… / Add to
+  // thread… · Memorize · Mark chapter read…. Opened by right-click or long-press;
+  // the target verse rides in session state.
+  //
+  // Trimmed 2026-07-29 on product feedback that it had become noisy. Two things
+  // went:
+  //
+  //   * THREE copy variants collapsed into one "Copy" that honours the reader's
+  //     chosen shape (Settings ▸ Copy format), which is what Android always did.
+  //     A menu is not the place to re-ask a question the settings already answer.
+  //   * The highlight tone swatches and "Remove highlight". Colour-washing verses
+  //     was noise nobody wanted, and a row of six circles was the loudest thing in
+  //     a menu opened to copy a verse.
+  //
+  // Existing highlights still RENDER — the washes come from coloured tags, and a
+  // reader's tags are their data, not ours to delete. There is simply no longer a
+  // way to make a new one from here.
   import { getSession } from "../state/session.svelte";
   import { nowStamp } from "../engine/StudyEngine";
   import { dispatchLink } from "../study/links";
 
   const s = getSession();
-  const tones = $derived(s.tones);
 
   const menu = $derived(s.contextMenu);
 
   function close(): void {
     s.contextMenu = null;
   }
+
+  /** The reader's chosen copy shape (Settings ▸ Copy format). */
+  const copyStyle = $derived(s.config.copyStyle ?? "verseRef");
 
   async function copy(kind: string): Promise<void> {
     const ref = menu!.refKey;
@@ -29,31 +45,6 @@
     const ref = menu!.refKey;
     close();
     void dispatchLink(s, `editnote:${ref}`);
-  }
-
-  function highlight(tone: { name: string; hex: string }): void {
-    const ref = menu!.refKey;
-    close();
-    // Whole-verse wash: membership in the tone's colour tag (created coloured).
-    const capName = tone.name[0].toUpperCase() + tone.name.slice(1);
-    void s.author("tagAdd", capName, "verse", ref, null, nowStamp()).then((err) => {
-      if (err) {
-        s.showToast(err);
-        return;
-      }
-      void s.author("tagSetColor", capName, tone.hex);
-      s.lastTone = { name: capName, hex: tone.hex };
-    });
-  }
-
-  async function removeHighlight(): Promise<void> {
-    const ref = menu!.refKey;
-    close();
-    // Clear any word-precise range covering the verse, then drop membership
-    // in every colour tag holding it (errors from non-membership are noise).
-    void s.author("highlightClearVerse", ref);
-    for (const t of (await s.fetchQ("tags"))?.tags ?? [])
-      if (t.color) void s.author("tagRemove", t.name, "verse", ref);
   }
 
   /** The chapter of the verse under the menu, when it is that chapter's FIRST
@@ -117,24 +108,10 @@
   <div class="backdrop" onclick={close} oncontextmenu={(e) => (e.preventDefault(), close())}></div>
   <div class="menu" bind:this={el} style:left="{pos.x}px" style:top="{pos.y}px">
     <div class="ref">{menu.refKey}</div>
-    <button onclick={() => copy("verse")}>Copy verse</button>
-    <button onclick={() => copy("verseRef")}>Copy with reference</button>
-    <button onclick={() => copy("verseMarkdown")}>Copy as markdown</button>
+    <button onclick={() => copy(copyStyle)}>Copy</button>
     <button onclick={() => copy("chapter")}>Copy chapter</button>
     <hr />
     <button onclick={note}>Note…</button>
-    <div class="tones">
-      {#each tones as t (t.name)}
-        <button
-          class="swatch"
-          style:background={t.hex}
-          title="Highlight — {t.name}"
-          aria-label="Highlight {t.name}"
-          onclick={() => highlight(t)}
-        ></button>
-      {/each}
-    </div>
-    <button onclick={removeHighlight}>Remove highlight</button>
     <hr />
     <button onclick={tagPick}>Tag…</button>
     <button onclick={addThread}>Add to thread…</button>
@@ -185,19 +162,5 @@
     border: none;
     border-top: 1px solid color-mix(in srgb, var(--rule, #d8cba8) 70%, transparent);
     margin: 4px 6px;
-  }
-  .tones {
-    display: flex;
-    gap: 6px;
-    padding: 5px 9px;
-  }
-  .swatch {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    border: 1px solid rgba(0, 0, 0, 0.15);
-  }
-  .swatch:hover {
-    transform: scale(1.12);
   }
 </style>

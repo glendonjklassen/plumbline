@@ -51,11 +51,11 @@ function chapterTile(page: Page, n: number) {
   return page.locator(".grid.nums button").nth(n - 1);
 }
 
-// The three hues, as core::theme's LIGHT palette emits them (readUnread #6b7a8f,
-// readPartial #c98a2e, readDone #6f8f6a). Asserting the actual rgb is the point:
+// The three hues, as core::theme's LIGHT palette emits them (readUnread #c9a227,
+// readPartial #a8642c, readDone #6f8f6a). Asserting the actual rgb is the point:
 // "has a background" is true of every tile — an unread chapter is deliberately
-// tinted slate, not left blank — so only the hue distinguishes the states.
-const SLATE = "107, 122, 143";
+// tinted, not left blank — so only the hue distinguishes the states.
+const GOLD = "201, 162, 39";
 const SAGE = "111, 143, 106";
 
 /** Assert a tile's hue, waiting for it.
@@ -101,16 +101,16 @@ async function waitForPersist(page: Page): Promise<void> {
     .toBe(true);
 }
 
-test("an unread canon is calm, and a chapter marked read is tinted and titled", async ({ page }) => {
+test("an unread canon invites, and a chapter marked read is tinted and titled", async ({ page }) => {
   await boot(page);
 
-  // ── a fresh profile has read nothing: slate everywhere, and no bloom ──
-  // Calm is the promise, not blank: a brand-new install must not shout, so every
-  // tile is tinted the "not started" hue with no glow on top of it.
+  // ── a fresh profile has read nothing: gold, and lit from the first launch ──
+  // Not calm — INVITING. A map whose job is to show a reader where to go must not
+  // start dark (2026-07-29), so unread glows at once rather than ramping.
   await openChapterGrid(page, "Genesis");
-  await expectHue(page, 1, SLATE);
+  await expectHue(page, 1, GOLD);
   const before = await chapterTile(page, 1).getAttribute("style");
-  expect(before, "a fresh install must not bloom").not.toContain("box-shadow");
+  expect(before, "unread must invite immediately").toContain("box-shadow");
   await expect(chapterTile(page, 1)).toHaveAttribute("title", /not read yet/);
 
   // ── log Genesis 1 by hand, a year and a bit ago ──
@@ -135,10 +135,9 @@ test("an unread canon is calm, and a chapter marked read is tinted and titled", 
   const after = await chapterTile(page, 1).getAttribute("style");
   expect(after, "two years untouched must bloom").toContain("box-shadow");
 
-  // Its neighbour is untouched — the map is per chapter, not per book.
-  await expectHue(page, 2, SLATE);
-  const neighbour = await chapterTile(page, 2).getAttribute("style");
-  expect(neighbour, "an unread neighbour stays quiet").not.toContain("box-shadow");
+  // Its neighbour is untouched — the map is per chapter, not per book — and it is
+  // the READ one that is now quiet-by-recency while the unread one still calls.
+  await expectHue(page, 2, GOLD);
   await expect(chapterTile(page, 2)).toHaveAttribute("title", /not read yet/);
 });
 

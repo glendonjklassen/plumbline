@@ -815,11 +815,15 @@ verse 1. Dwell is **aggregate, not per-verse** — time over verse 3 pays for ve
 is never a trailing verse to chase. Stored per chapter: `reached`, `dwell`
 (both belong to the pass under way, cleared when it completes) and `lastRead`.
 
-Two signals in the navigator's grids: **hue** = `Standing` (unread slate
-`readUnread` / partial amber `readPartial` / read sage `readDone`, all three in
-`core::theme`), **bloom** = staleness — flat zero for 30 days, ramping to full at
-365, measured from the last full read, or from the reader's start date for
-anything never finished (so a fresh install starts calm and builds). Books are the
+Two signals in the navigator's grids: **hue** = `Standing` (unread gold
+`readUnread` / partial copper `readPartial` / read sage `readDone`, all three in
+`core::theme`), **bloom** = the invitation, and it means two different things
+(revised 2026-07-29). For a chapter you have READ it is staleness: flat zero for
+30 days, ramping to full at 365 from the last full read. For one you have NEVER
+read it is full **from the first launch** — it used to ramp from the reader's start
+date, which left the map dark on precisely the day it is most use, and dressed "you
+have never opened this" up as "not due yet". A part-read chapter glows in proportion
+to what is LEFT, so the invitation shrinks as it fills. Books are the
 **word-weighted** roll-up of their chapters, so chapters visibly sum to the book;
 a book's `days` is the exception and reports its most recent read.
 

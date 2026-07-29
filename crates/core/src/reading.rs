@@ -36,9 +36,18 @@
 //! shell holds it for the session and it is no loss if it evaporates.
 //!
 //! One file per book under `home/reading/`, plus `_since.json` holding the date
-//! the reader started (see [`ensure_since`]) — a chapter never read has no
-//! anchor of its own, so its glow ramps from there instead. That is what keeps a
-//! fresh install calm on day one and lets it build.
+//! the reader started (see [`ensure_since`]).
+//!
+//! ## Two different invitations
+//!
+//! The glow does not mean one thing. For a chapter you have READ it means
+//! *you have been away a while* — flat for [`FRESH_DAYS`], full at
+//! [`STALE_DAYS`]. For a chapter you have NEVER read it means *there is
+//! something here you have not seen*, and it is full from the first launch
+//! (revised 2026-07-29: it used to ramp from the reader's start date, which made
+//! the map calm on precisely the day a reader most wants showing where to go, and
+//! dressed "you have never opened this" up as "not due yet"). A part-read chapter
+//! glows in proportion to what is LEFT, so the invitation shrinks as you fill it.
 //!
 //! Personal study data, so it rides in the backup zip like `memory/` and
 //! `notes/` do.
@@ -120,8 +129,9 @@ pub fn spec() -> Spec {
     }
 }
 
-/// Where a chapter stands. Drives the **hue** in the navigator: unread slate,
-/// partial amber, read sage. The glow rides on top of all three.
+/// Where a chapter stands. Drives the **hue** in the navigator: unread gold
+/// (unopened treasure), partial copper (under way), read sage (settled). The glow
+/// rides on top of all three, but means different things — see the module docs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Standing {
@@ -251,10 +261,12 @@ pub fn write_book(home: impl AsRef<Path>, book: &str, chapters: &[ChapterReading
     crate::store::write_atomic(path, &(json + "\n"))
 }
 
-/// The date this reader started, creating it at `now` on first call. The anchor
-/// for chapters that have never been completed: without it a brand-new install
-/// would have to choose between "everything glows at once" and "nothing ever
-/// glows until you've read it", and neither is the ask.
+/// The date this reader started, creating it at `now` on first call.
+///
+/// No longer feeds the glow — unread chapters glow at once (2026-07-29) — but it
+/// is kept: it is a true fact about this reader, it already ships inside v0.31.0
+/// backup zips, and `since` is part of the wire payload. Deleting it would strip
+/// a field from a contract that only evolves additively, to save one small file.
 pub fn ensure_since(home: impl AsRef<Path>, now: &str) -> Result<String, Error> {
     if let Some(s) = since(&home) {
         return Ok(s);
@@ -383,9 +395,9 @@ pub struct Heat {
     /// Coverage, 0.0–1.0. Snapped to 1.0 once a full pass has happened.
     pub pct: f32,
     pub standing: Standing,
-    /// Attention, 0.0–1.0: 0 for [`FRESH_DAYS`] after a read, ramping to 1 at
-    /// [`STALE_DAYS`]. Measured from the last full read, or from the reader's
-    /// start date for anything never finished.
+    /// Attention, 0.0–1.0. For a chapter you have read: 0 for [`FRESH_DAYS`]
+    /// after it, ramping to 1 at [`STALE_DAYS`]. For one you have not: 1 at
+    /// once, less only in proportion to how far in you already are.
     pub glow: f32,
     /// Days since the last full read — `None` if it has never had one.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -439,27 +451,30 @@ fn pass_pct(corpus: &Corpus, book: &str, r: &ChapterReading, words: u32) -> f32 
     (covered / words as f32).clamp(0.0, 1.0)
 }
 
-/// Turn one stored chapter record into paintable numbers. `anchor` is the
-/// reader's start date, used when the chapter has never been finished.
+/// Turn one stored chapter record into paintable numbers.
 fn heat_of(
     corpus: &Corpus,
     book: &str,
     r: Option<&ChapterReading>,
     words: u32,
-    anchor: &str,
     now: &str,
 ) -> Heat {
     let last_read = r.and_then(|r| r.last_read.clone());
-    let from = last_read.as_deref().unwrap_or(anchor);
-    let elapsed = days_between(from, now).unwrap_or(0).max(0);
-    let glow = glow_for_days(elapsed);
     match &last_read {
         // Read through at least once: full coverage, and the glow counts from
         // then. A re-read in progress doesn't dim it — only finishing does.
-        Some(_) => Heat { pct: 1.0, standing: Standing::Read, glow, days: Some(elapsed), last_read },
+        Some(from) => {
+            let elapsed = days_between(from, now).unwrap_or(0).max(0);
+            let glow = glow_for_days(elapsed);
+            Heat { pct: 1.0, standing: Standing::Read, glow, days: Some(elapsed), last_read }
+        }
         None => {
             let pct = r.map_or(0.0, |r| pass_pct(corpus, book, r, words));
             let standing = if pct > 0.0 { Standing::Partial } else { Standing::Unread };
+            // Unread glows AT ONCE, and fully. A part-read chapter glows in
+            // proportion to what is LEFT, so the invitation shrinks as it fills.
+            // See the module docs for why this is not the staleness ramp.
+            let glow = if pct > 0.0 { (1.0 - pct).clamp(0.0, 1.0) } else { 1.0 };
             Heat { pct, standing, glow, days: None, last_read: None }
         }
     }
@@ -471,7 +486,6 @@ pub fn book_chapters(
     words: &ChapterWords,
     store: &Store,
     book: &str,
-    anchor: &str,
     now: &str,
 ) -> Vec<ChapterHeat> {
     let recs = store.get(book);
@@ -479,7 +493,7 @@ pub fn book_chapters(
         .map(|c| {
             let r = recs.and_then(|v| v.iter().find(|r| r.chapter == c));
             let w = words.words(book, c);
-            ChapterHeat { chapter: c, words: w, heat: heat_of(corpus, book, r, w, anchor, now) }
+            ChapterHeat { chapter: c, words: w, heat: heat_of(corpus, book, r, w, now) }
         })
         .collect()
 }
@@ -497,12 +511,11 @@ pub fn books(
     corpus: &Corpus,
     words: &ChapterWords,
     store: &Store,
-    anchor: &str,
     now: &str,
 ) -> Vec<BookHeat> {
     canon::book_ids()
         .map(|book| {
-            let chapters = book_chapters(corpus, words, store, book, anchor, now);
+            let chapters = book_chapters(corpus, words, store, book, now);
             let total: u32 = chapters.iter().map(|c| c.words).sum();
             let weight = |f: fn(&ChapterHeat) -> f32| -> f32 {
                 if total == 0 {
@@ -807,18 +820,33 @@ mod tests {
     }
 
     #[test]
-    fn unread_chapters_ramp_from_the_readers_start_date() {
+    fn unread_chapters_glow_at_once_and_dim_as_they_fill() {
         let c = toy();
         let w = ChapterWords::build(&c);
         let store = Store::new();
-        // Day one: calm.
-        let fresh = book_chapters(&c, &w, &store, "Gen", "2026-07-28", NOW);
-        assert!(fresh.iter().all(|ch| ch.heat.standing == Standing::Unread));
-        assert!(fresh.iter().all(|ch| ch.heat.glow == 0.0), "a fresh install must not shout");
-        // A year in: the parts never opened are at full glow.
-        let old = book_chapters(&c, &w, &store, "Gen", "2025-07-28", NOW);
-        assert!(old.iter().all(|ch| ch.heat.glow == 1.0));
-        assert!(old.iter().all(|ch| ch.heat.days.is_none()), "never read has no last-read day");
+        // Day one, and every day after: what you have never read is fully lit.
+        // This is the invitation, not a nag — the reader asked to be shown where
+        // the treasure is, and a map that starts dark shows nothing.
+        for now in ["2026-07-28T12:00:00Z", "2030-01-01T00:00:00Z"] {
+            let fresh = book_chapters(&c, &w, &store, "Gen", now);
+            assert!(fresh.iter().all(|ch| ch.heat.standing == Standing::Unread));
+            assert!(fresh.iter().all(|ch| ch.heat.glow == 1.0), "unread glows at once, at {now}");
+            assert!(fresh.iter().all(|ch| ch.heat.days.is_none()), "never read has no last-read day");
+        }
+
+        // Part-read: the invitation shrinks in proportion to what is LEFT, so a
+        // chapter you are most of the way through stops shouting.
+        let mut part = Store::new();
+        part.insert(
+            "Gen".into(),
+            // Gen 1 is 10 words over 5 verses; reached verse 4 (8 words) with
+            // ample dwell = 80% covered, so 20% of the invitation remains.
+            vec![ChapterReading { chapter: 1, reached: 4, dwell: 600.0, last_read: None }],
+        );
+        let ch = &book_chapters(&c, &w, &part, "Gen", NOW)[0];
+        assert_eq!(ch.heat.standing, Standing::Partial);
+        assert!((ch.heat.pct - 0.8).abs() < 1e-6, "got {}", ch.heat.pct);
+        assert!((ch.heat.glow - 0.2).abs() < 1e-6, "glow tracks what is left, got {}", ch.heat.glow);
     }
 
     #[test]
@@ -830,13 +858,13 @@ mod tests {
             "Gen".into(),
             vec![ChapterReading { chapter: 1, last_read: Some("2026-07-01".into()), ..Default::default() }],
         );
-        let ch = &book_chapters(&c, &w, &store, "Gen", "2020-01-01", NOW)[0];
+        let ch = &book_chapters(&c, &w, &store, "Gen", NOW)[0];
         assert_eq!(ch.heat.standing, Standing::Read);
         assert_eq!(ch.heat.pct, 1.0);
         assert_eq!(ch.heat.days, Some(27));
         assert_eq!(ch.heat.glow, 0.0, "read last month, so quiet");
         // Same record, a year later.
-        let ch = &book_chapters(&c, &w, &store, "Gen", "2020-01-01", "2027-07-28T12:00:00Z")[0];
+        let ch = &book_chapters(&c, &w, &store, "Gen", "2027-07-28T12:00:00Z")[0];
         assert_eq!(ch.heat.glow, 1.0);
         // Being read must beat the start-date ramp, not be averaged with it.
         assert_eq!(ch.heat.standing, Standing::Read);
@@ -852,7 +880,7 @@ mod tests {
             "Gen".into(),
             vec![ChapterReading { chapter: 2, last_read: Some("2026-07-20".into()), ..Default::default() }],
         );
-        let gen = books(&c, &w, &store, "2026-07-01", NOW).into_iter().find(|b| b.book == "Gen").unwrap();
+        let gen = books(&c, &w, &store, NOW).into_iter().find(|b| b.book == "Gen").unwrap();
         assert_eq!(gen.words, 35);
         assert_eq!(gen.read, 1);
         assert_eq!(gen.chapters, 3);
@@ -860,7 +888,7 @@ mod tests {
         assert_eq!(gen.heat.standing, Standing::Partial);
         assert_eq!(gen.heat.days, Some(8), "most recent read in the book");
         // Every book is present, in canon order, even with no data at all.
-        let all = books(&c, &w, &Store::new(), "2026-07-01", NOW);
+        let all = books(&c, &w, &Store::new(), NOW);
         assert_eq!(all.len(), 66);
         assert_eq!(all[0].book, "Gen");
         assert_eq!(all[65].book, "Rev");
@@ -881,7 +909,7 @@ mod tests {
                 })
                 .collect(),
         );
-        let gen = books(&c, &w, &store, "2026-07-01", NOW).into_iter().find(|b| b.book == "Gen").unwrap();
+        let gen = books(&c, &w, &store, NOW).into_iter().find(|b| b.book == "Gen").unwrap();
         assert_eq!(gen.heat.standing, Standing::Read);
         assert!((gen.heat.pct - 1.0).abs() < 1e-6);
         assert_eq!(gen.read, 3);
@@ -895,7 +923,7 @@ mod tests {
         mark_read(&home, "Gen", 3, "2026-05-04T00:00:00Z").unwrap();
         let (store, errs) = load(&home);
         assert!(errs.is_empty(), "{errs:?}");
-        let ch = &book_chapters(&c, &w, &store, "Gen", "2026-01-01", NOW)[2];
+        let ch = &book_chapters(&c, &w, &store, "Gen", NOW)[2];
         assert_eq!(ch.heat.standing, Standing::Read);
         assert_eq!(ch.heat.pct, 1.0);
         assert_eq!(ch.heat.last_read.as_deref(), Some("2026-05-04"), "day only, no clock");
@@ -910,7 +938,7 @@ mod tests {
         forget(&home, "Gen", 1).unwrap();
         let (store, _) = load(&home);
         assert!(store["Gen"].iter().all(|r| r.chapter != 1));
-        let ch = &book_chapters(&c, &w, &store, "Gen", "2026-01-01", NOW)[0];
+        let ch = &book_chapters(&c, &w, &store, "Gen", NOW)[0];
         assert_eq!(ch.heat.standing, Standing::Unread);
         let _ = std::fs::remove_dir_all(&home);
     }

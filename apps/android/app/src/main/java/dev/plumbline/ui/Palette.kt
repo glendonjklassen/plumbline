@@ -154,8 +154,8 @@ data class ReaderPalette(
                 tierHuman = c(0x6F, 0x8F, 0x6A),
                 tierMachine = c(0x99, 0x99, 0x99),
                 tierResearch = c(0xB0, 0x4A, 0x3A),
-                readUnread = c(0x6B, 0x7A, 0x8F),
-                readPartial = c(0xC9, 0x8A, 0x2E),
+                readUnread = c(0xC9, 0xA2, 0x27),
+                readPartial = c(0xA8, 0x64, 0x2C),
                 readDone = c(0x6F, 0x8F, 0x6A),
             )
         }

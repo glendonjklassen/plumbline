@@ -3,6 +3,12 @@
   // every card with Review due / Coverage & activity, the SM-2 review drill
   // (first letters / blank-out slider / typed recall + four grades), and the
   // stats view (8-section coverage rollup + reviews-per-day activity).
+  //
+  // Its own SCREEN, not a modal (2026-07-29 — "memorize should be its own screen
+  // like it is on Android"). It was a 520px centred dialog with a backdrop, which
+  // made the app's second-biggest surface feel like a confirmation prompt and left
+  // the reader scrolling behind it. It now fills the body between the top bar and
+  // the destination nav, exactly as ui/MemorizeScreen.kt does.
   import { untrack } from "svelte";
   import { getSession } from "../state/session.svelte";
   import { nowStamp } from "../engine/StudyEngine";
@@ -34,7 +40,9 @@
   const dueRefs = $derived(open ? ((s.q("memoryDue", stamp)?.refs ?? []) as string[]) : []);
 
   function close(): void {
-    s.memorize = null;
+    // A destination closes by going home — leaving `screen` on "memorize" with no
+    // view would render an empty screen with no way out.
+    s.goRead();
   }
   function goRef(ref: string): void {
     close();
@@ -105,18 +113,16 @@
 </script>
 
 {#if view}
-  <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-  <div class="backdrop" onclick={close}></div>
-  <div class="dialog" role="dialog" aria-modal="true">
+  <section class="screen" aria-label="Memorize">
     <div class="bar">
+      <button class="back" onclick={close} aria-label="Back to reading">‹</button>
       <span class="title">
         {view.view === "hub" ? "Memorize" : view.view === "review" ? "Review" : "Coverage & activity"}
       </span>
       {#if view.view !== "hub"}
-        <button class="navbtn" onclick={() => (s.memorize = { view: "hub" })}>‹ hub</button>
+        <button class="navbtn" onclick={() => (s.memorize = { view: "hub" })}>hub</button>
       {/if}
       <span class="spacer"></span>
-      <button class="close" onclick={close} aria-label="Close">✕</button>
     </div>
 
     {#if view.view === "hub"}
@@ -231,31 +237,29 @@
         {/if}
       </div>
     {/if}
-  </div>
+  </section>
 {/if}
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(20, 16, 8, 0.35);
-    z-index: 38;
-  }
-  .dialog {
-    position: fixed;
-    z-index: 39;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: min(520px, 94vw);
-    max-height: 80vh;
+  .screen {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    background: var(--popupPaper, #f2eee6);
-    border: 1px solid var(--rule, #d8cba8);
-    border-radius: 12px;
-    box-shadow: 0 16px 64px rgba(0, 0, 0, 0.3);
+    background: var(--paper, #fcf9f4);
     overflow: hidden;
+  }
+  .back {
+    font-size: 22px;
+    line-height: 1;
+    padding: 8px 14px;
+    min-height: 44px;
+    border-radius: 6px;
+    color: var(--gold, #9e7d38);
+  }
+  .back:hover {
+    background: color-mix(in srgb, var(--gold, #9e7d38) 14%, transparent);
   }
   .bar {
     display: flex;
@@ -273,10 +277,6 @@
   }
   .spacer {
     flex: 1;
-  }
-  .close {
-    color: var(--faded, #8a8276);
-    padding: 2px 6px;
   }
   .content {
     padding: 12px 16px 18px;

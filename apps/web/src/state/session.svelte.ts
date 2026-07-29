@@ -43,8 +43,7 @@ export type PanelView =
   | { kind: "search" }
   | { kind: "guide" }
   | { kind: "about" }
-  | { kind: "notesBrowser" }
-  | { kind: "explore" };
+  | { kind: "notesBrowser" };
 
 export type MapPopup =
   | { kind: "chord" }
@@ -95,6 +94,22 @@ export class Session {
   showHistory = $state(false);
   /** The one Settings dialog (Android IA). */
   showSettings = $state(false);
+  /**
+   * Which DESTINATION is on screen — the web twin of Android's `Dest`.
+   *
+   * A destination replaces the reader; it does not hover over it. Explore used to
+   * be a study-panel kind (so, on a phone, a bottom sheet over the verse you were
+   * reading) and Memorize a centred modal. Both are screens now (2026-07-29).
+   * `"read"` is the absence of a destination rather than one of its own.
+   */
+  screen = $state<"read" | "explore" | "memorize">("read");
+
+  /** Back to the text from anywhere — what every screen's ‹ does. */
+  goRead(): void {
+    this.dismissTransient();
+    this.screen = "read";
+  }
+
   /** Passage navigator (OT/NT → book → chapter → verse grids); pane index. */
   bookNavFor = $state<number | null>(null);
   /** "Mark chapter read…" dialog target — the by-hand date for a paper-Bible
@@ -142,6 +157,52 @@ export class Session {
     multiline: boolean;
     resolve: (v: string | null) => void;
   } | null>(null);
+
+  /**
+   * Close every transient surface — dialogs, sheets, pickers, popups, the study
+   * panel. What a destination tap does before it opens anything.
+   *
+   * This lives HERE, next to the declarations, and not in the shell, because the
+   * shell's version was a hand-kept list of five and there are thirteen of these
+   * (2026-07-29: "when I go into notes, then try to navigate to read, it does not
+   * let me — this is likely a class of bug", and it was). Every surface added
+   * since that list was written inherited the same trap: its modal covered the
+   * screen and the Read tab could not dismiss it. Adding a `$state` surface above
+   * without adding it here is now a one-file omission a reviewer can see, rather
+   * than a bug in a different file that nobody thinks to look at.
+   *
+   * `promptReq` is RESOLVED, not just nulled: `askText` handed a promise to a
+   * caller that is still awaiting it, and dropping the request on the floor would
+   * leave that caller hanging forever.
+   */
+  dismissTransient(): void {
+    this.screen = "read";
+    this.cancelPrompt();
+    this.panel = null;
+    this.mapPopup = null;
+    this.memorize = null;
+    this.contextMenu = null;
+    this.tagPickFor = null;
+    this.threadPickFor = null;
+    this.tagWeaveFor = null;
+    this.memorizePassageFrom = null;
+    this.markReadFor = null;
+    this.bookNavFor = null;
+    this.reopenIntro = null;
+    this.showHistory = false;
+    this.showSettings = false;
+    this.showShortcuts = false;
+    this.showPresent = false;
+    // NOT showFirstRun: a reader who has never chosen a path must not be able to
+    // tab past the question. It closes by being answered.
+  }
+
+  /** Dismiss an open text prompt, resolving its promise so the caller that is
+   *  awaiting it does not hang. */
+  cancelPrompt(): void {
+    this.promptReq?.resolve(null);
+    this.promptReq = null;
+  }
 
   /** Ask the user for text — the web twin of the desktops' native prompts. */
   askText(title: string, initial = "", multiline = false): Promise<string | null> {
@@ -522,6 +583,12 @@ export class Session {
     pane.pendingScroll = verse != null;
     pane.scrollY = 0;
     pane.reached = 0; // a new chapter is a new reading pass
+    // Going to a passage means going to the TEXT. Every route into the reader
+    // funnels through here — a weave tapped in Explore, a search hit, a
+    // cross-reference, the navigator — so this is the one place that has to know
+    // it, rather than each caller remembering (which is how Explore-as-a-screen
+    // first shipped a weave that navigated a pane nobody could see).
+    this.screen = "read";
     this.activePane = paneIdx;
     this.#pushHistory(book, chapter);
     this.saveConfig();

@@ -538,23 +538,33 @@
   .pane.active {
     border-top-color: var(--gold, #9e7d38);
   }
+  /* Sized for a thumb, not for a mouse (feedback 2026-07-29: "verse navigation"
+     was too small). The passage button is the single most-tapped control in the
+     app — it is how a reader gets anywhere — and the chapter arrows either side of
+     it were 2px of padding away from being un-hittable on a phone. Android's 48dp
+     is the standard both shells now meet. */
   .nav {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
+    gap: 6px;
+    padding: 6px 10px;
     background: var(--paneNavBg, #efeae1);
-    font-size: 14px;
+    font-size: 16px;
   }
   .nav .passage {
     border: 1px solid var(--rule, #d8cba8);
-    border-radius: 5px;
-    padding: 2px 10px;
+    border-radius: 7px;
+    padding: 9px 16px;
+    min-height: 44px;
     font-weight: 600;
+    font-size: 16.5px;
   }
   .nav button {
-    padding: 2px 8px;
-    border-radius: 4px;
+    padding: 9px 13px;
+    min-height: 44px;
+    min-width: 40px;
+    border-radius: 6px;
+    font-size: 17px;
   }
   .nav button:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 14%, transparent);

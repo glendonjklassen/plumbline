@@ -1,26 +1,19 @@
-// The Tier-0 verse-action sheet (Tier 0 #1 + #4): a Material3 ModalBottomSheet the
-// reader opens on a long-press over a verse. It mirrors the GTK context menu
-// (apps/desktop/src/main.rs show_context_menu) and the WinUI flyout
-// (apps/windows/PureStudyWin/MainWindow.cs ShowContextMenu), reduced to a touch
-// sheet: copy shapes (+ an Android share), a personal note, a highlight tone with
-// the verse-then-trim mechanic, and "Memorize this verse".
+// The verse-action sheet: a Material3 ModalBottomSheet the reader opens on a
+// long-press over a verse. Copy (in the reader's chosen shape) · Copy chapter ·
+// Share · Tag… · Note… · Add to thread… · Memorize · Mark chapter read….
 //
 // All study logic stays across the ABI — this composable only orchestrates
 // StudyEngine calls and paints their affordances. Every mutating call runs off the
 // main thread under `synchronized(engine)` (two reader panes may touch the engine
 // at once, exactly as ReaderPane serialises its layout/hit-test calls).
 //
-// The highlight mechanic (verse-then-trim), documented once here:
-//   1. Pick a tone → the WHOLE verse is washed: HighlightAdd(tag, hex, ref, 0,
-//      ref, lastTok). This lays down one word-precise run spanning every token, so
-//      the reader paints it per-word (ReaderPane's `runs` pass).
-//   2. Trim → tap a word chip in the sheet. The boundary nearest the tapped token
-//      moves to it (tap left/right of the range extends that end; tap inside pulls
-//      the nearer end in). Each trim re-issues the range via HighlightClearVerse +
-//      HighlightAdd, so ranges never accumulate.
-//   3. Remove → HighlightClearVerse drops every run covering the verse.
-// The tag name is the capitalised tone ("amber" → "Amber"), matching GTK/WinUI so
-// a highlight laid down on any shell reads identically on the others.
+// The highlight tones and the verse-then-trim mechanic were REMOVED 2026-07-29 on
+// product feedback: colour-washing verses was noise nobody wanted, and a row of
+// six swatches was the loudest thing in a sheet opened to copy a verse. Existing
+// highlights still render — the washes come from coloured tags, and a reader's tags
+// are their data, not ours to delete — there is just no longer a way to make a new
+// one from here. The engine's HighlightAdd / HighlightClearVerse endpoints stay on
+// the ABI for the same reason.
 //
 // Author D (Compose UI).
 
@@ -77,9 +70,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.plumbline.ChapterHighlights
-import dev.plumbline.HighlightTone
-import dev.plumbline.HighlightTones
 import dev.plumbline.StudyEngine
 import dev.plumbline.Tag1
 import dev.plumbline.Tags
@@ -112,29 +102,11 @@ private fun parseRef(ref: String): RefParts? {
     return RefParts(book, chapter, verse)
 }
 
-/** "amber" → "Amber": the tag name a tone highlights under (matches GTK
- *  `highlight_verse` and WinUI `HighlightVerse`). */
-private fun toneTag(tone: String): String =
-    if (tone.isEmpty()) tone else tone.substring(0, 1).uppercase() + tone.substring(1)
-
 /**
- * Move the [start, end] boundary nearest [tapped] to it — the verse-then-trim rule.
- * Tapping left of the range extends the start; right of it extends the end; inside
- * it pulls the nearer end inward. Endpoints are inclusive token indices.
- */
-internal fun trimRange(start: Int, end: Int, tapped: Int): Pair<Int, Int> = when {
-    tapped < start -> tapped to end
-    tapped > end -> start to tapped
-    tapped - start <= end - tapped -> tapped to end
-    else -> start to tapped
-}
-
-/**
- * The verse-action sheet. Opened by the reader's long-press (see the wiring spec
- * in the task) with the verse [verseRef] (a refKey, e.g. `"John 3:16"`) and,
- * optionally, its [tokenCount]; a non-positive [tokenCount] is resolved from the
- * engine. [onHighlightsChanged] must make the reader re-fetch `ChapterHighlightsJson`
- * and repaint (highlights changed). [onDismiss] tears the sheet down.
+ * The verse-action sheet. Opened by the reader's long-press with the verse
+ * [verseRef] (a refKey, e.g. `"John 3:16"`) and, optionally, its [tokenCount]; a
+ * non-positive [tokenCount] is resolved from the engine. [onDismiss] tears the
+ * sheet down.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -146,9 +118,7 @@ fun VerseActionSheet(
     // The reader's chosen copy shape (config): a single "Copy" honours it instead
     // of listing every variant. One of "verse" / "verseRef" / "verseMarkdown".
     copyStyle: String = "verseRef",
-    onHighlightsChanged: () -> Unit = {},
-    /** Open the tag picker for this verse — tags are the primary annotation
-     *  (topic study over time); the tone swatches are just washes. */
+    /** Open the tag picker for this verse — tags are how a topic accumulates. */
     onTag: (String) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
@@ -157,15 +127,10 @@ fun VerseActionSheet(
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
 
-    // Loaded on open: the verse display + its tokens (for the trim chips), the
-    // fixed tone swatches, and any highlight already on this verse (to re-open in
-    // trim state). Keyed on verseRef so re-targeting resets cleanly.
+    // Loaded on open: the verse display + its tokens. Keyed on verseRef so
+    // re-targeting resets cleanly.
     var display by remember(verseRef) { mutableStateOf(verseRef) }
     var tokens by remember(verseRef) { mutableStateOf<List<String>>(emptyList()) }
-    var tones by remember { mutableStateOf<List<HighlightTone>>(emptyList()) }
-    var appliedTone by remember(verseRef) { mutableStateOf<HighlightTone?>(null) }
-    var start by remember(verseRef) { mutableStateOf(0) }
-    var end by remember(verseRef) { mutableStateOf(0) }
 
     var showNote by remember(verseRef) { mutableStateOf(false) }
     var showPassage by remember(verseRef) { mutableStateOf(false) }
@@ -177,10 +142,6 @@ fun VerseActionSheet(
     val lastTok = if (tokens.isNotEmpty()) tokens.lastIndex else tokenCount - 1
 
     LaunchedEffect(verseRef) {
-        tones = withContext(Dispatchers.Default) {
-            runCatching { parseWire<HighlightTones>(StudyEngine.HighlightTonesJson()).tones }
-                .getOrElse { emptyList() }
-        }
         val vd = withContext(Dispatchers.Default) {
             runCatching { synchronized(engine) { engine.VerseJson(verseRef) } }.getOrNull()
                 ?.let { runCatching { parseWire<VerseData>(it) }.getOrNull() }
@@ -190,20 +151,6 @@ fun VerseActionSheet(
             // Keep index i == token index i (frozen kjv1769-tok2); label with the
             // surface word, falling back to punctuation so every slot is tappable.
             tokens = vd.tokens.map { it.word.ifBlank { (it.pre + it.post).ifBlank { "·" } } }
-        }
-        // Prefill from any run already washing this verse, so re-opening lands in
-        // trim mode on the live range.
-        parseRef(verseRef)?.let { parts ->
-            val ch = withContext(Dispatchers.Default) {
-                runCatching { synchronized(engine) { engine.ChapterHighlightsJson(parts.book, parts.chapter) } }
-                    .getOrNull()?.let { runCatching { parseWire<ChapterHighlights>(it) }.getOrNull() }
-            }
-            ch?.runs?.firstOrNull { it.verse == verseRef }?.let { run ->
-                start = run.lo
-                end = run.hi
-                appliedTone = tones.firstOrNull { it.hex.equals(run.color, ignoreCase = true) }
-                    ?: HighlightTone(name = "custom", hex = run.color)
-            }
         }
     }
 
@@ -292,50 +239,6 @@ fun VerseActionSheet(
         }
     }
 
-    // Re-paint the current [start,end] range under [tone]: clear this verse's runs,
-    // then re-add the trimmed range. Fires the reader re-paint hook.
-    fun paintRange(tone: HighlightTone, lo: Int, hi: Int) {
-        if (lastTok < 0) return
-        scope.launch {
-            withContext(Dispatchers.Default) {
-                synchronized(engine) {
-                    engine.HighlightClearVerse(verseRef)
-                    engine.HighlightAdd(
-                        toneTag(tone.name), tone.hex,
-                        verseRef, lo, verseRef, hi, Instant.now().toString(),
-                    )
-                }
-            }
-            onHighlightsChanged()
-        }
-    }
-
-    fun applyTone(tone: HighlightTone) {
-        if (lastTok < 0) return
-        appliedTone = tone
-        start = 0
-        end = lastTok
-        paintRange(tone, 0, lastTok)
-    }
-
-    fun trimTo(tapped: Int) {
-        val tone = appliedTone ?: return
-        val (lo, hi) = trimRange(start, end, tapped)
-        start = lo
-        end = hi
-        paintRange(tone, lo, hi)
-    }
-
-    fun removeHighlight() {
-        scope.launch {
-            withContext(Dispatchers.Default) {
-                runCatching { synchronized(engine) { engine.HighlightClearVerse(verseRef) } }
-            }
-            appliedTone = null
-            onHighlightsChanged()
-        }
-    }
-
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -380,66 +283,6 @@ fun VerseActionSheet(
             }
             HorizontalDivider(color = palette.rule)
 
-            // ── highlight: tones, then verse-then-trim (Tier 0 #4) ───────────
-            Text(
-                "Highlight",
-                color = palette.inkFaded,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
-            )
-            FlowRow(
-                Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                for (tone in tones) {
-                    val selected = appliedTone?.name == tone.name
-                    Box(
-                        Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(ReaderPalette.hex(tone.hex), CircleShape)
-                            .border(
-                                width = if (selected) 3.dp else 1.dp,
-                                color = if (selected) palette.gold else palette.rule,
-                                shape = CircleShape,
-                            )
-                            .clickable(enabled = lastTok >= 0) { applyTone(tone) },
-                    )
-                }
-            }
-
-            if (appliedTone != null && tokens.isNotEmpty()) {
-                val tone = appliedTone!!
-                Text(
-                    "Tap a word to trim the highlight to it.",
-                    color = palette.inkFaded,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 6.dp),
-                )
-                FlowRow(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    val wash = palette.wash(ReaderPalette.hex(tone.hex))
-                    tokens.forEachIndexed { i, word ->
-                        val inRange = i in start..end
-                        Box(
-                            Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(if (inRange) wash else Color.Transparent, RoundedCornerShape(4.dp))
-                                .border(1.dp, palette.rule, RoundedCornerShape(4.dp))
-                                .clickable { trimTo(i) }
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                        ) {
-                            Text(word, color = palette.ink, fontSize = 15.sp)
-                        }
-                    }
-                }
-            }
-
-            ActionRow("Remove highlight", palette.ink) { removeHighlight() }
             Spacer(Modifier.height(12.dp))
         }
     }

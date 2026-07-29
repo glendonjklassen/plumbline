@@ -772,7 +772,6 @@ fun StudyScreen(
             VerseActionSheet(
                 engine, palette, v,
                 copyStyle = copyStyle,
-                onHighlightsChanged = { highlightEpoch++ },
                 onTag = { ref -> tagPickRef = ref },
                 onDismiss = { actionVerse = null },
             )

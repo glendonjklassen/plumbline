@@ -57,7 +57,7 @@ pub unsafe extern "C" fn plumbline_engine_reading_books_json(
         let since = e.reading_since(now);
         let store = e.reading_store();
         out_json(&wire::WireReadingBooks {
-            books: reading::books(&e.corpus, e.reading_words(), &store, &since, now),
+            books: reading::books(&e.corpus, e.reading_words(), &store, now),
             since,
             spec: reading::spec(),
         })
@@ -86,7 +86,7 @@ pub unsafe extern "C" fn plumbline_engine_reading_chapters_json(
         let store = e.reading_store();
         out_json(&wire::WireReadingChapters {
             book: book.to_string(),
-            chapters: reading::book_chapters(&e.corpus, e.reading_words(), &store, book, &since, now),
+            chapters: reading::book_chapters(&e.corpus, e.reading_words(), &store, book, now),
             since,
             spec: reading::spec(),
         })

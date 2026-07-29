@@ -6,9 +6,10 @@
 // is; this only decides how loudly to say it.
 //
 // Hue says where you stand, strength says how much it wants your attention. A
-// chapter read last week is barely tinted — that is the design, not a bug: the
-// map exists to point at what you have drifted away from, and a uniformly loud
-// grid points at nothing.
+// chapter read last week is barely tinted; one you have never opened is lit gold
+// from the first launch. Those are two different invitations and they are meant to
+// look different — "you have been away a while" and "there is treasure in here you
+// have not seen" (2026-07-29).
 
 /** What the core sends per chapter/book (the flattened `Heat`). */
 export interface ReadingHeat {
@@ -49,8 +50,8 @@ function rgbParts(hex: string): string {
 
 const BASE: Record<string, [string, string]> = {
   read: ["readDone", "#6f8f6a"],
-  partial: ["readPartial", "#c98a2e"],
-  unread: ["readUnread", "#6b7a8f"],
+  partial: ["readPartial", "#a8642c"],
+  unread: ["readUnread", "#c9a227"],
 };
 
 /** Resolve a chapter's or book's standing into CSS. Returns null when there is
@@ -71,7 +72,7 @@ export function readingTint(heat: ReadingHeat | null | undefined): ReadingTint |
     shadow:
       glow <= 0.02
         ? ""
-        : `0 0 ${(3 + glow * 9).toFixed(1)}px ${(glow * 2.5).toFixed(1)}px rgba(${rgb}, ${(glow * 0.34).toFixed(3)})`,
+        : `0 0 ${(4 + glow * 12).toFixed(1)}px ${(glow * 3).toFixed(1)}px rgba(${rgb}, ${(glow * 0.45).toFixed(3)})`,
   };
 }
 

@@ -1426,10 +1426,18 @@ test("the phone top bar stays on one row, search behind a glass", async ({ page 
   await page.evaluate(() =>
     (window as any).__plumbline.setChurch({ name: "Grace Bible Church", info: "", url: "https://example.org" }),
   );
+  // "One row" means the visible children share a row AS EACH OTHER — compared
+  // among themselves, not against the header's own top. The original form used the
+  // container's top with a 24px tolerance, which quietly also asserted a bar height
+  // and so went red the moment the bar was made bigger on purpose (2026-07-29).
+  // Children with display:none are skipped: their rects are all zeros and would
+  // drag the spread to the full bar height whatever the layout did.
   const oneRow = () =>
     page.locator("header").evaluate((h) => {
-      const top = h.getBoundingClientRect().top;
-      return [...h.children].every((c) => Math.abs(c.getBoundingClientRect().top - top) < 24);
+      const tops = [...h.children]
+        .filter((c) => c.getBoundingClientRect().height > 0)
+        .map((c) => c.getBoundingClientRect().top);
+      return tops.length > 0 && Math.max(...tops) - Math.min(...tops) < 24;
     });
   await expect.poll(oneRow).toBe(true);
 
