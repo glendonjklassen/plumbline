@@ -14,7 +14,10 @@
 
   // ── backup / restore: the authored home dirs as a zip, the same layout the
   //    Android backup writes — one archive restores across devices. ──────────
-  const BACKUP_DIRS = ["tags/", "threads/", "weaves/", "notes/", "memory/", ".config/"];
+  // Must stay in step with engine/home.ts's USER_DIRS and the Android shell's
+  // BACKUP_DIRS: a dir missing from this restore filter is a dir that exports
+  // into the zip and is then silently dropped on the way back in.
+  const BACKUP_DIRS = ["tags/", "threads/", "weaves/", "notes/", "memory/", "reading/", ".config/"];
 
   // Archives written before the Plumbline rename carry the config under
   // ".config/pure-study/"; the live home reads ".config/plumbline/". Remapped on
@@ -68,11 +71,14 @@
   }
 
   function toggleGate(key: "humanAnalysis" | "machineAnalysis"): void {
-    s.config[key] = s.config[key] === false;
+    // `!== true`, not `=== false`. The tiers are opt-in, so an ABSENT value means
+    // off — and `undefined === false` is false, which left the first click on a
+    // never-set toggle doing nothing at all.
+    s.config[key] = s.config[key] !== true;
     s.saveConfig();
     // Machine tier switched on: pull the deferred R&D pack in (no-op if the
     // idle path already did).
-    if (key === "machineAnalysis" && s.config[key] !== false) void s.ensureRnd();
+    if (key === "machineAnalysis" && s.config[key] === true) void s.ensureRnd();
   }
   function setTheme(theme: string): void {
     s.config.theme = theme;
@@ -308,7 +314,7 @@
         </span>
         <input
           type="checkbox"
-          checked={s.config.humanAnalysis !== false}
+          checked={s.config.humanAnalysis === true}
           onchange={() => toggleGate("humanAnalysis")}
         />
       </label>
@@ -319,11 +325,11 @@
         </span>
         <input
           type="checkbox"
-          checked={s.config.machineAnalysis !== false}
+          checked={s.config.machineAnalysis === true}
           onchange={() => toggleGate("machineAnalysis")}
         />
       </label>
-      {#if s.config.machineAnalysis !== false && s.rndState !== "ready"}
+      {#if s.config.machineAnalysis === true && s.rndState !== "ready"}
         <div class="rnd-status">
           {#if s.rndState === "loading"}
             <span>

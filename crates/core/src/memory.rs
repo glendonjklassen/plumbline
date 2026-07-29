@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::civil::{add_days, date_to_days, days_to_date};
 use crate::reference::VRef;
 use crate::Error;
 
@@ -623,50 +624,6 @@ pub fn coverage_by_section(cards: &HashMap<VRef, Card>) -> Vec<SectionCoverage> 
         }
     }
     acc
-}
-
-// ── civil-date math (no external time dep; day granularity for SRS) ──────────
-
-/// Howard Hinnant's days-from-civil (proleptic Gregorian; 1970-01-01 == 0).
-fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = if y >= 0 { y } else { y - 399 } / 400;
-    let yoe = y - era * 400;
-    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146097 + doe - 719468
-}
-
-fn civil_from_days(z: i64) -> (i64, i64, i64) {
-    let z = z + 719468;
-    let era = if z >= 0 { z } else { z - 146096 } / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    (if m <= 2 { y + 1 } else { y }, m, d)
-}
-
-/// Parse the `YYYY-MM-DD` date out of an RFC3339 stamp → days since epoch.
-fn date_to_days(stamp: &str) -> Option<i64> {
-    let mut it = stamp.get(0..10)?.split('-');
-    let y: i64 = it.next()?.parse().ok()?;
-    let m: i64 = it.next()?.parse().ok()?;
-    let d: i64 = it.next()?.parse().ok()?;
-    Some(days_from_civil(y, m, d))
-}
-
-fn days_to_date(days: i64) -> String {
-    let (y, m, d) = civil_from_days(days);
-    format!("{y:04}-{m:02}-{d:02}")
-}
-
-/// `stamp`'s date advanced by `n` days, as `YYYY-MM-DD`.
-fn add_days(stamp: &str, n: i64) -> String {
-    days_to_date(date_to_days(stamp).unwrap_or(0) + n)
 }
 
 #[cfg(test)]

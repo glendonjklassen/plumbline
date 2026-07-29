@@ -384,6 +384,15 @@ char *plumbline_engine_thread_add(struct PlumblineEngine *engine,
                                   const char *note,
                                   const char *added);
 
+// Delete the thread named `name` — its file and every entry on it. Matched
+// case-insensitively, like `plumbline_engine_thread_add`. A name with no thread
+// is a success (the caller wanted it gone; it is gone). Null on success, else an
+// owned error string.
+//
+// # Safety
+// `engine` is valid; `name` is null or valid NUL-terminated UTF-8.
+char *plumbline_engine_thread_remove(struct PlumblineEngine *engine, const char *name);
+
 // Add a target to the tag named `name` (created on first use). `kind` is
 // `"verse"` (with `value` a ref key) or `"concept"` (with `value` a Strong's
 // code). `note` may be null; `added` is a caller-supplied UTC timestamp.
@@ -978,6 +987,61 @@ char *plumbline_panel_guide_blocks_json(void);
 // The About card as panel blocks. Engine-independent (static content). Never
 // null.
 char *plumbline_panel_about_blocks_json(void);
+
+// Every book's reading standing at `now` (RFC3339), canon order, as
+// `{books:[…],since,spec}`. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
+char *plumbline_engine_reading_books_json(const struct PlumblineEngine *engine, const char *now);
+
+// One book's chapters at `now`, chapter order, as `{book,chapters:[…],since,spec}`.
+// Null for an unknown book id.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_reading_chapters_json(const struct PlumblineEngine *engine,
+                                             const char *book,
+                                             const char *now);
+
+// Credit reading time to a chapter and persist it.
+//
+// `reached` is the furthest verse number the reader has had on screen and
+// `seconds` the dwell **since the last call** — a shell accumulates both while
+// a chapter is on screen and reports on the cadence in `spec.tickSeconds`, plus
+// on leaving the chapter and on going to the background.
+//
+// Returns the resulting `{book,chapter,pct,completed,lastRead?}`, or null when
+// the engine has no home to write to (reading is simply not tracked then).
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_reading_record_json(struct PlumblineEngine *engine,
+                                           const char *book,
+                                           uint32_t chapter,
+                                           uint32_t reached,
+                                           float seconds,
+                                           const char *now);
+
+// Log a chapter as read on `date` (`YYYY-MM-DD`, or any RFC3339 stamp — only
+// the day is kept) — the by-hand affordance for reading done in a paper Bible.
+// Full credit. Null on success, else an owned error string.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_reading_mark_read(struct PlumblineEngine *engine,
+                                         const char *book,
+                                         uint32_t chapter,
+                                         const char *date);
+
+// Drop a chapter's reading record — the way back out of a date set by mistake;
+// the chapter returns to unread. Null on success, else an owned error string.
+//
+// # Safety
+// `engine` is valid; `book` is null or valid NUL-terminated UTF-8.
+char *plumbline_engine_reading_forget(struct PlumblineEngine *engine,
+                                      const char *book,
+                                      uint32_t chapter);
 
 #ifdef __cplusplus
 }  // extern "C"

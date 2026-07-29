@@ -1,6 +1,6 @@
 // The virtual home directory the engine sees through WASI: the read-only data
 // pack (data/, bridge/) plus the user's authored files (tags/, threads/,
-// weaves/, notes/, memory/, .config/) restored from IndexedDB. After every
+// weaves/, notes/, memory/, reading/, .config/) restored from IndexedDB. After every
 // authoring write the user subtree is diffed back to IndexedDB — the browser
 // twin of the desktop shells' "engine reloads from disk after any write".
 
@@ -8,7 +8,7 @@ import { Directory, File } from "@bjorn3/browser_wasi_shim";
 import { idbApply, idbEntries, idbGet } from "./idb";
 
 /** Home-relative directories that hold user-authored state. */
-const USER_DIRS = ["tags", "threads", "weaves", "notes", "memory", ".config"];
+const USER_DIRS = ["tags", "threads", "weaves", "notes", "memory", "reading", ".config"];
 /** The corpus idxcache — rebuildable, persisted to skip the 19 MB re-parse.
  *  Sources, in preference order: this device's persisted copy (IndexedDB),
  *  else the pack-shipped web-stamped one (fetched on first visit). */
@@ -54,6 +54,13 @@ export interface VirtualHome {
   evict(paths: string[]): number;
   /** Diff the user subtree against IndexedDB (call after authoring writes). */
   persistUserData(): Promise<void>;
+  /** Persist ONE user directory, additively — no whole-subtree diff and no
+   *  deletions. For writes that fire on a TIMER rather than on a human action:
+   *  the reading map reports dwell every 30 s while someone reads, and putting
+   *  a full rewrite of every note and memory card on that timer would spend a
+   *  phone's IndexedDB budget (and the one worker thread that answers taps) on
+   *  work nothing asked for. See `persistUserData` for the diffing version. */
+  persistUserDir(dir: string): Promise<void>;
   /** Snapshot of the authored files (for the backup zip). */
   exportUserData(): Map<string, Uint8Array>;
   /** Stop ALL persistence (a restore is pending reload — nothing may write). */
@@ -232,6 +239,20 @@ export async function buildHome(
       // authoring event is cheaper than tracking per-file dirty bits.
       await idbApply("user", current, deletes);
       synced = new Set(current.keys());
+    },
+    async persistUserDir(d: string) {
+      if (frozen) return;
+      // A guard, not politeness: an unknown directory here would write paths
+      // `persistUserData` never collects, and its diff would then delete them
+      // on the reader's next highlight.
+      if (!USER_DIRS.includes(d)) return;
+      const current = new Map<string, Uint8Array>();
+      const dir = root.get(d);
+      if (dir instanceof Directory) collectFiles(d, dir, current);
+      // Additive only. Deletions belong to the diffing path — a timer-driven
+      // write has no business deciding something else is gone.
+      await idbApply("user", current);
+      for (const k of current.keys()) synced.add(k);
     },
   };
 }

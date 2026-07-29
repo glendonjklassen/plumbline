@@ -7,6 +7,7 @@
   import PromptDialog from "./PromptDialog.svelte";
   import Shortcuts from "./Shortcuts.svelte";
   import BookNav from "./BookNav.svelte";
+  import MarkReadDialog from "./MarkReadDialog.svelte";
   import CanonStrip from "./CanonStrip.svelte";
   import HistorySheet from "./HistorySheet.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
@@ -17,12 +18,37 @@
   import MapsHost from "../maps/MapsHost.svelte";
   import ContextMenu from "../reader/ContextMenu.svelte";
   import TagPicker from "../study/TagPicker.svelte";
+  import ThreadPicker from "../study/ThreadPicker.svelte";
   import TagWeave from "../study/TagWeave.svelte";
   import QrCode from "./QrCode.svelte";
   import { hasChurch, safeChurchUrl } from "./church";
   import { getSession } from "../state/session.svelte";
+  import { startReadingTracker } from "../state/readingTracker";
 
   const s = getSession();
+
+  // Reading time for the navigator's map (core::reading). The FIRST pane only: a
+  // second pane is usually a parallel reference being consulted, not a chapter
+  // being read through. Nothing is tracked while a modal surface is up — Present,
+  // the memorize drill and the maps are not reading.
+  $effect(() =>
+    startReadingTracker({
+      target: () => {
+        if (s.showPresent || s.memorize || s.mapPopup) return null;
+        const p = s.panes[0];
+        return p ? { book: p.book, chapter: p.chapter } : null;
+      },
+      reached: () => s.panes[0]?.reached ?? 0,
+      record: (book, chapter, reached, seconds) =>
+        s.rpc.call("readingRecord", book, chapter, reached, seconds, new Date().toISOString()),
+      spec: () =>
+        s.rpc
+          .call("readingBooks", new Date().toISOString())
+          .then((r: any) => r?.spec ?? null)
+          .catch(() => null),
+      onCompleted: (book, chapter) => s.showToast(`Read through — ${s.bookName(book)} ${chapter}`),
+    }),
+  );
 
   const subtitle = $derived.by(() => {
     const p = s.panes[s.activePane];
@@ -434,6 +460,8 @@
 <PresentHost />
 <SettingsDialog />
 <BookNav />
+<MarkReadDialog />
+<ThreadPicker />
 
 <style>
   .frame {

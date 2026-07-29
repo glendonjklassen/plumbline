@@ -24,6 +24,28 @@ Conventions used everywhere:
   any write the engine reloads study data from disk — re-fetch, never mutate
   shell-side state.
 
+## Type — one face, chrome included (2026-07-28)
+
+Both shells ship the SAME two font files, byte-identical variable TTFs
+(851,176 bytes, `fvar`, wght 400–700), and both always used them for scripture.
+The CHROME had drifted: the web sets `body { font-family: "EB Garamond" }`
+(`app.css`), so every control there is Garamond, while Android called a bare
+`MaterialTheme { }` and inherited Material 3's default — Roboto — everywhere but
+FirstRun and Present. Fixed at the theme: `ui/Typography.kt` builds one
+`FontFamily` (bold off the `wght` axis, not synthetic) and `serifTypography`
+substitutes it into Material's whole type scale; `MaterialTheme` provides
+`typography.bodyLarge` as `LocalTextStyle`, so a bare `Text(…, fontSize = 15.sp)`
+picks the family up without naming it. Existing `sp` values are UNCHANGED —
+Garamond's x-height is smaller than Roboto's, so the chrome reads slightly
+smaller until re-tuned on-device.
+
+One deliberate exception stays: the web boot splash asks for Georgia
+(`App.svelte`) because Garamond is render-blocking and the splash would paint
+nothing for 1.6 MB.
+
+Intro-pane text was enlarged on both shells the same day (older eyes, and the
+smaller x-height compounds it) — sizes and line heights up roughly 2 px / 2.5 sp.
+
 ## Constants + styling (M:41–54, 3807–3823)
 
 | name | value | meaning |
@@ -296,6 +318,20 @@ reload → refetch) stay shell-side. `parse_link` handles multi-word books
 Code + lemma large + count; verse links capped at 300, "… N more".
 *Data*: `plumbline_engine_strongs_occurrences_json` (cap 500 engine-side).
 
+## Thread picker + delete (2026-07-28, both shells)
+
+`Add to thread…` was a bare freetext prompt, which made the common case — adding
+a fifth passage to the thread you have been building all week — require retyping
+its name exactly, and a typo silently FORKED a second thread instead of failing.
+It is now the same picker idiom tags already had: existing threads are a list you
+tap (with entry counts), freetext only for a genuinely new one, and `✕` deletes a
+thread and everything on it (the verses are untouched). `addTag`'s study-panel
+route was switched to the tag picker for the same reason.
+
+Core: `thread::remove_thread` (case-insensitive, like `add_to_thread`; an absent
+name is a no-op, not an error). **C ABI**: `plumbline_engine_thread_remove`.
+Shells: `ThreadPickerSheet` (`ui/VerseActions.kt`) / `ThreadPicker.svelte`.
+
 ## Threads / Tags browsers (M:3380–3471)
 
 List → detail. Threads list: "Threads (N)", each name + "N passage(s)".
@@ -390,7 +426,9 @@ position intentionally transient. *Data*: `plumbline_config_load_json` /
 ## First run — who is opening the Book? (2026-07-26, both shells)
 
 The first launch asks who's here (`FirstRun.svelte` / `FirstRun.kt` — keep
-the copy in sync):
+the copy in sync). **Path order (2026-07-28): Curious about the Bible sits ABOVE
+New in the faith** — a stranger to the Bible is the likelier first-time reader,
+and the path that asks least of someone should be seen first.
 
 - **New in the faith** — a welcome from the maintainer (next steps: read —
   Ps 12:6–7; find a church — Heb 10:24–25; memorize — Ps 119:11; assurance —
@@ -679,6 +717,27 @@ New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
   the modifier in the link handler; GTK captures it with a capture-phase click
   gesture on the study label just before the link activates).
 
+## Analysis tiers are OPT-IN (2026-07-28)
+
+They were opt-out. A first-time reader silently inherited a study apparatus —
+and on the web a background download of the analysis pack — before ever asking
+for one. Now **absent means off**, in five places that must agree:
+`core::config::Config::default` + `from_wire`, `ffi::wire` `config_from_wire`,
+`session.gates` (`=== true`, not `!== false`), `engine.worker.ts`'s `machineOn`
+(so a first visit does not prefetch the pack), and both first-runs' checkboxes
+start unchecked. The flip is in the ABSENT case ONLY — a reader who switched a
+tier on has an explicit `true` and keeps it.
+
+Two traps this sprang, both fixed: `SettingsDialog.toggleGate` used
+`s.config[key] = s.config[key] === false`, which under opt-in left the first
+click on a never-set toggle doing nothing (`undefined === false` is false) — it
+is `!== true` now; and `App.svelte`'s `rndDeferred = deferRnd && !info.rndAuto`
+conflated "download deferred" with "tier is off", which would have shown every
+phone StudyPanel's "Load analysis" offer for a tier its reader never asked for —
+it now also requires `config.machineAnalysis === true`. The e2e suite's `boot()`
+helpers tick both tier boxes, because the tests below that measure the analysis
+pack are about a reader who HAS it on.
+
 ## Per-tier analysis gates + tag→weave (2026-07-25, product round 4)
 
 Street-use feedback retired two ideas at once: the all-or-nothing
@@ -733,8 +792,8 @@ the other shells owe the UI (deltas below).
 
 ## Backup / restore (2026-07-25, both shells)
 
-Settings exports the authored home — `tags/ threads/ weaves/ notes/ memory/`
-+ the config as `.config/plumbline/config.json` + a `plumbline-backup.json`
+Settings exports the authored home — `tags/ threads/ weaves/ notes/ memory/
+reading/` + the config as `.config/plumbline/config.json` + a `plumbline-backup.json`
 marker — as a **zip with a shared layout**, so one archive restores across
 devices (phone ↔ browser). Restore is merge-by-overwrite (same-name items
 replaced), path-filtered to the authored dirs (no traversal), then the engine
@@ -743,6 +802,47 @@ store+deflate read) in `apps/web/src/engine/zip.ts`, IndexedDB write with ALL
 persistence frozen until the reload (three clobber paths guarded, covered by
 the Playwright round-trip test). Android: `ui/Backup.kt` over SAF
 Create/OpenDocument + java.util.zip; restore recreates the activity.
+
+## The reading map — where you've read, and how long ago (2026-07-28, both shells)
+
+`plumbline_core::reading` (`plumbline-reading-v1`, one file per book under
+`home/reading/`, plus `_since.json` for the reader's start date). Coverage of a
+chapter is a **percentage**, gated two ways at once:
+`min(words above the furthest verse reached, dwell × 220 wpm) ÷ chapter words`.
+Scrolling to the bottom instantly credits nothing; sitting on verse 1 credits only
+verse 1. Dwell is **aggregate, not per-verse** — time over verse 3 pays for verse
+30 once you get there — and a pass completes at **90%** and snaps to 1.0, so there
+is never a trailing verse to chase. Stored per chapter: `reached`, `dwell`
+(both belong to the pass under way, cleared when it completes) and `lastRead`.
+
+Two signals in the navigator's grids: **hue** = `Standing` (unread slate
+`readUnread` / partial amber `readPartial` / read sage `readDone`, all three in
+`core::theme`), **bloom** = staleness — flat zero for 30 days, ramping to full at
+365, measured from the last full read, or from the reader's start date for
+anything never finished (so a fresh install starts calm and builds). Books are the
+**word-weighted** roll-up of their chapters, so chapters visibly sum to the book;
+a book's `days` is the exception and reports its most recent read.
+
+Shells own only the clock: `ReadingTracker` (Android `ui/ReadingTracker.kt`, web
+`state/readingTracker.ts`) with three refusals — a grace period before accrual
+(so paging through credits nothing), an idle cutoff (a phone on a table is not
+reading), and stop-on-background. All thresholds come from `reading::spec()` over
+the ABI, so the shells cannot drift. Reports land every 30 s and on the way out of
+a chapter/app; the high-water verse comes from `onVerseReached` (Android) /
+`pane.reached` (web), monotonic per chapter.
+
+**By hand**: long-press a chapter's *first verse* → "Mark chapter read…" → a date
+picker with today/yesterday/last-week shortcuts, plus Clear. Full credit, for
+reading done in a paper Bible; kept to verse 1 so it is findable but not
+bulk-usable.
+
+**Perf**: write paths read ONE book file, not the store (dwell is timer-driven);
+`ChapterWords` is built once per engine and cached; the web persists only
+`reading/` via `home.persistUserDir` rather than diffing the whole user subtree
+every 30 s.
+
+**C ABI** (`plumbline_engine_reading_*`, 5 fns): `books_json` / `chapters_json` /
+`record_json` / `mark_read` / `forget`.
 
 ## Memorization — spaced repetition (Tier 2 #15)
 

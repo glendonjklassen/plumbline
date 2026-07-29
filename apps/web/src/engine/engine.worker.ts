@@ -628,8 +628,14 @@ self.onmessage = async (ev: MessageEvent) => {
           }
           self.postMessage({ type: "authored" });
         };
+        // Dwell reports persist ONLY the reading dir — see onReadingWrite.
+        booted.engine.onReadingWrite = () => {
+          void booted!.home.persistUserDir("reading");
+        };
         const cfg = configLoad(booted.wasm) ?? {};
-        const machineOn = cfg.machineAnalysis !== false;
+        // Opt-in: absent means off, so a first visit does NOT pull the analysis
+        // pack in the background.
+        const machineOn = cfg.machineAnalysis === true;
         // Tell the shell up front, so it never offers a "Load analysis" button
         // for a load that is already on its way (feedback 2026-07-27).
         const rndAuto = await willAutoLoadRnd(machineOn, m.deferRnd === true);

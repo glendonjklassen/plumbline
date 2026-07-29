@@ -221,6 +221,10 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
     fun ThreadAdd(name: String, refKey: String, note: String?, addedUtc: String): String? =
         take(ffi.plumbline_engine_thread_add(h, name, refKey, note, addedUtc))
 
+    /** Delete a thread and everything on it. Null = success. */
+    fun ThreadRemove(name: String): String? =
+        take(ffi.plumbline_engine_thread_remove(h, name))
+
     fun TagAdd(name: String, kind: String, value: String, note: String?, addedUtc: String): String? =
         take(ffi.plumbline_engine_tag_add(h, name, kind, value, note, addedUtc))
 
@@ -374,6 +378,35 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
 
     /** The activity heatmap (`{days:[{day,reviews}]}`). */
     fun MemoryActivityJson(): String? = take(ffi.plumbline_engine_memory_activity_json(h))
+
+    // ── the reading map ─────────────────────────────────────────────────────
+
+    /** Every book's reading standing at `nowUtc` (`{books,since,spec}`). */
+    fun ReadingBooksJson(nowUtc: String): String? =
+        take(ffi.plumbline_engine_reading_books_json(h, nowUtc))
+
+    /** One book's chapters at `nowUtc` (`{book,chapters,since,spec}`). */
+    fun ReadingChaptersJson(book: String, nowUtc: String): String? =
+        take(ffi.plumbline_engine_reading_chapters_json(h, book, nowUtc))
+
+    /** Credit `seconds` of dwell to a chapter, having reached verse `reached`.
+     *  Returns `{book,chapter,pct,completed,lastRead?}`, or null when there is
+     *  no home to write to. */
+    fun ReadingRecordJson(
+        book: String,
+        chapter: Int,
+        reached: Int,
+        seconds: Float,
+        nowUtc: String,
+    ): String? = take(ffi.plumbline_engine_reading_record_json(h, book, chapter, reached, seconds, nowUtc))
+
+    /** Log a chapter as read on `date` (`YYYY-MM-DD`) by hand. Null = success. */
+    fun ReadingMarkRead(book: String, chapter: Int, date: String): String? =
+        take(ffi.plumbline_engine_reading_mark_read(h, book, chapter, date))
+
+    /** Drop a chapter's reading record (back to unread). Null = success. */
+    fun ReadingForget(book: String, chapter: Int): String? =
+        take(ffi.plumbline_engine_reading_forget(h, book, chapter))
 
     /** A drill prompt for a verse at blank-out `level`
      *  (`{ref,text,firstLetters,blanked,level,maxLevel}`). */

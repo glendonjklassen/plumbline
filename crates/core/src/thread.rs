@@ -174,6 +174,24 @@ pub fn write_thread(path: impl AsRef<Path>, thread: &Thread) -> Result<(), Error
     crate::store::write_atomic(path, &to_json(thread)?)
 }
 
+/// Delete a whole thread — its file and everything on it.
+///
+/// Matched case-insensitively among `loaded`, the same way [`add_to_thread`]
+/// matches, so "Romans Road" and "romans road" are the same thread here as they
+/// are there. A name that isn't loaded is a no-op rather than an error: the
+/// thread the caller wanted gone is gone either way.
+pub fn remove_thread(loaded: &[LoadedThread], name: &str) -> Result<bool, Error> {
+    let wanted = name.trim().to_lowercase();
+    let Some(lt) = loaded.iter().find(|lt| lt.thread.name.to_lowercase() == wanted) else {
+        return Ok(false);
+    };
+    match std::fs::remove_file(&lt.file) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(Error::Io { path: lt.file.display().to_string(), source: e }),
+    }
+}
+
 /// Append `entry` to the thread named `name` (case-insensitive match among
 /// `loaded`), creating its file on first use. Returns the file written. A file
 /// that exists but is absent from `loaded` (i.e. it failed to parse) is refused

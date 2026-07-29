@@ -154,7 +154,8 @@ fun PlumblineApp(
     } else {
         lightColorScheme(background = palette.paper, surface = palette.paper, onSurface = palette.ink)
     }
-    MaterialTheme(colorScheme = scheme) {
+    // Garamond for the chrome too, matching the web shell (see ui/Typography.kt).
+    MaterialTheme(colorScheme = scheme, typography = rememberSerifTypography()) {
         StudyScreen(engine, fold, palette, themeChoice, { themeChoice = it }, bundledOn, onToggleBundled)
     }
 }
@@ -215,8 +216,10 @@ fun StudyScreen(
     var highlightEpoch by remember { mutableStateOf(0) }            // repaint after highlight/note edits
     // Per-tier content gates (2026-07-25): the text is always on; curated and
     // machine analysis are independently switchable. Persisted in the config.
-    var humanAnalysis by remember { mutableStateOf(loadedCfg?.humanAnalysis ?: true) }
-    var machineAnalysis by remember { mutableStateOf(loadedCfg?.machineAnalysis ?: true) }
+    // Opt-in (2026-07-28): absent means off, so a first-time reader gets the text
+    // and their own notes, not a study apparatus they never asked for.
+    var humanAnalysis by remember { mutableStateOf(loadedCfg?.humanAnalysis ?: false) }
+    var machineAnalysis by remember { mutableStateOf(loadedCfg?.machineAnalysis ?: false) }
     // First run (2026-07-26): the core derives firstRun from "no config file
     // yet", so this shows exactly once — the first persist clears it for good.
     var showFirstRun by remember { mutableStateOf(loadedCfg?.firstRun == true) }
@@ -224,6 +227,11 @@ fun StudyScreen(
     var presentThread by remember { mutableStateOf<Thread1?>(null) } // Present: chosen thread (picker keeps nav)
     var makeWeaveTag by remember { mutableStateOf<Int?>(null) }     // tag→weave sheet (tag ordinal)
     var firstVisibleVerse by remember { mutableStateOf(lastPane?.verse) } // scroll restore across sessions
+    // The reading map: how deep into the chapter the reader has got, and a
+    // counter that any scroll/tap bumps so the tracker can tell reading from a
+    // chapter left open. Reset per chapter — each is its own pass.
+    var reachedVerse by remember(book, chapter) { mutableStateOf(0) }
+    var readerInput by remember { mutableStateOf(0) }
     var studySheet by remember { mutableStateOf(false) }            // phone: study as a bottom sheet
     var showSearch by remember { mutableStateOf(false) }            // full-screen search overlay
     var showPresent by remember { mutableStateOf(false) }           // thread presentation mode
@@ -236,6 +244,7 @@ fun StudyScreen(
     var showWeaves by remember { mutableStateOf(false) }            // Weaves screen (All/Suggested filter)
     var bookNavPane by remember { mutableStateOf<Int?>(null) }      // passage navigator (0 primary, 1 second)
     var tagPickRef by remember { mutableStateOf<String?>(null) }    // tag-picker target verse
+    var threadPickRef by remember { mutableStateOf<String?>(null) } // thread-picker target verse
     var prompt by remember { mutableStateOf<AuthorPrompt?>(null) }   // text-input authoring dialog
 
     // The navigator's verse target: ReaderPane scrolls it into view on layout.
@@ -311,6 +320,18 @@ fun StudyScreen(
         lifecycleOwner.lifecycle.addObserver(obs)
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
+
+    // Time spent in the chapter on screen, for the navigator's reading map. Only
+    // the primary pane is tracked: a second pane is usually a parallel reference
+    // being consulted, not a chapter being read through.
+    ReadingTracker(
+        engine = engine,
+        book = book,
+        chapter = chapter,
+        reachedVerse = reachedVerse,
+        interactionEpoch = readerInput,
+        enabled = dest == Dest.Read,
+    )
 
     val mode = rememberUiMode(fold)
 
@@ -455,11 +476,10 @@ fun StudyScreen(
             // Tagging offers the existing tags first; freetext is the secondary
             // path inside the picker (product call, 2026-07-24).
             "addTag" -> link.refKey?.let { ref -> tagPickRef = ref }
-            "addThread" -> link.refKey?.let { ref ->
-                prompt = AuthorPrompt("New thread on $ref", "") { name ->
-                    if (name.isNotBlank()) engine.ThreadAdd(name, ref, null, nowUtc())
-                }
-            }
+            // Pick from the threads that exist, or name a new one — a bare text
+            // field made you retype an existing name exactly, and a typo forked a
+            // second thread instead of failing (2026-07-28 feedback).
+            "addThread" -> link.refKey?.let { ref -> threadPickRef = ref }
             "editNote" -> link.refKey?.let { ref ->
                 val cur = engine.UserNoteJson(ref)
                     ?.let { runCatching { parseWire<UserNote>(it).text }.getOrNull() } ?: ""
@@ -503,7 +523,11 @@ fun StudyScreen(
                 targetVerse = if (isSecond) null else pendingVerse,
                 targetEpoch = if (isSecond) 0 else navEpoch,
                 clearPinEpoch = clearPinEpoch,
-                onFirstVisibleVerse = if (isSecond) ({ }) else ({ v -> firstVisibleVerse = v }),
+                onFirstVisibleVerse = if (isSecond) ({ }) else ({ v ->
+                    firstVisibleVerse = v
+                    readerInput++
+                }),
+                onVerseReached = if (isSecond) ({ }) else ({ v -> reachedVerse = v; readerInput++ }),
             )
         }
     }
@@ -707,7 +731,7 @@ fun StudyScreen(
         }
         bookNavPane?.let { paneIdx ->
             BookNavScreen(
-                toc, palette,
+                engine, toc, palette,
                 currentBook = if (paneIdx == 1) secondBook else book,
                 onGo = { b, c, v ->
                     if (paneIdx == 1) {
@@ -723,6 +747,9 @@ fun StudyScreen(
         }
         tagPickRef?.let { ref ->
             TagPickerSheet(engine, palette, ref, onDismiss = { tagPickRef = null })
+        }
+        threadPickRef?.let { ref ->
+            ThreadPickerSheet(engine, palette, ref, onDismiss = { threadPickRef = null })
         }
         if (showSearch) {
             SearchOverlay(

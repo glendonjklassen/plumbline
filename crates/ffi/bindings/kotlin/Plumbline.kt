@@ -89,6 +89,7 @@ internal interface PlumblineNative : Library {
     fun plumbline_engine_thread_add(
         engine: Pointer, name: String, refKey: String, note: String?, added: String,
     ): Pointer?
+    fun plumbline_engine_thread_remove(engine: Pointer, name: String): Pointer?
     fun plumbline_engine_tag_add(
         engine: Pointer, name: String, kind: String, value: String, note: String?, added: String,
     ): Pointer?
@@ -214,6 +215,17 @@ internal interface PlumblineNative : Library {
     fun plumbline_engine_memory_activity_json(engine: Pointer): Pointer?
     fun plumbline_engine_memory_drill_json(engine: Pointer, verseRef: String, level: Int): Pointer?
     fun plumbline_engine_memory_score_json(engine: Pointer, verseRef: String, typed: String): Pointer?
+
+    // ── the reading map: where you've read, and how long ago ────────────────
+    fun plumbline_engine_reading_books_json(engine: Pointer, now: String): Pointer?
+    fun plumbline_engine_reading_chapters_json(engine: Pointer, book: String, now: String): Pointer?
+    fun plumbline_engine_reading_record_json(
+        engine: Pointer, book: String, chapter: Int, reached: Int, seconds: Float, now: String,
+    ): Pointer?
+    fun plumbline_engine_reading_mark_read(
+        engine: Pointer, book: String, chapter: Int, date: String,
+    ): Pointer?
+    fun plumbline_engine_reading_forget(engine: Pointer, book: String, chapter: Int): Pointer?
 
     // ── static panel content: guide / about ─────────────────────────────────
     fun plumbline_panel_guide_blocks_json(): Pointer?

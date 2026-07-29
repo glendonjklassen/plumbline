@@ -40,6 +40,75 @@ data class Toc(val books: List<TocBook> = emptyList())
 @Serializable
 data class TocBook(val id: String, val name: String, val chapters: Int)
 
+// ── the reading map ─────────────────────────────────────────────────────────
+
+/** The tuning behind the reading map, handed over by the core so the phone and
+ *  the browser cannot drift on what "read" means. */
+@Serializable
+data class ReadingSpec(
+    val wordsPerMinute: Float = 220f,
+    val completeAt: Float = 0.9f,
+    val freshDays: Int = 30,
+    val staleDays: Int = 365,
+    val graceSeconds: Float = 3f,
+    val tickSeconds: Float = 30f,
+    val idleSeconds: Float = 120f,
+)
+
+/** One chapter's standing. `standing` (`unread` | `partial` | `read`) drives the
+ *  hue, `glow` (0–1) the bloom, `pct` the fill. The core flattens its `Heat`
+ *  into this object rather than nesting it. */
+@Serializable
+data class ReadingChapter(
+    val chapter: Int = 0,
+    val words: Int = 0,
+    val pct: Float = 0f,
+    val standing: String = "unread",
+    val glow: Float = 0f,
+    val days: Int? = null,
+    val lastRead: String? = null,
+)
+
+@Serializable
+data class ReadingBook(
+    val book: String = "",
+    val name: String = "",
+    val chapters: Int = 0,
+    val words: Int = 0,
+    val read: Int = 0,
+    val pct: Float = 0f,
+    val standing: String = "unread",
+    val glow: Float = 0f,
+    val days: Int? = null,
+    val lastRead: String? = null,
+)
+
+@Serializable
+data class ReadingBooks(
+    val books: List<ReadingBook> = emptyList(),
+    val since: String = "",
+    val spec: ReadingSpec = ReadingSpec(),
+)
+
+@Serializable
+data class ReadingChapters(
+    val book: String = "",
+    val chapters: List<ReadingChapter> = emptyList(),
+    val since: String = "",
+    val spec: ReadingSpec = ReadingSpec(),
+)
+
+/** The outcome of a dwell report. `completed` means this call carried the pass
+ *  over the bar and the chapter now counts as read through. */
+@Serializable
+data class ReadingRecorded(
+    val book: String = "",
+    val chapter: Int = 0,
+    val pct: Float = 0f,
+    val completed: Boolean = false,
+    val lastRead: String? = null,
+)
+
 // ── layout display list + hit ───────────────────────────────────────────────
 
 @Serializable
@@ -483,6 +552,10 @@ data class PaletteData(
     val paneNavBg: String = "",
     val stripBg: String = "",
     val pin: String = "",
+    // The reading map's three hues (core::reading::Standing).
+    val readUnread: String = "",
+    val readPartial: String = "",
+    val readDone: String = "",
 )
 
 @Serializable

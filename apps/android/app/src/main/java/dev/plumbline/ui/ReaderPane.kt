@@ -137,6 +137,12 @@ fun ReaderPane(
     // Reports the first visible verse as the reader scrolls — persisted so a
     // session reopens mid-chapter where it left off.
     onFirstVisibleVerse: (Int) -> Unit = {},
+    /** Reports the DEEPEST verse the reader has scrolled to in this chapter — the
+     *  reading map's high-water mark (core::reading). Monotonic within a chapter:
+     *  it only ever rises, because scrolling back up does not un-read anything.
+     *  Distinct from [onFirstVisibleVerse], which tracks the top edge and moves
+     *  both ways. */
+    onVerseReached: (Int) -> Unit = {},
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -267,6 +273,28 @@ fun ReaderPane(
             if (first != lastReported) {
                 lastReported = first
                 onFirstVisibleVerse(first)
+            }
+        }
+
+        // The reading map's high-water mark: the deepest verse whose text has
+        // come fully into view. Reset per chapter, and only ever rising within
+        // one — the core takes the max anyway, but reporting a fall would put
+        // pointless writes on the scroll path.
+        var deepest by remember(book, chapter) { mutableStateOf(0) }
+        LaunchedEffect(scrollY, viewportH, dl) {
+            val list = dl ?: return@LaunchedEffect
+            if (viewportH <= 0f) return@LaunchedEffect
+            val bottom = scrollY + viewportH
+            // A verse counts as reached once its LAST word is above the fold; the
+            // final verse of a chapter also counts when the document bottom is in
+            // view, so a short last verse can't strand a chapter at 99%.
+            val reached = list.items
+                .filter { it.kind == "word" && it.y + it.h <= bottom }
+                .mapNotNull { it.verse?.substringAfterLast(':')?.toIntOrNull() }
+                .maxOrNull() ?: return@LaunchedEffect
+            if (reached > deepest) {
+                deepest = reached
+                onVerseReached(reached)
             }
         }
 

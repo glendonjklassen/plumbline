@@ -4,6 +4,9 @@
 //! every handle/string. No GUI, fully deterministic (monospace measurement).
 
 use super::*;
+// The reading-map endpoints live in their own module (see reading_map.rs — lib.rs
+// was already past the no-3k-line rule); `use super::*` does not reach into it.
+use crate::reading_map::*;
 use serde_json::Value;
 use std::ffi::CStr;
 
@@ -2020,6 +2023,104 @@ fn core_data_loads_after_open() {
         assert!(plumbline_engine_load_core_data(e).is_null());
         let st: Value = serde_json::from_str(&take(plumbline_engine_strongs_json(e, c("G2316").as_ptr())).unwrap()).unwrap();
         assert_eq!(st["code"], "G2316");
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
+/// The reading map across the ABI: the anchor is stamped by the first call that
+/// needs it, dwell accrues, a full pass lands, a by-hand date lands, and the
+/// book roll-up follows its chapters.
+#[test]
+fn reading_map_round_trip_via_abi() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-reading-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null() && !e.is_null());
+        let c = |s: &str| CString::new(s).unwrap();
+        let now = c("2026-07-28T12:00:00Z");
+
+        // Nothing read yet: every book unread, and a fresh anchor keeps it calm.
+        let books: Value =
+            serde_json::from_str(&take(plumbline_engine_reading_books_json(e, now.as_ptr())).unwrap()).unwrap();
+        assert_eq!(books["books"].as_array().unwrap().len(), 66);
+        assert_eq!(books["since"], "2026-07-28");
+        assert_eq!(books["spec"]["staleDays"], 365);
+        assert_eq!(books["spec"]["completeAt"], 0.9);
+        let john = books["books"].as_array().unwrap().iter().find(|b| b["book"] == "John").unwrap();
+        assert_eq!(john["standing"], "unread");
+        assert_eq!(john["glow"], 0.0, "a brand-new reader must not be shouted at");
+
+        // The anchor is written once and must not move on a later call.
+        let later: Value = serde_json::from_str(
+            &take(plumbline_engine_reading_books_json(e, c("2027-01-01T00:00:00Z").as_ptr())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(later["since"], "2026-07-28", "the start date is stamped once");
+        // Half a year on, the unread canon has begun to glow. (Only John is in
+        // this toy corpus, so it is the only book with any words to weight.)
+        let john = later["books"].as_array().unwrap().iter().find(|b| b["book"] == "John").unwrap();
+        let g = john["glow"].as_f64().unwrap();
+        assert!(g > 0.3 && g < 1.0, "unread ramps from the start date, got {g}");
+
+        // A dwell report that is all scroll and no time credits nothing.
+        let rec: Value = serde_json::from_str(
+            &take(plumbline_engine_reading_record_json(e, c("John").as_ptr(), 3, 18, 0.0, now.as_ptr())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(rec["pct"], 0.0);
+        assert_eq!(rec["completed"], false);
+
+        // Time enough for the whole chapter, having scrolled it: a full pass.
+        let rec: Value = serde_json::from_str(
+            &take(plumbline_engine_reading_record_json(e, c("John").as_ptr(), 3, 18, 60.0, now.as_ptr())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(rec["completed"], true);
+        assert_eq!(rec["pct"], 1.0);
+        assert_eq!(rec["lastRead"], "2026-07-28");
+
+        let chs: Value = serde_json::from_str(
+            &take(plumbline_engine_reading_chapters_json(e, c("John").as_ptr(), now.as_ptr())).unwrap(),
+        )
+        .unwrap();
+        let ch3 = chs["chapters"].as_array().unwrap().iter().find(|ch| ch["chapter"] == 3).unwrap();
+        assert_eq!(ch3["standing"], "read");
+        assert_eq!(ch3["days"], 0);
+        assert_eq!(ch3["glow"], 0.0, "just read, so quiet");
+
+        // By hand, for a paper Bible — full credit on the date given.
+        assert!(plumbline_engine_reading_forget(e, c("John").as_ptr(), 3).is_null());
+        assert!(plumbline_engine_reading_mark_read(e, c("John").as_ptr(), 3, c("2025-01-01").as_ptr()).is_null());
+        let chs: Value = serde_json::from_str(
+            &take(plumbline_engine_reading_chapters_json(e, c("John").as_ptr(), now.as_ptr())).unwrap(),
+        )
+        .unwrap();
+        let ch3 = chs["chapters"].as_array().unwrap().iter().find(|ch| ch["chapter"] == 3).unwrap();
+        assert_eq!(ch3["standing"], "read");
+        assert_eq!(ch3["lastRead"], "2025-01-01");
+        assert_eq!(ch3["glow"], 1.0, "over a year ago is a full glow");
+
+        // The book follows its chapters: this toy John has only chapter 3.
+        let books: Value =
+            serde_json::from_str(&take(plumbline_engine_reading_books_json(e, now.as_ptr())).unwrap()).unwrap();
+        let john = books["books"].as_array().unwrap().iter().find(|b| b["book"] == "John").unwrap();
+        assert_eq!(john["standing"], "read");
+        assert_eq!(john["read"], 1);
+        assert_eq!(john["days"], 573);
+
+        // Unknown books are refused rather than invented.
+        assert!(plumbline_engine_reading_chapters_json(e, c("Nope").as_ptr(), now.as_ptr()).is_null());
+        assert!(!plumbline_engine_reading_mark_read(e, c("Nope").as_ptr(), 1, c("2026-01-01").as_ptr()).is_null());
 
         plumbline_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);

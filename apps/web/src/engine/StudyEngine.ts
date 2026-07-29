@@ -61,6 +61,12 @@ export class StudyEngine {
   #engine: number;
   /** Invoked after any authoring write; boot wires this to home persistence. */
   onAuthored: () => void = () => {};
+  /** A reading-map write landed. Deliberately NOT `onAuthored`: dwell is
+   *  reported on a timer while somebody reads, and `onAuthored` runs a full
+   *  user-subtree diff into IndexedDB — fine for a highlight, wasteful every 30
+   *  seconds on the one thread that also answers taps. The worker binds this to
+   *  `home.persistUserDir("reading")` instead. */
+  onReadingWrite: () => void = () => {};
 
   private constructor(w: WasmEngine, engine: number) {
     this.#w = w;
@@ -431,7 +437,11 @@ export class StudyEngine {
 
   threadAdd(name: string, refKey: string, note: string | null, added: string): string | null {
     return this.#author("plumbline_engine_thread_add", (f, ...p) => f(this.#engine, ...p), [name, refKey, note, added]);
+  }  /** Delete a thread and everything on it. */
+  threadRemove(name: string): string | null {
+    return this.#author("plumbline_engine_thread_remove", (f, ...p) => f(this.#engine, ...p), [name]);
   }
+
   tagAdd(name: string, kind: string, value: string, note: string | null, added: string): string | null {
     return this.#author("plumbline_engine_tag_add", (f, ...p) => f(this.#engine, ...p), [name, kind, value, note, added]);
   }
@@ -570,6 +580,44 @@ export class StudyEngine {
   }
   memoryScore(verseRef: string, typed: string): any {
     return this.#json("plumbline_engine_memory_score_json", verseRef, typed);
+  }
+
+  // ── the reading map ─────────────────────────────────────────────────────────
+
+  /** Every book's reading standing at `now` — `{books,since,spec}`. */
+  readingBooks(now: string): any {
+    return this.#json("plumbline_engine_reading_books_json", now);
+  }
+  /** One book's chapters — `{book,chapters,since,spec}`. */
+  readingChapters(book: string, now: string): any {
+    return this.#json("plumbline_engine_reading_chapters_json", book, now);
+  }
+  /** Credit `seconds` of dwell, having reached verse `reached`. Returns
+   *  `{book,chapter,pct,completed,lastRead?}` (null with no writable home). */
+  readingRecord(book: string, chapter: number, reached: number, seconds: number, now: string): any {
+    const str = this.#call(
+      (b, n) =>
+        this.#w.takeStr(
+          (this.#w.exports.plumbline_engine_reading_record_json as Function)(
+            this.#engine, b, chapter, reached, seconds, n,
+          ) as number,
+        ),
+      [book, now],
+    );
+    if (str !== null) this.onReadingWrite();
+    return str === null ? null : JSON.parse(str);
+  }
+  /** Log a chapter as read on `date` by hand (a paper-Bible read). */
+  readingMarkRead(book: string, chapter: number, date: string): string | null {
+    return this.#author(
+      "plumbline_engine_reading_mark_read",
+      (f, b, d) => f(this.#engine, b, chapter, d),
+      [book, date],
+    );
+  }
+  /** Drop a chapter's reading record — back to unread. */
+  readingForget(book: string, chapter: number): string | null {
+    return this.#author("plumbline_engine_reading_forget", (f, b) => f(this.#engine, b, chapter), [book]);
   }
 }
 

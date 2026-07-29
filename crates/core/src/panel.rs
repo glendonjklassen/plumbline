@@ -1287,51 +1287,142 @@ fn guide_section(out: &mut Vec<Block>, title: &str, paras: &[&str]) {
     }
 }
 
+/// A sub-heading inside a guide section, and its paragraphs. Bold rather than a
+/// second `Block::section`, so the task/step hierarchy is visible at a glance
+/// without inventing a heading level every shell would have to style.
+fn guide_step(out: &mut Vec<Block>, title: &str, paras: &[&str]) {
+    out.push(Block::para(vec![Run::new(title, sz::LABEL, Color::Ink).bold()]));
+    for p in paras {
+        out.push(Block::para(vec![Run::new(*p, sz::BODY, Color::Ink)]));
+    }
+}
+
 /// The in-app guide: a concise tour of the reader. (The full manual lives in
 /// docs/GUIDE.md; this is the on-screen version.)
+///
+/// Organised by **what you came to do**, not by what the app has (product call,
+/// 2026-07-28). Nobody opens a Bible wanting "the study panel"; they want to
+/// share the gospel, get ready to teach on Sunday, understand a passage, or keep
+/// reading faithfully. Every feature below earns its place under one of those.
 pub fn guide_blocks() -> Vec<Block> {
     let mut out = vec![Block::para(vec![Run::new("Using Plumbline", sz::TITLE, Color::Ink).bold()])];
+    out.push(Block::para(vec![Run::new(
+        "Whatever you came here to do, start with the thing you want — the rest of the app arranges itself around it.",
+        sz::BODY,
+        Color::Faded,
+    )]));
+
     guide_section(
         &mut out,
-        "GETTING AROUND",
+        "READ THE BIBLE",
         &[
-            "One to three reading panes sit side by side; the ＋ / ✕ in the pane strip add and remove them. Each pane has its own book and chapter and scrolls on its own.",
-            "The active pane (gold top border — click a pane to activate it) is where searches and jumps land. Hold Shift while scrolling to lock every pane together.",
-            "Left / Right (or [ / ]) step chapters and roll across book boundaries. Alt+Left / Alt+Right (and the mouse back/forward buttons) walk your reading history.",
+            "One to three panes sit side by side; the ＋ / ✕ in the pane strip add and remove them. Each pane has its own book and chapter and scrolls on its own, so you can hold two passages open together.",
+            "Go to… walks Testament, then book, then chapter — every step a big target. Left / Right (or [ / ]) step chapters and roll across book boundaries; Alt+Left / Alt+Right walk back and forth through where you have been.",
+            "Hold Shift while scrolling to move every pane together, which is how you read two accounts side by side without losing your place in either.",
         ],
     );
+    guide_step(
+        &mut out,
+        "If the older English is hard going",
+        &[
+            "Turn on the Plain-English overlay in Settings. It marks the words the American King James Version puts differently — tap one to see what it replaced. The text stays the King James: nothing you memorize, present, copy or share is changed by it.",
+        ],
+    );
+    guide_step(
+        &mut out,
+        "Keeping track of where you have read",
+        &[
+            "The book and chapter grids in Go to… tint themselves by how you have read: slate for a chapter you have never been through, amber while you are partway, sage once you have read it through. A book takes the blend of its chapters, weighted by length, so its chapters always add up to it.",
+            "On top of the colour, a chapter glows the longer it has been since you read it — nothing for the first month, building to a full glow at a year. That is the whole point of the map: it shows you where you have not been lately. It is not a score, and nobody sees it but you.",
+            "Reading is counted generously. A chapter fills as you move through it at a natural pace — flipping past credits nothing, and neither does leaving it open — and it counts as read through at 90%, so there is never a last verse to chase.",
+            "Read a chapter in a paper Bible? Long-press its first verse and choose Mark chapter read… to set the date yourself.",
+        ],
+    );
+
     guide_section(
         &mut out,
-        "SEARCH",
+        "SHARE THE GOSPEL",
         &[
-            "Type a word, a phrase, or a reference. A reference (John 3:16, 1 Cor 13, psalms) jumps there; a word or phrase lists ranked hits — every hit in the open chapter is banded as you read.",
-            "A bare Strong's code (H430, G26) lists every verse tagged with it.",
+            "Present is the mode for handing your phone to somebody, or putting the text on a screen: fullscreen, high contrast, one passage at a time, no chrome to explain. It opens on the Romans Road, ready to walk through.",
         ],
     );
+    guide_step(
+        &mut out,
+        "Share a thread with someone",
+        &[
+            "Any thread can be handed over as a link or a QR code — from Present, or from the thread itself. Whoever opens it lands in the first passage with the whole trail in front of them, in their own copy of the app, offline from then on.",
+            "This is the way to leave someone with something after a conversation: they keep the passages you walked through, in order, instead of a photo of a page.",
+        ],
+    );
+    guide_step(
+        &mut out,
+        "Set your church",
+        &[
+            "Settings ▸ Church holds your congregation's name, a line about it, and a link. It travels in the links and QR codes you share, and nowhere else — no account, and nothing is sent anywhere.",
+            "It matters because a stranger who reads the gospel on their phone still needs somebody to sit next to on Sunday. Fill it in and every Bible you hand out says where to find you.",
+        ],
+    );
+
     guide_section(
         &mut out,
-        "THE STUDY PANEL",
+        "PREPARE TO TEACH",
         &[
-            "Ctrl+click (or double-click) a word for its Strong's entry, its renderings across the KJV, cross-references, and — in Full study — the analytics tiers and the concept map.",
-            "Full study adds weave authoring, threads, tags, and the R&D tiers; Simple is a clean reader. The header button flips between them any time.",
+            "A thread is a trail you make: passages in your order, for your reason. It is the tool for a sermon, a lesson, a Bible study, or an argument you want to be able to walk someone through twice.",
+            "Right-click (or long-press) a verse and choose Add to thread… — pick a thread you have already started, or name a new one. Each entry keeps the words you selected and takes a note of its own, and the thread itself has a running notes document for the shape of the whole thing.",
         ],
     );
+    guide_step(
+        &mut out,
+        "Then preach it",
+        &[
+            "Open the thread in Present and it becomes your outline: the passages advance one at a time, big enough to read from across a room, in the order you set. The same thread you built studying is the one you teach from and the one you hand out afterwards.",
+        ],
+    );
+
     guide_section(
         &mut out,
-        "WEAVES, THREADS, TAGS",
+        "STUDY A PASSAGE",
         &[
-            "A weave ties parallel passages together; point two panes at linked passages and the connector lines draw themselves. The Map and Constellation show the whole library.",
-            "Threads are ordered trails of passages; tags are labelled sets of verses and concepts. Give a tag a colour and its verses get a highlight wash — the tags browser doubles as your highlight browser.",
+            "Ctrl+click (or double-click) a word for what is underneath it: its Strong's entry, every way the King James renders that same word elsewhere, cross-references, and — with the analysis tiers on — morphology, same-root words and the concept map.",
+            "Search takes a word, a phrase, or a reference. A reference (John 3:16, 1 Cor 13, psalms) jumps there; a word or phrase lists ranked hits, and every hit in the chapter you are reading is banded as you go. A bare Strong's code (H430, G26) lists every verse tagged with it.",
         ],
     );
+    guide_step(
+        &mut out,
+        "Follow what the text says about itself",
+        &[
+            "A weave is a connection you FIND — the same event in three Gospels, a prophecy and its fulfilment, an Old Testament verse and the New that quotes it. Point two panes at linked passages and the connector lines draw themselves; no mode to enter.",
+            "That is the difference from a thread. A weave is in the text whether or not you noticed it, and you will stumble back into it for years. A thread is yours, and it is in the order you chose. If the connection is in the text, weave it; if the connection is your point, thread it.",
+            "The Map and Constellation views show the whole weave library at once. Weaves that shipped with the app began as AI-generated study aids and say so — approving one, from its compare card, is how it graduates to something you have checked against the text yourself.",
+        ],
+    );
+    guide_step(
+        &mut out,
+        "Collect a topic over time",
+        &[
+            "Tags are labelled sets of verses and concepts — the slow way a topic accumulates as you keep running into it. Give a tag a colour and its verses get a highlight wash, so the tags browser doubles as your highlight browser.",
+        ],
+    );
+
     guide_section(
         &mut out,
-        "NOTES, COPY, THEMES",
+        "HIDE IT IN YOUR HEART",
         &[
-            "Right-click a verse to copy it (plain, with a reference, or as markdown), copy the chapter, tag it, add it to a thread, highlight it, or write a personal note. Your notes show a gutter mark and a “your note” line in the study panel.",
-            "The theme button cycles light, a candlelight-warm dark, a true-black night, and follow-system. Your choice, text size, and last reading position are remembered.",
+            "Any verse (or a passage, as one chunk) can become a memorization card. The drills are first-letter prompts, progressive blank-out, and typed recall; the schedule is the proven spaced-repetition algorithm, so review comes back exactly when you are about to forget.",
+            "The memorize hub shows what is due, a map of the canon shaded by what you know, and a heatmap of the days you turned up.",
         ],
     );
+
+    guide_section(
+        &mut out,
+        "MAKE IT YOURS",
+        &[
+            "Right-click a verse to copy it (plain, with a reference, or as markdown), copy the chapter, tag it, thread it, highlight it, or write a note in your own words. Your notes get a gutter mark and a “your note” line in the study panel.",
+            "The theme button cycles light, a candlelight-warm dark, a true-black night, and follow-system. Your theme, text size, margins and last reading position are all remembered.",
+            "Everything you write is yours and stays on your device. Settings ▸ Back up (.zip) exports all of it — notes, highlights, tags, threads, weaves, memory work and your reading history — and the same archive restores on a phone or in a browser.",
+        ],
+    );
+
     out.push(Block::Rule);
     out.push(Block::para(vec![
         Run::new("Press ? for keyboard shortcuts.", sz::SMALL, Color::Faded),

@@ -52,8 +52,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -121,15 +119,9 @@ fun FirstRunOverlay(
             }
         }
     }
-    val context = LocalContext.current
-    val serif = remember {
-        runCatching {
-            FontFamily(
-                Font("fonts/EBGaramond-Regular.ttf", context.assets),
-                Font("fonts/EBGaramond-Italic.ttf", context.assets, style = FontStyle.Italic),
-            )
-        }.getOrElse { FontFamily.Serif }
-    }
+    // One shared family for the whole app (ui/Typography.kt) — it also drives the
+    // Material typography, so chrome and body text are the same face.
+    val serif = rememberSerifFamily()
 
     // 0 choose · 1 welcome · 2 tiers · 3 curious · 4 church-before-sharing
     var stage by remember {
@@ -141,8 +133,10 @@ fun FirstRunOverlay(
             },
         )
     }
-    var human by remember { mutableStateOf(true) }
-    var machine by remember { mutableStateOf(true) }
+    // Unchecked to begin with: the tiers are opt-in, so this screen ASKS rather
+    // than confirming something already decided (2026-07-28).
+    var human by remember { mutableStateOf(false) }
+    var machine by remember { mutableStateOf(false) }
     // Asked on the two paths that hand the app on. Optional; pushed up only
     // when a name was actually given.
     var cName by remember { mutableStateOf("") }
@@ -211,21 +205,24 @@ fun FirstRunOverlay(
 
 @Composable
 private fun Choose(palette: ReaderPalette, serif: FontFamily, onPath: (Int) -> Unit, onSharing: () -> Unit) {
-    Text("✦", color = palette.gold, fontSize = 22.sp)
+    Text("✦", color = palette.gold, fontSize = 25.sp)
     Spacer(Modifier.height(8.dp))
     Text(
-        "Welcome to Plumbline", color = palette.ink, fontSize = 26.sp,
+        "Welcome to Plumbline", color = palette.ink, fontSize = 29.sp,
         fontFamily = serif, fontWeight = FontWeight.Bold,
     )
     Spacer(Modifier.height(6.dp))
     Text(
         "The Holy Bible, free and offline.\nWhere would you like to begin?",
-        color = palette.faded, fontSize = 14.5.sp,
+        color = palette.faded, fontSize = 16.5.sp,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
     Spacer(Modifier.height(22.dp))
-    PathCard(palette, "New in the faith", "I've just put my faith in Jesus — where do I start?") { onPath(1) }
+    // Curious leads (2026-07-28): a stranger to the Bible is the likelier
+    // first-time reader of the two, and the path that asks the least of someone
+    // should be the one they see first. Web twin: FirstRun.svelte's choose stage.
     PathCard(palette, "Curious about the Bible", "I'm not sure what I believe — where do I start?") { onPath(3) }
+    PathCard(palette, "New in the faith", "I've just put my faith in Jesus — where do I start?") { onPath(1) }
     PathCard(palette, "Sharing the gospel", "Walk someone down the Romans Road, right now.", onSharing)
     PathCard(
         palette, "Established believer",
@@ -244,8 +241,8 @@ private fun PathCard(palette: ReaderPalette, name: String, desc: String, onClick
             .clickable(onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 15.dp),
     ) {
-        Text(name, color = palette.ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Text(desc, color = palette.faded, fontSize = 13.5.sp, modifier = Modifier.padding(top = 3.dp))
+        Text(name, color = palette.ink, fontSize = 19.5.sp, fontWeight = FontWeight.SemiBold)
+        Text(desc, color = palette.faded, fontSize = 15.5.sp, modifier = Modifier.padding(top = 3.dp))
     }
 }
 
@@ -263,7 +260,7 @@ private fun Welcome(
 ) {
     @Composable
     fun Para(text: String) = Text(
-        text, color = palette.ink, fontSize = 16.5.sp, lineHeight = 25.sp,
+        text, color = palette.ink, fontSize = 19.sp, lineHeight = 29.sp,
         fontFamily = serif, modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
     )
 
@@ -274,7 +271,7 @@ private fun Welcome(
         Column(Modifier.fillMaxWidth().padding(top = 6.dp, start = 14.dp, end = 6.dp)) {
             if (text.isNotEmpty()) {
                 Text(
-                    "“$text”", color = palette.ink, fontSize = 15.5.sp, lineHeight = 23.sp,
+                    "“$text”", color = palette.ink, fontSize = 17.5.sp, lineHeight = 27.sp,
                     fontFamily = serif, fontStyle = FontStyle.Italic,
                 )
             }
@@ -284,7 +281,7 @@ private fun Welcome(
             ) {
                 for (r in refs) {
                     Text(
-                        r.label, color = palette.gold, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        r.label, color = palette.gold, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.clickable { onRef(r) }.padding(vertical = 3.dp),
                     )
                 }
@@ -294,7 +291,7 @@ private fun Welcome(
 
     Text(
         "We're so glad you've put your faith in Jesus",
-        color = palette.ink, fontSize = 22.sp, fontFamily = serif, fontWeight = FontWeight.Bold,
+        color = palette.ink, fontSize = 25.sp, fontFamily = serif, fontWeight = FontWeight.Bold,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
     Para("There are some next steps you can take to grow in faith:")
@@ -303,8 +300,9 @@ private fun Welcome(
             "great place to start reading the inspired, inerrant word of God. You've been linked " +
             "the King James Version, which is the closest to the original texts and has been used " +
             "for hundreds of years by millions of believers. If you have trouble with the older " +
-            "English, we recommend you read a newer translation like the ESV alongside (not " +
-            "instead of) the King James to better understand.",
+            "English, turn on the Plain-English overlay in Settings: it marks the words the " +
+            "American King James Version puts differently, so a modern wording is a tap away " +
+            "without ever leaving the King James text.",
     )
     Quote(PURE)
     Para(
@@ -342,13 +340,13 @@ private fun Welcome(
     Spacer(Modifier.height(10.dp))
     Text(
         "Tap any verse reference to open it beside the book of John.",
-        color = palette.faded, fontSize = 12.5.sp, fontStyle = FontStyle.Italic,
+        color = palette.faded, fontSize = 14.5.sp, fontStyle = FontStyle.Italic,
     )
     Spacer(Modifier.height(16.dp))
     Button(
         onClick = onStart,
         colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
-    ) { Text(closeLabel ?: "Open the book of John", fontSize = 16.sp) }
+    ) { Text(closeLabel ?: "Open the book of John", fontSize = 18.5.sp) }
 }
 
 /**
@@ -368,7 +366,7 @@ private fun Curious(
 ) {
     @Composable
     fun Para(text: String) = Text(
-        text, color = palette.ink, fontSize = 16.5.sp, lineHeight = 25.sp,
+        text, color = palette.ink, fontSize = 19.sp, lineHeight = 29.sp,
         fontFamily = serif, modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
     )
 
@@ -378,7 +376,7 @@ private fun Curious(
         Column(Modifier.fillMaxWidth().padding(top = 6.dp, start = 14.dp, end = 6.dp)) {
             if (text.isNotEmpty()) {
                 Text(
-                    "“$text”", color = palette.ink, fontSize = 15.5.sp, lineHeight = 23.sp,
+                    "“$text”", color = palette.ink, fontSize = 17.5.sp, lineHeight = 27.sp,
                     fontFamily = serif, fontStyle = FontStyle.Italic,
                 )
             }
@@ -388,7 +386,7 @@ private fun Curious(
             ) {
                 for (r in refs) {
                     Text(
-                        r.label, color = palette.gold, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        r.label, color = palette.gold, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.clickable { onRef(r) }.padding(vertical = 3.dp),
                     )
                 }
@@ -398,7 +396,7 @@ private fun Curious(
 
     Text(
         "I'm glad you're curious about the Bible.",
-        color = palette.ink, fontSize = 22.sp, fontFamily = serif, fontWeight = FontWeight.Bold,
+        color = palette.ink, fontSize = 25.sp, fontFamily = serif, fontWeight = FontWeight.Bold,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
     Para(
@@ -431,13 +429,13 @@ private fun Curious(
     Spacer(Modifier.height(10.dp))
     Text(
         "Tap any verse reference to open it beside the book of John.",
-        color = palette.faded, fontSize = 12.5.sp, fontStyle = FontStyle.Italic,
+        color = palette.faded, fontSize = 14.5.sp, fontStyle = FontStyle.Italic,
     )
     Spacer(Modifier.height(16.dp))
     Button(
         onClick = onStart,
         colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
-    ) { Text(closeLabel ?: "Open the book of John", fontSize = 16.sp) }
+    ) { Text(closeLabel ?: "Open the book of John", fontSize = 18.5.sp) }
 }
 
 /** The three optional church fields, with the reason they are being asked. */
@@ -455,7 +453,7 @@ private fun ChurchFields(
         "Optional. If you add your church, the links and QR codes you share carry it, so whoever " +
             "you hand the Bible to can also find your church. It stays on your device otherwise — " +
             "nothing is sent anywhere.",
-        color = palette.faded, fontSize = 12.5.sp,
+        color = palette.faded, fontSize = 14.5.sp,
     )
     OutlinedTextField(
         value = name, onValueChange = onName, label = { Text("Church name") },
@@ -486,13 +484,13 @@ private fun ChurchBeforeSharing(
     onGo: () -> Unit,
 ) {
     Text(
-        "Before you share it", color = palette.ink, fontSize = 24.sp, fontWeight = FontWeight.SemiBold,
+        "Before you share it", color = palette.ink, fontSize = 27.sp, fontWeight = FontWeight.SemiBold,
     )
     Spacer(Modifier.height(6.dp))
     Text(
         "You're about to walk someone down the Romans Road. If they keep the app afterwards, this " +
             "is how they find their way back to you.",
-        color = palette.faded, fontSize = 14.sp,
+        color = palette.faded, fontSize = 16.sp,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
     Spacer(Modifier.height(14.dp))
@@ -501,7 +499,7 @@ private fun ChurchBeforeSharing(
     Button(
         onClick = onGo,
         colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
-    ) { Text("Open the Romans Road", fontSize = 16.sp) }
+    ) { Text("Open the Romans Road", fontSize = 18.5.sp) }
     TextButton(onClick = onGo) { Text("Skip for now", color = palette.faded) }
 }
 
@@ -521,17 +519,17 @@ private fun Tiers(
     onStart: () -> Unit,
 ) {
     Text(
-        "Welcome to Plumbline", color = palette.ink, fontSize = 24.sp, fontWeight = FontWeight.SemiBold,
+        "Welcome to Plumbline", color = palette.ink, fontSize = 27.sp, fontWeight = FontWeight.SemiBold,
     )
     Spacer(Modifier.height(10.dp))
-    Text("Your church", color = palette.ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+    Text("Your church", color = palette.ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(4.dp))
     ChurchFields(palette, cName, cInfo, cUrl, onName, onInfo, onUrl)
     HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 14.dp))
     Text(
         "The Holy Bible is always on — reading, search, and your own tags, notes, " +
             "and threads. Choose which layers of analysis sit alongside it:",
-        color = palette.faded, fontSize = 14.sp,
+        color = palette.faded, fontSize = 16.sp,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
     Spacer(Modifier.height(16.dp))
@@ -548,14 +546,14 @@ private fun Tiers(
     Spacer(Modifier.height(8.dp))
     Text(
         "Every piece of evidence is marked with where it comes from — ✝ the text · † scholarship · ≈ machine.",
-        color = palette.faded, fontSize = 12.sp,
+        color = palette.faded, fontSize = 14.sp,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
     Spacer(Modifier.height(14.dp))
     Button(
         onClick = onStart,
         colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
-    ) { Text("Start reading", fontSize = 16.sp) }
+    ) { Text("Start reading", fontSize = 18.5.sp) }
 }
 
 @Composable
@@ -581,8 +579,8 @@ private fun TierCard(
             colors = CheckboxDefaults.colors(checkedColor = palette.gold),
         )
         Column {
-            Text(name, color = palette.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            Text(desc, color = palette.faded, fontSize = 13.sp, modifier = Modifier.padding(top = 3.dp))
+            Text(name, color = palette.ink, fontSize = 18.5.sp, fontWeight = FontWeight.SemiBold)
+            Text(desc, color = palette.faded, fontSize = 15.sp, modifier = Modifier.padding(top = 3.dp))
         }
     }
 }

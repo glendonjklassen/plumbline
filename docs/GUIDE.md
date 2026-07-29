@@ -115,11 +115,37 @@ others is just two links, and combining weaves is a union.
 
 ## Threads & tags
 
-- **Threads** are ordered trails of passages — build one with *＋ add to
-  thread* from the study panel, follow it from the **Threads** list, annotate
-  entries with notes.
-- **Tags** are flat labels on verses — *＋ tag verse*, then browse from
-  **Tags**; `✕` untags.
+**A weave is something you find. A thread is something you make.** Weaves are
+already in the Bible — the same event in three Gospels, a prophecy and its
+fulfilment — and you write down what you noticed. A thread is passages you
+gathered because *you* had a reason: a sermon, a lesson, an argument. The order
+matters, because the order is your point.
+
+- **Threads** are ordered trails of passages. *Add to thread…* from the verse
+  menu opens a picker: tap a thread you already have, or name a new one (a
+  freetext-only prompt made you retype an existing name exactly, and a typo
+  forked a second thread). `✕` deletes a thread and everything on it. Entries
+  carry their own notes, and the thread has a running notes document.
+- **Tags** are flat labels on verses — same picker idiom, existing tags first.
+  Colour a tag and its verses get a highlight wash.
+
+## The reading map
+
+The book and chapter grids in **Go to…** tint themselves by how you have read:
+slate for never, amber for partway, sage for read through. A book takes the
+word-weighted blend of its chapters, so the chapters always add up to it.
+
+On top of the hue, a chapter **glows** the longer it has been since you read it —
+nothing for the first month, full at a year. That is the point of the feature: it
+shows where you have not been lately. Chapters you have never read ramp the same
+way from the day you started, so a new install begins quiet and fills in.
+
+Reading is counted generously: a chapter fills as you move through it at a natural
+pace (flipping past credits nothing, and neither does leaving it open), and 90%
+counts as read through. Read on paper? Long-press a chapter's first verse and
+choose **Mark chapter read…** to set the date yourself.
+
+It all travels in the backup zip (`reading/`), and nobody but you ever sees it.
 
 ## Where everything lives
 
@@ -130,8 +156,8 @@ the per-user data dir (`~/.local/share/plumbline` on Linux,
 on macOS). The window title's tooltip and the first line of `plumbline-hydrate
 check` both print the resolved home.
 
-Inside it, **yours** (back these up): `weaves/`, `threads/`, `tags/`,
-`patches/`. Shipped/regenerable: `data/`, `bridge/`, and the `*.idxcache`
+Inside it, **yours** (back these up): `weaves/`, `threads/`, `tags/`, `notes/`,
+`memory/`, `reading/`. Shipped/regenerable: `data/`, `bridge/`, and the `*.idxcache`
 startup cache. Config (mode, text size, open panes) is separate, in the
 platform config dir (`~/.config/plumbline/config.json` on Linux). Every write
 is atomic; a corrupt or missing optional file degrades its feature, never the

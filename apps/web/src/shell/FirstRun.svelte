@@ -25,8 +25,10 @@
   $effect(() => {
     if (s.reopenIntro) stage = s.reopenIntro === "curious" ? "curious" : "welcome";
   });
-  let human = $state(true);
-  let machine = $state(true);
+  // Unchecked to begin with: the tiers are opt-in, so this screen ASKS rather
+  // than confirming something already decided (2026-07-28).
+  let human = $state(false);
+  let machine = $state(false);
 
   // The home church, asked of the people likely to hand this on: the
   // established believer setting the app up, and whoever is about to walk
@@ -261,13 +263,16 @@
       <h2>Welcome to Plumbline</h2>
       {@render sharedBy()}
       <p class="sub">The Holy Bible, free and offline. Where would you like to begin?</p>
-      <button class="path" onclick={() => (stage = "welcome")}>
-        <span class="name">New in the faith</span>
-        <span class="desc">I've just put my faith in Jesus — where do I start?</span>
-      </button>
+      <!-- Curious leads (2026-07-28): a stranger to the Bible is the likelier
+           first-time reader of the two, and the path that asks the least of
+           someone should be the one they see first. -->
       <button class="path" onclick={() => (stage = "curious")}>
         <span class="name">Curious about the Bible</span>
         <span class="desc">I'm not sure what I believe — where do I start?</span>
+      </button>
+      <button class="path" onclick={() => (stage = "welcome")}>
+        <span class="name">New in the faith</span>
+        <span class="desc">I've just put my faith in Jesus — where do I start?</span>
       </button>
       <!-- A link shared from Present was handed to someone in person, so it
            offers only the two paths it was meant for: the rest is setup for a
@@ -295,8 +300,9 @@
           great place to start reading the inspired, inerrant word of God. You've been linked the
           King James Version, which is the closest to the original texts and has been used for
           hundreds of years by millions of believers. If you have trouble with the older English,
-          I recommend you read a newer translation like the ESV alongside (not instead of) the
-          King James to better understand.
+          turn on the <b>Plain-English overlay</b> in Settings: it marks the words the American
+          King James Version puts differently, so a modern wording is a tap away without ever
+          leaving the King James text.
         </p>
         {@render vquote([REF.pure])}
         <p>
@@ -479,12 +485,12 @@
     white-space: nowrap;
   }
   h2 {
-    font-size: 20px;
+    font-size: 23px;
     font-weight: 500;
     text-align: center;
   }
   .sub {
-    font-size: 14px;
+    font-size: 16px;
     color: var(--faded, #8a8276);
     text-align: center;
   }
@@ -506,7 +512,7 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    font-size: 15px;
+    font-size: 17px;
     line-height: 1.55;
   }
   .vq {
@@ -519,7 +525,7 @@
   }
   .vq-text {
     font-family: "EB Garamond", Georgia, serif;
-    font-size: 15.5px;
+    font-size: 17.5px;
     line-height: 1.5;
     font-style: italic;
   }
@@ -530,7 +536,7 @@
     display: inline;
     color: var(--gold, #9e7d38);
     font-weight: 600;
-    font-size: 13.5px;
+    font-size: 15.5px;
     padding: 0 2px;
   }
   .ref:hover {
@@ -542,7 +548,7 @@
     font-weight: 400;
   }
   .hint {
-    font-size: 12.5px;
+    font-size: 14.5px;
     color: var(--faded, #8a8276);
     font-style: italic;
   }
@@ -551,7 +557,7 @@
     text-align: center;
   }
   .ch-why {
-    font-size: 12.5px;
+    font-size: 14.5px;
     color: var(--faded, #8a8276);
     line-height: 1.45;
     text-align: center;
@@ -562,7 +568,7 @@
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 7px;
     padding: 8px 10px;
-    font-size: 15px;
+    font-size: 17px;
     box-sizing: border-box;
   }
   .ch-rule {
@@ -573,7 +579,7 @@
   }
   .ch-skip {
     align-self: center;
-    font-size: 13.5px;
+    font-size: 15.5px;
     color: var(--faded, #8a8276);
     text-decoration: underline;
   }
@@ -588,21 +594,21 @@
     padding: 10px 14px;
   }
   .fc-lead {
-    font-size: 12px;
+    font-size: 14px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--faded, #8a8276);
   }
   .fc-name {
-    font-size: 17px;
+    font-size: 19.5px;
     font-weight: 600;
     color: var(--gold, #9e7d38);
   }
   .fc-info {
-    font-size: 13.5px;
+    font-size: 15.5px;
   }
   .fc-url {
-    font-size: 13px;
+    font-size: 15px;
     color: var(--gold, #9e7d38);
     text-decoration: underline;
     word-break: break-all;
@@ -641,12 +647,12 @@
     color: var(--tierMachine, #999);
   }
   .desc {
-    font-size: 13.5px;
+    font-size: 15.5px;
     color: var(--faded, #8a8276);
     line-height: 1.4;
   }
   .note {
-    font-size: 12px;
+    font-size: 14px;
     color: var(--faded, #8a8276);
     text-align: center;
   }
@@ -656,6 +662,6 @@
     background: var(--gold, #9e7d38);
     color: #fff;
     border-radius: 8px;
-    font-size: 16px;
+    font-size: 18.5px;
   }
 </style>
