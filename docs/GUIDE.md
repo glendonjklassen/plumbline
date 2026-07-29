@@ -127,7 +127,13 @@ matters, because the order is your point.
   forked a second thread). `✕` deletes a thread and everything on it. Entries
   carry their own notes, and the thread has a running notes document.
 - **Tags** are flat labels on verses — same picker idiom, existing tags first.
-  Colour a tag and its verses get a highlight wash.
+  The slow way a topic accumulates: tag a verse each time you run into the idea
+  again, and the tag becomes the list you wished you had kept.
+
+> [!NOTE]
+> Highlighting was removed in v0.33.0. Tags, notes and threads all say *why* a
+> verse matters to you; a colour only says *that* it does, and three ways to mark
+> a verse was two too many. Nothing you tagged or wrote was touched.
 
 ## The reading map
 

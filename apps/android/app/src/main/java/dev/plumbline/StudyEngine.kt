@@ -14,7 +14,7 @@
 // `char*` for the ABI's optional parameters.
 //
 // Method names are PascalCase on purpose: the four-author contract fixes the C#
-// vocabulary (Open, TocJson, LayoutChapter, HighlightAdd, …) as the shared names
+// vocabulary (Open, TocJson, LayoutChapter, TagAdd, …) as the shared names
 // every shell calls, so they are identical across StudyEngine.cs and this file.
 
 package dev.plumbline
@@ -102,9 +102,6 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
         /** The colour palette for a theme (`light`/`dark`/`night`) as JSON.
          *  Never null. */
         fun PaletteJson(theme: String): String = take(ffi.plumbline_theme_palette_json(theme))!!
-
-        /** The fixed highlight tones (`{tones:[{name,hex}]}`) — the swatch menu. */
-        fun HighlightTonesJson(): String = take(ffi.plumbline_theme_highlight_tones_json())!!
 
         /** The in-app guide / About cards as panel blocks. Static content. */
         fun GuideBlocksJson(): String = take(ffi.plumbline_panel_guide_blocks_json())!!
@@ -266,7 +263,7 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
     fun WeaveSetNotes(name: String, notes: String): String? =
         take(ffi.plumbline_engine_weave_set_notes(h, name, notes))
 
-    // ── Tier 0: copy, personal notes, highlights, warming ─────────────────────
+    // ── Tier 0: copy, personal notes, warming ─────────────────────────────────
 
     /** Clipboard text for a verse / its chapter in one of the CopyKind shapes
      *  (`verse`/`verseRef`/`verseMarkdown`/`chapter`/`chapterMarkdown`). Plain
@@ -284,37 +281,6 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
      *  Null = success, else an error message. */
     fun UserNoteSet(refKey: String, text: String, stampUtc: String): String? =
         take(ffi.plumbline_engine_user_note_set(h, refKey, text, stampUtc))
-
-    /** Set (or clear, with a null `color`) the swatch colour of a tag — drives
-     *  highlighting. Null = success, else an error message. */
-    fun TagSetColor(name: String, color: String?): String? =
-        take(ffi.plumbline_engine_tag_set_color(h, name, color))
-
-    /** The highlight washes for a chapter (`{book,chapter,verses:[…],runs:[…]}`).
-     *  Never null on a live engine. */
-    fun ChapterHighlightsJson(book: String, chapter: Int): String? =
-        take(ffi.plumbline_engine_chapter_highlights_json(h, book, chapter))
-
-    /** Add a word-precise cross-verse highlight range to a tone tag (created
-     *  coloured on first use). Endpoints are ordered canonically in core, so a
-     *  backwards drag is fine. `color` may be null. Null = success. */
-    fun HighlightAdd(
-        name: String, color: String?,
-        startRef: String, startTok: Int, endRef: String, endTok: Int, addedUtc: String,
-    ): String? = take(
-        ffi.plumbline_engine_highlight_add(h, name, color, startRef, startTok, endRef, endTok, addedUtc)
-    )
-
-    /** Remove the highlight range with these exact endpoints from a tag.
-     *  Null = success. */
-    fun HighlightRemove(
-        name: String, startRef: String, startTok: Int, endRef: String, endTok: Int,
-    ): String? = take(ffi.plumbline_engine_highlight_remove(h, name, startRef, startTok, endRef, endTok))
-
-    /** Drop every highlight range covering a verse (the drag-remove path).
-     *  Null = success. */
-    fun HighlightClearVerse(verseRef: String): String? =
-        take(ffi.plumbline_engine_highlight_clear_verse(h, verseRef))
 
     /** Force the lazy analytics indexes to build now (call on a background thread
      *  at startup in Full mode). Safe from any thread; null = success. */

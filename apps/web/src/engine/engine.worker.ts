@@ -48,7 +48,6 @@ import {
   configSave,
   engineVersion,
   guideBlocks,
-  highlightTones,
   routeLink,
   themePalette,
   type LayoutCfg,
@@ -131,7 +130,7 @@ function startStallMeter(): void {
 }
 
 // ── the turn cache ────────────────────────────────────────────────────────────
-// Laid-out chapters, keyed by everything the layout depends on. Highlights,
+// Laid-out chapters, keyed by everything the layout depends on. Overlays,
 // notes and the verse band are painted OVER the display list by the shell, so
 // authoring never invalidates this — only a width/font/spacing change does,
 // and that changes the key. Small and LRU: a handful of chapters is enough to
@@ -594,7 +593,6 @@ function statics(): Record<string, (...a: any[]) => any> {
     configLoad: () => configLoad(w),
     configSave: (cfg: unknown) => configSave(w, cfg),
     themePalette: (theme: string) => themePalette(w, theme),
-    highlightTones: () => highlightTones(w),
     guideBlocks: () => guideBlocks(w),
     aboutBlocks: () => aboutBlocks(w),
     engineVersion: () => engineVersion(w),

@@ -75,8 +75,6 @@ export class Session {
   toast = $state<string | null>(null);
   showFirstRun = $state(false);
   showShortcuts = $state(false);
-  /** Last-used highlight tone — the default for drag ranges. */
-  lastTone = $state<{ name: string; hex: string } | null>(null);
   /** Open context menu (verse actions), positioned at client coords. */
   contextMenu = $state<{ x: number; y: number; refKey: string } | null>(null);
   /** Tag-picker sheet target (refKey), Android TagPickerSheet parity. */
@@ -122,8 +120,6 @@ export class Session {
   presentThreadName = $state<string | null>(null);
   /** Whether the bundled stock set is on (worker home state, mirrored). */
   bundledOn = $state(true);
-  /** The fixed highlight tones (primed at boot — swatches + drag default). */
-  tones = $state<{ name: string; hex: string }[]>([]);
   /** The machine-tier pack's lifecycle this session. Phones boot with the
    *  auto-download deferred ("off") and load it behind an explicit action;
    *  desktops auto-load ("loading" → "ready") when the machine tier is on. */

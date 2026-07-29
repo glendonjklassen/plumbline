@@ -7,13 +7,12 @@
 // main thread under `synchronized(engine)` (two reader panes may touch the engine
 // at once, exactly as ReaderPane serialises its layout/hit-test calls).
 //
-// The highlight tones and the verse-then-trim mechanic were REMOVED 2026-07-29 on
-// product feedback: colour-washing verses was noise nobody wanted, and a row of
-// six swatches was the loudest thing in a sheet opened to copy a verse. Existing
-// highlights still render — the washes come from coloured tags, and a reader's tags
-// are their data, not ours to delete — there is just no longer a way to make a new
-// one from here. The engine's HighlightAdd / HighlightClearVerse endpoints stay on
-// the ABI for the same reason.
+// Highlighting is GONE, root and branch (2026-07-29): the tone swatches, the
+// verse-then-trim mechanic, the washes, tag colour, and the five ABI endpoints
+// behind them. "Tags + notes + threads are a better way to annotate and tie
+// together scripture as we read" — three ways to mark a verse was two too many,
+// and the swatches were the loudest thing in a sheet opened to copy a verse.
+// If anyone asks for highlights, they come back; git remembers.
 //
 // Author D (Compose UI).
 
@@ -539,7 +538,7 @@ private fun ActionRow(label: String, color: Color, onClick: () -> Unit) {
 
 /**
  * The tag picker (product feedback, 2026-07-24): tagging a verse offers the
- * EXISTING tags first — plain tags before the coloured highlight-tone ones — and
+ * EXISTING tags first, alphabetically, and
  * "New tag…" is the secondary, freetext path. New tags are created colourless
  * (colour stays an explicit, optional choice; core never assigns one).
  * Opened by the study panel's `addtag:REF` link.
@@ -599,9 +598,9 @@ fun TagPickerSheet(
             if (list == null) {
                 Text("…", color = palette.faded, modifier = Modifier.padding(vertical = 12.dp))
             } else {
-                // Existing tags first: plain topical tags, then the coloured
-                // highlight-tone ones (they are highlight machinery, not topics).
-                val ordered = list.sortedWith(compareBy({ it.color != null }, { it.name.lowercase() }))
+                // Every tag is a topic now that highlight tones are gone, so plain
+                // alphabetical is the whole ordering.
+                val ordered = list.sortedBy { it.name.lowercase() }
                 for (t in ordered) {
                     Row(
                         Modifier.fillMaxWidth().clickable { apply(t.name) }
@@ -609,13 +608,6 @@ fun TagPickerSheet(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(t.name, color = palette.ink, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                        t.color?.let { hex ->
-                            Box(
-                                Modifier.size(12.dp).clip(CircleShape)
-                                    .background(ReaderPalette.hex(hex), CircleShape),
-                            )
-                            Spacer(Modifier.size(8.dp))
-                        }
                         Text(
                             "${t.members.size} verse${if (t.members.size == 1) "" else "s"}",
                             color = palette.faded, fontSize = 12.sp,

@@ -11,8 +11,7 @@
   // verse targeting) push it back via the guarded effect below.
   import { untrack } from "svelte";
   import { getSession } from "../state/session.svelte";
-  import { hitTest, itemVerse, MARGIN, paintChapter, verseExtents, type LayoutItem, type PaintOverlays } from "./paint";
-  import { nowStamp } from "../engine/StudyEngine";
+  import { hitTest, MARGIN, paintChapter, verseExtents, type LayoutItem, type PaintOverlays } from "./paint";
 
   const MAX_COLUMN = 720;
 
@@ -59,17 +58,6 @@
 
   const verseNumOf = (refKey: string) => Number(refKey.slice(refKey.lastIndexOf(":") + 1)) || 0;
 
-  // Highlight washes + word-precise runs for this chapter (Tier-0 #4).
-  const highlights = $derived.by(() => {
-    void s.studyEpoch;
-    return s.q("chapterHighlights", pane.book, pane.chapter);
-  });
-  const washes = $derived(
-    new Map<number, string>((highlights?.verses ?? []).map((v: any) => [verseNumOf(v.verse), v.color])),
-  );
-  const runs = $derived(
-    (highlights?.runs ?? []).map((r: any) => ({ verse: verseNumOf(r.verse), lo: r.lo, hi: r.hi, color: r.color })),
-  );
 
   // Verses with a personal note — the square gutter mark (Tier-0 #3).
   const noteVerses = $derived.by(() => {
@@ -229,10 +217,7 @@
     void s.palette;
     void overlays;
     void weaveDots;
-    void washes;
-    void runs;
     void noteVerses;
-    void dragPreview;
     void cssW;
     void cssH;
     void pane.targetVerse;
@@ -268,9 +253,6 @@
         bandVerse: pane.targetVerse,
         weaveDotVerses: weaveDots,
         noteVerses,
-        washes,
-        runs,
-        dragPreview,
         ...overlays,
       },
     );
@@ -331,33 +313,7 @@
     if (refKey) s.contextMenu = { x: clientX, y: clientY, refKey };
   }
 
-  // ── drag highlights (mouse): press marks the start word, a 6px drag
-  //    previews the range in the last-used tone ──
-  const defaultTone = () =>
-    s.lastTone ?? {
-      name: s.tones[0]?.name.replace(/^./, (c) => c.toUpperCase()) ?? "Amber",
-      hex: s.tones[0]?.hex ?? "#f6e0a0",
-    };
-  let dragStart: { verse: number; tok: number; x: number; y: number } | null = null;
-  let dragEnd: { verse: number; tok: number } | null = null;
-  let dragPreview = $state<{ verse: number; lo: number; hi: number; color: string }[] | null>(null);
-
-  function maxTokOf(verse: number): number {
-    let max = 0;
-    for (const it of items)
-      if (it.kind === "word" && itemVerse(it) === verse && (it.tokenIndex ?? 0) > max) max = it.tokenIndex ?? 0;
-    return max;
-  }
-  function rangeRuns(a: { verse: number; tok: number }, b: { verse: number; tok: number }, color: string) {
-    let [s1, s2] = a.verse < b.verse || (a.verse === b.verse && a.tok <= b.tok) ? [a, b] : [b, a];
-    if (s1.verse === s2.verse) return [{ verse: s1.verse, lo: s1.tok, hi: s2.tok, color }];
-    const out = [{ verse: s1.verse, lo: s1.tok, hi: maxTokOf(s1.verse), color }];
-    for (let v = s1.verse + 1; v < s2.verse; v++) out.push({ verse: v, lo: 0, hi: maxTokOf(v), color });
-    out.push({ verse: s2.verse, lo: 0, hi: s2.tok, color });
-    return out;
-  }
-
-  // ── touch: tap, long-press menu, horizontal chapter swipe; mouse click/drag.
+  // ── touch: tap, long-press menu, horizontal chapter swipe; mouse click.
   //    Vertical panning is the browser's (touch-action: pan-y) — when native
   //    scroll claims the gesture we get pointercancel and stand down. ──
   let touchStartX = 0;
@@ -383,10 +339,6 @@
           moved = true; // swallow the tap-up
         }
       }, 480);
-    } else if (e.button === 0) {
-      const hit = hitAt(e);
-      if (hit?.tokenIndex != null)
-        dragStart = { verse: verseNumOf(hit.verse), tok: hit.tokenIndex, x: e.clientX, y: e.clientY };
     }
   }
   function onPointerMove(e: PointerEvent): void {
@@ -395,14 +347,6 @@
       if (Math.abs(e.clientY - touchStartY) > 8 || Math.abs(touchDx) > 8) {
         moved = true;
         if (longPress) clearTimeout(longPress);
-      }
-      return;
-    }
-    if (dragStart && Math.hypot(e.clientX - dragStart.x, e.clientY - dragStart.y) > 6) {
-      const hit = hitAt(e);
-      if (hit?.tokenIndex != null) {
-        dragEnd = { verse: verseNumOf(hit.verse), tok: hit.tokenIndex };
-        dragPreview = rangeRuns(dragStart, dragEnd, defaultTone().hex);
       }
     }
   }
@@ -434,25 +378,6 @@
       }
       return;
     }
-    if (dragStart && dragEnd && dragPreview) {
-      // Commit the range highlight (endpoints canonicalised).
-      const [a, b] =
-        dragStart.verse < dragEnd.verse || (dragStart.verse === dragEnd.verse && dragStart.tok <= dragEnd.tok)
-          ? [dragStart, dragEnd]
-          : [dragEnd, dragStart];
-      const tone = defaultTone();
-      const mk = (v: number) => `${pane.book} ${pane.chapter}:${v}`;
-      void s.author("highlightAdd", tone.name, tone.hex, mk(a.verse), a.tok, mk(b.verse), b.tok, nowStamp()).then(
-        (err) => {
-          if (err) s.showToast(err);
-          else s.lastTone = tone;
-        },
-      );
-      suppressClick = true;
-    }
-    dragStart = null;
-    dragEnd = null;
-    dragPreview = null;
   }
   // Single click a word → word study (Compose tap parity; touch taps already
   // do this in onPointerUp).

@@ -93,7 +93,7 @@ by both desktop shells). Each shell wires it to the window/taskbar:
   faint gold rule under every one, and since most words carry a Strong's number
   it amounted to underlining the Bible. Whether a word answers when tapped is
   learned once; the page does not need to keep saying it.
-- **Highlight band** (search/goto target): gold α0.12 rect over the verse's
+- **Search / goto band** (the jump target): gold α0.12 rect over the verse's
   lines, x from `margin−6`, width `col+12`; persists until that pane next
   navigates (M:2720–2740).
 - *Data*: `plumbline_engine_layout_chapter` (+ `plumbline_layout_*`), `plumbline_engine_toc_json`.
@@ -150,7 +150,7 @@ below — tier order, caps, (F)-gating, `humanize`, `RenderKey`, gloss/lemma
 formatting, the reverse-lens line, the provenance marks, snippet windowing, and
 the pre-baked link URIs. Each shell has a *small* per-block painter
 (`RenderBlocks` / `blocks_to_markup`); it derives nothing. The `word` (the
-surface that led here — highlights its rendering, keys the reverse line) is a
+surface that led here — marks its rendering, keys the reverse line) is a
 producer argument; the same producer's `code_study_card` is what the
 `code:CODE[:word]` verb opens standalone. The items below document *what the
 producer emits*, not shell code.
@@ -243,7 +243,7 @@ verses; 179 KB gzipped, shipped as a stage-2 core file.
   when that rule was removed (2026-07-28). Not bold and not grey: italic already means "supplied by the
   translator", a grey word is a de-emphasised one when the overlay makes it the
   word you are reading, and at 6.9% density a heavy mark reads as a ransom note.
-  Dotted also survives a highlight wash and works in greyscale.
+  Dotted also survives a search band and works in greyscale.
 - **Tapping** a marked word shows the AKJV wording and `KJV: …` under the
   headword, ABOVE the Strong's, because the codes are keyed to the KJV word. A
   multi-token run answers from any word inside it.
@@ -640,15 +640,14 @@ The eight small, additive daily-driver features from [TODO.md](../TODO.md) Tier
 0. Shared logic lives in `plumbline-core`; GTK calls it directly, WinUI/Compose
 through new FFI endpoints. New endpoints (all additive; bindings regenerated):
 `plumbline_engine_copy_text`, `plumbline_engine_user_note_json` / `_notes_json` / `_set`,
-`plumbline_engine_tag_set_color`, `plumbline_engine_chapter_highlights_json`,
-`plumbline_theme_palette_json`, `plumbline_theme_highlight_tones_json`,
+`plumbline_theme_palette_json`,
 `plumbline_engine_warm_indexes`, `plumbline_panel_guide_blocks_json` / `_about_blocks_json`.
 New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
 
 - **1. Copy & context menu.** Formatting is `plumbline_core::export::copy_text`
   (verse / verse+ref / markdown / chapter). Right-click a verse → menu: copy
-  shapes, Note…, highlight tones, and (Full) Tag… / Add to thread… (the last
-  three route through the panel dispatcher). GTK: a `gtk::Popover` of buttons +
+  shapes, Note…, and (Full) Tag… / Add to thread… (the last two route through the
+  panel dispatcher). GTK: a `gtk::Popover` of buttons +
   `area.clipboard().set_text`; WinUI: a `MenuFlyout` + `Clipboard.SetContent`.
   Verse-under-point = hit word's verse, else nearest verse-number by y.
 - **2. Back/forward history.** Per-pane `(book, chapter)` stack + cursor, seeded
@@ -662,29 +661,22 @@ New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
   content model; the `editnote:` verb prompts (multi-line). A square gutter mark
   sits left of the weave dot. GTK reads `State.usernotes`; WinUI via
   `user_notes_json` (gutter set) + `user_note_json` (prefill).
-- **4. Highlighting.** Reuses the existing tag `color` field: a colour-bearing
-  tag washes its verses. `tag::set_color` + `tag::verse_color`; a fixed 6-tone
-  palette (`theme::HIGHLIGHT_TONES`). The context menu's "Highlight — <tone>"
-  adds the verse to that tone's tag (created coloured); "Remove highlight"
-  clears every colour-tag holding it. Whole-verse washes paint at the band site
-  (GTK `band` closure; WinUI the highlight-band loop) under the search band.
+- **4. Highlighting — REMOVED 2026-07-29 (v0.33.0).** Tag colour, the six-tone
+  palette, whole-verse washes, the word-precise cross-verse drag ranges, and the
+  five ABI endpoints behind them (`tag_set_color`, `highlight_add` / `_remove` /
+  `_clear_verse`, `chapter_highlights_json`, `theme_highlight_tones_json`) are all
+  gone from the core, the ABI and both shells. Product call: *"tags + notes +
+  threads are a better way to annotate and tie together scripture as we read"* —
+  a tag or a note says WHY a verse matters, a colour only says THAT it does, and
+  three ways to mark a verse was two too many.
 
-  **Word-precise cross-verse ranges (drag).** Click-drag in the reader lays down
-  a highlight from one word to another, spanning verses. Model: an additive
-  `highlights` array on the tag file — `{startRef,startTok,endRef,endTok,color?}`,
-  reusing the frozen refKey + `kjv1769-tok2` token offsets; an old reader ignores
-  it and still shows whole-verse member washes (no new `TargetRepr` variant, which
-  would break its parse). `tag::add_highlight` / `remove_highlight`;
-  `tag::verse_highlight_runs` decomposes a range into per-verse `[lo,hi]` runs
-  (partial first/last verse, whole interior). FFI (all additive):
-  `plumbline_engine_highlight_add` / `_remove` / `_clear_verse`, and
-  `plumbline_engine_chapter_highlights_json` gains a `runs` array beside `verses`.
-  Both shells paint the runs as per-word rects (like the pinned-span band) and
-  preview the live drag in the default tone; a press still pins the start word,
-  a drag past a 6px threshold supersedes the pin, and endpoints are canonicalised
-  (a backwards drag stores the same range). "Remove highlight" also drops any
-  range covering the verse (GTK removes inline; WinUI via `_clear_verse`). GTK
-  uses a `gtk::GestureDrag`; WinUI a pointer-capture drag on the `CanvasControl`.
+  **What was kept**, because it is the reader's data and not ours: an
+  `overlay-tag-v1` file written before the removal still loads whole. Serde
+  ignores unknown fields, so its `color` and `highlights` keys are read past and
+  fall away the next time that tag is written — the tag, its members and their
+  notes survive untouched (tested: `tag::tests::a_tag_file_from_before_highlights_were_removed_still_loads`).
+  Nothing migrates, nothing is deleted out from under anyone, and git has the
+  implementation if it is ever asked for again.
 - **5. Dark + night themes.** `plumbline_core::theme::Palette` is the one source
   (`palette(theme)`), served as `plumbline_theme_palette_json`; light values are the
   shipped ones (no regression), dark (candlelight-warm) + night (true-black) are
@@ -895,7 +887,7 @@ canvas `measureText`, all flags/bands/washes/runs/gutter marks), multi-pane
 link router (incl. `makeweave:`), live search, hover gloss (native tooltip),
 keyboard map + wheel + touch (pan, long-press menu, horizontal chapter
 swipe), context menu (copy shapes / note / tones / tag / thread / memorize),
-tag picker + tag→weave sheets, drag highlights, the
+tag picker + tag→weave sheets, the
 three map popups from the core view-models (pinch-zoom), memorization (hub /
 drill / coverage / activity), Present mode (sunlight, share + the hosted
 PWA link + its QR on the end card), notes browser, history, first-run,
@@ -1080,7 +1072,7 @@ lines would wrap where they are not drawn.)
   `ui/Memorize.kt`); the **concept / constellation / chord** maps as
   pinch-zoom/pan canvases (`ui/Maps.kt`, incl. the cross-testament bridge row);
   **Tier-0 verse actions** via a long-press sheet (copy/share · note ·
-  verse-then-trim highlight · memorize — `ui/VerseActions.kt`); **study
+  memorize · mark-chapter-read — `ui/VerseActions.kt`); **study
   routing** for every panel verb (occurrences / rendering / codeStudy / thread /
   tag / weave / guide / about → the block pane); the **≡ study libraries**
   (threads / tags / weaves / suggested / guide / about) + a **Full-study**
@@ -1088,7 +1080,7 @@ lines would wrap where they are not drawn.)
   blocks); a **word-study bottom sheet** on narrow screens; and **authoring**
   (add tag/thread, edit note, approve/reject suggested weaves). Form-factor
   calls (product decisions, 2026-07-24): zoomable canvases, study bottom
-  sheet, verse-then-trim highlighting. So the per-feature "Compose delta" notes
+  sheet. So the per-feature "Compose delta" notes
   below are **resolved** except: `editThreadNotes` / `editWeaveNotes` /
   `editEntryNote` / `untag` (need an index→name lookup); the cross-testament
   **bridge data isn't loaded on Android yet** — `OpenFromBytes` has no home dir,

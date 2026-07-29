@@ -1101,8 +1101,8 @@ fn route_link_via_abi() {
 }
 
 /// The Tier-0 endpoints over the ABI: copy text, personal notes (write → read),
-/// tag colour → chapter highlights, the theme palette, guide/about blocks, and
-/// index warming. Exercised through a temp home exactly as a shell would.
+/// the theme palette, guide/about blocks, and index warming. Exercised through a
+/// temp home exactly as a shell would.
 #[test]
 fn tier0_endpoints_via_abi() {
     use std::ffi::CString;
@@ -1118,9 +1118,6 @@ fn tier0_endpoints_via_abi() {
             serde_json::from_str(&take(plumbline_theme_palette_json(c("night").as_ptr())).unwrap()).unwrap();
         assert_eq!(palette["paper"], "#000000");
         assert_eq!(palette["dark"], true);
-        let tones: Value =
-            serde_json::from_str(&take(plumbline_theme_highlight_tones_json()).unwrap()).unwrap();
-        assert!(tones["tones"].as_array().unwrap().len() >= 5);
         let guide: Value = serde_json::from_str(&take(plumbline_panel_guide_blocks_json()).unwrap()).unwrap();
         assert!(!guide["blocks"].as_array().unwrap().is_empty());
         assert!(!take(plumbline_panel_about_blocks_json()).unwrap().is_empty());
@@ -1154,63 +1151,6 @@ fn tier0_endpoints_via_abi() {
         assert_eq!(all["notes"].as_array().unwrap().len(), 1);
         assert!(plumbline_engine_user_note_set(e, c("John 3:16").as_ptr(), c("").as_ptr(), stamp.as_ptr()).is_null());
         assert!(plumbline_engine_user_note_json(e, c("John 3:16").as_ptr()).is_null());
-
-        // Highlight: tag a verse, colour the tag, then the chapter reports the wash.
-        assert!(plumbline_engine_tag_add(e, c("amber").as_ptr(), c("verse").as_ptr(), c("John 3:16").as_ptr(), ptr::null(), stamp.as_ptr()).is_null());
-        assert!(plumbline_engine_tag_set_color(e, c("amber").as_ptr(), c("#f6e0a0").as_ptr()).is_null());
-        let hl: Value = serde_json::from_str(&take(plumbline_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
-        assert_eq!(hl["verses"][0]["verse"], "John 3:16");
-        assert_eq!(hl["verses"][0]["color"], "#f6e0a0");
-        // Clearing the colour clears the wash.
-        assert!(plumbline_engine_tag_set_color(e, c("amber").as_ptr(), ptr::null()).is_null());
-        let hl2: Value = serde_json::from_str(&take(plumbline_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
-        assert!(hl2["verses"].as_array().unwrap().is_empty());
-
-        // Word-precise cross-verse highlight: "drag" John 3:16 tok2 → 3:18 tok1
-        // with a tone. The fixture has 3:16 (6 tokens) and 3:18 (3 tokens), so
-        // the range lands as a start-partial run (tok 2..last=5) plus an
-        // end-partial run (0..1).
-        assert!(plumbline_engine_highlight_add(
-            e, c("dragged").as_ptr(), c("#c8b0e0").as_ptr(),
-            c("John 3:16").as_ptr(), 2, c("John 3:18").as_ptr(), 1, stamp.as_ptr(),
-        ).is_null());
-        let hr: Value = serde_json::from_str(
-            &take(plumbline_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
-        let runs = hr["runs"].as_array().unwrap();
-        assert_eq!(runs.len(), 2, "runs: {runs:?}");
-        assert_eq!(runs[0]["verse"], "John 3:16");
-        assert_eq!(runs[0]["lo"], 2);
-        assert_eq!(runs[0]["hi"], 5);
-        assert_eq!(runs[0]["color"], "#c8b0e0");
-        assert_eq!(runs[1]["verse"], "John 3:18");
-        assert_eq!(runs[1]["lo"], 0);
-        assert_eq!(runs[1]["hi"], 1);
-        // A backwards drag (end→start) is ordered the same and dedupes.
-        assert!(plumbline_engine_highlight_add(
-            e, c("dragged").as_ptr(), c("#c8b0e0").as_ptr(),
-            c("John 3:18").as_ptr(), 1, c("John 3:16").as_ptr(), 2, stamp.as_ptr(),
-        ).is_null());
-        let hr_dup: Value = serde_json::from_str(
-            &take(plumbline_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
-        assert_eq!(hr_dup["runs"].as_array().unwrap().len(), 2, "backwards drag must dedupe");
-        // Remove it → runs gone.
-        assert!(plumbline_engine_highlight_remove(
-            e, c("dragged").as_ptr(), c("John 3:16").as_ptr(), 2, c("John 3:18").as_ptr(), 1,
-        ).is_null());
-        let hr2: Value = serde_json::from_str(
-            &take(plumbline_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
-        assert!(hr2["runs"].as_array().map(|a| a.is_empty()).unwrap_or(true));
-
-        // Clear-by-verse (WinUI's "Remove highlight"): re-add, then clear on any
-        // covered verse drops the whole range.
-        assert!(plumbline_engine_highlight_add(
-            e, c("dragged").as_ptr(), c("#c8b0e0").as_ptr(),
-            c("John 3:16").as_ptr(), 2, c("John 3:18").as_ptr(), 1, stamp.as_ptr(),
-        ).is_null());
-        assert!(plumbline_engine_highlight_clear_verse(e, c("John 3:16").as_ptr()).is_null());
-        let hr4: Value = serde_json::from_str(
-            &take(plumbline_engine_chapter_highlights_json(e, c("John").as_ptr(), 3)).unwrap()).unwrap();
-        assert!(hr4["runs"].as_array().map(|a| a.is_empty()).unwrap_or(true));
 
         // Memorization (Tier 2 #15): grade → card, drill, recall, coverage, activity.
         assert!(plumbline_engine_memory_grade(

@@ -45,12 +45,11 @@
         );
       }
       // Prime what synchronous readers need on their first frame: the theme
-      // palettes, highlight tones, and the TOC/canon shape.
-      const [light, dark, night, tones] = await Promise.all([
+      // palettes and the TOC/canon shape.
+      const [light, dark, night] = await Promise.all([
         rpc.static("themePalette", "light"),
         rpc.static("themePalette", "dark"),
         rpc.static("themePalette", "night"),
-        rpc.static("highlightTones"),
       ]);
       const s = initSession(rpc, info, { light, dark, night }, info.bundledOn);
       // A shared link can carry the sender's church. Save it as this reader's
@@ -83,7 +82,6 @@
       // every phone would be shown StudyPanel's "Load analysis" offer for a tier
       // its reader had never asked for.
       s.rndDeferred = deferRnd && !info.rndAuto && s.config.machineAnalysis === true;
-      s.tones = tones?.tones ?? [];
       await Promise.all([s.fetchQ("toc"), s.fetchQ("canonSegments")]);
       session = s;
       // After the TOC is in, so navigation clamps against a real canon.

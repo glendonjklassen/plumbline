@@ -240,7 +240,6 @@ data class Tags(val tags: List<Tag1> = emptyList())
 @Serializable
 data class Tag1(
     val name: String,
-    val color: String? = null,
     val created: String = "",
     val members: List<TagMember> = emptyList(),
 )
@@ -527,7 +526,7 @@ data class ConfigState(
 @Serializable
 data class PaneRef1(val book: String, val chapter: Int = 0, val verse: Int? = null)
 
-// ── Tier 0: palette, tones, personal notes, highlights ────────────────────────
+// ── Tier 0: palette, personal notes ───────────────────────────────────────────
 
 @Serializable
 data class PaletteData(
@@ -559,12 +558,6 @@ data class PaletteData(
 )
 
 @Serializable
-data class HighlightTones(val tones: List<HighlightTone> = emptyList())
-
-@Serializable
-data class HighlightTone(val name: String, val hex: String)
-
-@Serializable
 data class UserNote(
     val verse: String,
     val display: String,
@@ -576,21 +569,6 @@ data class UserNote(
 @Serializable
 data class UserNotes(val notes: List<UserNote> = emptyList())
 
-@Serializable
-data class ChapterHighlights(
-    val book: String,
-    val chapter: Int,
-    val verses: List<VerseHighlight> = emptyList(),
-    val runs: List<HighlightRun> = emptyList(),
-)
-
-@Serializable
-data class VerseHighlight(val verse: String, val color: String)
-
-/** One word-precise wash run within a verse: inclusive token indices [lo, hi]
- *  plus the tone — the cross-verse drag highlights (Tier 0 #4). */
-@Serializable
-data class HighlightRun(val verse: String, val lo: Int, val hi: Int, val color: String)
 
 // ── study-panel content model (typed block list) ──────────────────────────────
 

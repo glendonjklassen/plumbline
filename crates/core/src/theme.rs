@@ -6,9 +6,8 @@
 //! the study-panel's [`crate::panel::Color`] roles all resolve through it. GTK
 //! reads the struct directly; the non-Rust shells fetch it as JSON
 //! (`plumbline_theme_palette_json`) and apply it. Shells own translucency: a search
-//! band, a Strong's underline, a weave connector, a highlight wash are all drawn
-//! by applying alpha to `gold` / `pin` / a highlight tone, so those follow the
-//! theme for free.
+//! band, a Strong's underline, a weave connector are all drawn by applying alpha
+//! to `gold` / `pin`, so those follow the theme for free.
 //!
 //! The light values are exactly the ones the shells shipped with, so switching
 //! to the palette does not change the light look. Dark and night are new and
@@ -285,23 +284,6 @@ pub fn palette(theme: Theme) -> Palette {
     }
 }
 
-/// The fixed highlight-wash tones for the tags-as-highlights feature (Tier 0
-/// #4): `(name, hex)`, drawn behind a verse at low alpha. A small, muted set
-/// tuned to sit on the warm paper without shouting; the same tones read as soft
-/// washes over the dark themes too.
-pub const HIGHLIGHT_TONES: [(&str, &str); 6] = [
-    ("amber", "#f6e0a0"),
-    ("rose", "#f3cfcf"),
-    ("sky", "#cfe0f3"),
-    ("sage", "#d2e7cf"),
-    ("lilac", "#e6d8f2"),
-    ("sand", "#ece1c9"),
-];
-
-/// The hex for a named highlight tone, if it's one of [`HIGHLIGHT_TONES`].
-pub fn highlight_hex(name: &str) -> Option<&'static str> {
-    HIGHLIGHT_TONES.iter().find(|(n, _)| *n == name).map(|(_, h)| *h)
-}
 
 #[cfg(test)]
 mod tests {
@@ -353,10 +335,4 @@ mod tests {
         assert_eq!(p.panel_color(crate::panel::Color::TierHuman), Some("#6f8f6a"));
     }
 
-    #[test]
-    fn highlight_tones_resolve() {
-        assert_eq!(highlight_hex("amber"), Some("#f6e0a0"));
-        assert_eq!(highlight_hex("nope"), None);
-        assert_eq!(HIGHLIGHT_TONES.len(), 6);
-    }
 }
