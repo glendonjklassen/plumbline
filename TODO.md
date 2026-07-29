@@ -55,7 +55,7 @@ ride 1.0.x patches (the PWA auto-updates).
 - [ ] **[opus]** Stranded `.tmp` files in user dirs get persisted and shipped in backup
   zips: filter dot/`.tmp` names in `collectFiles` and `zipWrite`
   (`engine/home.ts:102-108`, `store.rs:55-65`).
-- [ ] **[opus]** Delete the dead duplicate `onAuthored` persistence handler
+- [x] **[opus]** Delete the dead duplicate `onAuthored` persistence handler
   (`engine/boot.ts:123-131`) — it never runs and traps whoever tunes the debounce.
 - [ ] **[opus]** Stock toggle OFF deletes the reader's *edits* to stock-named items
   (both shells): hash-compare against pristine assets and keep anything that

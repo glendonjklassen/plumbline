@@ -1,7 +1,10 @@
 // Boot sequence: CORE data pack → virtual home → wasm instance → engine open.
-// Returns the ready StudyEngine with persistence wired. The caller drives a
-// progress UI; the heavy step after download is the first-visit corpus parse
-// (the built cache is persisted so later visits skip it).
+// Returns the ready StudyEngine. Its hooks (`onAuthored`, `onReadingWrite`) are
+// the CALLER's to wire — engine.worker.ts does it, and it must stay the only
+// place: they are single-slot properties, so a handler set here is silently
+// overwritten and the debounce nobody can find sits in this file. The caller
+// drives a progress UI; the heavy step after download is the first-visit corpus
+// parse (the built cache is persisted so later visits skip it).
 //
 // Everything beyond the corpus (Strong's, cross-refs, the ~17 MB machine-tier
 // artifacts) is NOT part of boot — the engine opens without them, same shape
@@ -118,17 +121,6 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   // inside that window. Deriving the flag from the first warm step shipped once
   // and fixed nothing.
   engine.deferBuilds(true);
-
-  // Persistence choreography: any authoring write mirrors the user subtree.
-  let pending = false;
-  engine.onAuthored = () => {
-    if (pending) return;
-    pending = true;
-    setTimeout(() => {
-      pending = false;
-      void home.persistUserData();
-    }, 50);
-  };
 
   // PIN ONLY AFTER A SUCCESSFUL OPEN. The pin's value is that the next launch can
   // act on it without asking the network, so it must never name a pack that could
