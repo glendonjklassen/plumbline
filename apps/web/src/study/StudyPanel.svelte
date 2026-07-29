@@ -108,24 +108,19 @@
     return s.rndState === "loading" || s.rndDeferred;
   });
 
-  // A cold read is SLOW and a warm one is instant: the first definition of a
-  // session builds the occurrence index, the first analytical answer sweeps the
-  // corpus. A bare "— loading —" flashing for seconds reads as a hang
-  // (feedback 2026-07-27), so once a read outlasts a frame or two, say why and
-  // promise the rest are fast. Timed rather than flagged: whatever is cold, the
-  // wait itself is the honest signal.
-  const SLOW_READ_MS = 600;
-  let slowRead = $state(false);
-  $effect(() => {
-    // Re-arm per study: `blocks` null means the worker is still answering.
-    void s.panel;
-    if (blocks) {
-      slowRead = false;
-      return;
-    }
-    const t = setTimeout(() => (slowRead = true), SLOW_READ_MS);
-    return () => clearTimeout(t);
-  });
+  // GONE: "The first one takes a few seconds… Every look after this is instant."
+  //
+  // It was an apology for a bug, and it was not even accurate. "Every look after
+  // this" meant every look until the tab closed — the next launch rebuilt the
+  // same indexes and said it again, which is what made a reader who had used the
+  // app for days keep being told it was their first time (feedback 2026-07-28).
+  //
+  // The wait it was apologising for is gone too: the engine no longer builds an
+  // index inside a reader's request, so a study answers immediately with what is
+  // ready and fills in when `warmReady` lands. There is nothing left to warn
+  // about, and a message that explains a wait the reader is not having is worse
+  // than silence. "— loading —" remains for the moment the worker is genuinely
+  // still answering.
 
   // The reader's text-size setting scales the whole study surface too —
   // fixed 380px/13px chrome reads tiny on a 4K display (feedback 2026-07-25).
@@ -207,16 +202,6 @@
         {:else}
           <!-- Never look frozen: the worker is answering. -->
           <p class="loading" aria-live="polite">— loading —</p>
-          <!-- ONE explanation for one wait. While the analysis pack is coming
-               in, the note above it already says so, and stacking a second
-               notice under it read as two separate problems (feedback
-               2026-07-27). -->
-          {#if slowRead && s.rndState !== "loading"}
-            <p class="firstslow">
-              The first one takes a few seconds while the analysis is built for this text. Every
-              look after this is instant.
-            </p>
-          {/if}
         {/if}
       {/if}
     </div>
@@ -294,14 +279,6 @@
   .akjv-was {
     margin-left: 8px;
     color: var(--faded, #8a8276);
-  }
-  .firstslow {
-    color: var(--faded, #8a8276);
-    text-align: center;
-    padding: 0 10px 18px;
-    margin-top: -14px;
-    line-height: 1.45;
-    font-size: calc(12.5px * var(--uiScale, 1));
   }
   @keyframes loadpulse {
     0%,

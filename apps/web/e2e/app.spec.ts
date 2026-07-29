@@ -175,13 +175,24 @@ test("a phone is never asked to approve the analysis pack", async ({ page }) => 
   await expect(page.getByText("one-time ~4 MB download")).toHaveCount(0);
 });
 
-// The two stacked notices in that screenshot: the pack's own progress line, and
-// underneath it the "first one takes a few seconds" note. One wait deserves one
-// explanation. The study must genuinely be STUCK for this to mean anything —
-// the slow-read note only arms after 600ms of unanswered blocks, so a version
-// of this test that asserted straight away passed with the guard removed. A
-// null refKey leaves the read unanswered for real.
-test("a loading study explains itself once, not twice", async ({ page }) => {
+// This test used to be "a loading study explains itself once, not twice", and it
+// balanced two notices against each other: the analysis pack's progress line, and
+// underneath it a "the first one takes a few seconds… every look after this is
+// instant" note.
+//
+// That second note is gone (2026-07-28) and its half of this test with it. It was
+// an apology for a bug, and an inaccurate one: "every look after this" lasted
+// until the tab closed, and the next launch rebuilt the same indexes and said it
+// again — so a reader who had used the app for days kept being told it was their
+// first time. The wait itself is gone too, now that nothing builds an index
+// inside a reader's request.
+//
+// What is still worth pinning is the half that was never about the apology: a
+// study that genuinely cannot be answered yet must not look frozen, and while the
+// analysis pack is coming in it must say so. A null refKey leaves the read
+// unanswered for real, which is the only way this means anything — an earlier
+// version asserted straight away and passed with the guard removed.
+test("a study that cannot answer yet says so, and never looks frozen", async ({ page }) => {
   await boot(page);
   // Let the background load settle FIRST — otherwise it lands mid-test and
   // flips rndState back to "ready" under us, which is what made an earlier
@@ -196,14 +207,13 @@ test("a loading study explains itself once, not twice", async ({ page }) => {
     s.panel = { kind: "wordStudy", refKey: null, tokenIndex: 0 };
   });
   await expect(page.locator(".rnd-note")).toBeVisible();
-  await page.waitForTimeout(1200); // well past SLOW_READ_MS
-  await expect(page.locator(".loading")).toBeVisible(); // still unanswered, so
-  await expect(page.locator(".firstslow")).toHaveCount(0); // ...and only ONE notice
+  await page.waitForTimeout(1200);
+  await expect(page.locator(".loading")).toBeVisible();
 
-  // Control: the same stuck read DOES explain itself once the pack is in — the
-  // guard suppresses the note during the download, it doesn't delete it.
-  await page.evaluate(() => ((window as any).__plumbline.rndState = "ready"));
-  await expect(page.locator(".firstslow")).toBeVisible();
+  // And nothing promises the reader anything about how long it will take, or
+  // that it will not happen again. Both were untrue for a year.
+  await expect(page.getByText(/takes a few seconds/i)).toHaveCount(0);
+  await expect(page.getByText(/every look after this/i)).toHaveCount(0);
 });
 
 // THE relaunch complaint: wipe data, open, click a word — it thinks for a
