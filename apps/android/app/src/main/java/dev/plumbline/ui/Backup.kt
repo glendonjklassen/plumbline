@@ -22,6 +22,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.io.InputStream
 import java.time.Instant
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -32,6 +35,11 @@ import java.util.zip.ZipOutputStream
  *  shared, so a dir missing here is a dir that silently doesn't cross devices. */
 private val BACKUP_DIRS = listOf("tags", "threads", "weaves", "notes", "memory", "reading")
 
+/** Where a restore unpacks before anything touches the live tree. Inside the
+ *  home on purpose: the move-in is a rename, and a rename is only atomic within
+ *  one filesystem (the cache dir can be a different one). */
+private const val RESTORE_STAGE = ".restore-tmp"
+
 /** Archives written before the Plumbline rename carry the config under
  *  "pure-study/"; the live home uses "plumbline/". Restore-side only — nothing
  *  writes the old name back, so this is a read shim for old zips, not a
@@ -39,6 +47,112 @@ private val BACKUP_DIRS = listOf("tags", "threads", "weaves", "notes", "memory",
  *  settings (the authored dirs above are unaffected: their names never moved). */
 private fun String.currentConfigDir(): String =
     if (startsWith("pure-study/")) "plumbline/" + removePrefix("pure-study/") else this
+
+/** Where a backup-zip entry lands, home-relative — or null to skip it. A zip is
+ *  untrusted input and can name anything at all, so this is the single place
+ *  that decides, and it is pure so every decision is testable (RestorePlanTest).
+ *  Absolute paths, `..` traversal and anything outside the authored dirs are
+ *  refused outright; the legacy config prefix is remapped on the way through. */
+internal fun restoreDestination(entryName: String): String? {
+    // Zip names are '/'-separated by spec, but a Windows-authored archive can
+    // carry backslashes. Treat those as separators too, so such a name is vetted
+    // segment by segment instead of slipping through as one long filename.
+    val name = entryName.replace('\\', '/')
+    if (name.startsWith("/")) return null // absolute — never
+    val parts = name.split('/')
+    // An empty segment covers a trailing slash (a directory entry), a doubled
+    // slash, and bare prefixes like ".config/".
+    if (parts.any { it.isEmpty() || it == "." || it == ".." }) return null
+    if (parts.size < 2) return null // a root-level file (the manifest) restores nothing
+    return when (parts[0]) {
+        in BACKUP_DIRS -> name
+        // ".config/plumbline/…" → the XDG config dir (= home here).
+        ".config" -> name.removePrefix(".config/").currentConfigDir()
+        else -> null
+    }
+}
+
+/** The restore itself, with no Android in it: [openZip] hands over the archive
+ *  bytes, [home] is the live tree. Returns the file count (0 = nothing in the
+ *  archive belongs to us); throws if the archive is unusable.
+ *
+ *  All-or-nothing. The whole archive is unpacked into [RESTORE_STAGE] and
+ *  verified there, and only then does each file move into the live tree — the
+ *  staged file *is* the temp file of store.rs's temp+rename, so publishing it is
+ *  one atomic rename and no destination is ever half-written. A truncated
+ *  download or a bad CRC leaves the reader's study data exactly as it was;
+ *  streaming entries straight over the home, as this used to, left it
+ *  half-overwritten with no way back. */
+internal fun restoreZipInto(home: File, openZip: () -> InputStream): Int {
+    val stage = File(home, RESTORE_STAGE)
+    stage.deleteRecursively() // an attempt that died mid-flight leaves one behind
+    try {
+        val stageCanon = stage.canonicalPath + File.separator
+        // Unpack. Insertion-ordered and de-duplicated, so a zip naming the same
+        // file twice restores it once, the later entry winning as before.
+        val staged = LinkedHashSet<String>()
+        openZip().use { ins ->
+            ZipInputStream(ins).use { zip ->
+                var next = zip.nextEntry
+                while (next != null) {
+                    val e: ZipEntry = next
+                    val rel = restoreDestination(e.name)
+                    if (rel != null) {
+                        val out = File(stage, rel)
+                        // Belt to the sanitiser's braces — whatever the name did,
+                        // the file it produced must sit under the staging dir.
+                        require(out.canonicalPath.startsWith(stageCanon)) {
+                            "backup entry escapes the staging dir: ${e.name}"
+                        }
+                        out.parentFile?.mkdirs()
+                        FileOutputStream(out).use { o ->
+                            zip.copyTo(o)
+                            o.fd.sync() // durable before the rename that publishes it
+                        }
+                        // closeEntry checks the entry's CRC-32 and length, so a
+                        // corrupt or truncated archive throws right here — before
+                        // the live tree has been touched at all.
+                        zip.closeEntry()
+                        if (e.size >= 0 && out.length() != e.size) {
+                            throw IOException("backup entry ${e.name} is ${out.length()} bytes, not ${e.size}")
+                        }
+                        staged += rel
+                    } else {
+                        zip.closeEntry()
+                    }
+                    next = zip.nextEntry
+                }
+            }
+        }
+        if (staged.isEmpty()) return 0
+
+        // Verify the staged set is whole, and that every destination really is
+        // inside the home, before a single live file changes.
+        val homeCanon = home.canonicalPath + File.separator
+        for (rel in staged) {
+            if (!File(stage, rel).isFile) throw IOException("backup entry $rel did not unpack")
+            require(File(home, rel).canonicalPath.startsWith(homeCanon)) {
+                "backup entry escapes the home: $rel"
+            }
+        }
+
+        // Move in: one rename per file, straight out of the staging dir. The
+        // stage is inside the home, so this is a same-filesystem rename — atomic,
+        // and it replaces the destination outright. Renaming rather than copying
+        // also means no temp file is ever left in an authored dir for the next
+        // backup to sweep up.
+        var count = 0
+        for (rel in staged) {
+            val target = File(home, rel)
+            target.parentFile?.mkdirs()
+            if (!File(stage, rel).renameTo(target)) throw IOException("could not put $rel in place")
+            count++
+        }
+        return count
+    } finally {
+        stage.deleteRecursively()
+    }
+}
 
 /** Zip the authored dirs + config to [uri]. Returns the file count. */
 fun writeBackupZip(context: Context, home: File, uri: Uri): Int {
@@ -70,36 +184,10 @@ fun writeBackupZip(context: Context, home: File, uri: Uri): Int {
     return count
 }
 
-/** Restore a backup zip into the home. Returns the file count (0 = not a
- *  plumbline backup). Entries are path-filtered to the authored dirs. */
-fun restoreBackupZip(context: Context, home: File, uri: Uri): Int {
-    var count = 0
-    val homeCanon = home.canonicalPath + File.separator
-    context.contentResolver.openInputStream(uri)!!.use { ins ->
-        ZipInputStream(ins).use { zip ->
-            var e = zip.nextEntry
-            while (e != null) {
-                val name = e.name
-                val target: File? = when {
-                    e.isDirectory || name.contains("..") -> null
-                    BACKUP_DIRS.any { name.startsWith("$it/") } -> File(home, name)
-                    // ".config/plumbline/…" → the XDG config dir (= home here).
-                    name.startsWith(".config/") ->
-                        File(home, name.removePrefix(".config/").currentConfigDir())
-                    else -> null
-                }
-                if (target != null && target.canonicalPath.startsWith(homeCanon)) {
-                    target.parentFile?.mkdirs()
-                    target.outputStream().use { zip.copyTo(it) }
-                    count++
-                }
-                zip.closeEntry()
-                e = zip.nextEntry
-            }
-        }
-    }
-    return count
-}
+/** Restore the backup zip at [uri] into the home — the SAF wrapper around
+ *  [restoreZipInto]. Returns the file count (0 = not a plumbline backup). */
+fun restoreBackupZip(context: Context, home: File, uri: Uri): Int =
+    restoreZipInto(home) { context.contentResolver.openInputStream(uri)!! }
 
 /** The two Settings rows: back up to a zip, restore from one (then the
  *  activity recreates so the engine re-opens over the restored home). */

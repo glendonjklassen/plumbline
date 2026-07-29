@@ -17,7 +17,7 @@ ride 1.0.x patches (the PWA auto-updates).
 
 ## A. Data safety — before the tag
 
-- [ ] **[opus]** Android restore is a destructive in-place partial write: unzip to
+- [x] **[opus]** Android restore is a destructive in-place partial write: unzip to
   `.restore-tmp`, verify every entry, then temp+rename each file in; all-or-nothing
   (`ui/Backup.kt:78-100`). Never stream over the live home.
 - [ ] **[opus]** Web save failure is silent: `void persistUserData()` swallows
