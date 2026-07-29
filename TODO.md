@@ -31,7 +31,7 @@ ride 1.0.x patches (the PWA auto-updates).
   only what it removed; IndexedDB's per-store transaction serialisation makes a
   cross-tab lock unnecessary). Same-file edits stay last-writer-wins by design.
   Regression test: `e2e/multitab.spec.ts`.
-- [ ] **[opus]** `reading.rs:263-269` and `memory.rs:358` treat unparseable/future-format
+- [x] **[opus]** `reading.rs:263-269` and `memory.rs:358` treat unparseable/future-format
   files as empty and then overwrite them. Copy the refuse-to-clobber guard from
   `thread.rs:196-199` into both.
 - [ ] **[opus]** Engine worker death hangs everything silently: add

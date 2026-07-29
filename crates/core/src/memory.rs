@@ -294,44 +294,48 @@ pub fn load_cards(home: impl AsRef<Path>) -> (HashMap<VRef, Card>, Vec<String>) 
     for path in entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")) {
         match std::fs::read(&path) {
             Err(e) => errors.push(format!("{}: {e}", path.display())),
-            Ok(bytes) => match serde_json::from_slice::<CardRepr>(&bytes) {
-                Ok(r) if r.format == FORMAT => match VRef::parse_ref_key(&r.ref_key) {
-                    Some(vref) => {
-                        // An unparseable or nonsensical `through` degrades to a
-                        // single-verse card rather than sinking the file.
-                        let through = r
-                            .through
-                            .as_deref()
-                            .and_then(VRef::parse_ref_key)
-                            .filter(|t| {
-                                t.book == vref.book
-                                    && t.chapter == vref.chapter
-                                    && t.verse > vref.verse
-                            });
-                        cards.insert(
-                            vref.clone(),
-                            Card {
-                                verse: vref,
-                                through,
-                                tok_version: r.tokenization,
-                                created: r.created,
-                                ease: r.ease,
-                                interval_days: r.interval_days,
-                                reps: r.reps,
-                                lapses: r.lapses,
-                                due: r.due,
-                                reviews: r.reviews,
-                            },
-                        );
-                    }
-                    None => errors.push(format!("{}: bad ref {}", path.display(), r.ref_key)),
-                },
-                Ok(r) => errors.push(format!("{}: unknown memory format {}", path.display(), r.format)),
-                Err(e) => errors.push(format!("{}: {e}", path.display())),
+            Ok(bytes) => match parse_card(&path, &bytes) {
+                Ok(card) => {
+                    cards.insert(card.verse.clone(), card);
+                }
+                Err(msg) => errors.push(msg),
             },
         }
     }
     (cards, errors)
+}
+
+/// Parse one card file's `bytes`; `Err` is the message [`load_cards`] reports.
+/// Shared with [`write_card`]'s refuse-to-clobber check so the reader and the
+/// writer can never disagree about which files we understand.
+fn parse_card(path: &Path, bytes: &[u8]) -> Result<Card, String> {
+    let r: CardRepr =
+        serde_json::from_slice(bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+    if r.format != FORMAT {
+        return Err(format!("{}: unknown memory format {}", path.display(), r.format));
+    }
+    let Some(vref) = VRef::parse_ref_key(&r.ref_key) else {
+        return Err(format!("{}: bad ref {}", path.display(), r.ref_key));
+    };
+    // An unparseable or nonsensical `through` degrades to a single-verse card
+    // rather than sinking the file.
+    let through = r
+        .through
+        .as_deref()
+        .and_then(VRef::parse_ref_key)
+        .filter(|t| t.book == vref.book && t.chapter == vref.chapter && t.verse > vref.verse);
+    Ok(Card {
+        verse: vref,
+        through,
+        tok_version: r.tokenization,
+        created: r.created,
+        ease: r.ease,
+        interval_days: r.interval_days,
+        reps: r.reps,
+        lapses: r.lapses,
+        due: r.due,
+        reviews: r.reviews,
+    })
 }
 
 /// Serialize a card to pretty JSON with a trailing newline.
@@ -340,13 +344,34 @@ pub fn to_json(card: &Card) -> Result<String, Error> {
 }
 
 /// Atomically write a card to its file under `home`.
+///
+/// Refuses when that file is already there and we could not read it — corrupt,
+/// or stamped by a build newer than this one. Nothing could have loaded such a
+/// file, so every write over one is a clobber of the reader's data in a form we
+/// do not understand yet; the same refuse-to-clobber rule as
+/// [`crate::thread::add_to_thread`], sited at the writer because grading is not
+/// the only way in (the shells also seed cards straight through here). A missing
+/// or empty file holds nothing to lose and writes as normal.
 pub fn write_card(home: impl AsRef<Path>, card: &Card) -> Result<(), Error> {
-    crate::store::write_atomic(card_file(&home, &card.verse), &to_json(card)?)
+    let path = card_file(&home, &card.verse);
+    if let Ok(bytes) = std::fs::read(&path) {
+        let empty = bytes.iter().all(|b| b.is_ascii_whitespace());
+        if !empty && parse_card(&path, &bytes).is_err() {
+            return Err(Error::Corpus(format!(
+                "{} exists but could not be read — refusing to overwrite",
+                path.display()
+            )));
+        }
+    }
+    crate::store::write_atomic(path, &to_json(card)?)
 }
 
 /// Grade the verse at `now`, creating the card on first review; persists and
 /// returns the updated card. `loaded` is the current card set (from
 /// [`load_cards`]); a caller reloads after.
+///
+/// A card file that exists but is absent from `loaded` (i.e. it failed to parse)
+/// is refused rather than clobbered — see [`write_card`].
 pub fn grade_verse(
     home: impl AsRef<Path>,
     loaded: &HashMap<VRef, Card>,
@@ -829,6 +854,55 @@ mod tests {
         let c = &loaded[&VRef::new("Ps", 23, 1)];
         assert_eq!(c.through, None);
         assert_eq!(c.verses().len(), 1);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn a_card_file_we_cannot_read_is_never_overwritten() {
+        let home = std::env::temp_dir().join(format!("plumbline-noclobber-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let jn = VRef::new("John", 3, 16);
+        let path = card_file(&home, &jn);
+
+        // Corrupt bytes, and a card stamped by a build newer than this one. Both
+        // are the reader's work in a form we cannot use; neither is "no card yet",
+        // and a card carries its whole review log, so a clobber loses months.
+        let future = r#"{"format":"overlay-memory-v9","ref":"John 3:16","tokenization":"kjv1769-tok2","created":"2026-01-01T00:00:00Z","ease":2.5,"intervalDays":40,"reps":9,"lapses":0,"due":"2026-02-10","reviews":[]}"#;
+        for content in ["{ not json".to_string(), future.to_string()] {
+            crate::store::write_atomic(&path, &content).unwrap();
+            let (cards, errs) = load_cards(&home);
+            assert!(!cards.contains_key(&jn), "a file we cannot read must not become a card");
+            assert_eq!(errs.len(), 1, "it is reported, not read as absent: {errs:?}");
+
+            for e in [
+                grade_verse(&home, &cards, &jn, "kjv1769-tok2", Grade::Good, T0).err(),
+                write_card(&home, &Card::new(jn.clone(), "kjv1769-tok2", T0)).err(),
+            ] {
+                let msg = e.map(|e| e.to_string()).unwrap_or_default();
+                assert!(msg.contains("refusing to overwrite"), "want a refusal, got {msg:?}");
+            }
+            assert_eq!(
+                std::fs::read_to_string(&path).unwrap(),
+                content,
+                "the bytes on disk must be exactly as the reader left them",
+            );
+        }
+
+        // No file is genuinely no card, and a card we CAN read still updates in
+        // place — the guard must not stand between a reader and their own reviews.
+        std::fs::remove_file(&path).unwrap();
+        let (cards, _) = load_cards(&home);
+        grade_verse(&home, &cards, &jn, "kjv1769-tok2", Grade::Good, T0).unwrap();
+        let (cards, errs) = load_cards(&home);
+        assert!(errs.is_empty(), "{errs:?}");
+        assert_eq!(cards[&jn].reps, 1);
+        grade_verse(&home, &cards, &jn, "kjv1769-tok2", Grade::Good, "2026-01-02T00:00:00Z").unwrap();
+        assert_eq!(load_cards(&home).0[&jn].reps, 2, "a readable card is still graded");
+
+        // An empty file holds nothing to lose, so it does not block a write.
+        crate::store::write_atomic(&path, "").unwrap();
+        write_card(&home, &Card::new(jn.clone(), "kjv1769-tok2", T0)).unwrap();
+        assert_eq!(load_cards(&home).0[&jn].reps, 0);
         let _ = std::fs::remove_dir_all(&home);
     }
 

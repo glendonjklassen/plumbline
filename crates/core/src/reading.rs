@@ -260,11 +260,31 @@ pub fn load(home: impl AsRef<Path>) -> (Store, Vec<String>) {
 /// Load ONE book's chapters. What every write path uses: recording dwell runs on
 /// a timer while someone reads, and reading all 66 files to touch one of them
 /// would put the whole store on that timer for no reason.
-pub fn load_book(home: impl AsRef<Path>, book: &str) -> Vec<ChapterReading> {
-    let Ok(bytes) = std::fs::read(book_file(&home, book)) else { return Vec::new() };
+///
+/// A file that is THERE but that we cannot understand — corrupt, or stamped by a
+/// build newer than this one — is an **error**, never an empty history. Every
+/// caller writes the list it gets back out again, so answering "nothing read
+/// yet" for a file we merely failed to parse would overwrite the reader's
+/// history with a blank one. Same refuse-to-clobber rule as
+/// [`crate::thread::add_to_thread`]: the reader's data outlives our ability to
+/// read it. A missing file — or an empty one, which holds nothing to lose —
+/// still means nothing read yet.
+pub fn load_book(home: impl AsRef<Path>, book: &str) -> Result<Vec<ChapterReading>, Error> {
+    let path = book_file(&home, book);
+    let bytes = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(Error::Io { path: path.display().to_string(), source: e }),
+    };
+    if bytes.iter().all(|b| b.is_ascii_whitespace()) {
+        return Ok(Vec::new());
+    }
     match serde_json::from_slice::<BookFile>(&bytes) {
-        Ok(f) if f.format == FORMAT && f.book == book => f.chapters,
-        _ => Vec::new(),
+        Ok(f) if f.format == FORMAT && f.book == book => Ok(f.chapters),
+        _ => Err(Error::Corpus(format!(
+            "{} exists but could not be read — refusing to overwrite",
+            path.display()
+        ))),
     }
 }
 
@@ -292,14 +312,29 @@ pub fn write_book(home: impl AsRef<Path>, book: &str, chapters: &[ChapterReading
 /// is kept: it is a true fact about this reader, it already ships inside v0.31.0
 /// backup zips, and `since` is part of the wire payload. Deleting it would strip
 /// a field from a contract that only evolves additively, to save one small file.
+///
+/// A file we cannot parse is refused here for the same reason [`load_book`]
+/// refuses one: [`since`] reads it as `None`, and the anchor is written once and
+/// never again, so stamping a fresh date over it is the one chance to lose it.
+/// Callers already treat a failure as "no anchor yet" and carry on, so the
+/// reading map keeps working either way — the file just survives.
 pub fn ensure_since(home: impl AsRef<Path>, now: &str) -> Result<String, Error> {
     if let Some(s) = since(&home) {
         return Ok(s);
     }
+    let path = since_file(&home);
+    // Getting here means `since` could not use the file, so anything in it is
+    // content we do not understand rather than an absence.
+    if std::fs::read(&path).is_ok_and(|b| !b.iter().all(|b| b.is_ascii_whitespace())) {
+        return Err(Error::Corpus(format!(
+            "{} exists but could not be read — refusing to overwrite",
+            path.display()
+        )));
+    }
     let date = day_of(now);
     let f = SinceFile { format: FORMAT.to_string(), since: date.clone() };
     let json = serde_json::to_string_pretty(&f).map_err(|e| Error::Parse(e.to_string()))?;
-    crate::store::write_atomic(since_file(&home), &(json + "\n"))?;
+    crate::store::write_atomic(path, &(json + "\n"))?;
     Ok(date)
 }
 
@@ -645,7 +680,7 @@ pub fn record(
     seconds: f32,
     now: &str,
 ) -> Result<Recorded, Error> {
-    let mut list = load_book(&home, book);
+    let mut list = load_book(&home, book)?;
     let idx = match list.iter().position(|r| r.chapter == chapter) {
         Some(i) => i,
         None => {
@@ -688,7 +723,7 @@ pub fn record(
 ///
 /// `date` may be any `YYYY-MM-DD` (or RFC3339 stamp); only its day is kept.
 pub fn mark_read(home: impl AsRef<Path>, book: &str, chapter: u16, date: &str) -> Result<(), Error> {
-    let mut list = load_book(&home, book);
+    let mut list = load_book(&home, book)?;
     let day = day_of(date);
     match list.iter_mut().find(|r| r.chapter == chapter) {
         Some(r) => {
@@ -711,7 +746,7 @@ pub fn mark_read(home: impl AsRef<Path>, book: &str, chapter: u16, date: &str) -
 /// Drop a chapter's reading record entirely — the way back out of a date set by
 /// mistake. The chapter returns to unread.
 pub fn forget(home: impl AsRef<Path>, book: &str, chapter: u16) -> Result<(), Error> {
-    let mut list = load_book(&home, book);
+    let mut list = load_book(&home, book)?;
     list.retain(|r| r.chapter != chapter);
     write_book(&home, book, &list)
 }
@@ -1146,6 +1181,73 @@ mod tests {
         let (store, errors) = load(&home);
         assert!(store.contains_key("Gen"), "the good file still loads");
         assert_eq!(errors.len(), 3, "each bad file reported: {errors:?}");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn a_file_we_cannot_read_is_never_overwritten() {
+        let c = toy();
+        let w = ChapterWords::build(&c);
+        let home = scratch("no-clobber");
+        let path = book_file(&home, "Gen");
+
+        // Two ways a book file can be sitting there and mean nothing to us:
+        // corrupt bytes, and a well-formed file from a build newer than this one.
+        // Neither is "nothing read yet" — both are the reader's history, and
+        // every write path here reads the whole file and writes it back.
+        let future =
+            r#"{"format":"plumbline-reading-v9","book":"Gen","chapters":[{"c":1,"lastRead":"2019-01-01"}]}"#;
+        for content in ["{ not json".to_string(), future.to_string()] {
+            crate::store::write_atomic(&path, &content).unwrap();
+            assert!(load_book(&home, "Gen").is_err(), "must not read as no history: {content}");
+
+            let refusals = [
+                record(&home, &c, &w, "Gen", 1, 5, 60.0, NOW).err(),
+                mark_read(&home, "Gen", 1, "2026-05-04").err(),
+                forget(&home, "Gen", 1).err(),
+            ];
+            for e in refusals {
+                let msg = e.map(|e| e.to_string()).unwrap_or_default();
+                assert!(msg.contains("refusing to overwrite"), "want a refusal, got {msg:?}");
+            }
+            // `unwrap_or_default` and not `unwrap`: a refused `forget` that in
+            // fact went through deletes the file outright (an emptied book leaves
+            // no husk), and that must read as a diff, not as a panic about i/o.
+            assert_eq!(
+                std::fs::read_to_string(&path).unwrap_or_default(),
+                content,
+                "the bytes on disk must be exactly as the reader left them",
+            );
+        }
+
+        // Absent still means nothing read yet — a first-ever read must not trip
+        // over the guard.
+        std::fs::remove_file(&path).unwrap();
+        assert!(load_book(&home, "Gen").unwrap().is_empty());
+        mark_read(&home, "Gen", 1, "2026-05-04").unwrap();
+        assert_eq!(load_book(&home, "Gen").unwrap().len(), 1);
+
+        // A file with no chapters in it, and an empty file, are empty too: there
+        // is nothing in either to lose.
+        for content in [format!(r#"{{"format":"{FORMAT}","book":"Gen","chapters":[]}}"#), String::new()] {
+            crate::store::write_atomic(&path, &content).unwrap();
+            assert!(load_book(&home, "Gen").unwrap().is_empty(), "empty: {content:?}");
+            mark_read(&home, "Gen", 3, "2026-05-04").unwrap();
+            assert_eq!(load_book(&home, "Gen").unwrap().len(), 1);
+        }
+
+        // `_since.json` is the same story: `since` reads a file it cannot parse
+        // as "no anchor yet", and the anchor is written once and never again, so
+        // stamping a new one over it is the only chance to lose it.
+        for content in ["not json at all", r#"{"format":"plumbline-reading-v9","since":"2019-01-01"}"#] {
+            crate::store::write_atomic(since_file(&home), content).unwrap();
+            assert_eq!(since(&home), None, "unusable: {content}");
+            let msg = ensure_since(&home, NOW).err().map(|e| e.to_string()).unwrap_or_default();
+            assert!(msg.contains("refusing to overwrite"), "want a refusal, got {msg:?}");
+            assert_eq!(std::fs::read_to_string(since_file(&home)).unwrap(), content);
+        }
+        std::fs::remove_file(since_file(&home)).unwrap();
+        assert_eq!(ensure_since(&home, NOW).unwrap(), "2026-07-28", "absent still writes the anchor");
         let _ = std::fs::remove_dir_all(&home);
     }
 
