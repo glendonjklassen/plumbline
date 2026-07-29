@@ -146,8 +146,13 @@ ride 1.0.x patches (the PWA auto-updates).
   both shells).
 - [ ] **[opus]** Chrome ignores the text-size setting and browser font prefs: publish
   `--uiScale` on `:root` and scale the chrome, or convert to rem.
-- [ ] **[FABLE]** "Delete my data" (both shells): destructive-path spec + confirm UX —
-  needs a precise definition of what dies (user dirs + config) and what survives.
+- [x] **[FABLE]** "Delete my data" destructive-path spec: DONE 2026-07-29 — exact
+  kill/survive scope, flow, ordering rule and test requirements in
+  [docs/DELETE-MY-DATA.md](docs/DELETE-MY-DATA.md).
+- [ ] **[opus]** Implement erase-my-data per
+  [docs/DELETE-MY-DATA.md](docs/DELETE-MY-DATA.md) on BOTH shells, with the
+  offline e2e + Android scope unit test it requires. Do not improvise beyond the
+  spec's scope table.
 - [ ] **[opus]** Wire the dead `packUpdated` signal to the existing update-toast
   wording; capture `beforeinstallprompt` → "Install" in the ≡ menu.
 - [ ] **[opus]** Decouple the pasteable bug-report header from `PERF`
