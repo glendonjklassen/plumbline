@@ -72,12 +72,18 @@ use plumbline_rnd::{bridge, burst, concept, embed, morph};
 mod wire;
 pub mod reading_map;
 
-// ── token flag bits (mirror `plumbline_core::corpus::FLAG_*`; exported to bindings)──
+// ── token flag bits (mirror the core's `FLAG_*`; exported to bindings) ───────
 //
 // Written as bare literals (not `= corpus::FLAG_*`) so cbindgen can const-fold
 // them into `#define`s in the C header. The `const _` assertions below fail the
 // build if they ever drift from the core's canonical values, so the mirror
 // stays honest without costing the bindings.
+//
+// EVERY flag bit a shell tests belongs here, with its assertion. `FLAG_RERENDERED`
+// bypassed this until 2026-07-29 — the value lived only as a bare `16` in each
+// shell, answering to nothing, while the mechanism for exactly that sat four
+// lines up. `flag_bits_are_exported_with_their_assertion` in `tests.rs` now
+// checks the header, the assertions, and both shells' mirrors.
 
 /// Word supplied by the KJV translators (rendered in italics).
 pub const PLUMBLINE_FLAG_ADDED: u32 = 1;
@@ -87,11 +93,17 @@ pub const PLUMBLINE_FLAG_DIVINE: u32 = 2;
 pub const PLUMBLINE_FLAG_TITLE: u32 = 4;
 /// A paragraph mark (¶) precedes this word.
 pub const PLUMBLINE_FLAG_PARA: u32 = 8;
+/// Display only: this word is an AKJV re-rendering, set by the overlay on the
+/// display list as it passes. NEVER present in `kjv.jsonl`, whose bitfield is a
+/// frozen contract — so a shell reads this bit off a display-list item or a
+/// panel token, not off stored data.
+pub const PLUMBLINE_FLAG_RERENDERED: u32 = 16;
 
 const _: () = assert!(PLUMBLINE_FLAG_ADDED == corpus::FLAG_ADDED);
 const _: () = assert!(PLUMBLINE_FLAG_DIVINE == corpus::FLAG_DIVINE);
 const _: () = assert!(PLUMBLINE_FLAG_TITLE == corpus::FLAG_TITLE);
 const _: () = assert!(PLUMBLINE_FLAG_PARA == corpus::FLAG_PARA);
+const _: () = assert!(PLUMBLINE_FLAG_RERENDERED == akjv::FLAG_RERENDERED);
 
 /// How many verse references an occurrence list returns before it is capped
 /// (`total` in the JSON stays honest above this).

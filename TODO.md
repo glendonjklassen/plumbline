@@ -352,7 +352,7 @@ as "a later increment". F–I can ride later increments (the PWA auto-updates).
 - [ ] **[opus]** Move domain logic out of `crates/ffi` into core with its tests:
   `english_gloss`, `distil_gloss`, `name_noise`/`CONCEPT_KEEP_NAMES`,
   `concept_label`, `memory_span`, tuning constants.
-- [ ] **[opus]** Export `FLAG_RERENDERED` to the header with the compile-time assert
+- [x] **[opus]** Export `FLAG_RERENDERED` to the header with the compile-time assert
   (both shells hardcode `16`; it bypassed the mechanism built for exactly this).
 - [ ] **[opus]** Dead code sweep: `pruneStale`, `pinHasStage`, `EMPTY_CHURCH`,
   ~12 unnecessary exports; decide `rnd::capabilities()` (exposed nowhere — wire it

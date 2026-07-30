@@ -20,6 +20,12 @@
 // A paragraph mark (¶) precedes this word.
 #define PLUMBLINE_FLAG_PARA 8
 
+// Display only: this word is an AKJV re-rendering, set by the overlay on the
+// display list as it passes. NEVER present in `kjv.jsonl`, whose bitfield is a
+// frozen contract — so a shell reads this bit off a display-list item or a
+// panel token, not off stored data.
+#define PLUMBLINE_FLAG_RERENDERED 16
+
 // How many verse references an occurrence list returns before it is capped
 // (`total` in the JSON stays honest above this).
 #define OCCURRENCE_CAP 500
