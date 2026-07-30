@@ -250,6 +250,28 @@ private val tempSeq = AtomicLong()
  *  sibling temp (rename is only atomic within one filesystem), flushed to disk
  *  before the rename, and cleaned up best-effort if anything throws. The name is
  *  dotted and `.tmp`-suffixed so a stranded one is ignorable. */
+/** Does this file name belong to a half-finished atomic write?
+ *
+ *  The third statement of one rule. `store::is_temp_name` in the core is the
+ *  first, `collectFiles` in the web home the second; all three must accept
+ *  exactly `.<stem>.<digits>.tmp`, because every minter — the core's pid, the
+ *  wasm counter, and [writeThroughTemp]'s `tempSeq` below — mints that shape.
+ *
+ *  All three legs are load-bearing, and each rescues something real: `.config`
+ *  is a legitimate dotted directory, `config.json.bad` is a deliberate rescue
+ *  file that must keep riding along in backups, and a reader may name a thread
+ *  "notes.tmp". A stranded temp is unopenable by any loader, but one that
+ *  reaches a backup zip is restored onto the next device forever. */
+internal fun isTempName(name: String): Boolean {
+    if (!name.startsWith(".") || !name.endsWith(".tmp")) return false
+    // The stem keeps its own dots, so `.Gen.1.7.json.4242.tmp` is recognised as
+    // readily as `.out.9.tmp` — split off the discriminator only.
+    val rest = name.substring(1, name.length - 4)
+    val cut = rest.lastIndexOf('.')
+    if (cut <= 0 || cut == rest.length - 1) return false
+    return rest.substring(cut + 1).all { it in '0'..'9' }
+}
+
 internal fun writeThroughTemp(dest: File, input: InputStream) {
     val tmp = File(dest.absoluteFile.parentFile, ".${dest.name}.${tempSeq.incrementAndGet()}.tmp")
     try {

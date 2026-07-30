@@ -106,12 +106,34 @@ function insertFile(root: Map<string, Directory | File>, path: string, bytes: Ui
   contents.set(path.slice(slash + 1), new File(bytes));
 }
 
-/** Walk a user directory, collecting home-relative path → bytes. */
+/** A leftover of an interrupted atomic write. The core writes to a hidden
+ *  sibling and renames it over the target, so a session killed in between — or
+ *  an Android one, whose backups we restore — strands a `.<name>.<digits>.tmp`
+ *  in an authored dir. It is not the reader's data: the write that made it
+ *  either landed under its real name or came back as an error, no loader can
+ *  read one (they take `*.json`), and one that reaches a backup zip is restored
+ *  onto the next device as a permanent fixture.
+ *
+ *  The rule is `store::is_temp_name` in crates/core, restated here because a
+ *  filename check has no business crossing into wasm. All three parts must
+ *  match, and nothing looser will do: "starts with a dot" takes `.config`,
+ *  where the reader's settings live; "ends with .tmp" takes a `notes.tmp` that
+ *  arrived in someone else's archive. `config.json.bad` — the rescue copy of
+ *  damaged settings, which must keep riding along in backups — matches none of
+ *  the three. */
+const TEMP_NAME = /^\.[^/]+\.[0-9]+\.tmp$/;
+
+/** Walk a user directory, collecting home-relative path → bytes.
+ *
+ *  The ONE gate everything downstream passes through — both persists and the
+ *  backup zip's `exportUserData` — so the temp rule is applied here and nowhere
+ *  else. Only FILE names are tested: nothing mints a temp directory, and testing
+ *  directory names is exactly how a loose rule swallows `.config`. */
 function collectFiles(prefix: string, dir: Directory, out: Map<string, Uint8Array>): void {
   for (const [name, node] of dir.contents as Map<string, Directory | File>) {
     const path = `${prefix}/${name}`;
     if (node instanceof Directory) collectFiles(path, node, out);
-    else if (node instanceof File) out.set(path, (node as File).data);
+    else if (node instanceof File && !TEMP_NAME.test(name)) out.set(path, (node as File).data);
   }
 }
 
@@ -173,7 +195,9 @@ export async function buildHome(
   ensureDir(root, "weaves/suggested");
 
   // Restore the user's files from previous sessions (their copies overwrite
-  // freshly-seeded stock — theirs is newer).
+  // freshly-seeded stock — theirs is newer). Stranded temps come back too, on
+  // purpose: they must be in `synced` for the next persist to sweep them (see
+  // persistUserData), and in the tree they are inert — no loader opens one.
   for (const [path, bytes] of userFiles) insertFile(root, path, bytes);
 
   // What this session last saw in IndexedDB: path → content fingerprint.
@@ -317,6 +341,15 @@ export async function buildHome(
         // A FLUSH CHANGES NONE OF THIS. It runs this same diff, one moment
         // earlier, so it can neither widen what this session claims to own nor
         // resurrect a deletion — the fingerprints decide that, not the caller.
+        //
+        // ONE DELETION THIS SESSION MAKES WITHOUT HAVING TOUCHED THE FILE: a
+        // stranded temp. `collectFiles` no longer collects them, so one an older
+        // build persisted — or one that rode in on a restored Android backup — is
+        // in `synced`, absent from `current`, and swept here. That is the point:
+        // it is a fragment nothing can read, and left alone it ships in every
+        // backup from now on. The sweep reaches nothing else, because `deletes` is
+        // exactly `synced` minus `current` and the only names the filter newly
+        // withholds from `current` are the ones matching TEMP_NAME.
         const { puts, prints } = changedFiles(current, synced);
         const deletes = [...synced.keys()].filter((k) => !current.has(k));
         if (puts.size === 0 && deletes.length === 0) return;

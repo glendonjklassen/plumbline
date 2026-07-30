@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.plumbline.isTempName
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -64,6 +65,10 @@ internal fun restoreDestination(entryName: String): String? {
     // slash, and bare prefixes like ".config/".
     if (parts.any { it.isEmpty() || it == "." || it == ".." }) return null
     if (parts.size < 2) return null // a root-level file (the manifest) restores nothing
+    // A stranded temp in an OLDER zip — written before the backup walk learned to
+    // skip them — must not be planted on this device either. Refusing on the way
+    // in is what makes the fix retroactive.
+    if (isTempName(parts.last())) return null
     return when (parts[0]) {
         in BACKUP_DIRS -> name
         // ".config/plumbline/…" → the XDG config dir (= home here).
@@ -168,7 +173,11 @@ fun writeBackupZip(context: Context, home: File, uri: Uri): Int {
             for (d in BACKUP_DIRS) {
                 val dir = File(home, d)
                 if (!dir.isDirectory) continue
-                dir.walkTopDown().filter { it.isFile }.forEach { f ->
+                // Not stranded temps. Android is the shell that actually strands
+                // them — a process kill between write and rename is ordinary
+                // here — and a temp that rides into a zip is restored onto the
+                // next device as a fixture nothing ever removes.
+                dir.walkTopDown().filter { it.isFile && !isTempName(it.name) }.forEach { f ->
                     add(f, f.relativeTo(home).invariantSeparatorsPath)
                 }
             }
