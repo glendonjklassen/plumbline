@@ -8,11 +8,30 @@ analysis layer is a tool for studying the text, never an authority over it.
 
 | Shipped file | Contents | Source | License |
 |---|---|---|---|
-| `data/kjv.jsonl` | KJV 1769 text, Strong's-tagged, tokenized (`kjv1769-tok2`) | eBible.org SWORD module `engKJV2006eb`, converted by the overlay import pipeline | KJV text: public domain (Crown patent applies in the UK) |
+| `data/kjv.jsonl` | KJV 1769 text, Strong's-tagged, tokenized (`kjv1769-tok2`) | eBible.org SWORD module `engKJV2006eb` 14.3, converted by the overlay import pipeline (see below) | KJV text: public domain (Crown patent applies in the UK) |
 | `data/strongs.json` | Strong's Hebrew + Greek dictionaries (14,197 entries) | [openscriptures/strongs](https://github.com/openscriptures/strongs) | CC-BY-SA |
-| `data/kjv-notes.jsonl` | The 1769 translators' margin notes | same import pipeline | public domain |
+| `data/kjv-notes.jsonl` | The 1769 translators' margin notes — 6,959 of them, Genesis to Malachi | the `<note>` markup carried inside that same `engKJV2006eb` 14.3 dump, lifted in the same pass (see below) | public domain |
 | `data/akjv.jsonl` | Plain-English overlay: where the AKJV words a verse differently, keyed to KJV token spans (6.9% of tokens) | American King James Version, Michael Peter Engelbrite 1999, via [scrollmapper/bible_databases](https://github.com/scrollmapper/bible_databases); aligned by `scripts/build-akjv-delta.mjs` | **public domain** — released 1999-11-08, "copy it, sell it, modify it" |
 | `data/cross-references.tsv` | ~343k Treasury of Scripture Knowledge references with votes | [openbible.info](https://www.openbible.info/labs/cross-references/) | CC Attribution; TSK itself public domain |
+
+**The KJV module, named exactly.** Both KJV rows come out of one dump of one
+module: **`engKJV2006eb`, version 14.3** — eBible.org's Strong's-tagged KJV,
+documented by the import pipeline as the 1769 standardised text — distributed
+through CrossWire's install manager. The reference `overlay` checkout's
+hydration script installs it (`installmgr -ri eBible.org engKJV2006eb`), dumps
+it to plain text (`mod2imp`), and the importer walks that dump once: verse text
+becomes `kjv.jsonl`'s tokens, and the `<note>` elements sitting inside those
+verses become `kjv-notes.jsonl`. The margin notes are therefore not a separate
+edition to credit — they are the apparatus shipped inside the same module — and
+`data/kjv.jsonl`'s header line records the identity for both:
+`"source":"engKJV2006eb 14.3 (CrossWire/eBible.org, public domain)"`. The notes
+run Genesis to Malachi, 6,959 rows over the 39 Old Testament books; the module
+carries none for the New Testament.
+
+eBible.org's catalogue lists that KJV today as **`ENGKJV` / `eng-kjv2006`**
+([entry](https://ebible.org/find/details.php?id=engKJV), public domain); the
+module id `engKJV2006eb` itself no longer resolves there (checked 2026-07-29).
+`data/` and `bridge/` are committed to this repo, so nothing re-fetches it.
 
 ## Morphology
 
@@ -45,11 +64,14 @@ the overlay project's BIBLIOGRAPHY; the Rust ports implement the same recipes
 
 ## Study content
 
-`weaves/` (including the suggested queue), `threads/`, and `patches/` are
-authored study data. The shipped weaves began life as **AI-generated study
-aids**; each carries an `approved` flag surfaced in the reader, and the
-suggested queue is exactly that — suggestions, kept out of the approved
-library until a human blesses them.
+The bundled study set is `apps/android/app/src/main/assets/stock/`, seeded once
+into the reader's own files, after which their copies rule: **28 weaves** in the
+library (386 links, every one marked `approved`), **194 more under
+`weaves/suggested/`** (none approved), and one thread — the Romans Road. The
+weaves began life as **AI-generated study aids**, and their notes say so
+(`notesSource: "generated"`, which is also the default when the field is
+absent). `approved` is surfaced in the reader, and approving a suggestion is
+what promotes it out of the queue into the library.
 
 ## Type
 

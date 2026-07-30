@@ -6,10 +6,12 @@
 >
 > — **Amos 7:8**
 
-**Plumbline** is a Bible-study tool: a clean parallel-passage reader with an
-optional "Full study" tier of Strong's, morphology, cross-references, and
-corpus analytics. Everything runs on your device and works offline — no
-account, no sign-in, nothing phoned home.
+**Plumbline** is a Bible-study tool: a clean parallel-passage reader with two
+optional layers of analysis beside the text — **Scholars'** (Strong's, word
+grammar, the same root traced across the testaments, the Treasury's
+cross-references) and **Machine** (statistical patterns to weigh for yourself).
+Everything runs on your device and works offline — no account, no sign-in,
+nothing phoned home.
 
 ![Isaiah 2 and Micah 4 open side by side, joined by weave connector lines,
 with the study panel on "treasures" — Strong's H214, its morphology, every
@@ -25,13 +27,59 @@ open it in any browser and install it from the address bar (phone or
 desktop). It works offline after the first visit, and your study data lives
 in browser storage.
 
-### Android (sideload)
+### Android — sideload the APK
 
-For unlocked phones and people comfortable sideloading: download the APK
-from the [Releases page](https://github.com/glendonjklassen/plumbline/releases)
-(arm64-v8a + x86_64, signed; no Play Store, no Google services required —
-note Google's newer install rules can make sideloading a chore on stock
-devices).
+No Play Store, no Google account: you download one file and open it. Four
+steps, all on the phone.
+
+1. **Download it.** Open the
+   [Releases page](https://github.com/glendonjklassen/plumbline/releases) on the
+   phone and, under **Assets** on the newest release, tap
+   `plumbline-<version>-android.apk` (about 20 MB). Chrome will warn that a file
+   of this type "can harm your device" — it says that about every APK anyone has
+   ever downloaded. Keep it.
+2. **Open the file.** Tap it in the download notification, or find it later
+   under **Files → Downloads** and tap it there.
+3. **Let Android install it.** The first time, Android stops you: your phone
+   "is not allowed to install unknown apps from this source." Tap **Settings**
+   in that message, turn on **Allow from this source**, then press Back — you
+   land back on the installer. Tap **Install**.
+4. **Get past Play Protect, if it shows up.** Some phones offer to scan the app
+   first, or say **Unsafe app blocked**, because Google has never seen this file
+   before. Choose **More details → Install anyway** (or **Don't send**). Then
+   open **Plumbline** from your app drawer: the whole Bible is inside the file
+   you just installed, so it opens with the network off.
+
+Needs Android 8.0 or newer and a 64-bit phone (`arm64-v8a`; the APK carries
+`x86_64` as well, for emulators). It declares **no INTERNET permission at
+all**, so it cannot phone home even by accident. Two study layers ride in the
+web version only, because the APK doesn't carry their data files: the
+word-grammar gloss, and the embedding-based "similar concepts" and "verses like
+this" (which also thins the concept map). Everything else is in the APK — the
+text, Strong's, the margin notes, the Treasury's cross-references, the
+cross-testament bridge, the plain-English overlay, and all of your own work.
+
+**What sideloading means.** You are the one deciding to trust this file, which
+is why Android keeps asking. Two things follow. There is no auto-update — when
+a new version ships you come back to Releases and repeat the four steps; it
+installs over the old one and your notes, tags and threads stay where they are,
+because every release is signed with the same key. And take the APK only from
+that Releases page: a file called `plumbline-….apk` from anywhere else is not
+something I built. If any of this stalls on your phone, the web version above
+needs none of it.
+
+**Checking what you downloaded** (optional). GitHub records a SHA-256 for every
+file attached to a release. Ask it for the APK's, hash your own copy, and
+compare:
+
+```sh
+curl -s https://api.github.com/repos/glendonjklassen/plumbline/releases/tags/v1.0.0 \
+  | grep -o 'sha256:[0-9a-f]\{64\}'
+sha256sum plumbline-v1.0.0-android.apk
+```
+
+(`shasum -a 256` on macOS, `Get-FileHash` in Windows PowerShell.) The two hex
+strings have to match character for character.
 
 ## Getting started (60 seconds)
 
@@ -141,10 +189,12 @@ leaves its connector pinned at the pane edge as a hint.
   there, an edge to open the weave.
 
 > [!NOTE]
-> The weaves shipped with the app began life as **AI-generated study aids**.
-> Each records an `approved` flag, surfaced in the reader; approving one (from
-> its compare card) is how a parallel graduates from a study prompt to
-> something you've checked against the text yourself.
+> The weaves shipped with the app began life as **AI-generated study aids**. The
+> 28 that ship in the library arrive with every link marked `approved`, and the
+> flag is surfaced in the reader; anything sitting in **Suggested** (under
+> Explore) is still a proposal. Approving one from its compare card is what moves
+> it into your library — a parallel graduating from a study prompt to something
+> you have checked against the text yourself.
 
 ## Your data
 
