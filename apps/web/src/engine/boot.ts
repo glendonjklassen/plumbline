@@ -14,13 +14,59 @@
 //
 // Every stage is timed into `trace` — the on-device answer to "where do the
 // milliseconds actually go on a phone" (surfaced via the bootTrace RPC).
+//
+// TWO WAITS RUN AT ONCE. The engine binary and the text need nothing from each
+// other until the instantiate, so the download of the first starts at the top of
+// `boot()` and is collected where it is actually needed. Awaited in order — as
+// this did until 2026-07-29 — the whole wasm download was dead time before first
+// text, which is the number that matters most on a phone.
 
 import { instantiate, type WasmEngine } from "./engine";
+import { depotAvailable, depotHas, depotResponse } from "./depot";
 import { buildHome, dropLegacyIdxcache, type VirtualHome } from "./home";
 import { assetUrl, fetchManifest, fetchPack, fetchStageLocal, type PackManifest } from "./pack";
 import { manifestFromPin, readPin, writePin } from "./pin";
 import { PERF } from "./perf";
 import { StudyEngine } from "./StudyEngine";
+
+/** Where the engine binary lives — content-addressed on the build id, so a new
+ *  build is a new depot entry beside the old one rather than an overwrite.
+ *
+ *  THREE places have to agree on this string: the prefetch below, the read inside
+ *  `instantiate()` (engine.ts), and `pruneToPin`'s keep-set (engine.worker.ts).
+ *  Disagreeing is silent and expensive in both directions — a prefetch under the
+ *  wrong URL is a second 1.7 MB download, and a keep-set under the wrong URL is
+ *  prune deleting the engine — so two of the three read it from here, and
+ *  `e2e/boot-overlap.spec.ts` asserts a cold boot requests it EXACTLY ONCE. */
+export function engineUrl(): string {
+  return assetUrl(`plumbline_ffi.wasm?v=${__BUILD_ID__}`);
+}
+
+/** Start the engine binary arriving NOW, beside the stage-1 read.
+ *
+ *  This warms the DEPOT rather than handing bytes back, because the read site is
+ *  inside `instantiate()` and reads through the depot: once these bytes are
+ *  stored, that read is a local hit and nothing crosses the network twice.
+ *
+ *  Skipped when there is no depot to warm (private mode, plain http). Without
+ *  somewhere to leave the bytes a prefetch is not an overlap, it is the same
+ *  1.7 MB downloaded twice — so the honest thing on those devices is to let the
+ *  instantiate fetch it, exactly as before.
+ *
+ *  Resolves with whether the handoff really happened: a `put` refused for quota
+ *  leaves the instantiate to fetch it again, and that belongs in a trace rather
+ *  than in a guess. Rejections belong to the caller — see the call site.
+ *
+ *  ONE depot lookup on a warm boot, which is the common case and the one that has
+ *  to stay cheap: the binary is already there, the instantiate's own read will hit
+ *  it, and there is nothing to overlap. */
+async function prefetchEngine(): Promise<boolean> {
+  if (!depotAvailable()) return false;
+  const url = engineUrl();
+  if (await depotHas(url)) return true;
+  await depotResponse(url);
+  return depotHas(url);
+}
 
 export interface BootPhase {
   phase: "download" | "prepare" | "open" | "warm";
@@ -50,6 +96,19 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
     trace.push([label, Math.round(performance.now() - t0)]);
     return v;
   };
+
+  // THE OVERLAP, started before anything else asks the network so the engine
+  // binary and the text share the connection instead of queueing on it.
+  //
+  // ITS REJECTION IS ROUTED TWICE, on purpose. The `catch` here marks the promise
+  // handled, so a failed engine fetch cannot surface as an unhandled rejection
+  // while nobody is awaiting it (in a worker that is a console error at best and
+  // a dead thread at worst, and the reader would see a splash that never moves).
+  // The `await` at the instantiate site below still throws, which is the same
+  // failure path the awaited `instantiate()` used: out of `boot`, out of the boot
+  // RPC, onto the splash with a Retry.
+  const engineBytes = prefetchEngine();
+  void engineBytes.catch(() => {});
 
   onPhase({ phase: "download", fraction: 0 });
   // THE LADDER. First rung that works, wins.
@@ -97,6 +156,12 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   const home = await timed("virtual home build", () =>
     buildHome(pack, stockPaths),
   );
+  // Collected here, not at the top: near-zero means the overlap paid for itself
+  // and the binary arrived while the text was being read; a large number means
+  // the engine download IS the critical path, which is a different fix (a smaller
+  // binary) and worth being able to tell apart on a real device.
+  const handedOff = await timed("engine bytes wait (overlapped)", () => engineBytes);
+  if (PERF && !handedOff) trace.push(["engine bytes not stored — instantiate refetches", 1]);
   const wasm = await timed("wasm compile+instantiate", () => instantiate(home.root));
 
   onPhase({ phase: "open" });

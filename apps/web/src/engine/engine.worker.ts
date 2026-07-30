@@ -28,9 +28,12 @@
 //
 // Layout measure runs HERE over an OffscreenCanvas (measure.ts adapts), so
 // EB Garamond must be loaded into self.fonts before the first layout — the
-// boot message carries the resolved font URL.
+// boot message carries the resolved font URL. Before the first LAYOUT, note,
+// which is not the same as before the boot: the load runs alongside the whole
+// boot and is collected just before the boot reply, since no layout op can be
+// answered until the shell has that reply.
 
-import { boot, type BootResult } from "./boot";
+import { boot, engineUrl, type BootResult } from "./boot";
 import { pinnedUrls, writePin } from "./pin";
 import {
   assetUrl,
@@ -547,7 +550,9 @@ async function pruneToPin(shell: string[]): Promise<number> {
   keep.add(assetUrl("pack/manifest.json"));
   // The engine binary is versioned by build id rather than listed in the shell
   // manifest (it is the worker's to fetch, and far too big for a shell list).
-  keep.add(assetUrl(`plumbline_ffi.wasm?v=${__BUILD_ID__}`));
+  // From boot.ts, which is also what prefetches it: an allowlist that spells the
+  // URL out for itself deletes the engine the day the spelling changes.
+  keep.add(engineUrl());
   // The saved "verses like this" model. Prune is an ALLOWLIST, so anything not
   // named here is deleted — and this was, on the very next launch, which is why
   // the first version of it re-saved 12 MB every open and never once restored.
@@ -698,11 +703,34 @@ self.onmessage = async (ev: MessageEvent) => {
         // Before anything else, so the meter covers the whole boot — including
         // the downloads, which is the window the numbers are argued over.
         if (PERF) startStallMeter();
+        // THE FONTS OVERLAP THE WHOLE BOOT. They are needed before the first
+        // LAYOUT, not before the boot — and awaited here they held everything
+        // behind two font files: the pack download, and the splash's first
+        // progress message with it, so the boot watchdog's opening silence
+        // window was spent on fonts before the reader saw a single percent.
         const t0 = performance.now();
-        const fontFaces = await loadFonts(m.fontUrl, m.italicUrl);
-        const fontsMs = Math.round(performance.now() - t0);
+        let fontsMs = 0;
+        const fonts = loadFonts(m.fontUrl, m.italicUrl).then((n) => {
+          fontsMs = Math.round(performance.now() - t0);
+          return n;
+        });
+        // Handled immediately so nothing here can become an unhandled rejection
+        // while it is un-awaited; the await below still sees a failure and it
+        // lands in the same catch as any other boot failure. `loadFonts` swallows
+        // a refused face itself, so this is the belt for a platform that throws
+        // somewhere it does not expect to.
+        void fonts.catch(() => {});
         booted = await boot((p) => self.postMessage({ type: "progress", ...p }));
-        booted.trace.unshift(["worker fonts", fontsMs], ["worker font faces", fontFaces]);
+        // BEFORE the reply, and therefore before any layout op can be answered:
+        // measurement must see the real Garamond metrics or lines wrap where they
+        // are not painted.
+        const w0 = performance.now();
+        const fontFaces = await fonts;
+        booted.trace.unshift(
+          ["worker fonts", fontsMs],
+          ["worker font faces", fontFaces],
+          ["worker fonts wait after boot", Math.round(performance.now() - w0)],
+        );
         booted.engine.onAuthored = () => {
           schedulePersist();
           self.postMessage({ type: "authored" });

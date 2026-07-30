@@ -237,7 +237,7 @@ as "a later increment". F–I can ride later increments (the PWA auto-updates).
 - [x] **[opus]** `$state.raw` for the display-list items (deep proxy walked 3×/frame,
   ~10k signals on Ps 119) + memoize `verseExtents` per layout
   (`ReaderPane.svelte:33`, `paint.ts:80-94`).
-- [ ] **[opus]** Overlap the wasm fetch+compile with the stage-1 read (start
+- [x] **[opus]** Overlap the wasm fetch+compile with the stage-1 read (start
   un-awaited at the top of `boot()`, await at the instantiate site); start
   `loadFonts` un-awaited too (`boot.ts:86-97`, `engine.worker.ts:615-617`).
 - [ ] **[opus]** Consolidate boot RPCs: boot reply carries palettes + toc (+ first
