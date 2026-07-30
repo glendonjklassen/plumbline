@@ -8,7 +8,6 @@
 
   const LINK_INSET = 14;
   const YINSET = 5;
-  const NAV_H = 33; // pane nav strip height (px) — canvas sits below it
 
   const s = getSession();
 
@@ -16,15 +15,45 @@
   let host: HTMLDivElement;
   let cssW = $state(0);
   let cssH = $state(0);
+  // Bumped whenever a pane's chrome is re-measured. The nav strip changes height
+  // without this overlay's own box moving an inch — a wider font, a zoom, a
+  // re-styled button — and the connectors have to follow it (see `paneTextTops`).
+  let chromeEpoch = $state(0);
 
   $effect(() => {
+    // Re-bound when panes come and go: the strips being watched belong to them.
+    void s.panes.length;
     const ro = new ResizeObserver(() => {
       cssW = host.clientWidth;
       cssH = host.clientHeight;
+      chromeEpoch++;
     });
     ro.observe(host);
+    for (const port of scrollports()) ro.observe(port);
     return () => ro.disconnect();
   });
+
+  /** The panes' scrollports, in pane order — the sibling elements whose top edge
+   *  is where a pane's text begins. The overlay has to share their coordinate
+   *  space, so it reads their chrome off the DOM rather than assuming it. */
+  function scrollports(): HTMLElement[] {
+    return [...(host.parentElement?.querySelectorAll<HTMLElement>(".pane .scroll") ?? [])];
+  }
+
+  /** How far below this overlay's top edge each pane's text starts — the nav
+   *  strip plus the active-pane rule above it — MEASURED. A pane's canvas is
+   *  sticky at the top of its scrollport, so that edge is exactly where MARGIN
+   *  and the display list begin.
+   *
+   *  This used to be a `NAV_H = 33` constant. The strip then grew to Android's
+   *  48dp touch targets and nothing told the overlay, so every connector met its
+   *  verse some 25px too high. `--bottomNavH` in Shell.svelte was written for the
+   *  same mistake: two declarations of one length drift the moment either side is
+   *  touched, and a measurement cannot. */
+  function paneTextTops(): number[] {
+    const top = host.getBoundingClientRect().top;
+    return scrollports().map((port) => port.getBoundingClientRect().top - top);
+  }
 
   const pairs = $derived.by(() => {
     void s.studyEpoch;
@@ -39,20 +68,29 @@
     void s.panes.map((p) => `${p.book}:${p.chapter}:${p.scrollY}`).join();
     void cssW;
     void cssH;
+    void chromeEpoch;
     cancelAnimationFrame(rafId);
     rafId = requestAnimationFrame(draw);
   });
 
   function draw(): void {
     if (!canvas || cssW <= 0) return;
+    const n = s.panes.length;
+    // Measured in the frame being painted, and BEFORE the canvas resize below: a
+    // height cached from the observer arrives a frame late (every connector drawn
+    // wrong, then a jump), and a rect read after writing canvas.width would force
+    // a reflow this frame never needed.
+    const textTop = n < 2 ? [] : paneTextTops();
     const dpr = devicePixelRatio || 1;
     canvas.width = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
     const ctx = canvas.getContext("2d")!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
-    const n = s.panes.length;
     if (n < 2) return;
+    // A pane we could not measure would be drawn at the wrong y; skip the frame
+    // and let the observer's redraw have it once the panes are laid out.
+    if (textTop.length < n) return;
 
     const paneW = cssW / n;
     // Later pane wins duplicates (manifest): walk panes in order into a map.
@@ -65,8 +103,9 @@
     const endpointY = (paneIdx: number, verse: number): number | null => {
       const geom = s.paneVerseGeom[paneIdx]?.get(verse);
       if (!geom) return null;
-      const y = NAV_H + MARGIN + geom.y + geom.h / 2 - s.panes[paneIdx].scrollY;
-      return Math.min(Math.max(y, NAV_H + YINSET), cssH - YINSET);
+      const top = textTop[paneIdx];
+      const y = top + MARGIN + geom.y + geom.h / 2 - s.panes[paneIdx].scrollY;
+      return Math.min(Math.max(y, top + YINSET), cssH - YINSET);
     };
 
     const gold = s.palette.gold ?? "#9e7d38";
