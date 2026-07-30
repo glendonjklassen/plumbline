@@ -62,6 +62,15 @@ export default defineConfig({
     // precaching it would spend first-visit bytes on a file no reader can ever
     // read offline. It still ships: Vite copies public/ verbatim, and this list
     // decides what goes in the DEPOT, not what goes in dist.
+    //
+    // Also deliberately absent, and for the same reason: 404.html and CNAME.
+    // Neither is ever fetched BY the app. CNAME is not an HTTP resource at all —
+    // it is a line of text GitHub Pages reads at deploy time to bind the custom
+    // domain. And 404.html is served by the HOST for a path the app never
+    // requests; once anything is stored, `sw.js` answers an unfetchable
+    // navigation with the shell itself, so an installed reader can never reach
+    // it. Storing it would cost first-visit bytes for a page that only exists
+    // for a visitor who has stored nothing yet.
     {
       name: "plumbline-shell-manifest",
       generateBundle(_options, bundle) {

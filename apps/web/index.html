@@ -77,6 +77,101 @@
   </head>
   <body>
     <div id="app"></div>
+
+    <!-- What a browser with JavaScript switched off gets, and what a text-only
+         crawler reads. Both used to get blank cream paper for ever, which reads
+         as a broken site rather than an unmet requirement. There is nothing to
+         degrade to: the text, the concordance and the reader's own notes are all
+         built in the page from a local engine, with no server rendering anything.
+
+         The styles live INSIDE the noscript on purpose. A browser with scripting
+         ENABLED never parses the contents of a noscript element — they are raw
+         text to it — so nothing in here can reach the running app: not the CSS,
+         not the markup, not the accessibility tree, not Ctrl+F. And it cannot
+         lean on the bundle's stylesheet either, because the premise is that the
+         bundle never ran. Same palette values as the light/dark themes. -->
+    <noscript>
+      <style>
+        #app {
+          display: none;
+        }
+        :root {
+          color-scheme: light dark;
+          --ns-paper: #fcf9f4;
+          --ns-ink: #211f1a;
+          --ns-faded: #6c665d;
+          --ns-gold: #7d632c;
+        }
+        @media (prefers-color-scheme: dark) {
+          :root {
+            --ns-paper: #1f1b16;
+            --ns-ink: #e8e0d0;
+            --ns-faded: #9a9385;
+            --ns-gold: #c8a24e;
+          }
+        }
+        body {
+          margin: 0;
+          background: var(--ns-paper);
+          color: var(--ns-ink);
+          font-family: "EB Garamond", Georgia, "Times New Roman", serif;
+          line-height: 1.6;
+        }
+        .noscript-page {
+          box-sizing: border-box;
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 2rem 1.5rem;
+        }
+        .noscript-card {
+          max-width: 30rem;
+        }
+        .noscript-card h1 {
+          margin: 0 0 0.15rem;
+          font-size: 2rem;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+        }
+        .noscript-card p {
+          margin: 0.9rem 0 0;
+        }
+        .noscript-card .tagline {
+          margin: 0;
+          color: var(--ns-faded);
+          font-size: 1.1rem;
+        }
+        .noscript-card .aside {
+          margin-top: 1.4rem;
+          color: var(--ns-faded);
+          font-size: 0.95rem;
+        }
+        .noscript-card a {
+          color: var(--ns-gold);
+        }
+      </style>
+      <div class="noscript-page">
+        <div class="noscript-card">
+          <h1>Plumbline</h1>
+          <p class="tagline">
+            The Holy Bible, free and offline — the whole 1769 King James Version, on your own
+            device.
+          </p>
+          <p>
+            Plumbline needs JavaScript. The text, the concordance and your own notes all run here
+            on your device rather than on a server, so there is no plain page to fall back to.
+            Switch JavaScript on for this site and reload: the Bible downloads once, and after that
+            it opens with the network off.
+          </p>
+          <p class="aside">
+            If you would rather not run it, there is an Android app on the
+            <a href="https://github.com/glendonjklassen/plumbline/releases">Releases page</a>.
+          </p>
+        </div>
+      </div>
+    </noscript>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Plumbline</title>
+
+    <!-- GitHub Pages serves THIS file, with a 404, for any path the site does
+         not have: a mistyped address, an old link that still carries a path
+         segment, a refresh of a URL a future release routes on the path.
+         Left alone it is a dead end, so it forwards to the app.
+
+         THE QUERY AND THE HASH ARE THE PAYLOAD, and both travel over verbatim.
+         `?at=Ps 23:1`, `?church=`, `?churchInfo=`, `?churchUrl=`, `?start=new`
+         are what a shared link or a printed QR hands over (src/shell/church.ts)
+         — the verse to open at and the church that sent you — and the hash is
+         where the app mirrors what is being read. Dropping either turns a
+         shared link back into a plain visit, which is the whole thing the link
+         was for. Concatenating `location.search` and `location.hash` keeps them
+         byte-for-byte as they arrived; they are already percent-encoded.
+
+         THE PATH IS DROPPED, deliberately. No address the app produces carries
+         one — the reader lives at the site root and its state rides in the
+         query and the hash — so a path here is either a typo or a stale prefix,
+         and forwarding it would just 404 again. If path routing is ever added,
+         this is the file that has to start carrying it.
+
+         NO FLASH OF THIS PAGE: the script sits in <head>, so it runs before the
+         body exists, and it hides the body the instant it commits to leaving in
+         case the parser gets there before the navigation does. `replace`, not
+         `assign`, so Back goes where the reader came from instead of back into
+         this file.
+
+         IT CANNOT LOOP: the destination is one fixed path. If we are already on
+         that path and still got served a 404, then the app itself is missing and
+         there is nowhere left to go — so this page stops and says so. One hop,
+         always.
+
+         Offline, this file is never reached at all: `sw.js` answers a navigation
+         it cannot fetch with the stored shell, hash and query intact. This page
+         is for the online visitor who has not installed anything yet, which is
+         also why it is NOT in the depot's keep-set (see vite.config.ts). -->
+    <style>
+      html.leaving > body {
+        display: none;
+      }
+      :root {
+        color-scheme: light dark;
+        --paper: #fcf9f4;
+        --ink: #211f1a;
+        --faded: #6c665d;
+        --gold: #7d632c;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #1f1b16;
+          --ink: #e8e0d0;
+          --faded: #9a9385;
+          --gold: #c8a24e;
+        }
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1.5rem;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: "EB Garamond", Georgia, "Times New Roman", serif;
+        line-height: 1.55;
+      }
+      main {
+        max-width: 26rem;
+        text-align: center;
+      }
+      h1 {
+        margin: 0 0 0.15rem;
+        font-size: 2rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+      p {
+        margin: 0.9rem 0 0;
+      }
+      .tagline {
+        margin: 0;
+        color: var(--faded);
+        font-size: 1.05rem;
+      }
+      a {
+        display: inline-block;
+        margin-top: 1.4rem;
+        padding: 0.55rem 1.1rem;
+        border: 1px solid var(--gold);
+        border-radius: 0.4rem;
+        color: var(--gold);
+        text-decoration: none;
+      }
+    </style>
+    <script>
+      (function () {
+        // The app's one address on this host. `public/CNAME` beside this file
+        // pins the site to plumblinebible.org, whose root IS the reader.
+        var ROOT = "/";
+        // Already at the destination and still served a 404: the app is not
+        // there. Redirecting would be redirecting to here, for ever.
+        if (location.pathname === ROOT) return;
+        document.documentElement.className = "leaving";
+        location.replace(ROOT + location.search + location.hash);
+      })();
+    </script>
+  </head>
+  <body>
+    <main>
+      <h1>Plumbline</h1>
+      <p class="tagline">The Holy Bible, free and offline.</p>
+      <p>Nothing is at this address.</p>
+      <a href="/">Open the Bible</a>
+    </main>
+  </body>
+</html>

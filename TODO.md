@@ -122,7 +122,7 @@ as "a later increment". F–I can ride later increments (the PWA auto-updates).
 - [x] **[opus]** Icons/manifest: generate 192/512 + maskable from `public/icon.svg`;
   add manifest `id`, `lang`, `orientation`, `categories`, `screenshots`; dark
   `theme-color` meta pair.
-- [ ] **[opus]** `<noscript>` block; `404.html` redirect preserving search+hash;
+- [x] **[opus]** `<noscript>` block; `404.html` redirect preserving search+hash;
   optional `public/CNAME` (belt-and-braces — Pages setting is verified working).
 - [x] **[opus]** Canvas reader exposes zero accessible text (screen readers, Ctrl+F,
   translate see nothing): hidden text mirror rebuilt from the display list +
