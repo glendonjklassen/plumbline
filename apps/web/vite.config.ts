@@ -56,8 +56,12 @@ export default defineConfig({
     // loaded — including the one an update had just downloaded.
     //
     // Deliberately NOT listed: sw.js (the service worker must never be served
-    // from the cache it manages), and the pack + wasm, which are the depot's
-    // business and are far too big to belong in a shell list.
+    // from the cache it manages), the pack + wasm, which are the depot's business
+    // and are far too big to belong in a shell list, and og-image.png — the link
+    // card is fetched by remote crawlers over the network, never by the app, so
+    // precaching it would spend first-visit bytes on a file no reader can ever
+    // read offline. It still ships: Vite copies public/ verbatim, and this list
+    // decides what goes in the DEPOT, not what goes in dist.
     {
       name: "plumbline-shell-manifest",
       generateBundle(_options, bundle) {
@@ -68,6 +72,9 @@ export default defineConfig({
           "icon.svg",
           "icon-128.png",
           "icon-256.png",
+          // The home-screen icon, alongside the webmanifest's own: same kind of
+          // file, wanted at the same moment, and 3 KB.
+          "apple-touch-icon-180.png",
           ...READER_FONT_PATHS,
         ];
         this.emitFile({

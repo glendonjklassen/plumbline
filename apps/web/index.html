@@ -5,7 +5,60 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#fcf9f4" />
     <title>Plumbline Bible</title>
+    <meta
+      name="description"
+      content="The Holy Bible, free and offline — the whole 1769 King James Version on your own device. No account, no sign-in, nothing phoned home."
+    />
+
+    <!-- The link card: what a stranger sees when someone pastes this address into
+         a chat, a bulletin, or a post. It is the app's first sentence, so it says
+         what Plumbline IS rather than what it has.
+
+         ABSOLUTE urls on purpose. Everything else here is relative — `base: "./"`
+         keeps the bundle host-agnostic — but a crawler is not a browser: it reads
+         the markup, resolves nothing, and drops a card whose image it cannot
+         fetch. So these name the one origin the app is shared from. (The old Pages
+         address 301s there, and a 301 is followed.)
+
+         og:image states its exact pixel size because scrapers that would have to
+         download and measure the file often skip the image instead — which means
+         the numbers below and the shipped PNG can disagree with nothing on screen
+         to show it. `e2e/social.spec.ts` decodes the file and holds them equal. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Plumbline" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="https://plumblinebible.org/" />
+    <meta property="og:title" content="Plumbline — the Holy Bible, free and offline" />
+    <meta
+      property="og:description"
+      content="The Holy Bible, free and offline — the whole 1769 King James Version on your own device. No account, no sign-in, nothing phoned home."
+    />
+    <meta property="og:image" content="https://plumblinebible.org/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="The Plumbline mark — a woven gold cross on warm paper — beside the word Plumbline and the line “The Holy Bible, free and offline.”"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Plumbline — the Holy Bible, free and offline" />
+    <meta
+      name="twitter:description"
+      content="The Holy Bible, free and offline — the whole 1769 King James Version on your own device. No account, no sign-in, nothing phoned home."
+    />
+    <meta name="twitter:image" content="https://plumblinebible.org/og-image.png" />
+    <meta
+      name="twitter:image:alt"
+      content="The Plumbline mark — a woven gold cross on warm paper — beside the word Plumbline and the line “The Holy Bible, free and offline.”"
+    />
+
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <!-- iOS ignores the webmanifest icons when someone adds this to their home
+         screen, and it composites a transparent icon on BLACK, so this one is
+         opaque and bleeds to all four edges — iOS rounds the corners itself.
+         Without it the home screen shows a screenshot of the page. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon-180.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="stylesheet" href="./fonts.css" />
   </head>
