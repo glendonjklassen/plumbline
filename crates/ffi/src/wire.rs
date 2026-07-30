@@ -7,6 +7,14 @@
 //! Kotlin, Swift or JS and stable to evolve (new fields are additive). Verse
 //! references cross the wire as compact keys (`"John 3:16"`) plus a display
 //! form, so a shell needs no canon table of its own.
+//!
+//! **On an enum, `rename_all` renames the VARIANTS, not the fields inside
+//! them** — a tagged union needs `rename_all_fields = "camelCase"` as well, or
+//! its struct-variant fields go out in Rust's snake_case. That mistake shipped:
+//! `WireBlock` emitted `mark_glyph` / `top_gap`, so Android's decoder (which
+//! ignores unknown keys) read nothing and the tier marks and paragraph gaps
+//! never rendered. The golden key-set tests in `tests.rs` now pin the complete
+//! set of keys each variant emits, so the next one fails at the test.
 
 use serde::{Deserialize, Serialize};
 
@@ -268,7 +276,7 @@ pub struct WireWordCodes {
 // ── search ────────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum WireSearch {
     /// The query resolved to a reference.
     Goto {
@@ -1100,7 +1108,7 @@ pub struct WirePanel {
 }
 
 #[derive(Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum WireBlock {
     /// A section header, with an optional tier mark (glyph + colour role).
     Section { title: String, mark_glyph: Option<String>, mark_color: Option<&'static str> },
@@ -1149,7 +1157,7 @@ fn run_to_wire(r: Run) -> WireRun {
 /// vocabulary, tagged by `verb` so a shell dispatches on the typed shape
 /// instead of re-splitting the URI string.
 #[derive(Serialize)]
-#[serde(tag = "verb", rename_all = "camelCase")]
+#[serde(tag = "verb", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum WirePanelLink {
     Go { book: String, chapter: u32, verse: Option<u32> },
     Occurrences { code: String },
@@ -1159,29 +1167,16 @@ pub enum WirePanelLink {
     Tag { index: usize },
     Weave { index: usize },
     ConceptMap { code: String },
-    AddTag {
-        #[serde(rename = "refKey")]
-        ref_key: String,
-    },
-    AddThread {
-        #[serde(rename = "refKey")]
-        ref_key: String,
-    },
-    Untag {
-        tag: usize,
-        #[serde(rename = "refKey")]
-        ref_key: String,
-    },
+    AddTag { ref_key: String },
+    AddThread { ref_key: String },
+    Untag { tag: usize, ref_key: String },
     MakeWeave { tag: usize },
     Approve { index: usize },
     Reject { index: usize },
     EditThreadNotes { index: usize },
     EditWeaveNotes { index: usize },
     EditEntryNote { thread: usize, entry: usize },
-    EditNote {
-        #[serde(rename = "refKey")]
-        ref_key: String,
-    },
+    EditNote { ref_key: String },
     Guide,
     About,
 }

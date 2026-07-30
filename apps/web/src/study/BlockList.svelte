@@ -13,11 +13,11 @@
   interface Block {
     kind: "section" | "para" | "rule";
     title?: string;
-    mark_glyph?: string;
-    mark_color?: string;
+    markGlyph?: string;
+    markColor?: string;
     runs?: Run[];
     indent?: boolean;
-    top_gap?: boolean;
+    topGap?: boolean;
   }
   interface Props {
     blocks: Block[];
@@ -35,12 +35,12 @@
     {:else if b.kind === "section"}
       <h3>
         <span class="title">{b.title}</span>
-        {#if b.mark_glyph}
-          <span class="mark" style:color={color(b.mark_color)}>{b.mark_glyph}</span>
+        {#if b.markGlyph}
+          <span class="mark" style:color={color(b.markColor)}>{b.markGlyph}</span>
         {/if}
       </h3>
     {:else if b.kind === "para"}
-      <p class:indent={b.indent} class:gap={b.top_gap}>
+      <p class:indent={b.indent} class:gap={b.topGap}>
         {#each b.runs ?? [] as r, j (j)}
           {#if r.uri}
             <button

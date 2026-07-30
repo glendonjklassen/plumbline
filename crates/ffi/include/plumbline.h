@@ -29,7 +29,12 @@
 // can fail loudly instead of silently reading nulls; purely additive fields
 // do not bump it. Exported to the C header; golden samples are pinned in
 // `tests.rs`.
-#define PLUMBLINE_WIRE_VERSION 1
+// 2 (2026-07-29): `rename_all_fields` on the tagged unions in `wire.rs`. Three
+// keys changed spelling — `mark_glyph`/`mark_color`/`top_gap` → camelCase — which
+// is a rename, so it bumps by the rule above. Nothing compares this constant yet
+// (TODO §H tracks making it a live handshake), so today the bump is a record
+// rather than a gate.
+#define PLUMBLINE_WIRE_VERSION 2
 
 // One laid-out chapter: the positioned display list a shell paints and
 // hit-tests. Opaque to C; produced by [`plumbline_engine_layout_chapter`], released

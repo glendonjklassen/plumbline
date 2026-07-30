@@ -2080,3 +2080,229 @@ fn reading_map_round_trip_via_abi() {
         let _ = std::fs::remove_dir_all(&home);
     }
 }
+
+// ── the wire's key sets (golden) ──────────────────────────────────────────────
+//
+// `#[serde(rename_all)]` on an **enum** renames its VARIANTS, not the fields
+// inside them. `WireBlock` shipped `mark_glyph` / `mark_color` / `top_gap` while
+// both shells asked for `markGlyph` / `markColor` / `topGap`; Android's decoder
+// ignores unknown keys (as it must, for additive evolution), so tier marks and
+// paragraph gaps simply never rendered there, and the web had matched the wrong
+// names so nothing looked broken. A test naming one field would not have caught
+// that — no key was missing, every key was misspelled.
+//
+// So the tests below pin the COMPLETE key set of every variant of every tagged
+// union on the wire, and check each key against the contract itself (camelCase).
+// Changing a payload on purpose is one edited list; a rename or a wrong-cased
+// new field fails here with the whole set in the diff.
+
+/// An object's JSON keys, sorted — what the golden lists compare against.
+fn json_keys(v: &Value) -> Vec<&str> {
+    let mut ks: Vec<&str> = v
+        .as_object()
+        .unwrap_or_else(|| panic!("expected a JSON object, got {v}"))
+        .keys()
+        .map(String::as_str)
+        .collect();
+    ks.sort_unstable();
+    ks
+}
+
+/// The frozen contract in one assertion: every wire key is camelCase. This holds
+/// even when the golden list beside it agrees with the bug, because a golden is
+/// only as good as the person who typed it.
+fn assert_camel_keys(keys: &[&str], what: &str) {
+    for k in keys {
+        assert!(
+            !k.contains('_') && !k.starts_with(|c: char| c.is_uppercase()),
+            "{what}: key `{k}` is not camelCase. The wire is camelCase; on an enum, \
+             `rename_all` renames the variants — struct-variant fields need \
+             `rename_all_fields = \"camelCase\"`."
+        );
+    }
+}
+
+/// A block's `kind` token, as a match that must stay exhaustive: a new
+/// [`crate::wire::WireBlock`] variant will not compile until it is added here —
+/// and the golden test below wants a sample of it too.
+fn block_kind(b: &crate::wire::WireBlock) -> &'static str {
+    use crate::wire::WireBlock as B;
+    match b {
+        B::Section { .. } => "section",
+        B::Para { .. } => "para",
+        B::Rule => "rule",
+    }
+}
+
+/// The study panel's whole content model, key by key: every block variant and
+/// both shapes of run.
+#[test]
+fn wire_block_keys_are_golden() {
+    use plumbline_core::panel::{Block, Color, Run};
+
+    let blocks = vec![
+        Block::Section { title: "Scholarship".into(), mark: Some(("◆".into(), Color::TierHuman)) },
+        Block::Section { title: "Plain".into(), mark: None },
+        Block::Para {
+            runs: vec![
+                Run::new("plain", 16.0, Color::Ink),
+                Run::new("God", 16.0, Color::Gold).link("occ:G2316"),
+            ],
+            indent: true,
+            top_gap: true,
+        },
+        Block::Rule,
+    ];
+    let panel = crate::wire::blocks_to_wire(blocks);
+    // One sample per variant (see `block_kind`).
+    let kinds: Vec<&str> = panel.blocks.iter().map(block_kind).collect();
+    assert_eq!(kinds, ["section", "section", "para", "rule"]);
+
+    let v = serde_json::to_value(&panel).unwrap();
+    assert_eq!(json_keys(&v), ["blocks"]);
+    let b = v["blocks"].as_array().unwrap();
+
+    // A marked and an unmarked section emit the SAME keys — `markGlyph` /
+    // `markColor` are explicit nulls, which is what lets a strict decoder bind
+    // them as always-present optionals.
+    let golden: &[(&str, &[&str])] = &[
+        ("section (marked)", &["kind", "markColor", "markGlyph", "title"]),
+        ("section (plain)", &["kind", "markColor", "markGlyph", "title"]),
+        ("para", &["indent", "kind", "runs", "topGap"]),
+        ("rule", &["kind"]),
+    ];
+    assert_eq!(b.len(), golden.len());
+    for (block, (what, keys)) in b.iter().zip(golden) {
+        assert_eq!(json_keys(block), *keys, "{what}");
+        assert_camel_keys(&json_keys(block), what);
+    }
+
+    // A run carries `uri` only when it is a link.
+    let runs: &[(&str, &[&str])] = &[
+        ("run (plain)", &["bold", "color", "italic", "size", "text"]),
+        ("run (link)", &["bold", "color", "italic", "size", "text", "uri"]),
+    ];
+    for (run, (what, keys)) in b[2]["runs"].as_array().unwrap().iter().zip(runs) {
+        assert_eq!(json_keys(run), *keys, "{what}");
+        assert_camel_keys(&json_keys(run), what);
+    }
+
+    // And the three keys the bug hid actually carry their values.
+    assert_eq!(b[0]["markGlyph"], "◆");
+    assert_eq!(b[0]["markColor"], "tierHuman");
+    assert!(b[1]["markGlyph"].is_null());
+    assert_eq!(b[2]["topGap"], true);
+}
+
+/// A link's `verb` token — exhaustive on purpose, like [`block_kind`].
+fn link_verb(l: &crate::wire::WirePanelLink) -> &'static str {
+    use crate::wire::WirePanelLink as L;
+    match l {
+        L::Go { .. } => "go",
+        L::Occurrences { .. } => "occurrences",
+        L::Rendering { .. } => "rendering",
+        L::CodeStudy { .. } => "codeStudy",
+        L::Thread { .. } => "thread",
+        L::Tag { .. } => "tag",
+        L::Weave { .. } => "weave",
+        L::ConceptMap { .. } => "conceptMap",
+        L::AddTag { .. } => "addTag",
+        L::AddThread { .. } => "addThread",
+        L::Untag { .. } => "untag",
+        L::MakeWeave { .. } => "makeWeave",
+        L::Approve { .. } => "approve",
+        L::Reject { .. } => "reject",
+        L::EditThreadNotes { .. } => "editThreadNotes",
+        L::EditWeaveNotes { .. } => "editWeaveNotes",
+        L::EditEntryNote { .. } => "editEntryNote",
+        L::EditNote { .. } => "editNote",
+        L::Guide => "guide",
+        L::About => "about",
+    }
+}
+
+/// Every panel-link verb, keys and all. `refKey` is the field most exposed to
+/// this class of bug — three verbs carry it, and serde spells it `ref_key` unless
+/// told otherwise.
+#[test]
+fn wire_panel_link_keys_are_golden() {
+    // (the URI the panel bakes, the verb on the wire, the complete key set)
+    let golden: &[(&str, &str, &[&str])] = &[
+        ("go:1 John:3:16", "go", &["book", "chapter", "verb", "verse"]),
+        ("occ:G25", "occurrences", &["code", "verb"]),
+        ("rend:G25:loved", "rendering", &["code", "rendering", "verb"]),
+        ("code:G25:loved", "codeStudy", &["code", "verb", "word"]),
+        ("thread:0", "thread", &["index", "verb"]),
+        ("tag:0", "tag", &["index", "verb"]),
+        ("weave:0", "weave", &["index", "verb"]),
+        ("conceptmap:G25", "conceptMap", &["code", "verb"]),
+        ("addtag:John 3:16", "addTag", &["refKey", "verb"]),
+        ("addthread:John 3:16", "addThread", &["refKey", "verb"]),
+        ("untag:2:John 3:16", "untag", &["refKey", "tag", "verb"]),
+        ("makeweave:1", "makeWeave", &["tag", "verb"]),
+        ("approve:0", "approve", &["index", "verb"]),
+        ("reject:0", "reject", &["index", "verb"]),
+        ("editthreadnotes:0", "editThreadNotes", &["index", "verb"]),
+        ("editweavenotes:0", "editWeaveNotes", &["index", "verb"]),
+        ("editentrynote:1:4", "editEntryNote", &["entry", "thread", "verb"]),
+        ("editnote:John 3:16", "editNote", &["refKey", "verb"]),
+        ("guide", "guide", &["verb"]),
+        ("about", "about", &["verb"]),
+    ];
+    let mut verbs = std::collections::BTreeSet::new();
+    for (uri, verb, keys) in golden {
+        let parsed = plumbline_core::panel::parse_link(uri).unwrap_or_else(|| panic!("{uri} should route"));
+        let wire = crate::wire::link_to_wire(parsed);
+        assert_eq!(link_verb(&wire), *verb, "{uri}");
+        let v = serde_json::to_value(&wire).unwrap();
+        assert_eq!(v["verb"], *verb, "{uri}");
+        assert_eq!(json_keys(&v), *keys, "{uri}");
+        assert_camel_keys(&json_keys(&v), uri);
+        verbs.insert(*verb);
+    }
+    // One row per variant, so `link_verb`'s exhaustive match is a real tripwire.
+    assert_eq!(verbs.len(), golden.len(), "each verb wants exactly one golden row");
+}
+
+/// A search answer's `kind` token — exhaustive on purpose, like [`block_kind`].
+fn search_kind(a: &crate::wire::WireSearch) -> &'static str {
+    use crate::wire::WireSearch as S;
+    match a {
+        S::Goto { .. } => "goto",
+        S::Hits { .. } => "hits",
+    }
+}
+
+/// The search answer's keys: the third tagged union a shell decodes strictly.
+#[test]
+fn wire_search_keys_are_golden() {
+    use plumbline_core::search::{SearchAnswer, SearchHit};
+
+    let goto = crate::wire::search_to_wire(&SearchAnswer::GoTo {
+        book: "John".to_string(),
+        chapter: 3,
+        verse: Some(16),
+    });
+    assert_eq!(search_kind(&goto), "goto");
+    let v = serde_json::to_value(&goto).unwrap();
+    assert_eq!(json_keys(&v), ["book", "chapter", "display", "kind", "verse"]);
+    assert_camel_keys(&json_keys(&v), "goto");
+
+    let hits = crate::wire::search_to_wire(&SearchAnswer::Hits {
+        how: "the word “God”".to_string(),
+        total: 2,
+        hits: vec![SearchHit {
+            vref: plumbline_core::VRef::new("John".to_string(), 3, 16),
+            note: false,
+            why: String::new(),
+        }],
+    });
+    assert_eq!(search_kind(&hits), "hits");
+    let v = serde_json::to_value(&hits).unwrap();
+    assert_eq!(json_keys(&v), ["capped", "hits", "how", "kind", "total"]);
+    assert_camel_keys(&json_keys(&v), "hits");
+    assert_eq!(json_keys(&v["hits"][0]), ["display", "note", "verse", "why"]);
+    assert_camel_keys(&json_keys(&v["hits"][0]), "hit");
+    // `total` above the returned hits is the honest count, and says so.
+    assert_eq!(v["capped"], true);
+}

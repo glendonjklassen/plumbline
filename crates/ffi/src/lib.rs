@@ -102,7 +102,12 @@ pub const OCCURRENCE_CAP: usize = 500;
 /// can fail loudly instead of silently reading nulls; purely additive fields
 /// do not bump it. Exported to the C header; golden samples are pinned in
 /// `tests.rs`.
-pub const PLUMBLINE_WIRE_VERSION: u32 = 1;
+/// 2 (2026-07-29): `rename_all_fields` on the tagged unions in `wire.rs`. Three
+/// keys changed spelling — `mark_glyph`/`mark_color`/`top_gap` → camelCase — which
+/// is a rename, so it bumps by the rule above. Nothing compares this constant yet
+/// (TODO §H tracks making it a live handshake), so today the bump is a record
+/// rather than a gate.
+pub const PLUMBLINE_WIRE_VERSION: u32 = 2;
 
 /// Verses per warm slice on the web's chunked warm-up
 /// (`plumbline_engine_warm_step`). Lives here rather than in `wasm.rs` so the
