@@ -17,7 +17,11 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+# The version every crate inherits, and the one `plumbline_version()` hands the
+# shells — About renders it as `engine 1.0.0`. The release workflow refuses a tag
+# whose version disagrees with this line (and with apps/web/package.json), so a
+# release ships one number, not three.
+version = "1.0.0"
 edition = "2021"
 license = "MIT"
 authors = ["Glendon Klassen <gjklassen@proton.me>"]
