@@ -6,6 +6,14 @@
 // the GTK (Pango) and WinUI (DirectWrite) shells follow. Constants mirror the
 // feature manifest (MARGIN 28, MAX_COLUMN 720, line_height = textH·1.35).
 //
+// Dragging a chapter up and down is the thing a reader does most, so the scroll
+// offset is kept OUT OF COMPOSITION: it is written from gestures and read from
+// the draw phase, which means a frame repaints without recomposing. Everything a
+// frame needs that doesn't move — the bands, the note dots, the inks as packed
+// ARGB, the per-verse extents the scroll reports binary-search — is worked out
+// once per layout. Keep it that way: one composition-phase read of `scroll` puts
+// a full recomposition back on every frame.
+//
 // Author D (Compose UI).
 
 package dev.plumbline.ui
@@ -26,10 +34,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
@@ -172,9 +183,18 @@ fun ReaderPane(
         if (clearPinEpoch > 0) pin = null
     }
 
-    var scrollY by remember { mutableStateOf(0f) }
-    var viewportH by remember { mutableStateOf(0f) }
-    var swipeDx by remember { mutableStateOf(0f) }   // accumulated horizontal drag
+    // The scroll offset is a state OBJECT read through `.floatValue`, never a
+    // delegated `var`: nothing in COMPOSITION may touch it. The pane's whole
+    // content is one Canvas, so a scroll frame needs only the draw phase — but
+    // this was read and (in the clamp) written during composition, which
+    // recomposed the pane on every pixel of every drag. Every read below is in
+    // the draw lambda, a gesture callback, or a snapshotFlow: all after
+    // composition. The clamp moved to the three places that write it.
+    val scroll = remember { mutableFloatStateOf(0f) }
+    // Set from the layout phase (onSizeChanged) and read in composition for the
+    // scroll extent — it changes on a rotation or a fold, not on a frame.
+    var viewportH by remember { mutableFloatStateOf(0f) }
+    var swipeDx by remember { mutableFloatStateOf(0f) }   // accumulated horizontal drag
 
     // Free the native display list when this pane leaves the tree.
     DisposableEffect(Unit) { onDispose { chapterHandle?.close() } }
@@ -220,7 +240,7 @@ fun ReaderPane(
             }
             chapterHandle?.close()
             result.onSuccess { (chap, parsed) ->
-                chapterHandle = chap; dl = parsed; problem = null; scrollY = 0f; pin = null
+                chapterHandle = chap; dl = parsed; problem = null; scroll.floatValue = 0f; pin = null
             }.onFailure {
                 chapterHandle = null; dl = null; problem = it.message ?: "layout failed"
             }
@@ -240,40 +260,52 @@ fun ReaderPane(
             }
         }
 
+        // Where every verse sits, worked out ONCE per layout. The scroll path asks
+        // two questions of it on every frame — which verse is at the top edge, and
+        // how deep has the reader got — and both are a binary search over this
+        // table instead of a scan over every word in the chapter (verseExtents /
+        // verseAtTop / deepestVerseEntered below).
+        val extents = remember(dl) { verseExtents(dl?.items ?: emptyList()) }
+
         // Report the first visible verse (top edge) whenever scroll settles on a
-        // new one — the config persists it for cross-session scroll restore.
-        var lastReported by remember { mutableStateOf(-1) }
-        LaunchedEffect(scrollY, dl) {
-            val list = dl ?: return@LaunchedEffect
-            val first = list.items.firstOrNull { it.kind == "verseNumber" && it.y + it.h > scrollY }
-                ?.verseNumber?.toInt() ?: return@LaunchedEffect
-            if (first != lastReported) {
-                lastReported = first
-                onFirstVisibleVerse(first)
+        // new one — the config persists it for cross-session scroll restore. ONE
+        // collector per layout: this was keyed on the offset itself, so a drag
+        // cancelled and relaunched a coroutine every frame.
+        var lastReported by remember { mutableIntStateOf(-1) }
+        val reportFirst = rememberUpdatedState(onFirstVisibleVerse)
+        LaunchedEffect(extents) {
+            snapshotFlow { verseAtTop(extents, scroll.floatValue) }.collect { first ->
+                if (first > 0 && first != lastReported) {
+                    lastReported = first
+                    reportFirst.value(first)
+                }
             }
         }
 
-        // The reading map's high-water mark: the deepest verse whose text has
-        // come fully into view. Reset per chapter, and only ever rising within
-        // one — the core takes the max anyway, but reporting a fall would put
-        // pointless writes on the scroll path.
-        var deepest by remember(book, chapter) { mutableStateOf(0) }
-        LaunchedEffect(scrollY, viewportH, dl) {
-            val list = dl ?: return@LaunchedEffect
-            if (viewportH <= 0f) return@LaunchedEffect
-            val bottom = scrollY + viewportH
-            // A verse counts as reached once its LAST word is above the fold; the
-            // final verse of a chapter also counts when the document bottom is in
-            // view, so a short last verse can't strand a chapter at 99%.
-            val reached = list.items
-                .filter { it.kind == "word" && it.y + it.h <= bottom }
-                .mapNotNull { it.verse?.substringAfterLast(':')?.toIntOrNull() }
-                .maxOrNull() ?: return@LaunchedEffect
-            if (reached > deepest) {
-                deepest = reached
-                onVerseReached(reached)
+        // The reading map's high-water mark: the deepest verse the reader has
+        // scrolled to. A verse counts once the line it STARTS on has cleared the
+        // fold — which is what the old max-over-every-word-above-the-fold worked
+        // out, spelled plainly. Reset per chapter, and only ever rising within
+        // one: the core takes the max anyway, but reporting a fall would put
+        // pointless writes on the scroll path. The fold is generous by a margin
+        // (the offset is measured from the document top, margin included), so the
+        // document bottom coming into view reaches the last verse and a short
+        // final verse can't strand a chapter at 99%.
+        var deepest by remember(book, chapter) { mutableIntStateOf(0) }
+        val reportReached = rememberUpdatedState(onVerseReached)
+        LaunchedEffect(extents) {
+            snapshotFlow {
+                if (viewportH <= 0f) 0 else deepestVerseEntered(extents, scroll.floatValue + viewportH)
+            }.collect { reached ->
+                if (reached > deepest) {
+                    deepest = reached
+                    reportReached.value(reached)
+                }
             }
         }
+
+        val docHeight = (dl?.height ?: 0f) + 2 * marginPx
+        val maxScroll = max(0f, docHeight - viewportH)
 
         // Scroll the navigator's target verse into view once the layout lands.
         // Epoch-guarded so a re-layout (font/margin change) doesn't re-jump.
@@ -284,30 +316,74 @@ fun ReaderPane(
             if (appliedTarget == targetEpoch) return@LaunchedEffect
             val item = list.items.firstOrNull { it.kind == "verseNumber" && it.verseNumber?.toInt() == tv }
             if (item != null) {
-                scrollY = max(0f, item.y)
+                scroll.floatValue = max(0f, item.y).coerceAtMost(maxScroll)
                 appliedTarget = targetEpoch
             }
         }
 
-        val docHeight = (dl?.height ?: 0f) + 2 * marginPx
-        val maxScroll = max(0f, docHeight - viewportH)
-        scrollY = scrollY.coerceIn(0f, maxScroll)
-
-        // Live-updated snapshots for the tap gesture (so the gesture detector is
+        // Live-updated snapshot for the tap gesture (so the gesture detector is
         // keyed on the chapter handle only, not restarted on every scroll frame).
-        val scrollYNow = rememberUpdatedState(scrollY)
         val originXNow = rememberUpdatedState(originX)
 
         val scrollState = rememberScrollableState { delta ->
-            val newY = (scrollY - delta).coerceIn(0f, maxScroll)
-            val consumed = scrollY - newY
-            scrollY = newY
-            consumed
+            val y = scroll.floatValue
+            val newY = (y - delta).coerceIn(0f, maxScroll)
+            scroll.floatValue = newY
+            y - newY
         }
 
         // Horizontal fling → chapter step. Distinct from the vertical scroll
         // above; Compose routes each drag to the detector matching its axis.
         val swipeState = rememberDraggableState { delta -> swipeDx += delta }
+
+        // Everything the paint pass can know before the reader moves: the inks as
+        // packed ARGB, and the bands/dots as positioned rectangles. All of it was
+        // a filter + groupBy + a colour conversion per word PER FRAME, rebuilding
+        // values that only change with the layout, the palette or a tap. A scroll
+        // frame now culls and paints, and allocates nothing.
+        val inks = remember(palette) { ReaderInks(palette) }
+        val problemPaint = remember(regular, inks) { Paint(regular).apply { color = inks.added } }
+        val bandLines = remember(dl, searchHits, book, chapter, column) {
+            val out = ArrayList<LayoutRect>()
+            if (searchHits.isNotEmpty()) {
+                // One wash per LINE, not per hit word. Items arrive top-to-bottom,
+                // so a line's hits are contiguous and the previous y is enough to
+                // dedupe — painting a translucent band twice would darken it.
+                var lastY = Float.NaN
+                for (item in dl?.items ?: emptyList()) {
+                    if (item.refOf(book, chapter) !in searchHits) continue
+                    if (item.y == lastY) continue
+                    lastY = item.y
+                    out.add(LayoutRect(-6f, item.y, column + 12f, item.h))
+                }
+            }
+            out
+        }
+        val pinRects = remember(dl, pin) {
+            val out = ArrayList<LayoutRect>()
+            val p = pin
+            if (p != null) {
+                for (item in dl?.items ?: emptyList()) {
+                    if (item.verse != p.verse) continue
+                    val t = item.tokenIndex ?: continue
+                    if (t < p.lo || t > p.hi) continue
+                    out.add(LayoutRect(item.x - 1.5f, item.y, item.w + 3f, item.h))
+                }
+            }
+            out
+        }
+        val noteDots = remember(dl, noteVerses) {
+            val out = ArrayList<LayoutDot>()
+            if (noteVerses.isNotEmpty()) {
+                for (item in dl?.items ?: emptyList()) {
+                    if (item.kind != "verseNumber") continue
+                    val v = item.verseNumber ?: continue
+                    if (v !in noteVerses) continue
+                    out.add(LayoutDot(item.x - 18f, item.y + item.h * 0.5f, item.y, item.h))
+                }
+            }
+            out
+        }
 
         Canvas(
             modifier = Modifier
@@ -318,7 +394,15 @@ fun ReaderPane(
                 // in the Column, i.e. underneath in draw order). Belt to the
                 // per-item viewport cull below.
                 .clipToBounds()
-                .onSizeChanged { viewportH = it.height.toFloat() }
+                .onSizeChanged {
+                    val h = it.height.toFloat()
+                    viewportH = h
+                    // A shorter viewport (a rotation, a fold) can leave the offset
+                    // past the document's end. Re-clamp HERE — from the layout
+                    // phase — rather than in composition, which is what used to
+                    // write scroll state on every frame.
+                    scroll.floatValue = scroll.floatValue.coerceIn(0f, max(0f, docHeight - h))
+                }
                 .scrollable(scrollState, Orientation.Vertical)
                 .draggable(
                     state = swipeState,
@@ -335,7 +419,7 @@ fun ReaderPane(
                         onTap = { pos ->
                             val chap = chapterHandle ?: return@detectTapGestures
                             val x = pos.x - originXNow.value
-                            val y = pos.y - marginPx + scrollYNow.value
+                            val y = pos.y - marginPx + scroll.floatValue
                             val hj = runCatching {
                                 synchronized(engine) { chap.HitTestJson(x, y) }
                             }.getOrNull() ?: return@detectTapGestures
@@ -345,7 +429,7 @@ fun ReaderPane(
                             onWordTap(hit)
                         },
                         onLongPress = { pos ->
-                            val verse = verseAt(dl, pos, originXNow.value, scrollYNow.value, marginPx, book, chapter, engine, chapterHandle)
+                            val verse = verseAt(dl, pos, originXNow.value, scroll.floatValue, marginPx, book, chapter, engine, chapterHandle)
                             if (verse != null) onVerseLongPress(verse)
                         },
                     )
@@ -357,12 +441,17 @@ fun ReaderPane(
             if (list == null) {
                 // "loading…" / an error, at the top margin.
                 drawContext.canvas.nativeCanvas.drawText(
-                    problem ?: "loading…", marginPx, marginPx - fm.ascent,
-                    Paint(regular).apply { color = palette.inkFaded.toArgbInt() },
+                    problem ?: "loading…", marginPx, marginPx - fm.ascent, problemPaint,
                 )
                 return@Canvas
             }
 
+            // The one place the scroll offset is read on a frame — a draw-phase
+            // read, so a drag invalidates the draw and nothing else. Clamped on
+            // the way in as well as at every write: the extent depends on the
+            // viewport, and a target-verse jump can land before the pane has
+            // been measured.
+            val scrollY = scroll.floatValue.coerceIn(0f, maxScroll)
             val top = scrollY - marginPx
             val viewH = size.height
 
@@ -370,38 +459,26 @@ fun ReaderPane(
                 // Same viewport cull the text uses (§5): a wash/band for an item
                 // scrolled off-screen must not paint — otherwise it lands over the
                 // chrome above the pane on scroll. clipToBounds is the safety net.
-                fun onScreen(item: DisplayItem) = item.y + item.h >= top && item.y <= top + viewH
+                fun onScreen(y: Float, h: Float) = y + h >= top && y <= top + viewH
 
                 // 1. Search hits — a soft band per line.
-                if (searchHits.isNotEmpty()) {
-                    list.items.filter { it.refOf(book, chapter) in searchHits && onScreen(it) }
-                        .groupBy { it.y }
-                        .forEach { (y, line) ->
-                            drawRect(palette.band, Offset(-6f, y), Size(column + 12f, line.first().h))
-                        }
+                for (r in bandLines) {
+                    if (!onScreen(r.y, r.h)) continue
+                    drawRect(palette.band, Offset(r.x, r.y), Size(r.w, r.h))
                 }
 
                 // 4. Pinned span — a blue band per word rect.
-                pin?.let { p ->
-                    list.items.filter {
-                        it.verse == p.verse && onScreen(it) &&
-                            it.tokenIndex?.toInt()?.let { t -> t in p.lo..p.hi } == true
-                    }.forEach { drawRect(palette.pinBand, Offset(it.x - 1.5f, it.y), Size(it.w + 3f, it.h)) }
+                for (r in pinRects) {
+                    if (!onScreen(r.y, r.h)) continue
+                    drawRect(palette.pinBand, Offset(r.x, r.y), Size(r.w, r.h))
                 }
 
                 // 4b. Note marks: a small gutter dot beside the verse number of
                 // any verse carrying the reader's own note (their words are in
                 // the study pane; this says "you wrote here" at a glance).
-                if (noteVerses.isNotEmpty()) {
-                    list.items.filter {
-                        it.kind == "verseNumber" && it.verseNumber?.toInt() in noteVerses && onScreen(it)
-                    }.forEach {
-                        drawCircle(
-                            color = palette.gutterDot,
-                            radius = 5f,
-                            center = Offset(it.x - 18f, it.y + it.h * 0.5f),
-                        )
-                    }
+                for (d in noteDots) {
+                    if (!onScreen(d.y, d.h)) continue
+                    drawCircle(color = palette.gutterDot, radius = 5f, center = Offset(d.cx, d.cy))
                 }
 
                 // 5. The text itself.
@@ -412,22 +489,21 @@ fun ReaderPane(
                     val baseline = dyTop - fm.ascent
 
                     if (it.kind == "verseNumber") {
-                        bold.color = palette.gold.toArgbInt()
+                        bold.color = inks.gold
                         canvas.drawText(it.text, it.x, baseline, bold)
                         continue
                     }
-                    val flags = it.flags.toInt()
+                    val flags = it.flags
                     val added = flags and PlumblineFlags.ADDED != 0
                     val divine = flags and PlumblineFlags.DIVINE != 0
                     val title = flags and PlumblineFlags.TITLE != 0
-                    val color = when {
-                        added -> palette.inkFaded
-                        divine -> palette.divine
-                        title -> palette.titleInk
-                        else -> palette.ink
-                    }
                     val paint = if (added) italic else regular
-                    paint.color = color.toArgbInt()
+                    paint.color = when {
+                        added -> inks.added
+                        divine -> inks.divine
+                        title -> inks.title
+                        else -> inks.ink
+                    }
                     canvas.drawText(it.text, it.x, baseline, paint)
                     // NO mark for a Strong's-tagged word. There used to be a
                     // faint gold rule under every one, and since most words
@@ -485,6 +561,101 @@ private fun verseAt(
         if (d < bestD) { bestD = d; best = it }
     }
     return best?.refOf(book, chapter)
+}
+
+// ── the scroll path, precomputed ────────────────────────────────────────────
+// Everything below is worked out once per layout (or per palette) and then only
+// read: the reader drags a chapter more than they do anything else, and a frame
+// that allocates or rescans the display list is a frame that stutters.
+
+/** A rectangle placed once per layout: the wash under a search-hit line and the
+ *  band under a pinned word are both this. [y] and [h] are the source item's
+ *  own, so the draw pass culls with exactly the test the text uses. */
+private class LayoutRect(val x: Float, val y: Float, val w: Float, val h: Float)
+
+/** A note dot: its centre, plus the verse number's extent it is culled by. */
+private class LayoutDot(val cx: Float, val cy: Float, val y: Float, val h: Float)
+
+/** The reader's inks as packed ARGB — what android.graphics.Paint takes. Built
+ *  once per palette: converting a Compose [Color] per word per frame was ~900
+ *  conversions a frame for five values that change only with the theme. */
+private class ReaderInks(palette: ReaderPalette) {
+    val ink = palette.ink.toArgbInt()
+    val added = palette.inkFaded.toArgbInt()
+    val divine = palette.divine.toArgbInt()
+    val title = palette.titleInk.toArgbInt()
+    val gold = palette.gold.toArgbInt()
+}
+
+/** One verse's vertical landmarks in a laid-out chapter, in the display list's
+ *  own coordinate space.
+ *
+ *  @property numberBottom the bottom edge of the line the verse NUMBER sits on —
+ *    the verse is the top-edge verse until this scrolls past the top.
+ *  @property entryBottom the bottom edge of the line the verse's FIRST word sits
+ *    on — the verse has come into view once this is above the fold.
+ */
+internal data class VerseExtent(val verse: Int, val numberBottom: Float, val entryBottom: Float)
+
+/**
+ * The per-verse extents of one laid-out chapter, in verse order.
+ *
+ * Built once per layout for the two questions the scroll path asks on every
+ * frame. Both bounds rise with the verse number, because the core emits the
+ * display list strictly top-to-bottom, a verse's number ahead of its words, and
+ * every item one line tall — which is what makes the binary searches below
+ * legal. A linear scan of this table must always give the same answer;
+ * VerseExtentsTest holds them to it.
+ */
+internal fun verseExtents(items: List<DisplayItem>): List<VerseExtent> {
+    val out = ArrayList<VerseExtent>()
+    var awaitingFirstWord = false
+    for (item in items) {
+        if (item.kind == "verseNumber") {
+            val v = item.verseNumber ?: continue
+            val bottom = item.y + item.h
+            // entryBottom starts on the number's line and moves down to the first
+            // word's, which is a different line only when the word wrapped. A
+            // verse that renders no words at all (the overlay can blank a token)
+            // keeps the number's line, so every verse has an extent and the table
+            // stays sorted.
+            out.add(VerseExtent(v, bottom, bottom))
+            awaitingFirstWord = true
+        } else if (awaitingFirstWord && item.kind == "word" && out.isNotEmpty()) {
+            out[out.size - 1] = out.last().copy(entryBottom = item.y + item.h)
+            awaitingFirstWord = false
+        }
+    }
+    return out
+}
+
+/** The verse at the pane's top edge: the first one whose number has not yet
+ *  scrolled past [scrollY]. 0 when the offset is below every verse. */
+internal fun verseAtTop(extents: List<VerseExtent>, scrollY: Float): Int {
+    // Lower bound on `numberBottom > scrollY` — the FIRST index that satisfies
+    // it, which is what `firstOrNull { it.y + it.h > scrollY }` used to find.
+    var lo = 0
+    var hi = extents.size
+    while (lo < hi) {
+        val mid = (lo + hi) ushr 1
+        if (extents[mid].numberBottom > scrollY) hi = mid else lo = mid + 1
+    }
+    return if (lo < extents.size) extents[lo].verse else 0
+}
+
+/** The deepest verse that has come into view above [fold] — the reading map's
+ *  high-water candidate. 0 when none has. */
+internal fun deepestVerseEntered(extents: List<VerseExtent>, fold: Float): Int {
+    // Upper bound on `entryBottom <= fold`: the LAST index that satisfies it,
+    // and since verses only ever run down the page that is the same verse the
+    // old filter-every-word-then-max arrived at.
+    var lo = 0
+    var hi = extents.size
+    while (lo < hi) {
+        val mid = (lo + hi) ushr 1
+        if (extents[mid].entryBottom <= fold) lo = mid + 1 else hi = mid
+    }
+    return if (lo > 0) extents[lo - 1].verse else 0
 }
 
 /** Compose [Color] → packed ARGB int for android.graphics.Paint. */
