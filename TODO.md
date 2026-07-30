@@ -131,7 +131,7 @@ as "a later increment". F–I can ride later increments (the PWA auto-updates).
 - [ ] **[opus]** URL routing: mirror pane 0 into `location.hash` (`#/John/3`),
   `pushState` when a transient surface opens, `popstate` → `dismissTransient()` so
   Back closes overlays instead of exiting the PWA. Nothing is bookmarkable today.
-- [ ] **[opus]** "Share link" verse action in `ContextMenu` →
+- [x] **[opus]** "Share link" verse action in `ContextMenu` →
   `shareUrl(PWA_URL, s.church, {at: refKey})` — the `?at=` plumbing exists, only
   Present's QR uses it.
 - [x] **[opus]** Light-theme contrast fails WCAG AA: darken `faded` → ~#6e6862 and
