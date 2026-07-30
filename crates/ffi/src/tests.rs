@@ -987,6 +987,18 @@ fn config_round_trip_via_abi() {
         assert_eq!(loaded["bodySize"], 21.0);
         assert_eq!(loaded["openPanes"][1]["book"], "Rom");
         assert_eq!(loaded["activePane"], 1);
+        // Not asked for → off (AUDIT 2026-07-29: the field used to be missing
+        // from the wire state entirely, so a shell's save dropped it).
+        assert_eq!(loaded["akjvOverlay"], false);
+
+        // The plain-English overlay is a reader preference like any other: what
+        // a shell saves is what the next load hands back.
+        let saved = r#"{"studyMode":"full","bodySize":21.0,"akjvOverlay":true}"#;
+        let sc = CString::new(saved).unwrap();
+        assert!(plumbline_config_save_json(sc.as_ptr()).is_null());
+        let loaded: Value =
+            serde_json::from_str(&take(plumbline_config_load_json()).unwrap()).unwrap();
+        assert_eq!(loaded["akjvOverlay"], true, "the shells' overlay switch did not survive a save");
 
         // Garbage json is an error, not a panic.
         let bad = CString::new("{nope").unwrap();

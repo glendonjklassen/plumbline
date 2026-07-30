@@ -1278,6 +1278,11 @@ pub struct WireConfigState {
     /// Present-screen shares open as a new believer (additive, 2026-07-27).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub present_shares_as_new: Option<bool>,
+    /// The plain-English overlay (the AKJV delta) on the reader (additive,
+    /// 2026-07-29). Absent → off. Both shells were already writing this key;
+    /// the core had no field for it, so every save dropped it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub akjv_overlay: Option<bool>,
     /// The welcome this reader was given, "new" | "curious" (additive).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub intro: Option<String>,
@@ -1332,6 +1337,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         human_analysis: Some(cfg.human_analysis),
         machine_analysis: Some(cfg.machine_analysis),
         present_shares_as_new: Some(cfg.present_shares_as_new),
+        akjv_overlay: Some(cfg.akjv_overlay),
         intro: (!cfg.intro.is_empty()).then(|| cfg.intro.clone()),
         church: (!cfg.church.is_empty()).then(|| WireChurch {
             name: cfg.church.name.clone(),
@@ -1382,6 +1388,8 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         human_analysis: w.human_analysis.unwrap_or(false),
         machine_analysis: w.machine_analysis.unwrap_or(false),
         present_shares_as_new: w.present_shares_as_new.unwrap_or(true),
+        // Absent = off (core::config::from_wire): the KJV is the text.
+        akjv_overlay: w.akjv_overlay.unwrap_or(false),
         intro: match w.intro.as_deref() {
             Some("new") => "new".to_string(),
             Some("curious") => "curious".to_string(),

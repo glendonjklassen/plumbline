@@ -125,6 +125,12 @@ pub struct Config {
     /// it is usually meeting the Bible, not setting up a study tool. On by
     /// default (2026-07-27); the recipient can still change everything.
     pub present_shares_as_new: bool,
+    /// The plain-English overlay (the AKJV delta) on the reader. Off unless the
+    /// reader asks for it, and reader-only either way — memorize, Present, copy
+    /// and share stay KJV (see [`crate::akjv`]). Kept here since 2026-07-29:
+    /// both shells were writing it and the core was dropping it, so the switch
+    /// never survived a restart.
+    pub akjv_overlay: bool,
     /// Which welcome this reader was given ("new" | "curious"), empty when
     /// none. The shells offer it again from the chrome — a reader shouldn't
     /// have to reinstall to read it twice (2026-07-27).
@@ -155,6 +161,7 @@ impl Default for Config {
             machine_analysis: false,
             church: Church::default(),
             present_shares_as_new: true,
+            akjv_overlay: false,
             intro: String::new(),
         }
     }
@@ -198,6 +205,10 @@ struct ConfigWire {
     /// older file → on, which is the default the feature shipped with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     present_shares_as_new: Option<bool>,
+    /// The plain-English overlay (2026-07-29); absent in an older file → off,
+    /// which is what every reader saw while the field was being dropped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    akjv_overlay: Option<bool>,
     /// The welcome this reader was given (2026-07-27); absent when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     intro: Option<String>,
@@ -292,6 +303,9 @@ impl Config {
             // Trimmed on the way in: these arrive from a shared link's query
             // string, where trailing spaces are an accident of copy-paste.
             present_shares_as_new: w.present_shares_as_new.unwrap_or(true),
+            // Absent = off: the KJV is the text, and off is what the reader was
+            // getting on every launch before this field was kept.
+            akjv_overlay: w.akjv_overlay.unwrap_or(false),
             intro: match w.intro.as_deref() {
                 Some("new") => "new".to_string(),
                 Some("curious") => "curious".to_string(),
@@ -332,6 +346,7 @@ impl Config {
             human_analysis: Some(self.human_analysis),
             machine_analysis: Some(self.machine_analysis),
             present_shares_as_new: Some(self.present_shares_as_new),
+            akjv_overlay: Some(self.akjv_overlay),
             intro: (!self.intro.is_empty()).then(|| self.intro.clone()),
             church: (!self.church.is_empty()).then(|| ChurchWire {
                 name: self.church.name.clone(),
@@ -483,6 +498,7 @@ mod tests {
             human_analysis: true,
             machine_analysis: false,
             present_shares_as_new: false,
+            akjv_overlay: true,
             intro: "curious".to_string(),
             church: Church {
                 name: "Grace Bible Church".into(),
@@ -575,6 +591,36 @@ mod tests {
         std::fs::write(&path, damaged).unwrap();
         load_from(&path);
         assert_eq!(std::fs::read_to_string(&bad).unwrap(), damaged);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// AUDIT 2026-07-29: both shells wrote `akjvOverlay`, the core had no field
+    /// for it, and so every save wrote the object back without it — the reader
+    /// turned the plain-English overlay on and found it off again next launch.
+    /// The key spelling here is the one the shells use; absent still means off.
+    #[test]
+    fn akjv_overlay_survives_a_load_save_load() {
+        let dir = scratch("akjv");
+        let path = dir.join("config.json");
+
+        // Written by a shell (Android ConfigState / the web session snapshot).
+        std::fs::write(&path, r#"{"studyMode":"simple","akjvOverlay":true}"#).unwrap();
+        let (cfg, first_run) = load_from(&path);
+        assert!(!first_run);
+        assert!(cfg.akjv_overlay, "the shells' akjvOverlay never reached Config");
+
+        // The save that used to drop it. Check the bytes, not just the struct:
+        // it is the written file the next launch reads.
+        save_to(&path, &cfg).unwrap();
+        let json = std::fs::read_to_string(&path).unwrap();
+        assert!(json.contains(r#""akjvOverlay": true"#), "the save dropped akjvOverlay: {json}");
+        let (back, _) = load_from(&path);
+        assert!(back.akjv_overlay, "the overlay was off again after a restart");
+
+        // Absent → off, which is what every reader saw before this landed.
+        std::fs::write(&path, r#"{"studyMode":"simple"}"#).unwrap();
+        assert!(!load_from(&path).0.akjv_overlay);
 
         let _ = std::fs::remove_dir_all(&dir);
     }
