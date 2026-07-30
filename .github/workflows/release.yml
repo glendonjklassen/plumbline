@@ -13,6 +13,16 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # A manual run is a DRY RUN, and only a dry run. It does everything a tag
+  # does — the version gate, the data pack contract, the type check, the wasm
+  # engine, the signed APK, the Pages bundle — and publishes NOTHING: no
+  # release is created or touched, no APK is uploaded, nothing reaches
+  # plumblinebible.org. Every publishing step carries the same guard,
+  # `github.event_name != 'workflow_dispatch'`. There are no inputs on purpose;
+  # a manual run cannot be pointed at a version, so it cannot be talked into
+  # overwriting one. Exercising this workflow should not cost a tag you then
+  # have to delete.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -43,12 +53,19 @@ jobs:
       - name: Derive the displayed version, and check the manifests agree
         id: v
         run: |
+          crate=$(grep -m1 -E '^version = "' Cargo.toml | cut -d'"' -f2)
+          web=$(grep -m1 -E '^  "version": "' apps/web/package.json | cut -d'"' -f4)
+          # A dry run has no tag. It labels itself from Cargo.toml — the number a
+          # tag would have to match anyway — so the build is stamped like the real
+          # thing while the manifests are still checked against each other. Nothing
+          # publishes on this path, so the string only ever reaches a build.
           tag="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="v$crate"
+          fi
           name="${tag#v}"
           core="${name%%-*}"
           IFS=. read -r maj min pat <<< "$core"
-          crate=$(grep -m1 -E '^version = "' Cargo.toml | cut -d'"' -f2)
-          web=$(grep -m1 -E '^  "version": "' apps/web/package.json | cut -d'"' -f4)
           if [ "$core" != "$crate" ] || [ "$core" != "$web" ]; then
             echo "::error::Tag $tag means version $core, but Cargo.toml says '$crate' and apps/web/package.json says '$web'. Bump both manifests (About shows the Cargo version as the engine version), commit, and move the tag."
             exit 1
@@ -63,7 +80,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: version
     steps:
+      # Guarded on the step, not the job: a skipped job skips everything that
+      # needs it, and a dry run is supposed to keep building.
       - name: Create the release if it does not exist yet
+        if: github.event_name != 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -112,9 +132,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         if: steps.sign.outputs.ready == 'true'
 
+      # Same pinned install CI uses, so the toolchain that builds the shipped .so
+      # is the one the pushes were tested with (and it comes prebuilt, not from a
+      # cold `cargo install`).
       - name: Install cargo-ndk
         if: steps.sign.outputs.ready == 'true'
-        run: cargo install cargo-ndk --locked
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
 
       - name: Cross-compile libplumbline_ffi.so (arm64-v8a + x86_64, 16 KB-aligned)
         if: steps.sign.outputs.ready == 'true'
@@ -139,7 +164,7 @@ jobs:
             -PplumblineVersionCode="${{ needs.version.outputs.code }}"
 
       - name: Attach the APK to the release
-        if: steps.sign.outputs.ready == 'true'
+        if: steps.sign.outputs.ready == 'true' && github.event_name != 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -198,9 +223,14 @@ jobs:
       - name: Build the engine (wasm32-wasip1)
         run: cargo build --locked -p plumbline-ffi --release --target wasm32-wasip1
 
+      # `npm run check` for the same reason the pack check is here: CI runs
+      # svelte-check on every push, but a tag can be cut from any commit, and
+      # this job goes straight to plumblinebible.org. It runs before the bundle
+      # so a type error stops the release instead of shipping in it.
       - name: Build the app
         run: |
           node scripts/copy-wasm.mjs
+          npm run check
           npm run build
         working-directory: apps/web
         env:
@@ -209,14 +239,20 @@ jobs:
           # The same string the APK carries — bare, no leading 'v'.
           PLUMBLINE_VERSION: ${{ needs.version.outputs.name }}
 
+      # Everything above builds and checks; everything below publishes. A dry run
+      # stops here — it has proved the bundle can be built, which is the whole
+      # question a manual run is asking.
       - uses: actions/configure-pages@v5
+        if: github.event_name != 'workflow_dispatch'
         with:
           enablement: true
 
       - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'workflow_dispatch'
         with:
           path: apps/web/dist
 
       - name: Deploy to GitHub Pages
         id: deploy
+        if: github.event_name != 'workflow_dispatch'
         uses: actions/deploy-pages@v4
