@@ -463,6 +463,22 @@
     <button class="dismiss" aria-label="Not now" onclick={() => (s.updateReady = false)}>✕</button>
   </div>
 {/if}
+
+<!-- This device would not take the write. Sticky, like the update notice and for
+     a stronger reason: a fading toast would tell a reader their work is at risk
+     while they are looking at the note they just typed. `title` carries the
+     browser's own words for a bug report; the sentence carries what to do. -->
+{#if s.persistFailed}
+  <div class="toast warn" class:stacked={s.updateReady} role="status" title={s.persistFailed.detail}>
+    <span>
+      {s.persistFailed.retrying
+        ? "Couldn't save your last change — trying again."
+        : "Couldn't save your last change — storage may be full. Free some space, then try again."}
+    </span>
+    <button class="upd" onclick={() => s.retryPersist()}>Try again</button>
+    <button class="dismiss" aria-label="Dismiss" onclick={() => (s.persistFailed = null)}>✕</button>
+  </div>
+{/if}
 <PromptDialog />
 <Shortcuts />
 <MapsHost />
@@ -779,14 +795,17 @@
     font-size: 14px;
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
   }
-  /* The update toast stays until acted on, so it carries its own buttons. */
-  .toast.update {
+  /* A toast that stays until acted on carries its own buttons. */
+  .toast.update,
+  .toast.warn {
     display: flex;
     align-items: center;
     gap: 12px;
     padding: 8px 10px 8px 16px;
+    max-width: min(560px, calc(100vw - 24px));
   }
-  .toast.update .upd {
+  .toast.update .upd,
+  .toast.warn .upd {
     background: var(--gold, #9e7d38);
     color: #fff;
     border: none;
@@ -795,13 +814,28 @@
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
+    white-space: nowrap;
   }
-  .toast.update .dismiss {
+  .toast.update .dismiss,
+  .toast.warn .dismiss {
     background: none;
     border: none;
     color: inherit;
     opacity: 0.7;
     font-size: 14px;
     cursor: pointer;
+  }
+  /* The app's one alarm colour (--tierResearch, as ConfirmDialog's destructive
+     button uses) as a left edge — enough to read as "wrong" without turning the
+     reader's page into a warning banner. */
+  .toast.warn {
+    border-left: 4px solid var(--tierResearch, #b04a3a);
+  }
+  .toast.warn .upd {
+    background: var(--tierResearch, #b04a3a);
+  }
+  /* Both sticky notices at once: this one sits above the update. */
+  .toast.warn.stacked {
+    bottom: 74px;
   }
 </style>

@@ -18,10 +18,12 @@
 //   in:  { id, op: "loadRnd" }                      → deferred pack + re-warm
 //   in:  { id, op: "bootTrace" }                    → [label, ms][] so far
 //   in:  { id, op: "export" } / { id, op: "freeze" } / { id, op: "setBundled", on }
+//   in:  { id, op: "flush" }                        → persist pending writes NOW
 //   out: { id, result } | { id, error }
 //   out: { type: "progress", phase, fraction?, detail? }   (during boot)
 //   out: { type: "authored" }                       (any authoring write landed)
 //   out: { type: "readingWrote" }                   (a dwell report landed)
+//   out: { type: "persistFailed", detail, retrying } / { type: "persistOk" }
 //   out: { type: "coreReady" } / { type: "rndReady" } / { type: "rndProgress", fraction }
 //
 // Layout measure runs HERE over an OffscreenCanvas (measure.ts adapts), so
@@ -560,6 +562,91 @@ async function pruneToPin(shell: string[]): Promise<number> {
   return gone;
 }
 
+// ── persisting the reader's own work ─────────────────────────────────────────
+// This used to be `void booted.home.persistUserData()` inside a 50 ms debounce,
+// and it lost writes two different ways.
+//
+//  * A FAILED WRITE went nowhere. QuotaExceededError on a full phone, or a
+//    browser that has decided this origin may not have a database, rejected a
+//    promise nobody was holding — while the shell had already told the reader
+//    their note was saved. It was saved in the in-memory home, which dies with
+//    the tab. So failures come back out to the shell now, and are retried.
+//  * A TAB THAT WENT AWAY inside the debounce lost the note entirely: 50 ms is
+//    nothing, and a hidden page has its timers frozen, so the pending callback
+//    may simply never run. `flush` awaits the write instead of scheduling it,
+//    and the main thread calls it on pagehide / visibilitychange-hidden.
+//
+// Everything funnels through `persistNow`, so "did this get told about?" has one
+// answer. The multi-tab contract is untouched: the flush runs the SAME per-file
+// diff (see home.ts), one moment earlier.
+const PERSIST_DEBOUNCE = 50;
+/** Backoff between retries, ms. It ENDS. A device that has refused five times is
+ *  out of room rather than busy, and a timer that never stops costs battery
+ *  while promising something we cannot deliver; the shell's notice carries a
+ *  "Try again" the reader can use once they have freed some space. */
+const PERSIST_BACKOFF = [250, 1_000, 4_000, 15_000];
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let persistRetry: ReturnType<typeof setTimeout> | null = null;
+let persistTries = 0;
+/** Whether the shell is currently showing a failure notice — so a healthy
+ *  session posts nothing at all, and a recovered one posts exactly once. */
+let persistFailing = false;
+
+/** What went wrong, in the browser's own words. An aborted IndexedDB transaction
+ *  can reject with a NULL error, and "null" is not something a reader (or a bug
+ *  report) can do anything with. */
+function persistReason(e: unknown): string {
+  if (e instanceof Error) return `${e.name}: ${e.message}`;
+  return e == null ? "the browser gave no reason" : String(e);
+}
+
+/** Persist the authored subtree now. Resolves when THIS attempt has settled,
+ *  which is what makes it awaitable from `flush`. Never rejects: a failed save
+ *  is news for the reader, not an error for whoever happened to trigger it. */
+async function persistNow(): Promise<void> {
+  // Both timers are subsumed by running right now; leaving either armed would
+  // double-write (and the debounce's write would diff against a moving tree).
+  if (persistTimer) clearTimeout(persistTimer);
+  if (persistRetry) clearTimeout(persistRetry);
+  persistTimer = null;
+  persistRetry = null;
+  try {
+    await booted!.home.persistUserData();
+    persistTries = 0;
+    if (persistFailing) {
+      persistFailing = false;
+      self.postMessage({ type: "persistOk" });
+    }
+  } catch (e) {
+    persistFailing = true;
+    const more = persistTries < PERSIST_BACKOFF.length;
+    // `detail` is the browser's own words ("QuotaExceededError…"). The shell does
+    // not shout it at the reader, but a failure we cannot name is a failure
+    // nobody can act on, so it travels.
+    self.postMessage({
+      type: "persistFailed",
+      detail: persistReason(e),
+      retrying: more,
+    });
+    if (more && !persistRetry) {
+      persistRetry = setTimeout(() => {
+        persistRetry = null;
+        void persistNow();
+      }, PERSIST_BACKOFF[persistTries++]);
+    }
+  }
+}
+
+/** Coalesce a burst of authoring writes into one persist. */
+function schedulePersist(): void {
+  if (persistTimer) return;
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    void persistNow();
+  }, PERSIST_DEBOUNCE);
+}
+
 // ── statics ───────────────────────────────────────────────────────────────────
 
 async function loadFonts(fontUrl: string, italicUrl: string): Promise<number> {
@@ -616,15 +703,8 @@ self.onmessage = async (ev: MessageEvent) => {
         const fontsMs = Math.round(performance.now() - t0);
         booted = await boot((p) => self.postMessage({ type: "progress", ...p }));
         booted.trace.unshift(["worker fonts", fontsMs], ["worker font faces", fontFaces]);
-        let persistPending = false;
         booted.engine.onAuthored = () => {
-          if (!persistPending) {
-            persistPending = true;
-            setTimeout(() => {
-              persistPending = false;
-              void booted!.home.persistUserData();
-            }, 50);
-          }
+          schedulePersist();
           self.postMessage({ type: "authored" });
         };
         // Dwell reports persist ONLY the reading dir — see onReadingWrite — and
@@ -632,8 +712,19 @@ self.onmessage = async (ev: MessageEvent) => {
         // its cached reading reads or the navigator keeps painting the map it
         // fetched hours ago; it must not drop everything else with them, which is
         // the same reason this does not just fire `authored`.
+        //
+        // Its own retry ladder would be pointless — the next dwell tick rewrites
+        // the same file — but the reader still hears about a device that is
+        // refusing writes, because it is refusing THEIR notes too.
         booted.engine.onReadingWrite = () => {
-          void booted!.home.persistUserDir("reading");
+          void booted!.home.persistUserDir("reading").catch((e) => {
+            persistFailing = true;
+            self.postMessage({
+              type: "persistFailed",
+              detail: persistReason(e),
+              retrying: false,
+            });
+          });
           self.postMessage({ type: "readingWrote" });
         };
         const cfg = configLoad(booted.wasm) ?? {};
@@ -667,7 +758,15 @@ self.onmessage = async (ev: MessageEvent) => {
         // IndexedDB like any authoring write. Before this, config persisted
         // only when an authoring write happened to follow — a pure reader's
         // first-run choice (and pane layout) never survived a relaunch.
-        if (m.fn === "configSave") void booted!.home.persistUserData();
+        //
+        // NOT `schedulePersist()`: config is written at exactly the moments the
+        // page is about to go away — answering first run, then reloading;
+        // choosing a theme, then closing the tab — and a 50 ms debounce is long
+        // enough to lose all of them. `persistNow()` still reports failure and
+        // still retries; it just does not wait first. Debouncing this reopened
+        // the 2026-07-26 bug (the chooser returned on every launch) and
+        // app.spec.ts's "the first-run choice survives a relaunch" caught it.
+        if (m.fn === "configSave") void persistNow();
         break;
       }
       case "layout": {
@@ -731,6 +830,23 @@ self.onmessage = async (ev: MessageEvent) => {
       }
       case "export": {
         reply([...booted!.home.exportUserData()]);
+        break;
+      }
+      case "flush": {
+        // The reader is leaving (or has asked us to try again). Persist NOW and
+        // answer only once the transaction has settled, so the caller knows
+        // whether it was worth waiting for — a `void` here would recreate the
+        // very hole this op closes.
+        //
+        // Boot may not have finished: a tab hidden during a cold boot has no home
+        // to write, and nothing was authored either, so there is nothing to lose.
+        if (!booted) {
+          reply(null);
+          break;
+        }
+        persistTries = 0; // a fresh ladder: someone asked on purpose
+        await persistNow();
+        reply(null);
         break;
       }
       case "freeze": {

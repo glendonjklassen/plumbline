@@ -498,12 +498,46 @@ export class Session {
     // Debug handle for the console (and the repo's headless probes).
     (globalThis as any).__plumbline = this;
 
+    rpc.onPersistFailed = (info) => (this.persistFailed = info);
+    // Whatever went wrong has stopped going wrong — take the notice down rather
+    // than leaving the reader to wonder whether their note is safe.
+    rpc.onPersistOk = () => (this.persistFailed = null);
+
     // The web twin of Android's ON_PAUSE persist: flush the session (incl.
     // the scroll verse) when the tab hides or unloads.
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") this.flushConfig();
+      if (document.visibilityState === "hidden") this.flushSession();
     });
-    addEventListener("pagehide", () => this.flushConfig());
+    addEventListener("pagehide", () => this.flushSession());
+  }
+
+  /** A save to this device's storage failed. Sticky: the reader has to hear it,
+   *  and NOT from a toast that fades while they are looking away — their note
+   *  exists only in this tab until it lands. Deliberately absent from
+   *  `dismissTransient`: it is a warning about their data, not a surface they
+   *  navigated into, so switching destinations must not silence it. */
+  persistFailed = $state<{ detail: string; retrying: boolean } | null>(null);
+
+  /** Try the failed save again — what the notice's button does. Resets the
+   *  worker's backoff ladder, so a reader who has just freed some space gets a
+   *  full set of attempts rather than the tail of the last set. */
+  retryPersist(): void {
+    this.rpc.flush().catch(() => {
+      /* a dead worker already has its own report; this is not the place */
+    });
+  }
+
+  /** Everything that must reach the disk before this tab may be frozen: the
+   *  config snapshot, then the authored data the worker is still holding behind
+   *  its 50 ms debounce. `flushConfig` alone left a note written moments ago in
+   *  memory only — a hidden page's timers are frozen, so the debounce may never
+   *  fire, and a discarded tab takes the note with it. */
+  flushSession(): void {
+    this.flushConfig();
+    // AFTER flushConfig, and it matters: the RPC is ordered, so the configSave
+    // message is already queued when the flush arrives, and the flush's persist
+    // carries it too.
+    if (!this.restoring) this.retryPersist();
   }
 
   /** A restore is pending reload — nothing may persist over it. */

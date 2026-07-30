@@ -87,6 +87,14 @@ export class EngineRpc {
   onRndProgress: (fraction: number) => void = () => {};
   /** Download finished; the engine is now parsing it (seconds on a phone). */
   onRndPreparing: () => void = () => {};
+  /** A save to this device's storage did not land — quota, blocked storage, a
+   *  browser that dropped the database. DELIBERATELY NOT the fatal path below: a
+   *  failed save is recoverable (the bytes are still in the engine's home, and a
+   *  retry or a freed megabyte lands them), while a dead worker never comes back.
+   *  Routing this through `#die` would kill a session over a full disk. */
+  onPersistFailed: (info: { detail: string; retrying: boolean }) => void = () => {};
+  /** A save that had been failing succeeded — the notice can go. */
+  onPersistOk: () => void = () => {};
   /** The worker is gone — crashed, out of memory, or silent through a whole boot
    *  stage. Every pending call has already been rejected with this error, which
    *  is how the splash learns about a death during boot (App.svelte awaits
@@ -143,6 +151,9 @@ export class EngineRpc {
       if (m.type === "rndReady") return this.onRndReady();
       if (m.type === "rndProgress") return this.onRndProgress(m.fraction ?? 0);
       if (m.type === "rndPreparing") return this.onRndPreparing();
+      if (m.type === "persistFailed")
+        return this.onPersistFailed({ detail: String(m.detail ?? ""), retrying: m.retrying === true });
+      if (m.type === "persistOk") return this.onPersistOk();
       const p = this.#waiting.get(m.id);
       if (!p) return;
       this.#waiting.delete(m.id);
@@ -269,6 +280,22 @@ export class EngineRpc {
   }
   exportUserData(): Promise<[string, Uint8Array][]> {
     return this.#send({ op: "export" });
+  }
+  /** Persist pending authored data NOW, and resolve once it has landed.
+   *
+   *  The worker debounces authoring writes by 50 ms, which is invisible until the
+   *  reader writes a note and immediately switches apps: a hidden page has its
+   *  timers frozen and may be discarded outright, so that callback can simply
+   *  never run. Called on `visibilitychange`-hidden and on `pagehide`, and by the
+   *  failure notice's "Try again".
+   *
+   *  HONESTLY LIMITED. On a real unload the page can be torn down before an async
+   *  round trip completes, so `visibilitychange` is the one that reliably lands —
+   *  which is also the one mobile fires before freezing or discarding a tab.
+   *  There is no synchronous way to write IndexedDB from a worker, so this is the
+   *  best the platform allows. */
+  flush(): Promise<void> {
+    return this.#send({ op: "flush" });
   }
   freeze(): Promise<void> {
     return this.#send({ op: "freeze" });

@@ -54,14 +54,20 @@ export interface VirtualHome {
   evict(paths: string[]): number;
   /** Diff the user subtree against IndexedDB (call after authoring writes).
    *  Writes only files THIS session changed and deletes only files it removed,
-   *  so concurrent tabs can't clobber each other — see the contract inline. */
+   *  so concurrent tabs can't clobber each other — see the contract inline.
+   *
+   *  REJECTS when the write did not land (quota, blocked storage, a browser that
+   *  dropped the database). The caller owes the reader that news: the bytes exist
+   *  only in this in-memory home and die with the tab. Every dirty file stays
+   *  dirty, so the next persist retries the whole backlog. */
   persistUserData(): Promise<void>;
   /** Persist ONE user directory, additively — no whole-subtree diff and no
    *  deletions. For writes that fire on a TIMER rather than on a human action:
    *  the reading map reports dwell every 30 s while someone reads, and putting
    *  a full rewrite of every note and memory card on that timer would spend a
    *  phone's IndexedDB budget (and the one worker thread that answers taps) on
-   *  work nothing asked for. See `persistUserData` for the diffing version. */
+   *  work nothing asked for. See `persistUserData` for the diffing version.
+   *  Rejects on a failed write, like its sibling. */
   persistUserDir(dir: string): Promise<void>;
   /** Snapshot of the authored files (for the backup zip). */
   exportUserData(): Map<string, Uint8Array>;
@@ -177,6 +183,24 @@ export async function buildHome(
   for (const [path, bytes] of userFiles) synced.set(path, fingerprint(bytes));
   let frozen = false;
 
+  // ONE persist at a time. Every persist below diffs the live tree against
+  // `synced` and rewrites `synced` only after its transaction commits, so two
+  // overlapping calls diff against the same snapshot and write the same files
+  // twice — and the flush that closes the debounce window (engine.worker.ts) is
+  // exactly that overlap.
+  //
+  // They QUEUE rather than join. A flush that merely awaited the attempt already
+  // in flight would return before the write the reader made AFTER that attempt
+  // took its diff — which is the write the flush exists to save.
+  let chain: Promise<unknown> = Promise.resolve();
+  function serial<T>(f: () => Promise<T>): Promise<T> {
+    // `.then(f, f)`: the next persist runs however the previous one ended. A
+    // quota failure must not strand the whole queue behind it.
+    const run = chain.then(f, f);
+    chain = run.catch(() => {});
+    return run;
+  }
+
   if (seedStock) {
     // Persist the seeded stock as the user's own files + set the marker.
     const seeded = new Map<string, Uint8Array>();
@@ -265,55 +289,63 @@ export async function buildHome(
     freeze() {
       frozen = true;
     },
-    async persistUserData() {
-      if (frozen) return;
-      const current = new Map<string, Uint8Array>();
-      for (const d of USER_DIRS) {
+    persistUserData() {
+      return serial(async () => {
+        if (frozen) return;
+        const current = new Map<string, Uint8Array>();
+        for (const d of USER_DIRS) {
+          const dir = root.get(d);
+          if (dir instanceof Directory) collectFiles(d, dir, current);
+        }
+        // THE MULTI-TAB CONTRACT. Two tabs share one IndexedDB but each holds its
+        // own in-memory home, snapshotted at ITS boot. This used to write the
+        // whole subtree, which made every persist an assertion about files this
+        // tab had never touched — the slower tab's stale copies overwrote the
+        // faster tab's edits, and a file deleted over there was resurrected by
+        // any write over here. So:
+        //
+        //  * write ONLY files whose bytes differ from what we last synced —
+        //    a file we didn't change is a file we have no opinion about;
+        //  * delete ONLY files WE removed (in `synced`, gone from our tree) —
+        //    absence elsewhere is someone else's decision, not ours.
+        //
+        // Both tabs editing the SAME file stays last-writer-wins per file: the
+        // engine can't reload another tab's state mid-session, and IndexedDB
+        // already serialises readwrite transactions per store, so no cross-tab
+        // lock is needed — the transaction below is atomic either way.
+        //
+        // A FLUSH CHANGES NONE OF THIS. It runs this same diff, one moment
+        // earlier, so it can neither widen what this session claims to own nor
+        // resurrect a deletion — the fingerprints decide that, not the caller.
+        const { puts, prints } = changedFiles(current, synced);
+        const deletes = [...synced.keys()].filter((k) => !current.has(k));
+        if (puts.size === 0 && deletes.length === 0) return;
+        await idbApply("user", puts, deletes);
+        // Only after the transaction commits — a failed persist must leave every
+        // dirty file dirty, so the next write retries the whole backlog.
+        for (const k of deletes) synced.delete(k);
+        for (const [k, p] of prints) synced.set(k, p);
+      });
+    },
+    persistUserDir(d: string) {
+      return serial(async () => {
+        if (frozen) return;
+        // A guard, not politeness: an unknown directory here would write paths
+        // `persistUserData` never collects, and its diff would then delete them
+        // on the reader's next authoring write.
+        if (!USER_DIRS.includes(d)) return;
+        const current = new Map<string, Uint8Array>();
         const dir = root.get(d);
         if (dir instanceof Directory) collectFiles(d, dir, current);
-      }
-      // THE MULTI-TAB CONTRACT. Two tabs share one IndexedDB but each holds its
-      // own in-memory home, snapshotted at ITS boot. This used to write the
-      // whole subtree, which made every persist an assertion about files this
-      // tab had never touched — the slower tab's stale copies overwrote the
-      // faster tab's edits, and a file deleted over there was resurrected by
-      // any write over here. So:
-      //
-      //  * write ONLY files whose bytes differ from what we last synced —
-      //    a file we didn't change is a file we have no opinion about;
-      //  * delete ONLY files WE removed (in `synced`, gone from our tree) —
-      //    absence elsewhere is someone else's decision, not ours.
-      //
-      // Both tabs editing the SAME file stays last-writer-wins per file: the
-      // engine can't reload another tab's state mid-session, and IndexedDB
-      // already serialises readwrite transactions per store, so no cross-tab
-      // lock is needed — the transaction below is atomic either way.
-      const { puts, prints } = changedFiles(current, synced);
-      const deletes = [...synced.keys()].filter((k) => !current.has(k));
-      if (puts.size === 0 && deletes.length === 0) return;
-      await idbApply("user", puts, deletes);
-      // Only after the transaction commits — a failed persist must leave every
-      // dirty file dirty, so the next write retries the whole backlog.
-      for (const k of deletes) synced.delete(k);
-      for (const [k, p] of prints) synced.set(k, p);
-    },
-    async persistUserDir(d: string) {
-      if (frozen) return;
-      // A guard, not politeness: an unknown directory here would write paths
-      // `persistUserData` never collects, and its diff would then delete them
-      // on the reader's next authoring write.
-      if (!USER_DIRS.includes(d)) return;
-      const current = new Map<string, Uint8Array>();
-      const dir = root.get(d);
-      if (dir instanceof Directory) collectFiles(d, dir, current);
-      // Additive only. Deletions belong to the diffing path — a timer-driven
-      // write has no business deciding something else is gone. Same dirty-only
-      // rule as persistUserData: on the 30 s dwell tick that means one book's
-      // file, not the whole reading dir.
-      const { puts, prints } = changedFiles(current, synced);
-      if (puts.size === 0) return;
-      await idbApply("user", puts);
-      for (const [k, p] of prints) synced.set(k, p);
+        // Additive only. Deletions belong to the diffing path — a timer-driven
+        // write has no business deciding something else is gone. Same dirty-only
+        // rule as persistUserData: on the 30 s dwell tick that means one book's
+        // file, not the whole reading dir.
+        const { puts, prints } = changedFiles(current, synced);
+        if (puts.size === 0) return;
+        await idbApply("user", puts);
+        for (const [k, p] of prints) synced.set(k, p);
+      });
     },
   };
 }
