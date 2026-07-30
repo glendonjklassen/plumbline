@@ -16,6 +16,11 @@
   const bookCount: number = $derived(toc?.books?.length ?? 0);
   const orderOf = $derived(new Map<string, number>((toc?.books ?? []).map((b: any, i: number) => [b.id, i])));
 
+  // Where the strip is pointing right now — the active pane's book. It is what
+  // the gold pin marks, and it is what the strip reports as its value.
+  const activeOrder = $derived(orderOf.get(s.panes[s.activePane]?.book) ?? 0);
+  const activeBook = $derived(toc?.books?.[activeOrder]?.name ?? "");
+
   $effect(() => {
     const ro = new ResizeObserver(() => (cssW = host.clientWidth));
     ro.observe(host);
@@ -74,16 +79,61 @@
     });
   });
 
+  function goTo(idx: number): void {
+    const book = toc?.books?.[Math.min(bookCount - 1, Math.max(0, idx))];
+    if (book) s.navigate(s.activePane, book.id, 1);
+  }
+
   function onClick(e: MouseEvent): void {
     const rect = canvas.getBoundingClientRect();
-    const idx = Math.min(bookCount - 1, Math.max(0, Math.floor(((e.clientX - rect.left) / cssW) * bookCount)));
-    const book = toc?.books?.[idx];
-    if (book) s.navigate(s.activePane, book.id, 1);
+    goTo(Math.floor(((e.clientX - rect.left) / cssW) * bookCount));
+  }
+
+  // The strip is a position along the canon, so it is driven like one: arrows
+  // step a book, Home/End go to the ends. Without this it was a mouse-only
+  // control with no keyboard story whatever — 66 books reachable only by aiming
+  // at a 30px band.
+  function onKeydown(e: KeyboardEvent): void {
+    let idx: number;
+    switch (e.key) {
+      case "ArrowLeft":
+        idx = activeOrder - 1;
+        break;
+      case "ArrowRight":
+        idx = activeOrder + 1;
+        break;
+      case "Home":
+        idx = 0;
+        break;
+      case "End":
+        idx = bookCount - 1;
+        break;
+      default:
+        return; // everything else stays the shell's (scroll, chapter, Escape…)
+    }
+    // The strip has the focus, so the shell's global arrows must not also fire.
+    e.preventDefault();
+    e.stopPropagation();
+    goTo(idx);
   }
 </script>
 
 <div class="strip" bind:this={host}>
-  <canvas bind:this={canvas} style:height="{HEIGHT}px" onclick={onClick}></canvas>
+  <!-- A slider over the canon: one value, 66 stops, and the book it is on read
+       out by name rather than as "book 43 of 66". -->
+  <canvas
+    bind:this={canvas}
+    style:height="{HEIGHT}px"
+    role="slider"
+    tabindex="0"
+    aria-label="Jump to a book"
+    aria-valuemin="0"
+    aria-valuemax={Math.max(0, bookCount - 1)}
+    aria-valuenow={activeOrder}
+    aria-valuetext={activeBook}
+    onclick={onClick}
+    onkeydown={onKeydown}
+  ></canvas>
 </div>
 
 <style>
@@ -95,5 +145,10 @@
     display: block;
     width: 100%;
     cursor: pointer;
+  }
+  /* Inset so the ring sits inside the 30px band instead of over the text above. */
+  canvas:focus-visible {
+    outline: 2px solid var(--gold, #9e7d38);
+    outline-offset: -2px;
   }
 </style>

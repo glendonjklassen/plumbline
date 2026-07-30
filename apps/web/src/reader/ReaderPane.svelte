@@ -44,6 +44,7 @@
   const marginX = $derived(Math.max(sideMargin, (cssW - columnWidth) / 2));
 
   const toc = $derived(s.q("toc"));
+  const bookName = $derived(toc?.books?.find((b: any) => b.id === pane.book)?.name ?? pane.book);
 
   // Verses in this chapter with weave partners — the gold gutter dot.
   const weaveDots = $derived.by(() => {
@@ -115,6 +116,35 @@
         untrack(clampScroll);
         untrack(prefetchNeighbours);
       });
+  });
+
+  // ── the text mirror ──
+  // A canvas holds no text, so to a screen reader, to the browser's own Ctrl+F,
+  // and to a translate feature the chapter simply was not there. This mirrors the
+  // display list into real DOM text — visually hidden, but present in the
+  // accessibility tree and findable — so the words on the page are words the page
+  // actually has. Verse by verse, in reading order, so it can be navigated and
+  // quoted rather than being one undifferentiated blob.
+  //
+  // Derived from `items` ALONE: it is rebuilt once per layout and never touches
+  // pane.scrollY, so nothing about it sits on the scroll or paint path. A
+  // geometry-only re-layout (resize, zoom, spacing) yields the identical strings,
+  // and the keyed each below then writes nothing to the DOM at all.
+  const mirror = $derived.by(() => {
+    const verses: { n: number; text: string }[] = [];
+    let cur: { n: number; text: string } | null = null;
+    for (const it of items) {
+      if (it.kind === "verseNumber") {
+        if (it.verseNumber === null) continue;
+        cur = { n: it.verseNumber, text: "" };
+        verses.push(cur);
+      } else if (cur) {
+        // A word's text is already pre+word+post, and the canvas sets one space
+        // between the boxes — so the mirror joins them the same way.
+        cur.text += cur.text ? ` ${it.text}` : it.text;
+      }
+    }
+    return verses;
   });
 
   // Lay out the chapters on either side while the reader reads, so ‹ › and a
@@ -423,7 +453,7 @@
       onclick={() => (s.bookNavFor = paneIdx)}
       title="Go to… (book · chapter · verse)"
     >
-      {toc?.books?.find((b: any) => b.id === pane.book)?.name ?? pane.book}
+      {bookName}
       {pane.chapter} ▾
     </button>
     <button onclick={() => s.stepChapter(paneIdx, 1)} title="Next chapter">›</button>
@@ -435,11 +465,21 @@
       <button onclick={() => s.closePane(paneIdx)} title="Close pane">✕</button>
     {/if}
   </div>
-  <div class="scroll" bind:this={container} onscroll={onScroll} title={hoverTitle}>
+  <!-- Named so a screen reader can list this pane and jump to it by passage;
+       two panes are two regions, "Genesis 1" and "John 3". -->
+  <div
+    class="scroll"
+    bind:this={container}
+    onscroll={onScroll}
+    title={hoverTitle}
+    role="region"
+    aria-label={`${bookName} ${pane.chapter}`}
+  >
     <div class="spacer" style:height={`${spacerH}px`}>
       <canvas
         bind:this={canvas}
         style:height={`${cssH}px`}
+        aria-hidden="true"
         onclick={onClick}
         oncontextmenu={onContextMenu}
         onpointerdown={onPointerDown}
@@ -448,6 +488,13 @@
         onpointercancel={onPointerCancel}
         onmousemove={onMouseMove}
       ></canvas>
+    </div>
+    <!-- The chapter as text. The canvas above is a picture of these words, which
+         is why it is aria-hidden: one pane must report its chapter once. -->
+    <div class="mirror">
+      {#each mirror as v (v.n)}
+        <p data-verse={v.n}>{v.n} {v.text}</p>
+      {/each}
     </div>
   </div>
 </div>
@@ -516,6 +563,29 @@
   }
   .spacer {
     position: relative;
+  }
+  /* Hidden to the eye, present to everything else. NOT display:none, NOT
+     visibility:hidden, NOT aria-hidden — each of those takes the chapter back out
+     of the accessibility tree and out of find-in-page, which is the whole bug.
+     So: a 1px box that clips its content.
+
+     `position: fixed` rather than absolute so the box is always already in the
+     viewport: a Ctrl+F match inside it has nothing to scroll into view, and the
+     reader is not thrown to the top of the chapter by finding a phrase in it.
+     Fixed also keeps it out of the scroll container's overflow entirely.
+
+     `white-space: nowrap` matters for cost: inside a 1px-wide box, wrapping would
+     ask the browser to break a chapter into a couple of thousand line boxes. One
+     unwrapped line per verse is a handful of text runs and no line-breaking. */
+  .mirror {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   canvas {
     /* Pinned to the scrollport while the spacer provides the scroll range;
