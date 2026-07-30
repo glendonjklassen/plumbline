@@ -299,7 +299,7 @@ as "a later increment". F–I can ride later increments (the PWA auto-updates).
   core is documented thread-safe for reads; a tap during a cold study build
   currently blocks the main thread for seconds (ANR class). Read-write lock or
   lock-free reads; concurrency semantics need care.
-- [ ] **[opus]** `WarmIndexes()` builds all eight indexes at every cold start,
+- [x] **[opus]** `WarmIndexes()` builds all eight indexes at every cold start,
   including the off-by-default machine tier: warm `search_ix` eagerly only, gate
   the machine tier on `machineAnalysis`, and instrument on-device first
   (`MainActivity.kt:118-120`). Proper fix is `warm_step` in the C ABI — see the
