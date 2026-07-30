@@ -1073,6 +1073,16 @@ pub fn weaves_list(src: &dyn PanelSource) -> Vec<Block> {
     let mut ws = src.weaves();
     ws.sort_by(|a, b| b.links.len().cmp(&a.links.len()));
     let mut out = vec![Block::para(vec![Run::new(format!("Weaves ({})", ws.len()), sz::TITLE, Color::Ink).bold()])];
+    if ws.is_empty() {
+        // A heading over nothing reads as a broken panel. Threads, tags and the
+        // review queue all say what to do here; this one said nothing.
+        out.push(Block::para(vec![Run::new(
+            "No weaves yet — tag a few passages, then “⇔ make weave” on the tag to chain them through the canon.",
+            sz::SMALL,
+            Color::Faded,
+        )
+        .italic()]));
+    }
     for w in &ws {
         let suffix = if w.suggested { " · suggested" } else { "" };
         out.push(Block::para(vec![
@@ -1205,6 +1215,17 @@ pub fn search(src: &dyn PanelSource, query: &str) -> Vec<Block> {
             .bold()])];
             if !how.is_empty() {
                 out.push(Block::para(vec![Run::new(how, sz::CAPTION, Color::Faded).italic()]));
+            }
+            if total == 0 {
+                // "0 results" alone leaves the reader guessing whether they typed
+                // the wrong thing or the search is broken. Say what this search
+                // takes — the same three shapes the guide names.
+                out.push(Block::para(vec![Run::new(
+                    "Nothing matched. Try a single word (its other forms are found too), a reference like John 3:16 or 1 Cor 13, or a Strong's code like H430.",
+                    sz::SMALL,
+                    Color::Faded,
+                )
+                .italic()]));
             }
             for h in &hits {
                 let mut runs = vec![go(&h.verse, &h.display, sz::LIST)];

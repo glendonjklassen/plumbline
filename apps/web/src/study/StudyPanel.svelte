@@ -168,7 +168,13 @@
             <span class="akjv-was">KJV: {akjvWord.kjv}</span>
           </p>
         {/if}
-        {#if blocks}
+        <!-- `blocks?.length`, not `blocks`: an empty array is truthy in JS, so a
+             panel the engine answered with nothing rendered as a blank white
+             sheet with no heading, no message and no sign anything had happened.
+             Every producer in `panel.rs` emits at least a heading, so `[]` means
+             the answer has not arrived (or a producer regressed) — either way
+             "— loading —" is the honest thing to show. -->
+        {#if blocks?.length}
           <BlockList {blocks} {onLink} />
           <!-- Which build is this? Neither of us could answer that from a
                screenshot (feedback 2026-07-27), and "have you relaunched yet"

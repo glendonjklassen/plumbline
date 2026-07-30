@@ -653,3 +653,63 @@ fn guide_and_about_render_combined() {
     assert!(about.iter().any(|b| text_of(b).contains("covenant") || text_of(b).contains("COVENANT")));
 }
 
+/// A heading over nothing is a panel that looks broken. Threads, tags and the
+/// review queue always said what to do when empty; the weave library and a
+/// fruitless search did not — fixing them in the core fixes both shells, which is
+/// the whole reason the copy lives here.
+#[test]
+fn an_empty_weave_library_says_what_to_do() {
+    let f = Fake::default();
+    let blocks = weaves_list(&f);
+    assert_eq!(text_of(&blocks[0]), "Weaves (0)");
+    assert!(blocks.len() > 1, "the empty weave library is a bare heading and nothing else");
+    let body = blocks[1..].iter().map(text_of).collect::<Vec<_>>().join(" ");
+    assert!(body.contains("make weave"), "the empty state should name the way in: {body}");
+}
+
+/// "0 results" alone leaves the reader unable to tell a typo from a broken
+/// search. The guidance names the three shapes a query can take.
+#[test]
+fn a_search_with_no_hits_says_what_a_query_can_be() {
+    let mut f = Fake::default();
+    f.search = Some(SearchView::Hits { how: String::new(), total: 0, capped: false, hits: Vec::new() });
+    let blocks = search(&f, "quinquagesima");
+    assert_eq!(text_of(&blocks[0]), "0 results");
+    assert!(blocks.len() > 1, "0 results with no guidance under it");
+    let body = blocks[1..].iter().map(text_of).collect::<Vec<_>>().join(" ");
+    for want in ["John 3:16", "H430"] {
+        assert!(body.contains(want), "the guidance should show a {want}-shaped example: {body}");
+    }
+}
+
+/// And the guidance is for an empty result, not a decoration on every search: a
+/// search WITH hits must not carry it.
+#[test]
+fn the_no_hits_guidance_stays_out_of_a_search_that_found_something() {
+    let mut f = Fake::default();
+    f.search = Some(SearchView::Hits {
+        how: String::new(),
+        total: 1,
+        capped: false,
+        hits: vec![SearchHitView { verse: "John 3:16".into(), display: "John 3:16".into(), note: false, why: String::new() }],
+    });
+    let body = search(&f, "loved").iter().map(text_of).collect::<Vec<_>>().join(" ");
+    assert!(!body.contains("Nothing matched"), "the empty-state guidance leaked into a search with hits: {body}");
+}
+
+/// Every list producer answers with SOMETHING, whatever the reader has (or has
+/// not) made. The web shell treats an empty block list as "not loaded yet", so a
+/// producer that returned nothing would show "— loading —" for ever.
+#[test]
+fn no_list_producer_answers_with_nothing() {
+    let f = Fake::default();
+    for (what, blocks) in [
+        ("threads", threads_list(&f)),
+        ("tags", tags_list(&f)),
+        ("weaves", weaves_list(&f)),
+        ("suggested", suggested(&f)),
+        ("search", search(&f, "nothing at all")),
+    ] {
+        assert!(!blocks.is_empty(), "the {what} panel is empty with an empty source");
+    }
+}

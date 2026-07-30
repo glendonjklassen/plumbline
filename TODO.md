@@ -193,9 +193,10 @@ sideload block is already fixed and guarded by a test.
   attributes and the tree's numeric position, and says so where it used to assert
   the book name.
 
-- [ ] **[opus]** Empty states in `panel.rs`: search "0 results" gets guidance; weaves(0)
+- [x] **[opus]** Empty states in `panel.rs`: search "0 results" gets guidance; weaves(0)
   gets a body; web `{#if blocks}` should treat `[]` as empty (fixing core fixes
-  both shells).
+  both shells). **DONE 2026-07-30**, with a test that NO list producer can answer
+  with an empty vec — which is the invariant the web guard now leans on.
 - [ ] **[opus]** Chrome ignores the text-size setting and browser font prefs: publish
   `--uiScale` on `:root` and scale the chrome, or convert to rem.
 - [x] **[FABLE]** "Delete my data" destructive-path spec: DONE 2026-07-29 — exact
