@@ -73,9 +73,9 @@ file attached to a release. Ask it for the APK's, hash your own copy, and
 compare:
 
 ```sh
-curl -s https://api.github.com/repos/glendonjklassen/plumbline/releases/tags/v1.0.0 \
+curl -s https://api.github.com/repos/glendonjklassen/plumbline/releases/latest \
   | grep -o 'sha256:[0-9a-f]\{64\}'
-sha256sum plumbline-v1.0.0-android.apk
+sha256sum plumbline-v*-android.apk
 ```
 
 (`shasum -a 256` on macOS, `Get-FileHash` in Windows PowerShell.) The two hex

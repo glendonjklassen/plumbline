@@ -18,7 +18,7 @@ default-members = [
 
 [workspace.package]
 # The version every crate inherits, and the one `plumbline_version()` hands the
-# shells — About renders it as `engine 1.0.0`. The release workflow refuses a tag
+# shells — About renders it as `engine ` + this number. The workflow refuses a tag
 # whose version disagrees with this line (and with apps/web/package.json), so a
 # release ships one number, not three.
 version = "0.36.0"

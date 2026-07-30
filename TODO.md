@@ -19,6 +19,9 @@ the next INCREMENTAL tag (v0.36.0), not as 1.0.0. When 1.0.0 happens is his call
 and his alone. So read "before the tag" below as "before the next tag" — the work
 is still ordered the same way, and §A–E still come first — and read any "1.0.x"
 as "a later increment". F–I can ride later increments (the PWA auto-updates).
+That decision also means **1.0.0 must not appear anywhere a reader could read it
+as this release** — the version-prose sweep is the last item in §E, and README's
+sideload block is already fixed and guarded by a test.
 
 ## A. Data safety — before the tag
 
@@ -227,6 +230,13 @@ as "a later increment". F–I can ride later increments (the PWA auto-updates).
   targeted `disable += "NonNullableMutableLiveData"`.
 - [ ] **[opus]** Split `crates/ffi/src/lib.rs` (3,861 lines; repo rule is 3k) —
   authoring + study-blocks sections are contiguous; no ABI change, bindgen guards.
+- [ ] **[opus]** **Version-prose sweep — LAST item before the tag.** The manifests
+  say 0.36.0 and a test now pins README to it, but prose written when this was a
+  1.0.0 audit still says otherwise: this file's own title and §E's header, and
+  `docs/STABLE-IDS.md`'s "v1.0 / first 1.0.x" sequencing (B-02's agent updates
+  that one). Keep 1.0.0 only where it means Glendon's future milestone; anywhere it
+  could be read as *this* release, say 0.36.0 or "the next tag". Run it last so it
+  catches whatever the intervening batches write.
 
 ## F. Performance — web
 

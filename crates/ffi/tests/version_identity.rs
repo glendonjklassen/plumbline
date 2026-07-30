@@ -2,7 +2,7 @@
 //!
 //! Three things name the build a reader sees. `plumbline_version()` hands the
 //! shells `CARGO_PKG_VERSION` — the workspace version, shown under About as
-//! `engine 1.0.0` — while Android's `versionName` and the web shell's
+//! `engine ` + that number — while Android's `versionName` and the web shell's
 //! `PLUMBLINE_VERSION` are both derived from the release tag. They have drifted
 //! twice: the manifests sat at 0.1.0 through every 0.x release, so About read
 //! `engine 0.1.0` on a 0.3.x APK; and the release workflow stripped the tag's
@@ -148,6 +148,60 @@ fn both_shells_display_one_derived_version() {
              expression resolves to nothing and About shows a blank version: {}",
             needs.trim()
         );
+    }
+}
+
+/// Every `d.d.d` in `s`, with any leading `v` dropped.
+fn version_literals(s: &str) -> Vec<String> {
+    let b: Vec<char> = s.chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        if !b[i].is_ascii_digit() || (i > 0 && (b[i - 1].is_ascii_digit() || b[i - 1] == '.')) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        let mut dots = 0;
+        while i < b.len() && (b[i].is_ascii_digit() || (b[i] == '.' && dots < 2)) {
+            if b[i] == '.' {
+                // A trailing dot ends the run — "1.0." is prose, not a version.
+                if i + 1 >= b.len() || !b[i + 1].is_ascii_digit() {
+                    break;
+                }
+                dots += 1;
+            }
+            i += 1;
+        }
+        if dots == 2 {
+            out.push(b[start..i].iter().collect());
+        }
+    }
+    out
+}
+
+#[test]
+fn the_readme_names_no_version_but_the_one_it_ships() {
+    // The README is the download page's instructions. It told readers to verify
+    // `plumbline-v1.0.0-android.apk` for a year in which no such release existed
+    // — the version-identity work above bumped three manifests and left the one
+    // file a sideloader actually reads. The durable fix is that the sideload
+    // block names no version at all (`releases/latest`, `plumbline-v*`), so this
+    // test's real job is to keep a literal from creeping back in: any version in
+    // the README has to be the one this tree builds.
+    let want = env!("CARGO_PKG_VERSION");
+    let readme = read("README.md");
+    for (n, line) in readme.lines().enumerate() {
+        for found in version_literals(line) {
+            assert_eq!(
+                found, want,
+                "README.md:{} names version {found} but this tree builds {want} — a reader \
+                 following these steps downloads or hashes the wrong file. Prefer no literal \
+                 at all (`releases/latest`, `plumbline-v*-android.apk`): {}",
+                n + 1,
+                line.trim()
+            );
+        }
     }
 }
 
