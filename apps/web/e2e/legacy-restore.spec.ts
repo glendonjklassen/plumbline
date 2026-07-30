@@ -1,0 +1,173 @@
+import { expect, test, type Page } from "@playwright/test";
+import { zipWrite } from "../src/engine/zip";
+
+// A backup zip written before the Plumbline rename carries the config under
+// ".config/pure-study/"; the live home reads ".config/plumbline/". Both shells
+// remap it on the way in — SettingsDialog.svelte's `currentConfigPath` here,
+// Backup.kt's `currentConfigDir` on Android — and neither remap was tested, so
+// the shim sat one careless refactor away from dropping a reader's whole config
+// on restore. That failure does not look like a failure: the restore reports
+// success, the app reloads, and every setting is quietly back to default.
+//
+// What this asserts is deliberately NOT "the key turned up in IndexedDB". A
+// remap that wrote the bytes to a path the engine never opens would satisfy that
+// and still lose the settings. So it checks what reaches the reader: the chapter
+// that opens, the theme on the screen, the text size Settings shows back to
+// them — and, for the modern-named entries riding along in the same zip, the
+// note the engine answers with, because a shim that widened into a general
+// prefix rewrite would break those instead.
+
+const enc = new TextEncoder();
+
+/** A config.json as an OLDER build wrote it — the frozen camelCase wire keys,
+ *  with values a reader can see rather than flags only a test can. */
+const LEGACY_CONFIG = {
+  studyMode: "full",
+  bodySize: 33,
+  theme: "night",
+  copyStyle: "verseMarkdown",
+  openPanes: [{ book: "Rev", chapter: 22 }],
+  activePane: 0,
+  sideMargin: 44,
+  lineSpacing: 1.8,
+  humanAnalysis: true,
+  machineAnalysis: false,
+};
+
+/** One of the reader's own notes, named the way the store names them
+ *  (`notes/<slug of the refKey>.json`) — a modern entry, whose path the shim
+ *  must leave completely alone. */
+const NOTE = {
+  format: "pure-note-v1",
+  ref: "John 3:16",
+  text: "restored from a pre-rename backup",
+  created: "2026-01-01T00:00:00Z",
+};
+
+/** The zip an old build handed the reader: the legacy config prefix, a modern
+ *  authored file, and the manifest at the root (which restores nothing). */
+function legacyBackup(): Buffer {
+  const files = new Map<string, Uint8Array>([
+    [".config/pure-study/config.json", enc.encode(JSON.stringify(LEGACY_CONFIG))],
+    ["notes/john-3-16.json", enc.encode(JSON.stringify(NOTE))],
+    ["plumbline-backup.json", enc.encode(JSON.stringify({ format: 1, app: "web", exported: "2026-01-01T00:00:00Z" }))],
+  ]);
+  return Buffer.from(zipWrite(files));
+}
+
+async function boot(page: Page): Promise<void> {
+  await page.goto("/");
+  const established = page.getByRole("button", { name: "Established believer" });
+  await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
+  if (await established.isVisible().catch(() => false)) {
+    await established.click();
+    await page.getByRole("button", { name: "Start reading" }).click();
+  }
+  await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
+}
+
+async function openSettings(page: Page): Promise<void> {
+  await page.getByLabel("Menu").click();
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.locator('[data-surface="settings"]')).toBeVisible();
+}
+
+/** Hand the zip to the Restore row and wait for the reload it triggers.
+ *  `waitForLoadState` resolves against the document we already have, so the
+ *  marker is what tells us the new one is up (the idiom app.spec.ts uses). */
+async function restore(page: Page, zip: Buffer): Promise<void> {
+  await page.evaluate(() => ((window as any).__preRestore = true));
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "plumbline-backup-2026-01-01.zip",
+    mimeType: "application/zip",
+    buffer: zip,
+  });
+  await expect
+    .poll(async () => page.evaluate(() => (window as any).__preRestore ?? null), { timeout: 30_000 })
+    .toBeNull();
+}
+
+test("a backup written before the rename restores the reader's settings, not the defaults", async ({
+  page,
+}) => {
+  await boot(page);
+
+  // This device's own settings first, so the restore has something to replace —
+  // and so none of the assertions below can pass by accident on a default.
+  const before = await page.evaluate(() => {
+    const s = (window as any).__plumbline;
+    return { bodySize: Number(s.config.bodySize ?? 18), theme: s.config.theme ?? "system" };
+  });
+  expect(before.bodySize, "fixture: the live text size must differ from the backup's").not.toBe(33);
+  expect(before.theme, "fixture: the live theme must differ from the backup's").not.toBe("night");
+
+  await openSettings(page);
+  await restore(page, legacyBackup());
+  await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
+
+  const after = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    return {
+      bodySize: Number(s.config.bodySize ?? 18),
+      theme: s.config.theme ?? "system",
+      lineSpacing: Number(s.config.lineSpacing ?? 1.35),
+      sideMargin: Number(s.config.sideMargin ?? 28),
+      copyStyle: s.config.copyStyle ?? "verseRef",
+      pane: `${s.panes[0].book} ${s.panes[0].chapter}`,
+      paper: getComputedStyle(document.documentElement).getPropertyValue("--paper").trim(),
+      note: (await s.engine.userNote("John 3:16"))?.text ?? null,
+    };
+  });
+
+  // The engine opened the restored file: every one of these came out of it.
+  const lost =
+    "the config from a pre-rename backup did not reach the engine — the reader was told the " +
+    "restore worked and got their settings back as defaults";
+  expect(after.bodySize, lost).toBe(33);
+  expect(after.theme, lost).toBe("night");
+  expect(after.lineSpacing, lost).toBe(1.8);
+  expect(after.sideMargin, lost).toBe(44);
+  expect(after.copyStyle, lost).toBe("verseMarkdown");
+
+  // And the app is USING it, not merely holding it: the pane the backup was
+  // last in is what opened, and the theme it chose is what paints.
+  expect(after.pane, "the restored session opened somewhere else entirely").toBe("Rev 22");
+  await expect(page.locator(".subtitle")).toHaveText("Revelation 22", { timeout: 30_000 });
+  expect(after.paper.toLowerCase(), "the restored night theme is not on the page").toContain("#0");
+
+  // Settings shows the restored size back to the reader (the Aa preview is
+  // rendered at it) — the same number, arrived at through the DOM.
+  await openSettings(page);
+  const aa = await page.locator(".dialog .aa").evaluate((el) => getComputedStyle(el).fontSize);
+  expect(aa, "Settings is not showing the restored text size").toBe("33px");
+
+  // The modern-named entries in the same zip are untouched by the shim.
+  expect(after.note, "a modern entry beside the legacy one did not restore").toBe(
+    "restored from a pre-rename backup",
+  );
+});
+
+test("the legacy prefix is remapped under .config only, not wherever it appears", async ({ page }) => {
+  // The shim is a read shim for one moved directory. A zip that names a
+  // ROOT-level "pure-study/" holds nothing of ours, and generalising the remap
+  // into "rewrite this prefix anywhere" would start restoring files from paths
+  // the vetting never approved. Asserted through the reload rather than through
+  // the toast, so it stays true whatever the copy says.
+  await boot(page);
+  await openSettings(page);
+  await page.evaluate(() => ((window as any).__preRestore = true));
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "plumbline-backup-rootlevel.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.from(
+      zipWrite(new Map([["pure-study/config.json", enc.encode(JSON.stringify(LEGACY_CONFIG))]])),
+    ),
+  });
+  // Nothing was restored, so nothing reloads and the marker survives.
+  await page.waitForTimeout(2_000);
+  expect(
+    await page.evaluate(() => (window as any).__preRestore ?? null),
+    "a root-level pure-study/ entry was restored — the remap has become a general prefix rewrite",
+  ).toBe(true);
+  expect(await page.evaluate(() => Number((window as any).__plumbline.config.bodySize ?? 18))).not.toBe(33);
+});
