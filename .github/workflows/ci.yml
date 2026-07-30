@@ -69,6 +69,20 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     steps:
       - uses: actions/checkout@v4
+      # 224 stock files sat tracked against .gitignore's stated intent until
+      # 2026-07-29 — a second source of truth for the study set, and the kind of
+      # thing nobody notices because git keeps honouring an `add` that predates
+      # the rule. `git add -f` still works on purpose; this only refuses the
+      # accident.
+      - name: Nothing is tracked against .gitignore
+        run: |
+          tracked="$(git ls-files -i -c --exclude-standard)"
+          if [ -n "$tracked" ]; then
+            echo "::error::These files are tracked but .gitignore says they should not be."
+            echo "Untrack them with: git rm -r --cached <path> (the files stay on disk)"
+            echo "$tracked"
+            exit 1
+          fi
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy

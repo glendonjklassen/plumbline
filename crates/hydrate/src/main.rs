@@ -45,11 +45,17 @@ const RND_FILES: &[&str] = &[
     // The graded text-as-witness (its gate keeps it silent until qualified).
     "data/text-witness.json",
 ];
-/// Authored / seed content copied as whole directories. The overlay home keeps
-/// the user's weaves (parallel passages), threads, tags, the suggested-weave
-/// review queue, and patches here; seeding them means a fresh Plumbline home
-/// opens with the same study aids instead of an empty reader.
-const USER_DIRS: &[&str] = &["weaves", "suggested", "threads", "tags", "patches"];
+/// Authored / seed content copied as whole directories. The home keeps the
+/// user's weaves (parallel passages), threads, tags and the suggested-weave
+/// review queue here; seeding them means a fresh Plumbline home opens with the
+/// same study aids instead of an empty reader.
+///
+/// `patches` is gone (2026-07-29): the Ed25519 point-patch/rule layer was never
+/// ported, so advertising a dir nothing writes sent readers looking for a
+/// feature that does not exist. This list is also NOT the whole user subtree —
+/// notes, memory and reading are the reader's alone and are never seeded — which
+/// is one of the four hand-kept copies TODO §H proposes to single-source.
+const USER_DIRS: &[&str] = &["weaves", "suggested", "threads", "tags"];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -257,7 +263,7 @@ plumbline-hydrate — assemble + verify the Plumbline data pack
 
   plumbline-hydrate copy --from <dir> [--to <dir>]
       Copy the pack from <dir>/data into <dir-to>/data, seed the authored
-      dirs (weaves/threads/tags/suggested/patches) without overwriting any
+      dirs (weaves/threads/tags/suggested) without overwriting any
       existing files there, then verify.
       --to defaults to the resolved home (env / working tree / user data dir).
 

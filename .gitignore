@@ -33,12 +33,22 @@ target
 #.idea/
 
 # Personal study data written when the repo root is the data home (dev/testing);
-# never commit — the reader's own tags/weaves/threads/notes.
+# never commit — the reader's own tags/weaves/threads/notes. This list is the
+# web home's USER_DIRS (apps/web/src/engine/home.ts) plus weaves/suggested and
+# the retired patches dir; three of them were missing until 2026-07-29, which is
+# the same hole that let 224 stock files sit tracked against this file's intent.
+# The CI step "nothing is tracked against .gitignore" is the guard.
 /tags/
 /weaves/
 /threads/
 /notes/
 /memory/
+/reading/
+/suggested/
+/.config/
+# The Ed25519 point-patch/rule layer was never ported (see CLAUDE.md's
+# architecture table); a patches/ dir at the root is dev leftovers, not data.
+/patches/
 
 # Android signing keystores — the app's permanent signing identity. NEVER
 # commit; keep it in a password manager, and feed CI via the

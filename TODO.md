@@ -205,7 +205,7 @@ ride 1.0.x patches (the PWA auto-updates).
   currently ship type errors CI would catch); pin cargo-ndk via
   `taiki-e/install-action` in release.yml (matches ci.yml); add
   `workflow_dispatch`.
-- [ ] **[opus]** `git rm -r --cached weaves threads patches` (tracked against
+- [x] **[opus]** `git rm -r --cached weaves threads patches` (tracked against
   .gitignore's intent; second source of truth for the stock set); add `/patches/`
   to .gitignore; drop `"patches"` from hydrate `USER_DIRS` + its `--help` text.
 - [x] **[opus]** FEATURE-MANIFEST.md cleanup: 5 residual highlight mentions, 5 false
