@@ -72,10 +72,13 @@ test("boots to the reader with the stock set seeded", async ({ page }) => {
   });
   expect(counts.weaves).toBeGreaterThan(20);
   expect(counts.threads).toBeGreaterThanOrEqual(1);
-  // Tags are the reader's own (semantic) groupings — nothing ships stock.
-  // This also guards against stray authoring leftovers in the stock set
-  // (a shipped amber highlight once painted John 3:7 on every fresh install).
-  expect(counts.tags).toBe(0);
+  // ONE stock tag ships (95ff71b): "False teaching", two verses, no notes — the
+  // only example a reader ever sees of what a tag is for. It was zero until then,
+  // and the exact count is asserted rather than a floor, because the thing this
+  // line has always guarded is stray AUTHORING LEFTOVERS in the stock set: a
+  // shipped amber highlight once painted John 3:7 on every fresh install. A
+  // second stock tag arriving unnoticed is the failure worth catching.
+  expect(counts.tags).toBe(1);
 });
 
 test("first-run: the welcome owns the boot screen, with no reader behind it", async ({ page }) => {
