@@ -458,42 +458,11 @@ pub fn load_from(path: impl AsRef<Path>) -> (Config, bool) {
         Ok(bytes) => match serde_json::from_slice::<ConfigWire>(&bytes) {
             Ok(w) => (Config::from_wire(w), false),
             Err(_) => {
-                move_damaged_aside(path, &bytes);
+                crate::store::move_damaged_aside(path, &bytes);
                 (Config::default(), false)
             }
         },
     }
-}
-
-/// Move an unparseable config to `<name>.bad` before anything writes defaults
-/// over it. One bad byte otherwise costs the reader their reading history,
-/// their pane layout and their church; this leaves them a file to fix by hand
-/// (and on the web shell `.config/` is user data, so the rescue is persisted
-/// and rides along in the backup zip).
-///
-/// If a `.bad` is already there we KEEP IT and leave the new damage where it
-/// is. The first rescue is the one worth having — a second failure is nearly
-/// always the same damage read and saved back out — and numbered `.bad.2`,
-/// `.bad.3` files would pile up in a directory nobody ever prunes.
-///
-/// Best-effort by design: an empty (truncated) file has nothing in it to
-/// recover, so it doesn't spend the single slot real damage will need, and a
-/// rename we cannot do still loads as the default — there is nothing else we
-/// could do about it.
-fn move_damaged_aside(path: &Path, bytes: &[u8]) {
-    if bytes.trim_ascii().is_empty() {
-        return;
-    }
-    let mut name = match path.file_name() {
-        Some(n) => n.to_os_string(),
-        None => return,
-    };
-    name.push(".bad");
-    let bad = path.with_file_name(name);
-    if bad.exists() {
-        return;
-    }
-    let _ = std::fs::rename(path, &bad);
 }
 
 /// Atomically write the config to `path`, keeping any key the file already there

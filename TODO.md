@@ -402,8 +402,15 @@ sideload block is already fixed and guarded by a test.
 - [ ] **[opus]** One UI-level authoring e2e: create a tag from the verse menu → add a
   second verse → convert to a weave (largest untested block; all authoring in
   tests today goes through back-door RPC).
-- [ ] **[opus]** `store.rs` interrupted-write test; `usernote.rs` malformed-input +
+- [x] **[opus]** `store.rs` interrupted-write test; `usernote.rs` malformed-input +
   forward-compat tests (frozen format already inside shipped backup zips).
+  **DONE 2026-07-30.** Writing them found two real gaps in `set_note`, both fixed
+  here: unparseable bytes were rewritten from scratch (now moved aside as `.bad`,
+  the rescue `config.rs` already had — lifted into `store.rs` so there is one copy
+  of the rule), and a `pure-note-v2` file was silently restamped as v1 (now
+  refused, the way `thread.rs` refuses to clobber). Atomicity is now DRIVEN: a
+  reader thread hammering the file while another rewrites it, which reddens on a
+  plain `fs::write`.
 - [x] **[opus]** Legacy `pure-study/` zip restore test — both shells carry the shim,
   neither tests it.
 - [x] **[opus]** Maps smoke e2e (ChordMap/ConceptMap/Constellation — ~500 lines,

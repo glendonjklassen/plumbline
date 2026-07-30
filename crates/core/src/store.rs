@@ -216,6 +216,40 @@ pub(crate) fn resolve_duplicate_ids<T>(
         .collect()
 }
 
+/// Move an unparseable file to `<name>.bad` before anything writes over it.
+///
+/// One bad byte otherwise costs the reader whatever was in it — their reading
+/// history, their pane layout and their church in the case of `config.json`, the
+/// text of a note in the case of `notes/*.json`. This leaves them a file to fix
+/// by hand, and on the web shell both directories are user data, so the rescue is
+/// persisted and rides along in the backup zip (`is_temp_name` deliberately does
+/// not match `.bad`).
+///
+/// If a `.bad` is already there we KEEP IT and leave the new damage where it
+/// is. The first rescue is the one worth having — a second failure is nearly
+/// always the same damage read and saved back out — and numbered `.bad.2`,
+/// `.bad.3` files would pile up in a directory nobody ever prunes.
+///
+/// Best-effort by design: an empty (truncated) file has nothing in it to
+/// recover, so it doesn't spend the single slot real damage will need, and a
+/// rename we cannot do still loads as the default — there is nothing else we
+/// could do about it.
+pub fn move_damaged_aside(path: &Path, bytes: &[u8]) {
+    if bytes.trim_ascii().is_empty() {
+        return;
+    }
+    let mut name = match path.file_name() {
+        Some(n) => n.to_os_string(),
+        None => return,
+    };
+    name.push(".bad");
+    let bad = path.with_file_name(name);
+    if bad.exists() {
+        return;
+    }
+    let _ = std::fs::rename(path, &bad);
+}
+
 fn io_err(path: &Path, source: std::io::Error) -> Error {
     Error::Io { path: path.display().to_string(), source }
 }
@@ -430,5 +464,124 @@ mod tests {
             assert_eq!(kept.len(), 1);
             assert_eq!(kept[0].0, want, "order {order}");
         }
+    }
+
+    // ── the interrupted write (TODO §I) ──────────────────────────────────────
+
+    /// **A reader never sees half a file.** The whole reason for the temp-sibling
+    /// dance is that a save is one `rename`, so a concurrent read gets the old
+    /// contents or the new ones and never a prefix of either.
+    ///
+    /// Driven, not argued: one thread rewrites the same path between two very
+    /// different bodies while another reads it as fast as it can. Every read has
+    /// to be one whole body. Sizes are far past a page, so a non-atomic writer
+    /// (truncate-then-write, which is what `fs::write` does) would be caught —
+    /// and it is: swapping the body of `write_atomic` for `fs::write` reddens this
+    /// with a short read.
+    #[test]
+    fn a_concurrent_reader_never_sees_a_partial_file() {
+        let dir = scratch("atomicity");
+        let _ = fs::remove_dir_all(&dir);
+        let path = dir.join("notes").join("john-3-16.json");
+        let a = format!("{{\"a\":\"{}\"}}", "a".repeat(200_000));
+        let b = format!("{{\"b\":\"{}\"}}", "b".repeat(300_000));
+        write_atomic(&path, &a).unwrap();
+
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let reader = {
+            let (path, stop, a, b) = (path.clone(), stop.clone(), a.clone(), b.clone());
+            std::thread::spawn(move || {
+                let mut reads = 0u32;
+                while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                    // A read that fails is not the failure under test (Windows can
+                    // deny one mid-rename); a read that SUCCEEDS with the wrong
+                    // bytes is.
+                    if let Ok(got) = fs::read_to_string(&path) {
+                        assert!(
+                            got == a || got == b,
+                            "a reader saw {} bytes — neither body is that long, so it caught a write in progress",
+                            got.len()
+                        );
+                        reads += 1;
+                    }
+                }
+                reads
+            })
+        };
+
+        for i in 0..60 {
+            write_atomic(&path, if i % 2 == 0 { &b } else { &a }).unwrap();
+        }
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        let reads = reader.join().expect("the reader saw a partial file");
+        assert!(reads > 0, "the reader never managed a read, so this proved nothing");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The write that was interrupted: a process killed between the temp write
+    /// and the rename leaves the temp behind and **the target exactly as it was**.
+    /// The reader's previous note is not damaged by a save that never finished.
+    #[test]
+    fn an_interrupted_write_leaves_the_previous_file_whole() {
+        let dir = scratch("interrupted");
+        let _ = fs::remove_dir_all(&dir);
+        let path = dir.join("threads").join("romans-road.json");
+        write_atomic(&path, &thread_json("Romans Road")).unwrap();
+
+        // Exactly the state a kill between the two steps leaves: the new contents
+        // written to the sibling, the rename never reached.
+        let tmp = temp_sibling(&path);
+        fs::write(&tmp, "{\"format\":\"overlay-thread-v1\",\"name\":\"half written").unwrap();
+
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            thread_json("Romans Road"),
+            "the interrupted write damaged the file it was replacing"
+        );
+        assert!(
+            is_temp_name(&tmp.file_name().unwrap().to_string_lossy()),
+            "the leftover is not recognised as a temp, so it would ride into every backup"
+        );
+
+        // And the next save completes over the top of it, leaving nothing but the
+        // finished file plus that one stranded sibling for the enumerators to skip.
+        write_atomic(&path, &thread_json("Romans Road again")).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), thread_json("Romans Road again"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The rescue lifted here from `config.rs` (2026-07-30), so `usernote.rs`
+    /// could use the same rule: damaged bytes move aside once, and a second
+    /// failure does not spend the slot the first one is using.
+    #[test]
+    fn damaged_bytes_are_set_aside_once() {
+        let dir = scratch("aside");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        let bad = dir.join("config.json.bad");
+
+        fs::write(&path, "{ not json").unwrap();
+        move_damaged_aside(&path, b"{ not json");
+        assert_eq!(fs::read_to_string(&bad).unwrap(), "{ not json");
+
+        // A second, different failure leaves the first rescue alone.
+        fs::write(&path, "also not json").unwrap();
+        move_damaged_aside(&path, b"also not json");
+        assert_eq!(fs::read_to_string(&bad).unwrap(), "{ not json", "the first rescue was overwritten");
+
+        // An empty file has nothing to recover, so it does not spend the slot.
+        let empty_dir = scratch("aside-empty");
+        let _ = fs::remove_dir_all(&empty_dir);
+        fs::create_dir_all(&empty_dir).unwrap();
+        let empty = empty_dir.join("config.json");
+        fs::write(&empty, "   ").unwrap();
+        move_damaged_aside(&empty, b"   ");
+        assert!(!empty_dir.join("config.json.bad").exists(), "an empty file spent the rescue slot");
+
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(&empty_dir);
     }
 }

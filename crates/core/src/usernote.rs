@@ -140,7 +140,37 @@ pub fn set_note(
         // note is edited through its text, not by handing this function a
         // `UserNote`, so the file we are replacing is the only place those keys
         // can come from.
-        let existing = std::fs::read(&path).ok().and_then(|b| serde_json::from_slice::<NoteRepr>(&b).ok());
+        //
+        // Two ways that file can be something this build must not simply
+        // overwrite, and they need opposite answers:
+        let on_disk = std::fs::read(&path).ok();
+        let existing = match &on_disk {
+            None => None,
+            Some(bytes) => match serde_json::from_slice::<NoteRepr>(bytes) {
+                // A FOREIGN format stamp — a `pure-note-v2` from a later build,
+                // say. It parsed, so it is not damaged; it is a file whose meaning
+                // we do not know. Refuse, the way `thread.rs` refuses to clobber a
+                // thread it could not load, rather than rewrite it as v1 and take
+                // the stamp off. Both shells surface a note-save error.
+                Ok(r) if r.format != FORMAT => {
+                    return Err(Error::Corpus(format!(
+                        "{} is a {} note, which this build does not understand — refusing to overwrite it",
+                        path.display(),
+                        r.format
+                    )))
+                }
+                Ok(r) => Some(r),
+                // UNPARSEABLE bytes: there is nothing in them to keep and nothing
+                // the reader can read, so the note they are writing now must land.
+                // Their old bytes go aside as `.bad` first — the same rescue a
+                // damaged config gets — so a truncated write is recoverable by hand
+                // instead of gone.
+                Err(_) => {
+                    crate::store::move_damaged_aside(&path, bytes);
+                    None
+                }
+            },
+        };
         let created = existing
             .as_ref()
             .map(|r| r.created.clone())
@@ -283,6 +313,106 @@ mod tests {
 }
 "#
         );
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    // ── malformed and foreign files (TODO §I) ────────────────────────────────
+
+    /// Unreadable bytes are reported, not silently treated as "no note". A
+    /// loader that swallowed them would show the reader an empty margin and then
+    /// overwrite whatever was really there.
+    #[test]
+    fn unreadable_and_foreign_notes_are_reported_rather_than_dropped() {
+        let home = scratch("malformed");
+        let _ = std::fs::remove_dir_all(&home);
+        let dir = home.join("notes");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("truncated.json"), r#"{"format":"pure-note-v1","ref":"John 3:16","text":"half"#).unwrap();
+        std::fs::write(dir.join("later.json"), r#"{"format":"pure-note-v2","ref":"John 3:17","text":"x","created":"t","updated":"t"}"#).unwrap();
+        // No chapter:verse at all. Note the frozen parser does NOT check the
+        // book against the canon (`VRef::parse_ref_key` splits on the last space
+        // and the colon, nothing more), so "Nowhere 3:16" would load as a note on
+        // a book that does not exist — harmless, since it can never match a verse
+        // being read, and not this test's business.
+        std::fs::write(dir.join("badref.json"), r#"{"format":"pure-note-v1","ref":"John","text":"x","created":"t","updated":"t"}"#).unwrap();
+        // And one good one beside them: three bad files must not cost the reader
+        // the note that is fine.
+        set_note(&home, &VRef::new("Gen", 1, 1), "in the beginning", "2026-01-01T00:00:00Z").unwrap();
+
+        let (notes, errs) = load_notes(&home);
+        assert_eq!(notes.len(), 1, "the readable note should still load");
+        assert_eq!(notes[&VRef::new("Gen", 1, 1)].note.text, "in the beginning");
+        assert_eq!(errs.len(), 3, "every unreadable file should be named: {errs:?}");
+        let all = errs.join(" | ");
+        assert!(all.contains("truncated.json"), "{all}");
+        assert!(all.contains("unknown note format pure-note-v2"), "{all}");
+        assert!(all.contains("bad ref John"), "{all}");
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// A note whose bytes are damaged is set aside as `.bad` and the note the
+    /// reader is writing now lands. Nothing else can recover those bytes — the
+    /// text is not on screen, because it could not be loaded — so the alternative
+    /// is losing them silently.
+    #[test]
+    fn a_damaged_note_is_moved_aside_and_the_new_one_lands() {
+        let home = scratch("damaged");
+        let _ = std::fs::remove_dir_all(&home);
+        let v = VRef::new("John", 3, 16);
+        let path = note_file(&home, &v);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let damaged = r#"{"format":"pure-note-v1","ref":"John 3:16","text":"the words I typed"#;
+        std::fs::write(&path, damaged).unwrap();
+
+        set_note(&home, &v, "written again", "2026-02-02T00:00:00Z").unwrap();
+
+        let (notes, errs) = load_notes(&home);
+        assert!(errs.is_empty(), "{errs:?}");
+        assert_eq!(notes[&v].note.text, "written again", "the new note did not land");
+        let bad = path.with_file_name(format!("{}.bad", path.file_name().unwrap().to_string_lossy()));
+        assert_eq!(std::fs::read_to_string(&bad).unwrap(), damaged, "the damaged bytes were not kept");
+        // `created` restarts, because the file that knew it was unreadable.
+        assert_eq!(notes[&v].note.created, "2026-02-02T00:00:00Z");
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// A note written by a LATER format is refused, not rewritten. It parsed, so
+    /// it is not damaged — it is a file whose meaning this build does not know,
+    /// and a sideloaded APK that quietly restamped it as v1 would have taken the
+    /// stamp off for good.
+    #[test]
+    fn a_note_from_a_later_format_is_refused_rather_than_rewritten() {
+        let home = scratch("foreign");
+        let _ = std::fs::remove_dir_all(&home);
+        let v = VRef::new("John", 3, 16);
+        let path = note_file(&home, &v);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let later = r#"{"format":"pure-note-v2","ref":"John 3:16","text":"from a later build","created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z","segments":[{"at":0,"len":3}]}"#;
+        std::fs::write(&path, later).unwrap();
+
+        let err = set_note(&home, &v, "overwritten", "2026-02-02T00:00:00Z").unwrap_err();
+        assert!(format!("{err}").contains("pure-note-v2"), "the error should name the format: {err}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), later, "the later build's note was overwritten");
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// Deleting is not writing: the reader asked for the note to be gone, and a
+    /// file this build cannot read is not a reason to keep it against their word.
+    #[test]
+    fn removing_a_note_works_whatever_shape_the_file_is_in() {
+        let home = scratch("remove-foreign");
+        let _ = std::fs::remove_dir_all(&home);
+        let v = VRef::new("John", 3, 16);
+        let path = note_file(&home, &v);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, r#"{"format":"pure-note-v2","ref":"John 3:16","text":"x","created":"t","updated":"t"}"#).unwrap();
+
+        remove_note(&home, &v).unwrap();
+        assert!(!path.exists(), "the reader asked for it to be gone");
+
         let _ = std::fs::remove_dir_all(&home);
     }
 }
