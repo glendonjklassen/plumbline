@@ -48,11 +48,11 @@ ride 1.0.x patches (the PWA auto-updates).
 - [x] **[opus]** Android stock re-seed overwrites user-edited stock items (web
   preserves): `seedStock` must skip existing destinations, and `copyAsset` must
   write temp+rename (`MainActivity.kt:163-189`).
-- [ ] **[opus]** Web `backup()` is unguarded while `restore()` right below has
+- [x] **[opus]** Web `backup()` is unguarded while `restore()` right below has
   try/catch + toast (`SettingsDialog.svelte:31-45`). Same shape.
 - [x] **[opus]** Damaged config is replaced with defaults on next save (loses history/
   panes/church): rename to `config.json.bad` first (`config.rs:386-390`).
-- [ ] **[opus]** Stranded `.tmp` files in user dirs get persisted and shipped in backup
+- [x] **[opus]** Stranded `.tmp` files in user dirs get persisted and shipped in backup
   zips: filter dot/`.tmp` names in `collectFiles` and `zipWrite`
   (`engine/home.ts:102-108`, `store.rs:55-65`).
 - [x] **[opus]** Delete the dead duplicate `onAuthored` persistence handler
@@ -64,7 +64,7 @@ ride 1.0.x patches (the PWA auto-updates).
 
 ## B. Forward compatibility — before the tag (cannot retrofit; sideloaded APKs never auto-update)
 
-- [ ] **[opus]** "Additive evolution only" is not implemented: add
+- [x] **[opus]** "Additive evolution only" is not implemented: add
   `#[serde(flatten)] extra: Map<String, Value>` to every user-format Repr
   (usernote, tag, thread, weave, memory, reading, config) and round-trip it, with
   tests. Without this, any v1.1 field is stripped the first time a v1.0 build
@@ -83,7 +83,7 @@ ride 1.0.x patches (the PWA auto-updates).
 - [x] **[opus]** `akjvOverlay` is written by both shells and dropped by the core on
   every config save — the preference never survives a restart. Add the field to
   `Config` + `WireConfigState` (`wire.rs:1239-1287`, `config.rs:89-137`).
-- [ ] **[opus]** Android never renders tier marks / paragraph gaps: serde `rename_all`
+- [x] **[opus]** Android never renders tier marks / paragraph gaps: serde `rename_all`
   on `WireBlock` renames variants, not fields, so JSON carries `mark_glyph`/`top_gap`
   while `Wire.kt:584-589` expects camelCase. Add `rename_all_fields = "camelCase"`,
   update web `BlockList.svelte:16-20` to camelCase, bump `PLUMBLINE_WIRE_VERSION`,
@@ -98,15 +98,28 @@ ride 1.0.x patches (the PWA auto-updates).
 
 ## D. First impression (PWA) — before sharing the link
 
-- [ ] **[opus]** Social metadata: meta description + full OG/Twitter block + static
+- [x] **[opus]** Social metadata: meta description + full OG/Twitter block + static
   1200×630 og-image + `apple-touch-icon-180` in `index.html`; register new assets in
   `vite.config.ts` publicFiles.
+- [ ] **[opus]** **NEW 2026-07-29, found by the WebKit project (`I-01`).** `sw.js`'s
+  `mayCache()` recognises "the shell document asked for as data" by comparing
+  `url.href`, so ANY query string walks past it: `index.html?x`, `/?x` and
+  `manifest.webmanifest?x` are all written to the cache by a non-navigation fetch.
+  That is the exact white-screen vector the comment above it claims to have closed —
+  a newer document cached while that build's `/assets/*` are absent. Chromium caches
+  it too (`cache.keys()` lists the entry); `app.spec.ts:821` passes there ONLY because
+  the page's `cache.match` runs before the SW's fire-and-forget `cache.put` lands, and
+  WebKit wins that race and fails. Two-part fix: compare `url.pathname` in
+  `isShellDoc`, and make the test POLL for the entry instead of racing it. Latent today
+  (`engine/update.ts` fetches the manifest `no-store`, which the first rule refuses),
+  but the guard is weaker than its own comment. Then add
+  `/checking for an update cannot poison the cached shell/` to `OFFLINE_ON_WEBKIT`.
 - [ ] **[opus]** Icons/manifest: generate 192/512 + maskable from `public/icon.svg`;
   add manifest `id`, `lang`, `orientation`, `categories`, `screenshots`; dark
   `theme-color` meta pair.
 - [ ] **[opus]** `<noscript>` block; `404.html` redirect preserving search+hash;
   optional `public/CNAME` (belt-and-braces — Pages setting is verified working).
-- [ ] **[opus]** Canvas reader exposes zero accessible text (screen readers, Ctrl+F,
+- [x] **[opus]** Canvas reader exposes zero accessible text (screen readers, Ctrl+F,
   translate see nothing): hidden text mirror rebuilt from the display list +
   `role`/`aria-label` on the wrapper (`ReaderPane.svelte:438-451`). Also
   role/label/keyboard path for `CanonStrip.svelte:85-87`.
@@ -116,7 +129,7 @@ ride 1.0.x patches (the PWA auto-updates).
 - [ ] **[opus]** "Share link" verse action in `ContextMenu` →
   `shareUrl(PWA_URL, s.church, {at: refKey})` — the `?at=` plumbing exists, only
   Present's QR uses it.
-- [ ] **[opus]** Light-theme contrast fails WCAG AA: darken `faded` → ~#6e6862 and
+- [x] **[opus]** Light-theme contrast fails WCAG AA: darken `faded` → ~#6e6862 and
   `gold` → ~#846327 in `theme.rs:200-212` (fixes both shells); fix Present
   `.linkbtn` (~1.5:1!) and `.stepbar`; restate literal light values inside the
   white `.share-dialog`; dim MapFrame paper in night.
@@ -173,7 +186,7 @@ ride 1.0.x patches (the PWA auto-updates).
 - [ ] **[opus]** Decouple the pasteable bug-report header from `PERF`
   (`SettingsDialog.svelte:176-216`), then flip `PERF` off for release (its own
   docstring says it shouldn't ship on).
-- [ ] **[opus]** Weave connectors drawn ~23 px off: measure the nav strip with
+- [x] **[opus]** Weave connectors drawn ~23 px off: measure the nav strip with
   `bind:this` + ResizeObserver instead of the stale `NAV_H = 33` const
   (`ConnectorsOverlay.svelte:10`) — same pattern as `--bottomNavH`.
 
@@ -188,7 +201,7 @@ ride 1.0.x patches (the PWA auto-updates).
 - [ ] **[FABLE]** Hand-write the v1.0.0 release notes (`gh release create
   --notes-file`) — auto-generated notes are PR-title soup and the repo is the
   download page.
-- [ ] **[opus]** Release workflow: add `npm run check` to the pages job (a tag can
+- [x] **[opus]** Release workflow: add `npm run check` to the pages job (a tag can
   currently ship type errors CI would catch); pin cargo-ndk via
   `taiki-e/install-action` in release.yml (matches ci.yml); add
   `workflow_dispatch`.
@@ -199,7 +212,7 @@ ride 1.0.x patches (the PWA auto-updates).
   "not yet in Compose" blocks, icon marked "pending" but shipped, dead
   `apps/desktop/` paths, undeclared canon-strip delta, first-run "fetched live"
   line (it's hardcoded).
-- [ ] **[opus]** README: 4-step sideload instructions + APK sha256 + 3-4 more
+- [x] **[opus]** README: 4-step sideload instructions + APK sha256 + 3-4 more
   screenshots; BIBLIOGRAPHY.md: name the actual source module/edition for the 1769
   margin notes (ask Glendon if not derivable).
 - [ ] **[opus]** Clippy/rustfmt gates: fix `search.rs:451` + `strongs.rs:136`, run
@@ -264,7 +277,7 @@ ride 1.0.x patches (the PWA auto-updates).
 
 ## G. Performance — Android
 
-- [ ] **[opus]** Scroll path (one file): move `scrollY` out of composition to a
+- [x] **[opus]** Scroll path (one file): move `scrollY` out of composition to a
   draw-phase read and stop writing it during composition
   (`ReaderPane.kt:175, 292-294`); replace the two `scrollY`-keyed LaunchedEffects
   with `snapshotFlow` + binary search over per-verse extents precomputed once per
@@ -342,9 +355,19 @@ ride 1.0.x patches (the PWA auto-updates).
 
 ## I. Testing debt
 
-- [ ] **[opus]** WebKit Playwright project running at least the offline trio — the
+- [x] **[opus]** WebKit Playwright project running at least the offline trio — the
   offline promise is untested on the engine where Cache API/eviction actually
   differ.
+- [ ] **[opus]** **NEW 2026-07-29 (`I-01`).** Rewrite "boots offline after ONE visit"
+  so its offline is a DEAD ORIGIN rather than `context.setOffline(true)`. Playwright's
+  emulation makes WebKit stop consulting the service worker entirely — the reload dies
+  with "WebKit encountered an internal error" — proven to be the harness and not us by a
+  minimal cache-first SW on a throwaway origin failing identically while Chromium serves
+  it from cache. So the offline promise's own test is the one test that cannot run on the
+  engine that matters most; the two stalled-origin boots stand in for it today.
+  `network.spec.ts` already has the machinery (`stallableOrigin` — close it instead of
+  stalling), and it works on both engines. Same WebKit device booted to John 3 in 222 ms
+  with its origin genuinely refusing connections.
 - [ ] **[opus]** One UI-level authoring e2e: create a tag from the verse menu → add a
   second verse → convert to a weave (largest untested block; all authoring in
   tests today goes through back-door RPC).

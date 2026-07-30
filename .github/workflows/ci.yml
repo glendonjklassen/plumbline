@@ -168,8 +168,15 @@ jobs:
           npm run check
           npm run build
         working-directory: apps/web
-      - name: Install Playwright chromium
-        run: npx playwright install --with-deps chromium
+      # WebKit as well as chromium: the webkit-offline project in
+      # playwright.config.ts proves the offline promise on the engine where the
+      # Cache API and eviction actually differ, and it is the only engine on iOS.
+      # `--with-deps` is what makes the bundled build launchable (libicu74,
+      # libxml2, libflite), which is why the config trusts a bundled WebKit only
+      # under CI. Costs a ~102 MB download; without it the config fails loudly at
+      # load rather than letting the coverage vanish quietly.
+      - name: Install Playwright browsers (chromium, and webkit for the offline project)
+        run: npx playwright install --with-deps chromium webkit
         working-directory: apps/web
       - name: Playwright e2e
         run: npx playwright test
