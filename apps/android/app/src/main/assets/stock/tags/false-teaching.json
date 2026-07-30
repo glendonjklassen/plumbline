@@ -1,0 +1,16 @@
+{
+  "format": "overlay-tag-v1",
+  "name": "False teaching",
+  "tokenization": "kjv1769-tok2",
+  "created": "2026-07-29T00:00:00Z",
+  "members": [
+    {
+      "target": { "kind": "verse", "ref": "2Pet 2:1" },
+      "added": "2026-07-29T00:00:00Z"
+    },
+    {
+      "target": { "kind": "verse", "ref": "Jude 1:4" },
+      "added": "2026-07-29T00:00:00Z"
+    }
+  ]
+}
