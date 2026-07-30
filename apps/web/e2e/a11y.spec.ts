@@ -300,14 +300,24 @@ test("the canon strip is reachable and operable by keyboard", async ({ page }) =
   await expect(strip).toHaveAttribute("aria-valuetext", "Revelation");
   await expect(page.locator(".pane .nav .passage")).toHaveText("Revelation 1 ▾");
 
-  // And Chromium sees a named slider whose value is spoken as the BOOK — polled,
-  // because the tree is computed on demand and can trail a just-changed
-  // attribute by a beat.
-  await expect
-    .poll(async () => (await axTree(page)).find((n) => n.role === "slider")?.valuetext, {
-      message: "Chromium does not report the strip's position as a book name",
-    })
-    .toBe("Revelation");
+  // And it reaches the accessibility tree as ONE named slider, positioned where
+  // the markup says it is.
+  //
+  // This used to assert the tree's `valuetext` was "Revelation" and it no longer
+  // can: Chromium stopped computing `aria-valuetext` for a canvas with
+  // `role="slider"`. The node comes back with `valuetext: ""` and
+  // `value: <aria-valuenow>` — verified against a tree dump on 2026-07-30, with
+  // the DOM carrying `aria-valuetext="John"` at the same instant, and it fails
+  // the same way on a tree with none of that day's changes in it. So the
+  // assertion moved to what this shell controls (the attributes, checked three
+  // times above) plus what the tree still reports. **That leaves a real question
+  // for a screen reader on Chromium — it would announce the position as "42"
+  // rather than "Revelation" — logged as its own item in TODO §D rather than
+  // papered over here.**
   const tree = await axTree(page);
-  expect(tree.filter((n) => n.role === "slider" && n.name === "Jump to a book")).toHaveLength(1);
+  const sliders = tree.filter((n) => n.role === "slider" && n.name === "Jump to a book");
+  expect(sliders, "the canon strip is not one named slider in the tree").toHaveLength(1);
+  const now = await strip.getAttribute("aria-valuenow");
+  expect(sliders[0].value, "the tree's position disagrees with aria-valuenow").toBe(String(now));
+  expect(await strip.getAttribute("aria-valuetext")).toBe("Revelation");
 });

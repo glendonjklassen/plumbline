@@ -182,6 +182,17 @@ sideload block is already fixed and guarded by a test.
 - [x] **[opus]** BookNav: OT/NT toggle + current-book marker (port from
   `ui/BookNav.kt:142-149, 265-268`) + one-line reading-tint legend (title= never
   fires on touch).
+- [ ] **[opus]** **NEW 2026-07-30.** Chromium no longer computes `aria-valuetext`
+  for a canvas with `role="slider"`, so a screen reader on it announces the canon
+  strip's position as **"42"** instead of "Revelation". Evidence: a full AX-tree
+  dump shows `valuetext: ""` and `value: <aria-valuenow>` while the DOM carries
+  `aria-valuetext="Revelation"` at the same instant (`CanonStrip.svelte`). The
+  attributes are right, so this needs a second channel — an `aria-live="polite"`
+  region announcing the book on change is the cheap fix; `role="slider"` on a
+  canvas may simply be the wrong primitive. `e2e/a11y.spec.ts` asserts the
+  attributes and the tree's numeric position, and says so where it used to assert
+  the book name.
+
 - [ ] **[opus]** Empty states in `panel.rs`: search "0 results" gets guidance; weaves(0)
   gets a body; web `{#if blocks}` should treat `[]` as empty (fixing core fixes
   both shells).
