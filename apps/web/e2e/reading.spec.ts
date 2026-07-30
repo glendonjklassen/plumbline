@@ -72,6 +72,12 @@ async function openChapterGrid(page: Page, bookName: string): Promise<void> {
   await page.evaluate(() => {
     (window as any).__plumbline.bookNavFor = 0;
   });
+  // The navigator lists ONE testament, opening on the one the reader is standing
+  // in (Android's pattern, ported 2026-07-29) — and a fresh test profile is at
+  // John 3, i.e. the New Testament. So ask for the testament the book is in
+  // before looking for the book; the tab is a no-op if it is already current.
+  const otBooks = new Set(["Genesis", "Exodus", "Psalms", "Isaiah", "Malachi"]);
+  await page.locator(`.dialog [data-testament="${otBooks.has(bookName) ? "ot" : "nt"}"]`).click();
   const book = page.getByRole("button", { name: bookName, exact: true });
   await expect(book).toBeVisible({ timeout: 15_000 });
   await book.click();

@@ -10,8 +10,9 @@
   //
   // Everything this dialog needs is the TOC, prefetched at boot — so the
   // grids are synchronous, and Joel's chapter count is on screen instantly.
+  import { untrack } from "svelte";
   import { getSession } from "../state/session.svelte";
-  import { tintStyle, tintTitle, type ReadingHeat } from "./readingTint";
+  import { readingTint, tintStyle, tintTitle, type ReadingHeat } from "./readingTint";
 
   const s = getSession();
 
@@ -35,10 +36,27 @@
   });
 
   let book = $state<string | null>(null);
+  /** Which testament's books the grid lists — Android's `newTestament`. */
+  let newTestament = $state(false);
 
   const open = $derived(s.bookNavFor !== null);
+  /** The book the pane being navigated is already showing, so the grid can say
+   *  "you are here" (Android BookNav.kt: `currentBook`). */
+  const currentBook = $derived(
+    s.bookNavFor === null ? null : (s.panes[s.bookNavFor]?.book ?? null),
+  );
+  const divide = $derived(seg?.otNtDivide ?? 39);
+
   $effect(() => {
-    if (open) book = null;
+    if (!open) return;
+    book = null;
+    // Open on the testament the reader is standing in, so the book they came
+    // from — and its "you are here" tile — is on screen without a tap. Read
+    // untracked: this decides the tab at OPEN time and then leaves it alone,
+    // because after that the tab is the reader's choice, not the pane's.
+    untrack(() => {
+      newTestament = (toc?.books ?? []).findIndex((b: any) => b.id === currentBook) >= divide;
+    });
   });
 
   const chapterCount = $derived(book ? s.chapterCount(book) || 1 : 0);
@@ -52,8 +70,22 @@
     close();
   }
 
-  const otBooks = $derived((toc?.books ?? []).slice(0, seg?.otNtDivide ?? 39));
-  const ntBooks = $derived((toc?.books ?? []).slice(seg?.otNtDivide ?? 39));
+  const books = $derived.by(() => {
+    const all = toc?.books ?? [];
+    return newTestament ? all.slice(divide) : all.slice(0, divide);
+  });
+
+  /** A book tile's reading-map paint. Android's rule (BookNav.kt: "the gold
+   *  'you are here' border always wins"): on the book the reader is in, the
+   *  marker takes the fill and the border and only the bloom survives — where
+   *  they ARE matters more than where they have been, and the tile still says
+   *  how long it has been. */
+  function bookStyle(id: string): string {
+    const heat = bookHeat.get(id);
+    if (id !== currentBook) return tintStyle(heat);
+    const shadow = readingTint(heat)?.shadow;
+    return shadow ? `box-shadow:${shadow};` : "";
+  }
 </script>
 
 {#if open}
@@ -67,26 +99,48 @@
         <span class="crumb-title">Go to…</span>
       {/if}
       <span class="spacer"></span>
+      {#if !book}
+        <!-- One testament at a time (Android BookNav.kt): 39 tiles is a grid you
+             can take in, 66 is a scroll. -->
+        <div class="testaments" role="group" aria-label="Testament">
+          <button
+            class="tab"
+            class:on={!newTestament}
+            data-testament="ot"
+            aria-pressed={!newTestament}
+            onclick={() => (newTestament = false)}>Old Testament</button
+          >
+          <button
+            class="tab"
+            class:on={newTestament}
+            data-testament="nt"
+            aria-pressed={newTestament}
+            onclick={() => (newTestament = true)}>New</button
+          >
+        </div>
+      {/if}
       <button class="close" onclick={close} aria-label="Close">✕</button>
     </div>
+    <!-- The tint has to explain itself on screen. Every tile carries a `title`
+         with its own story, and on a phone — where most reading happens — a
+         title never fires, so the colours were simply unexplained. One line,
+         above the grid it describes, and it does not scroll away with it. -->
+    <p class="legend" data-tint-legend>
+      <span class="hue unread">Gold</span> not read yet,
+      <span class="hue partial">copper</span> partway,
+      <span class="hue read">sage</span> read through — the stronger the glow, the longer since you
+      were there.
+    </p>
     <div class="content">
       {#if !book}
-        <p class="sect">Old Testament</p>
         <div class="grid books">
-          {#each otBooks as b (b.id)}
+          {#each books as b (b.id)}
             <button
+              data-book={b.id}
+              class:current={b.id === currentBook}
+              aria-current={b.id === currentBook ? "page" : undefined}
               onclick={() => (book = b.id)}
-              style={tintStyle(bookHeat.get(b.id))}
-              title={tintTitle(b.name ?? b.id, bookHeat.get(b.id))}
-            >{b.name ?? b.id}</button>
-          {/each}
-        </div>
-        <p class="sect">New Testament</p>
-        <div class="grid books">
-          {#each ntBooks as b (b.id)}
-            <button
-              onclick={() => (book = b.id)}
-              style={tintStyle(bookHeat.get(b.id))}
+              style={bookStyle(b.id)}
               title={tintTitle(b.name ?? b.id, bookHeat.get(b.id))}
             >{b.name ?? b.id}</button>
           {/each}
@@ -152,11 +206,47 @@
   .spacer {
     flex: 1;
   }
+  .testaments {
+    display: flex;
+    flex: 0 0 auto;
+  }
+  .tab {
+    padding: 8px 8px;
+    min-height: 44px;
+    font-size: 14px;
+    white-space: nowrap;
+    color: var(--faded, #8a8276);
+  }
+  .tab.on {
+    font-weight: 600;
+    color: var(--gold, #9e7d38);
+  }
   .close {
     color: var(--faded, #8a8276);
     font-size: 18px;
     padding: 8px 12px;
     min-height: 44px;
+  }
+  .legend {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--rule, #d8cba8);
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--faded, #8a8276);
+  }
+  /* The three hue words, written in their own hue — the legend is then legible
+     next to the tiles without becoming a chart of swatches. */
+  .hue {
+    font-weight: 600;
+  }
+  .hue.unread {
+    color: var(--readUnread, #c9a227);
+  }
+  .hue.partial {
+    color: var(--readPartial, #a8642c);
+  }
+  .hue.read {
+    color: var(--readDone, #6f8f6a);
   }
   .content {
     overflow-y: auto;
@@ -197,5 +287,12 @@
   .grid button:hover {
     border-color: var(--gold, #9e7d38);
     color: var(--gold, #9e7d38);
+  }
+  /* You are here. After :hover so it holds when the pointer is elsewhere in the
+     grid, and bold as well as gold so it is not colour alone. */
+  .grid button.current {
+    border-color: var(--gold, #9e7d38);
+    background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
+    font-weight: 600;
   }
 </style>

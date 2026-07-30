@@ -540,6 +540,9 @@ test("passage navigator is two taps, book then chapter, with no waiting", async 
   // lay out the whole chapter just to count verses (2026-07-26).
   await boot(page);
   await page.locator(".nav .passage").first().click();
+  // The navigator lists one testament and opens on the one the reader is in (a
+  // fresh profile is at John 3, i.e. the NT), so Joel needs the OT tab first.
+  await page.locator('.dialog [data-testament="ot"]').click();
   await page.getByRole("button", { name: "Joel", exact: true }).click();
   // Joel's three chapters render synchronously — no round trip to the engine.
   await expect(page.locator(".grid.nums button")).toHaveCount(3, { timeout: 1_000 });
