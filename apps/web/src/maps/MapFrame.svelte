@@ -31,6 +31,12 @@
 
   const s = getSession();
 
+  // Night is the one theme where light popup paper is wrong: #f2eee6 against a
+  // true-black reader is an 18:1 step, which glares (2026-07-29). Night is always
+  // an explicit choice, never resolved from the system, so the config token is
+  // exact.
+  const night = $derived((s.config.theme ?? "system") === "night");
+
   // The first analytical map of a session pays for a corpus-wide sweep; the
   // rest are instant. Blank paper for several seconds reads as broken
   // (feedback 2026-07-27), so once the wait is real, name it and say it is
@@ -49,7 +55,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
 <div class="backdrop" onclick={() => (s.mapPopup = null)}></div>
-<div class="popup" style:max-width="min({width}px, 96vw)">
+<div class="popup" class:night style:max-width="min({width}px, 96vw)">
   <div class="bar">
     <span class="title">{title}</span>
     {#if pager}
@@ -121,7 +127,7 @@
     align-items: center;
     gap: 6px;
     font-size: 13px;
-    color: #8a8276;
+    color: #6c665d;
   }
   .pager button {
     padding: 0 8px;
@@ -134,18 +140,18 @@
   .caption {
     flex: 1;
     font-size: 12.5px;
-    color: #8a8276;
+    color: #6c665d;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .close {
-    color: #8a8276;
+    color: #6c665d;
     padding: 2px 6px;
     border-radius: 4px;
   }
   .close:hover {
-    background: rgba(158, 125, 56, 0.14);
+    background: rgba(125, 99, 44, 0.14);
   }
   .host {
     position: relative;
@@ -168,23 +174,26 @@
     background: #f2eee6;
   }
   .waitline {
-    color: #8a8276;
+    color: #6c665d;
     font-size: 13.5px;
     animation: waitpulse 1.1s ease-in-out infinite;
   }
   .waitnote {
-    color: #8a8276;
+    color: #6c665d;
     font-size: 12.5px;
     line-height: 1.5;
     max-width: 46ch;
   }
+  /* The breath used to be `opacity: 0.35` → 1, which put the words at 1.7:1 for
+     most of the cycle. Between two solid tones instead: 4.9:1 at the quiet end,
+     14.2:1 at the loud one. */
   @keyframes waitpulse {
     0%,
     100% {
-      opacity: 0.35;
+      color: #6c665d;
     }
     50% {
-      opacity: 1;
+      color: #211f1a;
     }
   }
   .host :global(canvas) {
@@ -192,5 +201,47 @@
     inset: 0;
     width: 100%;
     height: 100%;
+  }
+  /* NIGHT — dimmed, not inverted. Each map paints its own #f2eee6 paper onto the
+     canvas, so the frame can't just darken itself: it would leave a bright
+     rectangle inside a dark border. Dimming the canvas by the same factor the
+     frame restates keeps the two exactly matched (#f2eee6 × 0.70 = #a9a7a1) and
+     drops the popup's step from the black reader from 18.1:1 to 8.7:1.
+     Every value below is measured against that #a9a7a1: ink 6.8:1, muted 5.0:1,
+     both clear AA. It is one number — raise 0.70 for a brighter popup, lower it
+     for a darker one, and re-check the two text tones against the result. */
+  .popup.night {
+    background: #a9a7a1;
+    border-color: #544f45;
+  }
+  .popup.night .bar {
+    border-bottom-color: #544f45;
+  }
+  .popup.night .pager,
+  .popup.night .caption,
+  .popup.night .close,
+  .popup.night .waitnote {
+    color: #3b362d;
+  }
+  .popup.night .close:hover {
+    background: rgba(33, 31, 26, 0.14);
+  }
+  .popup.night .wait {
+    background: #a9a7a1;
+  }
+  .popup.night .waitline {
+    animation-name: waitpulse-night;
+  }
+  @keyframes waitpulse-night {
+    0%,
+    100% {
+      color: #3b362d;
+    }
+    50% {
+      color: #211f1a;
+    }
+  }
+  .popup.night .host :global(canvas) {
+    filter: brightness(0.7);
   }
 </style>

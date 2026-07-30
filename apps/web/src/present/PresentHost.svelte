@@ -217,7 +217,13 @@
 {/if}
 
 <style>
-  /* Sunlight palette — deliberately fixed light, maximum contrast. */
+  /* Sunlight palette — deliberately fixed light, maximum contrast. Because it is
+     fixed, every value here is a literal rather than a `var(--…)`, and the
+     literals are the light palette's (crates/core/src/theme.rs). They were the
+     OLD light palette, and measured against this paper (#fcf9f4) the muted ones
+     failed WCAG AA: #8a8276 was 3.61:1 and .linkbtn's #d8cba8 was 1.53:1 —
+     effectively invisible, on the one screen most likely to be projected in front
+     of a room (2026-07-29). Restated at 5.4:1 and 6.9:1. */
   .present {
     position: fixed;
     /* Stops ABOVE the bottom bar rather than covering it — both the picker and
@@ -255,7 +261,7 @@
     flex: 1;
   }
   .sharebtn {
-    border: 1.5px solid #9e7d38;
+    border: 1.5px solid #7d632c;
     border-radius: 8px;
     padding: 4px 14px;
     font-size: 15px;
@@ -265,7 +271,7 @@
     margin: auto;
     max-width: 26em;
     text-align: center;
-    color: #8a8276;
+    color: #6c665d;
     font-size: 17px;
     padding: 24px;
   }
@@ -288,7 +294,7 @@
     box-shadow: 0 1px 4px rgba(60, 45, 10, 0.05);
   }
   .pick:hover {
-    border-color: #9e7d38;
+    border-color: #7d632c;
   }
   /* Theme-aware picker stage (dark mode was jarringly white). */
   .present.picking {
@@ -302,7 +308,7 @@
     color: var(--ink, #211f1a);
   }
   .present.picking .empty {
-    color: var(--faded, #8a8276);
+    color: var(--faded, #6c665d);
   }
   .present.picking .pick {
     border-color: var(--rule, #d8cba8);
@@ -310,17 +316,17 @@
     box-shadow: none;
   }
   .present.picking .pick:hover {
-    border-color: var(--gold, #9e7d38);
+    border-color: var(--gold, #7d632c);
   }
   .present.picking .pick .n {
-    color: var(--faded, #8a8276);
+    color: var(--faded, #6c665d);
   }
   .pick .name {
     font-size: 22px;
     font-weight: 600;
   }
   .pick .n {
-    color: #8a8276;
+    color: #6c665d;
     font-size: 14px;
   }
   .overview {
@@ -374,7 +380,7 @@
     padding: 12px;
     border-top: 1px solid #d8cba8;
     font-size: 15px;
-    color: #8a8276;
+    color: #6c665d;
   }
   .stepbar button {
     font-size: 22px;
@@ -383,7 +389,7 @@
   }
   .ovbtn {
     font-size: 14px;
-    color: #8a8276;
+    color: #6c665d;
     text-decoration: underline;
   }
   .endcard {
@@ -397,11 +403,11 @@
     text-align: center;
   }
   .endcard .mark {
-    color: #9e7d38;
+    color: #7d632c;
     font-size: 26px;
   }
   .endnote {
-    color: #8a8276;
+    color: #6c665d;
     font-style: italic;
   }
   .qr {
@@ -419,13 +425,13 @@
     margin-top: 8px;
     font-size: 13px;
     font-weight: 600;
-    color: #d8cba8;
-    border: 1px solid #6a5f45;
+    color: #6b5417;
+    border: 1px solid #7d632c;
     border-radius: 6px;
     padding: 4px 12px;
   }
   .qrnote {
-    color: #8a8276;
+    color: #6c665d;
     font-size: 14px;
   }
 </style>

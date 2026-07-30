@@ -119,17 +119,24 @@ data class ReaderPalette(
         fun forTheme(theme: String): ReaderPalette =
             runCatching { fromJson(StudyEngine.PaletteJson(theme)) }.getOrElse { default() }
 
-        /** The shipped light defaults, matching WinUI's field initialisers — so
-         *  the reader renders correctly even before the core palette is fetched. */
+        /** The shipped light defaults — so the reader renders correctly even
+         *  before the core palette is fetched, and forever if `PaletteJson`
+         *  throws.
+         *
+         *  These are a COPY of `theme::palette(Theme::Light)` and the copy has
+         *  drifted once already: the WCAG pass on 2026-07-29 darkened ten roles
+         *  in theme.rs and left this fallback painting the failing values. Any
+         *  palette change in the core has to be mirrored here by hand. (The
+         *  reference to WinUI's field initialisers is gone with that shell.) */
         fun default(): ReaderPalette {
             fun c(r: Int, g: Int, b: Int) = Color(red = r, green = g, blue = b)
-            val gold = c(0x9E, 0x7D, 0x38)
+            val gold = c(0x7D, 0x63, 0x2C)
             return ReaderPalette(
                 dark = false,
                 paper = c(0xFC, 0xF9, 0xF4),
                 ink = c(0x21, 0x1F, 0x1A),
-                inkFaded = c(0x6B, 0x68, 0x62),
-                faded = c(0x8A, 0x82, 0x76),
+                inkFaded = c(0x69, 0x66, 0x61),
+                faded = c(0x6C, 0x66, 0x5D),
                 divine = c(0x4D, 0x33, 0x26),
                 titleInk = c(0x66, 0x5C, 0x4D),
                 gold = gold,
@@ -141,15 +148,15 @@ data class ReaderPalette(
                 paneNavBg = c(0xEF, 0xEA, 0xE1),
                 stripBg = c(0xEB, 0xE6, 0xDB),
                 rule = c(0xD8, 0xCB, 0xA8),
-                sectionGold = c(0xA0, 0x89, 0x4A),
-                disputed = c(0xB0, 0x4A, 0x3A),
-                mono = c(0x88, 0x88, 0x88),
+                sectionGold = c(0x77, 0x65, 0x37),
+                disputed = c(0xAA, 0x48, 0x38),
+                mono = c(0x66, 0x66, 0x66),
                 morph = c(0x6A, 0x5A, 0x2A),
-                lemma = c(0x8A, 0x7A, 0x52),
+                lemma = c(0x73, 0x65, 0x44),
                 tierGod = gold,
-                tierHuman = c(0x6F, 0x8F, 0x6A),
-                tierMachine = c(0x99, 0x99, 0x99),
-                tierResearch = c(0xB0, 0x4A, 0x3A),
+                tierHuman = c(0x55, 0x6D, 0x51),
+                tierMachine = c(0x66, 0x66, 0x66),
+                tierResearch = c(0xAA, 0x48, 0x38),
                 readUnread = c(0xC9, 0xA2, 0x27),
                 readPartial = c(0xA8, 0x64, 0x2C),
                 readDone = c(0x6F, 0x8F, 0x6A),
