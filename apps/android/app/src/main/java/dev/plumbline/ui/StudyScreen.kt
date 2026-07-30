@@ -77,6 +77,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -1310,8 +1311,30 @@ private fun SettingsDialog(
     onPresentSharesAsNew: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // The three reader-pref sliders are DRAFTED. Text size, margin and line
+    // spacing are all layout inputs to the reading pane, so pushing them up per
+    // tick re-laid the chapter per tick: a two-second drag was ~120 chapter
+    // layouts, each one a native display list, all but the last orphaned the
+    // instant the next value arrived. The thumb follows the draft, and so does the
+    // specimen below (size and line multiple both), so the drag stays live under
+    // the finger; the pane lays out once, when the finger lifts.
+    //
+    // Keyed on the committed value: the reader's own state stays the truth, and
+    // the reset a commit causes lands on the value just pushed, so nothing jumps.
+    val bodyDraft = remember(bodySize) { SliderDraft(bodySize.toFloat()) }
+    val marginDraft = remember(sideMargin) { SliderDraft(sideMargin.toFloat()) }
+    val spacingDraft = remember(lineSpacing) { SliderDraft(lineSpacing.toFloat()) }
+    // Belt to onValueChangeFinished's braces: a thumb moved by a path that never
+    // reports a release (an accessibility set-progress, a dialog dismissed
+    // mid-drag) must not lose the value the reader chose. Idempotent — after a
+    // normal lift there is nothing left to commit.
+    fun commitDrafts() {
+        bodyDraft.commit { onBodySize(it.toDouble()) }
+        marginDraft.commit { onSideMargin(it.toDouble()) }
+        spacingDraft.commit { onLineSpacing(it.toDouble()) }
+    }
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { commitDrafts(); onDismiss() },
         title = { Text("Settings") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -1359,12 +1382,40 @@ private fun SettingsDialog(
                 }
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 Text("Text size — reader & study", color = palette.faded, fontSize = 12.sp)
-                Text("Aa", fontSize = bodySize.sp, color = palette.ink)
-                Slider(value = bodySize.toFloat(), onValueChange = { onBodySize(it.toDouble()) }, valueRange = 12f..40f, steps = 27)
+                // The live feedback a drag has instead of the pane behind the
+                // scrim: the specimen takes the drafted SIZE and the drafted line
+                // multiple, so two of the three sliders show what they do while
+                // the finger is still down. Two lines because one cannot show
+                // spacing. (Margin gets none: this column is not the reader's
+                // column, so any preview of it here would be a made-up scale. It
+                // lands when the finger lifts, like the pane's own layout.)
+                Text(
+                    "Aa\nAa",
+                    fontSize = bodyDraft.value.sp,
+                    lineHeight = (bodyDraft.value * spacingDraft.value).sp,
+                    color = palette.ink,
+                )
+                Slider(
+                    value = bodyDraft.value,
+                    onValueChange = { bodyDraft.drag(it) },
+                    onValueChangeFinished = { bodyDraft.commit { v -> onBodySize(v.toDouble()) } },
+                    valueRange = 12f..40f,
+                    steps = 27,
+                )
                 Text("Margin — space either side of the text", color = palette.faded, fontSize = 12.sp)
-                Slider(value = sideMargin.toFloat(), onValueChange = { onSideMargin(it.toDouble()) }, valueRange = 8f..96f)
+                Slider(
+                    value = marginDraft.value,
+                    onValueChange = { marginDraft.drag(it) },
+                    onValueChangeFinished = { marginDraft.commit { v -> onSideMargin(v.toDouble()) } },
+                    valueRange = 8f..96f,
+                )
                 Text("Line spacing", color = palette.faded, fontSize = 12.sp)
-                Slider(value = lineSpacing.toFloat(), onValueChange = { onLineSpacing(it.toDouble()) }, valueRange = 1.0f..2.2f)
+                Slider(
+                    value = spacingDraft.value,
+                    onValueChange = { spacingDraft.drag(it) },
+                    onValueChangeFinished = { spacingDraft.commit { v -> onLineSpacing(v.toDouble()) } },
+                    valueRange = 1.0f..2.2f,
+                )
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 Text("Copy format", color = palette.faded, fontSize = 12.sp)
                 val copyOpts = listOf(
@@ -1429,8 +1480,43 @@ private fun SettingsDialog(
                 BackupRestoreRows(palette)
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        confirmButton = { TextButton(onClick = { commitDrafts(); onDismiss() }) { Text("Done") } },
     )
+}
+
+/**
+ * A slider's live value, held back from the caller until the drag ends.
+ *
+ * [value] is what the thumb (and any specimen next to it) shows, and it moves at
+ * pointer rate — that is the whole point of a slider. [commit] is the only thing
+ * that hands the value up, so a setting that costs real work downstream — the
+ * three reader prefs each re-lay out the chapter, natively — pays that cost once
+ * per drag instead of once per frame.
+ *
+ * [commit] is idempotent between drags: it pushes only a value that has moved
+ * since the last push, so wiring it to both `onValueChangeFinished` and the
+ * dialog's close is safe.
+ */
+internal class SliderDraft(committed: Float) {
+    private val live = mutableFloatStateOf(committed)
+    private var pushed = committed
+
+    /** What the thumb shows. Compose state: reading it recomposes the slider and
+     *  its specimen, and nothing else. */
+    val value: Float get() = live.floatValue
+
+    /** The finger moved. Cheap by construction — one state write, no work up. */
+    fun drag(v: Float) {
+        live.floatValue = v
+    }
+
+    /** Hand the value up if it has moved since the last time it was handed up. */
+    fun commit(push: (Float) -> Unit) {
+        val v = live.floatValue
+        if (v == pushed) return
+        pushed = v
+        push(v)
+    }
 }
 
 @Composable

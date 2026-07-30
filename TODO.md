@@ -288,7 +288,7 @@ as "a later increment". F–I can ride later increments (the PWA auto-updates).
   with `snapshotFlow` + binary search over per-verse extents precomputed once per
   layout (`:246, :261-276`); hoist the per-frame `filter`/`groupBy`/`toArgbInt`
   allocations out of the draw loop (`:377-431`).
-- [ ] **[opus]** Cancelled-layout native leak: `chapterHandle` close is unreachable on
+- [x] **[opus]** Cancelled-layout native leak: `chapterHandle` close is unreachable on
   cancellation (`ReaderPane.kt:221`) — try/finally; and give the three Settings
   sliders `onValueChangeFinished` (a 2 s drag currently fires ~120 full layouts,
   ~119 leaked).

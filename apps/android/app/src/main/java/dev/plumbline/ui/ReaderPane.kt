@@ -14,6 +14,11 @@
 // once per layout. Keep it that way: one composition-phase read of `scroll` puts
 // a full recomposition back on every frame.
 //
+// A laid-out chapter is a native handle, and the layout effect is cancelled every
+// time a reader turns a page before the last one finished. Every allocation goes
+// through publishOrClose, which either hands the handle to the pane or frees it —
+// there is no third path out of that function.
+//
 // Author D (Compose UI).
 
 package dev.plumbline.ui
@@ -63,8 +68,11 @@ import dev.plumbline.StudyEngine
 import dev.plumbline.UserNotes
 import dev.plumbline.core.PlumblineLayoutConfig
 import dev.plumbline.parseWire
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.Closeable
+import kotlin.coroutines.CoroutineContext
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -223,27 +231,34 @@ fun ReaderPane(
             val measurePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 typeface = typefaces.regular; textSize = fontPx
             }
-            val result = withContext(Dispatchers.Default) {
-                runCatching {
-                    // Serialise engine access: two panes may lay out concurrently.
-                    synchronized(engine) {
-                        // Set inside the lock and immediately before the layout:
-                        // the overlay is engine state, so a pane laying out
-                        // concurrently must not see a half-applied toggle.
-                        engine.SetAkjvOverlay(akjvOverlay)
-                        val chap = engine.LayoutChapter(book, chapter, cfg) { t ->
-                            measurePaint.measureText(t)
-                        }
-                        chap to parseWire<DisplayList>(chap.Json())
+            // The layout allocates a NATIVE display list. publishOrClose owns it
+            // from the allocation until either `publish` takes it or it is freed —
+            // this effect is cancelled on every fast chapter turn, and the old
+            // shape (lay out, then assign) dropped the handle on the floor every
+            // time that happened.
+            publishOrClose(
+                // Serialise engine access: two panes may lay out concurrently.
+                // (This is the `synchronized(engine)` monitor, held inside.)
+                engineLock = engine,
+                acquire = {
+                    // Set inside the lock and immediately before the layout:
+                    // the overlay is engine state, so a pane laying out
+                    // concurrently must not see a half-applied toggle.
+                    engine.SetAkjvOverlay(akjvOverlay)
+                    engine.LayoutChapter(book, chapter, cfg) { t ->
+                        measurePaint.measureText(t)
                     }
-                }
-            }
-            chapterHandle?.close()
-            result.onSuccess { (chap, parsed) ->
-                chapterHandle = chap; dl = parsed; problem = null; scroll.floatValue = 0f; pin = null
-            }.onFailure {
-                chapterHandle = null; dl = null; problem = it.message ?: "layout failed"
-            }
+                },
+                derive = { chap -> parseWire<DisplayList>(chap.Json()) },
+                publish = { chap, parsed ->
+                    chapterHandle?.close()
+                    chapterHandle = chap; dl = parsed; problem = null; scroll.floatValue = 0f; pin = null
+                },
+                onProblem = {
+                    chapterHandle?.close()
+                    chapterHandle = null; dl = null; problem = it.message ?: "layout failed"
+                },
+            )
         }
 
         // Which verses carry a personal note — the reader's own words get a
@@ -561,6 +576,66 @@ private fun verseAt(
         if (d < bestD) { bestD = d; best = it }
     }
     return best?.refOf(book, chapter)
+}
+
+// ── the native handle: published or closed, never dropped ───────────────────
+
+/**
+ * Produce a value that comes with a NATIVE handle, and guarantee the handle is
+ * either published or freed.
+ *
+ * A laid-out chapter is native memory that only `plumbline_layout_free` releases
+ * (via [Closeable.close]), so a handle that reaches nobody is leaked for the life
+ * of the process. Three things can happen between the allocation and the
+ * assignment that keeps it, and the old straight-line shape — lay out, then
+ * assign — handled only the first:
+ *
+ *  1. it lands: [publish] takes ownership, and the pane frees it when it is
+ *     replaced or the pane leaves the tree;
+ *  2. [derive] throws with the handle already allocated (the JSON parse) — the
+ *     handle was inside a failed `Result` nothing held;
+ *  3. the coroutine is CANCELLED while [acquire] runs. This is the common one: a
+ *     reader turning pages fast re-keys the layout effect, which cancels the one
+ *     in flight, and leaving the reader cancels it too. The native call is not
+ *     interruptible, so the layout finishes and cancellation is observed on the
+ *     way out of [withContext] — the handle exists and the assignment that would
+ *     have owned it never runs. One leaked chapter per cancelled turn.
+ *
+ * So [acquire] is separated from everything that can throw, and the `finally`
+ * closes anything not handed over — including on cancellation, where the
+ * exception is rethrown (never reported as a layout problem: the pane is either
+ * going away or already laying out the next chapter, and swallowing it would
+ * break structured concurrency).
+ *
+ * @param engineLock held across [acquire] and [derive]: engine state is set
+ *   immediately before the layout reads it, so the two cannot be interleaved.
+ */
+internal suspend fun <H : Closeable, V> publishOrClose(
+    engineLock: Any,
+    acquire: () -> H,
+    derive: (H) -> V,
+    publish: (H, V) -> Unit,
+    onProblem: (Throwable) -> Unit,
+    context: CoroutineContext = Dispatchers.Default,
+) {
+    var owned: H? = null
+    try {
+        val (handle, value) = withContext(context) {
+            synchronized(engineLock) {
+                val h = acquire()
+                owned = h          // owned from HERE — derive may throw
+                h to derive(h)
+            }
+        }
+        publish(handle, value)
+        owned = null               // ownership transferred
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (t: Throwable) {
+        onProblem(t)
+    } finally {
+        owned?.close()
+    }
 }
 
 // ── the scroll path, precomputed ────────────────────────────────────────────
