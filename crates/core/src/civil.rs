@@ -54,6 +54,25 @@ pub fn add_days(stamp: &str, n: i64) -> String {
     days_to_date(date_to_days(stamp).unwrap_or(0) + n)
 }
 
+/// Unix seconds as the frozen wire stamp, `YYYY-MM-DDThh:mm:ssZ` — the same
+/// shape the shells send for `created` / `added`.
+///
+/// The core still has no clock: this only *formats* a number someone else read.
+/// `crates/ffi` is where that number comes from, for the mutations whose shell
+/// caller sends no stamp of its own (an `updated` bump on a note edit, say —
+/// docs/STABLE-IDS.md). Keeping the arithmetic here keeps it testable at fixed
+/// instants, which a clock never is.
+///
+/// UTC by construction, no leap seconds, no local zone: seconds since the epoch
+/// divided into days and a remainder.
+pub fn stamp_from_epoch_secs(secs: i64) -> String {
+    // Floor division, so a pre-epoch instant lands on the right day rather than
+    // rounding toward zero into the next one.
+    let days = secs.div_euclid(86_400);
+    let rem = secs.rem_euclid(86_400);
+    format!("{}T{:02}:{:02}:{:02}Z", days_to_date(days), rem / 3600, (rem % 3600) / 60, rem % 60)
+}
+
 /// Whole days from `from` to `to` (negative when `to` precedes `from`).
 /// `None` if either stamp is unparseable.
 pub fn days_between(from: &str, to: &str) -> Option<i64> {
@@ -92,5 +111,31 @@ mod tests {
     #[test]
     fn parses_bare_dates_and_full_stamps_alike() {
         assert_eq!(date_to_days("2026-07-28"), date_to_days("2026-07-28T13:45:01Z"));
+    }
+
+    /// The stamp `crates/ffi`'s clock formats, pinned at fixed instants — which
+    /// is the point of keeping the arithmetic here and the clock there.
+    #[test]
+    fn formats_epoch_seconds_as_the_wire_stamp() {
+        assert_eq!(stamp_from_epoch_secs(0), "1970-01-01T00:00:00Z");
+        assert_eq!(stamp_from_epoch_secs(1), "1970-01-01T00:00:01Z");
+        assert_eq!(stamp_from_epoch_secs(86_399), "1970-01-01T23:59:59Z");
+        assert_eq!(stamp_from_epoch_secs(86_400), "1970-01-02T00:00:00Z");
+        // 2026-07-30T12:34:56Z, the shape a save actually writes.
+        let secs = days_from_civil(2026, 7, 30) * 86_400 + 12 * 3600 + 34 * 60 + 56;
+        assert_eq!(stamp_from_epoch_secs(secs), "2026-07-30T12:34:56Z");
+        // A clock behind the epoch still lands on the right day, rather than
+        // rounding toward zero into the next one.
+        assert_eq!(stamp_from_epoch_secs(-1), "1969-12-31T23:59:59Z");
+    }
+
+    /// Whatever the clock says, the stamp is one the rest of the core can read
+    /// back — these strings are compared against `created` and each other.
+    #[test]
+    fn the_stamp_it_writes_is_one_date_to_days_can_parse() {
+        for secs in [0i64, 1_000_000, 1_785_000_000, -86_400] {
+            let stamp = stamp_from_epoch_secs(secs);
+            assert_eq!(date_to_days(&stamp), Some(secs.div_euclid(86_400)), "{stamp}");
+        }
     }
 }

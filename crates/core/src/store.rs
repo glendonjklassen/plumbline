@@ -143,6 +143,79 @@ pub fn slug(name: &str, fallback: &str) -> String {
     }
 }
 
+/// A fresh object identity: 32 lowercase hex chars (128 bits), per
+/// docs/STABLE-IDS.md. Threads, tags and weaves are keyed by NAME on disk, so a
+/// rename is a new file and a lost identity; this is the identity that survives
+/// one.
+///
+/// The bits come from `RandomState`, std's own hasher seed, because this crate
+/// takes no dependencies and both shipped targets already rely on it: every
+/// `HashMap` in the core seeds one, so if OS randomness were unavailable
+/// (`random_get` under the browser's WASI shim, `getrandom` on Android) nothing
+/// here would run at all. Two hashers give two `u64`.
+///
+/// **Not cryptographic, and it doesn't need to be.** An id is a label to match
+/// two copies of the same object by; nobody is guessing at it, and nothing is
+/// authorised by it. What it does need is not to collide, and it doesn't: std
+/// draws the seed once per thread and bumps it per `RandomState`, so ids minted
+/// in one process differ by construction, and two *devices* collide only if
+/// their 128-bit seeds do.
+pub fn new_id() -> String {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    let mut out = String::with_capacity(32);
+    for _ in 0..2 {
+        let mut h = RandomState::new().build_hasher();
+        h.write(b"plumbline-id");
+        out.push_str(&format!("{:016x}", h.finish()));
+    }
+    out
+}
+
+/// Resolve duplicate ids among loaded objects: where two files carry the same
+/// `id`, keep the one with the newer `updated` and drop the other **from memory
+/// only**.
+///
+/// Two files with one id is the rename artifact docs/STABLE-IDS.md describes —
+/// a build that renames an object writes the new slug, and a copy of the old
+/// file can still arrive from a backup zip. The reader's newest edit is the one
+/// they meant.
+///
+/// **Load never deletes.** Dropping the stale *file* happens only on the next
+/// explicit save of that object, through the atomic writer. A loader that
+/// deleted would turn a misparse, a half-restored backup or a clock skew into
+/// permanent data loss, and there is no undo on a phone.
+///
+/// `updated` is the frozen `YYYY-MM-DDThh:mm:ssZ` UTC form, so a plain string
+/// compare orders it; an object without one (anything written before ids
+/// existed) sorts oldest. Ties keep the earlier item, which leaves the caller's
+/// own deterministic order — by path — deciding.
+pub(crate) fn resolve_duplicate_ids<T>(
+    items: Vec<T>,
+    id_of: impl Fn(&T) -> Option<&str>,
+    updated_of: impl Fn(&T) -> Option<&str>,
+) -> Vec<T> {
+    use std::collections::HashMap;
+    // Winner per id, by index, decided before anything is moved.
+    let mut best: HashMap<&str, usize> = HashMap::new();
+    for (i, it) in items.iter().enumerate() {
+        let Some(id) = id_of(it) else { continue };
+        match best.get(id) {
+            Some(&j) if updated_of(&items[j]).unwrap_or("") >= updated_of(it).unwrap_or("") => {}
+            _ => {
+                best.insert(id, i);
+            }
+        }
+    }
+    let keep: std::collections::HashSet<usize> = best.into_values().collect();
+    items
+        .into_iter()
+        .enumerate()
+        .filter(|(i, it)| id_of(it).is_none() || keep.contains(i))
+        .map(|(_, it)| it)
+        .collect()
+}
+
 fn io_err(path: &Path, source: std::io::Error) -> Error {
     Error::Io { path: path.display().to_string(), source }
 }
@@ -314,5 +387,48 @@ mod tests {
         assert_eq!(slug("  A Priest, after the Order! ", "thread"), "a-priest-after-the-order");
         assert_eq!(slug("", "tag"), "tag");
         assert_eq!(slug("!!!", "tag"), "tag");
+    }
+
+    /// An id is 32 lowercase hex chars and never repeats. The shape matters
+    /// because it goes on disk in a frozen format; the uniqueness matters because
+    /// the id IS the identity — two objects sharing one would make the duplicate
+    /// resolution below discard a tag the reader still has.
+    #[test]
+    fn every_id_is_thirty_two_lowercase_hex_and_distinct() {
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..20_000 {
+            let id = new_id();
+            assert_eq!(id.len(), 32, "not 32 chars: {id}");
+            assert!(
+                id.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
+                "not lowercase hex: {id}"
+            );
+            assert!(seen.insert(id.clone()), "minted {id} twice");
+        }
+    }
+
+    /// A tie on `updated` keeps the earlier item, so the caller's own order — by
+    /// path, for every loader here — is what decides. Deterministic beats
+    /// arbitrary: the same two files must resolve the same way on every launch.
+    #[test]
+    fn a_tie_on_updated_keeps_the_earlier_item() {
+        let items = vec![("first", Some("x"), Some("2026-08-01T00:00:00Z")), ("second", Some("x"), Some("2026-08-01T00:00:00Z"))];
+        let kept = resolve_duplicate_ids(items, |i| i.1, |i| i.2);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].0, "first");
+    }
+
+    /// An object with no `updated` at all — anything written before ids existed —
+    /// is the older one, whichever side of the pair it is on.
+    #[test]
+    fn a_missing_updated_sorts_oldest() {
+        for (order, want) in [(0, "stamped"), (1, "stamped")] {
+            let stamped = ("stamped", Some("x"), Some("2026-08-01T00:00:00Z"));
+            let bare = ("bare", Some("x"), None);
+            let items = if order == 0 { vec![stamped, bare] } else { vec![bare, stamped] };
+            let kept = resolve_duplicate_ids(items, |i| i.1, |i| i.2);
+            assert_eq!(kept.len(), 1);
+            assert_eq!(kept[0].0, want, "order {order}");
+        }
     }
 }

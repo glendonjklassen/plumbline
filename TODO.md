@@ -81,10 +81,15 @@ sideload block is already fixed and guarded by a test.
   the first 1.0.x, after the flatten item lands in v1.0. Full design (id/updated
   fields, identity semantics, wire evolution, sequencing, required tests) in
   [docs/STABLE-IDS.md](docs/STABLE-IDS.md).
-- [ ] **[opus]** Implement stable ids per [docs/STABLE-IDS.md](docs/STABLE-IDS.md)
+- [x] **[opus]** Implement stable ids per [docs/STABLE-IDS.md](docs/STABLE-IDS.md)
   (first 1.0.x, NOT before the flatten item ships in v1.0): `id` + `updated` on
   Thread/Tag/Weave, lazy assignment on save, duplicate-id resolution, the four
-  required tests.
+  required tests. **DONE 2026-07-30, in this tag** — the ordering rule was "after
+  the flatten item", and that landed in this same unreleased catalogue, so no
+  shipped build can strip the new fields. The wire is untouched (ordinals stay
+  until §H codegen). One thing the doc asked for is NOT implemented, deliberately:
+  "the stale file is removed on the next save" needs a rename endpoint, and
+  neither shell has one — nothing can create the artifact yet.
 
 ## C. Live wire-drift bugs
 

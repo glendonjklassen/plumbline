@@ -79,6 +79,24 @@ pub struct Tag {
     pub name: String,
     pub tok_version: String,
     pub created: String,
+    /// Stable identity — 32 hex chars, minted once and never derived from the
+    /// name (docs/STABLE-IDS.md). `None` for every tag written before ids
+    /// existed; [`write_tag`] assigns one on the next save, and an id already
+    /// present is never rewritten.
+    ///
+    /// **The id is the identity; the name is a label.** A rename keeps it, which
+    /// is the whole point: the file is `slug(name).json`, so renaming a tag today
+    /// leaves a new file and no way to tell it is the same tag the reader had.
+    pub id: Option<String>,
+    /// UTC stamp of the last mutating save, in the wire format `created` uses.
+    /// `None` until this build (or a later one) writes the file.
+    ///
+    /// This is what makes "which copy is newer" answerable — between a backup
+    /// zip and the device it lands on, and between two copies that share an
+    /// [`id`](Tag::id). Nothing consumes it yet; it exists now because a
+    /// sideloaded APK never auto-updates, so a field absent on the day 1.0 ships
+    /// is absent from those devices for ever.
+    pub updated: Option<String>,
     pub members: Vec<TagMember>,
     /// Every key in the file this build has never heard of, carried back out
     /// again on save.
@@ -110,6 +128,10 @@ struct TagRepr {
     tokenization: String,
     created: String,
     #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    updated: Option<String>,
+    #[serde(default)]
     members: Vec<TagMember>,
     #[serde(flatten)]
     extra: Map<String, Value>,
@@ -125,6 +147,14 @@ impl Serialize for Tag {
         m.serialize_entry("name", &self.name)?;
         m.serialize_entry("tokenization", &self.tok_version)?;
         m.serialize_entry("created", &self.created)?;
+        // Both additive: a tag that has neither writes neither key, so files
+        // from before ids existed round-trip byte for byte.
+        if let Some(id) = &self.id {
+            m.serialize_entry("id", id)?;
+        }
+        if let Some(updated) = &self.updated {
+            m.serialize_entry("updated", updated)?;
+        }
         m.serialize_entry("members", &self.members)?;
         for (k, v) in &self.extra {
             m.serialize_entry(k, v)?;
@@ -149,6 +179,8 @@ impl<'de> Deserialize<'de> for Tag {
             name: r.name,
             tok_version: r.tokenization,
             created: r.created,
+            id: r.id,
+            updated: r.updated,
             members: r.members,
             extra,
         })
@@ -200,6 +232,11 @@ pub fn load_tags(home: impl AsRef<Path>) -> (Vec<LoadedTag>, Vec<String>) {
         }
     }
     loaded.sort_by(|a, b| a.tag.name.to_lowercase().cmp(&b.tag.name.to_lowercase()));
+    let loaded = crate::store::resolve_duplicate_ids(
+        loaded,
+        |lt| lt.tag.id.as_deref(),
+        |lt| lt.tag.updated.as_deref(),
+    );
     (loaded, errors)
 }
 
@@ -213,9 +250,25 @@ pub fn tag_file(home: impl AsRef<Path>, name: &str) -> PathBuf {
     home.as_ref().join("tags").join(format!("{}.json", crate::store::slug(name, "tag")))
 }
 
-/// Atomically write a tag to `path`.
-pub fn write_tag(path: impl AsRef<Path>, tag: &Tag) -> Result<(), Error> {
-    crate::store::write_atomic(path, &to_json(tag)?)
+/// Atomically write a tag to `path`, stamping it: `updated` becomes `now`, and a
+/// tag with no [`id`](Tag::id) is assigned one.
+///
+/// The stamping lives HERE, in the writer, rather than in each of the callers
+/// above — every save of a tag passes through this function, so an id cannot be
+/// forgotten by adding a mutation later. `now` is the same UTC stamp the
+/// mutation itself carries where the shell sends one (`added`), and the engine's
+/// own clock where it does not (see `plumbline-ffi`'s `now_stamp`).
+///
+/// An id already on the tag is left exactly as it is, whatever its shape: it may
+/// have been minted by a later build whose rules we do not know, and identity we
+/// rewrite is identity we have destroyed.
+pub fn write_tag(path: impl AsRef<Path>, tag: &Tag, now: &str) -> Result<(), Error> {
+    let mut stamped = tag.clone();
+    stamped.updated = Some(now.to_string());
+    if stamped.id.is_none() {
+        stamped.id = Some(crate::store::new_id());
+    }
+    crate::store::write_atomic(path, &to_json(&stamped)?)
 }
 
 /// Add `target` to the tag named `name` (case-insensitive match among
@@ -244,7 +297,7 @@ pub fn add_member(
         }
         let mut tag = lt.tag.clone();
         tag.members.push(member);
-        write_tag(&lt.file, &tag)?;
+        write_tag(&lt.file, &tag, added)?;
         Ok(lt.file.clone())
     } else {
         let path = tag_file(&home, name);
@@ -258,24 +311,25 @@ pub fn add_member(
             name: name.trim().to_string(),
             tok_version: tok_version.to_string(),
             created: added.to_string(),
+            // Both filled by the writer — a new tag is stamped the same way an
+            // edited one is, through one code path.
+            id: None,
+            updated: None,
             members: vec![member],
             extra: Map::new(),
         };
-        write_tag(&path, &tag)?;
+        write_tag(&path, &tag, added)?;
         Ok(path)
     }
 }
 
-/// Rewrite a tag's file without `target`.
-pub fn remove_member(lt: &LoadedTag, target: &TagTarget) -> Result<(), Error> {
+/// Rewrite a tag's file without `target`. `now` stamps the save (see
+/// [`write_tag`]).
+pub fn remove_member(lt: &LoadedTag, target: &TagTarget, now: &str) -> Result<(), Error> {
     let mut tag = lt.tag.clone();
     tag.members.retain(|m| &m.target != target);
-    write_tag(&lt.file, &tag)
+    write_tag(&lt.file, &tag, now)
 }
-
-/// Set (or clear, with `None`) the swatch colour of the tag named `name`
-/// (case-insensitive). Drives the highlighting feature (Tier 0 #4): a verse's
-/// wash is the colour of a colour-bearing tag it belongs to. Errors if no such
 
 #[cfg(test)]
 mod tests {
@@ -337,21 +391,13 @@ mod tests {
         assert_eq!(loaded[0].tag.members.len(), 2);
 
         // Remove one member and reload.
-        remove_member(&loaded[0], &isa).unwrap();
+        remove_member(&loaded[0], &isa, "2026-07-30T00:00:00Z").unwrap();
         let (loaded, _) = load_tags(&home);
         assert_eq!(loaded[0].tag.members.len(), 1);
         assert_eq!(loaded[0].tag.members[0].target, concept);
 
         let _ = std::fs::remove_dir_all(&home);
     }
-
-    const HL_SAMPLE: &str = r##"{
-      "format":"overlay-tag-v1","name":"Amber","color":"#d8a24a",
-      "tokenization":"kjv1769-tok2","created":"2026-07-01T00:00:00Z",
-      "members":[],
-      "highlights":[
-        {"startRef":"John 3:16","startTok":3,"endRef":"John 3:18","endTok":5,"added":"2026-07-01T00:00:00Z"}
-      ]}"##;
 
     #[test]
     fn a_tag_file_from_before_highlights_were_removed_still_loads() {
@@ -402,7 +448,7 @@ mod tests {
                 {"target":{"kind":"verse","ref":"Isa 53:5"},"added":"2026-07-01T00:00:00Z",
                  "pinned":true,"source":{"by":"reader","at":"2026-08-01"}}
               ],
-              "id":"9f2c1d","shared":{"with":"study group"},"aliases":["Christ","Messiah"]
+              "colophon":"9f2c1d","shared":{"with":"study group"},"aliases":["Christ","Messiah"]
             }"#,
         )
         .unwrap();
@@ -423,7 +469,10 @@ mod tests {
 
         let back: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(back["members"].as_array().unwrap().len(), 2, "the add itself must land");
-        assert_eq!(back["id"], "9f2c1d", "an unknown scalar was stripped");
+        // `colophon`, not `id`: `id` became a real field with stable ids
+        // (docs/STABLE-IDS.md), and a key this build knows tests nothing about
+        // the keys it doesn't. What `id` does now is asserted separately below.
+        assert_eq!(back["colophon"], "9f2c1d", "an unknown scalar was stripped");
         assert_eq!(back["shared"], serde_json::json!({"with":"study group"}), "an unknown object was stripped");
         assert_eq!(back["aliases"], serde_json::json!(["Christ", "Messiah"]), "an unknown array was stripped");
         assert_eq!(back["members"][0]["pinned"], true, "a member's unknown scalar was stripped");
@@ -473,5 +522,201 @@ mod tests {
 }
 "#
         );
+    }
+
+    // ── stable ids (docs/STABLE-IDS.md) ──────────────────────────────────────
+
+    fn id_home(tag: &str) -> PathBuf {
+        let home = std::env::temp_dir().join(format!("plumbline-tagid-{}-{tag}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        home
+    }
+
+    fn read_json(path: &Path) -> Value {
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    /// The upgrade case, and the one that has to be right: a tag written before
+    /// ids existed gains one the first time this build saves it — and loses
+    /// nothing on the way.
+    #[test]
+    fn a_tag_from_before_ids_gains_one_on_first_save_and_loses_nothing() {
+        let home = id_home("upgrade");
+        let path = tag_file(&home, "Messianic");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, SAMPLE).unwrap();
+
+        let (loaded, errs) = load_tags(&home);
+        assert!(errs.is_empty(), "{errs:?}");
+        assert_eq!(loaded[0].tag.id, None, "the file on disk has no id yet");
+
+        add_member(
+            &home,
+            &loaded,
+            "Messianic",
+            "kjv1769-tok2",
+            TagTarget::Verse(VRef::new("Rom", 1, 3)),
+            None,
+            "2026-08-01T09:00:00Z",
+        )
+        .unwrap();
+
+        let back = read_json(&path);
+        let id = back["id"].as_str().expect("no id was assigned on save");
+        assert_eq!(id.len(), 32, "an id is 32 hex chars: {id}");
+        assert!(id.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()), "lowercase hex only: {id}");
+        assert_eq!(back["updated"], "2026-08-01T09:00:00Z", "updated is the mutation's own stamp");
+        // Nothing else moved: created stays put and every member is still there.
+        assert_eq!(back["created"], "2026-07-01T00:00:00Z");
+        assert_eq!(back["members"].as_array().unwrap().len(), 3);
+        assert_eq!(back["name"], "Messianic");
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// An id is minted ONCE. A second save moves `updated` and leaves the
+    /// identity alone — the whole value of the field is that it doesn't change.
+    #[test]
+    fn a_second_save_moves_updated_and_keeps_the_id() {
+        let home = id_home("stable");
+        let target = TagTarget::Verse(VRef::new("Isa", 53, 5));
+        let (loaded, _) = load_tags(&home);
+        let path = add_member(&home, &loaded, "Mercy", "kjv1769-tok2", target.clone(), None, "2026-08-01T00:00:00Z").unwrap();
+        let first = read_json(&path);
+
+        let (loaded, _) = load_tags(&home);
+        remove_member(&loaded[0], &target, "2026-08-02T00:00:00Z").unwrap();
+        let second = read_json(&path);
+
+        assert_eq!(first["id"], second["id"], "the id changed between two saves");
+        assert_eq!(first["updated"], "2026-08-01T00:00:00Z");
+        assert_eq!(second["updated"], "2026-08-02T00:00:00Z", "updated did not move on a mutating save");
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// An id minted by a build whose rules we don't know is left exactly as it
+    /// is. Rewriting one — to normalise its shape, say — destroys the identity
+    /// it was carrying.
+    #[test]
+    fn an_id_this_build_did_not_mint_is_left_alone() {
+        let home = id_home("foreign");
+        let path = tag_file(&home, "Mercy");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"format":"overlay-tag-v1","name":"Mercy","tokenization":"kjv1769-tok2",
+                "created":"2026-07-01T00:00:00Z","id":"NOT-32-HEX","members":[]}"#,
+        )
+        .unwrap();
+
+        let (loaded, _) = load_tags(&home);
+        add_member(&home, &loaded, "Mercy", "kjv1769-tok2", TagTarget::Concept("G26".into()), None, "2026-08-01T00:00:00Z").unwrap();
+        assert_eq!(read_json(&path)["id"], "NOT-32-HEX");
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// The point of an id: it survives the file moving. There is no rename
+    /// endpoint yet (nothing in either shell can rename a tag), so this pins the
+    /// mechanism a rename will use — write the same tag under a different slug
+    /// and it is still the same tag. And the old file is still there, because
+    /// only an explicit save may remove one.
+    #[test]
+    fn a_tag_written_under_a_new_name_keeps_its_id() {
+        let home = id_home("rename");
+        let (loaded, _) = load_tags(&home);
+        let old = add_member(
+            &home,
+            &loaded,
+            "Mercy",
+            "kjv1769-tok2",
+            TagTarget::Verse(VRef::new("Isa", 53, 5)),
+            None,
+            "2026-08-01T00:00:00Z",
+        )
+        .unwrap();
+
+        let (loaded, _) = load_tags(&home);
+        let mut renamed = loaded[0].tag.clone();
+        renamed.name = "Loving-kindness".to_string();
+        let new = tag_file(&home, &renamed.name);
+        assert_ne!(new, old, "the slug should change with the name");
+        write_tag(&new, &renamed, "2026-08-02T00:00:00Z").unwrap();
+
+        assert_eq!(read_json(&new)["id"], read_json(&old)["id"], "the rename lost the identity");
+        assert!(old.exists(), "load-and-save must not delete the old file — that is the reader's data");
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// Two files, one id — the rename artifact. The newer `updated` is the copy
+    /// the reader meant, and **the loader deletes neither file**: a loader that
+    /// deleted would turn a bad clock or a half-restored backup into permanent
+    /// loss.
+    #[test]
+    fn duplicate_ids_keep_the_newer_and_load_deletes_nothing() {
+        let home = id_home("dup");
+        let dir = home.join("tags");
+        std::fs::create_dir_all(&dir).unwrap();
+        let one = |name: &str, id: &str, updated: &str, members: &str| {
+            format!(
+                r#"{{"format":"overlay-tag-v1","name":"{name}","tokenization":"kjv1769-tok2",
+                    "created":"2026-07-01T00:00:00Z","id":"{id}",
+                    "updated":"{updated}","members":[{members}]}}"#
+            )
+        };
+        const A: &str = "aaaaaaaaaaaaaaaabbbbbbbbbbbbbbbb";
+        const B: &str = "ccccccccccccccccdddddddddddddddd";
+        // Both orderings, deliberately: the loader sorts by name, so a pair whose
+        // newer copy sorts FIRST cannot tell "keep the newest" apart from "keep
+        // whichever came first". One pair each way can.
+        let member = r#"{"target":{"kind":"verse","ref":"Isa 53:5"},"added":"2026-08-02T00:00:00Z"}"#;
+        let files = [
+            // Pair A — the newer copy sorts LAST.
+            ("alms.json", one("Alms", A, "2026-08-01T00:00:00Z", "")),
+            ("zeal.json", one("Zeal", A, "2026-08-02T00:00:00Z", member)),
+            // Pair B — the newer copy sorts FIRST.
+            ("balm.json", one("Balm", B, "2026-08-02T00:00:00Z", member)),
+            ("yoke.json", one("Yoke", B, "2026-08-01T00:00:00Z", "")),
+        ];
+        for (file, body) in &files {
+            std::fs::write(dir.join(file), body).unwrap();
+        }
+
+        let (loaded, errs) = load_tags(&home);
+        assert!(errs.is_empty(), "{errs:?}");
+        let names: Vec<&str> = loaded.iter().map(|lt| lt.tag.name.as_str()).collect();
+        assert_eq!(names, ["Balm", "Zeal"], "each pair should present as its newer copy alone");
+        for lt in &loaded {
+            assert_eq!(lt.tag.members.len(), 1, "{} kept the wrong copy's members", lt.tag.name);
+        }
+        for (file, _) in &files {
+            assert!(dir.join(file).exists(), "load deleted {file}");
+        }
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// Tags with no ids are never confused with each other, however many there
+    /// are — the resolution keys on the id, and `None` is not a key.
+    #[test]
+    fn tags_without_ids_are_all_kept() {
+        let home = id_home("noids");
+        let dir = home.join("tags");
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in ["Mercy", "Messianic", "Wisdom"] {
+            std::fs::write(
+                dir.join(format!("{}.json", crate::store::slug(name, "tag"))),
+                format!(
+                    r#"{{"format":"overlay-tag-v1","name":"{name}","tokenization":"kjv1769-tok2",
+                        "created":"2026-07-01T00:00:00Z","members":[]}}"#
+                ),
+            )
+            .unwrap();
+        }
+        let (loaded, _) = load_tags(&home);
+        assert_eq!(loaded.len(), 3);
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

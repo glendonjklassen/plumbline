@@ -876,6 +876,32 @@ fn guard_err(f: impl FnOnce() -> *mut c_char) -> *mut c_char {
     catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|_| out_string("internal error".to_string()))
 }
 
+/// The engine's own UTC stamp, in the frozen wire form
+/// `YYYY-MM-DDThh:mm:ssZ` — for the mutations whose shell caller sends none.
+///
+/// **This is the only clock in the product's Rust.** The core is pure and takes
+/// every timestamp from its caller (`crates/core/src/civil.rs` says so), which is
+/// what keeps its tests deterministic; the shells send one for the authoring
+/// calls that CREATE something (`added`). But `updated` (docs/STABLE-IDS.md) has
+/// to move on every mutating save, including the several that carry no stamp at
+/// all — setting a thread's notes, clearing an entry's note, dropping a tag
+/// member — and an `updated` that only sometimes moves is worse than none: a
+/// future importer choosing between two copies would trust a stale one.
+///
+/// So the clock sits here, at the edge that already owns files and handles,
+/// rather than in the core or in seven new ABI parameters. Both shipped targets
+/// have a real one: Android natively, and the browser's WASI shim answers
+/// `clock_time_get(CLOCKID_REALTIME)` from `Date`. A clock that somehow reads
+/// before the epoch yields the epoch rather than a negative stamp.
+fn now_stamp() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    plumbline_core::civil::stamp_from_epoch_secs(secs)
+}
+
 /// Move an owned `String` out as a caller-freed C string. Returns null if the
 /// string contains an interior NUL (never true for our JSON / ref keys).
 fn out_string(s: String) -> *mut c_char {
@@ -1902,7 +1928,7 @@ pub unsafe extern "C" fn plumbline_engine_tag_remove(
         let mut study = engine.study_write();
         let found = study.tags.iter().find(|lt| lt.tag.name.to_lowercase() == wanted).cloned();
         match found {
-            Some(lt) => match tag::remove_member(&lt, &target) {
+            Some(lt) => match tag::remove_member(&lt, &target, &now_stamp()) {
                 Ok(()) => {
                     *study = load_study(&engine.home);
                     ptr::null_mut()
@@ -2070,7 +2096,7 @@ pub unsafe extern "C" fn plumbline_engine_weave_approve(engine: *mut PlumblineEn
         let Some(i) = nth_suggested(&study.weaves, index as usize) else {
             return out_string(format!("no suggested weave at index {index}"));
         };
-        match weave::approve_weave(&home, &study.weaves[i]) {
+        match weave::approve_weave(&home, &study.weaves[i], &now_stamp()) {
             Ok(_) => {
                 *study = load_study(&engine.home);
                 ptr::null_mut()
@@ -2131,7 +2157,7 @@ pub unsafe extern "C" fn plumbline_engine_thread_set_notes(
             return out_string("null or invalid argument".to_string());
         };
         let mut study = engine.study_write();
-        match thread::set_thread_notes(&study.threads, name, notes) {
+        match thread::set_thread_notes(&study.threads, name, notes, &now_stamp()) {
             Ok(_) => {
                 *study = load_study(&engine.home);
                 ptr::null_mut()
@@ -2164,7 +2190,13 @@ pub unsafe extern "C" fn plumbline_engine_thread_entry_set_note(
             return out_string("null or invalid name".to_string());
         };
         let mut study = engine.study_write();
-        match thread::set_entry_note(&study.threads, name, index as usize, opt_str(note).map(str::to_string)) {
+        match thread::set_entry_note(
+            &study.threads,
+            name,
+            index as usize,
+            opt_str(note).map(str::to_string),
+            &now_stamp(),
+        ) {
             Ok(_) => {
                 *study = load_study(&engine.home);
                 ptr::null_mut()
@@ -2196,7 +2228,7 @@ pub unsafe extern "C" fn plumbline_engine_weave_set_notes(
             return out_string("null or invalid argument".to_string());
         };
         let mut study = engine.study_write();
-        match weave::set_weave_notes(&study.weaves, name, notes) {
+        match weave::set_weave_notes(&study.weaves, name, notes, &now_stamp()) {
             Ok(_) => {
                 *study = load_study(&engine.home);
                 ptr::null_mut()

@@ -97,6 +97,15 @@ pub struct Thread {
     pub notes: String,
     pub entries: Vec<ThreadEntry>,
     pub created: String,
+    /// Stable identity — 32 hex chars, minted once, never derived from the name
+    /// (docs/STABLE-IDS.md). See [`crate::tag::Tag::id`] for why it exists; the
+    /// rules are identical, and [`write_thread`] assigns one lazily.
+    ///
+    /// The ENTRIES need none: `(refKey, added)` is already a natural key, which
+    /// is what [`EntryRepr::key`] leans on.
+    pub id: Option<String>,
+    /// UTC stamp of the last mutating save. See [`crate::tag::Tag::updated`].
+    pub updated: Option<String>,
     /// Every key in the file this build has never heard of, carried back out
     /// again on save.
     ///
@@ -124,6 +133,10 @@ struct ThreadRepr {
     #[serde(default)]
     entries: Vec<ThreadEntry>,
     created: String,
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    updated: Option<String>,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -139,6 +152,12 @@ struct ThreadOut<'a> {
     notes: &'a str,
     entries: Vec<EntryRepr>,
     created: &'a str,
+    /// Both additive, and both skipped when absent — a thread from before ids
+    /// existed is written exactly as it was.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: &'a Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    updated: &'a Option<String>,
     #[serde(flatten)]
     extra: &'a Map<String, Value>,
 }
@@ -169,6 +188,8 @@ impl Thread {
                 })
                 .collect(),
             created: &self.created,
+            id: &self.id,
+            updated: &self.updated,
             extra: &self.extra,
         }
     }
@@ -186,6 +207,8 @@ impl<'de> Deserialize<'de> for Thread {
             notes: r.notes,
             entries: r.entries,
             created: r.created,
+            id: r.id,
+            updated: r.updated,
             extra: r.extra,
         })
     }
@@ -253,6 +276,11 @@ pub fn load_threads(home: impl AsRef<Path>) -> (Vec<LoadedThread>, Vec<String>) 
         }
     }
     loaded.sort_by(|a, b| a.thread.name.to_lowercase().cmp(&b.thread.name.to_lowercase()));
+    let loaded = crate::store::resolve_duplicate_ids(
+        loaded,
+        |lt| lt.thread.id.as_deref(),
+        |lt| lt.thread.updated.as_deref(),
+    );
     (loaded, errors)
 }
 
@@ -277,8 +305,16 @@ pub fn thread_file(home: impl AsRef<Path>, name: &str) -> PathBuf {
 ///
 /// Reads whatever is at `path` first, to carry each entry's unknown keys forward
 /// (see [`EntryRepr::extra`]) — the thread's own ride on the value being written.
-pub fn write_thread(path: impl AsRef<Path>, thread: &Thread) -> Result<(), Error> {
-    let json = to_json_keeping(thread, &entry_extras(path.as_ref()))?;
+/// Stamps as it writes — `updated` becomes `now`, and a thread with no
+/// [`id`](Thread::id) is assigned one. See [`crate::tag::write_tag`] for why the
+/// stamping lives in the writer.
+pub fn write_thread(path: impl AsRef<Path>, thread: &Thread, now: &str) -> Result<(), Error> {
+    let mut stamped = thread.clone();
+    stamped.updated = Some(now.to_string());
+    if stamped.id.is_none() {
+        stamped.id = Some(crate::store::new_id());
+    }
+    let json = to_json_keeping(&stamped, &entry_extras(path.as_ref()))?;
     crate::store::write_atomic(path, &json)
 }
 
@@ -314,9 +350,10 @@ pub fn add_to_thread(
 ) -> Result<PathBuf, Error> {
     let wanted = name.trim().to_lowercase();
     if let Some(lt) = loaded.iter().find(|lt| lt.thread.name.to_lowercase() == wanted) {
+        let now = entry.added.clone();
         let mut thread = lt.thread.clone();
         thread.entries.push(entry);
-        write_thread(&lt.file, &thread)?;
+        write_thread(&lt.file, &thread, &now)?;
         Ok(lt.file.clone())
     } else {
         let path = thread_file(&home, name);
@@ -332,10 +369,14 @@ pub fn add_to_thread(
             tok_version: tok_version.to_string(),
             notes: String::new(),
             entries: vec![entry],
-            created,
+            created: created.clone(),
+            // Both filled by the writer, so a new thread is stamped through the
+            // same path an edited one is.
+            id: None,
+            updated: None,
             extra: Map::new(),
         };
-        write_thread(&path, &thread)?;
+        write_thread(&path, &thread, &created)?;
         Ok(path)
     }
 }
@@ -353,11 +394,16 @@ fn find_thread<'a>(loaded: &'a [LoadedThread], name: &str) -> Result<&'a LoadedT
 
 /// Replace the running notes document of the thread named `name`. The thread
 /// must already exist among `loaded`.
-pub fn set_thread_notes(loaded: &[LoadedThread], name: &str, notes: &str) -> Result<PathBuf, Error> {
+pub fn set_thread_notes(
+    loaded: &[LoadedThread],
+    name: &str,
+    notes: &str,
+    now: &str,
+) -> Result<PathBuf, Error> {
     let lt = find_thread(loaded, name)?;
     let mut thread = lt.thread.clone();
     thread.notes = notes.to_string();
-    write_thread(&lt.file, &thread)?;
+    write_thread(&lt.file, &thread, now)?;
     Ok(lt.file.clone())
 }
 
@@ -368,6 +414,7 @@ pub fn set_entry_note(
     name: &str,
     index: usize,
     note: Option<String>,
+    now: &str,
 ) -> Result<PathBuf, Error> {
     let lt = find_thread(loaded, name)?;
     let mut thread = lt.thread.clone();
@@ -377,7 +424,7 @@ pub fn set_entry_note(
         .ok_or_else(|| Error::Corpus(format!("thread {name} has no entry {index}")))?;
     // An empty note reads as "no note".
     entry.note = note.filter(|n| !n.trim().is_empty());
-    write_thread(&lt.file, &thread)?;
+    write_thread(&lt.file, &thread, now)?;
     Ok(lt.file.clone())
 }
 
@@ -476,20 +523,20 @@ mod tests {
 
         // Set the thread's running notes and the first entry's note.
         let (loaded, _) = load_threads(&home);
-        set_thread_notes(&loaded, "romans road", "the gospel").unwrap();
+        set_thread_notes(&loaded, "romans road", "the gospel", "2026-07-30T00:00:00Z").unwrap();
         let (loaded, _) = load_threads(&home);
-        set_entry_note(&loaded, "Romans Road", 0, Some("all have sinned".into())).unwrap();
+        set_entry_note(&loaded, "Romans Road", 0, Some("all have sinned".into()), "2026-07-30T00:00:00Z").unwrap();
 
         let (loaded, _) = load_threads(&home);
         assert_eq!(loaded[0].thread.notes, "the gospel");
         assert_eq!(loaded[0].thread.entries[0].note.as_deref(), Some("all have sinned"));
 
         // A blank note clears it; a missing thread / out-of-range index errors.
-        set_entry_note(&loaded, "Romans Road", 0, Some("  ".into())).unwrap();
+        set_entry_note(&loaded, "Romans Road", 0, Some("  ".into()), "2026-07-30T00:00:00Z").unwrap();
         let (loaded, _) = load_threads(&home);
         assert_eq!(loaded[0].thread.entries[0].note, None);
-        assert!(set_entry_note(&loaded, "Nope", 0, None).is_err());
-        assert!(set_entry_note(&loaded, "Romans Road", 9, None).is_err());
+        assert!(set_entry_note(&loaded, "Nope", 0, None, "2026-07-30T00:00:00Z").is_err());
+        assert!(set_entry_note(&loaded, "Romans Road", 9, None, "2026-07-30T00:00:00Z").is_err());
 
         let _ = std::fs::remove_dir_all(&home);
     }
@@ -563,7 +610,7 @@ mod tests {
         // Editing an entry's note keeps the entry's own unknown keys: the note is
         // not part of what identifies it.
         let (loaded, _) = load_threads(&home);
-        set_entry_note(&loaded, "Romans Road", 0, Some("all have sinned".into())).unwrap();
+        set_entry_note(&loaded, "Romans Road", 0, Some("all have sinned".into()), "2026-07-30T00:00:00Z").unwrap();
         let back: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(back["entries"][0]["note"], "all have sinned");
@@ -596,7 +643,7 @@ mod tests {
         .unwrap();
 
         let (loaded, _) = load_threads(&home);
-        set_thread_notes(&loaded, "Twins", "rewritten").unwrap();
+        set_thread_notes(&loaded, "Twins", "rewritten", "2026-07-30T00:00:00Z").unwrap();
         let back: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         for e in back["entries"].as_array().unwrap() {
@@ -653,5 +700,98 @@ mod tests {
 }
 "#
         );
+    }
+
+    // ── stable ids (docs/STABLE-IDS.md) ──────────────────────────────────────
+
+    /// Every mutating path a thread has stamps `updated` and keeps one id. This
+    /// is the test that would catch a NEW mutator written to bypass
+    /// [`write_thread`]: three different edits, one identity, three stamps.
+    #[test]
+    fn every_thread_mutator_stamps_updated_and_keeps_one_id() {
+        let home = std::env::temp_dir().join(format!("plumbline-thread-ids-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let entry = |v: VRef, added: &str| ThreadEntry {
+            vref: v,
+            span: (0, 1),
+            text: vec!["For".into()],
+            note: None,
+            added: added.into(),
+        };
+        let read = |path: &Path| -> Value {
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+        };
+
+        let (loaded, _) = load_threads(&home);
+        let path = add_to_thread(
+            &home,
+            &loaded,
+            "Romans Road",
+            "kjv1769-tok2",
+            entry(VRef::new("Rom", 3, 23), "2026-08-01T00:00:00Z"),
+        )
+        .unwrap();
+        let created = read(&path);
+        let id = created["id"].as_str().expect("a new thread was written without an id").to_string();
+        assert_eq!(id.len(), 32, "an id is 32 hex chars: {id}");
+        assert_eq!(created["updated"], "2026-08-01T00:00:00Z");
+
+        // Appending an entry: the entry's own `added` is the stamp.
+        let (loaded, _) = load_threads(&home);
+        add_to_thread(&home, &loaded, "romans road", "kjv1769-tok2", entry(VRef::new("Rom", 6, 23), "2026-08-02T00:00:00Z")).unwrap();
+        assert_eq!(read(&path)["updated"], "2026-08-02T00:00:00Z");
+
+        // The notes document, and one entry's note: no stamp of their own, so
+        // these are the ones the engine's clock supplies in production.
+        let (loaded, _) = load_threads(&home);
+        set_thread_notes(&loaded, "Romans Road", "the gospel in Romans", "2026-08-03T00:00:00Z").unwrap();
+        assert_eq!(read(&path)["updated"], "2026-08-03T00:00:00Z");
+
+        let (loaded, _) = load_threads(&home);
+        set_entry_note(&loaded, "Romans Road", 0, Some("all have sinned".into()), "2026-08-04T00:00:00Z").unwrap();
+        let last = read(&path);
+        assert_eq!(last["updated"], "2026-08-04T00:00:00Z");
+        assert_eq!(last["id"].as_str(), Some(id.as_str()), "the identity moved under the reader");
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// Two files, one id: the newer `updated` wins in memory and neither file is
+    /// touched. Both orderings, since the loader sorts by name (see the tag
+    /// version of this test — "keep the first" passes a one-pair test by luck).
+    #[test]
+    fn duplicate_thread_ids_keep_the_newer_and_load_deletes_nothing() {
+        let home = std::env::temp_dir().join(format!("plumbline-thread-dup-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let dir = home.join("threads");
+        std::fs::create_dir_all(&dir).unwrap();
+        let one = |name: &str, id: &str, updated: &str| {
+            format!(
+                r#"{{"format":"overlay-thread-v1","name":"{name}","tokenization":"kjv1769-tok2",
+                    "notes":"","entries":[],"created":"2026-07-01T00:00:00Z","id":"{id}",
+                    "updated":"{updated}"}}"#
+            )
+        };
+        const A: &str = "11111111111111112222222222222222";
+        const B: &str = "33333333333333334444444444444444";
+        let files = [
+            ("alpha.json", one("Alpha", A, "2026-08-01T00:00:00Z")),
+            ("omega.json", one("Omega", A, "2026-08-02T00:00:00Z")),
+            ("beta.json", one("Beta", B, "2026-08-02T00:00:00Z")),
+            ("psi.json", one("Psi", B, "2026-08-01T00:00:00Z")),
+        ];
+        for (f, body) in &files {
+            std::fs::write(dir.join(f), body).unwrap();
+        }
+
+        let (loaded, errs) = load_threads(&home);
+        assert!(errs.is_empty(), "{errs:?}");
+        let names: Vec<&str> = loaded.iter().map(|lt| lt.thread.name.as_str()).collect();
+        assert_eq!(names, ["Beta", "Omega"]);
+        for (f, _) in &files {
+            assert!(dir.join(f).exists(), "load deleted {f}");
+        }
+
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

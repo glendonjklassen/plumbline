@@ -205,6 +205,15 @@ pub struct Weave {
     pub created: String,
     pub links: Vec<Link>,
     pub approved: bool,
+    /// Stable identity — 32 hex chars, minted once, never derived from the name
+    /// (docs/STABLE-IDS.md). See [`crate::tag::Tag::id`]; the rules are
+    /// identical, and [`write_weave`] assigns one lazily.
+    ///
+    /// The LINKS need none: the undirected `(a, b)` pair is already their natural
+    /// key, which is what [`Link::key`] is.
+    pub id: Option<String>,
+    /// UTC stamp of the last mutating save. See [`crate::tag::Tag::updated`].
+    pub updated: Option<String>,
     /// Every key in the file this build has never heard of, carried back out
     /// again on save.
     ///
@@ -234,6 +243,10 @@ impl Weave {
             created: created.into(),
             links: Vec::new(),
             approved: false,
+            // Both filled by [`write_weave`], so a new weave is stamped through
+            // the same path an edited one is.
+            id: None,
+            updated: None,
             extra: Map::new(),
         }
     }
@@ -454,6 +467,14 @@ impl Serialize for Weave {
             m.serialize_entry("notesSource", self.notes_source.token())?;
         }
         m.serialize_entry("created", &self.created)?;
+        // Both additive: a weave with neither writes neither key, so files from
+        // before ids existed round-trip unchanged.
+        if let Some(id) = &self.id {
+            m.serialize_entry("id", id)?;
+        }
+        if let Some(updated) = &self.updated {
+            m.serialize_entry("updated", updated)?;
+        }
         m.serialize_entry("approved", &self.approved)?;
         m.serialize_entry("links", &self.links)?;
         for (k, v) in &self.extra {
@@ -475,6 +496,10 @@ struct WeaveWire {
     #[serde(rename = "notesSource", default = "default_notes_source_token")]
     notes_source: String,
     created: String,
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    updated: Option<String>,
     #[serde(default)]
     links: Vec<Link>,
     #[serde(default)]
@@ -508,6 +533,8 @@ impl<'de> Deserialize<'de> for Weave {
             notes: w.notes,
             notes_source,
             created: w.created,
+            id: w.id,
+            updated: w.updated,
             links: w.links,
             approved: w.approved,
             extra: w.extra,
@@ -835,6 +862,11 @@ pub fn load_weaves(home: impl AsRef<Path>) -> (Vec<LoadedWeave>, Vec<String>) {
         }
     }
     loaded.sort_by(|x, y| x.weave.name.to_lowercase().cmp(&y.weave.name.to_lowercase()));
+    let loaded = crate::store::resolve_duplicate_ids(
+        loaded,
+        |lw| lw.weave.id.as_deref(),
+        |lw| lw.weave.updated.as_deref(),
+    );
     (loaded, errors)
 }
 
@@ -845,9 +877,16 @@ pub fn to_json(weave: &Weave) -> Result<String, Error> {
     serde_json::to_string(weave).map(|s| s + "\n").map_err(|e| Error::Parse(e.to_string()))
 }
 
-/// Atomically write a weave to `path`.
-pub fn write_weave(path: impl AsRef<Path>, weave: &Weave) -> Result<(), Error> {
-    crate::store::write_atomic(path, &to_json(weave)?)
+/// Atomically write a weave to `path`, stamping it: `updated` becomes `now`, and
+/// a weave with no [`id`](Weave::id) is assigned one. See
+/// [`crate::tag::write_tag`] for why the stamping lives in the writer.
+pub fn write_weave(path: impl AsRef<Path>, weave: &Weave, now: &str) -> Result<(), Error> {
+    let mut stamped = weave.clone();
+    stamped.updated = Some(now.to_string());
+    if stamped.id.is_none() {
+        stamped.id = Some(crate::store::new_id());
+    }
+    crate::store::write_atomic(path, &to_json(&stamped)?)
 }
 
 /// Add `link` to the weave named `name` (case-insensitive match among
@@ -873,7 +912,7 @@ pub fn add_link(
     {
         let mut weave = lw.weave.clone();
         weave.add_links([link]);
-        write_weave(&lw.file, &weave)?;
+        write_weave(&lw.file, &weave, created)?;
         Ok(lw.file.clone())
     } else {
         let path = weave_file_in(home.as_ref().join("weaves"), name);
@@ -885,7 +924,7 @@ pub fn add_link(
         }
         let mut weave = Weave::empty(name.trim(), kind, tok_version, created);
         weave.add_links([link]);
-        write_weave(&path, &weave)?;
+        write_weave(&path, &weave, created)?;
         Ok(path)
     }
 }
@@ -926,7 +965,7 @@ pub fn add_chain(
     {
         let mut weave = lw.weave.clone();
         weave.add_links(links);
-        write_weave(&lw.file, &weave)?;
+        write_weave(&lw.file, &weave, created)?;
         Ok(lw.file.clone())
     } else {
         let path = weave_file_in(home.as_ref().join("weaves"), name);
@@ -938,7 +977,7 @@ pub fn add_chain(
         }
         let mut weave = Weave::empty(name.trim(), kind, tok_version, created);
         weave.add_links(links);
-        write_weave(&path, &weave)?;
+        write_weave(&path, &weave, created)?;
         Ok(path)
     }
 }
@@ -962,7 +1001,11 @@ pub fn is_suggested(lw: &LoadedWeave) -> bool {
 /// approved. Returns the canonical file written. Cross-platform: the write goes
 /// through [`crate::store`]'s atomic write and the old file (if any) is removed
 /// with `std::fs::remove_file`.
-pub fn approve_weave(home: impl AsRef<Path>, lw: &LoadedWeave) -> Result<std::path::PathBuf, Error> {
+pub fn approve_weave(
+    home: impl AsRef<Path>,
+    lw: &LoadedWeave,
+    now: &str,
+) -> Result<std::path::PathBuf, Error> {
     let dest = weave_file_in(home.as_ref().join("weaves"), &lw.weave.name);
 
     // Start from any existing canonical weave of this name so approval merges
@@ -983,7 +1026,7 @@ pub fn approve_weave(home: impl AsRef<Path>, lw: &LoadedWeave) -> Result<std::pa
     };
     weave.set_all_approval(true);
 
-    write_weave(&dest, &weave)?;
+    write_weave(&dest, &weave, now)?;
     if lw.file != dest && lw.file.exists() {
         std::fs::remove_file(&lw.file).map_err(|e| Error::Corpus(format!("{}: {e}", lw.file.display())))?;
     }
@@ -1004,7 +1047,12 @@ pub fn reject_weave(lw: &LoadedWeave) -> Result<(), Error> {
 /// Replace the notes document of the weave named `name` (case-insensitive among
 /// `loaded`), marking `notesSource` as hand-written since a person edited it.
 /// The weave must already exist.
-pub fn set_weave_notes(loaded: &[LoadedWeave], name: &str, notes: &str) -> Result<std::path::PathBuf, Error> {
+pub fn set_weave_notes(
+    loaded: &[LoadedWeave],
+    name: &str,
+    notes: &str,
+    now: &str,
+) -> Result<std::path::PathBuf, Error> {
     let wanted = name.trim().to_lowercase();
     let lw = loaded
         .iter()
@@ -1013,7 +1061,7 @@ pub fn set_weave_notes(loaded: &[LoadedWeave], name: &str, notes: &str) -> Resul
     let mut weave = lw.weave.clone();
     weave.notes = notes.to_string();
     weave.notes_source = NotesSource::Hand;
-    write_weave(&lw.file, &weave)?;
+    write_weave(&lw.file, &weave, now)?;
     Ok(lw.file.clone())
 }
 
@@ -1033,12 +1081,12 @@ mod tests {
         add_link(&home, &loaded, "Lamb", WeaveKind::Typological, "kjv1769-tok2", "c", Link::canon(r("Gen", 22, 8), r("John", 1, 29))).unwrap();
 
         let (loaded, _) = load_weaves(&home);
-        set_weave_notes(&loaded, "lamb", "God will provide himself a lamb").unwrap();
+        set_weave_notes(&loaded, "lamb", "God will provide himself a lamb", "2026-07-30T00:00:00Z").unwrap();
 
         let (loaded, _) = load_weaves(&home);
         assert_eq!(loaded[0].weave.notes, "God will provide himself a lamb");
         assert_eq!(loaded[0].weave.notes_source, NotesSource::Hand);
-        assert!(set_weave_notes(&loaded, "nope", "x").is_err());
+        assert!(set_weave_notes(&loaded, "nope", "x", "2026-07-30T00:00:00Z").is_err());
 
         let _ = std::fs::remove_dir_all(&home);
     }
@@ -1053,7 +1101,7 @@ mod tests {
         let mut w = Weave::empty("Ransom", WeaveKind::Prophecy, "kjv1769-tok2", "2026-01-01T00:00:00Z");
         w.add_links([Link::canon(r("Isa", 53, 5), r("1Pet", 2, 24))]);
         assert!(!w.approved);
-        write_weave(weave_file_in(&sug_dir, "Ransom"), &w).unwrap();
+        write_weave(weave_file_in(&sug_dir, "Ransom"), &w, "2026-07-30T00:00:00Z").unwrap();
 
         let (loaded, errs) = load_weaves(&home);
         assert!(errs.is_empty());
@@ -1061,7 +1109,7 @@ mod tests {
         assert!(is_suggested(&loaded[0]));
 
         // Approve → promoted into weaves/, all links approved, suggestion gone.
-        let dest = approve_weave(&home, &loaded[0]).unwrap();
+        let dest = approve_weave(&home, &loaded[0], "2026-07-30T00:00:00Z").unwrap();
         assert!(!loaded[0].file.exists(), "suggestion should be removed");
         assert!(dest.exists());
         let (loaded, _) = load_weaves(&home);
@@ -1090,16 +1138,16 @@ mod tests {
         let mut canon = Weave::empty("Lamb", WeaveKind::Typological, "kjv1769-tok2", "c");
         canon.add_links([Link::canon(r("Gen", 22, 8), r("John", 1, 29))]);
         canon.set_all_approval(true);
-        write_weave(weave_file_in(home.join("weaves"), "Lamb"), &canon).unwrap();
+        write_weave(weave_file_in(home.join("weaves"), "Lamb"), &canon, "2026-07-30T00:00:00Z").unwrap();
 
         // Same-named suggestion with a different link.
         let mut sug = Weave::empty("Lamb", WeaveKind::Typological, "kjv1769-tok2", "s");
         sug.add_links([Link::canon(r("Exod", 12, 3), r("Rev", 5, 6))]);
-        write_weave(weave_file_in(home.join("weaves").join("suggested"), "Lamb"), &sug).unwrap();
+        write_weave(weave_file_in(home.join("weaves").join("suggested"), "Lamb"), &sug, "2026-07-30T00:00:00Z").unwrap();
 
         let (loaded, _) = load_weaves(&home);
         let suggestion = loaded.iter().find(|lw| is_suggested(lw)).unwrap();
-        approve_weave(&home, suggestion).unwrap();
+        approve_weave(&home, suggestion, "2026-07-30T00:00:00Z").unwrap();
 
         let (loaded, _) = load_weaves(&home);
         assert_eq!(loaded.len(), 1, "the two same-named weaves merged into one canonical file");
@@ -1489,7 +1537,7 @@ mod review_tests {
         let mut sug = Weave::empty("Echoes", WeaveKind::Quotation, "kjv1769-tok2", "c");
         sug.add_links([Link::canon(VRef::new("Gen", 1, 1), VRef::new("John", 1, 1))]);
         let sug_file = sug_dir.join("echoes.json");
-        write_weave(&sug_file, &sug).unwrap();
+        write_weave(&sug_file, &sug, "2026-07-30T00:00:00Z").unwrap();
         let loaded = vec![LoadedWeave { file: sug_file.clone(), weave: sug }];
 
         let out = add_link(
@@ -1514,4 +1562,102 @@ mod review_tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
+    // ── stable ids (docs/STABLE-IDS.md) ──────────────────────────────────────
+
+    /// A weave gains an id on its first save, keeps it through later edits, and
+    /// carries `updated` forward from whichever stamp the mutation had.
+    #[test]
+    fn a_weave_gains_an_id_once_and_keeps_it() {
+        let home = std::env::temp_dir().join(format!("plumbline-weave-ids-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let read = |path: &Path| -> Value {
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+        };
+
+        let (loaded, _) = load_weaves(&home);
+        let path = add_link(
+            &home,
+            &loaded,
+            "Lamb",
+            WeaveKind::Quotation,
+            "kjv1769-tok2",
+            "2026-08-01T00:00:00Z",
+            Link::canon(VRef::new("Gen", 22, 8), VRef::new("John", 1, 29)),
+        )
+        .unwrap();
+        let first = read(&path);
+        let id = first["id"].as_str().expect("a new weave was written without an id").to_string();
+        assert_eq!(id.len(), 32, "an id is 32 hex chars: {id}");
+        assert_eq!(first["updated"], "2026-08-01T00:00:00Z");
+
+        // Hand-editing the notes is a mutating save with no stamp of its own.
+        let (loaded, _) = load_weaves(&home);
+        set_weave_notes(&loaded, "lamb", "behold the Lamb of God", "2026-08-05T00:00:00Z").unwrap();
+        let second = read(&path);
+        assert_eq!(second["id"].as_str(), Some(id.as_str()), "the identity changed on a notes edit");
+        assert_eq!(second["updated"], "2026-08-05T00:00:00Z");
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// Approving a suggestion writes a canonical file — which is a save, so it is
+    /// stamped like any other. (The suggestion's own id rides across with it when
+    /// there is no canonical weave of that name to merge into.)
+    #[test]
+    fn approving_a_suggestion_stamps_the_file_it_writes() {
+        let home = std::env::temp_dir().join(format!("plumbline-weave-approve-ids-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let sug_dir = home.join("weaves").join("suggested");
+        std::fs::create_dir_all(&sug_dir).unwrap();
+        let mut w = Weave::empty("Ransom", WeaveKind::Quotation, "kjv1769-tok2", "2026-08-01T00:00:00Z");
+        w.add_links([Link::canon(VRef::new("Mark", 10, 45), VRef::new("Isa", 53, 5))]);
+        write_weave(weave_file_in(&sug_dir, "Ransom"), &w, "2026-08-01T00:00:00Z").unwrap();
+
+        let (loaded, _) = load_weaves(&home);
+        let dest = approve_weave(&home, &loaded[0], "2026-08-09T00:00:00Z").unwrap();
+        let back: Value = serde_json::from_str(&std::fs::read_to_string(&dest).unwrap()).unwrap();
+        assert_eq!(back["updated"], "2026-08-09T00:00:00Z");
+        assert_eq!(back["id"].as_str().map(str::len), Some(32));
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// Two files, one id — newer wins in memory, both files stay. Weaves load
+    /// from two directories (`weaves/` and `weaves/suggested/`), which is exactly
+    /// how a duplicate arrives.
+    #[test]
+    fn duplicate_weave_ids_keep_the_newer_and_load_deletes_nothing() {
+        let home = std::env::temp_dir().join(format!("plumbline-weave-dup-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let canon_dir = home.join("weaves");
+        std::fs::create_dir_all(&canon_dir).unwrap();
+        let one = |name: &str, id: &str, updated: &str| {
+            format!(
+                r#"{{"format":"overlay-weave-v2","name":"{name}","kind":"quotation",
+                    "tokenization":"kjv1769-tok2","notes":"","created":"2026-07-01T00:00:00Z",
+                    "id":"{id}","updated":"{updated}","approved":false,"links":[]}}"#
+            )
+        };
+        const A: &str = "55555555555555556666666666666666";
+        const B: &str = "77777777777777778888888888888888";
+        let files = [
+            ("aleph.json", one("Aleph", A, "2026-08-01T00:00:00Z")),
+            ("tav.json", one("Tav", A, "2026-08-02T00:00:00Z")),
+            ("bet.json", one("Bet", B, "2026-08-02T00:00:00Z")),
+            ("shin.json", one("Shin", B, "2026-08-01T00:00:00Z")),
+        ];
+        for (f, body) in &files {
+            std::fs::write(canon_dir.join(f), body).unwrap();
+        }
+
+        let (loaded, errs) = load_weaves(&home);
+        assert!(errs.is_empty(), "{errs:?}");
+        let names: Vec<&str> = loaded.iter().map(|lw| lw.weave.name.as_str()).collect();
+        assert_eq!(names, ["Bet", "Tav"]);
+        for (f, _) in &files {
+            assert!(canon_dir.join(f).exists(), "load deleted {f}");
+        }
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
 }
