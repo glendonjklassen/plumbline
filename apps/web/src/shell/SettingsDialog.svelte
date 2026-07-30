@@ -28,6 +28,29 @@
   const currentConfigPath = (p: string): string =>
     p.startsWith(LEGACY_CONFIG) ? ".config/plumbline/" + p.slice(LEGACY_CONFIG.length) : p;
 
+  // A restore that fails after it has muted this session's writes cannot be
+  // reported IN that session: `s.restoring` silences every config persist and
+  // `home.freeze()` silences every authoring persist, and neither has an undo
+  // (the worker has a `freeze` op and nothing that lifts it). A session left
+  // standing there takes notes, tags and threads all day, looks like it saved
+  // them, and keeps none. So a failure past that point reloads regardless, and
+  // the message rides across the reload — the reader is owed an explanation,
+  // not a blink.
+  const RESTORE_FAILED = "plumbline:restoreFailed";
+  /** A failed restore to tell the reader about, blocking (see below). */
+  let restoreFailed = $state<string | null>(null);
+  // Read on mount, and this dialog is mounted for the whole session, so the
+  // notice lands whether or not Settings was open when the page came back.
+  try {
+    const carried = sessionStorage.getItem(RESTORE_FAILED);
+    if (carried) {
+      sessionStorage.removeItem(RESTORE_FAILED);
+      restoreFailed = carried;
+    }
+  } catch {
+    /* no session storage — then nothing was carried across either */
+  }
+
   async function backup(): Promise<void> {
     const files = new Map<string, Uint8Array>(await s.rpc.exportUserData());
     files.set(
@@ -48,6 +71,9 @@
     const file = input.files?.[0];
     input.value = "";
     if (!file) return;
+    // Whether this session's writes have been muted yet — set BEFORE they are,
+    // so a `freeze()` that itself fails still ends in a reload.
+    let muted = false;
     try {
       const entries = await zipRead(new Uint8Array(await file.arrayBuffer()));
       // Only home-relative authored paths — no traversal, nothing else.
@@ -61,12 +87,29 @@
       }
       // The restored files are now the truth — nothing (incl. the pagehide
       // flush) may persist the current session over them; just reload.
+      muted = true;
       s.restoring = true;
       await s.rpc.freeze(); // the debounced authoring persist must not fire either
       await idbApply("user", safe);
       location.reload(); // the engine re-opens over the restored home
     } catch (err) {
-      s.showToast(err instanceof Error ? err.message : String(err));
+      const why = err instanceof Error ? err.message : String(err);
+      if (!muted) {
+        // The zip never got as far as the home; this session is still whole.
+        restoreFailed = `That backup couldn't be read, so nothing changed: ${why}`;
+        return;
+      }
+      // `idbApply` is ONE transaction and IndexedDB rolls an aborted one back
+      // whole, so the reader's own study data is exactly as it was.
+      try {
+        sessionStorage.setItem(
+          RESTORE_FAILED,
+          `Restoring that backup didn't finish, so nothing changed — your own study data is as it was, and you can try again: ${why}`,
+        );
+      } catch {
+        /* storage refused the note; the reload still matters more than it does */
+      }
+      location.reload();
     }
   }
 
@@ -579,6 +622,25 @@
   </div>
 {/if}
 
+{#if restoreFailed}
+  <!-- The one thing here that must not be a toast. A restore can fail with the
+       phone already back in a pocket, and a reader who missed the 2.2 seconds is
+       left believing their backup went in. No backdrop dismiss either — a stray
+       tap must not take the message away before it has been read. -->
+  <div class="err-backdrop"></div>
+  <div
+    class="err-dialog"
+    role="alertdialog"
+    aria-modal="true"
+    aria-label="Restore didn't finish"
+    data-surface="restore-failed"
+  >
+    <h2>Restore didn't finish</h2>
+    <p class="err-body">{restoreFailed}</p>
+    <button class="done" onclick={() => (restoreFailed = null)}>Close</button>
+  </div>
+{/if}
+
 <style>
   .backdrop {
     position: fixed;
@@ -607,6 +669,38 @@
   h2 {
     font-size: 17px;
     font-weight: 600;
+  }
+  /* Above every other surface, the confirmation included: this one reports a
+     failure the reader already lived through, and it arrives on a page that has
+     just reloaded under them. */
+  .err-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 16, 8, 0.4);
+    z-index: 52;
+  }
+  .err-dialog {
+    position: fixed;
+    z-index: 53;
+    top: 22vh;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(400px, 92vw);
+    max-height: calc(70vh - var(--bottomNavH, 0px));
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 20px 22px 14px;
+    background: var(--popupPaper, #f2eee6);
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 12px;
+    box-shadow: 0 16px 64px rgba(0, 0, 0, 0.32);
+  }
+  .err-body {
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: var(--faded, #8a8276);
   }
   .rnd-status {
     display: flex;
