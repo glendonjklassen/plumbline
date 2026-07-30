@@ -106,6 +106,51 @@ function insertFile(root: Map<string, Directory | File>, path: string, bytes: Ui
   contents.set(path.slice(slash + 1), new File(bytes));
 }
 
+/** Find the directory a home-relative path lives in, WITHOUT creating anything.
+ *  Nothing comes back when a parent is missing — both callers below are asking a
+ *  question about what is there, and `ensureDir` would answer it by minting the
+ *  directories it was looking for. */
+function locate(
+  root: Map<string, Directory | File>,
+  path: string,
+): { contents: Map<string, Directory | File>; name: string } | undefined {
+  const parts = path.split("/");
+  const name = parts.pop();
+  if (!name) return undefined;
+  let contents = root;
+  for (const part of parts) {
+    const next = contents.get(part);
+    if (!(next instanceof Directory)) return undefined;
+    contents = next.contents as Map<string, Directory | File>;
+  }
+  return { contents, name };
+}
+
+/** The live bytes at a home-relative path, or nothing if no FILE is there. */
+function readFile(root: Map<string, Directory | File>, path: string): Uint8Array | undefined {
+  const at = locate(root, path);
+  const node = at?.contents.get(at.name);
+  return node instanceof File ? (node as File).data : undefined;
+}
+
+/** Drop a file from the live home. Directories are never touched. */
+function removeFile(root: Map<string, Directory | File>, path: string): void {
+  const at = locate(root, path);
+  if (at && at.contents.get(at.name) instanceof File) at.contents.delete(at.name);
+}
+
+/** Byte-for-byte equality — NOT a fingerprint.
+ *
+ *  `fingerprint` below is allowed to collide because the cost of a collision
+ *  there is one skipped write of a file that gets rewritten on the next edit.
+ *  The one caller here is deciding whether to DELETE the reader's file, and a
+ *  collision would delete their work. Nothing but the bytes will do. */
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 /** A leftover of an interrupted atomic write. The core writes to a hidden
  *  sibling and renames it over the target, so a session killed in between — or
  *  an Android one, whose backups we restore — strands a `.<name>.<digits>.tmp`
@@ -183,6 +228,19 @@ export async function buildHome(
   // The stock set seeds ONCE (Android parity): after that the user's own
   // copies rule, so edits and deletions stick across pack updates.
   const seedStock = bundledOn && !seededFlag;
+
+  // The PRISTINE bytes of every bundled stock file, kept for the session so the
+  // OFF toggle can tell an untouched example from one the reader made their own
+  // (see `setBundled`). ~64 KB for 30 small JSON files, and it is here rather
+  // than re-fetched at toggle time because the toggle must work offline.
+  //
+  // Held only for paths the pack actually delivered: `build-web-pack.mjs` forces
+  // every `seedOnce` entry to stage "text", so on both boot paths they arrive in
+  // this map. A stock path whose pristine bytes are NOT known is one the toggle
+  // may never delete — no reference to compare against is no proof it is
+  // untouched.
+  const pristineStock = new Map<string, Uint8Array>();
+  for (const [path, bytes] of pack) if (stockPaths.has(path)) pristineStock.set(path, bytes);
 
   for (const [path, bytes] of pack) {
     if (stockPaths.has(path) && !seedStock) continue;
@@ -300,15 +358,69 @@ export async function buildHome(
     },
     bundledOn,
     async setBundled(on: boolean) {
+      // A restore is pending reload — nothing may write (see `freeze`). The
+      // restored user store is about to become the truth, and deleting stock
+      // paths out of it would take files the archive just put back.
+      if (frozen) return;
       await idbApply("cache", new Map([[BUNDLED, enc.encode(on ? "on" : "off")]]));
       if (on) {
         // Re-seed on next boot: missing stock files come back, kept edits win.
         await idbApply("cache", new Map(), [STOCK_SEEDED]);
-      } else {
-        // Remove just the stock items by their bundled paths; anything the
-        // reader authored under other names stays (Android parity).
-        await idbApply("user", new Map(), [...stockPaths]);
+        return;
       }
+      // OFF REMOVES THE EXAMPLES, NOT THE READER'S WORK.
+      //
+      // This used to delete every stock PATH outright, so a stock thread or
+      // weave the reader had renamed, re-noted or added verses to was destroyed
+      // by a settings toggle that reads as "hide the examples". Their copy wins
+      // on the way in (buildHome lays their saved files over freshly-seeded
+      // stock, and skips the stock paths entirely once seeded); this is the same
+      // invariant on the way out.
+      //
+      // THE TEST IS RAW BYTES, exactly, against the bundled file — never a
+      // normalised or parsed form, and never a fingerprint:
+      //
+      //  * The seed writes the pack's bytes verbatim, so a stock file nobody has
+      //    touched is byte-identical by construction. Merely OPENING one changes
+      //    nothing: the core writes a thread/tag/weave only from an authoring
+      //    call (`write_weave` and friends have no read-path callers), so
+      //    "the reader looked at it" still classifies as pristine — correctly,
+      //    since none of their work is in it.
+      //  * Any authoring write re-serializes through the core, which differs from
+      //    the shipped bytes in whitespace and key order even before the edit
+      //    itself, so an edited file lands on the KEEP side twice over.
+      //  * Comparing a NORMALISED form is the dangerous direction, and it is why
+      //    this does not do it: it would call a re-saved file pristine even when
+      //    the reader's change lives in a field the normaliser drops. Byte
+      //    equality can only err toward keeping.
+      //
+      // BOTH COPIES MUST AGREE. The live tree can hold an edit that has not been
+      // persisted yet, and IndexedDB can hold one ANOTHER TAB made after our
+      // boot — either alone would call the other tab's rename pristine. So a
+      // path is removable only when neither copy differs from the bundled bytes.
+      await serial(async () => {
+        if (frozen) return;
+        const stored = await idbEntries("user");
+        const removable: string[] = [];
+        for (const [path, pristine] of pristineStock) {
+          const live = readFile(root, path);
+          if (live && !sameBytes(live, pristine)) continue;
+          const saved = stored.get(path);
+          if (saved && !sameBytes(saved, pristine)) continue;
+          removable.push(path);
+        }
+        if (removable.length === 0) return;
+        await idbApply("user", new Map(), removable);
+        // Keep this session's bookkeeping honest: gone from the tree AND from
+        // `synced`, so the next persist neither resurrects them (a file whose
+        // fingerprint still matched `synced` would not be rewritten, but one
+        // still in `synced` and absent from the tree would be deleted a second
+        // time) nor claims anything about them.
+        for (const path of removable) {
+          synced.delete(path);
+          removeFile(root, path);
+        }
+      });
     },
     freeze() {
       frozen = true;

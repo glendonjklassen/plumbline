@@ -33,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -158,29 +159,59 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Remove just the stock items (by their bundled filenames); anything the
-     *  reader authored themselves is left untouched. */
-    private fun clearStock(home: File) {
+    /** Remove the stock items the reader never made their own, and return how
+     *  many were KEPT because they differ from the bundled bytes.
+     *
+     *  Candidates are the bundled filenames only — anything the reader authored
+     *  under another name was never in scope. Of those, a file is deleted only
+     *  when [isPristineCopy] proves it is byte-for-byte the shipped asset. An
+     *  asset we cannot open is a file we cannot judge, so it stays. */
+    private fun clearStock(home: File): Int {
+        var kept = 0
         for (kind in listOf("weaves", "threads", "tags")) {
-            for (n in assets.list("stock/$kind") ?: emptyArray()) File(File(home, kind), n).delete()
+            for (n in assets.list("stock/$kind") ?: emptyArray()) {
+                val dest = File(File(home, kind), n)
+                // Not seeded, already deleted, or a directory (`weaves/suggested`
+                // is an asset entry too): nothing here to remove.
+                if (!dest.isFile) continue
+                val pristine = runCatching { assets.open("stock/$kind/$n") }.getOrNull()
+                if (pristine == null) {
+                    kept++
+                    continue
+                }
+                if (pristine.use { isPristineCopy(dest, it) }) dest.delete() else kept++
+            }
         }
+        return kept
     }
 
     /** Toggle the bundled study set on/off. Reconciles files immediately; the
-     *  open engine reloads the study set on the next launch (hence the note). */
+     *  open engine reloads the study set on the next launch (hence the note).
+     *  Turning it OFF says how many of the reader's own edits it kept, because a
+     *  toggle that silently leaves files behind is as confusing as one that
+     *  silently deletes them. */
     private fun toggleBundled() {
         val home = filesDir
         bundledOn = !bundledOn
         lifecycleScope.launch {
-            withContext(Dispatchers.IO) {
+            val kept = withContext(Dispatchers.IO) {
                 val flag = File(home, ".no-bundle")
-                if (bundledOn) { flag.delete(); seedStock(home) } else { clearStock(home); flag.createNewFile() }
+                if (bundledOn) {
+                    flag.delete()
+                    seedStock(home)
+                    0
+                } else {
+                    val k = clearStock(home)
+                    flag.createNewFile()
+                    k
+                }
             }
-            Toast.makeText(
-                this@MainActivity,
-                (if (bundledOn) "Bundled study set on" else "Bundled study set off") + " — restart to apply",
-                Toast.LENGTH_LONG,
-            ).show()
+            val what = when {
+                bundledOn -> "Bundled study set on"
+                kept > 0 -> "Bundled study set off — kept $kept you had edited"
+                else -> "Bundled study set off"
+            }
+            Toast.makeText(this@MainActivity, "$what — restart to apply", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -238,6 +269,71 @@ private fun ErrorScreen(message: String) {
  *  over the destination, so a stock thread the reader had renamed or re-noted was
  *  silently reverted. What is on disk is theirs. */
 internal fun shouldSeed(dest: File): Boolean = !dest.exists()
+
+/** Is [dest] byte-for-byte the bundled asset [pristine] delivers — i.e. may the
+ *  OFF toggle delete it?
+ *
+ *  THE OTHER HALF OF [shouldSeed]. Their copy wins on the way in; this is the
+ *  same invariant on the way out. Turning the bundled set off used to delete
+ *  every stock FILENAME, so a stock thread or weave the reader had renamed,
+ *  re-noted or added verses to went with the pristine ones — their own work,
+ *  destroyed by a toggle that reads as "hide the examples".
+ *
+ *  RAW BYTES, exactly — not a parsed or normalised form, and not a hash:
+ *
+ *   * `copyAsset` seeds through [writeThroughTemp] with the asset's own bytes, so
+ *     an untouched stock file is byte-identical by construction.
+ *   * Merely OPENING one changes nothing. The core writes a thread/tag/weave
+ *     only from an authoring call, never on a read, so "the reader looked at it"
+ *     stays pristine — rightly, since none of their work is in it.
+ *   * Any authoring write re-serializes through the core, whose output differs
+ *     from the shipped bytes in whitespace and key order before the edit itself
+ *     is counted, so an edited file lands on the KEEP side twice over.
+ *   * A normalised comparison is the dangerous direction: it would call a
+ *     re-saved file pristine even when the reader's change sits in a field the
+ *     normaliser drops. Byte equality can only err toward keeping.
+ *
+ *  Anything unreadable answers false: a file we cannot compare is a file we
+ *  cannot prove is untouched, and the safe verdict is to leave it alone. */
+internal fun isPristineCopy(dest: File, pristine: InputStream): Boolean {
+    if (!dest.isFile) return false
+    return try {
+        FileInputStream(dest).use { have -> sameStream(have, pristine) }
+    } catch (_: IOException) {
+        false
+    }
+}
+
+/** Do two streams deliver exactly the same bytes AND end at the same place?
+ *
+ *  The "end together" half is load-bearing. A comparison that stops when either
+ *  stream runs out calls a TRUNCATED copy pristine, and calls one the reader
+ *  appended to pristine as well — both of which are edits, and both of which
+ *  would then be deleted. */
+private fun sameStream(a: InputStream, b: InputStream): Boolean {
+    val bufA = ByteArray(8192)
+    val bufB = ByteArray(8192)
+    while (true) {
+        val nA = fill(a, bufA)
+        val nB = fill(b, bufB)
+        if (nA != nB) return false      // one ended first: different lengths
+        if (nA == 0) return true        // both ended together, every byte matched
+        for (i in 0 until nA) if (bufA[i] != bufB[i]) return false
+    }
+}
+
+/** Read until [buf] is full or the stream ends, returning how many bytes came.
+ *  A short `read` is legal and an asset stream gives them, so comparing what two
+ *  single reads happened to return would compare misaligned windows. */
+private fun fill(s: InputStream, buf: ByteArray): Int {
+    var got = 0
+    while (got < buf.size) {
+        val n = s.read(buf, got, buf.size - got)
+        if (n < 0) break
+        got += n
+    }
+    return got
+}
 
 /** The unique-per-copy part of a temp name. The core's `store::write_atomic_bytes`
  *  uses the pid; there is one process here, so a counter gives the same

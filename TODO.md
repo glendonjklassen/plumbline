@@ -62,7 +62,7 @@ as "a later increment". F–I can ride later increments (the PWA auto-updates).
   (`engine/home.ts:102-108`, `store.rs:55-65`).
 - [x] **[opus]** Delete the dead duplicate `onAuthored` persistence handler
   (`engine/boot.ts:123-131`) — it never runs and traps whoever tunes the debounce.
-- [ ] **[opus]** Stock toggle OFF deletes the reader's *edits* to stock-named items
+- [x] **[opus]** Stock toggle OFF deletes the reader's *edits* to stock-named items
   (both shells): hash-compare against pristine assets and keep anything that
   differs, or warn in the toggle copy (`engine/home.ts:222-225`,
   `MainActivity.kt:155-159`).
