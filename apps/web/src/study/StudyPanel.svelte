@@ -82,6 +82,10 @@
     void dispatchLink(s, uri, ev);
   }
 
+  /** refKey → the core's `go:` verb, split on the LAST space, as core `go_uri`
+   *  does. Also in App.svelte and MemorizeHost — see App.svelte for why. */
+  const goUri = (refKey: string): string => `go:${refKey.replace(/ (?=\S*$)/, ":")}`;
+
   // The "load analysis" offer — a LAST RESORT, and no longer a progress bar.
   //
   // The bar and its percentage are gone (feedback 2026-07-28). They existed to
@@ -140,7 +144,7 @@
         {#each notes as n (n.verse)}
           <div class="nb-note">
             <div class="nb-head">
-              <button class="nb-ref" onclick={(e) => onLink(`go:${n.verse.replace(" ", ":")}`, e)}>
+              <button class="nb-ref" onclick={(e) => onLink(goUri(n.verse), e)}>
                 {n.display ?? n.verse}
               </button>
               <button class="nb-edit" onclick={(e) => onLink(`editnote:${n.verse}`, e)}>✎ edit</button>

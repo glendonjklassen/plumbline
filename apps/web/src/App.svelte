@@ -20,6 +20,17 @@
   let error = $state<string | null>(null);
   let session = $state<Session | null>(null);
 
+  /** A refKey ("Gen 1:7", "1John 3:16") → the core's `go:` verb, split on the
+   *  LAST space — the same rule as core `go_uri` and `VRef::parse_ref_key`.
+   *
+   *  Every OSIS id the corpus ships is one word ("1John", "2Chr"), so the old
+   *  `replace(" ", ":")` happened to agree for all 66 books; it disagreed with
+   *  the contract, which lets a book id hold a space, and a disagreement here is
+   *  silent — the verb parses into a book nobody has and the tap does nothing.
+   *  The same line sits in MemorizeHost and StudyPanel; all three go when refKey
+   *  parse/format reaches the ABI. */
+  const goUri = (refKey: string): string => `go:${refKey.replace(/ (?=\S*$)/, ":")}`;
+
   async function start(): Promise<void> {
     try {
       const rpc = new EngineRpc();
@@ -85,7 +96,7 @@
       await Promise.all([s.fetchQ("toc"), s.fetchQ("canonSegments")]);
       session = s;
       // After the TOC is in, so navigation clamps against a real canon.
-      if (at) void dispatchLink(s, `go:${at.replace(" ", ":")}`);
+      if (at) void dispatchLink(s, goUri(at));
       // The on-device boot numbers (also under Settings → boot diagnostics).
       void rpc.bootTrace().then((t) => {
         s.bootTrace = t;

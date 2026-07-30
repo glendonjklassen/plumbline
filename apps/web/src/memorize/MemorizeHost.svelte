@@ -57,9 +57,13 @@
     // view would render an empty screen with no way out.
     s.goRead();
   }
+  /** refKey → the core's `go:` verb, split on the LAST space, as core `go_uri`
+   *  does. Also in App.svelte and StudyPanel — see App.svelte for why. */
+  const goUri = (refKey: string): string => `go:${refKey.replace(/ (?=\S*$)/, ":")}`;
+
   function goRef(ref: string): void {
     close();
-    void dispatchLink(s, `go:${ref.replace(" ", ":")}`);
+    void dispatchLink(s, goUri(ref));
   }
 
   // ── review state ──
