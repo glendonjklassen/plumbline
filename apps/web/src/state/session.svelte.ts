@@ -52,6 +52,54 @@ export type MapPopup =
 
 const HISTORY_CAP = 50; // mirrors core config::HISTORY_CAP
 
+/**
+ * The delimiter between an engine method name and its arguments in a cache key.
+ *
+ * Spelled ONCE, on purpose. `invalidate()` used to hand-write the prefix it
+ * exempts as `"toc "` — with a SPACE — while `q()` has always built keys with a
+ * NUL, so the exemption never matched a single key. Every core-ready,
+ * warm-ready, rnd-ready and authored event therefore dropped the TOC and the
+ * canon segments, which is exactly the outcome the comment above it says it
+ * exists to prevent: mid-refill the canon strip painted nothing, a click on it
+ * did nothing, and stepping across a book boundary had no book list to step
+ * into (found 2026-07-29 while writing the accessibility tests).
+ */
+const KEY_SEP = "\0";
+/** Namespace for `qs()` keys — engine-independent statics, never invalidated. */
+const STATIC_NS = "static:";
+
+/** The cache key for an engine read. The one builder; see [[KEY_SEP]]. */
+function cacheKey(method: string, args: unknown[]): string {
+  return `${method}${KEY_SEP}${JSON.stringify(args)}`;
+}
+
+/**
+ * Reads that are pinned in the cache: no invalidation drops them and no
+ * eviction may take them.
+ *
+ * They are corpus-derived — the TOC and the canon shape cannot change while a
+ * session runs, because the text does not. Keeping them is not an optimisation:
+ * `navigate()` clamps the chapter against `chapterCount()` and `stepChapter()`
+ * finds the adjacent book in the TOC, so a session that momentarily has no TOC
+ * clamps against nothing and steps nowhere.
+ */
+const PINNED_READS = ["toc", "canonSegments"];
+
+function isPinned(key: string): boolean {
+  return key.startsWith(STATIC_NS) || PINNED_READS.some((m) => key.startsWith(m + KEY_SEP));
+}
+
+/**
+ * How many chapters' gutter marks are remembered (per kind).
+ *
+ * Six are live at the very most — three panes × weave dots + note marks — and
+ * the rest are chapters the reader has walked away from. Sixteen lets a pane
+ * step through several chapters without evicting another pane's marks; going
+ * deeper would only remember chapters nobody is looking at, and the cost of an
+ * eviction is one extra repaint of a chapter being reopened.
+ */
+const MARKS_CAP = 16;
+
 export class Session {
   /** The RPC to the engine worker — the only line to the engine. */
   rpc: EngineRpc;
@@ -258,18 +306,67 @@ export class Session {
   #cache = new Map<string, any>();
   #pending = new Set<string>();
 
+  /**
+   * How many engine reads the cache may hold at once.
+   *
+   * It held everything, for the life of the tab, and several call sites mint a
+   * key per interaction rather than per screen: `searchBlocks` is keyed by the
+   * query string (one entry per keystroke), `wordStudyBlocks` by the tapped
+   * word, `verse` by refKey — the passage-memorize preview asks for one per
+   * verse, so Psalm 119 alone is 176 — and `memoryDue`/`memoryCoverage` by a
+   * second-granularity stamp taken afresh each time the hub opens.
+   *
+   * The bound is derived from the largest working set the app can legitimately
+   * have LIVE: that 176-verse preview, plus the navigator's day-keyed reading
+   * map (1 books read + up to 66 chapter reads), plus three panes and an open
+   * study panel — under 300. 512 is that with room, so eviction cannot take an
+   * answer out from under something on screen, which would cost a null frame.
+   *
+   * Honest limit: this bounds the COUNT, not the bytes. One `concordanceBlocks`
+   * for a common Strong's code is orders of magnitude bigger than one `verse`,
+   * and a byte bound would need a per-entry size estimate. Capping the count is
+   * what stops the unbounded growth; it is not a memory budget.
+   */
+  static readonly CACHE_CAP = 512;
+
+  /** Live cache size — what the e2e bound test measures. */
+  get cacheSize(): number {
+    return this.#cache.size;
+  }
+
+  /** Read a hit and move it to the young end of the LRU order. A Map iterates
+   *  in insertion order, so re-inserting IS the reordering. */
+  #touch(key: string): any {
+    const v = this.#cache.get(key);
+    this.#cache.delete(key);
+    this.#cache.set(key, v);
+    return v;
+  }
+
+  /** Store a fresh answer, then evict from the old end until the cache is back
+   *  inside [[CACHE_CAP]]. Pinned reads are skipped: evicting the TOC breaks
+   *  navigation exactly the way dropping it in `invalidate()` did. */
+  #store(key: string, value: any): void {
+    this.#cache.set(key, value);
+    if (this.#cache.size <= Session.CACHE_CAP) return;
+    for (const k of this.#cache.keys()) {
+      if (this.#cache.size <= Session.CACHE_CAP) break;
+      if (!isPinned(k)) this.#cache.delete(k);
+    }
+  }
+
   /** Read an engine method through the cache: the cached value, or null while
    *  the worker answers (the reply bumps cacheEpoch → callers re-run). */
   q(method: string, ...args: unknown[]): any {
     void this.cacheEpoch; // register the dependency
-    const key = `${method}\0${JSON.stringify(args)}`;
-    if (this.#cache.has(key)) return this.#cache.get(key);
+    const key = cacheKey(method, args);
+    if (this.#cache.has(key)) return this.#touch(key);
     if (!this.#pending.has(key)) {
       this.#pending.add(key);
       this.rpc
         .call(method, ...args)
         .then((v) => {
-          this.#cache.set(key, v);
+          this.#store(key, v);
           this.#pending.delete(key);
           this.cacheEpoch++;
         })
@@ -284,14 +381,14 @@ export class Session {
   /** An engine-independent static fn through the same cache (guide/about…). */
   qs(fn: string, ...args: unknown[]): any {
     void this.cacheEpoch;
-    const key = `static:${fn} ${JSON.stringify(args)}`;
-    if (this.#cache.has(key)) return this.#cache.get(key);
+    const key = `${STATIC_NS}${fn} ${JSON.stringify(args)}`;
+    if (this.#cache.has(key)) return this.#touch(key);
     if (!this.#pending.has(key)) {
       this.#pending.add(key);
       this.rpc
         .static(fn, ...args)
         .then((v) => {
-          this.#cache.set(key, v);
+          this.#store(key, v);
           this.#pending.delete(key);
           this.cacheEpoch++;
         })
@@ -302,10 +399,10 @@ export class Session {
 
   /** Await an engine read AND leave it in the cache (prefetch / imperative). */
   async fetchQ(method: string, ...args: unknown[]): Promise<any> {
-    const key = `${method}\0${JSON.stringify(args)}`;
-    if (this.#cache.has(key)) return this.#cache.get(key);
+    const key = cacheKey(method, args);
+    if (this.#cache.has(key)) return this.#touch(key);
     const v = await this.rpc.call(method, ...args);
-    this.#cache.set(key, v);
+    this.#store(key, v);
     this.cacheEpoch++;
     return v;
   }
@@ -321,11 +418,11 @@ export class Session {
 
   /** Drop cached study reads (authoring landed / R&D pack arrived). The
    *  corpus-derived immutables (toc, canon shape, statics) survive — wiping
-   *  them made navigation clamp against an empty TOC mid-refill. */
+   *  them made navigation clamp against an empty TOC mid-refill. Which reads
+   *  those are, and the delimiter that decides it, live in [[PINNED_READS]] and
+   *  [[KEY_SEP]]: hand-writing the prefix here is what broke it. */
   invalidate(): void {
-    for (const key of [...this.#cache.keys()])
-      if (!key.startsWith("toc ") && !key.startsWith("canonSegments ") && !key.startsWith("static:"))
-        this.#cache.delete(key);
+    for (const key of [...this.#cache.keys()]) if (!isPinned(key)) this.#cache.delete(key);
     this.cacheEpoch++;
   }
 
@@ -338,8 +435,103 @@ export class Session {
    *  bookkeeping tick they never asked for. */
   invalidateOnly(...methods: string[]): void {
     for (const key of [...this.#cache.keys()])
-      if (methods.some((m) => key.startsWith(`${m}\0`))) this.#cache.delete(key);
+      if (methods.some((m) => key.startsWith(m + KEY_SEP))) this.#cache.delete(key);
     this.cacheEpoch++;
+  }
+
+  // ── gutter marks, memoized by CONTENT ───────────────────────────────────────
+  //
+  // The reader pane derives the weave dots and the note marks and its paint
+  // effect tracks them, so what it actually reacts to is the IDENTITY of those
+  // sets: a freshly built Set holding the same verse numbers repaints the whole
+  // canvas to draw the marks that were already on it. Study data is invalidated
+  // on core-ready, warm-ready, rnd-ready and every authoring write, and each of
+  // those bumps `studyEpoch` too — so a reader scrolling while the background
+  // pipeline settles paid a full repaint per event for nothing.
+  //
+  // Memoizing here rather than in the pane is deliberate: it is one memo for
+  // however many panes are open, and the epoch dependency travels with the
+  // mechanism instead of having to be remembered at each call site.
+
+  /** Last set returned per (kind, book, chapter) — LRU, [[MARKS_CAP]] deep. */
+  #marks = new Map<string, Set<number>>();
+
+  /** Read a memoized set, moving it to the young end of the LRU order. */
+  #markHit(key: string): Set<number> | undefined {
+    const prev = this.#marks.get(key);
+    if (prev === undefined) return undefined;
+    this.#marks.delete(key);
+    this.#marks.set(key, prev);
+    return prev;
+  }
+
+  #putMarks(key: string, set: Set<number>): Set<number> {
+    this.#marks.set(key, set);
+    for (const k of this.#marks.keys()) {
+      if (this.#marks.size <= MARKS_CAP) break;
+      this.#marks.delete(k);
+    }
+    return set;
+  }
+
+  /** The marks last drawn for this key — a stable empty set when there are none
+   *  yet, so the frames before the read lands share one identity as well. */
+  #heldMarks(key: string): Set<number> {
+    return this.#markHit(key) ?? this.#putMarks(key, new Set());
+  }
+
+  /** `next`, or the previous set when it holds exactly the same verses. */
+  #memoMarks(key: string, next: Set<number>): Set<number> {
+    const prev = this.#markHit(key);
+    if (prev && prev.size === next.size) {
+      let same = true;
+      for (const v of next)
+        if (!prev.has(v)) {
+          same = false;
+          break;
+        }
+      if (same) return prev;
+    }
+    return this.#putMarks(key, next);
+  }
+
+  /**
+   * Verses in a chapter that have a weave partner — the gold gutter dot.
+   *
+   * The SAME Set comes back while the content is unchanged, including across the
+   * gap where an invalidation has dropped `linkPairs` and the refetch has not
+   * landed: the marks last drawn are held rather than blinked off and drawn again
+   * a frame later.
+   *
+   * READ-ONLY. It is shared between callers and across frames; a mutation would
+   * be a mutation of every pane's dots at once.
+   */
+  weaveDots(book: string, chapter: number): Set<number> {
+    void this.studyEpoch;
+    const key = `weaveDots${KEY_SEP}${book} ${chapter}`;
+    const pairs = this.q("linkPairs")?.pairs;
+    if (!pairs) return this.#heldMarks(key);
+    const set = new Set<number>();
+    for (const p of pairs) {
+      if (p.aBook === book && p.aChapter === chapter) set.add(p.aVerse);
+      if (p.bBook === book && p.bChapter === chapter) set.add(p.bVerse);
+    }
+    return this.#memoMarks(key, set);
+  }
+
+  /** Verses in a chapter carrying one of the reader's own notes — the square
+   *  gutter mark. Content-memoized and read-only, exactly like [[weaveDots]]. */
+  noteVerses(book: string, chapter: number): Set<number> {
+    void this.studyEpoch;
+    const key = `noteVerses${KEY_SEP}${book} ${chapter}`;
+    const notes = this.q("userNotes")?.notes;
+    if (!notes) return this.#heldMarks(key);
+    const prefix = `${book} ${chapter}:`;
+    const set = new Set<number>();
+    for (const n of notes)
+      if (typeof n.verse === "string" && n.verse.startsWith(prefix))
+        set.add(Number(n.verse.slice(n.verse.lastIndexOf(":") + 1)) || 0);
+    return this.#memoMarks(key, set);
   }
 
   /** The reader's home church — what their own shared links carry. */

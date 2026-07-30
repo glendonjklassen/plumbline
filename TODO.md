@@ -253,7 +253,7 @@ as "a later increment". F–I can ride later increments (the PWA auto-updates).
 - [ ] **[opus]** Slice warm phases 3/5/6 (xref 8.5 MB TSV parse, leitwort, bridge) the
   way SearchIxBuilder already is — they're the same shape as the fixed 54 s block
   (`crates/ffi/src/lib.rs:577-631`).
-- [ ] **[opus]** Cache-layer quick fixes: the `startsWith("toc ")` exemption never
+- [x] **[opus]** Cache-layer quick fixes: the `startsWith("toc ")` exemption never
   fires (space vs `\0` — one-character bug, `session.svelte.ts:325-330`); bound
   `#cache` (LRU); memoize `weaveDots`/`noteVerses` with content comparison so
   epoch bumps stop repainting mid-scroll.
