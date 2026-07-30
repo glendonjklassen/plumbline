@@ -19,3 +19,44 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+The data is licensed separately
+
+The MIT license above covers the code: the Rust crates, the Android shell, the
+web shell, and the build and data-prep scripts.
+
+The text and the lexical data are other people's work, redistributed here under
+their own terms. Those terms travel with the files; nothing above changes them.
+
+  data/     the KJV 1769 text and the 1769 translators' margin notes (public
+            domain — a Crown patent applies in the UK); the American King James
+            Version overlay (public domain); Strong's Hebrew and Greek
+            dictionaries from Open Scriptures (CC-BY-SA); OSHB Hebrew
+            morphology (CC-BY 4.0); Robinson's Greek parsing codes (public
+            domain); Treasury of Scripture Knowledge cross-references via
+            openbible.info (CC Attribution; the TSK itself is public domain).
+
+  bridge/   Abbott-Smith's Manual Greek Lexicon (public-domain text, from a
+            CC-BY-SA repository); the LXX alignment (Swete's LXX text is public
+            domain; see the upstream repositories for the rest); STEPBible's
+            TIPNR proper-name identities (CC-BY 4.0).
+
+  fonts     EB Garamond, under the SIL Open Font License. OFL.txt ships beside
+            the fonts in both shells — apps/web/public/fonts/ and
+            apps/android/app/src/main/assets/fonts/.
+
+The files built from those sources inherit whatever they were derived from —
+data/kjv.jsonl.idxcache, data/akjv.akjvb, data/source-priors.json,
+data/quotation-pairs.json, data/text-witness.json, and the packed forms the two
+shells load. Both shells bundle copies of the data (under
+apps/android/app/src/main/assets/ and apps/web/public/pack/); the same terms
+follow the copies.
+
+Everything else is MIT, as above: the code, the authored study set (threads,
+tags, weaves), and data/concept-vectors.vec (+ .meta, .freq), which is trained
+here over Strong's numbers alone.
+
+BIBLIOGRAPHY.md has the per-file detail — every source, its upstream repository,
+and its license.

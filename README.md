@@ -163,6 +163,13 @@ public-domain Textus Receptus tagging; cross-references from the TSK via
 openbible.info. Full credits and licenses: **[BIBLIOGRAPHY.md](BIBLIOGRAPHY.md)**.
 Scripture renders in EB Garamond (OFL, bundled).
 
+## License
+
+The code is MIT — **[LICENSE](LICENSE)**. The text and the lexical data keep
+their own terms (public domain, CC-BY 4.0, CC-BY-SA); the carve-out at the end
+of LICENSE names them directory by directory, and
+[BIBLIOGRAPHY.md](BIBLIOGRAPHY.md) has it file by file.
+
 ## Translation selection
 
 This application is built with the 1769 King James Version of the Bible, which
