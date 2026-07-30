@@ -79,13 +79,25 @@ android {
     }
 
     lint {
-        // AGP 8.7's bundled lint crashes analysing our Compose / Kotlin-2.0
-        // sources: androidx.lifecycle's NonNullableMutableLiveDataDetector hits
-        // an IncompatibleClassChangeError against the Kotlin 2.0 analysis API
-        // (a lint/tooling bug, not our code). We don't gate releases on lint, so
-        // skip the release-build vital check and never abort on a lint fault.
-        checkReleaseBuilds = false
-        abortOnError = false
+        // Lint DOES gate the build. A blanket `abortOnError = false` hides every
+        // real finding, and it never even bought what it was added for: the four
+        // checks below crash inside `lintAnalyze`, which fails the task no matter
+        // what abortOnError says. All four are androidx-shipped detectors that
+        // resolve calls through a Kotlin analysis API newer than the one AGP 8.7's
+        // bundled lint carries, so they die with IncompatibleClassChangeError
+        // ("Found class ...KaFunctionCall, but interface was expected") — one
+        // tooling bug, not our code. adaptive:1.2.0 is what drags compose-runtime
+        // from the BOM's 1.7.5 up to 1.9.0, whose lint jars are the mismatch, so
+        // the real cure is a newer AGP (or android.experimental.lint.version),
+        // not these lines. Disable exactly those four, by ISSUE id (lint's crash
+        // message names the id, which is NOT the detector's class name), and keep
+        // every other check fatal. Note the crash is JVM-state dependent — a warm
+        // daemon can hide it — so re-check with `--no-daemon`, which is what CI is.
+        abortOnError = true
+        disable += "NullSafeMutableLiveData" // androidx.lifecycle
+        disable += "FrequentlyChangingValue" // androidx.compose.runtime
+        disable += "RememberInComposition" // androidx.compose.runtime
+        disable += "AutoboxingStateCreation" // androidx.compose.runtime
     }
 
     // Compile the shared Kotlin/JNA binding (package dev.plumbline.core) straight
