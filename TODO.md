@@ -12,8 +12,13 @@ architecture/perf passes). Every item carries the model it needs:
   regression test; rebuild the wasm before the web suite when a crate changed).
 
 File:line refs were verified 2026-07-29 against `69f137f` with a tidying thread
-in flight — re-verify lines before editing. Sections A–E are pre-tag; F–I can
-ride 1.0.x patches (the PWA auto-updates).
+in flight — re-verify lines before editing.
+
+**Versioning, decided 2026-07-29 by Glendon:** this whole catalogue ships under
+the next INCREMENTAL tag (v0.36.0), not as 1.0.0. When 1.0.0 happens is his call
+and his alone. So read "before the tag" below as "before the next tag" — the work
+is still ordered the same way, and §A–E still come first — and read any "1.0.x"
+as "a later increment". F–I can ride later increments (the PWA auto-updates).
 
 ## A. Data safety — before the tag
 
