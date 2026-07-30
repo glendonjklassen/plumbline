@@ -64,6 +64,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
 use crate::canon;
 use crate::civil::{date_to_days, days_between, days_to_date};
@@ -187,6 +188,24 @@ pub struct ChapterReading {
     /// is supposed to notice.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub touched: Option<String>,
+    /// Every key on this record this build has never heard of, carried back out
+    /// again on save.
+    ///
+    /// The on-disk formats evolve **additively** (CLAUDE.md §Data formats), and
+    /// a sideloaded APK never auto-updates: a build that drops the fields of a
+    /// later one drops them for good on that device. Every write path here reads
+    /// the book's whole chapter list and writes it back, so without this a v1.0
+    /// would strip a v1.1's per-chapter field from all 150 psalms the first time
+    /// the reader opened one of them.
+    ///
+    /// Serde fills this with the leftovers after the known fields are matched, so
+    /// a known key can never be swallowed, and a key a later version promotes to
+    /// a real field stops arriving here the moment that field exists — it can
+    /// never be written twice. Empty for every record on disk today, and an empty
+    /// flattened map writes no key at all, so those files are written exactly as
+    /// they were.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 /// A book's file: `home/reading/<book>.json`.
@@ -195,10 +214,20 @@ struct BookFile {
     format: String,
     book: String,
     chapters: Vec<ChapterReading>,
+    /// The file's own unknown keys. These ride on the *file* rather than on a
+    /// loaded value, because a book's reading state is a bare `Vec` of chapters
+    /// with no container to hang them on: [`write_book`] lifts them off the file
+    /// it is replacing.
+    #[serde(flatten)]
+    extra: Map<String, Value>,
 }
 
 /// `home/reading/_since.json` — when this reader started. Underscored so it can
 /// never be mistaken for a book file.
+///
+/// No unknown-key catch-all here, unlike its siblings: [`ensure_since`] writes
+/// this file once and never again — a readable one is returned untouched — so
+/// there is no save for a later version's field to be stripped by.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct SinceFile {
     format: String,
@@ -301,7 +330,16 @@ pub fn write_book(home: impl AsRef<Path>, book: &str, chapters: &[ChapterReading
     }
     let mut chapters = chapters.to_vec();
     chapters.sort_by_key(|c| c.chapter);
-    let f = BookFile { format: FORMAT.to_string(), book: book.to_string(), chapters };
+    // Whatever the file we are replacing carries at its top level and we do not
+    // understand goes back out with it; the chapters carry their own (see
+    // [`ChapterReading::extra`]). Bytes we cannot parse yield nothing — such a
+    // file is refused by [`load_book`] before any caller gets here.
+    let extra = std::fs::read(&path)
+        .ok()
+        .and_then(|b| serde_json::from_slice::<BookFile>(&b).ok())
+        .map(|f| f.extra)
+        .unwrap_or_default();
+    let f = BookFile { format: FORMAT.to_string(), book: book.to_string(), chapters, extra };
     let json = serde_json::to_string_pretty(&f).map_err(|e| Error::Parse(e.to_string()))?;
     crate::store::write_atomic(path, &(json + "\n"))
 }
@@ -738,6 +776,7 @@ pub fn mark_read(home: impl AsRef<Path>, book: &str, chapter: u16, date: &str) -
             dwell: 0.0,
             last_read: Some(day.clone()),
             touched: Some(day),
+            extra: Map::new(),
         }),
     }
     write_book(&home, book, &list)
@@ -1038,6 +1077,7 @@ mod tests {
                 dwell: 600.0,
                 last_read: None,
                 touched: Some("2020-01-01".into()),
+                ..Default::default()
             }],
         );
         let ch = &book_chapters(&c, &w, &part, "Gen", NOW)[0];
@@ -1263,6 +1303,87 @@ mod tests {
         assert_eq!(v["chapters"][0]["lastRead"], "2026-05-04");
         // An untouched pass writes nothing about itself.
         assert!(v["chapters"][0].get("reached").is_none() || v["chapters"][0]["reached"] == 0);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// AUDIT 2026-07-29 forward compatibility: the on-disk formats evolve
+    /// **additively** (CLAUDE.md §Data formats), and a sideloaded APK never
+    /// auto-updates — so a key this build drops is dropped for good on that
+    /// device. Reading one chapter of a book rewrites that book's whole file, so
+    /// a v1.1 field would go from all 150 psalms at once.
+    #[test]
+    fn a_book_file_keeps_the_keys_of_a_later_build() {
+        let home = scratch("forward");
+        let path = book_file(&home, "Gen");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"format":"plumbline-reading-v1","book":"Gen",
+                "chapters":[
+                  {"c":1,"reached":0,"dwell":0.0,"lastRead":"2026-05-04","touched":"2026-05-04",
+                   "passes":3,"aloud":{"minutes":4},"plans":["chronological"]},
+                  {"c":2,"reached":0,"dwell":0.0}
+                ],
+                "plan":"chronological","streak":{"days":9},"devices":["phone","laptop"]}"#,
+        )
+        .unwrap();
+
+        // Marking another chapter read rewrites the file, chapter 1 with it.
+        mark_read(&home, "Gen", 2, "2026-07-28").unwrap();
+        let back: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(back["chapters"][1]["lastRead"], "2026-07-28", "the mark itself must land");
+        assert_eq!(back["plan"], "chronological", "an unknown scalar was stripped");
+        assert_eq!(back["streak"], serde_json::json!({"days":9}), "an unknown object was stripped");
+        assert_eq!(back["devices"], serde_json::json!(["phone", "laptop"]), "an unknown array was stripped");
+        assert_eq!(back["chapters"][0]["passes"], 3, "a chapter's unknown scalar was stripped");
+        assert_eq!(
+            back["chapters"][0]["aloud"],
+            serde_json::json!({"minutes":4}),
+            "a chapter's unknown object was stripped"
+        );
+        assert_eq!(
+            back["chapters"][0]["plans"],
+            serde_json::json!(["chronological"]),
+            "a chapter's unknown array was stripped"
+        );
+
+        // The start anchor is written once and never again, so there is no save
+        // for it to lose a key to — but check, because that is the whole promise.
+        std::fs::write(
+            since_file(&home),
+            r#"{"format":"plumbline-reading-v1","since":"2026-01-01","timezone":"Africa/Johannesburg"}"#,
+        )
+        .unwrap();
+        assert_eq!(ensure_since(&home, NOW).unwrap(), "2026-01-01");
+        let back: Value = serde_json::from_str(&std::fs::read_to_string(since_file(&home)).unwrap()).unwrap();
+        assert_eq!(back["timezone"], "Africa/Johannesburg");
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// A book file with nothing unknown in it is written byte for byte as it was
+    /// before any of that landed — these files already ship inside backup zips.
+    #[test]
+    fn a_book_file_with_no_unknown_keys_is_written_exactly_as_before() {
+        let home = scratch("golden");
+        mark_read(&home, "Gen", 1, "2026-01-01").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(book_file(&home, "Gen")).unwrap(),
+            r#"{
+  "format": "plumbline-reading-v1",
+  "book": "Gen",
+  "chapters": [
+    {
+      "c": 1,
+      "reached": 0,
+      "dwell": 0.0,
+      "lastRead": "2026-01-01",
+      "touched": "2026-01-01"
+    }
+  ]
+}
+"#
+        );
         let _ = std::fs::remove_dir_all(&home);
     }
 }

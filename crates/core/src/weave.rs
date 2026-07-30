@@ -15,6 +15,7 @@ use crate::corpus::Corpus;
 use crate::reference::VRef;
 use crate::Error;
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
@@ -38,6 +39,10 @@ pub struct Link {
     pub approved: bool,
     pub span_a: Option<Span>,
     pub span_b: Option<Span>,
+    /// Unknown keys on this link, kept — see [`Weave::extra`]. Excluded from
+    /// identity (`Eq`/`Ord`) for the same reason `approved` is: a link is the
+    /// edge it draws, and an unknown key must never make one edge into two.
+    pub extra: Map<String, Value>,
 }
 
 impl Link {
@@ -55,9 +60,9 @@ impl Link {
     ) -> Link {
         let label = label.into();
         if a.reading_key() <= b.reading_key() {
-            Link { a, b, label, approved: false, span_a, span_b }
+            Link { a, b, label, approved: false, span_a, span_b, extra: Map::new() }
         } else {
-            Link { a: b, b: a, label, approved: false, span_a: span_b, span_b: span_a }
+            Link { a: b, b: a, label, approved: false, span_a: span_b, span_b: span_a, extra: Map::new() }
         }
     }
 
@@ -190,7 +195,7 @@ impl NotesSource {
 
 /// A weave: named graph of verse↔verse links, plus metadata. Ported from
 /// `Weave`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Weave {
     pub name: String,
     pub kind: WeaveKind,
@@ -200,6 +205,21 @@ pub struct Weave {
     pub created: String,
     pub links: Vec<Link>,
     pub approved: bool,
+    /// Every key in the file this build has never heard of, carried back out
+    /// again on save.
+    ///
+    /// The on-disk formats evolve **additively** (CLAUDE.md §Data formats), and
+    /// a sideloaded APK never auto-updates: a build that drops the fields of a
+    /// later one drops them for good on that device. So a weave written by a v1.1
+    /// and re-saved here comes back whole, links included ([`Link::extra`]).
+    ///
+    /// Serde fills this with the leftovers after the known fields are matched, so
+    /// a known key can never be swallowed, and a key a later version promotes to
+    /// a real field stops arriving here the moment that field exists — it can
+    /// never be written twice. Empty for every weave on disk today, and an empty
+    /// flattened map writes no key at all, so those files are written exactly as
+    /// they were.
+    pub extra: Map<String, Value>,
 }
 
 impl Weave {
@@ -214,6 +234,7 @@ impl Weave {
             created: created.into(),
             links: Vec::new(),
             approved: false,
+            extra: Map::new(),
         }
     }
 
@@ -222,8 +243,17 @@ impl Weave {
     /// the weave-level flag is recomputed. Ported from `addLinks`.
     pub fn add_links(&mut self, new: impl IntoIterator<Item = Link>) {
         let mut m: BTreeMap<LinkKey, Link> = BTreeMap::new();
-        for l in self.links.drain(..).chain(new) {
-            m.insert(l.key(), l);
+        for mut l in self.links.drain(..).chain(new) {
+            let key = l.key();
+            // A link added over one already here replaces it (that is how
+            // approval passes). It must not carry away the unknown keys of the
+            // edge it stands in for.
+            if l.extra.is_empty() {
+                if let Some(prev) = m.get(&key) {
+                    l.extra = prev.extra.clone();
+                }
+            }
+            m.insert(key, l);
         }
         self.links = m.into_values().collect();
         self.reapprove();
@@ -371,6 +401,9 @@ impl Serialize for Link {
         if let Some(s) = self.span_b {
             m.serialize_entry("spanB", &s)?;
         }
+        for (k, v) in &self.extra {
+            m.serialize_entry(k, v)?;
+        }
         m.end()
     }
 }
@@ -387,6 +420,8 @@ struct LinkWire {
     span_a: Option<Span>,
     #[serde(rename = "spanB", default)]
     span_b: Option<Span>,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
 }
 
 impl<'de> Deserialize<'de> for Link {
@@ -401,6 +436,7 @@ impl<'de> Deserialize<'de> for Link {
         // stays paired even for hand-edited, out-of-order on-disk links.
         let mut link = Link::canon_span(a, b, w.label, w.span_a, w.span_b);
         link.approved = w.approved;
+        link.extra = w.extra;
         Ok(link)
     }
 }
@@ -420,6 +456,9 @@ impl Serialize for Weave {
         m.serialize_entry("created", &self.created)?;
         m.serialize_entry("approved", &self.approved)?;
         m.serialize_entry("links", &self.links)?;
+        for (k, v) in &self.extra {
+            m.serialize_entry(k, v)?;
+        }
         m.end()
     }
 }
@@ -440,6 +479,8 @@ struct WeaveWire {
     links: Vec<Link>,
     #[serde(default)]
     approved: bool,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
 }
 
 fn default_kind_token() -> String {
@@ -469,12 +510,13 @@ impl<'de> Deserialize<'de> for Weave {
             created: w.created,
             links: w.links,
             approved: w.approved,
+            extra: w.extra,
         })
     }
 }
 
 /// A weave together with the file it loaded from. Ported from `LoadedWeave`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LoadedWeave {
     pub file: std::path::PathBuf,
     pub weave: Weave,
@@ -1336,6 +1378,97 @@ mod tests {
         );
         assert_eq!(weave_file_in("weaves", "  "), std::path::Path::new("weaves/weave.json"));
     }
+
+    /// AUDIT 2026-07-29 forward compatibility: the on-disk formats evolve
+    /// **additively** (CLAUDE.md §Data formats), and a sideloaded APK never
+    /// auto-updates — so a key this build drops is dropped for good on that
+    /// device. A weave written by a later build has to come back out whole, and
+    /// that includes its LINKS: adding one edge rewrites all of them.
+    #[test]
+    fn a_weave_keeps_the_keys_of_a_later_build() {
+        let home = std::env::temp_dir().join(format!("plumbline-weave-forward-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let path = weave_file_in(home.join("weaves"), "Passover");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"format":"overlay-weave-v2","name":"Passover","kind":"type",
+                "tokenization":"kjv1769-tok2","notes":"","created":"2026-07-01T00:00:00Z",
+                "approved":false,
+                "links":[{"a":"Exod 12:46","b":"John 19:36","label":"not a bone broken",
+                          "strength":3,"drawn":{"curve":"gentle"},"seenAt":["2026-07-04"]}],
+                "id":"77aa02","shared":{"with":"study group"},"aliases":["Lamb"]}"#,
+        )
+        .unwrap();
+
+        // Adding an edge rewrites the file, the existing edge with it.
+        let (loaded, errs) = load_weaves(&home);
+        assert!(errs.is_empty(), "{errs:?}");
+        add_link(
+            &home,
+            &loaded,
+            "Passover",
+            WeaveKind::Typological,
+            "kjv1769-tok2",
+            "2026-09-01T00:00:00Z",
+            Link::canon(r("Exod", 12, 13), r("Rom", 3, 25)),
+        )
+        .unwrap();
+
+        let back: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(back["links"].as_array().unwrap().len(), 2, "the add itself must land");
+        assert_eq!(back["id"], "77aa02", "an unknown scalar was stripped");
+        assert_eq!(back["shared"], serde_json::json!({"with":"study group"}), "an unknown object was stripped");
+        assert_eq!(back["aliases"], serde_json::json!(["Lamb"]), "an unknown array was stripped");
+        // Links come out sorted; find the one that was already there.
+        let old = back["links"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|l| l["a"] == "Exod 12:46")
+            .expect("the existing link is still there");
+        assert_eq!(old["strength"], 3, "a link's unknown scalar was stripped");
+        assert_eq!(old["drawn"], serde_json::json!({"curve":"gentle"}), "a link's unknown object was stripped");
+        assert_eq!(old["seenAt"], serde_json::json!(["2026-07-04"]), "a link's unknown array was stripped");
+
+        // Re-adding an edge that is already there replaces it (that is how
+        // approval passes) and must not carry its unknown keys away.
+        let (loaded, _) = load_weaves(&home);
+        add_link(
+            &home,
+            &loaded,
+            "Passover",
+            WeaveKind::Typological,
+            "kjv1769-tok2",
+            "x",
+            Link::canon_labelled(r("Exod", 12, 46), r("John", 19, 36), "not a bone broken"),
+        )
+        .unwrap();
+        let back: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(back["links"].as_array().unwrap().len(), 2, "the re-add must not duplicate the edge");
+        let old = back["links"].as_array().unwrap().iter().find(|l| l["a"] == "Exod 12:46").unwrap();
+        assert_eq!(old["strength"], 3, "re-adding the edge cost it its keys");
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// A weave with nothing unknown in it is written byte for byte as it was
+    /// before any of that landed — these files already ship inside backup zips.
+    #[test]
+    fn a_weave_with_no_unknown_keys_is_written_exactly_as_before() {
+        let mut w = Weave::empty("Passover", WeaveKind::Typological, "kjv1769-tok2", "2026-07-01T00:00:00Z");
+        w.add_links([Link::canon_labelled(r("Exod", 12, 46), r("John", 19, 36), "not a bone broken")]);
+        assert_eq!(
+            to_json(&w).unwrap(),
+            concat!(
+                r#"{"format":"overlay-weave-v2","name":"Passover","kind":"type","#,
+                r#""tokenization":"kjv1769-tok2","notes":"","created":"2026-07-01T00:00:00Z","#,
+                r#""approved":false,"links":[{"a":"Exod 12:46","b":"John 19:36","#,
+                r#""label":"not a bone broken"}]}"#,
+                "\n"
+            )
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1380,4 +1513,5 @@ mod review_tests {
         assert_eq!(s.weave.links.len(), 1);
         let _ = std::fs::remove_dir_all(&home);
     }
+
 }

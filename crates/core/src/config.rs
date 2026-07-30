@@ -16,6 +16,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
 use crate::theme::ThemeChoice;
 use crate::Error;
@@ -169,6 +170,19 @@ impl Default for Config {
 
 // On-disk form (camelCase, mode as a token). Missing fields fall back to the
 // default so the file evolves additively.
+//
+// Evolving additively cuts both ways: a field this build has never heard of has
+// to survive its saves too. The formats are frozen contracts (CLAUDE.md §Data
+// formats) and a sideloaded APK never auto-updates, so a v1.0 that drops a v1.1
+// key drops it for good on that device. Every struct here therefore ends in a
+// flattened catch-all, and `save_to` fills them from the file it is replacing —
+// the reader's settings cannot be carried on `Config` itself, because
+// `crates/ffi` rebuilds that value field by field out of the shell's wire
+// payload on every save (`wire::config_from_wire`), so an in-memory field would
+// be dropped there instead. Serde matches the declared fields first, so the
+// catch-all holds only keys we have never heard of; a key a later version
+// promotes to a real field stops arriving in it the moment that field exists,
+// and can never be written twice.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ConfigWire {
@@ -212,6 +226,8 @@ struct ConfigWire {
     /// The welcome this reader was given (2026-07-27); absent when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     intro: Option<String>,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -223,6 +239,8 @@ struct ChurchWire {
     info: String,
     #[serde(default)]
     url: String,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -232,6 +250,8 @@ struct PaneWire {
     /// First visible verse (additive; absent = top / an old writer).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     verse: Option<u16>,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
 }
 
 fn default_mode_token() -> String {
@@ -329,7 +349,12 @@ impl Config {
             open_panes: self
                 .panes
                 .iter()
-                .map(|p| PaneWire { book: p.book.clone(), chapter: p.chapter, verse: p.verse })
+                .map(|p| PaneWire {
+                    book: p.book.clone(),
+                    chapter: p.chapter,
+                    verse: p.verse,
+                    extra: Map::new(),
+                })
                 .collect(),
             active_pane: self.active,
             verse_per_line: self.verse_per_line,
@@ -341,7 +366,12 @@ impl Config {
                 .history
                 .iter()
                 .take(HISTORY_CAP)
-                .map(|p| PaneWire { book: p.book.clone(), chapter: p.chapter, verse: None })
+                .map(|p| PaneWire {
+                    book: p.book.clone(),
+                    chapter: p.chapter,
+                    verse: None,
+                    extra: Map::new(),
+                })
                 .collect(),
             human_analysis: Some(self.human_analysis),
             machine_analysis: Some(self.machine_analysis),
@@ -352,7 +382,32 @@ impl Config {
                 name: self.church.name.clone(),
                 info: self.church.info.clone(),
                 url: self.church.url.clone(),
+                extra: Map::new(),
             }),
+            extra: Map::new(),
+        }
+    }
+}
+
+/// Copy the unknown keys of the file being replaced onto the settings about to be
+/// written over it — the whole object, the church, and each pane in the two pane
+/// lists (see the note on [`ConfigWire`]).
+///
+/// A pane keeps its unknown keys when the pane in the same slot is still the same
+/// chapter. Those two lists are the live session, regenerated from the shell's
+/// own state rather than edited in place, so there is no identity to match on;
+/// same slot, same chapter is as far as an honest guess goes, and anything else
+/// is dropped rather than attached to a passage it was never about.
+fn carry_unknown(old: ConfigWire, new: &mut ConfigWire) {
+    new.extra = old.extra;
+    if let (Some(from), Some(to)) = (old.church, new.church.as_mut()) {
+        to.extra = from.extra;
+    }
+    for (from, to) in [(old.open_panes, &mut new.open_panes), (old.history, &mut new.history)] {
+        for (from, to) in from.into_iter().zip(to.iter_mut()) {
+            if from.book == to.book && from.chapter == to.chapter {
+                to.extra = from.extra;
+            }
         }
     }
 }
@@ -441,9 +496,19 @@ fn move_damaged_aside(path: &Path, bytes: &[u8]) {
     let _ = std::fs::rename(path, &bad);
 }
 
-/// Atomically write the config to `path`.
+/// Atomically write the config to `path`, keeping any key the file already there
+/// carries that this build does not understand (see [`ConfigWire`]).
+///
+/// Unparseable bytes yield nothing to keep — and they are not there to be read
+/// anyway, since [`load_from`] moves a damaged file aside before it comes to
+/// this.
 pub fn save_to(path: impl AsRef<Path>, config: &Config) -> Result<(), Error> {
-    let json = serde_json::to_string_pretty(&config.to_wire())
+    let path = path.as_ref();
+    let mut wire = config.to_wire();
+    if let Some(old) = std::fs::read(path).ok().and_then(|b| serde_json::from_slice::<ConfigWire>(&b).ok()) {
+        carry_unknown(old, &mut wire);
+    }
+    let json = serde_json::to_string_pretty(&wire)
         .map(|s| s + "\n")
         .map_err(|e| Error::Parse(e.to_string()))?;
     crate::store::write_atomic(path, &json)
@@ -622,6 +687,86 @@ mod tests {
         std::fs::write(&path, r#"{"studyMode":"simple"}"#).unwrap();
         assert!(!load_from(&path).0.akjv_overlay);
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// AUDIT 2026-07-29 forward compatibility: the on-disk formats evolve
+    /// **additively** (CLAUDE.md §Data formats), and a sideloaded APK never
+    /// auto-updates — so a key this build drops is dropped for good on that
+    /// device. Settings are saved on nearly every interaction, so this file is the
+    /// one a v1.0 would strip fastest.
+    #[test]
+    fn the_config_keeps_the_keys_of_a_later_build() {
+        let dir = scratch("forward");
+        let path = dir.join("config.json");
+        std::fs::write(
+            &path,
+            r#"{"studyMode":"full","bodySize":21.5,
+                "openPanes":[{"book":"John","chapter":3,"verse":16,"scroll":0.4,"pinned":{"by":"reader"}}],
+                "activePane":0,
+                "history":[{"book":"Gen","chapter":1,"openedFrom":"search"}],
+                "church":{"name":"Grace Bible Church","info":"Sundays 10am","url":"","mapUrl":"https://maps.example/g"},
+                "lectionary":"acna","gestures":{"swipe":"chapter"},"pinnedBooks":["Ps","John"]}"#,
+        )
+        .unwrap();
+
+        let (cfg, first_run) = load_from(&path);
+        assert!(!first_run);
+        save_to(&path, &cfg).unwrap();
+
+        let back: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(back["studyMode"], "full", "the settings themselves must land");
+        assert_eq!(back["bodySize"], 21.5);
+        assert_eq!(back["lectionary"], "acna", "an unknown scalar was stripped");
+        assert_eq!(back["gestures"], serde_json::json!({"swipe":"chapter"}), "an unknown object was stripped");
+        assert_eq!(back["pinnedBooks"], serde_json::json!(["Ps", "John"]), "an unknown array was stripped");
+        assert_eq!(back["church"]["mapUrl"], "https://maps.example/g", "the church's unknown key was stripped");
+        assert_eq!(back["openPanes"][0]["scroll"], 0.4, "a pane's unknown scalar was stripped");
+        assert_eq!(
+            back["openPanes"][0]["pinnedBy"],
+            Value::Null,
+            "a pane's keys must not be renamed on the way through"
+        );
+        assert_eq!(back["openPanes"][0]["pinned"], serde_json::json!({"by":"reader"}), "a pane's unknown object was stripped");
+        assert_eq!(back["history"][0]["openedFrom"], "search", "a history entry's unknown key was stripped");
+
+        // A second load/save is still lossless — the keys are not one-shot.
+        let (cfg, _) = load_from(&path);
+        save_to(&path, &cfg).unwrap();
+        let back: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(back["lectionary"], "acna");
+        assert_eq!(back["openPanes"][0]["scroll"], 0.4);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A config with nothing unknown in it is written byte for byte as it was
+    /// before any of that landed — this file rides in the backup zip too.
+    #[test]
+    fn a_config_with_no_unknown_keys_is_written_exactly_as_before() {
+        let dir = scratch("golden");
+        let path = dir.join("config.json");
+        save_to(&path, &Config::default()).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            r#"{
+  "studyMode": "simple",
+  "bodySize": 18.0,
+  "openPanes": [],
+  "activePane": 0,
+  "versePerLine": false,
+  "theme": "system",
+  "copyStyle": "verseRef",
+  "sideMargin": 28.0,
+  "lineSpacing": 1.35,
+  "history": [],
+  "humanAnalysis": false,
+  "machineAnalysis": false,
+  "presentSharesAsNew": true,
+  "akjvOverlay": false
+}
+"#
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

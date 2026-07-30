@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
 use crate::reference::VRef;
 use crate::Error;
@@ -40,6 +41,22 @@ struct NoteRepr {
     created: String,
     #[serde(default)]
     updated: String,
+    /// Every key in the file this build has never heard of, carried straight
+    /// back out again on save.
+    ///
+    /// The on-disk formats evolve **additively** (CLAUDE.md §Data formats), and
+    /// a sideloaded APK never auto-updates: a build that drops the fields of a
+    /// later one drops them for good on that device. So the reader's file, not
+    /// this struct, decides what a note contains. Nothing has to be skipped
+    /// when it is empty — a flattened map with no entries writes no key at all,
+    /// so a note written here reads byte for byte as it always did.
+    ///
+    /// Serde fills this with the leftovers *after* the fields above are
+    /// matched, so a known key can never be swallowed, and a key a later
+    /// version promotes to a real field stops arriving here the moment that
+    /// field exists — it can never be written twice.
+    #[serde(flatten)]
+    extra: Map<String, Value>,
 }
 
 /// A note plus the file it came from.
@@ -118,11 +135,15 @@ pub fn set_note(
             Err(e) => Err(Error::Io { path: path.display().to_string(), source: e }),
         }
     } else {
-        // Preserve `created` if a note is already there.
-        let created = std::fs::read(&path)
-            .ok()
-            .and_then(|b| serde_json::from_slice::<NoteRepr>(&b).ok())
-            .map(|r| r.created)
+        // Preserve `created` — and anything else the file carries that we do not
+        // understand (see [`NoteRepr::extra`]) — if a note is already there. A
+        // note is edited through its text, not by handing this function a
+        // `UserNote`, so the file we are replacing is the only place those keys
+        // can come from.
+        let existing = std::fs::read(&path).ok().and_then(|b| serde_json::from_slice::<NoteRepr>(&b).ok());
+        let created = existing
+            .as_ref()
+            .map(|r| r.created.clone())
             .filter(|c| !c.is_empty())
             .unwrap_or_else(|| stamp.to_string());
         let repr = NoteRepr {
@@ -131,6 +152,7 @@ pub fn set_note(
             text: text.to_string(),
             created,
             updated: stamp.to_string(),
+            extra: existing.map(|r| r.extra).unwrap_or_default(),
         };
         let json = serde_json::to_string_pretty(&repr)
             .map(|s| s + "\n")
@@ -198,6 +220,69 @@ mod tests {
         assert_eq!(notes.len(), 2);
         assert_eq!(notes[&VRef::new("Gen", 1, 7)].note.text, "a");
         assert_eq!(notes[&VRef::new("Gen", 17, 1)].note.text, "b");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// AUDIT 2026-07-29 forward compatibility: the on-disk formats evolve
+    /// **additively** (CLAUDE.md §Data formats), and a sideloaded APK never
+    /// auto-updates — so a key this build drops is dropped for good on that
+    /// device. Editing a note written by a later build must keep every one.
+    #[test]
+    fn a_note_keeps_the_keys_of_a_later_build() {
+        let home = scratch("forward");
+        let _ = std::fs::remove_dir_all(&home);
+        let v = VRef::new("John", 3, 16);
+        let path = note_file(&home, &v);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"format":"pure-note-v1","ref":"John 3:16","text":"first draft",
+                "created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z",
+                "mood":"grateful","voice":{"lang":"en","clip":"jn3-16.ogg"},
+                "linkedTo":["Rom 5:8","1John 4:9"]}"#,
+        )
+        .unwrap();
+
+        set_note(&home, &v, "God's love for the world", "2026-02-02T00:00:00Z").unwrap();
+        let back: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(back["text"], "God's love for the world", "the edit itself must land");
+        assert_eq!(back["created"], "2026-01-01T00:00:00Z");
+        assert_eq!(back["updated"], "2026-02-02T00:00:00Z");
+        assert_eq!(back["mood"], "grateful", "an unknown scalar was stripped");
+        assert_eq!(
+            back["voice"],
+            serde_json::json!({"lang":"en","clip":"jn3-16.ogg"}),
+            "an unknown object was stripped"
+        );
+        assert_eq!(
+            back["linkedTo"],
+            serde_json::json!(["Rom 5:8", "1John 4:9"]),
+            "an unknown array was stripped"
+        );
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// A note with nothing unknown in it is written byte for byte as it was
+    /// before any of that landed — these files already ship inside backup zips.
+    #[test]
+    fn a_note_with_no_unknown_keys_is_written_exactly_as_before() {
+        let home = scratch("golden");
+        let _ = std::fs::remove_dir_all(&home);
+        let v = VRef::new("John", 3, 16);
+        set_note(&home, &v, "the golden text", "2026-01-01T00:00:00Z").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(note_file(&home, &v)).unwrap(),
+            r#"{
+  "format": "pure-note-v1",
+  "ref": "John 3:16",
+  "text": "the golden text",
+  "created": "2026-01-01T00:00:00Z",
+  "updated": "2026-01-01T00:00:00Z"
+}
+"#
+        );
         let _ = std::fs::remove_dir_all(&home);
     }
 }

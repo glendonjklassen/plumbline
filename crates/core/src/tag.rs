@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::{Map, Value};
 
 use crate::reference::VRef;
 use crate::Error;
@@ -59,28 +60,49 @@ impl<'de> Deserialize<'de> for TagTarget {
 }
 
 /// One tag membership: a target with an optional note and a timestamp.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TagMember {
     pub target: TagTarget,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     pub added: String,
+    /// Unknown keys on this member, kept — see [`Tag::extra`]. A member is
+    /// nested inside the tag file, and a key stripped from it is stripped just
+    /// as permanently as one on the tag itself.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 /// A named collection of targets.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Tag {
     pub name: String,
     pub tok_version: String,
     pub created: String,
     pub members: Vec<TagMember>,
+    /// Every key in the file this build has never heard of, carried back out
+    /// again on save.
+    ///
+    /// The on-disk formats evolve **additively** (CLAUDE.md §Data formats), and
+    /// a sideloaded APK never auto-updates: a build that drops the fields of a
+    /// later one drops them for good on that device. So a tag written by a v1.1
+    /// and re-saved here comes back whole.
+    ///
+    /// It holds only keys we have *never heard of*: serde fills it with the
+    /// leftovers after the known fields are matched (so a known key can never be
+    /// swallowed, and a key a later version promotes to a real field stops
+    /// arriving here the moment that field exists), and the two keys highlights
+    /// left behind are dropped by name on the way in — retired is not unknown.
+    /// Empty for every tag on disk today, and an empty flattened map writes no
+    /// key at all, so those files are written exactly as they were.
+    pub extra: Map<String, Value>,
 }
 
 /// The on-disk shape. `overlay-tag-v1` files written before highlights were
-/// removed (2026-07-29) may still carry `color` and `highlights` keys; serde
-/// ignores unknown fields, so those tags load as ordinary tags and the dead keys
-/// drop away the next time the tag is written. Nothing about a tag's MEMBERS
-/// changed, so no reader loses a tag.
+/// removed (2026-07-29) may still carry `color` and `highlights` keys; those two
+/// load as ordinary unknown keys and are then dropped by name (see
+/// [`Tag::extra`]), so the dead keys still fall away the next time the tag is
+/// written. Nothing about a tag's MEMBERS changed, so no reader loses a tag.
 #[derive(Deserialize)]
 struct TagRepr {
     format: String,
@@ -89,18 +111,25 @@ struct TagRepr {
     created: String,
     #[serde(default)]
     members: Vec<TagMember>,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
 }
 
 impl Serialize for Tag {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::SerializeStruct;
-        let mut st = s.serialize_struct("Tag", 5)?;
-        st.serialize_field("format", FORMAT)?;
-        st.serialize_field("name", &self.name)?;
-        st.serialize_field("tokenization", &self.tok_version)?;
-        st.serialize_field("created", &self.created)?;
-        st.serialize_field("members", &self.members)?;
-        st.end()
+        // A map, not a struct: serde_json writes the two identically, and only a
+        // map can take the unknown keys after the known ones.
+        use serde::ser::SerializeMap;
+        let mut m = s.serialize_map(None)?;
+        m.serialize_entry("format", FORMAT)?;
+        m.serialize_entry("name", &self.name)?;
+        m.serialize_entry("tokenization", &self.tok_version)?;
+        m.serialize_entry("created", &self.created)?;
+        m.serialize_entry("members", &self.members)?;
+        for (k, v) in &self.extra {
+            m.serialize_entry(k, v)?;
+        }
+        m.end()
     }
 }
 
@@ -110,17 +139,24 @@ impl<'de> Deserialize<'de> for Tag {
         if r.format != FORMAT {
             return Err(D::Error::custom(format!("unknown tag format: {}", r.format)));
         }
+        let mut extra = r.extra;
+        // Highlights and the tag colour that went with them were removed
+        // 2026-07-29. We know these two keys and have retired them, so they are
+        // dropped rather than preserved for ever.
+        extra.remove("color");
+        extra.remove("highlights");
         Ok(Tag {
             name: r.name,
             tok_version: r.tokenization,
             created: r.created,
             members: r.members,
+            extra,
         })
     }
 }
 
 /// A tag plus the file it came from.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LoadedTag {
     pub file: PathBuf,
     pub tag: Tag,
@@ -195,7 +231,12 @@ pub fn add_member(
     note: Option<String>,
     added: &str,
 ) -> Result<PathBuf, Error> {
-    let member = TagMember { target: target.clone(), note, added: added.to_string() };
+    let member = TagMember {
+        target: target.clone(),
+        note,
+        added: added.to_string(),
+        extra: Map::new(),
+    };
     let wanted = name.trim().to_lowercase();
     if let Some(lt) = loaded.iter().find(|lt| lt.tag.name.to_lowercase() == wanted) {
         if lt.tag.member_of(&target) {
@@ -218,6 +259,7 @@ pub fn add_member(
             tok_version: tok_version.to_string(),
             created: added.to_string(),
             members: vec![member],
+            extra: Map::new(),
         };
         write_tag(&path, &tag)?;
         Ok(path)
@@ -338,5 +380,98 @@ mod tests {
         assert!(!round.contains("highlights"), "highlights are gone: {round}");
         let again: Tag = serde_json::from_str(&round).unwrap();
         assert_eq!(again, t);
+    }
+
+    /// AUDIT 2026-07-29 forward compatibility: the on-disk formats evolve
+    /// **additively** (CLAUDE.md §Data formats), and a sideloaded APK never
+    /// auto-updates — so a key this build drops is dropped for good on that
+    /// device. A tag written by a later build has to come back out whole, on the
+    /// tag and on its members alike.
+    #[test]
+    fn a_tag_keeps_the_keys_of_a_later_build() {
+        let home = std::env::temp_dir().join(format!("plumbline-tag-forward-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let path = tag_file(&home, "Messianic");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            r#"{
+              "format":"overlay-tag-v1","name":"Messianic",
+              "tokenization":"kjv1769-tok2","created":"2026-07-01T00:00:00Z",
+              "members":[
+                {"target":{"kind":"verse","ref":"Isa 53:5"},"added":"2026-07-01T00:00:00Z",
+                 "pinned":true,"source":{"by":"reader","at":"2026-08-01"}}
+              ],
+              "id":"9f2c1d","shared":{"with":"study group"},"aliases":["Christ","Messiah"]
+            }"#,
+        )
+        .unwrap();
+
+        // Adding a member rewrites the whole file.
+        let (loaded, errs) = load_tags(&home);
+        assert!(errs.is_empty(), "{errs:?}");
+        add_member(
+            &home,
+            &loaded,
+            "Messianic",
+            "kjv1769-tok2",
+            TagTarget::Concept("G5547".into()),
+            None,
+            "2026-09-01T00:00:00Z",
+        )
+        .unwrap();
+
+        let back: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(back["members"].as_array().unwrap().len(), 2, "the add itself must land");
+        assert_eq!(back["id"], "9f2c1d", "an unknown scalar was stripped");
+        assert_eq!(back["shared"], serde_json::json!({"with":"study group"}), "an unknown object was stripped");
+        assert_eq!(back["aliases"], serde_json::json!(["Christ", "Messiah"]), "an unknown array was stripped");
+        assert_eq!(back["members"][0]["pinned"], true, "a member's unknown scalar was stripped");
+        assert_eq!(
+            back["members"][0]["source"],
+            serde_json::json!({"by":"reader","at":"2026-08-01"}),
+            "a member's unknown object was stripped"
+        );
+        // And the member this build wrote carries nothing of its own.
+        assert_eq!(
+            back["members"][1],
+            serde_json::json!({"target":{"kind":"concept","strongs":"G5547"},"added":"2026-09-01T00:00:00Z"})
+        );
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// A tag with nothing unknown in it is written byte for byte as it was before
+    /// any of that landed — these files already ship inside backup zips.
+    #[test]
+    fn a_tag_with_no_unknown_keys_is_written_exactly_as_before() {
+        let t: Tag = serde_json::from_str(SAMPLE).unwrap();
+        assert_eq!(
+            to_json(&t).unwrap(),
+            r#"{
+  "format": "overlay-tag-v1",
+  "name": "Messianic",
+  "tokenization": "kjv1769-tok2",
+  "created": "2026-07-01T00:00:00Z",
+  "members": [
+    {
+      "target": {
+        "kind": "verse",
+        "ref": "Isa 53:5"
+      },
+      "added": "2026-07-01T00:00:00Z"
+    },
+    {
+      "target": {
+        "kind": "concept",
+        "strongs": "G5547"
+      },
+      "note": "Christ",
+      "added": "2026-07-01T00:00:00Z"
+    }
+  ]
+}
+"#
+        );
     }
 }

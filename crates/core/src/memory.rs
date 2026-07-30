@@ -21,6 +21,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
 use crate::civil::{add_days, date_to_days, days_to_date};
 use crate::reference::VRef;
@@ -87,6 +88,12 @@ pub struct Review {
     pub grade: Grade,
     #[serde(rename = "intervalDays")]
     pub interval_days: u32,
+    /// Unknown keys on this review, kept — see [`Card::extra`]. The log is the
+    /// data behind the coverage map and the heatmap, and it is never rewritten,
+    /// only appended to; a key stripped from one entry is gone as finally as one
+    /// stripped from the card.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 // ── the card ─────────────────────────────────────────────────────────────────
@@ -116,6 +123,22 @@ pub struct Card {
     /// Next-due date, `YYYY-MM-DD` (day granularity, the SRS norm).
     pub due: String,
     pub reviews: Vec<Review>,
+    /// Every key in the file this build has never heard of, carried back out
+    /// again on save.
+    ///
+    /// The on-disk formats evolve **additively** (CLAUDE.md §Data formats), and
+    /// a sideloaded APK never auto-updates: a build that drops the fields of a
+    /// later one drops them for good on that device. A card is months of the
+    /// reader's work, so it comes back whole — review log included
+    /// ([`Review::extra`]).
+    ///
+    /// Serde fills this with the leftovers after the known fields are matched, so
+    /// a known key can never be swallowed, and a key a later version promotes to
+    /// a real field stops arriving here the moment that field exists — it can
+    /// never be written twice. Empty for every card on disk today, and an empty
+    /// flattened map writes no key at all, so those files are written exactly as
+    /// they were.
+    pub extra: Map<String, Value>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -136,6 +159,8 @@ struct CardRepr {
     due: String,
     #[serde(default)]
     reviews: Vec<Review>,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
 }
 
 impl Card {
@@ -152,6 +177,7 @@ impl Card {
             lapses: 0,
             due: days_to_date(date_to_days(created).unwrap_or(0)),
             reviews: Vec::new(),
+            extra: Map::new(),
         }
     }
 
@@ -203,6 +229,7 @@ impl Card {
             lapses: self.lapses,
             due: self.due.clone(),
             reviews: self.reviews.clone(),
+            extra: self.extra.clone(),
         }
     }
 }
@@ -245,7 +272,12 @@ pub fn review(card: &mut Card, grade: Grade, now: &str) {
     }
 
     card.due = add_days(now, card.interval_days as i64);
-    card.reviews.push(Review { at: now.to_string(), grade, interval_days: card.interval_days });
+    card.reviews.push(Review {
+        at: now.to_string(),
+        grade,
+        interval_days: card.interval_days,
+        extra: Map::new(),
+    });
 }
 
 /// Whether the card is due for review at `now` (RFC3339 UTC) — `due` on or
@@ -335,6 +367,7 @@ fn parse_card(path: &Path, bytes: &[u8]) -> Result<Card, String> {
         lapses: r.lapses,
         due: r.due,
         reviews: r.reviews,
+        extra: r.extra,
     })
 }
 
@@ -904,6 +937,80 @@ mod tests {
         write_card(&home, &Card::new(jn.clone(), "kjv1769-tok2", T0)).unwrap();
         assert_eq!(load_cards(&home).0[&jn].reps, 0);
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// AUDIT 2026-07-29 forward compatibility: the on-disk formats evolve
+    /// **additively** (CLAUDE.md §Data formats), and a sideloaded APK never
+    /// auto-updates — so a key this build drops is dropped for good on that
+    /// device. A card written by a later build has to come back out whole, review
+    /// log and all: every grade rewrites the whole file.
+    #[test]
+    fn a_card_keeps_the_keys_of_a_later_build() {
+        let home = std::env::temp_dir().join(format!("plumbline-mem-forward-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let jn = VRef::new("John", 3, 16);
+        let path = card_file(&home, &jn);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"format":"overlay-memory-v1","ref":"John 3:16","tokenization":"kjv1769-tok2",
+                "created":"2026-01-01T00:00:00Z","ease":2.5,"intervalDays":1,"reps":1,
+                "lapses":0,"due":"2026-01-02",
+                "reviews":[{"at":"2026-01-01T00:00:00Z","grade":"good","intervalDays":1,
+                            "seconds":12,"device":{"kind":"phone"},"hints":["first letters"]}],
+                "deck":"AWANA","fsrs":{"stability":4.2},"decks":["AWANA","family"]}"#,
+        )
+        .unwrap();
+
+        // Grading appends a review and rewrites the file.
+        let (cards, errs) = load_cards(&home);
+        assert!(errs.is_empty(), "{errs:?}");
+        grade_verse(&home, &cards, &jn, "kjv1769-tok2", Grade::Good, "2026-01-02T00:00:00Z").unwrap();
+
+        let back: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(back["reps"], 2, "the grade itself must land");
+        assert_eq!(back["reviews"].as_array().unwrap().len(), 2);
+        assert_eq!(back["deck"], "AWANA", "an unknown scalar was stripped");
+        assert_eq!(back["fsrs"], serde_json::json!({"stability":4.2}), "an unknown object was stripped");
+        assert_eq!(back["decks"], serde_json::json!(["AWANA", "family"]), "an unknown array was stripped");
+        assert_eq!(back["reviews"][0]["seconds"], 12, "a review's unknown scalar was stripped");
+        assert_eq!(
+            back["reviews"][0]["device"],
+            serde_json::json!({"kind":"phone"}),
+            "a review's unknown object was stripped"
+        );
+        assert_eq!(
+            back["reviews"][0]["hints"],
+            serde_json::json!(["first letters"]),
+            "a review's unknown array was stripped"
+        );
+        // The review this build logged carries nothing of its own.
+        assert!(back["reviews"][1].get("seconds").is_none());
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// A card with nothing unknown in it is written byte for byte as it was before
+    /// any of that landed — these files already ship inside backup zips.
+    #[test]
+    fn a_card_with_no_unknown_keys_is_written_exactly_as_before() {
+        let card = Card::new(VRef::new("John", 3, 16), "kjv1769-tok2", T0);
+        assert_eq!(
+            to_json(&card).unwrap(),
+            r#"{
+  "format": "overlay-memory-v1",
+  "ref": "John 3:16",
+  "tokenization": "kjv1769-tok2",
+  "created": "2026-01-01T00:00:00Z",
+  "ease": 2.5,
+  "intervalDays": 0,
+  "reps": 0,
+  "lapses": 0,
+  "due": "2026-01-01",
+  "reviews": []
+}
+"#
+        );
     }
 
     #[test]
