@@ -52,18 +52,39 @@
   }
 
   async function backup(): Promise<void> {
-    const files = new Map<string, Uint8Array>(await s.rpc.exportUserData());
-    files.set(
-      "plumbline-backup.json",
-      new TextEncoder().encode(JSON.stringify({ format: 1, app: "web", exported: nowStamp() })),
-    );
-    const blob = new Blob([zipWrite(files) as unknown as BlobPart], { type: "application/zip" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `plumbline-backup-${nowStamp().slice(0, 10)}.zip`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    s.showToast(`Backed up ${files.size - 1} files`);
+    const name = `plumbline-backup-${nowStamp().slice(0, 10)}.zip`;
+    try {
+      const files = new Map<string, Uint8Array>(await s.rpc.exportUserData());
+      files.set(
+        "plumbline-backup.json",
+        new TextEncoder().encode(JSON.stringify({ format: 1, app: "web", exported: nowStamp() })),
+      );
+      const blob = new Blob([zipWrite(files) as unknown as BlobPart], { type: "application/zip" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      // The file is NAMED, so a reader who looked away while the browser saved
+      // it knows what to go and find. Handing the anchor to the browser is the
+      // last thing we can see — there is no completion signal for a download —
+      // so this says what we did, not that the file is on the device.
+      const n = files.size - 1;
+      s.showToast(`Backed up ${n} file${n === 1 ? "" : "s"} as ${name}`);
+    } catch (err) {
+      // A toast, and deliberately NOT the blocking notice a failed restore gets.
+      // A backup that fails is not a data-loss event: nothing was written, the
+      // reader's own study data is exactly as it was, and they are standing in
+      // this dialog looking at the button that is also the repair. A restore
+      // failure has to block because it can land on a reloaded page with the
+      // phone already in a pocket; this one cannot.
+      // What it must not do is stay silent. Unguarded, a rejection anywhere
+      // above — the export, the zip write, the browser refusing the save — made
+      // the button do nothing at all, which is indistinguishable from a browser
+      // that saved the file somewhere the reader hasn't looked.
+      const why = err instanceof Error ? err.message : String(err);
+      s.showToast(`Couldn't make the backup — no file was saved: ${why}`);
+    }
   }
 
   async function restore(e: Event): Promise<void> {
