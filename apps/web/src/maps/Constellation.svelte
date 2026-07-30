@@ -21,7 +21,11 @@
 
   const model = $derived.by(() => {
     void s.studyEpoch;
-    return s.q("constellation", page, pins);
+    // $state.snapshot, not `pins`: an rune-backed array is a Proxy, and the
+    // engine call ends in postMessage, which cannot structured-clone one
+    // ("DataCloneError: [object Array] could not be cloned"). Every fetch failed,
+    // so the model stayed null and the frame sat on "— building —" for good.
+    return s.q("constellation", page, $state.snapshot(pins));
   });
 
   const COLORS = ["#8f6b28", "#5f7a94", "#7a8f5f", "#94655f", "#6b5f94", "#8f5f82", "#5f8f8a"];
@@ -205,7 +209,20 @@
   height={H}
   loading={!model}
   onZoom={(z) => (zoom = z)}
-  pager={model ? { page: model.page, maxPage: model.maxPage, onPage: (d) => (page = Math.min(Math.max(page + d, 0), model.maxPage)) } : null}
+  pager={model
+    ? {
+        page: model.page,
+        maxPage: model.maxPage,
+        // Clear the hover with the page. The caption prefers `hover`, and the
+        // cursor is over the pager button — not the canvas — so without this the
+        // caption keeps naming a star from the page the reader just left, which
+        // is not even drawn any more.
+        onPage: (d) => {
+          hover = "";
+          page = Math.min(Math.max(page + d, 0), model.maxPage);
+        },
+      }
+    : null}
 >
   <div class="fill" bind:this={host}>
     <canvas bind:this={canvas} onclick={onClick} onmousemove={onMove}></canvas>

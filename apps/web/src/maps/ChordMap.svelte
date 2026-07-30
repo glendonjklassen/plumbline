@@ -24,7 +24,12 @@
   $effect(() => {
     void model;
     void zoom;
-    if (!canvas || !host) return;
+    // `!model` belongs here as much as the two element checks: the read-through
+    // cache answers null on the first open and fetches behind it, and paint()
+    // dereferences the model. Without it the effect THROWS, Svelte disables it,
+    // and the model landing a beat later repaints nothing — a permanently blank
+    // map. ConceptMap and Constellation both had this guard; this one did not.
+    if (!canvas || !host || !model) return;
     const cssW = host.clientWidth;
     const cssH = host.clientHeight;
     const dpr = devicePixelRatio || 1;

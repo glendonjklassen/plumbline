@@ -20,7 +20,7 @@ ride 1.0.x patches (the PWA auto-updates).
 - [x] **[opus]** Android restore is a destructive in-place partial write: unzip to
   `.restore-tmp`, verify every entry, then temp+rename each file in; all-or-nothing
   (`ui/Backup.kt:78-100`). Never stream over the live home.
-- [ ] **[opus]** Web save failure is silent: `void persistUserData()` swallows
+- [x] **[opus]** Web save failure is silent: `void persistUserData()` swallows
   QuotaExceeded while the UI reports success (`engine.worker.ts:620-629`,
   `engine/home.ts:230-241`). Propagate failure → `persistFailed` message → sticky
   toast + retry with backoff. Add an `{op:"flush"}` RPC called on
@@ -39,7 +39,7 @@ ride 1.0.x patches (the PWA auto-updates).
   surfacing the existing error UI (`engine/worker-client.ts:82-98`).
 - [x] **[opus]** Web zip restore: bounds-check `dataAt + csize` and verify CRC-32
   against the central directory in `zipRead` (`engine/zip.ts:104-124`).
-- [ ] **[opus]** A failed restore leaves the session frozen forever: on `idbApply`
+- [x] **[opus]** A failed restore leaves the session frozen forever: on `idbApply`
   rejection, reload anyway (or un-freeze + clear `restoring`) with a blocking error
   (`SettingsDialog.svelte:62-70`).
 - [x] **[opus]** Android note-save discards the engine's error and closes the sheet:
@@ -80,7 +80,7 @@ ride 1.0.x patches (the PWA auto-updates).
 
 ## C. Live wire-drift bugs
 
-- [ ] **[opus]** `akjvOverlay` is written by both shells and dropped by the core on
+- [x] **[opus]** `akjvOverlay` is written by both shells and dropped by the core on
   every config save — the preference never survives a restart. Add the field to
   `Config` + `WireConfigState` (`wire.rs:1239-1287`, `config.rs:89-137`).
 - [ ] **[opus]** Android never renders tier marks / paragraph gaps: serde `rename_all`
@@ -88,10 +88,13 @@ ride 1.0.x patches (the PWA auto-updates).
   while `Wire.kt:584-589` expects camelCase. Add `rename_all_fields = "camelCase"`,
   update web `BlockList.svelte:16-20` to camelCase, bump `PLUMBLINE_WIRE_VERSION`,
   add golden key-set tests so this class can't recur silently.
-- [ ] **[opus]** Every numbered book (1 John, 2 Chronicles…) dead-clicks in three web
-  paths: `refKey.replace(" ", ":")` replaces only the first space. Split on the
-  *last* space (core `go_uri` is already correct) at `App.svelte:88` (the `?at=`/QR
-  arrival), `MemorizeHost.svelte:62`, `StudyPanel.svelte:143`.
+- [x] **[opus]** ~~Every numbered book (1 John, 2 Chronicles…) dead-clicks in three web
+  paths~~ — **FALSE POSITIVE**, closed 2026-07-29 (`51123f5`). Every OSIS book id is
+  one word (`1John`, `2Chr`), so `.replace(" ", ":")` never missed; the spaced form is
+  `display_name` and never feeds a refKey. The three sites were hardened to core's
+  last-space rule anyway (a shell disagreeing with the frozen parser fails silently),
+  with `e2e/numbered-books.spec.ts` as the guard. Related REAL bug found and left:
+  `church.ts`'s `sharedAtRef` regex rejects a hand-typed `?at=1 John 3:16` outright.
 
 ## D. First impression (PWA) — before sharing the link
 
@@ -119,7 +122,19 @@ ride 1.0.x patches (the PWA auto-updates).
   white `.share-dialog`; dim MapFrame paper in night.
 - [ ] **[opus]** A stray tap outside the first-run card permanently loses onboarding:
   make the choose stage non-dismissible or always write `config.intro`
-  (`FirstRun.svelte:207-216`).
+  (`FirstRun.svelte:207-216`). **HELD BACK 2026-07-29 — written and working, NOT
+  committed.** The fix (choose/tiers/church non-dismissible; welcome/curious dismiss
+  via `startInJohn()` so the intro is recorded) passes its own 2 tests and 3 mutations,
+  and Android's identical `BackHandler` hole was fixed with it. But with it in the tree
+  `e2e/network.spec.ts` takes 4.3 min with one test hanging to the 240 s timeout;
+  without it, 27 s and 3/3 — reproduced 3 clean runs vs 2 hangs, and the full suite went
+  11.6 min / 2 failed → 3.6 min / 107 passed on removing it alone. No mechanism found:
+  `.backdrop` and `.dialog` are SIBLINGS, so nothing in the path `firstVisit` takes can
+  reach `dismiss()`. Not shipped unexplained, because network.spec.ts is what guards the
+  offline promise. Held at
+  `…/scratchpad/d08-held/{FirstRun.svelte,firstrun.spec.ts,android-firstrun.patch}`.
+  Next step: give `page.reload()` in `timedReload` an explicit navigation timeout so the
+  hang fails fast and names itself instead of eating the test budget.
 - [ ] **[opus]** Splash: read the cached palette (written but never read — dark users
   get a cream flash every launch); say "≈3 MB, one time — then Plumbline works with
   no connection"; start phase as `prepare` not `download` (warm boots claim to be
@@ -138,7 +153,7 @@ ride 1.0.x patches (the PWA auto-updates).
   restore on close, local Escape) across the 9 `aria-modal` dialogs; Escape while
   focus is in an input currently does nothing. Add `role="status"` to the main
   toast (the update toast already has it).
-- [ ] **[opus]** BookNav: OT/NT toggle + current-book marker (port from
+- [x] **[opus]** BookNav: OT/NT toggle + current-book marker (port from
   `ui/BookNav.kt:142-149, 265-268`) + one-line reading-tint legend (title= never
   fires on touch).
 - [ ] **[opus]** Empty states in `panel.rs`: search "0 results" gets guidance; weaves(0)
@@ -164,10 +179,10 @@ ride 1.0.x patches (the PWA auto-updates).
 
 ## E. Release mechanics — before `git tag v1.0.0`
 
-- [ ] **[opus]** Version identity: workspace `Cargo.toml` 0.1.0 → 1.0.0 (About shows
+- [x] **[opus]** Version identity: workspace `Cargo.toml` 0.1.0 → 1.0.0 (About shows
   "engine 0.1.0" otherwise); bump `apps/web/package.json`; strip the `v` prefix
   consistently in *both* release.yml jobs (web shows "v1.0.0", Android "1.0.0").
-- [ ] **[opus]** LICENSE: append a data carve-out — MIT covers the code; `data/` and
+- [x] **[opus]** LICENSE: append a data carve-out — MIT covers the code; `data/` and
   `bridge/` keep their own licenses (strongs.json and Abbott-Smith are CC-BY-SA),
   see BIBLIOGRAPHY.md. Link LICENSE from README.
 - [ ] **[FABLE]** Hand-write the v1.0.0 release notes (`gh release create
@@ -180,7 +195,7 @@ ride 1.0.x patches (the PWA auto-updates).
 - [ ] **[opus]** `git rm -r --cached weaves threads patches` (tracked against
   .gitignore's intent; second source of truth for the stock set); add `/patches/`
   to .gitignore; drop `"patches"` from hydrate `USER_DIRS` + its `--help` text.
-- [ ] **[opus]** FEATURE-MANIFEST.md cleanup: 5 residual highlight mentions, 5 false
+- [x] **[opus]** FEATURE-MANIFEST.md cleanup: 5 residual highlight mentions, 5 false
   "not yet in Compose" blocks, icon marked "pending" but shipped, dead
   `apps/desktop/` paths, undeclared canon-strip delta, first-run "fetched live"
   line (it's hardcoded).
@@ -190,7 +205,7 @@ ride 1.0.x patches (the PWA auto-updates).
 - [ ] **[opus]** Clippy/rustfmt gates: fix `search.rs:451` + `strongs.rs:136`, run
   `-D warnings` across all crates (ffi has never been fully linted), drop both
   `continue-on-error` lines in ci.yml.
-- [ ] **[opus]** Android lint: replace the blanket `abortOnError = false` with a
+- [x] **[opus]** Android lint: replace the blanket `abortOnError = false` with a
   targeted `disable += "NonNullableMutableLiveData"`.
 - [ ] **[opus]** Split `crates/ffi/src/lib.rs` (3,861 lines; repo rule is 3k) —
   authoring + study-blocks sections are contiguous; no ABI change, bindgen guards.
@@ -335,9 +350,9 @@ ride 1.0.x patches (the PWA auto-updates).
   tests today goes through back-door RPC).
 - [ ] **[opus]** `store.rs` interrupted-write test; `usernote.rs` malformed-input +
   forward-compat tests (frozen format already inside shipped backup zips).
-- [ ] **[opus]** Legacy `pure-study/` zip restore test — both shells carry the shim,
+- [x] **[opus]** Legacy `pure-study/` zip restore test — both shells carry the shim,
   neither tests it.
-- [ ] **[opus]** Maps smoke e2e (ChordMap/ConceptMap/Constellation — ~500 lines,
+- [x] **[opus]** Maps smoke e2e (ChordMap/ConceptMap/Constellation — ~500 lines,
   entirely unexercised).
 
 ## Future (not this release)
