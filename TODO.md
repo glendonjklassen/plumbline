@@ -119,7 +119,7 @@ as "a later increment". F–I can ride later increments (the PWA auto-updates).
   (`engine/update.ts` fetches the manifest `no-store`, which the first rule refuses),
   but the guard is weaker than its own comment. Then add
   `/checking for an update cannot poison the cached shell/` to `OFFLINE_ON_WEBKIT`.
-- [ ] **[opus]** Icons/manifest: generate 192/512 + maskable from `public/icon.svg`;
+- [x] **[opus]** Icons/manifest: generate 192/512 + maskable from `public/icon.svg`;
   add manifest `id`, `lang`, `orientation`, `categories`, `screenshots`; dark
   `theme-color` meta pair.
 - [ ] **[opus]** `<noscript>` block; `404.html` redirect preserving search+hash;

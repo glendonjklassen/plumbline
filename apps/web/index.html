@@ -3,7 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#fcf9f4" />
+    <!-- The browser/OS chrome around the app. TWO tags, because a single one is a
+         single colour: on a dark-mode phone the address bar and the task-switcher
+         card were cream while the reader was candlelit. A UA uses the FIRST
+         theme-color whose media matches, so the pair below resolves to exactly
+         one value before any script runs.
+
+         Both hexes are `paper` from crates/core/src/theme.rs — Theme::Light and
+         Theme::Dark. Dark and not Night because that is what ThemeChoice::System
+         resolves a dark device to; Night (#000000) is only ever chosen by hand.
+         The light value moved in the WCAG pass (2026-07-29) — paper did not, but
+         if it ever does, `e2e/manifest.spec.ts` fails rather than letting the
+         chrome drift a shade off the page it frames. -->
+    <meta name="theme-color" content="#fcf9f4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1f1b16" media="(prefers-color-scheme: dark)" />
     <title>Plumbline Bible</title>
     <meta
       name="description"

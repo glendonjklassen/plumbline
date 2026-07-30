@@ -70,8 +70,23 @@ export default defineConfig({
           "fonts.css",
           "manifest.webmanifest",
           "icon.svg",
-          "icon-128.png",
-          "icon-256.png",
+          // The three icons the webmanifest declares, and no others. An install
+          // icon is fetched by the BROWSER at install time, from a page that may
+          // already be offline, so these belong in the depot even though app code
+          // never reads them: 192 and 512 are the pair Chrome wants (launcher +
+          // splash), and the maskable 512 is what Android actually crops. 30 KB
+          // for all three.
+          //
+          // icon-128.png and icon-256.png were here and are gone: no installer
+          // asks for those sizes, the manifest no longer names them, and a
+          // keep-set entry nothing declares is exactly the drift this list is
+          // supposed to prevent. Nothing in the app or the markup references
+          // them any more, so dropping them here only stops paying for 12 KB on
+          // every device; the two files themselves are now dead weight in
+          // public/ and can go.
+          "icon-192.png",
+          "icon-512.png",
+          "icon-maskable-512.png",
           // The home-screen icon, alongside the webmanifest's own: same kind of
           // file, wanted at the same moment, and 3 KB.
           "apple-touch-icon-180.png",
