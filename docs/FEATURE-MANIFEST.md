@@ -1,18 +1,30 @@
 # Shell feature manifest — the parity contract
 
 > **2026-07-25 — the shells are Android (Compose, the UX gold standard) and
-> the web PWA.** The GTK and WinUI desktop shells were retired and REMOVED
-> from the tree (git history has them). Sections below that cite GTK
-> `M:<line>` refs or name GTK/WinUI behaviours are kept as the historical
-> spec of *what* each feature does — the line refs no longer resolve, and
-> "deltas owed to GTK/WinUI" are void. Treat the Android shell as the living
-> reference implementation.
+> the web PWA (`apps/web`, on `main` — the `web-shell` branch was merged).**
+> The GTK and WinUI desktop shells were retired and REMOVED from the tree (git
+> history has them). Sections below that cite GTK `M:<line>` refs or name
+> GTK/WinUI behaviours are kept as the historical spec of *what* each feature
+> does — the line refs no longer resolve, and "deltas owed to GTK/WinUI" are
+> void. Where a live delta exists it is between **Android and web**, and it is
+> named as such.
+
+> **Write behaviour, not intention (2026-07-29).** Every claim here must be one
+> a grep can settle: what the code *does*, and the file it does it in. The
+> AKJV overlay shipped invisible on Android for a day (commit "Android had the
+> whole overlay and never loaded it") because this document said the feature was
+> wired when what was true was that every piece existed and nothing called it.
+> "The binding has the endpoint" is not "the shell uses it" — say which one you
+> mean. The audit of 2026-07-29 removed five blocks that claimed Compose lacked
+> features it had shipped weeks earlier; a stale delta costs the same day a
+> missing one does.
 
 The canonical inventory of everything a Plumbline shell does, written so a
 shell can be built **without re-surveying the repo**. Historically the GTK
 shell was the reference implementation; line refs below (`M:<line>`) pointed
-at its `main.rs`. Non-Rust shells reach everything through the C ABI
-(`crates/ffi`); the *Data* line under each feature names the endpoint(s).
+at its `main.rs`. Shells reach everything through the C ABI (`crates/ffi`) —
+Android over the hand-written Kotlin JNA binding, the web over the wasm
+build; the *Data* line under each feature names the endpoint(s).
 
 Conventions used everywhere:
 
@@ -26,8 +38,9 @@ Conventions used everywhere:
 
 ## Type — one face, chrome included (2026-07-28)
 
-Both shells ship the SAME two font files, byte-identical variable TTFs
-(851,176 bytes, `fvar`, wght 400–700), and both always used them for scripture.
+Both shells ship the SAME two font files, byte-identical variable TTFs (upright
+851,176 bytes / italic 754,468, `fvar`, wght 400–700; paths in §Constants), and
+both always used them for scripture.
 The CHROME had drifted: the web sets `body { font-family: "EB Garamond" }`
 (`app.css`), so every control there is Garamond, while Android called a bare
 `MaterialTheme { }` and inherited Material 3's default — Roboto — everywhere but
@@ -40,8 +53,10 @@ Garamond's x-height is smaller than Roboto's, so the chrome reads slightly
 smaller until re-tuned on-device.
 
 One deliberate exception stays: the web boot splash asks for Georgia
-(`App.svelte`) because Garamond is render-blocking and the splash would paint
-nothing for 1.6 MB.
+(`App.svelte`), a face already on the device, so the very first paint waits on no
+download. Garamond reaches the browser as two subset woff2 files (~112 KB + ~111 KB,
+`font-display: swap`) — small, but still a network round trip the splash must not
+be behind.
 
 Intro-pane text was enlarged on both shells the same day (older eyes, and the
 smaller x-height compounds it) — sizes and line heights up roughly 2 px / 2.5 sp.
@@ -50,43 +65,60 @@ smaller x-height compounds it) — sizes and line heights up roughly 2 px / 2.5 
 
 | name | value | meaning |
 |---|---|---|
-| MAX_COLUMN | 720 px | text column cap; centre in wider panes |
-| MARGIN | 28 px | text margin, all sides |
-| MIN/MAX/DEFAULT_FONT | 12 / 48 / 18 pt | zoom range, 1-pt steps |
-| MAX_PANES | 3 | reading columns |
-| PANEL_WIDTH | 380 px | study sidebar (web: × the text-size setting — the reader zoom scales the whole study surface, width and type; 2026-07-25) |
-| OCC_SHOWN | 300 | concordance cap |
-| XREF_SHOWN | 40 | xref/link list caps |
-| GLOSS_SAMPLE | 80 | verses sampled for the english gloss |
-| LINK_INSET / YINSET | 14 / 5 px | connector gutter inset / clamp margin |
+| MAX_COLUMN | 720 | text column cap; centre in wider panes (`ReaderPane.svelte` `MAX_COLUMN`, `ReaderPane.kt` `MAX_COLUMN_DP`) |
+| MARGIN | 28 | text margin, all sides (`MARGIN_DP` on Android — logical units, density-scaled) |
+| MIN/MAX/DEFAULT bodySize | 12 / 40 / 18 | the text-size slider in BOTH shells (`SettingsDialog.svelte`, `StudyScreen.kt` `valueRange = 12f..40f`). The config accepts a wider 6–96 (`config.rs`) so an old or hand-edited file is honoured, not clamped away |
+| MAX_PANES | 3 | reading columns — **web only** (`session.addPane`, and none at all when narrow). Android shows one pane, or two side by side on a fold opened flat (`FoldMode.kt`) |
+| PANEL_WIDTH | 380 | the web's study sidebar, × the text-size setting (the reader zoom scales the whole study surface, width and type; 2026-07-25). Android's study surface is a bottom sheet (phone) or the second fold pane, so it has no width constant |
+| OCC_SHOWN | 300 | concordance cap (`PANEL_OCC_CAP`, `crates/ffi/src/lib.rs`) |
+| XREF_SHOWN | 40 | xref/link list caps (`LIST_CAP`, `crates/core/src/panel.rs`) |
+| GLOSS_SAMPLE | 80 | verses sampled for the english gloss (`crates/ffi/src/lib.rs`) |
+| LINK_INSET / YINSET | 14 / 5 px | connector gutter inset / clamp margin (`ConnectorsOverlay.svelte`) |
 
-Palette: paper `#fcf9f4`; body `rgb(0.13,0.12,0.10)`; gold accent
-`rgb(0.62,0.49,0.22)` ≈ `#9e7d38`; added-word gray `#6b6862`; divine
-`rgb(0.30,0.20,0.15)`; popup paper `rgb(0.949,0.933,0.902)`; pane-nav bg
-`#efeae1`; section-header gold `#a0894a`. Font: bundled EB Garamond
-(`apps/desktop/assets/fonts/`), forced light theme. Window default 1100×780.
+Palette: the one source is `plumbline_core::theme::palette(theme)`, served as
+`plumbline_theme_palette_json` — **four themes** (light / dark / night /
+follow-system), and both shells paint reader + chrome + study panel from the
+returned values rather than any hex of their own. The LIGHT values, which are the
+shipped originals: paper `#fcf9f4`; ink `#211f1a`; gold accent `#9e7d38`;
+added-word gray `#6b6862`; divine `#4d3326`; popup paper `#f2eee6`; pane-nav bg
+`#efeae1`; canon-strip bg `#ebe6db`; section-header gold `#a0894a`; rule
+`#d8cba8`; faded `#8a8276`; the four tier marks and the three reading-map hues
+(see their sections). Font: EB Garamond, bundled by both shells and
+byte-identical between them — upright 851,176 bytes, italic 754,468
+(`apps/android/app/src/main/assets/fonts/EBGaramond-Regular.ttf` ≡
+`apps/web/fonts-src/EBGaramond.ttf`).
 
-## App / window icon
+## App icon — the woven cross (shipped in both shells)
 
-The woven-cross icon (`apps/desktop/assets/icons/plumbline.svg` + PNGs, shared
-by both desktop shells). Each shell wires it to the window/taskbar:
-- **GTK** — `install_app_icon` (M:4078, called after `install_css`) adds
-  `assets/icons` to the display's `IconTheme` search path and calls
-  `Window::set_default_icon_name(APP_ID)`. The icon is installed under the app
-  id as a scalable SVG: `assets/icons/hicolor/scalable/apps/
-  dev.plumbline.app.svg`. Compile-time manifest path (like the bundled fonts)
-  → CI-validated, never exercised on the dev machine.
-- **WinUI** — the multi-res `plumbline.ico` (window + taskbar).
-- **Compose** — pending (see Android notes).
+A woven Latin cross: two vertical and two horizontal gold (`#9e7d38`) strands on
+the reader's warm paper. Each shell holds its own copy in its own platform form —
+there is no shared source file anymore (the desktop `plumbline.svg` went with the
+GTK/WinUI shells).
+
+- **Android** — an adaptive icon, and only that, because `minSdk = 26`:
+  `res/mipmap-anydpi-v26/ic_launcher.xml` + `ic_launcher_round.xml` compose
+  `res/drawable/ic_launcher_foreground.xml` (a 108dp `<vector>`) over
+  `@color/ic_launcher_background` (`values/colors.xml`, `#fcf9f4`), wired by
+  `AndroidManifest.xml`'s `android:icon` / `android:roundIcon`.
+- **Web** — `apps/web/public/icon.svg` is the favicon (`index.html`);
+  `icon-128.png` + `icon-256.png` are the install icons in
+  `public/manifest.webmanifest`, whose `background_color` / `theme_color` are the
+  same `#fcf9f4`.
+
+Open product call, recorded in the drawable's own comment: the mark predates the
+Plumbline name and carries no plumb-line imagery.
 
 ## Reader core
 
 - **Layout is in the Rust core** — the shell provides a text-measure callback
   and paints the returned display list (`verseNumber` + `word` items with
-  x/y/w/h, flags, strongs). Config the GTK shell passes (M:2660–2815):
-  `width = min(paneW−2·28, 720)`, `line_height = (ascent+descent)·1.35`,
-  `space_width` measured, `verse_num_gap = space·1.4`,
-  `para_indent = line_height·0.9`, `para_spacing = line_height·0.45`.
+  x/y/w/h, flags, strongs). The config both shells pass, identically
+  (`ReaderPane.kt`, `engine.worker.ts`):
+  `width = min(paneW − 2·sideMargin, 720)`, `lineHeight = (ascent+descent)·lineSpacing`,
+  `spaceWidth` measured, `verseNumGap = space·1.4`,
+  `paraIndent = lineHeight·0.9`, `paraSpacing = lineHeight·0.45`, `verseBreak`
+  from `versePerLine`. `sideMargin` and `lineSpacing` are the reader's config
+  values, defaulting to 28 and 1.35.
 - Paint: verse numbers **bold gold**; FLAG_ADDED italic gray; FLAG_DIVINE /
   FLAG_TITLE colors above. Hit-testing: `hit_test(x − margin_x, y − MARGIN)`.
   **No mark for a Strong's-tagged word** (both shells, 2026-07-28): there was a
@@ -100,24 +132,39 @@ by both desktop shells). Each shell wires it to the window/taskbar:
 
 ## Multi-pane (M:1649–2113)
 
-1–3 columns; each has a nav strip: book dropdown, chapter spin (1..count),
-prev/next, **+** (only when n<3; inserts a copy of this pane after itself,
-becomes active), **✕** (only when n>1). **Active pane** = last touched (canvas
-click or nav interaction); gets a 2-px gold top border *only when >1 pane*;
-window subtitle "`{book} {ch}` · 1769 KJV". Search go-to, panel links, canon
-strip, chord/constellation clicks all target the active pane. Navigation with
-a verse polls (~8 ms × 120) until the fresh layout paints, then scrolls the
-verse to y−8. `step_pane` clamps chapter into 1..count (no cross-book step;
-header ‹› in WinUI added cross-book — GTK does not).
+1–3 columns; each has a nav strip: prev/next chapter `‹ ›`, the passage
+navigator (a "Go to…" button opening the book/chapter tap grids — it replaced the
+desktop-era book dropdown + chapter spin, see Android notes), **＋** (only when
+n<3; inserts a copy of this pane after itself, becomes active), **✕** (only when
+n>1). **Active pane** = last touched (canvas click or nav interaction); gets a
+2-px gold top border *only when >1 pane*; the header subtitle is just the passage
+("John 3"). Search go-to, panel links, canon strip, chord/constellation clicks
+all target the active pane. Navigation with a verse polls until the fresh layout
+paints, then scrolls the verse into view. Chapter stepping **crosses book
+bounds** in both shells (`session.stepChapter` / `StudyScreen.step`) — past a
+book's last chapter enters the next at ch 1, before ch 1 the previous at its
+last. Both walk the TOC to do it; `core::canon::adjacent_book` exists but no
+shell calls it.
 
-## Ambient weave connectors (M:2821–2934)
+**Delta:** three panes are a web thing (see MAX_PANES above). Android is one
+fullscreen reader, or two panes on a fold opened flat.
+
+## Ambient weave connectors (M:2821–2934) — WEB ONLY
+
+**Delta, verified 2026-07-29: this is a web feature.** `ConnectorsOverlay.svelte`
+is the only consumer of `plumbline_engine_link_pairs_json` in the tree. Android
+*declares* the endpoint (`StudyEngine.kt` `LinkPairsJson`) and never calls it — no
+connector overlay, and no in-pane weave gutter dot either (`ReaderPane.kt` paints
+a gutter dot for personal notes only). That is defensible on a phone, where one
+pane means there is nothing to draw a line between; it is written down here
+because the endpoint being in the binding used to read as the feature being in
+the shell.
 
 Transparent overlay above the pane row, input-transparent, redrawn on scroll /
 navigate / zoom / rebuild (60 ms delay) / authoring. The deduped canonical
 link pairs come from the **core view-model** `plumbline_engine_link_pairs_json`
-(each endpoint located + a `resolved` flag) — no shell re-derives the dedup:
-GTK calls `plumbline_core::weave::link_pairs` directly; WinUI parses the endpoint
-(filtering `resolved`), Compose consumes the same JSON. For each pair: map both
+(each endpoint located + a `resolved` flag) — the shell re-derives no dedup, and
+filters to `resolved`. For each pair: map both
 endpoints' `(book, chapter)` to showing panes
 (later pane wins duplicates); skip unless both shown in *different* panes.
 Endpoint y = the verse-number item's `MARGIN + y + h/2` in pane space →
@@ -129,16 +176,22 @@ gold α0.7. **In-pane gutter dots**: any verse with weave partners gets a gold
 dot α0.75 r2.3 at `x=margin−9`, next to the verse number (M:2712).
 *Data*: `plumbline_engine_weaves_json` (client folds into pair/xref indexes).
 
-## Hover gloss (M:1744, 3582)
+## Hover gloss (M:1744, 3582) — WEB ONLY
 
-Native tooltip timing; hit-test under pointer; only when the word has Strong's
+Native tooltip timing (the scroll container's `title`, `ReaderPane.svelte`
+`hoverTitle`); hit-test under pointer; only when the word has Strong's
 refs. Per code: bold code, lemma, italic xlit, then `kjv` (fallback `def`)
-trimmed to 80 chars. *Data*: `plumbline_layout_hit_test_json` + `plumbline_engine_strongs_json`.
+trimmed to 80 chars. **Delta:** there is no hover on a touch screen, so Android
+has none — a tap opens the study surface instead. *Data*:
+`plumbline_layout_hit_test_json` + `plumbline_engine_strongs_json`.
 
 ## Word study panel (click a word — 2026-07-25, was double-click; M:3168–3515)
 
-Sidebar 380 px (web: scaled by the text-size setting), on-demand; Esc hides;
-clearing search hides. Content order — (F) = Full mode only.
+The web's 380-px sidebar (scaled by the text-size setting); on Android a
+dismissible bottom sheet on a phone, or the second pane on an opened fold.
+On-demand; Esc / a swipe hides; clearing search hides. Content order — (F) marks
+what the *machine* or *human* gate turns on (see **Per-tier analysis gates**;
+"Full" is the pre-2026-07-25 name for both gates on).
 
 **Structure — one core producer, thin per-block renderers (P0.1).** The whole
 panel is now a **typed block list** built once in `plumbline_core::panel` and served
@@ -173,9 +226,10 @@ producer emits*, not shell code.
      it, not a verse list. New feature — no overlay antecedent. *Data*:
      `plumbline_engine_renderings_json` + `plumbline_engine_word_codes_json`.
    - **SAME ROOT ACROSS TESTAMENTS** *(per-chip marks)* — bridge partners (≤6)
-     as gloss chips → concordance links; sources humanized (`bridge::source_label`
-     / WinUI `Humanize`: `lxx`→Septuagint, `quotation`→NT quotation, `abbott-smith`→
-     Abbott-Smith (1922), …); then this chip's provenance marks from the union of
+     as gloss chips → concordance links; sources humanized in the core by
+     `bridge::source_label` (`lxx`→Septuagint, `quotation`→NT quotation,
+     `abbott-smith`→Abbott-Smith (1922), …), never shell-side; then this chip's
+     provenance marks from the union of
      its sources' tiers (✝/†/≈, + ⚗ if any source is research-grade); "· disputed
      by usage" in `#b04a3a` when the text-witness disbelieves (shipped data never
      grades, so silent).
@@ -208,11 +262,12 @@ Concept chips render english-first: "**gloss** *lemma*" joined by "  ·  "; the
 gloss is the modal KJV rendering across ≤80 occurrences (skip FLAG_ADDED tokens,
 strip edge punctuation, ties lexicographic; fallback: distilled def/kjv clause
 ≤30 chars). All of this is inside the producer; the shell only paints the runs.
-The `PanelSource` trait (implemented by both the GTK `State` and the FFI
-`PlumblineEngine`) is the producer's only input — a thin set of projected accessors
-(`strongs`/`occurrences`/`renderings`/`bridge_partners`/`concept`/
-`similar_verses`/`verse_xrefs`/`verse_notes`/…), so the same producer runs
-Rust→Rust for GTK and behind the endpoints for WinUI/Compose.
+The `PanelSource` trait is the producer's only input — a thin set of projected
+accessors (`strongs`/`occurrences`/`renderings`/`bridge_partners`/`concept`/
+`similar_verses`/`verse_xrefs`/`verse_notes`/…). One live implementation,
+`PlumblineEngine` (`crates/ffi/src/lib.rs`), so both shells get the identical
+producer behind the endpoints; `panel/tests.rs`'s `Fake` is the second, which is
+how the producer is unit-tested without a corpus.
 
 ## Plain-English overlay (the AKJV delta, 2026-07-27, both shells)
 
@@ -282,30 +337,35 @@ knows its provenance. The model is `plumbline_rnd::bridge` (`crates/rnd/src/brid
   yet held-out-graded). `tiers_of(&[src])` = deduped union, ordered God→Human→
   Machine (additive — never one "winning" tier). `source_label` = the lay label.
 - **Marks** (glyph + color): God `✝` gold `#9e7d38`; Human `†` green `#6f8f6a`;
-  Machine `≈` gray `#999`; research-grade `⚗` red `#b04a3a`. A GtkLabel can't
-  embed images (overlay draws PNGs via Monomer), so GTK uses overlay's
-  *glyph-fallback* set styled with `<span foreground>`; WinUI uses colored
-  `Run`s. **Per-chip** on SAME ROOT partners (real per-source provenance);
+  Machine `≈` gray `#999`; research-grade `⚗` red `#b04a3a`. They are text
+  glyphs, not images, and the **producer bakes them into the block runs** with
+  the semantic colour role `tierGod`/`tierHuman`/`tierMachine`/`tierResearch` — so
+  a shell shows them by painting runs, which is why both shells have them without
+  either one owning tier code. The colour roles resolve through the palette
+  (`Palette.kt` `colorOf` on Android, the role map in `BlockList.svelte`).
+  **Per-chip** on SAME ROOT partners (real per-source provenance);
   **per-section** on the headers above; a **legend** at the foot. Human-baseline
   blocks (the dictionary entry) and user data (weaves, tags) are unmarked.
-- **Wire**: `plumbline_engine_bridge_partners_json` gained additive `tiers`
-  (`["god","human","machine"]`) + `researchGrade` per partner, so non-Rust
-  shells consume the classification instead of reimplementing it. GTK, being
-  Rust, calls `bridge::tiers_of`/`research_grade` directly. Fixed-by-block
-  sections (SIMILAR CONCEPTS = Machine, TSK = Human, …) are marked shell-side.
+- **Wire**: `plumbline_engine_bridge_partners_json` carries additive `tiers`
+  (`["god","human","machine"]`) + `researchGrade` per partner, for a shell that
+  reads partners directly rather than as blocks. Fixed-by-block
+  sections (SIMILAR CONCEPTS = Machine, TSK = Human, …) are marked by the
+  producer too, not shell-side.
 
 ## Link routing — one verb vocabulary (P1.4)
 
 All panel interactivity funnels through one URI dispatcher, and the verb
 vocabulary is **parsed once in the core**: `plumbline_core::panel::parse_link(uri) ->
 PanelLink` — co-located with the producers that *emit* the URIs, so a verb can't
-drift between what the panel bakes and what a shell handles. GTK matches on
-`PanelLink` directly; WinUI/Compose route through `plumbline_route_link_json(uri)`
-(`{verb, …}`, tagged) — neither re-splits the string. The 16 verbs:
+drift between what the panel bakes and what a shell handles. Both shells route
+through `plumbline_route_link_json(uri)` (`{verb, …}`, tagged) — neither
+re-splits the string. The 20 verbs, all of them in `PanelLink`:
 `go:Book:ch[:v]` · `occ:CODE` · `rend:CODE:rendering` · `code:CODE[:word]` ·
 `thread:i` · `tag:i` · `weave:i` · `conceptmap:CODE` · `addtag:refkey` ·
-`addthread:refkey` · `untag:i:refkey` · `approve:i` · `reject:i` ·
-`editthreadnotes:i` · `editentrynote:ti:ei` · `editweavenotes:i`.
+`addthread:refkey` · `untag:i:refkey` · `makeweave:i` · `approve:i` · `reject:i` ·
+`editthreadnotes:i` · `editweavenotes:i` · `editentrynote:ti:ei` ·
+`editnote:refkey` · `guide` · `about`. An unknown verb or a malformed payload
+parses to `None` and the shell ignores the click.
 
 Navigation + native prompts + the write choreography (author endpoint →
 reload → refetch) stay shell-side. `parse_link` handles multi-word books
@@ -332,6 +392,30 @@ Core: `thread::remove_thread` (case-insensitive, like `add_to_thread`; an absent
 name is a no-op, not an error). **C ABI**: `plumbline_engine_thread_remove`.
 Shells: `ThreadPickerSheet` (`ui/VerseActions.kt`) / `ThreadPicker.svelte`.
 
+## Ask before destroying anything (2026-07-29, both shells)
+
+One confirmation per shell, and whether an action asks is a property of the
+**action**, not of whoever wrote its button — the app had four different answers
+to that question. `ui/Confirm.kt` (`ConfirmRequest` + `ConfirmDialog`) and
+`shell/ConfirmDialog.svelte` (behind `session.askConfirm(title, body, verb)`,
+which returns a promise). The confirm button **names the act** — "Delete thread",
+"Remove card", "Reject" — never "OK", so a reader who half-read the sentence still
+knows what it does; that button is the tinted one (`tierResearch`, the app's one
+alarm colour).
+
+Behind it, per shell — grepped, because this is exactly the kind of list that
+rots:
+
+| destructive act | web | Android |
+|---|---|---|
+| delete a thread | asks (`ThreadPicker.svelte`) | asks (`VerseActions.kt`) |
+| reject a suggested weave | asks (`study/links.ts`) | asks (`StudyScreen.kt`) |
+| untag a verse | asks (`study/links.ts`) | **the `untag` verb is unhandled** — see Android notes |
+| remove a memorization card | asks (`MemorizeHost.svelte`) | **no remove affordance at all**; `MemoryRemove` is an uncalled wrapper |
+| clear a chapter's reading record | asks (`MarkReadDialog.svelte`) | **does not ask** — `onClear` calls `ReadingForget` and toasts |
+
+The last three are live Android gaps, not design.
+
 ## Threads / Tags browsers (M:3380–3471)
 
 List → detail. Threads list: "Threads (N)", each name + "N passage(s)".
@@ -350,7 +434,8 @@ vector) → `thread_add`; `untag` → `tag_remove`. Note edits: `thread_set_note
 Filter library `suggested == true`. Per weave: name bold + kind label gray,
 notes, links ≤40 as "a ↔ b" go-links; actions `⇔ compare` `✓ approve`
 `✕ reject` `✎ note`. Approve merges into `weaves/` (all links approved);
-reject deletes the file. Ordinals shift after every write — always re-fetch.
+reject deletes the file and **asks first in both shells** — it is deleted, not
+hidden, and does not come back for review. Ordinals shift after every write — always re-fetch.
 *Data*: `suggested_weaves_json`, `weave_approve/reject(index)`.
 
 ## Weave authoring (M:2137–2236)
@@ -376,19 +461,27 @@ phone) and the fold's second pane is pointed at `b`, so flipping it back
 from Study lands on the other side. *Data*: `weaves_json` link endpoints
 (frozen refKey form).
 
-## Canon strip (M:2938–2989)
+## Canon strip (M:2938–2989) — WEB ONLY
 
-30-px strip under the panes. 8 sections (Law 0–4, History 5–16, Wisdom 17–21,
-Prophets 22–38, Gospels 39–42, Acts 43, Letters 44–64, Revelation 65), odd
+**Delta, verified 2026-07-29.** `CanonStrip.svelte` (mounted under the pane row in
+`Shell.svelte`) is the only canon strip in the tree. **Android has none** — the
+whole-canon overview a reader reaches for there is the passage navigator
+(`ui/BookNav.kt`: OT/NT → book → chapter tap grids, tinted by the reading map),
+which is a destination rather than persistent chrome, because 30 px of always-on
+strip is a poor trade against a phone's vertical space. Android *does* consume
+`canonSegments` — for the map popups (`ui/Maps.kt`) and the memorize coverage
+band (`ui/Memorize.kt`) — so the endpoint is live there, just not as a strip.
+
+The web strip: 30 px under the panes. 8 sections (Law 0–4, History 5–16, Wisdom
+17–21, Prophets 22–38, Gospels 39–42, Acts 43, Letters 44–64, Revelation 65), odd
 sections shaded black α0.04, centred 11-px labels when they fit; OT/NT divide
 line at index 39. Pin per pane at `x=(order+0.5)/66·w` (active gold, others
-gray). Click: `idx = x/w·66` → active pane to that book ch 1.
+faded). Click: `idx = x/w·66` → active pane to that book ch 1.
 
 The segments + divide are the **single source** `core::reference::CANON_SEGMENTS`
 / `OT_NT_DIVIDE`, served over the wire by `plumbline_engine_canon_segments_json`.
-GTK reads the const directly; WinUI loads the endpoint once into a shared
-`Canon` holder that both the strip and the map popups (chord / constellation)
-read — no shell hardcodes the bands anymore (the WinUI copies had drifted).
+Neither shell hardcodes the bands; both fetch the endpoint once and share the
+answer between the strip/navigator and the map popups.
 
 ## Search (M:660, 3739)
 
@@ -397,56 +490,97 @@ link (navigates active pane; verse target gets the band). `hits` → "N
 result(s)" + tier phrase small; per hit: verse link, gray `why`, "※ note"
 marker for margin-note matches; "… N more" past cap. *Data*: `search_json`.
 
-## Keyboard + wheel (M:1806–1875)
+## Keyboard + wheel (M:1806–1875) — WEB ONLY
 
 Up/Down ±line (`font·3` px); PageUp / PageDown|Space ±85% page (**Shift** =
 all panes lockstep); Home/End; Right|`]` / Left|`[` next/prev chapter (this
-pane); Ctrl+0 zoom reset, Ctrl+± zoom ±1 pt; Esc hides panel / closes popups.
-Wheel scrolls hovered pane; Ctrl+wheel zooms; Shift+wheel scrolls all panes.
-Zoom **persists config on every change** (M:2117).
+pane); Alt+←/→ and mouse buttons 4/5 step that pane's back/forward history;
+Ctrl+0 zoom reset, Ctrl+± zoom ±1 pt; `?`/F1 the shortcuts overlay; Esc hides
+panel / closes popups. Wheel scrolls hovered pane; Ctrl+wheel zooms; Shift+wheel
+scrolls all panes. Zoom **persists config on every change**.
+
+**Delta:** Android's equivalents are gestures, not keys — vertical scroll,
+horizontal swipe for the chapter step, pinch on the maps — and system Back closes
+whatever is layered on top rather than stepping a per-pane history. There is no
+per-pane back/forward stack on Android and no shortcuts sheet (nothing to list).
 
 ## Config / session (`core::config`)
 
-`%APPDATA%\plumbline\config.json` (XDG / App Support elsewhere):
-`{"studyMode":"simple"|"full","bodySize":18.0,"openPanes":[{"book","chapter"}],
+`<config_dir>/plumbline/config.json`, where `config_dir` is `%APPDATA%` on
+Windows, `~/Library/Application Support` on macOS, else `$XDG_CONFIG_HOME` (falling
+back to `~/.config`). Both shipping shells take the XDG branch and point it at
+their own storage: **Android** `Os.setenv("XDG_CONFIG_HOME", filesDir)` in
+`MainActivity.onCreate`, before any `plumbline_config_*` call (without it every
+launch loaded defaults); **web** `XDG_CONFIG_HOME=/home/.config` in the WASI env
+(`engine/engine.ts`), which is why the backup zip carries
+`.config/plumbline/config.json`.
+
+`{"studyMode":"simple"|"full","bodySize":18.0,"openPanes":[{"book","chapter","verse"}],
 "activePane":0,"versePerLine":false,"theme":"system","copyStyle":"verseRef",
-"sideMargin":28.0,"lineSpacing":1.35,"history":[{"book":"John","chapter":3}]}`.
+"sideMargin":28.0,"lineSpacing":1.35,"humanAnalysis":false,"machineAnalysis":false,
+"history":[{"book":"John","chapter":3}]}`.
 All additive (default on absence); a save must round-trip fields it doesn't
 expose (each shell carries them forward). `copyStyle`
 (`verse`|`verseRef`|`verseMarkdown`) is the one-tap copy shape; `sideMargin`
-(px, 0–160) + `lineSpacing` (×text-height, 1–3) are reader spacing. `history`
+(px, 0–160) + `lineSpacing` (×text-height, 1–3) are reader spacing — the sliders
+in both shells offer the narrower 8–96 and 1.0–2.2. `history`
 is recent (book, chapter), most-recent-first, deduped, core-capped at 50
 (`config::HISTORY_CAP`) — powers "start where I left off" + a history list.
-`first_run` only when the file is absent; corrupt file →
-defaults, no re-prompt. Restore panes (≤3; default John 3) + active + zoom at
-startup; persist on close, mode toggle, first-run pick, every zoom. Scroll
-position intentionally transient. *Data*: `plumbline_config_load_json` /
-`plumbline_config_save_json` (shared file with GTK — keep the shape).
+`first_run` only when the file is absent; a damaged file is renamed
+`config.json.bad` and the session opens on defaults, no re-prompt. Restore panes
+(≤3 on the web; default John 3) + active + zoom at startup; persist on close,
+first-run pick, every zoom, and on the way to the background (Android `ON_PAUSE`,
+web `visibilitychange`). Scroll position is NOT transient anymore — `openPanes`
+entries carry `verse`. *Data*: `plumbline_config_load_json` /
+`plumbline_config_save_json`.
 
 ## First run — who is opening the Book? (2026-07-26, both shells)
 
 The first launch asks who's here (`FirstRun.svelte` / `FirstRun.kt` — keep
-the copy in sync). **Path order (2026-07-28): Curious about the Bible sits ABOVE
-New in the faith** — a stranger to the Bible is the likelier first-time reader,
-and the path that asks least of someone should be seen first.
+the copy in sync). **Four paths, in this order (2026-07-28): Curious about the
+Bible sits ABOVE New in the faith** — a stranger to the Bible is the likelier
+first-time reader, and the path that asks least of someone should be seen first.
 
+- **Curious about the Bible** — for someone unsure what they believe: what this
+  book is, that it is loved and died for, an invitation to start in John and to
+  pray. Quotes John 3:16, Prov 2:4–5, Mark 9:24 ("Lord, I believe; help thou mine
+  unbelief"), Matt 7:7 + Jer 29:13, Ps 34:18. Ends in John 1, same as the
+  welcome.
 - **New in the faith** — a welcome from the maintainer (next steps: read —
   Ps 12:6–7; find a church — Heb 10:24–25; memorize — Ps 119:11; assurance —
   Rom 5:8, John 3:16, 1 John 5:13, John 10:28–29, Phil 1:6, 1 John 1:9,
   2 Tim 3:16–17). **The verses are QUOTED inline** (2026-07-26 — the new
-  believer reads scripture itself, fetched live from the engine, not a row
-  of links); every reference is tappable and opens **beside John**: web — second pane; fold —
+  believer reads scripture itself, not a row of links); every reference is
+  tappable and opens **beside John**: web — second pane; fold —
   second pane; phone — the passage opens with John 1 as the saved start.
   "Open the book of John" lands in John 1 with **both analysis tiers off** —
   just the text.
 - **Sharing the gospel** — straight into Present with the Romans Road
-  (default tiers; the picker shows if the stock thread was removed).
-- **Established believer** — the analysis-tier picker (scholars' / machine,
-  with examples). The text is always on; tiers change any time in Settings.
+  (default tiers; the picker shows if the stock thread was removed). Asks for the
+  church first, since this is the path that hands the app to someone.
+- **Established believer** — the church fields, then the analysis-tier picker
+  (scholars' / machine, with examples), both boxes **unchecked** (the tiers are
+  opt-in). The text is always on; tiers change any time in Settings.
   Dismissing without choosing (click-away / system back) keeps the defaults.
 
+A link shared from Present offers only the first two paths — it was handed to
+someone in person, and the rest is setup for a reader who already has a Bible
+habit. Either welcome is re-readable later (the `intro` config field remembers
+which one a reader was given): web a **Welcome** header button, Android an
+overflow (⋮) item.
+
+**Delta — where the quoted verse text comes from.** The two shells differ, on
+purpose, and the manifest used to claim both fetched: **Android** asks the engine
+(`FirstRun.kt`, `ALL_QUOTED` → `VerseJson` per refKey, off-thread into a `bodies`
+map). **The web writes the text out in the source** (`FirstRun.svelte`'s `REF`
+table, 15 entries) — asking for ten verses one at a time made the quotes pop in a
+beat after the page, and this is the first screen a new believer sees
+(feedback 2026-07-27). The 1769 text is frozen, so a copy cannot drift; each
+entry was taken verbatim from `data/kjv.jsonl` as `Verse::body()` renders it. If
+you add a quote to the web welcome you are adding *text*, not a reference.
+
 The old Simple/Full first-run modal is gone; `studyMode` still round-trips in
-the config for older readers of the shared file.
+the config for readers of an older file.
 
 ## Primary menu (≡)
 
@@ -472,29 +606,57 @@ behind it to return to. The highlighted tab always names the surface actually in
 front of the reader. Threads/Tags/Weaves live inside Explore, as on Android. The
 subtitle is just the passage ("John 3" — no edition suffix; the e2e boot
 signal matches `/\w+ \d+/`). **Share the app** (2026-07-25, both shells)
-opens the hosted PWA's QR code (pre-generated matrix, no QR dependency —
-`QrCode.svelte` / `QrShare.kt`) + the link via system share / copy; the same
-QR closes Present's end card. Historical menu notes: **Weave views** (Suggested, Weave map, Constellation — disabled outside
-Full study), **Reading** (Simple/Full radio + Verse-per-line toggle), **Theme**
-(light/dark/night/follow-system radio), and **Guide / Keyboard shortcuts /
-About**. GTK: a `gtk::MenuButton` + `gio::Menu` backed by `win.*` `SimpleAction`s
-(string-stateful radios, boolean toggle). WinUI: a `DropDownButton` + `MenuFlyout`
-with `RadioMenuFlyoutItem` / `ToggleMenuFlyoutItem`.
+opens a QR of the hosted PWA link + the link itself via system share / copy; the
+same QR closes Present's end card. The matrix is **encoded at render time** in
+both shells — `QrCode.svelte` over qrcode-generator, `QrShare.kt` over
+zxing-core, both forcing UTF-8 byte mode — because the link carries the reader's
+church and there is no one fixed URL to bake in (it was a build-time constant
+matrix until 2026-07-27). Two more conditional header buttons appear when there is
+something to point at: **Welcome** (re-read the intro) and **Church** (the link
+the reader was handed, or their own) — front and centre rather than in Settings,
+because someone gave this reader a church and they should not go hunting for it.
+Android carries both as overflow (⋮) items instead; its top bar is deliberately
+tight.
+
+Historical menu notes (the retired desktop shells): **Weave views** (Suggested,
+Weave map, Constellation — disabled outside Full study), **Reading** (Simple/Full
+radio + Verse-per-line toggle), **Theme** (light/dark/night/follow-system radio),
+and **Guide / Keyboard shortcuts / About**. GTK: a `gtk::MenuButton` + `gio::Menu`
+backed by `win.*` `SimpleAction`s (string-stateful radios, boolean toggle). WinUI:
+a `DropDownButton` + `MenuFlyout` with `RadioMenuFlyoutItem` /
+`ToggleMenuFlyoutItem`.
+
+**Explore's contents** (both shells, a described card list so the tools aren't
+cryptic): Notes · Threads · Tags · Weaves · Constellation · Weave map. *Delta:*
+the web lists **Suggested** as its own seventh card (`ExploreScreen.svelte`);
+Android folds it into one Weaves screen with an All/Suggested filter
+(`WeavesScreen`).
+
+## The three map popups — a shared note
+
+All three (chord / constellation / concept) are **core view-models the shell only
+paints** — positions cross the wire as fractions and logical units, never pixels
+or colours. The pixel sizes quoted below are the desktop-era popup dimensions and
+survive as proportions, not as layout: the web frames them in `MapFrame.svelte`,
+Android in a fullscreen `MapOverlay` over a pinch-zoom/pan canvas (`ui/Maps.kt`,
+the shared `zoomable` clamping the offset so a map can't be flung off-screen).
+Anything described below as a hover tooltip or a keyboard page step is web-only for
+the usual reason. **Delta (theme):** Android's maps paint on `palette.panelBg`, so
+they follow the reader's theme; the web's keep light popup paper in every theme
+(`MapFrame.svelte`). One of the two is wrong and it is a product call, not a bug.
 
 ## Chord/arc "Map" popup (M:887–935, 2994–3087)
 
 1000×360, Esc or the close button closes. **The book-pair fold lives in the core
 view-model** `plumbline_engine_chord_map_json` → `{pairs:[{a,b,count}] (canon book
-indices, a≤b), max, otNtDivide, bookCount}` (GTK calls `plumbline_core::weave::chord_pairs`
-directly). The shell only paints: canon axis with section bands + labels (from
-the `Canon` holder), gold baseline, OT/NT seam; ribbons heaviest-first, alpha
+indices, a≤b), max, otNtDivide, bookCount}`. The shell only paints: canon axis
+with section bands + labels (from the shared `canonSegments` fetch), gold
+baseline, OT/NT seam; ribbons heaviest-first, alpha
 `0.12+0.30·(cnt/max)`, foot width `2+8·(cnt/max)`; colours OT `(0.82,0.70,0.43)`
 / NT `(0.50,0.70,0.90)` / cross `(0.78,0.59,0.86)` (+0.08 α, cap 0.5); apex
 `min(0.42·h, 22+0.26·h·|dx|/w)`; self-pair = small loop. Click: x→book →
-navigate active pane + close.
-*Parity fix:* the map counts every deduped pair (resolved or not); WinUI
-previously folded only the resolved connector links — now unified to the GTK
-reference.
+navigate active pane + close. The map counts every deduped pair, resolved or not —
+unlike the connector overlay, which draws only resolved ones.
 
 ## Constellation popup (M:937–1529)
 
@@ -502,8 +664,8 @@ reference.
 **The whole layout is the core view-model** `plumbline_engine_constellation_json(page,
 pins_json)` (pins = a JSON array of weave indices) → lanes of nodes + edges as
 **fractions** (`x` a canon fraction, `laneFrac` 0..1 within a lane, `size` a
-0..1 witness degree) plus `nPins/freeTotal/page/maxPage/caption/laneCapacity`;
-GTK calls `plumbline_core::weave::constellation` directly. Usable = weaves with ≥1
+0..1 witness degree) plus `nPins/freeTotal/page/maxPage/caption/laneCapacity`.
+Usable = weaves with ≥1
 resolvable link, largest-first; `laneCapacity` (18) lanes, pinned (by weave
 **index**) first. The shell maps fractions to pixels + paints: `laneH =
 (h−topPad−10)/laneCapacity`, node `(plotLeft + x·(w−plotLeft), topPad +
@@ -513,9 +675,9 @@ cycle ×0.72; node square half-size `1.4+2.4·size`; pin gutter x<150 (filled go
 tooltip "verse · weave". Hit priority **node > edge > pin-gutter**; node →
 navigate (stays open); edge → compare card (closes); gutter → toggle pin. The
 caption comes from the model.
-*Parity fixes* folded into the one model: node size normalises by the **global**
-max degree (GTK was per-page), and both shells now share one lane-height metric
-and one caption (they had drifted on all three).
+Node size normalises by the **global** max degree, and the lane-height metric and
+the caption come from the model, so no two shells can drift on them (the desktop
+pair had, on all three).
 
 ## Concept map popup (`conceptmap:`; M:724–883)
 
@@ -523,10 +685,16 @@ and one caption (they had drifted on all three).
 view-model** `plumbline_engine_concept_map_json(code)` → `{code, centerLabel,
 spokes:[{code, label, semantic}], byBook (canon-ordered counts), otNtDivide,
 bookCount}`. The spoke union (embedding-near ∪ community, deduped, 6 each) lives
-in `plumbline_rnd::concept::radial_spokes` (GTK calls it directly); labels
+in `plumbline_rnd::concept::radial_spokes`; labels
 ("gloss\nlemma") are baked by the endpoint. Paint only: radius `min(w,h)/2−95`;
 semantic spokes gold, community green; centre node gold; dispersion cells gold α
 `0.15+0.75·(cnt/max)` at `bi/bookCount`, OT/NT seam. No shell book-order table.
+
+**Delta (data, not code): Android has no `semantic` spokes.** The gold ones come
+from the embedding (`nearest_concepts`), the green ones from the corpus-built
+concept graph. Android bundles neither `concept-vectors.vec` nor
+`morphology.jsonl` and never calls `load_rnd_data`, so every Android concept map
+is community-only — see **Android notes ▸ machine-tier data**.
 
 **Cross-testament bridge row.** `concept_map_json` also carries an optional
 `bridge:{partners:[{code,label,prior}], byBook}` — the strongest other-testament
@@ -536,13 +704,22 @@ their **unioned** per-book dispersion (`concept::union_by_book`), canon-ordered
 like `byBook`. Additive + `skip_serializing_if=None`, so the ABI/bindings are
 unchanged (same fn, richer JSON) and a partnerless code omits it. This is what
 makes an OT word light up its NT match: viewing *Christ* (G5547) fills the OT half
-via *Messiah* (H4899, prior 0.93). **GTK** (`draw_dispersion`) and **WinUI**
-(`Popups.ConceptMap`) both paint it as a second indigo row beneath the gold one
-(strip 52-px, alpha `0.18+0.72·(cnt/max)` on the row's own max) and name the
-partners in a caption. **Android** (`Maps.ConceptMap`) paints the same banded
-row on its zoomable concept-map canvas — all three shells now show it.
+via *Messiah* (H4899, prior 0.93). Both shells paint it as a second indigo row
+beneath the gold one (strip 52-px, alpha `0.18+0.72·(cnt/max)` on the row's own
+max) and name the partners in a caption — Android in `Maps.ConceptMap`, the web in
+`maps/ConceptMap.svelte`. This row DOES work on Android: it is fused from
+etymology + `bridge/*.json`, which the APK bundles and extracts (see Android
+notes), not from the embedding.
 
 ## C ABI surface (crates/ffi) — endpoint ↔ feature map
+
+**97 native fns as of 2026-07-29**, plus 9 wasm-only shims in
+`crates/ffi/src/wasm.rs` that cbindgen excludes by name. Don't trust a count in
+prose — the guarantee is mechanical: `plumbline-bindgen`'s `verify_surface`
+requires every `plumbline_*` symbol in `include/plumbline.h` to appear in
+`bindings/kotlin/Plumbline.kt` and vice versa, and CI fails on drift. So "the
+endpoint is in the Kotlin binding" is *automatic* and says nothing about whether
+Android calls it; only a grep for the wrapper's call sites answers that.
 
 Pre-existing: `open`/`open_from_bytes`/`free`, `toc_json`, `chapter_count`,
 `verse_json`, `token_json`, `layout_chapter` + `layout_*` + `hit_test`,
@@ -583,13 +760,12 @@ the warm-up that moves shared derivation out of the shells into the core):
 
 | endpoint | returns | for |
 |---|---|---|
-| `plumbline_engine_link_pairs_json()` | `{pairs:[{a, aBook, aChapter, aVerse, b, bBook, bChapter, bVerse, resolved}]}` | ambient connectors + chord map (retires the shell dedup) |
-| `plumbline_engine_canon_segments_json()` | `{segments:[{label, first, last}], otNtDivide}` | canon strip + map ruler bands (retires the WinUI hardcode) |
+| `plumbline_engine_link_pairs_json()` | `{pairs:[{a, aBook, aChapter, aVerse, b, bBook, bChapter, bVerse, resolved}]}` | ambient connectors (web only — Android's wrapper is uncalled) |
+| `plumbline_engine_canon_segments_json()` | `{segments:[{label, first, last}], otNtDivide}` | canon strip (web) / passage navigator + map ruler bands + memorize coverage (both) |
 
 Both are thin wrappers over the one core source: `link_pairs` wraps
 `plumbline_core::weave::link_pairs`; `canon_segments` wraps
-`core::reference::CANON_SEGMENTS` / `OT_NT_DIVIDE`. GTK (being Rust) calls those
-directly rather than round-tripping JSON.
+`core::reference::CANON_SEGMENTS` / `OT_NT_DIVIDE`.
 
 Added for the popup view-models (2026-07-18, architecture-review P0.2 — the
 three map popups' derivation moved into the core; positions cross the wire as
@@ -603,8 +779,8 @@ three map popups' derivation moved into the core; positions cross the wire as
 
 Producers: `chord_map` wraps `plumbline_core::weave::chord_pairs`; `constellation`
 wraps `plumbline_core::weave::constellation`; `concept_map` bakes labels over
-`plumbline_rnd::concept::radial_spokes` + `concept.stat`. GTK calls the core fns
-directly; the non-Rust shells consume the JSON and map fractions → pixels.
+`plumbline_rnd::concept::radial_spokes` + `concept.stat`. Both shells consume the
+JSON and map fractions → pixels; neither re-derives anything.
 
 Added for the panel content-model + link router (2026-07-18, P0.1 + P1.4 — the
 whole study panel and its verb vocabulary move into the core). Every block
@@ -624,8 +800,8 @@ role + logical size + optional uri); `full` gates the R&D tiers + author actions
 | `plumbline_route_link_json(uri)` | parse a panel link into `{verb, …}` (engine-independent) |
 
 One producer (`plumbline_core::panel`) over the `PanelSource` trait feeds all of
-these; GTK implements the trait on `State` and calls the producer directly, the
-FFI implements it on `PlumblineEngine`. **Golden coverage (P2.6):** `panel_blocks_via_abi`
+these; the FFI implements the trait on `PlumblineEngine`, so both shells read the
+identical blocks. **Golden coverage (P2.6):** `panel_blocks_via_abi`
 and `route_link_via_abi` exercise the block payloads + parser over the ABI, and
 the producer itself has 15 unit tests over a fake source; the block kinds are a
 Rust enum (a shell that meets an unknown kind renders nothing — forward-compat).
@@ -637,30 +813,35 @@ stays silent); quotation detection (awaits hydrated inputs).
 ## Tier 0 daily-driver features (2026-07-19)
 
 The eight small, additive daily-driver features from [TODO.md](../TODO.md) Tier
-0. Shared logic lives in `plumbline-core`; GTK calls it directly, WinUI/Compose
-through new FFI endpoints. New endpoints (all additive; bindings regenerated):
+0. Shared logic lives in `plumbline-core`; both shells reach it through FFI
+endpoints (all additive; bindings regenerated):
 `plumbline_engine_copy_text`, `plumbline_engine_user_note_json` / `_notes_json` / `_set`,
 `plumbline_theme_palette_json`,
 `plumbline_engine_warm_indexes`, `plumbline_panel_guide_blocks_json` / `_about_blocks_json`.
 New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
 
 - **1. Copy & context menu.** Formatting is `plumbline_core::export::copy_text`
-  (verse / verse+ref / markdown / chapter). Right-click a verse → menu: copy
-  shapes, Note…, and (Full) Tag… / Add to thread… (the last two route through the
-  panel dispatcher). GTK: a `gtk::Popover` of buttons +
-  `area.clipboard().set_text`; WinUI: a `MenuFlyout` + `Clipboard.SetContent`.
-  Verse-under-point = hit word's verse, else nearest verse-number by y.
-- **2. Back/forward history.** Per-pane `(book, chapter)` stack + cursor, seeded
-  with the opening chapter; navigation pushes (unless it *is* a history move),
-  forward entries drop on a new jump. Alt+←/→ and mouse buttons 4/5 (GTK
-  buttons 8/9; WinUI `XButton1/2`). Lives in the pane (GTK `Pane`, WinUI
-  `ReaderView`), fed by `navigate_pane` / `ShowChapter`.
+  (verse / verse+ref / markdown / chapter). Long-press (or right-click) a verse →
+  the sheet/menu: Copy · Copy chapter · Share · Tag… · Note… · Add to thread… ·
+  Memorize · Mark chapter read… (`ui/VerseActions.kt` / `ContextMenu.svelte`).
+  **Trimmed 2026-07-29:** the three copy variants collapsed into ONE **Copy** that
+  honours Settings ▸ Copy format — a menu is not the place to re-ask a question
+  the settings already answer — and the highlight swatches went with highlighting
+  itself. Verse-under-point = hit word's verse, else nearest verse-number by y.
+- **2. Back/forward history — WEB ONLY.** Per-pane `(book, chapter)` stack +
+  cursor, seeded with the opening chapter; navigation pushes (unless it *is* a
+  history move), forward entries drop on a new jump. Alt+←/→ and mouse buttons 4/5
+  (`session.historyStep`, `ReaderPane.svelte`). **Delta:** on Android system Back
+  dismisses the layered surface (`BackHandler`) and never steps chapters; the
+  recents list from the `history` config field is the way back to a passage there.
 - **3. Personal margin notes.** `plumbline_core::usernote`: one JSON file per verse
   under `home/notes/`, refKey-keyed, atomic store; empty text deletes. A new
   `PanelSource::user_note` surfaces the "your note" block (both modes) via the
-  content model; the `editnote:` verb prompts (multi-line). A square gutter mark
-  sits left of the weave dot. GTK reads `State.usernotes`; WinUI via
-  `user_notes_json` (gutter set) + `user_note_json` (prefill).
+  content model; the `editnote:` verb prompts (multi-line). Both shells read
+  `user_notes_json` for the gutter set and `user_note_json` to prefill the prompt,
+  and both mark the verse in the gutter — a square left of the weave dot on the
+  web (`reader/paint.ts`), a dot beside the verse number on Android
+  (`ReaderPane.kt`), which has no weave dot for it to sit beside.
 - **4. Highlighting — REMOVED 2026-07-29 (v0.33.0).** Tag colour, the six-tone
   palette, whole-verse washes, the word-precise cross-verse drag ranges, and the
   five ABI endpoints behind them (`tag_set_color`, `highlight_add` / `_remove` /
@@ -681,33 +862,29 @@ New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
   (`palette(theme)`), served as `plumbline_theme_palette_json`; light values are the
   shipped ones (no regression), dark (candlelight-warm) + night (true-black) are
   new. Config gains `theme` (`system`/`light`/`dark`/`night`, additive). The
-  reader canvas + chrome paint from the palette; the ≡ menu's Theme radio
-  (light/dark/night/follow-system) sets the choice + persists. GTK drives the CSS provider + `AdwStyleManager` scheme from the
-  palette; the study panel's accent hexes come from the palette via a
-  thread-local (`MARKUP_PALETTE`, set at load + on switch) while its base ink
-  inherits the `ForceDark`-themed label. WinUI re-applies the `Palette` static +
-  `ElementTheme` and rebuilds captured brushes; its panel "ink" runs inherit the
-  element theme (accents are palette-driven via `ColorOf`). **Delta (both shells): the analytical popups (chord / constellation /
-  concept map) stay on their light popup paper in dark/night** — reading + panel
-  + chrome are themed; the transient map overlays are not (a follow-up).
+  reader canvas + chrome + study panel paint from the palette in both shells —
+  Android maps it into a Compose `Palette` (`ui/Palette.kt`, `colorOf` for the
+  block runs' semantic roles), the web into CSS custom properties; Settings /
+  the ≡ menu offers light/dark/night/follow-system and persists the choice.
+  **Delta: only the web's analytical popups stay light in dark/night**
+  (`MapFrame.svelte`); Android's maps sit on `palette.panelBg` and follow the
+  theme. Reconcile deliberately — pick one.
 - **6. Kill the first-study-click pause.** `plumbline_engine_warm_indexes` forces the
-  lazy analytics (concept / leitwort / SIF) to build. **Delta:** WinUI warms on
-  a background thread (`Task.Run`) at startup in Full mode; GTK, whose engine
-  state is single-threaded `Rc<RefCell>`, warms on the main loop via a
-  `glib::timeout_add_local_once` just after first paint (proactive, not
-  off-thread). Both move the stall off the first click.
+  lazy analytics (concept / leitwort / SIF) to build. **Delta:** Android calls it
+  on a coroutine at startup; the web cannot — its engine is one worker thread, so
+  a single blocking warm would starve every layout/tap RPC behind it, and it warms
+  in slices instead (`warm_next`, see **Web shell ▸ the boot warm**).
 - **7. In-app guide, shortcuts, About.** `panel::guide_blocks` / `about_blocks`
   are shared block lists (served engine-free); a Help button opens the guide in
-  the panel, the guide links to About and vice-versa. The shortcuts overlay is
-  shell-native (keybindings differ): `?`/F1 → a modal list (GTK `gtk::Window`,
-  WinUI `ContentDialog`).
-- **8. Small unifications.** Cross-book stepping via `canon::adjacent_book` —
-  past a book's last chapter enters the next, before ch.1 the previous (was
-  clamped in **both** shells, not just GTK as an earlier note said). All search
+  the panel, the guide links to About and vice-versa. **The shortcuts overlay is
+  web-only** (`Shortcuts.svelte`, `?`/F1) — there are no keybindings to list on a
+  phone, and Android's ⋮ menu goes straight to Guide & About.
+- **8. Small unifications.** Cross-book stepping — past a book's last chapter
+  enters the next, before ch.1 the previous — in **both** shells (each walks the
+  TOC; `core::canon::adjacent_book` is unused, see §Multi-pane). All search
   hits band in any visible chapter (a hit set on the reader, painted at the band
-  site). A Shift/Ctrl-click on a `go:` link opens the other pane (WinUI reads
-  the modifier in the link handler; GTK captures it with a capture-phase click
-  gesture on the study label just before the link activates).
+  site). On the web a Shift/Ctrl-click on a `go:` link opens the other pane;
+  Android has no modifiers and no second pane to open on a phone.
 
 ## Analysis tiers are OPT-IN (2026-07-28)
 
@@ -733,10 +910,13 @@ pack are about a reader who HAS it on.
 ## Per-tier analysis gates + tag→weave (2026-07-25, product round 4)
 
 Street-use feedback retired two ideas at once: the all-or-nothing
-Simple/Full switch ("weirdly selective") and highlight-tones-as-annotation.
+Simple/Full switch ("weirdly selective") and highlight-tones-as-annotation
+(highlighting was removed outright three days later — see Tier 0 #4).
 **Tags are the primary annotation** (topic study accumulates over time); the
-**weave comes later** from the tag. Landed core-first; Android consumes it now,
-the other shells owe the UI (deltas below).
+**weave comes later** from the tag. Landed core-first on Android; **the web has
+the whole list now too** — `blocks2` (`StudyEngine.ts`), the two gate switches
+(`SettingsDialog.toggleGate`), `TagPicker.svelte`, `TagWeave.svelte`, and
+scroll-verse restore.
 
 - **Gates.** `plumbline_core::panel::Gates { human, machine }` replaces the
   producer-level `full: bool`: *human* gates curated scholarship (RENDERINGS +
@@ -746,7 +926,8 @@ the other shells owe the UI (deltas below).
   reader's own data — author actions (`＋ tag verse` / `＋ add to thread`),
   the verse's tags + `untag`, weave xrefs, margin + personal notes, the
   compare card's `✎ note` — are **never gated**. Legacy `full:bool` fns
-  remain as exact wrappers (Full = all on), so GTK compiles unchanged.
+  remain as exact wrappers (Full = all on), so an older caller keeps working;
+  neither shipping shell uses them for word/code study anymore.
 - **Note-first panel.** The reader's own note block moved to the **top** of
   the word study (right under the tapped word), in every mode.
 - **ABI (additive).** `plumbline_engine_word_study_blocks2_json(ref, tok, gates)`
@@ -755,7 +936,7 @@ the other shells owe the UI (deltas below).
   refsJson|null=all verse members, weaveName|null=tag name, added)` chains
   the tag's passages canon-ordered (`weave::add_chain`: sorted, deduped,
   consecutive pairs; find-or-create + link-dedup make re-runs additive).
-  Surface is now **90 fns**; bindings regenerated.
+  Bindings regenerated (see §C ABI surface for the live count and the CI guard).
 - **Verbs.** `makeweave:I` (→ `{verb:"makeWeave", tag}`) — emitted by the tag
   detail card whenever ≥2 verse members; the shell offers the member subset +
   name, then calls `weave_from_tag`.
@@ -774,13 +955,9 @@ the other shells owe the UI (deltas below).
   visible** under Notes / Weaves / maps / the memorize drill / the Present
   picker (in-content overlays) — only search and the live presentation remain
   fullscreen-by-design.
-- **Deltas owed (GTK/WinUI):** the two gate switches in place of the
-  Simple/Full UI (their menus still show the radio; producers already accept
-  both via the legacy wrappers), reader-level Tag… action, tag→weave UI
-  (`makeweave:` routing + subset picker), personal-note gutter mark parity
-  (GTK already has one; WinUI check), scroll-verse restore, and consuming the
-  `*_blocks2` endpoints. **Web shell (branch `web-shell`):** same list —
-  adopt before merge.
+- **No deltas left on this feature.** (The "deltas owed to GTK/WinUI" that stood
+  here are void — those shells are gone — and the web's list closed when the
+  shell merged to `main`.)
 
 ## Backup / restore (2026-07-25, both shells)
 
@@ -867,35 +1044,43 @@ due_json / coverage_json / activity_json / drill_json / score_json. Grades cross
 as `again`/`hard`/`good`/`easy`; timestamps caller-supplied UTC. Cards load fresh
 per call from `home/memory` (small set); no home → read-empty / author-error.
 
-**GTK** drives `plumbline_core::memory` directly: `≡` → Memorize (Review due / Coverage
-map / Activity); context menu "Memorize this verse". The review window steps the
-due queue with a first-letter / blank-out-slider / typed-recall drill + the four
-grade buttons; the coverage map reuses the canon-strip dispersion language shaded
-by mastery; activity is reviews-per-day columns. **WinUI** mirrors via the C ABI
-(StudyEngine.Memory* + Wire memory records). Decks are sourced one verse at a
-time for v1; **delta:** a "memorize this tag/thread" bulk-enqueue and printable
-flashcards (needs #14) are follow-ups.
+**Both shells ship the full UI**: Memorize is a first-class destination (bottom
+nav / header) opening a hub — every card, canon-sorted, with Review due /
+Coverage / Activity. Android `ui/Memorize.kt`, web `memorize/` + `MemorizeHost`.
+The review flow steps the due queue with a first-letter / blank-out-slider /
+typed-recall drill + the four grade buttons; the coverage map reuses the canon
+dispersion language shaded by mastery; activity is a calendar heatmap beside the
+history log. Long-press a verse → Memorize adds a card (or a passage — see
+**Passage memorization**). **Delta owed on both:** a "memorize this tag/thread"
+bulk-enqueue and printable flashcards.
 
-## Web shell (apps/web, branch web-shell — 2026-07-25)
+## Web shell (apps/web — 2026-07-25, merged to `main`)
 
-The fourth shell: Svelte 5 + TS over the **same C ABI**, compiled unchanged to
+One of the two shipping shells: Svelte 5 + TS over the **same C ABI**, compiled
+unchanged to
 `wasm32-wasip1` and run in the browser under `@bjorn3/browser_wasi_shim` with
 an in-memory home (data pack fetched + gunzipped into it; authored files
 mirrored to IndexedDB after every write; the corpus idxcache persisted for
 fast reopens). `apps/web/src/engine/StudyEngine.ts` is the method-for-method
-TS sibling of StudyEngine.kt / Plumbline.cs. Build:
+TS sibling of `StudyEngine.kt`. Build:
 `npm run pack:data && cargo build -p plumbline-ffi --release --target
-wasm32-wasip1 && npm run pack:wasm && npm run build` (in apps/web). Two
-wasm-only ABI shims live in `crates/ffi/src/wasm.rs` (`plumbline_web_alloc/free`,
-the `plumbline.plumbline_js_measure` import surfaced as a `PlumblineMeasureFn`);
-plumbline-bindgen excludes them from the native bindings by name.
+wasm32-wasip1 && npm run pack:wasm && npm run build` (in apps/web). **Nine
+wasm-only ABI exports** live in `crates/ffi/src/wasm.rs` — `plumbline_web_alloc` /
+`_free`, `plumbline_web_measure_fnptr` (the `plumbline.plumbline_js_measure`
+import surfaced as a `PlumblineMeasureFn`), and the sliced-work entry points
+`plumbline_engine_warm_step` / `_load_rnd_step` / `_defer_builds` /
+`_verse_sim_save` / `_verse_sim_load` / `_verse_sim_step`. plumbline-bindgen
+excludes them from the native bindings **by name**: extend that list in
+`src/bin/plumbline-bindgen.rs` when the module gains an export, or the header/Kotlin
+drift check fails.
 
 Feature state (per this manifest): reader core (canvas painter, measure via
-canvas `measureText`, all flags/bands/washes/runs/gutter marks), multi-pane
+canvas `measureText`, all flags/bands/runs/gutter marks), multi-pane
 (≤3) + canon strip + ambient connectors, the whole panel content-model +
 link router (incl. `makeweave:`), live search, hover gloss (native tooltip),
 keyboard map + wheel + touch (pan, long-press menu, horizontal chapter
-swipe), context menu (copy shapes / note / tones / tag / thread / memorize),
+swipe), context menu (copy / copy chapter / note / tag / thread / memorize /
+mark chapter read),
 tag picker + tag→weave sheets, the
 three map popups from the core view-models (pinch-zoom), memorization (hub /
 drill / coverage / activity), Present mode (sunlight, share + the hosted
@@ -903,8 +1088,17 @@ PWA link + its QR on the end card), notes browser, history, first-run,
 guide/about/shortcuts,
 light/dark/night/system themes from the core palette, per-tier gates,
 config round-trip incl. scroll-verse restore (flushed on tab hide — the
-ON_PAUSE twin), PWA (installable, offline after first visit; pack cached
-`?v=<content-hash>`).
+ON_PAUSE twin), PWA (installable, offline after first visit; every pack file
+content-addressed per file as `?h=<hash of its raw bytes>` — see the depot + pin
+rules in CLAUDE.md, which this section does NOT restate).
+
+**The engine lives in ONE worker thread**, not on the main thread
+(`engine/engine.worker.ts` behind the promise RPC in `engine/worker-client.ts`).
+That is load-bearing rather than incidental: a single long synchronous engine call
+starves every layout/tap RPC queued behind it, which is why background loading and
+the boot warm are chunked with yields and why the boot-responsiveness e2e test
+exists. (This section claimed "engine runs on the main thread, a worker is the
+escape hatch" until 2026-07-29 — it had been a worker for a while.)
 
 **The boot warm covers every index a study needs** (2026-07-27). Nothing an
 engine builds survives the tab, and the warm used to cover only the SEARCH
@@ -928,9 +1122,10 @@ took the worst warm chunk in wasm from ~640ms to ~256ms. It also fixed a real
 nondeterminism found while testing: edge order came out of a HashMap and broke
 weight TIES, so two builds over identical data could disagree about a concept's
 neighbours — the kNN truncation and the collocate lists now tie-break on the
-code, matching the rest of the pipeline. **Still owed:** four warm phases are
-still one call each — `xref_ix`, `leitwort` (82ms native, the likely ~256ms
-chunk), `bridge`, and the SIF model.
+code, matching the rest of the pipeline. The SIF model was the fourth to be sliced
+(`warm_verse_sim_slice`). **Still owed:** three warm phases are still one call
+each — `xref_ix`, `leitwort` (82ms native, the likely ~256ms chunk), and
+`bridge`.
 
 **Version in About** (2026-07-27): the web build had no idea which release it
 was, so a screenshot could not be dated and "have you relaunched yet?" was
@@ -943,7 +1138,8 @@ notes that sideloaded builds do not auto-update.
 **Updating** (2026-07-27): `index.html` is network-first, so a relaunch with a
 connection already picks up a new build — the SW script itself rarely changes
 and is not the signal. Two gaps closed: (1) every versioned URL is
-content-addressed (`?v=<pack hash>` for the pack, `?v=<build id>` for the wasm,
+content-addressed (`?h=<that file's raw-byte hash>` per pack file — `?v=<pack
+version>` only for a manifest entry with no hash — `?v=<build id>` for the wasm,
 hashed filenames for JS/CSS), so an update ADDED an entry beside the old one and
 nothing ever removed the old — three data updates meant three whole ~12 MB packs
 stranded on the device. `cache::pruneStale` now sweeps, at idle after the shell
@@ -957,8 +1153,7 @@ never automatic: reloading someone mid-verse to save them a tap is not a
 kindness. **Delta (Android):** the APK has no auto-update at all — no Play
 Store, so a sideloader fetches the new release by hand.
 
-Web deltas: engine runs on the main thread (GTK-style; a worker is the
-escape hatch if jank shows — TODO #28's remaining stage). **Boot ships the
+Web deltas. **Boot ships the
 core pack only** (2026-07-25, TODO #28): the `rnd`-marked artifacts
 (morphology, concept vectors) stream in after first paint —
 `loadRndPack` → `plumbline_engine_load_rnd_data` → a re-warm builds the SIF —
@@ -990,16 +1185,18 @@ decimals), `.morphb` ~230 KB smaller. **Still owed:** morphology's remaining
 cost is allocation, not parsing — 355,603 entries × three owned `String`s — so
 lazy per-verse decoding off the packed bytes would take most of the rest;
 `entries()` has exactly one caller (`plumbline_engine_morph_json`), which wants
-a single token, so the change is contained. Analytical popups keep light paper (shared delta); user data lives
-per-browser (export/import is the portability story);
-Present "In context" fade not built. Hosting decided 2026-07-25: GitHub
+a single token, so the change is contained. Remaining web-side deltas: the
+analytical popups keep light paper while Android's follow the theme; user data
+lives per-browser (export/import is the portability story); Present's "In context"
+fade is Android-only (`Present.kt`'s Hide/In context button has no web twin).
+Hosting decided 2026-07-25: GitHub
 Pages at <https://plumblinebible.org/> (custom domain, same day; the old
 github.io URL 301s there), deployed by the release workflow on every `v*`
 tag (base "./", so any host or subpath works without a rebuild; the
 scripture font's @font-face lives in `public/fonts.css` to keep its URLs
 base-relative — that file is GENERATED by `scripts/subset-fonts.mjs`, which
 subsets EB Garamond to the codepoints the corpus, Strong's and the UI actually
-use and emits content-hashed woff2, 1,605 KB of TTF down to 219 KB. The full
+use and emits content-hashed woff2, 1,605 KB of TTF down to ~224 KB. The full
 TTFs are build inputs in `apps/web/fonts-src/`. The charset is deliberately
 generous, whole Unicode blocks: layout is measured in the engine worker and
 painted on the main thread, so a glyph missing from the subset would make one
@@ -1008,9 +1205,46 @@ lines would wrap where they are not drawn.)
 
 ## Android notes
 
+> **Audited 2026-07-29.** Eight "not yet in a Compose shell" blocks used to close
+> this section — memorization, the rendering lens, the launcher icon, authority
+> tiers, the view-model consolidation, the panel content-model + link router, the
+> popup view-models, and Tier 0. **All eight were false**; every one of those
+> features had shipped, some of them weeks earlier, and several of the blocks were
+> written before the Compose shell existed and never revisited. They are deleted
+> rather than corrected, because the sections above already describe what both
+> shells do. What survives below is (a) Android-first product work, (b) the build
+> gate, and (c) the **live** Android deltas, each one grepped.
+>
+> The live Android deltas, all of them, in one place:
+> **no canon strip** (§Canon strip) · **no ambient connectors and no weave gutter
+> dot** (§Ambient weave connectors) · **no hover gloss** (§Hover gloss) · **no
+> keyboard map, shortcuts sheet, or per-pane back/forward** (§Keyboard + wheel,
+> Tier 0 #2) · **one pane, or two on an opened fold** (§Multi-pane) · **no
+> machine-tier artifacts** (below) · **four unhandled link verbs** (below) ·
+> **no way to remove a memorization card, and Clear-reading-record does not ask**
+> (§Ask before destroying anything) · **first-run verse text is fetched, not
+> written into the source** (§First run) · **maps follow the theme** where the
+> web's stay light (Tier 0 #5) · **receives neither `?church=` nor `?at=`**
+> (below) · **no auto-update** (§Web shell ▸ Updating).
+
+- **Machine-tier data: the APK does not ship it.** `assets/data/` holds
+  `kjv.jsonl`, `kjv-notes.jsonl`, `strongs.json`, `cross-references.tsv` and
+  `akjv.akjvb`, plus `assets/bridge/` (abbott-smith, lxx-alignment,
+  stepbible-tipnr) — extracted to `filesDir` once behind the `.data-v2` marker
+  (`MainActivity`). It bundles **no** `concept-vectors.vec` and **no**
+  `morphology.jsonl`, and nothing calls `LoadRndData`. Consequences, all
+  observable: the morphology gloss line never appears; SIMILAR CONCEPTS and
+  "verses like this" are always empty; the concept map has community spokes only.
+  The corpus-derived machine tiers — ALONGSIDE, WHERE IT CONCENTRATES, LEITWORT —
+  **do** work, because `Concept::build` folds the corpus and needs no artifact.
+  The cross-testament bridge row works too, off the bundled `bridge/*.json`.
+  (An earlier note here said the bridge data was unreachable because
+  `OpenFromBytes` has no home; the shell opens from `filesDir` and copies the
+  bridge assets in, so that has not been true for some time.)
+
 - **On-device feedback round 3 (2026-07-24/25, v0.4.0–v0.5.0).** Landed
-  Android-first from on-device street-use feedback; the product features among
-  them are **GTK/WinUI deltas** owed to the desktop shells:
+  Android-first from on-device street-use feedback; the web has since matched all
+  of it except where marked:
   - **Present mode** (`ui/Present.kt`, #1 priority): a thread as a fullscreen,
     high-contrast ("sunlight") large-type presentation for showing someone in
     person. **The thread picker follows the app theme** (2026-07-26 — it's the
@@ -1031,9 +1265,8 @@ lines would wrap where they are not drawn.)
     Share. The share's closing line carries the hosted PWA link and the end
     card shows its QR (2026-07-25, both shells; the BibleGateway link was
     dropped the same day — the verse text is inlined, and the take-home hands
-    the recipient the app, not just the text). **Delta (GTK/WinUI):** a projection-friendly
-    presentation window (fullscreen, large type, step keys) from the same
-    thread data.
+    the recipient the app, not just the text). **Delta:** the "In context" fade
+    is Android's alone; the web's Present has no equivalent.
   - **Sharing a passage is a QR, not the share sheet** (2026-07-27, both
     shells): Present's Share opens a code rather than handing a wall of text to
     the system share sheet — this is the screen you hold up to someone in front
@@ -1049,20 +1282,18 @@ lines would wrap where they are not drawn.)
   - **Embedded study maps** (`ui/StudyMaps.kt`): the concept map + canon
     dispersion heatmap as scaled-down, first-class cards inside the word-study
     panel (before the first titled section), tapping through to the fullscreen
-    map / a book jump. **Delta (GTK/WinUI):** same embed in their study panels
-    (both already have the fullscreen popups).
+    map / a book jump. Matched on the web by `study/EmbedMaps.svelte`.
   - **Notes browser** (`ui/Notes.kt`, Explore ▸ Notes): every personal note,
-    browsable; tap → passage, Edit in place. **Delta (GTK/WinUI):** desktop
-    only paints note gutter marks; a notes library view is owed.
+    browsable; tap → passage, Edit in place. Matched on the web (Explore ▸ Notes →
+    the `notesBrowser` panel).
   - **Tag picker** (`ui/VerseActions.kt` TagPickerSheet): `addtag:` offers
-    existing tags first (plain before coloured tone tags), freetext "New tag…"
-    secondary; tags stay colourless unless explicitly coloured. **Delta
-    (GTK/WinUI):** both still open a bare text prompt.
+    existing tags first, freetext "New tag…" secondary. Plain alphabetical is the
+    whole ordering, since tag colour is gone and every tag is a topic. Matched by
+    `study/TagPicker.svelte`.
   - **Memorize hub layout**: coverage is an inline strip above the verse list
     (not a screen); Activity is a half/half calendar-heatmap + history-log
-    split. **Delta (GTK/WinUI):** both still present coverage/activity as
-    separate popups with the bar-chart activity.
-  - Phone-idiom (no desktop port intended): **bottom nav bar** (Read · Explore
+    split. Matched on the web.
+  - Phone idioms, in both shells now: **bottom nav bar** (Read · Explore
     · Present · Memorize, one-handed reach; `ui/NavIcons.kt` — **ported to the
     web's narrow layout 2026-07-28**, same icon paths, so it is a phone idiom in
     both shells rather than an Android one), the **passage
@@ -1075,100 +1306,47 @@ lines would wrap where they are not drawn.)
     sheet, and the reader
     whitespace fix (manifest MARGIN/MAX_COLUMN are logical units — density-
     scaled on Android).
-- **Compose parity (passes 1–3, 2026-07-24).** The Compose shell reached
-  near-parity with GTK/WinUI. Beyond the v0 reader + word study + search + fold
-  layouts it now has: **memorization** (review drill · coverage · activity —
-  `ui/Memorize.kt`); the **concept / constellation / chord** maps as
-  pinch-zoom/pan canvases (`ui/Maps.kt`, incl. the cross-testament bridge row);
-  **Tier-0 verse actions** via a long-press sheet (copy/share · note ·
-  memorize · mark-chapter-read — `ui/VerseActions.kt`); **study
-  routing** for every panel verb (occurrences / rendering / codeStudy / thread /
-  tag / weave / guide / about → the block pane); the **≡ study libraries**
-  (threads / tags / weaves / suggested / guide / about) + a **Full-study**
-  toggle (surfacing the morphology / similar / bridge-partner + authority-tier
-  blocks); a **word-study bottom sheet** on narrow screens; and **authoring**
-  (add tag/thread, edit note, approve/reject suggested weaves). Form-factor
-  calls (product decisions, 2026-07-24): zoomable canvases, study bottom
-  sheet. So the per-feature "Compose delta" notes
-  below are **resolved** except: `editThreadNotes` / `editWeaveNotes` /
-  `editEntryNote` / `untag` (need an index→name lookup); the cross-testament
-  **bridge data isn't loaded on Android yet** — `OpenFromBytes` has no home dir,
-  so `bridge/*.json` isn't read; the bridge row is wired but empty until asset
-  or extract-to-home wiring lands; and posture-driven fold-mode switching is
-  untested on hardware.
+- **What the Compose shell paints (all of it, as of 2026-07-29).** The reader
+  (`ui/ReaderPane.kt`) + word study + search + the fold layouts, plus:
+  **memorization** (review drill · coverage · activity — `ui/Memorize.kt`); the
+  **concept / constellation / chord** maps as pinch-zoom/pan canvases
+  (`ui/Maps.kt`, incl. the cross-testament bridge row) and the same three
+  embedded in the study pane (`ui/StudyMaps.kt`); the **whole panel
+  content-model** — every `*_blocks_json` / `*_blocks2_json` payload walked by
+  `ui/StudyPane.kt` into `AnnotatedString` runs with the palette colour-role map,
+  which is how the **RENDERINGS tier and the authority-tier marks (✝ † ≈ ⚗) and
+  legend** arrive without Android owning any tier code; **link routing** through
+  `plumbline_route_link_json` for 16 of the 20 verbs; the **verse-action sheet**
+  (`ui/VerseActions.kt`: copy · copy chapter · share · tag · note · thread ·
+  memorize · mark-chapter-read, plus the tag and thread pickers and
+  `PassageEndPicker`); **Explore** (notes · threads · tags · weaves+suggested ·
+  constellation · chord); **Present** (`ui/Present.kt`); the **passage navigator**
+  (`ui/BookNav.kt`) tinted by the reading map; **first run** (`ui/FirstRun.kt`) and
+  **church** (`ui/Church.kt`); **backup/restore** (`ui/Backup.kt`); the four themes
+  off `plumbline_theme_palette_json` (`ui/Palette.kt`); the two analysis gates in
+  Settings; `WarmIndexes` on a coroutine at startup.
+
+  **Live authoring gap:** `editThreadNotes` / `editWeaveNotes` / `editEntryNote` /
+  `untag` are the four verbs `StudyScreen.onLink` does not handle — they need an
+  index→name lookup, and the comment saying so is in the code beside the `when`.
+  The web routes all twenty (`study/links.ts`). Also still untested on hardware:
+  posture-driven fold-mode switching.
 - The Kotlin/JNA binding (`crates/ffi/bindings/kotlin/Plumbline.kt`, package
-  `dev.plumbline.core`) is now current with the 87-fn C ABI (incl. the 9
-  `plumbline_engine_memory_*`). It is the low-level `PlumblineNative` interface +
-  JNA types (`PlumblineLayoutConfig`, `MeasureCallback`) **only** — the earlier
-  duplicate camelCase wrapper was removed (and the interface renamed from
-  `PlumblineFfi`); the single PascalCase wrapper is `app/.../StudyEngine.kt`,
-  method-for-method with `bindings/csharp/PureStudy.cs`. The native lib
+  `dev.plumbline.core`) is the low-level `PlumblineNative` interface +
+  JNA types (`PlumblineLayoutConfig`, `MeasureCallback`) **only**; the single
+  PascalCase wrapper is `app/.../StudyEngine.kt`. It covers the whole C ABI, and
+  it cannot fall behind: `plumbline-bindgen`'s `verify_surface` compares it symbol
+  for symbol against the generated header and CI fails on any difference. (The C#
+  sibling `bindings/csharp/PureStudy.cs` went with the WinUI shell —
+  `crates/ffi/bindings/` holds `c/` and `kotlin/` now.) The native lib
   cross-builds with cargo-ndk into `jniLibs/{arm64-v8a,x86_64}/libplumbline_ffi.so`
   (NDK r29, `--platform 26`), verified independently of the emulator/SDK.
-- **Memorization (Tier 2 #15) — Compose delta:** the binding + `StudyEngine`
-  (`Memory*`) + `Wire.kt` records are in place, but the Memorize UI (review
-  drill · coverage map · activity) is **not yet in the Compose shell** — build
-  it from the GTK/WinUI reference when the shell lands.
-- **Rendering lens (2026-07-16) — Compose delta:** the two endpoints
-  (`renderingsJson` / `wordCodesJson`) are already in the Kotlin binding, but
-  the RENDERINGS tier + the `rend:` and `code:` routes are **not yet in a
-  Compose shell**. Build them from the GTK/WinUI reference when the Compose
-  shell lands, including the reusable code-study view (`code_study_markup` /
-  `CodeStudy`) that both the per-code block and the `code:` verb share.
-- **App/window icon — Compose delta:** GTK (`install_app_icon`, scalable SVG at
-  `apps/desktop/assets/icons/hicolor/scalable/apps/dev.plumbline.app.svg`) and
-  WinUI (`.ico`) both wire the woven cross; Android needs its own launcher
-  icon (adaptive-icon / mipmap) generated from `plumbline.svg` — not the
-  hicolor tree.
-- **Authority tiers (2026-07-16) — Compose delta:** the classification lives in
-  Rust (`bridge::source_tiers`/`research_grade`/`tiers_of`) and rides the wire
-  (`tiers`/`researchGrade` on bridge partners), so a Compose shell reads it for
-  the SAME ROOT marks and hardcodes the fixed-by-block tiers (SIMILAR CONCEPTS =
-  Machine, TSK = Human, …) like GTK/WinUI. The mark glyphs (✝ † ≈ ⚗), their
-  colors, and the legend are **not yet in a Compose shell** — build from the
-  GTK/WinUI reference (see **Authority tiers** above). The Kotlin binding must
-  also gain `bridgePartnersJson` (its `PlumblineFfi` interface omits the R&D tier).
-- **View-model consolidation (2026-07-16, P0.3) — Compose delta:** the two new
-  endpoints (`plumbline_engine_link_pairs_json` / `plumbline_engine_canon_segments_json`)
-  are **not yet in the Kotlin `PlumblineFfi` interface** (kept minimal like the other
-  study-tier endpoints). A Compose shell adds the two JNA decls + wrappers, then
-  consumes them for its connectors and canon strip instead of re-deriving —
-  exactly what this phase removed from GTK/WinUI.
-- **Panel content-model + link router (2026-07-18, P0.1 + P1.4) — Compose
-  delta:** the whole study panel is a typed block list from the
-  `plumbline_engine_*_blocks_json` family, and links parse via `plumbline_route_link_json`
-  — none are in the Kotlin interface yet. A Compose shell adds those JNA decls +
-  wrappers, then walks the blocks with a small per-block composable
-  (`Section`/`Para`/`Rule`, runs → `AnnotatedString` with the colour-role map +
-  clickable link URIs) and dispatches clicks on the parsed `{verb}`. It writes
-  **no** panel derivation — the producer owns tier order, caps, gloss/lemma,
-  snippets, and the verb vocabulary. Colour roles map identically to GTK/WinUI.
-- **Popup view-models (2026-07-18, P0.2) — Compose delta:** the three map
-  popups now come from `plumbline_engine_chord_map_json` / `plumbline_engine_concept_map_json`
-  / `plumbline_engine_constellation_json` (all **not yet in the Kotlin interface**).
-  A Compose shell adds the three JNA decls + wrappers and paints the returned
-  fractions — it never re-derives the fold / spoke assembly / lane layout.
-  Positions are fractions/logical units, so the Compose mapping is the SAME
-  `plotLeft + x·(w−plotLeft)` / `topPad + (lane+laneFrac)·laneH` the GTK/WinUI
-  reference uses; keep `laneCapacity`, plotLeft 162, topPad 18, gutter 150, and
-  the `1.4+2.4·size` radius identical so all three shells place a node alike.
-- **Tier 0 (2026-07-19) — Compose delta:** the new endpoints (copy text,
-  user-note read/write, chapter highlights, palette, highlight tones, warm,
-  guide/about blocks) are **not yet in the Kotlin `PlumblineFfi` interface**. A
-  Compose shell adds the JNA decls + wrappers, then: a long-press/overflow
-  context menu (copy via `ClipboardManager`, note, highlight tones, tag/thread);
-  per-pane history (system back + gesture); a note gutter mark + the "your note"
-  block (already in the content model); highlight washes from
-  `chapterHighlightsJson`; theme from `paletteJson` (Compose is well-suited —
-  a `MaterialTheme`/`Color` map, follow-system via `isSystemInDarkTheme()`);
-  `warmIndexes` on a coroutine at startup; the guide/about blocks + a shortcuts
-  sheet; cross-book stepping + all-hits banding + modifier-open-other-pane.
 - Build gate: Android NDK + `cargo-ndk` for the `.so` per ABI; the Rust and
   the JSON contract are identical.
 - Measure callback: back it with `android.graphics.Paint.measureText` (or
   Compose's TextMeasurer); the core does the rest.
-- **v1 phone shell (2026-07-24) — Compose delta (form-factor UX, on-device
-  feedback).** The phone drops the always-split layout + the Split/Single and
+- **v1 phone shell (2026-07-24) — form-factor UX from on-device
+  feedback.** The phone drops the always-split layout + the Split/Single and
   Bible/Study text toggles. Two layouts only (`FoldMode.UiMode`): a single
   fullscreen reader (phone/closed/tabletop), or two side-by-side panes when the
   fold is opened flat with a vertical hinge. On the phone the study surface
@@ -1180,28 +1358,28 @@ lines would wrap where they are not drawn.)
   right→prev) and honours the new `sideMargin` / `lineSpacing` config prefs; the
   overflow menu exposes **Text & spacing** (size + margin + line-spacing sliders)
   and **Copy format** (the `copyStyle` chooser), so the long-press has a single
-  **Copy** action. Desktop keeps its right-click copy variants + fixed layout;
-  the desktop UI for `copyStyle`/`sideMargin`/`lineSpacing` is a pending follow-up
-  (the fields round-trip on both desktop shells regardless). Requires the
-  `material-icons-core` dependency.
-- **v1 phone shell, round 2 (2026-07-24) — Compose delta.** Overflow menu cut to
+  **Copy** action. The web took the same shape: one Copy honouring Settings ▸ Copy
+  format (2026-07-29), and the same three sliders in `SettingsDialog.svelte`.
+  Requires the `material-icons-core` dependency.
+- **v1 phone shell, round 2 (2026-07-24).** Overflow menu cut to
   five entries — Memorize / Explore / History / Guide & About / Settings — so it
   never scrolls; the fold's second-pane flip is a top-bar icon, not a menu item.
   **Memorize** is a hub (a list of every card from `MemoryCoverageJson`, canon-
   sorted, + Review due / Coverage / Activity buttons). **Explore** is a described
-  card list (Threads, Tags, Weaves, Constellation, Chord) so the tools aren't
-  cryptic; **Weaves** is one screen with an All/Suggested filter (was two items).
-  **History** is a bottom sheet over the new `history` config field; the reader
+  card list (Notes, Threads, Tags, Weaves, Constellation, Chord) so the tools
+  aren't cryptic; **Weaves** is one screen with an All/Suggested filter (was two
+  items — the web still lists Suggested separately).
+  **History** is a bottom sheet over the `history` config field; the reader
   restores the last-viewed passage from `openPanes` and persists it + history on
-  every chapter change (off-thread). **Settings** folds Full study + text size /
-  margin / line-spacing + copy format + bundled set into one dialog. Guide &
+  every chapter change (off-thread). **Settings** folds the two analysis gates +
+  text size / margin / line-spacing + copy format + theme + church + bundled set
+  into one dialog. Guide &
   About are combined in the core (`guide_blocks` inlines `about_body`; the
   standalone About card stays for the `about` link verb). Word study / library /
   search run off the main thread and the analytics index warms at startup
   (`WarmIndexes`) to kill the first-tap stall. Map pan is bounded (the shared
   `zoomable` clamps the offset so a map can't be flung off-screen; pinned at 1×).
-  A memorize add shows a Toast. Desktop keeps its menu/right-click layout; these
-  are phone form-factor deltas.
+  A memorize add shows a Toast.
 
 - **Passage memorization + the church on Android (2026-07-27, both shells).**
   A memory card can cover a **passage read and recalled as one chunk**, not only
