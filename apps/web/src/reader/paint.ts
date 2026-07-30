@@ -7,26 +7,46 @@ import { READER_FONT_FAMILY } from "./measure";
 
 export const MARGIN = 28; // top/bottom text margin (manifest constant)
 
+// Token flag bits on a display-list item: this shell's MIRROR of the
+// `PLUMBLINE_FLAG_*` #defines in crates/ffi/include/plumbline.h, which cbindgen
+// const-folds out of crates/ffi/src/lib.rs where a compile-time assert pins each
+// one to the core's own constant. Names and values must match that header
+// exactly, and every paint site below tests one of these rather than a number:
+// `flag_bits_are_mirrored_by_both_shells` (crates/ffi/src/tests.rs) fails on
+// either. FLAG_RERENDERED spent its life as a bare 16 here, mirroring nothing,
+// because the ffi crate never exported it (fixed 2026-07-29).
 export const FLAG_ADDED = 1;
 export const FLAG_DIVINE = 2;
 export const FLAG_TITLE = 4;
-/** Display-only (core::akjv): this word is an AKJV re-rendering. Never in
- *  `kjv.jsonl` — the overlay sets it on the display list on the way past. */
+/** Display only: this word is an AKJV re-rendering, set by the overlay on the
+ *  display list on the way past. Never in `kjv.jsonl`. */
 export const FLAG_RERENDERED = 16;
 
+/**
+ * One positioned box in a chapter's display list.
+ *
+ * IMMUTABLE, and `readonly` field by field so the compiler says so. A display
+ * list is produced whole by the core, handed across from the engine worker, and
+ * REPLACED WHOLESALE when anything about the layout changes — no code anywhere
+ * edits an item in place. Two things downstream depend on exactly that: the
+ * items are held in `$state.raw` (no deep proxy, no signal per field), and
+ * `verseExtents` is memoized on the identity of the array (below). Both would be
+ * wrong — not merely fast — if an item could change under them, so the rule is
+ * enforced here rather than remembered.
+ */
 export interface LayoutItem {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  text: string;
-  kind: "verseNumber" | "word";
-  verse: string | null;
-  verseDisplay: string | null;
-  tokenIndex: number | null;
-  verseNumber: number | null;
-  flags: number;
-  strongs: string[];
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+  readonly text: string;
+  readonly kind: "verseNumber" | "word";
+  readonly verse: string | null;
+  readonly verseDisplay: string | null;
+  readonly tokenIndex: number | null;
+  readonly verseNumber: number | null;
+  readonly flags: number;
+  readonly strongs: readonly string[];
 }
 
 export interface PaintOverlays {
@@ -60,15 +80,14 @@ export function itemVerse(it: LayoutItem): number | null {
   return null;
 }
 
-/** Per-verse vertical extents (layout coords), for the bands. */
 /** Hit-test a layout point against the word rectangles — the TS twin of
  *  plumbline_layout_hit_test_json, so hover/tap never crosses to the worker
  *  (TODO #28). Coordinates are layout-space (caller subtracts margins). */
 export function hitTest(
-  items: LayoutItem[],
+  items: readonly LayoutItem[],
   x: number,
   y: number,
-): { verse: string; tokenIndex: number; strongs: string[] } | null {
+): { verse: string; tokenIndex: number; strongs: readonly string[] } | null {
   for (const it of items) {
     if (it.kind !== "word" || it.verse == null || it.tokenIndex == null) continue;
     if (x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h)
@@ -77,7 +96,101 @@ export function hitTest(
   return null;
 }
 
-export function verseExtents(items: LayoutItem[]): Map<number, { top: number; bottom: number; firstY: number }> {
+/** One verse's vertical span in layout coords. Read-only because the map below
+ *  is SHARED — by every caller and by every frame of a layout — so an entry one
+ *  caller edited would be an entry the next paint believes. */
+export interface VerseExtent {
+  readonly top: number;
+  readonly bottom: number;
+  readonly firstY: number;
+}
+export type VerseExtents = ReadonlyMap<number, VerseExtent>;
+
+/**
+ * What the paint path is costing, counted rather than guessed at.
+ *
+ * This is a diagnostic in the same spirit as `__plumbline` on the session: a
+ * handle for the console, and the thing `e2e/reader-perf.spec.ts` measures — the
+ * count of per-frame recomputations across a real scroll, instead of a
+ * millisecond ceiling that says nothing about why a frame was slow.
+ *
+ * Present in PRODUCTION builds on purpose. The e2e suite runs the production
+ * bundle (`vite preview`), so a counter compiled out of the build could not
+ * regression-test the build. A steady-state scroll frame pays two increments,
+ * one WeakMap lookup and one identity compare for it.
+ *
+ * `items` is a WeakRef because a probe on the paint path must never be the reason
+ * a chapter the reader has left stays in memory.
+ */
+export interface PaintProbe {
+  /** paintChapter calls — i.e. frames actually drawn. */
+  paints: number;
+  /** Distinct display lists painted: layouts, as opposed to frames. */
+  layouts: number;
+  /** verseExtents calls, and how many of them had to do the work. */
+  extentsCalls: number;
+  extentsComputed: number;
+  /** The most recently painted display list, and the extents the paint used —
+   *  so a test can re-derive the extents and catch a memo gone stale. */
+  items: WeakRef<readonly LayoutItem[]> | null;
+  extents: VerseExtents | null;
+  /** Zero the counters. Deliberately keeps `items`/`extents` and the
+   *  last-painted identity, so `layouts` after a reset counts the layouts that
+   *  arrived AFTER it — which is the budget a scroll test compares against. */
+  reset(): void;
+}
+
+export const paintProbe: PaintProbe = {
+  paints: 0,
+  layouts: 0,
+  extentsCalls: 0,
+  extentsComputed: 0,
+  items: null,
+  extents: null,
+  reset(): void {
+    this.paints = 0;
+    this.layouts = 0;
+    this.extentsCalls = 0;
+    this.extentsComputed = 0;
+  },
+};
+(globalThis as any).__plumblinePaint = paintProbe;
+
+/** Identity of the display list the last frame painted (see `paintProbe`).
+ *
+ *  WEAK for the same reason `paintProbe.items` is: this is a counter's bookmark,
+ *  and a counter must not be why a chapter stays in memory — a pane closed right
+ *  after a paint would otherwise pin its whole display list forever. A collected
+ *  target derefs to `undefined`, which correctly compares unequal to the list
+ *  being painted now, so losing the bookmark costs one extra `layouts` tick and
+ *  cannot mis-report a shared layout as a fresh one. */
+let lastPainted: WeakRef<readonly LayoutItem[]> | null = null;
+
+/**
+ * Per-verse vertical extents, memoized ONCE PER LAYOUT.
+ *
+ * The key is the display list itself, which works because of the invariant
+ * stated on `LayoutItem`: a display list is replaced wholesale, never mutated in
+ * place. A changed layout is therefore a DIFFERENT array and cannot collide with
+ * a stale entry — there is no invalidation to get wrong, and nothing to keep in
+ * step. That is what makes the memo correct rather than merely faster.
+ *
+ * Weak, so an entry dies with the display list it describes rather than pinning
+ * every chapter the reader has visited.
+ *
+ * Before this, `paintChapter` rebuilt the map inside every frame: all 2,643 of
+ * Psalm 119's items walked per frame, for data that changes only when the layout
+ * does — and walked through the deep-state proxy that item 1 of this change
+ * removed, which measured 2.30 ms against 0.10 ms raw.
+ * `e2e/reader-perf.spec.ts` counts the computations across a real scroll.
+ */
+const extentsMemo = new WeakMap<readonly LayoutItem[], VerseExtents>();
+
+export function verseExtents(items: readonly LayoutItem[]): VerseExtents {
+  paintProbe.extentsCalls++;
+  const memo = extentsMemo.get(items);
+  if (memo) return memo;
+  paintProbe.extentsComputed++;
   const out = new Map<number, { top: number; bottom: number; firstY: number }>();
   for (const it of items) {
     const v = itemVerse(it);
@@ -90,6 +203,7 @@ export function verseExtents(items: LayoutItem[]): Map<number, { top: number; bo
       e.firstY = Math.min(e.firstY, it.y);
     }
   }
+  extentsMemo.set(items, out);
   return out;
 }
 
@@ -100,7 +214,7 @@ function withAlpha(hex: string, alpha: number): string {
 
 export function paintChapter(
   ctx: CanvasRenderingContext2D,
-  items: LayoutItem[],
+  items: readonly LayoutItem[],
   o: PaintOpts,
   ov: PaintOverlays,
 ): void {
@@ -111,6 +225,14 @@ export function paintChapter(
   const yOf = (layoutY: number) => MARGIN + layoutY - scrollY;
   const visible = (top: number, bottom: number) => yOf(bottom) >= 0 && yOf(top) <= viewportH;
   const extents = verseExtents(items);
+
+  paintProbe.paints++;
+  if (lastPainted?.deref() !== items) {
+    lastPainted = new WeakRef(items);
+    paintProbe.layouts++;
+    paintProbe.items = lastPainted;
+    paintProbe.extents = extents;
+  }
 
   // ── hit / goto bands ──
   const bandRect = (e: { top: number; bottom: number }) =>

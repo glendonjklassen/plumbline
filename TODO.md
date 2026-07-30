@@ -234,7 +234,7 @@ as "a later increment". F–I can ride later increments (the PWA auto-updates).
   frame on phones to draw nothing: guard the size assignment, bail before the
   alloc, mount conditionally (`ConnectorsOverlay.svelte:39-55`,
   `Shell.svelte:393`). #1 phone-jank suspect.
-- [ ] **[opus]** `$state.raw` for the display-list items (deep proxy walked 3×/frame,
+- [x] **[opus]** `$state.raw` for the display-list items (deep proxy walked 3×/frame,
   ~10k signals on Ps 119) + memoize `verseExtents` per layout
   (`ReaderPane.svelte:33`, `paint.ts:80-94`).
 - [ ] **[opus]** Overlap the wasm fetch+compile with the stage-1 read (start

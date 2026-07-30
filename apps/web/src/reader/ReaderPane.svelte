@@ -30,7 +30,31 @@
   let cssW = $state(0);
   let cssH = $state(0);
 
-  let items = $state<LayoutItem[]>([]);
+  // RAW state, not deep state. A display list is REPLACED WHOLESALE — the two
+  // writers below only ever ASSIGN a fresh array (the layout reply, and the
+  // empty list on a chapter change), and no code anywhere edits an item — so
+  // there is nothing for a per-item, per-field proxy to observe.
+  //
+  // Deep `$state` gave every item a proxy of its own — 2,643 of them on Psalm
+  // 119, counted from the page, not estimated — with a lazily-created signal
+  // behind each field those proxies were read for: nine of the twelve on the
+  // frame path (x, y, w, h, kind, text, flags, verse, verseNumber), eleven once
+  // hover and tap are counted. And a scroll frame walks the whole list THREE
+  // times: `trackReached` from onscroll, then `verseExtents` and the text loop
+  // inside the paint. Every one of those reads went through a trap to watch for a
+  // change that cannot happen. Measured in the page on this list, mean of 20
+  // walks reading those nine fields: 2.30 ms proxied against 0.10 ms raw — 23x,
+  // and it was being paid three times per frame.
+  //
+  // `LayoutItem` is `readonly` field by field, so the compiler now holds the
+  // invariant that makes this correct rather than merely cheap; `verseExtents`
+  // memoizes on the same guarantee, which takes the second of those three walks
+  // off the frame entirely.
+  //
+  // Reassignment is still tracked — raw state is a signal on the VARIABLE — so
+  // every `void items` dependency below, and the text mirror, behave exactly as
+  // they did. `e2e/reader-perf.spec.ts` counts both.
+  let items = $state.raw<readonly LayoutItem[]>([]);
   let contentH = $state(0);
   /** Which chapter `items` describes — the guard against painting one
    *  chapter's text under another's name. */
