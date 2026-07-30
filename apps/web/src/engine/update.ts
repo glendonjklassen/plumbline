@@ -25,8 +25,13 @@
 import { assetUrl } from "./pack";
 import type { ShellManifest } from "./precache";
 
-/** The build id deployed right now, or null if it cannot be read. */
-export async function deployedBuildId(): Promise<string | null> {
+/** The build id deployed right now, or null if it cannot be read.
+ *
+ *  Module-private: `updateAvailable` is the whole public surface. A caller
+ *  outside would have to reimplement the "false on any doubt" rule, which is the
+ *  only part of this that keeps a spurious "update ready" from reloading a reader
+ *  into the same build. */
+async function deployedBuildId(): Promise<string | null> {
   try {
     // no-store: this must see the deploy, not our own stored copy. Paired with
     // sw.js declining to cache no-store requests, so asking cannot poison

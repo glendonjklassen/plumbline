@@ -47,8 +47,30 @@ pub mod stopwords;
 #[cfg(feature = "concept")]
 pub mod burst;
 
-/// Which R&D capabilities this build was compiled with. The UI queries this to
-/// decide which panels/toggles to even show (decision #4).
+/// Which R&D capabilities this build was **compiled** with.
+///
+/// NOT the same axis as what the reader sees, and it is worth being exact about
+/// that because the comment here used to claim it was. Which panels and toggles
+/// appear is decided by `Config::scholars_analysis` / `machine_analysis` — a
+/// reader PREFERENCE, set at first run (decision #4) and changeable in Settings.
+/// This is a BUILD FACT: whether the code behind a tier was compiled in at all.
+/// A build can perfectly well have `concept` compiled in and the reader's machine
+/// tier switched off, and today every shipped build has all four (see
+/// `crates/ffi/Cargo.toml`; `plumbline-hydrate` takes three).
+///
+/// So nothing crosses the C ABI yet, and this is deliberately not wired to a
+/// shell: `plumbline-rnd` cannot see a shell, and the endpoint that should carry
+/// it is the negotiated-capabilities handshake in TODO §H (which also has to
+/// carry `defer_builds`, `warm_step`, and a live `PLUMBLINE_WIRE_VERSION` —
+/// today emitted and read by nothing). Kept rather than deleted for two
+/// reasons: it is a `const fn` over `cfg!`, so it costs no runtime and no bytes;
+/// and the tests below are the only thing watching the feature gating itself.
+/// CI runs a dedicated `rnd-featureless` job (ci.yml) precisely so feature
+/// unification from a sibling `-p` flag cannot switch the tiers on behind our
+/// back — and `default_build_has_no_rnd` is the only assertion in that job that
+/// says anything about the gating (its three companions are `stopwords`, pure
+/// data with no gate). Delete this and the job proves the crate compiles with no
+/// features, not that it compiled no features in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Capabilities {
     pub bridge: bool,
@@ -91,5 +113,41 @@ mod tests {
     fn default_build_has_no_rnd() {
         assert!(!any_enabled());
         assert_eq!(capabilities(), Capabilities::default());
+    }
+
+    // The mirror of the above, for the all-features build CI runs as its own
+    // step. It had no assertion about `capabilities()` at all, so the report
+    // could have gone permanently all-false in the build that ships (every
+    // shipped build has all four — see `crates/ffi/Cargo.toml`) and only the
+    // featureless job, where all-false is CORRECT, would have been watching.
+    #[cfg(all(
+        feature = "bridge",
+        feature = "embeddings",
+        feature = "morphology",
+        feature = "concept"
+    ))]
+    #[test]
+    fn full_build_reports_every_tier() {
+        assert!(any_enabled());
+        let c = capabilities();
+        assert!(c.bridge, "bridge compiled in but not reported");
+        assert!(c.embeddings, "embeddings compiled in but not reported");
+        assert!(c.morphology, "morphology compiled in but not reported");
+        assert!(c.concept, "concept compiled in but not reported");
+    }
+
+    // Every field must track ITS OWN feature. All-on and all-off cannot tell a
+    // copy-pasted `cfg!` from a correct one — both builds agree on every field
+    // either way — so this runs in the PARTIAL configuration that can: bridge
+    // without concept, which is `plumbline-hydrate`'s own feature set and what
+    // `cargo test -p plumbline-rnd --features bridge` builds.
+    #[cfg(all(feature = "bridge", not(feature = "concept")))]
+    #[test]
+    fn each_tier_tracks_its_own_feature() {
+        let c = capabilities();
+        assert!(c.bridge, "bridge is on, so Capabilities::bridge must be true");
+        assert!(!c.concept, "concept is off, so Capabilities::concept must be false");
+        assert!(any_enabled(), "one tier on is enough for any_enabled()");
+        assert_ne!(c, Capabilities::default(), "a partial build is not the empty report");
     }
 }

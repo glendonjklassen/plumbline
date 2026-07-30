@@ -36,6 +36,14 @@
 // Best-effort throughout: storage can be blocked (private mode, plain http) or
 // full. A reader who cannot cache should still be able to read, so every
 // failure here degrades to "works, but is not offline yet" rather than throwing.
+//
+// RECLAMATION IS NOT HERE. This module hands out primitives (`depotKeys`,
+// `depotDelete`); the sweep itself is `pruneToPin` in engine.worker.ts, because
+// the pin is the authority on what to keep and the pin lives in the worker.
+// There used to be a second sweeper here — `pruneStale`, a DENYLIST keyed on
+// `?v=` — and it went unreferenced the day the pin landed (2026-07-28) while
+// still reading as live code. One sweeper, in the module that holds the
+// keep-set: a second one either disagrees with the first or is dead.
 
 /** The single Cache bucket. Must match the name in public/sw.js — a plain
  *  script served from /, which cannot import this module. Change both together.
@@ -202,39 +210,6 @@ export async function depotResponse(url: string): Promise<Response> {
   return (await depotGet(url)) ?? new Response(bytes.slice().buffer as ArrayBuffer, {
     headers: { "content-type": "application/wasm" },
   });
-}
-
-/** Delete what this build can no longer use.
- *
- *  Every versioned URL is content-addressed — pack files carry `?v=<pack hash>`,
- *  the wasm `?v=<build id>`, the JS/CSS their hashed filenames — so an update
- *  never overwrites an entry, it adds a new one beside it. Nothing ever removed
- *  the old: the bucket name is a constant and the SW's activate only drops
- *  buckets under OTHER names. A reader who took three data updates was quietly
- *  carrying three whole packs (2026-07-27).
- *
- *  Conservative by construction: it deletes only what is positively identified
- *  as belonging to a version we are not running, so an interrupted update can
- *  never leave a device holding neither copy. Un-versioned entries (index.html,
- *  the fonts, the webmanifest) are never touched. Returns how many went. */
-export async function pruneStale(keep: { versions: string[]; assets: Set<string> }): Promise<number> {
-  const c = await bucket();
-  if (!c) return 0;
-  let gone = 0;
-  try {
-    for (const req of await c.keys()) {
-      const url = new URL(req.url);
-      const v = url.searchParams.get("v");
-      const stale =
-        v !== null
-          ? !keep.versions.includes(v)
-          : url.pathname.includes("/assets/") && !keep.assets.has(url.origin + url.pathname);
-      if (stale && (await c.delete(req))) gone++;
-    }
-  } catch {
-    /* storage blocked: nothing to reclaim, and the app is unaffected */
-  }
-  return gone;
 }
 
 /** Ask the browser not to evict us under storage pressure.

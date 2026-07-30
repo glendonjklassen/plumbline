@@ -20,7 +20,11 @@ export interface Church {
   url: string;
 }
 
-export const EMPTY_CHURCH: Church = { name: "", info: "", url: "" };
+// No EMPTY_CHURCH constant. One shipped with this module and was never read
+// once: `cleanChurch(null)` already returns the empty church, and it is what
+// every caller goes through anyway (a church arrives from a query string or a
+// settings field, both of which need normalizing). A second source for the same
+// value is a second thing to keep in step with `Church`.
 
 export const hasChurch = (c: Church | undefined | null): c is Church =>
   !!c && c.name.trim().length > 0;

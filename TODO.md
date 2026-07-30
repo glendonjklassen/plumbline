@@ -354,7 +354,7 @@ as "a later increment". F–I can ride later increments (the PWA auto-updates).
   `concept_label`, `memory_span`, tuning constants.
 - [x] **[opus]** Export `FLAG_RERENDERED` to the header with the compile-time assert
   (both shells hardcode `16`; it bypassed the mechanism built for exactly this).
-- [ ] **[opus]** Dead code sweep: `pruneStale`, `pinHasStage`, `EMPTY_CHURCH`,
+- [x] **[opus]** Dead code sweep: `pruneStale`, `pinHasStage`, `EMPTY_CHURCH`,
   ~12 unnecessary exports; decide `rnd::capabilities()` (exposed nowhere — wire it
   or delete it).
 

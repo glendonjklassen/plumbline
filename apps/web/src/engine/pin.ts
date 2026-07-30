@@ -26,7 +26,7 @@
 //   "the pin said so, therefore it is there". Boot degrades to the cold path,
 //   which re-downloads only what is actually missing.
 
-import { depotGet, depotHas, depotPut } from "./depot";
+import { depotGet, depotPut } from "./depot";
 import { assetUrl, type PackFile, type PackManifest } from "./pack";
 
 const PIN_URL = "__depot/pack-pin.json";
@@ -61,8 +61,13 @@ function pinFrom(manifest: PackManifest, base: string): Pin {
 /** The URL a pack file's bytes live under: content-addressed on the file's own
  *  hash, so a release that changes one weave invalidates one URL instead of all
  *  forty-four. The hash goes in the QUERY, not the filename, so the layout under
- *  `public/pack/` is untouched and the server needs no old-generation retention. */
-export function fileUrl(f: PackFile, packVersion: string): string {
+ *  `public/pack/` is untouched and the server needs no old-generation retention.
+ *
+ *  Module-private: the pin is the ONLY thing that mints these, and every reader
+ *  of a pack file goes through `packFileUrl` in pack.ts, which prefers the URL
+ *  the pin already recorded. Exporting this offered a second way to derive what
+ *  is supposed to be recorded once. */
+function fileUrl(f: PackFile, packVersion: string): string {
   return f.hash ? `pack/${f.path}.gz?h=${f.hash}` : `pack/${f.path}.gz?v=${packVersion}`;
 }
 
@@ -83,15 +88,13 @@ export async function readPin(base: string): Promise<Pin | null> {
   return null;
 }
 
-/** Whether every file this stage needs is actually in the depot. The pin claims
- *  it; this checks it. Cheap — `match` is a metadata lookup, no body is read. */
-export async function pinHasStage(pin: Pin, stage: PackFile["stage"]): Promise<boolean> {
-  for (const f of pin.files) {
-    if (f.stage !== stage) continue;
-    if (!(await depotHas(assetUrl(f.url!)))) return false;
-  }
-  return true;
-}
+// THERE IS NO "does the depot have this stage?" PROBE HERE, on purpose. One
+// shipped with the pin and was never called: boot instead asks `fetchStageLocal`
+// for the stage's BYTES and treats a miss as the cold path. A probe would cost a
+// storage round trip per file on the one path we are making fast (44 files on a
+// phone), and — because the pin is a claim, not a proof — it can disagree with
+// the read it is supposed to describe. The read that actually happens is the
+// only honest answer. (Same reasoning as `depotBytes`'s `source` out-param.)
 
 /** Commit a pin, keeping the one it replaces.
  *

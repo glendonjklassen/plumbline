@@ -21,17 +21,24 @@
 //
 // A build-emitted list is exact, complete, and identical on every page.
 
-import { DEPOT, depotHas, requestPersistence } from "./depot";
+import { DEPOT, depotAvailable, depotHas, requestPersistence } from "./depot";
 import { assetUrl } from "./pack";
 
+/** Exported for update.ts, which reads `buildId` off the same file to notice a
+ *  deploy. The FILE is this module's business; the SHAPE is shared. */
 export interface ShellManifest {
   buildId: string;
   files: string[];
 }
 
 /** The shell this build is made of, or null when the manifest cannot be read (a
- *  dev server, or offline before it was ever stored). */
-export async function fetchShellManifest(): Promise<ShellManifest | null> {
+ *  dev server, or offline before it was ever stored).
+ *
+ *  Module-private: `precacheShell` is the only caller and the only thing that
+ *  should be. update.ts deliberately fetches this file itself with `no-store` —
+ *  it must see the DEPLOY, not our stored copy — and reusing this cache-falling-
+ *  back reader there would make every update check answer "no update". */
+async function fetchShellManifest(): Promise<ShellManifest | null> {
   const url = assetUrl("shell-manifest.json");
   try {
     const res = await fetch(url);
@@ -52,7 +59,7 @@ export async function fetchShellManifest(): Promise<ShellManifest | null> {
  *  there and the pin is the authority on what to keep. Pruning happens only AFTER
  *  this resolves, never before: it must not be able to strand a half-updated app. */
 export async function precacheShell(): Promise<string[]> {
-  if (typeof caches === "undefined") return []; // no Cache API (private mode, http)
+  if (!depotAvailable()) return []; // no Cache API (private mode, http)
   try {
     const manifest = await fetchShellManifest();
     const base = new URL("./", location.href).href;
