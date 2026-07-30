@@ -390,7 +390,14 @@
           {#each s.panes as _, i (i)}
             <ReaderPane paneIdx={i} onWordStudy={openWordStudy} />
           {/each}
-          <ConnectorsOverlay />
+          {#if s.panes.length > 1}
+            <!-- A connector goes BETWEEN panes, so one pane has none — and a
+                 phone only ever has one (`addPane` refuses when narrow). Not
+                 mounting it there is the difference between a full-viewport
+                 canvas re-allocated on every scroll frame to draw nothing and
+                 no canvas at all. -->
+            <ConnectorsOverlay />
+          {/if}
         </div>
         <CanonStrip />
       </div>

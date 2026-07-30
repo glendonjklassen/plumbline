@@ -230,7 +230,7 @@ as "a later increment". F–I can ride later increments (the PWA auto-updates).
 
 ## F. Performance — web
 
-- [ ] **[opus]** ConnectorsOverlay reallocates a full-viewport canvas every scroll
+- [x] **[opus]** ConnectorsOverlay reallocates a full-viewport canvas every scroll
   frame on phones to draw nothing: guard the size assignment, bail before the
   alloc, mount conditionally (`ConnectorsOverlay.svelte:39-55`,
   `Shell.svelte:393`). #1 phone-jank suspect.

@@ -73,29 +73,91 @@
     rafId = requestAnimationFrame(draw);
   });
 
+  /** Whether the canvas currently carries ink. A frame with nothing to draw has
+   *  to erase what the last one drew — but only once, and only if there was
+   *  anything, because erasing is the one thing on this path that costs. */
+  let painted = false;
+
+  /** Wipe the backing store without resizing it. In device pixels and with the
+   *  transform reset, so it is correct whatever `cssW`/`cssH` have done since. */
+  function wipe(): void {
+    const ctx = canvas?.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    painted = false;
+  }
+
   function draw(): void {
     if (!canvas || cssW <= 0) return;
     const n = s.panes.length;
+
+    // NOTHING TO DRAW ⇒ TOUCH NOTHING. Both bails below stand in front of the
+    // resize on purpose: assigning `canvas.width` or `canvas.height`
+    // REALLOCATES the backing store and clears it even when the number assigned
+    // is the number already there, so the old unconditional pair meant a
+    // full-viewport allocation on every scroll frame — and this effect runs on
+    // every scroll frame, because it depends on each pane's scrollY.
+    //
+    // A one-pane reader has no second pane to cross to, which is every phone
+    // (`addPane` refuses when narrow). Shell.svelte does not even mount this
+    // overlay below two panes now; the guard stays because a pane can close
+    // under it, and because it is the honest statement of what the frame needs.
+    if (n < 2) {
+      if (painted) wipe();
+      return;
+    }
+
+    // Later pane wins duplicates (manifest): walk panes in order into a map.
+    const paneFor = new Map<string, number>();
+    s.panes.forEach((p, i) => paneFor.set(`${p.book}|${p.chapter}`, i));
+
+    // Which pairs actually cross the panes on screen, resolved before any of the
+    // drawing machinery is set up: two panes showing unwoven chapters is the
+    // common case, and it used to pay the same allocation to draw nothing at all.
+    const crossing: { li: number; lv: number; ri: number; rv: number }[] = [];
+    for (const pr of pairs) {
+      const ia = paneFor.get(`${pr.aBook}|${pr.aChapter}`);
+      const ib = paneFor.get(`${pr.bBook}|${pr.bChapter}`);
+      if (ia === undefined || ib === undefined || ia === ib) continue;
+      crossing.push(
+        ia < ib
+          ? { li: ia, lv: pr.aVerse, ri: ib, rv: pr.bVerse }
+          : { li: ib, lv: pr.bVerse, ri: ia, rv: pr.aVerse },
+      );
+    }
+    if (crossing.length === 0) {
+      if (painted) wipe();
+      return;
+    }
+
     // Measured in the frame being painted, and BEFORE the canvas resize below: a
     // height cached from the observer arrives a frame late (every connector drawn
     // wrong, then a jump), and a rect read after writing canvas.width would force
     // a reflow this frame never needed.
-    const textTop = n < 2 ? [] : paneTextTops();
-    const dpr = devicePixelRatio || 1;
-    canvas.width = Math.round(cssW * dpr);
-    canvas.height = Math.round(cssH * dpr);
-    const ctx = canvas.getContext("2d")!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, cssW, cssH);
-    if (n < 2) return;
+    const textTop = paneTextTops();
     // A pane we could not measure would be drawn at the wrong y; skip the frame
-    // and let the observer's redraw have it once the panes are laid out.
+    // and let the observer's redraw have it once the panes are laid out. Whatever
+    // is on the canvas stays there — a stale connector for one frame beats a
+    // blink, and `painted` still describes the pixels.
     if (textTop.length < n) return;
 
+    const dpr = devicePixelRatio || 1;
+    const bw = Math.round(cssW * dpr);
+    const bh = Math.round(cssH * dpr);
+    // Compared, not just assigned — see the note above. This is the size the
+    // canvas keeps for a whole scroll: it changes on a resize, a zoom or a pane
+    // opening, and on no frame in between.
+    if (canvas.width !== bw) canvas.width = bw;
+    if (canvas.height !== bh) canvas.height = bh;
+    const ctx = canvas.getContext("2d")!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Still cleared every frame: without the reallocation above, last frame's
+    // connectors would otherwise stay under this frame's.
+    ctx.clearRect(0, 0, cssW, cssH);
+    painted = false;
+
     const paneW = cssW / n;
-    // Later pane wins duplicates (manifest): walk panes in order into a map.
-    const paneFor = new Map<string, number>();
-    s.panes.forEach((p, i) => paneFor.set(`${p.book}|${p.chapter}`, i));
 
     // Endpoint y in overlay coords: verse line centre − pane scroll, clamped
     // into the pane's visible band ±YINSET so an off-screen end lingers as an
@@ -109,14 +171,11 @@
     };
 
     const gold = s.palette.gold ?? "#9e7d38";
-    for (const pr of pairs) {
-      const ia = paneFor.get(`${pr.aBook}|${pr.aChapter}`);
-      const ib = paneFor.get(`${pr.bBook}|${pr.bChapter}`);
-      if (ia === undefined || ib === undefined || ia === ib) continue;
-      const [li, lv, ri, rv] = ia < ib ? [ia, pr.aVerse, ib, pr.bVerse] : [ib, pr.bVerse, ia, pr.aVerse];
+    for (const { li, lv, ri, rv } of crossing) {
       const y1 = endpointY(li, lv);
       const y2 = endpointY(ri, rv);
       if (y1 === null || y2 === null) continue;
+      painted = true;
       const x1 = (li + 1) * paneW - LINK_INSET;
       const x2 = ri * paneW + LINK_INSET;
       const dx = x2 - x1;
