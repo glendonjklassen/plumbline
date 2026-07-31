@@ -441,8 +441,8 @@
         <span class="body">
           <span class="name">Machine analysis <span class="mark machine">≈</span></span>
           <span class="desc">
-            Statistical patterns to weigh for yourself: words that appear alongside, verses
-            like this one, and the concept maps.
+            Statistical patterns to weigh for yourself: the words a word keeps company with,
+            and where in the Bible it clusters.
           </span>
         </span>
       </label>

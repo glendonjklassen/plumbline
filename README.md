@@ -52,10 +52,9 @@ steps, all on the phone.
 
 Needs Android 8.0 or newer and a 64-bit phone (`arm64-v8a`; the APK carries
 `x86_64` as well, for emulators). It declares **no INTERNET permission at
-all**, so it cannot phone home even by accident. Two study layers ride in the
-web version only, because the APK doesn't carry their data files: the
-word-grammar gloss, and the embedding-based "similar concepts" and "verses like
-this" (which also thins the concept map). Everything else is in the APK — the
+all**, so it cannot phone home even by accident. One study layer rides in the
+web version only, because the APK doesn't carry its data file: the word-grammar
+gloss. Everything else is in the APK — the
 text, Strong's, the margin notes, the Treasury's cross-references, the
 cross-testament bridge, the plain-English overlay, and all of your own work.
 

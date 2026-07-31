@@ -87,6 +87,15 @@ if (seen.has("data/kjv.jsonl")) {
   fail("data/kjv.jsonl is in the pack — it is superseded by the corpus cache and is unsafe in the home");
 }
 
+// The concept embedding must NOT ship either. Removed 2026-07-30 with the two
+// features that read it ("verses like this" and the concept map), so any entry
+// here is 3.08 MB of download that nothing in the engine will ever open.
+for (const p of seen) {
+  if (p.startsWith("data/concept-vectors.")) {
+    fail(`${p} is in the pack — the concept embedding was removed 2026-07-30 and has no reader`);
+  }
+}
+
 // Every stage must be non-empty: an empty "text" stage means nothing to boot on.
 for (const st of STAGES) {
   if (!manifest.files.some((f) => f.stage === st)) fail(`no files in stage "${st}"`);

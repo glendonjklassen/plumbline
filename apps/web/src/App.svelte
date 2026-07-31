@@ -105,8 +105,8 @@
       const rpc = new EngineRpc();
       rpc.onProgress = (p) => (phase = p);
       // Phones defer the machine-tier auto-download (2026-07-26): the shell
-      // offers an explicit "load analysis" action instead of spending ~4 MB
-      // and worker time behind the reader's back.
+      // offers an explicit "load analysis" action instead of spending the
+      // download and the worker time behind the reader's back.
       const deferRnd = matchMedia("(max-width: 700px)").matches;
       const [info] = await Promise.all([
         rpc.boot({ deferRnd }),

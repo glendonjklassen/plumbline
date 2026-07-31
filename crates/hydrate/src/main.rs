@@ -1,12 +1,17 @@
 //! `plumbline-hydrate` — assemble and verify the Plumbline data pack into a home.
 //!
 //! The reader needs only `kjv.jsonl` + `strongs.json` (+ optional notes); the
-//! R&D tier adds `cross-references.tsv`, `concept-vectors.vec` (with its `.meta`
-//! / `.freq` sidecars), and `morphology.jsonl`. These are produced once by the
-//! offline pipeline (see `data-prep/README.md`) — this tool does not generate
-//! them; it **places** them into a home and **verifies** each by actually
-//! loading it through the same code the app uses, so "will this light up?" is
-//! answered concretely rather than by guessing from file presence.
+//! R&D tier adds `cross-references.tsv` and `morphology.jsonl`. These are
+//! produced once by the offline pipeline (see `data-prep/README.md`) — this tool
+//! does not generate them; it **places** them into a home and **verifies** each
+//! by actually loading it through the same code the app uses, so "will this
+//! light up?" is answered concretely rather than by guessing from file presence.
+//!
+//! `concept-vectors.vec` (with its `.meta` / `.freq` sidecars) and the `vecb`
+//! subcommand that packed it are gone as of 2026-07-30: the concept embedding
+//! left the product with the two features that read it, "verses like this" and
+//! the concept map. The file is still an output of the offline pipeline; nothing
+//! in the shipped product opens it, so a home does not need it.
 //!
 //! Usage:
 //!   plumbline-hydrate check [--home <dir>]        # inspect a home (default: resolved)
@@ -19,7 +24,7 @@ use std::process::ExitCode;
 
 use plumbline_core::canon::TOKENIZATION_VERSION;
 use plumbline_core::{akjv, corpus, crossref, home, notes, strongs};
-use plumbline_rnd::{bridge, embed, morph};
+use plumbline_rnd::{bridge, morph};
 
 /// The pack files, relative to a home. Core files gate the reader; the R&D
 /// files are optional tiers. Sidecars ride with their primary file.
@@ -27,9 +32,6 @@ const CORE_FILES: &[(&str, bool)] =
     &[("data/kjv.jsonl", true), ("data/strongs.json", true), ("data/kjv-notes.jsonl", false)];
 const RND_FILES: &[&str] = &[
     "data/cross-references.tsv",
-    "data/concept-vectors.vec",
-    "data/concept-vectors.vec.meta",
-    "data/concept-vectors.vec.freq",
     "data/morphology.jsonl",
     // Fused bridge: committed external witnesses + fitted trust priors, plus the
     // optional hydrated/harvested source files.
@@ -100,58 +102,6 @@ fn main() -> ExitCode {
                 }
                 Err(e) => {
                     eprintln!("web-cache failed: {e}");
-                    ExitCode::FAILURE
-                }
-            }
-        }
-        "vecb" => {
-            // Pack `concept-vectors.vec` (6.4 MB of decimal ASCII) into the f32
-            // form the loader prefers. The text costs an atof per float — 742,600
-            // of them — on EVERY launch, because the parsed embedding lives in
-            // memory and the web cannot keep it between launches; a phone paid
-            // seconds of that before any concept answer (feedback 2026-07-27).
-            let Some(from) = flag("--from") else {
-                eprintln!("vecb needs --from <concept-vectors.vec> [--out <file>]");
-                return ExitCode::from(2);
-            };
-            let out = flag("--out").unwrap_or_else(|| embed::vecb_path(&from));
-            let text = match std::fs::read_to_string(&from) {
-                Ok(t) => t,
-                Err(e) => {
-                    eprintln!("vecb: cannot read {}: {e}", from.display());
-                    return ExitCode::FAILURE;
-                }
-            };
-            let Some(bytes) = embed::encode_embedding_bin(&text) else {
-                eprintln!("vecb: {} is not a readable word2vec text body", from.display());
-                return ExitCode::FAILURE;
-            };
-            if let Err(e) = std::fs::write(&out, &bytes) {
-                eprintln!("vecb: cannot write {}: {e}", out.display());
-                return ExitCode::FAILURE;
-            }
-            // Verify by LOADING it, the way `check` verifies everything else —
-            // a file that writes but doesn't read back is worse than none, since
-            // the loader prefers it over the text.
-            let meta = {
-                let mut s = from.as_os_str().to_os_string();
-                s.push(".meta");
-                std::fs::read_to_string(PathBuf::from(s)).ok()
-            };
-            match embed::parse_embedding_bin(TOKENIZATION_VERSION, meta.as_deref(), &bytes, None) {
-                Some(e) => {
-                    println!(
-                        "wrote {} — {} vectors, dim {} ({} → {} bytes)",
-                        out.display(),
-                        e.size(),
-                        e.dim(),
-                        text.len(),
-                        bytes.len()
-                    );
-                    ExitCode::SUCCESS
-                }
-                None => {
-                    eprintln!("vecb: wrote {} but it does not load back", out.display());
                     ExitCode::FAILURE
                 }
             }
@@ -246,7 +196,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         other => {
-            eprintln!("unknown command '{other}'. Try: check | copy | web-cache | vecb | morphb | akjvb | help");
+            eprintln!("unknown command '{other}'. Try: check | copy | web-cache | morphb | akjvb | help");
             ExitCode::from(2)
         }
     }
@@ -268,12 +218,6 @@ plumbline-hydrate — assemble + verify the Plumbline data pack
       Parse the corpus and write its idxcache stamped for the web shell
       (mtime 0 — what the browser WASI shim reports), so the PWA's first
       boot skips the ~19 MB re-parse. Run by scripts/build-web-pack.mjs.
-
-  plumbline-hydrate vecb --from <concept-vectors.vec> [--out <file>]
-      Pack the concept vectors into the f32 form the loader prefers, so a
-      launch copies them instead of running 742,600 atof calls. The text
-      file stays valid — a home without the packed sibling still works.
-      Run by scripts/build-web-pack.mjs.
 
   plumbline-hydrate morphb --from <morphology.jsonl> [--out <file>]
       Pack the morphology sidecar into interned fixed-width records, so a
@@ -468,17 +412,9 @@ fn check(home: &Path) -> ExitCode {
         println!("  ✓ cross-references.tsv — {} refs over {} verses", crossref::xref_count(&xr), xr.len());
     }
 
-    match embed::load_embedding(TOKENIZATION_VERSION, data.join("concept-vectors.vec")) {
-        Some(e) => println!(
-            "  ✓ concept-vectors.vec — {} vectors, dim {}, {}, {}",
-            e.size(),
-            e.dim(),
-            if e.aligned() { "aligned (cross-testament on)" } else { "unaligned" },
-            if e.has_trained_freq() { "trained freq" } else { "no freq" },
-        ),
-        None => println!("  · concept-vectors.vec — absent or stale (concept neighbours / verses-like-this off)"),
-    }
-
+    // `concept-vectors.vec` is deliberately not checked (removed 2026-07-30):
+    // the embedding left the product with "verses like this" and the concept
+    // map, so a home neither needs it nor is worse off without it.
     match morph::load_morph(TOKENIZATION_VERSION, data.join("morphology.jsonl")) {
         Some(m) => println!("  ✓ morphology.jsonl — {} verses annotated", m.verse_count()),
         None => println!("  · morphology.jsonl — absent or stale (morphology off)"),

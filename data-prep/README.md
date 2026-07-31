@@ -25,7 +25,7 @@ All under the resolved data home (`core::home`) at `<home>/data/`:
 | `kjv-notes.jsonl` | 1769 margin notes | `core::notes` | committed (import) |
 | `akjv.jsonl` | the plain-English overlay | `core::akjv` | deterministic align (no ML) |
 | `cross-references.tsv` | TSK topical tier | `core::crossref` | download (no ML) |
-| `concept-vectors.vec` (+ `.meta`, `.freq`) | concept neighbours + "verses like this" | `rnd::embed` | **train once** (CPU) |
+| `concept-vectors.vec` (+ `.meta`, `.freq`) | **no longer shipped** (2026-07-30): its three readers were removed as noise. Still produced here; nothing consumes it | `rnd::embed` | **train once** (CPU) |
 | `morphology.jsonl` | per-token parse | `rnd::morph` | deterministic projection |
 | `bridge/*.json` (LXX, Abbott-Smith, TIPNR) | fused cross-testament witnesses | `rnd::bridge` | committed / align (no ML) |
 | `source-priors.json` | per-source trust weight | `rnd::bridge` | deterministic calibration |

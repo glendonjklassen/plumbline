@@ -442,7 +442,8 @@ sideload block is already fixed and guarded by a test.
 - [x] **[opus]** Legacy `pure-study/` zip restore test — both shells carry the shim,
   neither tests it.
 - [x] **[opus]** Maps smoke e2e (ChordMap/ConceptMap/Constellation — ~500 lines,
-  entirely unexercised).
+  entirely unexercised). The ConceptMap third of it went with the concept map
+  itself on 2026-07-30; the other two stand.
 
 ## Future (not this release)
 

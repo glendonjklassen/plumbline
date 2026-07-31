@@ -213,7 +213,6 @@ fun StudyScreen(
     // answer sweeps the whole corpus. A bare flash of nothing reads as a hang
     // (feedback 2026-07-27), so the pane says why, and that it is one-time.
     var studyLoading by remember { mutableStateOf(false) }
-    var studyCode by remember { mutableStateOf<String?>(null) }     // code behind the study → embedded maps
     var searchHits by remember { mutableStateOf<Set<String>>(emptySet()) }
     var searchText by remember { mutableStateOf("") }
 
@@ -224,7 +223,6 @@ fun StudyScreen(
     var actionVerse by remember { mutableStateOf<String?>(null) }   // long-press verse sheet
     var memView by remember { mutableStateOf(MemorizeView.List) }   // memorize sub-view (dest Memorize)
     var drillRef by remember { mutableStateOf<String?>(null) }      // drill one chosen verse
-    var conceptCode by remember { mutableStateOf<String?>(null) }   // conceptmap:CODE
     var showConstellation by remember { mutableStateOf(false) }
     var showChord by remember { mutableStateOf(false) }
     var noteEpoch by remember { mutableStateOf(0) }            // repaint the note marks after a note edit
@@ -389,10 +387,7 @@ fun StudyScreen(
     }
 
     // ── word tap → word study (bottom sheet on a phone, right pane on the fold) ─
-    // The tapped word's primary Strong's code drives the embedded concept map +
-    // canon heatmap cards inside the study pane.
     fun onWord(hit: Hit) {
-        studyCode = hit.strongs.firstOrNull()
         val overlayOn = akjvOverlay
         beginStudy()
         // The card and the overlay header come back from ONE read: the header
@@ -446,7 +441,6 @@ fun StudyScreen(
     // and which card are one answer: split across two turns the second would
     // cancel the first. [weaveOpening] is the whole decision, and it is pure.
     fun openWeave(index: Int) {
-        studyCode = null
         studyIsAbout = false
         beginStudy()
         scope.engineCall(
@@ -474,7 +468,6 @@ fun StudyScreen(
     // Load a study library (threads / tags / weaves / suggested / guide / about)
     // into the study surface — StudyPane renders each block list identically.
     fun openLibrary(which: Library) {
-        studyCode = null
         studyIsAbout = which == Library.Guide || which == Library.About
         loadStudy {
             when (which) {
@@ -520,30 +513,27 @@ fun StudyScreen(
                 pendingVerse = link.verse?.toInt(); navEpoch++
                 dest = Dest.Read
             }
-            "conceptMap" -> link.code?.let { conceptCode = it }
             // Named rather than `it` throughout: the producer is a second lambda
             // now, and it is read on another thread — what it captures should be
             // spelled out.
-            "occurrences" -> link.code?.let { code -> studyCode = code; show { engine.ConcordanceBlocksJson(code) } }
+            "occurrences" -> link.code?.let { code -> show { engine.ConcordanceBlocksJson(code) } }
             "rendering" -> if (link.code != null && link.rendering != null) {
                 val code = link.code!!
                 val rendering = link.rendering!!
-                studyCode = code
                 show { engine.RenderingConcordanceBlocksJson(code, rendering) }
             }
             "codeStudy" -> link.code?.let { code ->
                 val word = link.word
-                studyCode = code
                 show { engine.CodeStudyBlocks2Json(code, word, gates) }
             }
-            "thread" -> link.index?.let { at -> studyCode = null; show { engine.ThreadBlocksJson(at) } }
-            "tag" -> link.index?.let { at -> studyCode = null; show { engine.TagBlocksJson(at) } }
+            "thread" -> link.index?.let { at -> show { engine.ThreadBlocksJson(at) } }
+            "tag" -> link.index?.let { at -> show { engine.TagBlocksJson(at) } }
             "weave" -> link.index?.let { openWeave(it) }
             // Tag→weave: the accumulate-then-organize flow — pick the members
             // (default all), name it, chain it through the canon.
             "makeWeave" -> link.tag?.let { makeWeaveTag = it }
-            "guide" -> { studyCode = null; show { StudyEngine.GuideBlocksJson() } }
-            "about" -> { studyCode = null; show { StudyEngine.AboutBlocksJson() }; studyIsAbout = true }
+            "guide" -> show { StudyEngine.GuideBlocksJson() }
+            "about" -> { show { StudyEngine.AboutBlocksJson() }; studyIsAbout = true }
             // Tagging offers the existing tags first; freetext is the secondary
             // path inside the picker (product call, 2026-07-24).
             "addTag" -> link.refKey?.let { ref -> tagPickRef = ref }
@@ -646,22 +636,10 @@ fun StudyScreen(
         }
     }
 
-    // The concept map + canon heatmap cards embedded in the study pane whenever
-    // the study has a Strong's code behind it (first-class, scaled down —
-    // product call, 2026-07-24). Tap-through: fullscreen map / book jump.
-    val studyEmbed: (@Composable () -> Unit)? = studyCode?.let { code ->
-        {
-            StudyMapCards(
-                engine, code, palette, toc,
-                onOpenFull = { conceptCode = code },
-                onGoBook = { b -> book = b; chapter = 1; studySheet = false; dest = Dest.Read },
-            )
-        }
-    }
     val study: @Composable (Modifier) -> Unit = { m ->
         Box(m.background(palette.panelBg)) {
             StudyPane(
-                studyBlocks, palette, onLink = ::onLink, scale = studyScale, embed = studyEmbed,
+                studyBlocks, palette, onLink = ::onLink, scale = studyScale,
                 loading = studyLoading,
                 header = studyAkjv?.let { a -> { AkjvHeader(palette, studyScale, a.akjv, a.kjv) } },
                 footer = if (studyIsAbout) {
@@ -762,11 +740,6 @@ fun StudyScreen(
             drillRef?.let { ref ->
                 MemorizeReview(engine, palette, onClose = { drillRef = null }, only = ref)
             }
-            conceptCode?.let { c ->
-                MapOverlay("Concept map — $c", palette, { conceptCode = null }) {
-                    ConceptMap(engine, c, palette, Modifier.fillMaxSize())
-                }
-            }
             if (showConstellation) MapOverlay("Constellation", palette, { showConstellation = false }) {
                 Constellation(
                     engine, palette, Modifier.fillMaxSize(),
@@ -806,28 +779,28 @@ fun StudyScreen(
         NavigationBar(containerColor = palette.paneNavBg) {
             NavigationBarItem(
                 selected = dest == Dest.Read && !showPresent,
-                onClick = { showPresent = false; showChord = false; showConstellation = false; conceptCode = null; dest = Dest.Read },
+                onClick = { showPresent = false; showChord = false; showConstellation = false; dest = Dest.Read },
                 icon = { Icon(NavIconRead, contentDescription = null) },
                 label = { Text("Read") },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = dest == Dest.Explore && !showPresent,
-                onClick = { showPresent = false; showChord = false; showConstellation = false; conceptCode = null; dest = Dest.Explore },
+                onClick = { showPresent = false; showChord = false; showConstellation = false; dest = Dest.Explore },
                 icon = { Icon(NavIconExplore, contentDescription = null) },
                 label = { Text("Explore") },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = showPresent,
-                onClick = { showChord = false; showConstellation = false; conceptCode = null; showPresent = true },
+                onClick = { showChord = false; showConstellation = false; showPresent = true },
                 icon = { Icon(NavIconPresent, contentDescription = null) },
                 label = { Text("Present") },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = dest == Dest.Memorize && !showPresent,
-                onClick = { showPresent = false; showChord = false; showConstellation = false; conceptCode = null; memView = MemorizeView.List; dest = Dest.Memorize },
+                onClick = { showPresent = false; showChord = false; showConstellation = false; memView = MemorizeView.List; dest = Dest.Memorize },
                 icon = { Icon(NavIconMemorize, contentDescription = null) },
                 label = { Text("Memorize") },
                 colors = navColors,
@@ -838,7 +811,7 @@ fun StudyScreen(
         // ── overlays / sheets (parity features layered over the reader) ──────
         if (studySheet && mode == UiMode.FullscreenVertical) {
             // Swiping the study away also clears the tapped word's highlight.
-            StudySheet(studyBlocks, palette, studyScale, ::onLink, studyEmbed, studyLoading) {
+            StudySheet(studyBlocks, palette, studyScale, ::onLink, studyLoading) {
                 studySheet = false
                 clearPinEpoch++
             }
@@ -1274,7 +1247,7 @@ private fun TopBar(
 /** Study as a bottom sheet — the phone surface for a word tap / library / link
  *  result. Opens half-height; drag the handle up to fill (nearly) the whole
  *  screen (product call, 2026-07-24). Swipe down or tap the scrim to dismiss.
- *  Links route through [onLink]; [embed] slots the concept map + heatmap cards. */
+ *  Links route through [onLink]. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StudySheet(
@@ -1282,16 +1255,12 @@ private fun StudySheet(
     palette: ReaderPalette,
     scale: Float,
     onLink: (String) -> Unit,
-    embed: (@Composable () -> Unit)?,
     loading: Boolean,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = palette.panelBg) {
         Box(Modifier.fillMaxWidth().fillMaxHeight(0.94f)) {
-            StudyPane(
-                blocksJson, palette, onLink = onLink, scale = scale, embed = embed,
-                loading = loading,
-            )
+            StudyPane(blocksJson, palette, onLink = onLink, scale = scale, loading = loading)
         }
     }
 }
@@ -1617,7 +1586,7 @@ private fun SettingsDialog(
                 )
                 SettingToggle(
                     "Machine analysis",
-                    "Appears-alongside, verses-like-this, concept maps.",
+                    "Appears-alongside, most-used-in, repeated key words.",
                     machineAnalysis, palette, onToggleMachine,
                 )
                 // A reading aid over the SAME text, not a version picker: the

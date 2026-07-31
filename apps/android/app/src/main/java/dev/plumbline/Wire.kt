@@ -6,8 +6,9 @@
 // The wire JSON is camelCase (serde `rename_all = "camelCase"`). kotlinx uses a
 // property's own name as its JSON key, and every property here is already named
 // in the camelCase the wire emits (`verseDisplay`, `tokenIndex`, `otNtDivide`,
-// `aLaneFrac`, …), so no per-field @SerialName is needed except the one field
-// serde renames to a Kotlin keyword (`in`). Decode through [PlumblineJson], which
+// `aLaneFrac`, …), so no per-field @SerialName is needed. (The one that was —
+// `SimilarVerses.in`, serde-renamed to a Kotlin hard keyword — went with the
+// "verses like this" removal, 2026-07-30.) Decode through [PlumblineJson], which
 // ignores unknown keys so additive wire evolution never breaks an older shell.
 //
 // The tagged unions (search answer, panel block, panel link) arrive as a single
@@ -16,7 +17,6 @@
 
 package dev.plumbline
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -423,7 +423,10 @@ data class ConstellationEdgeData(
     val bLaneFrac: Float,
 )
 
-// ── the symbolic concept engine + concept map ─────────────────────────────────
+// ── the symbolic concept engine ───────────────────────────────────────────────
+// Co-occurrence statistics over the corpus (APPEARS ALONGSIDE / MOST USED IN /
+// LEITWORT). The embedding-backed concept MAP that used to live here was removed
+// 2026-07-30 with the rest of the machine-similarity features.
 
 @Serializable
 data class Concept1(
@@ -443,41 +446,6 @@ data class BookCount(val book: String, val display: String, val count: Int = 0)
 
 @Serializable
 data class Leitwort(val n: Int, val winCount: Int, val score: Double, val label: String)
-
-@Serializable
-data class ConceptMapData(
-    val code: String,
-    val centerLabel: String = "",
-    val spokes: List<ConceptSpoke> = emptyList(),
-    val byBook: List<Int> = emptyList(),
-    val otNtDivide: Int = 0,
-    val bookCount: Int = 0,
-    /** The cross-testament "bridge" row (see WireConceptMap.bridge); null when
-     *  the code has no other-testament partner. */
-    val bridge: ConceptBridge? = null,
-)
-
-@Serializable
-data class ConceptSpoke(
-    val code: String,
-    val label: String,
-    val semantic: Boolean = false,
-    /** Cosine similarity to the centre (semantic spokes only) — scales spoke
-     *  distance so more-related concepts sit closer. Null for community spokes. */
-    val weight: Double? = null,
-)
-
-/** The concept map's cross-testament "bridge" row: the strongest other-testament
- *  partners and their unioned per-book dispersion (canon order, length
- *  `bookCount`) — so viewing Christ lights up where Messiah occurs. */
-@Serializable
-data class ConceptBridge(
-    val partners: List<BridgeNode> = emptyList(),
-    val byBook: List<Int> = emptyList(),
-)
-
-@Serializable
-data class BridgeNode(val code: String = "", val label: String = "", val prior: Float = 0f)
 
 // ── shell config / session ────────────────────────────────────────────────────
 
@@ -622,13 +590,6 @@ data class PanelLinkData(
 data class Scored(val code: String, val score: Float = 0f)
 
 @Serializable
-data class ConceptNeighbours(
-    val code: String,
-    val near: List<Scored> = emptyList(),
-    val cross: List<Scored> = emptyList(),
-)
-
-@Serializable
 data class Morph(val verse: String, val tokenIndex: Int, val code: String, val gloss: String)
 
 @Serializable
@@ -643,17 +604,6 @@ data class BridgePartner(
 
 @Serializable
 data class BridgePartners(val code: String, val partners: List<BridgePartner> = emptyList())
-
-@Serializable
-data class SimilarVerse(val verse: String, val display: String, val score: Float = 0f)
-
-@Serializable
-data class SimilarVerses(
-    val verse: String,
-    // serde renames this field to "in" (a Kotlin hard keyword).
-    @SerialName("in") val `in`: List<SimilarVerse> = emptyList(),
-    val cross: List<SimilarVerse> = emptyList(),
-)
 
 // ── memorization (Tier 2 #15): SRS cards, drills, coverage + activity ─────────
 // Schemas frozen in crates/ffi/src/wire.rs (WireMemory*) + crates/core/src/memory.rs.

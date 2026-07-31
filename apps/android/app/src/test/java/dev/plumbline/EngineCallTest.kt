@@ -5,9 +5,10 @@
 // however long the longest call already running takes. Routing a panel link used
 // to make up to TEN in a row on the main thread and searching two — including the
 // producers that build a lazy index on first use by folding the whole corpus. (The
-// one measured number the tree has for such a fold is the web engine worker's
-// 10,205 ms concept map, `crates/ffi/src/lib.rs`; a wasm worker is not this shell,
-// but it is the same fold.)
+// one measured number the tree has for such a fold is 10,205 ms, clocked on the web
+// engine worker building the concept map — a feature since removed, 2026-07-30, so
+// do not go looking for the call. A wasm worker is not this shell either, but the
+// concept fold behind APPEARS ALONGSIDE is the same shape of work.)
 //
 // `engineCall` is the single mechanism that fixes both, so this exercises it for
 // real: a coroutine scope whose dispatcher is the runBlocking event loop stands in

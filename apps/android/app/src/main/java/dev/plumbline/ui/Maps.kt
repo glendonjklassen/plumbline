@@ -1,21 +1,23 @@
-// The three "map" visualisations, as full-screen Compose Canvas destinations
+// The two weave "map" visualisations, as full-screen Compose Canvas destinations
 // that pinch-zoom and pan. These are the Android mirror of the GTK popups
-// (apps/desktop/src/main.rs: draw_concept_radial + draw_dispersion +
-// show_concept_map, draw_constellation, draw_chord_map) and the WinUI popups
-// (apps/windows/PureStudyWin/Popups.cs: ConceptMap, Constellation, ChordMap).
+// (apps/desktop/src/main.rs: draw_constellation, draw_chord_map) and the WinUI
+// popups (apps/windows/PureStudyWin/Popups.cs: Constellation, ChordMap).
 //
-// Faithful, not simplified: every geometry constant + banding formula mirrors
-// the WinUI shell (whose bridge-row banding math is the exact reference), so a
-// node/band lands in the same relative spot in every shell. All the study logic
-// lives across the ABI — the shell only paints the returned view-models
-// (ConceptMapJson / ConstellationJson / ChordMapJson / CanonSegmentsJson) and
-// forwards taps back. Text is measured + drawn through a Paint-backed
-// android.graphics.Canvas, the same thin-shell convention as ReaderPane.kt.
+// (There was a third, the embedding-backed concept map. It was removed
+// 2026-07-30 along with the SIF "verses like this" model — machine-generated
+// noise, and the last reader of the concept-vector artifact.)
+//
+// Faithful, not simplified: every geometry constant mirrors the WinUI shell, so
+// a node/lane lands in the same relative spot in every shell. All the study
+// logic lives across the ABI — the shell only paints the returned view-models
+// (ConstellationJson / ChordMapJson / CanonSegmentsJson) and forwards taps back.
+// Text is measured + drawn through a Paint-backed android.graphics.Canvas, the
+// same thin-shell convention as ReaderPane.kt.
 //
 // Interaction that is a mouse affordance on the desktop (hover tooltips) is
 // dropped on touch; taps navigate directly. The whole canvas zooms/pans as one
 // (a product decision) via Modifier.zoomable — a detectTransformGestures +
-// graphicsLayer transform reused by all three.
+// graphicsLayer transform reused by both.
 //
 // Author D (Compose UI).
 
@@ -65,7 +67,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import dev.plumbline.CanonSegments
 import dev.plumbline.ChordMapData
-import dev.plumbline.ConceptMapData
 import dev.plumbline.ConstellationData
 import dev.plumbline.StudyEngine
 import dev.plumbline.TocBook
@@ -73,13 +74,10 @@ import dev.plumbline.parseWire
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
-import kotlin.math.sin
 
 // ── reusable pinch-zoom + pan ────────────────────────────────────────────────
 
@@ -209,28 +207,15 @@ private fun DrawScope.drawLabel(
     }
 }
 
-/** The total height a [lines] label occupies at the paint's current text size. */
-private fun Paint.labelHeight(lines: Int): Float {
-    val fm = fontMetrics
-    return lines * (fm.descent - fm.ascent)
-}
-
-/** Render the wire label "gloss\nlemma" as GTK's "gloss (lemma)" (falling back
- *  to whichever line exists) — the bridge-caption naming, matching WinUI. */
-internal fun partnerName(label: String): String {
-    val parts = label.split('\n')
-    return if (parts.size >= 2 && parts[1].isNotEmpty()) "${parts[0]} (${parts[1]})" else parts[0]
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 1. Concept map — radial neighbourhood over a banded dispersion strip
-// ═══════════════════════════════════════════════════════════════════════════
-
 /**
- * What a map shows while it is being built. The FIRST analytical map of a
- * session pays for a corpus-wide sweep; the rest are instant. Several seconds
- * under a bare label reads as a hang (feedback 2026-07-27), so once the wait is
- * real, say it is one-time. Web twin: MapFrame.svelte's `slow`.
+ * What a map shows while it is being built. A silent second under a bare label
+ * reads as a hang (feedback 2026-07-27), so once the wait is real, say what is
+ * being counted. Web twin: MapFrame.svelte's `slow`.
+ *
+ * (The line used to promise the wait was one-time — the first analytical map of
+ * a session paid for a corpus-wide sweep and the rest were instant. That was the
+ * concept map's sweep, and the concept map went on 2026-07-30; what is left here
+ * reads the weave library, which is already in memory.)
  */
 @Composable
 private fun MapBuilding(label: String, palette: ReaderPalette) {
@@ -246,8 +231,7 @@ private fun MapBuilding(label: String, palette: ReaderPalette) {
         Text(label, color = palette.faded)
         if (slow) {
             Text(
-                "The first map of a session takes a few seconds: the whole text is being swept " +
-                    "for this. The maps you open after it appear at once.",
+                "Every link in your weave library is being counted across the canon.",
                 color = palette.faded,
                 fontSize = 12.5.sp,
                 lineHeight = 18.sp,
@@ -258,223 +242,8 @@ private fun MapBuilding(label: String, palette: ReaderPalette) {
     }
 }
 
-/**
- * The concept map for [code]: a radial neighbourhood (centre label + spokes,
- * gold = semantic / green = community) over a canon dispersion strip. When the
- * code has a cross-testament bridge, an indigo partner row bands the strip
- * beneath a 1px gutter, with a caption naming the partners. Full-screen,
- * pinch-zoom + pan; double-tap resets. Mirrors WinUI Popups.ConceptMap.
- *
- * Opened by the word-study `conceptmap:CODE` link (wire verb `conceptMap`).
- */
-@Composable
-fun ConceptMap(
-    engine: StudyEngine,
-    code: String,
-    palette: ReaderPalette,
-    modifier: Modifier = Modifier,
-) {
-    val paint = rememberMapPaint()
-    val zoom = rememberZoomState()
-
-    var data by remember(code) { mutableStateOf<ConceptMapData?>(null) }
-    var loading by remember(code) { mutableStateOf(true) }
-
-    // First call builds the analytics engine (~seconds); do it off the main thread.
-    LaunchedEffect(code) {
-        loading = true
-        val parsed = withContext(Dispatchers.Default) {
-            runCatching {
-                synchronized(engine) { engine.ConceptMapJson(code) }
-                    ?.let { parseWire<ConceptMapData>(it) }
-            }.getOrNull()
-        }
-        data = parsed
-        loading = false
-    }
-
-    val caption = remember(data) {
-        data?.bridge?.partners?.takeIf { it.isNotEmpty() }
-            ?.let { "↔ across testaments: " + it.joinToString(", ") { p -> partnerName(p.label) } }
-    }
-
-    Box(
-        modifier.fillMaxSize().background(palette.panelBg),
-        contentAlignment = Alignment.Center,
-    ) {
-        val map = data
-        when {
-            loading -> MapBuilding("Building concept map…", palette)
-            map == null -> Text("No concept data for $code.", color = palette.faded)
-            else -> Canvas(
-                Modifier
-                    .fillMaxSize()
-                    .onSizeChanged { zoom.setViewport(it.width.toFloat(), it.height.toFloat()) }
-                    .pointerInput(Unit) { detectTapGestures(onDoubleTap = { zoom.reset() }) }
-                    .zoomable(zoom),
-            ) {
-                val stripH = 56.dp.toPx()
-                drawConceptRadial(map, paint, palette, size.height - stripH)
-                drawDispersionStrip(map, paint, palette, size.height - stripH, stripH, caption)
-            }
-        }
-    }
-}
-
-/** The radial neighbourhood (spokes + centre node) into the top [mapH] px of the
- *  current draw scope. Geometry mirrors WinUI Popups.ConceptMap; shared by the
- *  fullscreen map and the study panel's embedded card. */
-internal fun DrawScope.drawConceptRadial(
-    map: ConceptMapData,
-    paint: Paint,
-    palette: ReaderPalette,
-    mapH: Float,
-) {
-    val w = size.width
-    val cx = w / 2f
-    val cy = mapH / 2f
-    // Floor high enough that even the embedded card's ring clears the centre
-    // label (drawn BELOW the node since 2026-07-26 — above, it superimposed
-    // the centre word over the 12-o'clock spoke).
-    val rOuter = max(min(w, mapH) / 2f - 95.dp.toPx(), 64.dp.toPx())
-    // Relatedness → distance: the strongest semantic neighbour sits closest.
-    // Community spokes (no weight) draw at the outer ring. The inner floor
-    // keeps even the closest spoke clear of the centre label block.
-    val rInner = max(rOuter * 0.55f, 56.dp.toPx())
-    val weights = map.spokes.mapNotNull { it.weight }
-    val wMin = weights.minOrNull() ?: 0.0
-    val wMax = weights.maxOrNull() ?: 0.0
-    fun spokeRadius(weight: Double?): Float {
-        if (weight == null || wMax <= wMin) return rOuter
-        val t = ((weight - wMin) / (wMax - wMin)).toFloat()
-        return rOuter - (rOuter - rInner) * t
-    }
-
-    val goldStroke = palette.gold.copy(alpha = 0.5f)
-    val greenStroke = Color(red = 107, green = 140, blue = 102, alpha = 128)
-    val goldNode = palette.gold.copy(alpha = 0.9f)
-
-    // ── spokes ──
-    paint.textSize = 12.sp.toPx()
-    val spokes = map.spokes
-    val n = max(1, spokes.size)
-    for (i in spokes.indices) {
-        val angle = 2.0 * PI * i / n - PI / 2.0
-        val ca = cos(angle).toFloat()
-        val sa = sin(angle).toFloat()
-        val radius = spokeRadius(spokes[i].weight)
-        val nx = cx + radius * ca
-        val ny = cy + radius * sa
-        drawLine(
-            if (spokes[i].semantic) goldStroke else greenStroke,
-            Offset(cx, cy), Offset(nx, ny), strokeWidth = 1.4.dp.toPx(),
-        )
-        drawCircle(goldNode, radius = 3.dp.toPx(), center = Offset(nx, ny))
-
-        val lines = spokes[i].label.split('\n')
-        val th = paint.labelHeight(lines.size)
-        val align: Paint.Align
-        val lx: Float
-        var top: Float
-        when {
-            ca > 0.35f -> { align = Paint.Align.LEFT; lx = nx + 9.dp.toPx(); top = ny - th / 2f }
-            ca < -0.35f -> { align = Paint.Align.RIGHT; lx = nx - 9.dp.toPx(); top = ny - th / 2f }
-            sa < 0f -> { align = Paint.Align.CENTER; lx = nx; top = ny - 10.dp.toPx() - th }
-            else -> { align = Paint.Align.CENTER; lx = nx; top = ny + 9.dp.toPx() }
-        }
-        top = top.coerceIn(2f, max(2f, mapH - th - 2f))
-        drawLabel(paint, lines, lx, top, align, palette.ink.toArgbInt())
-    }
-
-    // ── centre node ──
-    // Label BELOW the node (web-shell parity): drawn above, it sat exactly on
-    // the 12-o'clock spoke whenever the radius floor bound (the embedded card,
-    // small phones) — the centre word superimposed over a related concept.
-    drawCircle(palette.gold, radius = 5.dp.toPx(), center = Offset(cx, cy))
-    paint.textSize = 15.sp.toPx()
-    val centreLines = map.centerLabel.split('\n')
-    drawLabel(
-        paint, centreLines, cx, cy + 12.dp.toPx(),
-        Paint.Align.CENTER, palette.ink.toArgbInt(),
-    )
-}
-
-/** The canon dispersion strip at [y0]..[y0]+[stripH] (banding mirrors WinUI
- *  exactly): gold = where the code occurs, indigo bridge row = where its
- *  cross-testament partners occur, OT/NT seam, optional [caption] just above.
- *  Shared by the fullscreen map and the study panel's embedded heatmap. */
-internal fun DrawScope.drawDispersionStrip(
-    map: ConceptMapData,
-    paint: Paint,
-    palette: ReaderPalette,
-    y0: Float,
-    stripH: Float,
-    caption: String?,
-) {
-    val w = size.width
-    val bridge = map.bridge
-    val hasBridge = bridge != null && bridge.byBook.any { it > 0 }
-    if (map.byBook.none { it > 0 } && !hasBridge) return
-
-    val bc = max(1, map.bookCount).toFloat()
-    drawRect(Color.Black.copy(alpha = 10f / 255f), Offset(0f, y0), Size(w, stripH))
-
-    val gap = 1f
-    val primH = if (hasBridge) max((stripH - gap) * 0.55f, 1f) else stripH
-    val brdgY = if (hasBridge) primH + gap else stripH
-    val brdgH = if (hasBridge) stripH - primH - gap else 0f
-
-    // Primary dispersion (gold): where CODE itself occurs. Alpha ∝ this row's
-    // own max (GTK 0.62,0.49,0.22 == palette.gold).
-    val bmax = max(1, map.byBook.maxOrNull() ?: 1).toFloat()
-    for (bi in map.byBook.indices) {
-        val cnt = map.byBook[bi]
-        if (cnt == 0) continue
-        val alpha = 0.15f + 0.75f * cnt / bmax
-        val x0 = bi / bc * w
-        val x1 = (bi + 1) / bc * w
-        drawRect(palette.gold.copy(alpha = alpha), Offset(x0, y0), Size(x1 - x0, primH))
-    }
-
-    // Bridge dispersion (indigo): where the cross-testament partners occur.
-    // Alpha ∝ the bridge row's OWN max; rgb 77,89,158.
-    if (hasBridge) {
-        val bb = bridge!!.byBook
-        val pmax = max(1, bb.maxOrNull() ?: 1).toFloat()
-        for (bi in bb.indices) {
-            val cnt = bb[bi]
-            if (cnt == 0) continue
-            val alpha = 0.18f + 0.72f * cnt / pmax
-            val x0 = bi / bc * w
-            val x1 = (bi + 1) / bc * w
-            drawRect(
-                Color(red = 77, green = 89, blue = 158, alpha = (alpha * 255f).toInt()),
-                Offset(x0, y0 + brdgY), Size(x1 - x0, brdgH),
-            )
-        }
-    }
-
-    // OT/NT seam (full height of the strip).
-    val seam = map.otNtDivide / bc * w
-    drawLine(
-        Color(red = 102, green = 77, blue = 51, alpha = 128),
-        Offset(seam, y0), Offset(seam, y0 + stripH), strokeWidth = 1.dp.toPx(),
-    )
-
-    // Caption naming the bridge partners, dim, just above the strip.
-    caption?.let { cap ->
-        paint.textSize = 11.sp.toPx()
-        drawLabel(
-            paint, listOf(cap), 8.dp.toPx(),
-            y0 - paint.labelHeight(1) - 3.dp.toPx(),
-            Paint.Align.LEFT,
-            Color(red = 89, green = 77, blue = 56, alpha = 190).toArgbInt(),
-        )
-    }
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
-// 2. Constellation — the weave library as labelled lanes over the canon
+// 1. Constellation — the weave library as labelled lanes over the canon
 // ═══════════════════════════════════════════════════════════════════════════
 
 private val LaneColors = arrayOf(
@@ -723,7 +492,7 @@ private fun segDist(p: Offset, a: Offset, b: Offset): Float {
 private fun dist(a: Offset, b: Offset): Float = (a - b).getDistance()
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 3. Chord map — canon-ordered book-pair weave ribbons
+// 2. Chord map — canon-ordered book-pair weave ribbons
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**

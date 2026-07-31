@@ -7,7 +7,7 @@
 // stay one product.
 //
 // It rides the low-level JNA binding `PlumblineNative` (author A —
-// dev.plumbline.core), which mirrors the frozen 87-fn C ABI. Strings the ABI
+// dev.plumbline.core), which mirrors the frozen C ABI. Strings the ABI
 // returns are owned `char*` typed as a JNA `Pointer`; [take] copies them out and
 // frees them through `plumbline_string_free`. Borrowed inputs cross as plain
 // Kotlin `String` (JNA encodes UTF-8), and a null `String?` becomes a null
@@ -167,9 +167,6 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
     /** Concept stats (distribution, collocates, community, leitwort) — null for
      *  a code that never occurs. First call builds the engine (~seconds). */
     fun ConceptJson(code: String): String? = take(ffi.plumbline_engine_concept_json(h, code))
-
-    /** The concept map for a code: radial neighbourhood + canon dispersion. */
-    fun ConceptMapJson(code: String): String? = take(ffi.plumbline_engine_concept_map_json(h, code))
 
     /** The short English gloss for a code (plain text, not JSON), or null. */
     fun Gloss(code: String): String? = take(ffi.plumbline_engine_gloss(h, code))
@@ -385,17 +382,11 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
 
     // ── R&D tier (null when the artifact is absent) ────────────────────────────
 
-    fun ConceptNeighboursJson(code: String, k: Int): String? =
-        take(ffi.plumbline_engine_concept_neighbours_json(h, code, k))
-
     fun BridgePartnersJson(code: String): String? =
         take(ffi.plumbline_engine_bridge_partners_json(h, code))
 
     fun MorphJson(refKey: String, tokenIndex: Int): String? =
         take(ffi.plumbline_engine_morph_json(h, refKey, tokenIndex))
-
-    fun SimilarVersesJson(refKey: String, k: Int): String? =
-        take(ffi.plumbline_engine_similar_verses_json(h, refKey, k))
 
     // ── layout ─────────────────────────────────────────────────────────────────
 

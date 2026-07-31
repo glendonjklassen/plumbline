@@ -45,10 +45,9 @@ export type PanelView =
   | { kind: "about" }
   | { kind: "notesBrowser" };
 
-export type MapPopup =
-  | { kind: "chord" }
-  | { kind: "constellation" }
-  | { kind: "conceptMap"; code: string };
+/** The analytical map popups. Both are weave visualisations — the third,
+ *  `conceptMap`, was removed 2026-07-30 with the concept embedding it drew. */
+export type MapPopup = { kind: "chord" } | { kind: "constellation" };
 
 const HISTORY_CAP = 50; // mirrors core config::HISTORY_CAP
 

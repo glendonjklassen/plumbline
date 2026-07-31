@@ -153,21 +153,27 @@ test("a shared link carries the church, and the welcome names them", async ({ pa
 
 test("the deferred machine-tier pack loads after boot", async ({ page }) => {
   await boot(page);
-  // Boot ships the core pack only (TODO #28); ensureRnd pulls morphology +
-  // concept vectors in and re-warms. Force it (instead of waiting out the
-  // idle timer) and check a machine-tier lookup lights up.
-  const neighbours = await page.evaluate(async () => {
+  // Boot ships the core pack only (TODO #28); ensureRnd pulls the analysis pack
+  // in and re-warms. Force it (instead of waiting out the idle timer) and check
+  // a machine-tier lookup lights up.
+  //
+  // The probe is MORPHOLOGY. It used to be `conceptNeighbours`, which read the
+  // concept embedding — dropped from the pack 2026-07-30 — so it now answers
+  // null whether or not the pack loaded, which is the one thing a probe may
+  // never do. `morph` reads `morphology.morphb`, the pack's largest remaining
+  // file, and John 3:16 token 3 is the token the FFI tests use for it.
+  const gloss = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     await s.ensureRnd();
-    return (await s.engine.conceptNeighbours("G2316", 3))?.near?.length ?? 0; // G2316 = God
+    return (await s.engine.morph("John 3:16", 3))?.gloss ?? "";
   });
-  expect(neighbours).toBeGreaterThan(0);
+  expect(gloss, "a machine-tier lookup should answer once the pack is in").not.toBe("");
 });
 
 // A PHONE must never be asked to approve the analysis pack. Deferring it keeps
 // it off the boot path; it was also keeping it out of the session entirely, so
-// every launch put a "one-time ~4 MB download / Load analysis" button in front
-// of a reader who had already taken that download — and, on the same screen, a
+// every launch put a "one-time download / Load analysis" button in front of a
+// reader who had already taken that download — and, on the same screen, a
 // second notice underneath about a slow first read (feedback 2026-07-27, with a
 // screenshot). It loads itself now.
 test("a phone is never asked to approve the analysis pack", async ({ page }) => {
@@ -179,14 +185,15 @@ test("a phone is never asked to approve the analysis pack", async ({ page }) => 
   await page.waitForFunction(() => (window as any).__plumbline.rndState === "ready", null, {
     timeout: 90_000,
   });
-  const neighbours = await page.evaluate(
-    async () => ((await (window as any).__plumbline.engine.conceptNeighbours("G2316", 3))?.near ?? []).length,
+  // Same morphology probe as the test above, and for the same reason.
+  const gloss = await page.evaluate(
+    async () => (await (window as any).__plumbline.engine.morph("John 3:16", 3))?.gloss ?? "",
   );
-  expect(neighbours).toBeGreaterThan(0);
+  expect(gloss, "the pack really arrived, unasked").not.toBe("");
 
   // And the offer never appeared.
   await expect(page.getByRole("button", { name: "Load analysis" })).toHaveCount(0);
-  await expect(page.getByText("one-time ~4 MB download")).toHaveCount(0);
+  await expect(page.getByText(/one-time .* download/)).toHaveCount(0);
 });
 
 // This test used to be "a loading study explains itself once, not twice", and it
@@ -233,7 +240,7 @@ test("a study that cannot answer yet says so, and never looks frozen", async ({ 
   await expect(page.getByText(/Downloading the analysis pack/i)).toHaveCount(0);
 
   // What survives is the one case that is a genuine ASK rather than a status:
-  // nothing is coming, and spending ~4 MB is the reader's decision.
+  // nothing is coming, and spending the download is the reader's decision.
   await page.evaluate(() => ((window as any).__plumbline.rndState = "off"));
   await expect(page.locator(".rnd-note")).toBeVisible();
   await expect(page.getByRole("button", { name: "Load analysis" })).toBeVisible();
@@ -297,10 +304,12 @@ test("after a relaunch, the first word study is already warm", async ({ page }) 
   // back — the way `kjv.jsonl.idxcache` already spares the corpus. Until that
   // lands this test fails on the BLOCK COUNT, not the clock.
   //
-  // Two things already fixed that this test does NOT measure, each with its own
-  // guard: warm phase 7 (the SIF model, a single unsliced 54,859 ms block on a
-  // phone) is covered by `sif_model_is_built_in_slices` in plumbline-ffi, and the
-  // tap-builds-nothing rule by `a_tap_never_builds_indexes_under_a_sliced_warm`.
+  // One thing already fixed that this test does NOT measure, with its own guard:
+  // the tap-builds-nothing rule, covered by
+  // `a_tap_never_builds_indexes_under_a_sliced_warm` in plumbline-ffi. (There
+  // were two. The other was warm phase 7, the "verses like this" SIF model — a
+  // single unsliced 54,859 ms block on a phone — and both that phase and its
+  // Rust slicing guard went with the feature on 2026-07-30.)
   test.fail();
   await boot(page);
   await settleBackground(page);
@@ -994,15 +1003,17 @@ test("background loading never starves the reader (worker-thread scheduling)", a
 // slice; one chunk many times the typical one is not a slice, it is a block, and
 // while it runs this thread answers no layout, no tap and no word study.
 //
-// HONEST ABOUT ITS REACH. The offender here was warm phase 7, the SIF model —
-// 54,859 ms on that phone against a ~300 ms median, and only ~226 ms against a
-// ~6 ms median on a desktop, because its cost was allocation churn rather than
-// arithmetic and a desktop absorbs that. The floor below keeps this test from
-// flaking on a GC spike, and a desktop's 226 ms sits under it. That is why the
-// deterministic guard for slicing lives in Rust
-// (`plumbline-ffi`: sif_model_is_built_in_slices) where it needs no device to be
-// slow to notice. This one catches the next unsliced phase on whatever hardware
-// runs it, and it is the only one of the two that sees the whole system.
+// HONEST ABOUT ITS REACH. The offender was warm phase 7, the "verses like this"
+// SIF model — 54,859 ms on that phone against a ~300 ms median, and only ~226 ms
+// against a ~6 ms median on a desktop, because its cost was allocation churn
+// rather than arithmetic and a desktop absorbs that. The floor below keeps this
+// test from flaking on a GC spike, and a desktop's 226 ms sat under it, which is
+// why that phase also had a deterministic slicing guard in Rust.
+//
+// That feature was removed 2026-07-30 and its Rust guard with it, so THIS test is
+// now the only thing watching for an unsliced background phase — which is the
+// case it was written for: it catches the next one on whatever hardware runs it,
+// without needing a slow device to notice.
 test("no single background chunk may monopolise the engine worker", async ({ page }) => {
   await boot(page);
   await settleBackground(page);
@@ -1323,7 +1334,11 @@ test("updating sweeps the versions this build no longer uses", async ({ page }) 
     const pin = hit ? await hit.json() : null;
     return (pin?.files ?? []).map((f: { url: string }) => "/" + f.url);
   });
-  expect(pinned.length, "there should be a pin naming the pack after a boot").toBeGreaterThan(40);
+  // A floor, not a count: what is asserted is that a pin exists and names the
+  // whole pack, and the loop below is the real check. Kept well under the true
+  // file count so that dropping an artifact (three of them went on 2026-07-30
+  // with the concept map) fails here for no reason at all.
+  expect(pinned.length, "there should be a pin naming the pack after a boot").toBeGreaterThan(30);
   for (const u of pinned) expect(after, `prune deleted a pinned pack file: ${u}`).toContain(u);
   // The bundle this page is actually running must still be cached.
   const running = await page.evaluate(

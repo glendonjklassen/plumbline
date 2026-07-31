@@ -604,14 +604,6 @@ fn rnd_tier_via_abi() {
         assert!(err.is_null() && !e.is_null());
         let c = |s: &str| CString::new(s).unwrap();
 
-        // Concept neighbours: same-testament near, Hebrew cross (aligned).
-        let n: Value =
-            serde_json::from_str(&take(plumbline_engine_concept_neighbours_json(e, c("G25").as_ptr(), 5)).unwrap())
-                .unwrap();
-        assert_eq!(n["code"], "G25");
-        assert!(n["near"].as_array().unwrap().iter().all(|x| x["code"].as_str().unwrap().starts_with('G')));
-        assert!(n["cross"].as_array().unwrap().iter().any(|x| x["code"] == "H7225"));
-
         // Fused bridge partner from the external witness.
         let b: Value =
             serde_json::from_str(&take(plumbline_engine_bridge_partners_json(e, c("G25").as_ptr())).unwrap()).unwrap();
@@ -636,94 +628,10 @@ fn rnd_tier_via_abi() {
         // A token with no annotation → null.
         assert!(plumbline_engine_morph_json(e, c("John 3:16").as_ptr(), 1).is_null());
 
-        // "Verses like this" (lazy SIF build) → the other Greek verse.
-        let s: Value =
-            serde_json::from_str(&take(plumbline_engine_similar_verses_json(e, c("John 3:16").as_ptr(), 5)).unwrap())
-                .unwrap();
-        assert_eq!(s["verse"], "John 3:16");
-        assert!(s["in"].as_array().unwrap().iter().any(|x| x["verse"] == "John 3:18"));
-
-        // A bytes-opened engine has no embedding/morph → those return null.
+        // A bytes-opened engine has no morphology → it returns null.
         let bytes_engine = open();
-        assert!(plumbline_engine_concept_neighbours_json(bytes_engine, c("G25").as_ptr(), 5).is_null());
         assert!(plumbline_engine_morph_json(bytes_engine, c("John 3:16").as_ptr(), 3).is_null());
         plumbline_engine_free(bytes_engine);
-
-        plumbline_engine_free(e);
-        let _ = std::fs::remove_dir_all(&home);
-    }
-}
-
-#[test]
-fn concept_map_bridge_row_lights_up_the_other_testament() {
-    use std::ffi::CString;
-    unsafe {
-        let home = std::env::temp_dir().join(format!("plumbline-ffi-bridgemap-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(home.join("data")).unwrap();
-        std::fs::create_dir_all(home.join("bridge")).unwrap();
-        // A Hebrew verse (H7225 in Genesis) and a Greek verse (G25 in John) — the
-        // cross-testament shape that makes "Christ lights up Messiah" meaningful.
-        let kjv = concat!(
-            r#"{"format":"x","tokenization":"kjv1769-tok2","verses":2}"#,
-            "\n",
-            r#"{"b":"Gen","c":1,"t":[["","In","",[],0],["","the","",[],1],["","beginning","",["H7225"],0]],"v":1}"#,
-            "\n",
-            r#"{"b":"John","c":3,"t":[["","God","",["G2316"],0],["","loved","",["G25"],0]],"v":16}"#,
-        );
-        std::fs::write(home.join("data").join("kjv.jsonl"), kjv).unwrap();
-        std::fs::write(
-            home.join("data").join("strongs.json"),
-            r#"{"G25":{"lemma":"ἀγαπάω","strongs_def":"to love"},"H7225":{"lemma":"רֵאשִׁית","kjv_def":"beginning"},"G2316":{"lemma":"θεός","kjv_def":"God"}}"#,
-        )
-        .unwrap();
-        // A bridge witness tying G25 ↔ H7225 (fixture stand-in for Christ↔Messiah).
-        std::fs::write(
-            home.join("bridge").join("x.json"),
-            r#"{"format":"overlay-bridge-sources-v1","links":[{"h":"H7225","g":"G25","source":"lxx"}]}"#,
-        )
-        .unwrap();
-
-        let home_c = CString::new(home.to_str().unwrap()).unwrap();
-        let mut err: *mut c_char = ptr::null_mut();
-        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
-        assert!(err.is_null() && !e.is_null());
-        let c = |s: &str| CString::new(s).unwrap();
-
-        // G25's concept map carries a bridge row: its Hebrew partner H7225, whose
-        // dispersion lights up Genesis (canon index 0) — even though G25 itself
-        // occurs only in the NT (its own by_book is 0 at Genesis).
-        let m: Value =
-            serde_json::from_str(&take(plumbline_engine_concept_map_json(e, c("G25").as_ptr())).unwrap()).unwrap();
-        assert_eq!(m["byBook"][0].as_u64().unwrap(), 0, "G25 itself is not in Genesis");
-        let bridge = &m["bridge"];
-        assert!(bridge.is_object(), "a bridge row exists when a partner does");
-        assert!(bridge["partners"].as_array().unwrap().iter().any(|p| p["code"] == "H7225"));
-        assert!(bridge["byBook"][0].as_u64().unwrap() >= 1, "the partner H7225 lights up Genesis in the bridge row");
-        assert_eq!(
-            bridge["byBook"].as_array().unwrap().len(),
-            m["bookCount"].as_u64().unwrap() as usize,
-            "the bridge row is canon-length, like by_book"
-        );
-
-        // A code with no cross-testament partner omits the bridge row entirely
-        // (serde skips the None), so shells draw a single dispersion band.
-        let m2: Value =
-            serde_json::from_str(&take(plumbline_engine_concept_map_json(e, c("G2316").as_ptr())).unwrap()).unwrap();
-        assert!(m2["bridge"].is_null(), "no bridge row without a cross-testament partner");
-
-        // Semantic spokes carry their cosine weight (shells scale distance by
-        // it); community spokes omit it (serde skips the None).
-        for m in [&m, &m2] {
-            for sp in m["spokes"].as_array().unwrap() {
-                if sp["semantic"].as_bool().unwrap() {
-                    let w = sp["weight"].as_f64().expect("semantic spokes are weighted");
-                    assert!((-1.0..=1.0).contains(&w), "a cosine, not a rank: {w}");
-                } else {
-                    assert!(sp["weight"].is_null(), "community spokes carry no weight");
-                }
-            }
-        }
 
         plumbline_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
@@ -862,24 +770,6 @@ fn parity_endpoints_via_abi() {
         let selfp = cpairs.iter().find(|p| p["a"].as_u64() == p["b"].as_u64()).expect("a self-pair");
         assert!(selfp["a"].as_u64().unwrap() >= 39);
         assert_eq!(selfp["count"], 1);
-
-        // Concept map: centre label (gloss over lemma), spokes, and the
-        // canon-ordered dispersion. G2316 (θεός / "God") occurs once, in John.
-        let cmap: Value =
-            serde_json::from_str(&take(plumbline_engine_concept_map_json(e, c("G2316").as_ptr())).unwrap()).unwrap();
-        assert_eq!(cmap["code"], "G2316");
-        assert!(cmap["centerLabel"].as_str().unwrap().contains("θεός"));
-        assert_eq!(cmap["otNtDivide"], 39);
-        assert_eq!(cmap["bookCount"], 66);
-        let bb = cmap["byBook"].as_array().unwrap();
-        assert_eq!(bb.len(), 66);
-        // Exactly one occurrence, and it lands in the NT (John, index ≥ 39).
-        let total: u64 = bb.iter().map(|x| x.as_u64().unwrap()).sum();
-        assert_eq!(total, 1);
-        assert_eq!(bb[..39].iter().map(|x| x.as_u64().unwrap()).sum::<u64>(), 0);
-        // No embedding artifact here → no semantic (gold) spokes; community
-        // spokes (if any) are all green.
-        assert!(cmap["spokes"].as_array().unwrap().iter().all(|s| s["semantic"] == false));
 
         // Constellation: the "Spanned" weave has one resolvable link (John
         // 3:16↔John 3:18); its Gen 1:1↔John 3:16 link is unresolved, so it never
@@ -1334,10 +1224,6 @@ fn timing_harness() {
     let _ = eng.leitwort();
     println!("leitwort scan:  {:?}", t.elapsed());
 
-    let t = Instant::now();
-    let _ = eng.verse_sim();
-    println!("verse_sim SIF:  {:?}", t.elapsed());
-
     unsafe { plumbline_engine_free(e) };
 }
 
@@ -1352,10 +1238,6 @@ fn timing_harness_open_parts() {
     let t = Instant::now();
     let m = morph::load_morph(canon::TOKENIZATION_VERSION, data.join("morphology.jsonl"));
     println!("morphology parse: {:?} (loaded: {})", t.elapsed(), m.is_some());
-
-    let t = Instant::now();
-    let emb = embed::load_embedding(canon::TOKENIZATION_VERSION, data.join("concept-vectors.vec"));
-    println!("embedding load:   {:?} (loaded: {})", t.elapsed(), emb.is_some());
 
     let t = Instant::now();
     let x = crossref::load_cross_refs(crossref::cross_refs_path(&repo));
@@ -1549,9 +1431,7 @@ fn rnd_data_loads_after_open() {
 
         // Core-pack boot: warm builds concept + leitwort; the R&D tiers are dark.
         assert!(plumbline_engine_warm_indexes(e).is_null());
-        assert!(plumbline_engine_concept_neighbours_json(e, c("G25").as_ptr(), 5).is_null());
         assert!(plumbline_engine_morph_json(e, c("John 3:16").as_ptr(), 3).is_null());
-        assert!(plumbline_engine_similar_verses_json(e, c("John 3:16").as_ptr(), 5).is_null());
 
         // A no-op load while the files are still missing is harmless.
         assert!(plumbline_engine_load_rnd_data(e).is_null());
@@ -1575,20 +1455,11 @@ fn rnd_data_loads_after_open() {
         .unwrap();
 
         assert!(plumbline_engine_load_rnd_data(e).is_null());
-        assert!(plumbline_engine_warm_indexes(e).is_null()); // builds the SIF now
+        assert!(plumbline_engine_warm_indexes(e).is_null());
 
-        let n: Value =
-            serde_json::from_str(&take(plumbline_engine_concept_neighbours_json(e, c("G25").as_ptr(), 5)).unwrap())
-                .unwrap();
-        assert_eq!(n["code"], "G25");
         let m: Value =
             serde_json::from_str(&take(plumbline_engine_morph_json(e, c("John 3:16").as_ptr(), 3)).unwrap()).unwrap();
         assert_eq!(m["code"], "V-AAI-3S");
-        let s: Value =
-            serde_json::from_str(&take(plumbline_engine_similar_verses_json(e, c("John 3:16").as_ptr(), 5)).unwrap())
-                .unwrap();
-        assert!(s["in"].as_array().unwrap().iter().any(|x| x["verse"] == "John 3:18"));
-
         plumbline_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
     }
@@ -1611,104 +1482,6 @@ fn generated_kjv(chapters: u16, per: u16) -> String {
         }
     }
     out
-}
-
-/// The SIF model must be built in SLICES, like every other heavy warm phase.
-///
-/// It was the one that wasn't. Phase 7 of `warm_next` was a single-shot
-/// `verse_sim()` call, and on a real phone that held the engine worker for
-/// **54,859 ms in one synchronous block** (maintainer's boot trace, 2026-07-28)
-/// — during which the worker answers no layout, no tap and no word study, which
-/// is exactly the "it says loading and the first one takes longer, every time I
-/// reopen it" report. Every other heavy phase was sliced on 2026-07-27; this one
-/// was missed because the same build is ~226 ms on a desktop and vanishes into
-/// the noise there. The ratio is ~240x, not the ~6-10x a phone's CPU explains,
-/// because the build's cost was allocation churn rather than arithmetic.
-///
-/// THE CORPUS HERE IS BIGGER THAN ONE SLICE ON PURPOSE. With the two-verse
-/// fixture the rest of this file uses, a single call finishes the model whether
-/// or not the code slices anything — so that version of this test would pass
-/// against the very bug it is named after. Guarding a slicing property requires
-/// more work than one slice can do.
-///
-/// The probe reads `verse_sim` directly rather than calling
-/// `similar_verses_json`, because that entry point builds the model on demand:
-/// asking "is it built yet?" through the public API would BUILD it and the
-/// assertion would be measuring its own side effect.
-///
-/// It drives `warm_next(WARM_SLICE)` rather than `plumbline_engine_warm_step`,
-/// which is compiled only for wasm32. That export is a one-line
-/// `guard(0, || e.warm_next(WARM_SLICE))` wrapper over exactly this call, and the
-/// slice size is shared, so nothing about the slicing behaviour is bypassed.
-#[test]
-fn sif_model_is_built_in_slices() {
-    use std::ffi::CString;
-    unsafe {
-        let home = std::env::temp_dir().join(format!("plumbline-ffi-sifslice-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(home.join("data")).unwrap();
-        // 150 x 20 = 3,000 verses: more than the 2,048-verse warm slice.
-        std::fs::write(home.join("data").join("kjv.jsonl"), generated_kjv(150, 20)).unwrap();
-        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
-
-        let home_c = CString::new(home.to_str().unwrap()).unwrap();
-        let mut err: *mut c_char = ptr::null_mut();
-        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
-        assert!(err.is_null() && !e.is_null(), "engine opened");
-        let eng = &*e;
-
-        // Warm to completion with NO embedding present. Phase 7 is reached and
-        // does nothing, leaving `sif_attempted` false — the same state a web boot
-        // is in when the analysis pack has not landed yet.
-        let mut calls = 0;
-        while eng.warm_next(crate::WARM_SLICE) == 1 {
-            calls += 1;
-            assert!(calls < 10_000, "warm never terminated");
-        }
-        assert!(eng.verse_sim.get().is_none(), "no embedding: nothing to build from");
-
-        // The analysis pack arrives.
-        std::fs::write(
-            home.join("data").join("concept-vectors.vec"),
-            "4 2\nG2316 1 0\nG25 0.9 0.1\nG4100 0.2 1\nH7225 0.95 0.05\n",
-        )
-        .unwrap();
-        std::fs::write(
-            home.join("data").join("concept-vectors.vec.meta"),
-            r#"{"tokenization":"kjv1769-tok2","aligned":"procrustes"}"#,
-        )
-        .unwrap();
-        assert!(plumbline_engine_load_rnd_data(e).is_null());
-
-        // ONE slice. Over 3,000 verses this cannot be the whole model — and if it
-        // is, the phase is a monolithic block and a phone pays for it in one go.
-        assert_eq!(eng.warm_next(crate::WARM_SLICE), 1, "a slice leaves work behind");
-        assert!(
-            eng.verse_sim.get().is_none(),
-            "one warm slice built the ENTIRE SIF model: phase 7 is not sliced, so the engine \
-             worker is held for the whole build and answers no layout or tap while it runs"
-        );
-
-        // ...and driving it out finishes, so slicing did not merely defer forever.
-        let mut more = 1;
-        let mut slices = 1;
-        while more == 1 {
-            more = eng.warm_next(crate::WARM_SLICE);
-            slices += 1;
-            assert!(slices < 10_000, "sliced warm never terminated");
-        }
-        assert!(eng.verse_sim.get().is_some(), "the sliced build completes");
-
-        // And the model it produced actually answers — a builder that terminates
-        // with a hollow model would satisfy everything above.
-        let s: Value =
-            serde_json::from_str(&take(plumbline_engine_similar_verses_json(e, c"Ps 1:2".as_ptr(), 5)).unwrap())
-                .unwrap();
-        assert!(!s["in"].as_array().unwrap().is_empty(), "the sliced SIF model returned no neighbours: {s}");
-
-        plumbline_engine_free(e);
-        let _ = std::fs::remove_dir_all(&home);
-    }
 }
 
 /// A reader's tap must never BUILD an index while a sliced warm is running.
@@ -1902,10 +1675,8 @@ fn no_reader_facing_export_builds_an_index_under_a_sliced_warm() {
         // Every one of these is reachable from a tap, a panel, or a map the reader
         // can open in the first seconds of a launch.
         let _ = take(plumbline_engine_word_study_blocks2_json(e, vref.as_ptr(), 1, 3));
-        let _ = take(plumbline_engine_concept_map_json(e, code.as_ptr()));
         let _ = take(plumbline_engine_concept_json(e, code.as_ptr()));
         let _ = take(plumbline_engine_strongs_occurrences_json(e, code.as_ptr()));
-        let _ = take(plumbline_engine_similar_verses_json(e, vref.as_ptr(), 5));
         let _ = take(plumbline_engine_study_xrefs_json(e, vref.as_ptr()));
 
         for (built, what) in [
@@ -1915,7 +1686,6 @@ fn no_reader_facing_export_builds_an_index_under_a_sliced_warm() {
             (eng.concept.get().is_some(), "the concept model"),
             (eng.leitwort.get().is_some(), "the leitwort scan"),
             (eng.bridge.get().is_some(), "the bridge"),
-            (eng.verse_sim.get().is_some(), "the SIF model"),
         ] {
             assert!(
                 !built,
@@ -2211,7 +1981,6 @@ fn link_verb(l: &crate::wire::WirePanelLink) -> &'static str {
         L::Thread { .. } => "thread",
         L::Tag { .. } => "tag",
         L::Weave { .. } => "weave",
-        L::ConceptMap { .. } => "conceptMap",
         L::AddTag { .. } => "addTag",
         L::AddThread { .. } => "addThread",
         L::Untag { .. } => "untag",
@@ -2241,7 +2010,6 @@ fn wire_panel_link_keys_are_golden() {
         ("thread:0", "thread", &["index", "verb"]),
         ("tag:0", "tag", &["index", "verb"]),
         ("weave:0", "weave", &["index", "verb"]),
-        ("conceptmap:G25", "conceptMap", &["code", "verb"]),
         ("addtag:John 3:16", "addTag", &["refKey", "verb"]),
         ("addthread:John 3:16", "addThread", &["refKey", "verb"]),
         ("untag:2:John 3:16", "untag", &["refKey", "tag", "verb"]),

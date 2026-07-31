@@ -25,7 +25,6 @@ struct Fake {
     concept: HashMap<String, ConceptView>,
     xrefs: HashMap<String, Vec<XrefView>>,
     study_xrefs: HashMap<String, Vec<StudyXrefView>>,
-    similar: HashMap<String, (Vec<SimilarView>, Vec<SimilarView>)>,
     verse_tags: HashMap<String, Vec<(usize, String)>>,
     notes: HashMap<String, Vec<String>>,
     user_notes: HashMap<String, String>,
@@ -87,9 +86,6 @@ impl PanelSource for Fake {
     }
     fn study_xrefs(&self, verse: &str) -> Vec<StudyXrefView> {
         self.study_xrefs.get(verse).cloned().unwrap_or_default()
-    }
-    fn similar_verses(&self, verse: &str, _k: usize) -> (Vec<SimilarView>, Vec<SimilarView>) {
-        self.similar.get(verse).cloned().unwrap_or_default()
     }
     fn verse_tags(&self, verse: &str) -> Vec<(usize, String)> {
         self.verse_tags.get(verse).cloned().unwrap_or_default()
@@ -202,7 +198,6 @@ fn parse_link_round_trips_the_producer_uris() {
     assert_eq!(parse_link("thread:2"), Some(PanelLink::Thread { index: 2 }));
     assert_eq!(parse_link("tag:0"), Some(PanelLink::Tag { index: 0 }));
     assert_eq!(parse_link("weave:4"), Some(PanelLink::Weave { index: 4 }));
-    assert_eq!(parse_link("conceptmap:G25"), Some(PanelLink::ConceptMap { code: "G25".into() }));
 
     // Write verbs (refkeys may contain spaces + a colon; only the verb splits).
     assert_eq!(parse_link("addtag:John 3:16"), Some(PanelLink::AddTag { refkey: "John 3:16".into() }));
@@ -347,7 +342,6 @@ fn full_word_study_orders_the_tiers_and_marks_them() {
         assert!(!runs.iter().any(|r| r.text == " ✝"));
     }
     // The concept-map link + legend close the card.
-    assert!(uris(&blocks).contains(&"conceptmap:G25".to_string()));
     assert!(blocks.iter().any(|b| text_of(b).contains("where this comes from")));
 }
 
@@ -419,7 +413,6 @@ fn gates_split_human_and_machine_tiers() {
     assert!(ht.contains(&"RENDERINGS".to_string()));
     assert!(!ht.contains(&"APPEARS ALONGSIDE".to_string()));
     assert!(uris(&hb).contains(&"go:Rom:5:8".to_string()));
-    assert!(!uris(&hb).iter().any(|u| u.starts_with("conceptmap:")));
 
     // Machine only: analytics + concept map, no renderings/TSK.
     let mb = word_study_gated(&f, Gates { human: false, machine: true }, "John 3:16", 3, &["G25".to_string()]);
@@ -427,7 +420,6 @@ fn gates_split_human_and_machine_tiers() {
     assert!(!mt.contains(&"RENDERINGS".to_string()));
     assert!(mt.contains(&"APPEARS ALONGSIDE".to_string()));
     assert!(!uris(&mb).contains(&"go:Rom:5:8".to_string()));
-    assert!(uris(&mb).iter().any(|u| u.starts_with("conceptmap:")));
 }
 
 #[test]

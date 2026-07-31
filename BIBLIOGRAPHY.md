@@ -51,9 +51,18 @@ module id `engKJV2006eb` itself no longer resolves there (checked 2026-07-29).
 
 ## Self-trained artifacts
 
-| Shipped file | Contents | Provenance |
+**No longer shipped, as of 2026-07-30.** The one entry in this section left the
+product that day: nothing in the app reads it any more, so it is not in the APK
+and not in the web data pack. The provenance record stays here because the file
+is still an output of the offline pipeline and still lives in `data/`.
+
+| File | Contents | Provenance |
 |---|---|---|
-| `data/concept-vectors.vec` (+ `.meta`, `.freq`) | 7,426 concept embeddings over Strong's sequences, Procrustes-aligned across testaments | trained offline in pure NumPy on the tagged corpus; it never sees the English surface, so the output is wholly owned and freely licensable |
+| `data/concept-vectors.vec` (+ `.meta`, `.freq`) — **not shipped since 2026-07-30** | 7,426 concept embeddings over Strong's sequences, Procrustes-aligned across testaments | trained offline in pure NumPy on the tagged corpus; it never sees the English surface, so the output is wholly owned and freely licensable |
+
+The three features that read it were removed the same day, on the maintainer's
+call that they were machine-generated noise: SIMILAR CONCEPTS, "verses like
+this", and the concept map.
 
 No modern pretrained encoder touches the text anywhere: contextual models
 misread Early Modern English, so every artifact is either curated (above) or

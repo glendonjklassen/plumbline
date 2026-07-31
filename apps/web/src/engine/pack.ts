@@ -171,9 +171,9 @@ async function fetchFiles(
   onProgress?: (p: PackProgress) => void,
 ): Promise<Map<string, Uint8Array>> {
   const totalGz = files.reduce((s, f) => s + f.gzBytes, 0);
-  // Bytes as they arrive, not files as they finish: the analysis pack is four
-  // files and one of them is 2.3 MB, so per-file reporting sat at 0% for the
-  // whole download on a phone (2026-07-27).
+  // Bytes as they arrive, not files as they finish: the analysis pack is a
+  // handful of files and one of them dwarfs the rest, so per-file reporting sat
+  // at 0% for the whole download on a phone (2026-07-27).
   let received = 0;
   const out = new Map<string, Uint8Array>();
   // A few files concurrently; decompression overlaps the network.

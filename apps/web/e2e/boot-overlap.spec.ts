@@ -130,8 +130,8 @@ function recordingOrigin(upstream: string): Promise<{
 
 /** A first visit, first-run dismissed, text on screen.
  *
- *  The analysis tiers are left OFF: this is a boot-path test, and ~4 MB of
- *  optional analytics would only add noise to the requests being counted. */
+ *  The analysis tiers are left OFF: this is a boot-path test, and the optional
+ *  analytics pack would only add noise to the requests being counted. */
 async function firstVisit(page: Page, url: string): Promise<void> {
   await page.goto(url);
   const established = page.getByRole("button", { name: "Established believer" });

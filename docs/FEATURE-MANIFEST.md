@@ -237,21 +237,34 @@ producer emits*, not shell code.
      neighbours plus an "across the testaments" cross list. Cut from
      `panel.rs`, so it went from both shells at once, along with the
      `concept_near` trait method and its FFI implementation, which had no other
-     caller. The embedding index STAYS: `VerseSim` ("verses like this") is built
-     from it, so the ~4 MB analysis pack is unchanged in size and the machine
-     tier still earns its download. The function-word filter this section needed
-     (`rnd::stopwords` — 2026-07-25, *believe* was offering *because*) is still
-     live for APPEARS ALONGSIDE below.
+     caller. The function-word filter this section needed (`rnd::stopwords` —
+     2026-07-25, *believe* was offering *because*) is still live for APPEARS
+     ALONGSIDE below. The embedding index it read went too, later the same day,
+     when "verses like this" (item 7) and the concept map followed it out.
    - **APPEARS ALONGSIDE** *(Machine ≈)* — concept community (8), same
      function-word filter.
-   - **WHERE IT CONCENTRATES** *(Machine ≈)* — top books (5) "Book ×N · …" + "(OT x · NT y)".
+   - **MOST USED IN** *(Machine ≈)* — top books (5) "Book ×N · …" + "(OT x · NT y)".
+     (Named WHERE IT CONCENTRATES until the 2026-07-30 copy pass.)
    - **LEITWORT** *(Machine ≈)* — "{winCount} of its {n} uses cluster in {label} (p ≈ 10^−{score})".
-   - "▸ open concept map" link.
+   - **"▸ open concept map" link** — **REMOVED 2026-07-30** with the popup it
+     opened; see §Concept map popup below. The three sections above it are the
+     symbolic concept engine (co-occurrence over the corpus) and are untouched.
 4. (F) Author actions: `＋ tag verse`, `＋ add to thread`.
 5. **cross-references (N)** — weave partners (≤40), each + weave-name link to
    its compare card.
 6. (F) **study cross-references (N) — TSK** *(Human †)* (≤40; ranges "a–b").
-7. (F) **verses like this** *(Machine ≈)* — SIF in-testament (6); cross (4).
+7. **verses like this** — **REMOVED 2026-07-30**, at Glendon's call: a per-verse
+   list of statistically similar verses (the SIF model over the concept
+   embedding, 6 in-testament and 4 cross-testament). Machine-generated noise, in
+   his judgement. It lived in `panel.rs` and in the core's `VerseSim`, so it went
+   from both shells at once, taking `PanelSource::similar_verses`,
+   `plumbline_engine_similar_verses_json` and the wasm-only
+   `plumbline_engine_verse_sim_save` / `_load` / `_step` with it. It was the last
+   feature reading the concept embedding, so `data/concept-vectors.vec` (+
+   `.vecb`, `.meta`, `.freq`) left the data pack too: 3.08 MB of a 6.4 MB
+   analysis tier, which now holds morphology and text-witness only. One code
+   path still opens the file — `plumbline_engine_concept_neighbours_json`, which
+   no shell has ever called (see §C ABI surface).
 8. (F) **tags** — tags holding this verse; each is a link + `✕` untag (user
    data, not evidence — no tier mark).
 9. **margin notes** *(Human †)* — the verse's 1769 notes, small.
@@ -268,7 +281,7 @@ strip edge punctuation, ties lexicographic; fallback: distilled def/kjv clause
 ≤30 chars). All of this is inside the producer; the shell only paints the runs.
 The `PanelSource` trait is the producer's only input — a thin set of projected
 accessors (`strongs`/`occurrences`/`renderings`/`bridge_partners`/`concept`/
-`similar_verses`/`verse_xrefs`/`verse_notes`/…). One live implementation,
+`verse_xrefs`/`verse_notes`/…). One live implementation,
 `PlumblineEngine` (`crates/ffi/src/lib.rs`), so both shells get the identical
 producer behind the endpoints; `panel/tests.rs`'s `Fake` is the second, which is
 how the producer is unit-tested without a corpus.
@@ -353,7 +366,7 @@ knows its provenance. The model is `plumbline_rnd::bridge` (`crates/rnd/src/brid
 - **Wire**: `plumbline_engine_bridge_partners_json` carries additive `tiers`
   (`["god","human","machine"]`) + `researchGrade` per partner, for a shell that
   reads partners directly rather than as blocks. Fixed-by-block
-  sections (SIMILAR CONCEPTS = Machine, TSK = Human, …) are marked by the
+  sections (APPEARS ALONGSIDE = Machine, TSK = Human, …) are marked by the
   producer too, not shell-side.
 
 ## Link routing — one verb vocabulary (P1.4)
@@ -363,13 +376,16 @@ vocabulary is **parsed once in the core**: `plumbline_core::panel::parse_link(ur
 PanelLink` — co-located with the producers that *emit* the URIs, so a verb can't
 drift between what the panel bakes and what a shell handles. Both shells route
 through `plumbline_route_link_json(uri)` (`{verb, …}`, tagged) — neither
-re-splits the string. The 20 verbs, all of them in `PanelLink`:
+re-splits the string. The 19 verbs, all of them in `PanelLink`:
 `go:Book:ch[:v]` · `occ:CODE` · `rend:CODE:rendering` · `code:CODE[:word]` ·
-`thread:i` · `tag:i` · `weave:i` · `conceptmap:CODE` · `addtag:refkey` ·
+`thread:i` · `tag:i` · `weave:i` · `addtag:refkey` ·
 `addthread:refkey` · `untag:i:refkey` · `makeweave:i` · `approve:i` · `reject:i` ·
 `editthreadnotes:i` · `editweavenotes:i` · `editentrynote:ti:ei` ·
 `editnote:refkey` · `guide` · `about`. An unknown verb or a malformed payload
 parses to `None` and the shell ignores the click.
+
+`conceptmap:CODE` was the twentieth until 2026-07-30; it left the vocabulary with
+the popup it opened (see §Concept map popup).
 
 Navigation + native prompts + the write choreography (author endpoint →
 reload → refetch) stay shell-side. `parse_link` handles multi-word books
@@ -662,9 +678,9 @@ the web lists **Suggested** as its own seventh card (`ExploreScreen.svelte`);
 Android folds it into one Weaves screen with an All/Suggested filter
 (`WeavesScreen`).
 
-## The three map popups — a shared note
+## The two map popups — a shared note
 
-All three (chord / constellation / concept) are **core view-models the shell only
+Both (chord / constellation) are **core view-models the shell only
 paints** — positions cross the wire as fractions and logical units, never pixels
 or colours. The pixel sizes quoted below are the desktop-era popup dimensions and
 survive as proportions, not as layout: the web frames them in `MapFrame.svelte`,
@@ -709,41 +725,28 @@ Node size normalises by the **global** max degree, and the lane-height metric an
 the caption come from the model, so no two shells can drift on them (the desktop
 pair had, on all three).
 
-## Concept map popup (`conceptmap:`; M:724–883)
+## Concept map popup — REMOVED 2026-07-30
 
-720×560: radial graph + 40-px dispersion strip. **The whole popup is the core
-view-model** `plumbline_engine_concept_map_json(code)` → `{code, centerLabel,
-spokes:[{code, label, semantic}], byBook (canon-ordered counts), otNtDivide,
-bookCount}`. The spoke union (embedding-near ∪ community, deduped, 6 each) lives
-in `plumbline_rnd::concept::radial_spokes`; labels
-("gloss\nlemma") are baked by the endpoint. Paint only: radius `min(w,h)/2−95`;
-semantic spokes gold, community green; centre node gold; dispersion cells gold α
-`0.15+0.75·(cnt/max)` at `bi/bookCount`, OT/NT seam. No shell book-order table.
+The radial graph opened by "▸ open concept map" (`conceptmap:CODE`) is gone, at
+Glendon's call: a Strong's code ringed by its embedding-near and community
+neighbours over a canon dispersion strip, plus the cross-testament bridge row
+that rode inside the same payload. Machine-generated noise, in his judgement.
 
-**Delta (data, not code): Android has no `semantic` spokes.** The gold ones come
-from the embedding (`nearest_concepts`), the green ones from the corpus-built
-concept graph. Android bundles neither `concept-vectors.vec` nor
-`morphology.jsonl` and never calls `load_rnd_data`, so every Android concept map
-is community-only — see **Android notes ▸ machine-tier data**.
+It was a core view-model, so it went from both shells at once: the endpoint
+`plumbline_engine_concept_map_json`, the `conceptmap:` link verb, and the
+shells' painters. What stays: the **chord map** and the **constellation** (weave
+visualisations, nothing to do with this), and the symbolic concept engine behind
+APPEARS ALONGSIDE / MOST USED IN / LEITWORT, which is co-occurrence statistics
+over the corpus and never read the embedding.
 
-**Cross-testament bridge row.** `concept_map_json` also carries an optional
-`bridge:{partners:[{code,label,prior}], byBook}` — the strongest other-testament
-equivalents of `code` (top `concept::BRIDGE_ROW_PARTNERS`=6 from the already-fused
-`FusedBridge`, i.e. etymology + `bridge/*.json` witnesses like Abbott-Smith) and
-their **unioned** per-book dispersion (`concept::union_by_book`), canon-ordered
-like `byBook`. Additive + `skip_serializing_if=None`, so the ABI/bindings are
-unchanged (same fn, richer JSON) and a partnerless code omits it. This is what
-makes an OT word light up its NT match: viewing *Christ* (G5547) fills the OT half
-via *Messiah* (H4899, prior 0.93). Both shells paint it as a second indigo row
-beneath the gold one (strip 52-px, alpha `0.18+0.72·(cnt/max)` on the row's own
-max) and name the partners in a caption — Android in `Maps.ConceptMap`, the web in
-`maps/ConceptMap.svelte`. This row DOES work on Android: it is fused from
-etymology + `bridge/*.json`, which the APK bundles and extracts (see Android
-notes), not from the embedding.
+The embedding half of the spoke union (`nearest_concepts`) was one of the three
+features reading `data/concept-vectors.vec`; with all three gone the artifact
+left the data pack. See item 7 of §Word study panel.
 
 ## C ABI surface (crates/ffi) — endpoint ↔ feature map
 
-**97 native fns as of 2026-07-29**, plus 9 wasm-only shims in
+**95 native fns as of 2026-07-30** (97 until `similar_verses_json` and
+`concept_map_json` were removed that day), plus 6 wasm-only shims in
 `crates/ffi/src/wasm.rs` that cbindgen excludes by name. Don't trust a count in
 prose — the guarantee is mechanical: `plumbline-bindgen`'s `verify_surface`
 requires every `plumbline_*` symbol in `include/plumbline.h` to appear in
@@ -758,7 +761,13 @@ Pre-existing: `open`/`open_from_bytes`/`free`, `toc_json`, `chapter_count`,
 (`thread_add`, `tag_add`, `tag_remove`, `weave_add_link`, `weave_approve`,
 `weave_reject`, `thread_set_notes`, `thread_entry_set_note`,
 `weave_set_notes`), R&D (`concept_neighbours_json`, `bridge_partners_json`,
-`morph_json`, `similar_verses_json`).
+`morph_json`). `similar_verses_json` was here too until 2026-07-30.
+
+**`concept_neighbours_json` is a dead endpoint** and has been for some time: both
+shells carry a wrapper (the binding covers the whole ABI automatically) and
+neither has a call site. Since 2026-07-30 it is also the only code left that
+opens `data/concept-vectors.vec`, which the pack no longer ships, so it can only
+answer empty. A candidate for deletion.
 
 Added for shell parity (2026-07-14):
 
@@ -767,7 +776,7 @@ Added for shell parity (2026-07-14):
 | `plumbline_engine_verse_notes_json(ref)` | `{verse, notes[]}` or null | margin notes |
 | `plumbline_engine_study_xrefs_json(ref)` | `{verse, refs:[{to, toDisplay, end?, votes}]}` | TSK tier |
 | `plumbline_engine_weaves_json()` | full library: weaves + links incl. `approved`, `spanA/B`, `resolved`, `suggested` | compare card, weaves list, panel xrefs (chord map + constellation now have their own view-model endpoints) |
-| `plumbline_engine_concept_json(code)` | `{total, ot, nt, topBooks, byBook, collocates, community, leitwort?}` | ALONGSIDE / CONCENTRATES / LEITWORT / dispersion |
+| `plumbline_engine_concept_json(code)` | `{total, ot, nt, topBooks, byBook, collocates, community, leitwort?}` | ALONGSIDE / MOST USED IN / LEITWORT / dispersion |
 | `plumbline_engine_gloss(code)` | plain english gloss or null | concept chips |
 | `plumbline_engine_weave_add_link_spans(name, a, b, aLo, aHi, bLo, bHi, added)` | null/error (negative span = none) | word-span links |
 | `plumbline_config_load_json()` / `plumbline_config_save_json(json)` | config wire above (+`firstRun` on load) | session/mode/zoom |
@@ -798,19 +807,18 @@ Both are thin wrappers over the one core source: `link_pairs` wraps
 `core::reference::CANON_SEGMENTS` / `OT_NT_DIVIDE`.
 
 Added for the popup view-models (2026-07-18, architecture-review P0.2 — the
-three map popups' derivation moved into the core; positions cross the wire as
+map popups' derivation moved into the core; positions cross the wire as
 **fractions/logical units**, never pixels/colours):
 
 | endpoint | returns | for |
 |---|---|---|
 | `plumbline_engine_chord_map_json()` | `{pairs:[{a, b, count}] (canon book indices, a≤b), max, otNtDivide, bookCount}` | chord/arc "Weave map" (retires the shell fold + max) |
-| `plumbline_engine_concept_map_json(code)` | `{code, centerLabel, spokes:[{code, label, semantic}], byBook[] (canon order), otNtDivide, bookCount}` | concept map (retires the spoke assembly + gloss/lemma lookups + book table) |
 | `plumbline_engine_constellation_json(page, pins_json)` | `{lanes:[{weaveIndex, name, pinned, nodes:[{x, laneFrac, size, refKey, book, chapter, verse, display}], edges:[{aX, aLaneFrac, bX, bLaneFrac}]}], nPins, freeTotal, page, maxPage, caption, laneCapacity}` (pins = JSON array of weave indices) | constellation (retires the usable/degree/jitter/paging/pin derivation) |
 
 Producers: `chord_map` wraps `plumbline_core::weave::chord_pairs`; `constellation`
-wraps `plumbline_core::weave::constellation`; `concept_map` bakes labels over
-`plumbline_rnd::concept::radial_spokes` + `concept.stat`. Both shells consume the
-JSON and map fractions → pixels; neither re-derives anything.
+wraps `plumbline_core::weave::constellation`. Both shells consume the
+JSON and map fractions → pixels; neither re-derives anything. A third row,
+`plumbline_engine_concept_map_json(code)`, stood here until 2026-07-30.
 
 Added for the panel content-model + link router (2026-07-18, P0.1 + P1.4 — the
 whole study panel and its verb vocabulary move into the core). Every block
@@ -900,7 +908,7 @@ New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
   (`MapFrame.svelte`); Android's maps sit on `palette.panelBg` and follow the
   theme. Reconcile deliberately — pick one.
 - **6. Kill the first-study-click pause.** `plumbline_engine_warm_indexes` forces the
-  lazy analytics (concept / leitwort / SIF) to build. **Delta:** Android calls it
+  lazy analytics (concept / leitwort) to build. **Delta:** Android calls it
   on a coroutine at startup; the web cannot — its engine is one worker thread, so
   a single blocking warm would starve every layout/tap RPC behind it, and it warms
   in slices instead (`warm_next`, see **Web shell ▸ the boot warm**).
@@ -951,8 +959,7 @@ scroll-verse restore.
 - **Gates.** `plumbline_core::panel::Gates { human, machine }` replaces the
   producer-level `full: bool`: *human* gates curated scholarship (RENDERINGS +
   reverse lens, morphology gloss, SAME ROOT, TSK), *machine* gates the
-  learned/statistical tiers (SIMILAR CONCEPTS, ALONGSIDE, CONCENTRATES,
-  LEITWORT, verses-like-this, the concept-map link). The text and the
+  learned/statistical tiers (ALONGSIDE, MOST USED IN, LEITWORT). The text and the
   reader's own data — author actions (`＋ tag verse` / `＋ add to thread`),
   the verse's tags + `untag`, weave xrefs, margin + personal notes, the
   compare card's `✎ note` — are **never gated**. Legacy `full:bool` fns
@@ -1094,12 +1101,13 @@ mirrored to IndexedDB after every write; the corpus idxcache persisted for
 fast reopens). `apps/web/src/engine/StudyEngine.ts` is the method-for-method
 TS sibling of `StudyEngine.kt`. Build:
 `npm run pack:data && cargo build -p plumbline-ffi --release --target
-wasm32-wasip1 && npm run pack:wasm && npm run build` (in apps/web). **Nine
+wasm32-wasip1 && npm run pack:wasm && npm run build` (in apps/web). **Six
 wasm-only ABI exports** live in `crates/ffi/src/wasm.rs` — `plumbline_web_alloc` /
 `_free`, `plumbline_web_measure_fnptr` (the `plumbline.plumbline_js_measure`
 import surfaced as a `PlumblineMeasureFn`), and the sliced-work entry points
-`plumbline_engine_warm_step` / `_load_rnd_step` / `_defer_builds` /
-`_verse_sim_save` / `_verse_sim_load` / `_verse_sim_step`. plumbline-bindgen
+`plumbline_engine_warm_step` / `_load_rnd_step` / `_defer_builds`. There were
+nine until 2026-07-30: `_verse_sim_save` / `_verse_sim_load` / `_verse_sim_step`
+went with "verses like this". plumbline-bindgen
 excludes them from the native bindings **by name**: extend that list in
 `src/bin/plumbline-bindgen.rs` when the module gains an export, or the header/Kotlin
 drift check fails.
@@ -1112,7 +1120,7 @@ keyboard map + wheel + touch (pan, long-press menu, horizontal chapter
 swipe), context menu (copy / copy chapter / note / tag / thread / memorize /
 mark chapter read),
 tag picker + tag→weave sheets, the
-three map popups from the core view-models (pinch-zoom), memorization (hub /
+two map popups from the core view-models (pinch-zoom), memorization (hub /
 drill / coverage / activity), Present mode (sunlight, share + the hosted
 PWA link + its QR on the end card), notes browser, history, first-run,
 guide/about/shortcuts,
@@ -1133,16 +1141,15 @@ escape hatch" until 2026-07-29 — it had been a worker for a while.)
 **The boot warm covers every index a study needs** (2026-07-27). Nothing an
 engine builds survives the tab, and the warm used to cover only the SEARCH
 index — so the occurrence index, the rendering lens, cross-refs, concepts,
-leitwort, the fused bridge and the SIF model were all built on the reader's
+leitwort and the fused bridge were all built on the reader's
 FIRST word click, in every session, forever ("wipe data, click a word, it
 thinks; close and reopen, click a word, it thinks again"). `warm_next` walks
-eight phases off one macrotask each: the three biggest are fed in verse slices
+seven phases off one macrotask each: the three biggest are fed in verse slices
 (`OccurrenceIxBuilder`, `RenderingsBuilder`, both mirroring the existing
 `SearchIxBuilder`, both with tests pinning sliced == one-shot at every slice
-size), the rest are single builds. The phase counter is explicit so the walk
-terminates even when a build cannot happen yet — the SIF model needs an
-embedding the R&D pack may never bring, and the warm re-enters that phase once
-(and only once) if the pack lands later. Measured in wasm: first study after a
+size). The phase counter is explicit, so the walk
+terminates rather than looping on a phase whose build cannot happen yet.
+Measured in wasm: first study after a
 relaunch **1235ms → 13ms**, with a regression test budgeted at 250ms from both
 measured ends. The concept model is sliced too (2026-07-27): `ConceptBuilder` carries a cursor
 through twelve stages — two corpus folds, PPMI, kNN gather/top/mutual, label
@@ -1152,10 +1159,9 @@ took the worst warm chunk in wasm from ~640ms to ~256ms. It also fixed a real
 nondeterminism found while testing: edge order came out of a HashMap and broke
 weight TIES, so two builds over identical data could disagree about a concept's
 neighbours — the kNN truncation and the collocate lists now tie-break on the
-code, matching the rest of the pipeline. The SIF model was the fourth to be sliced
-(`warm_verse_sim_slice`). **Still owed:** three warm phases are still one call
-each — `xref_ix`, `leitwort` (82ms native, the likely ~256ms chunk), and
-`bridge`.
+code, matching the rest of the pipeline. `xref_ix` and `leitwort` were sliced
+next (2026-07-30), leaving `bridge` as the one phase still built in a single
+call, at 3ms.
 
 **Version in About** (2026-07-27): the web build had no idea which release it
 was, so a screenshot could not be dated and "have you relaunched yet?" was
@@ -1184,34 +1190,38 @@ kindness. **Delta (Android):** the APK has no auto-update at all — no Play
 Store, so a sideloader fetches the new release by hand.
 
 Web deltas. **Boot ships the
-core pack only** (2026-07-25, TODO #28): the `rnd`-marked artifacts
-(morphology, concept vectors) stream in after first paint —
-`loadRndPack` → `plumbline_engine_load_rnd_data` → a re-warm builds the SIF —
+core pack only** (2026-07-25, TODO #28): the analysis-stage artifacts
+stream in after first paint —
+`loadRndPack` → `plumbline_engine_load_rnd_data` —
 at idle / on the first-run machine choice / on the Settings toggle, with
-`studyEpoch` refreshing any open panel; until they land, the machine tiers
-are simply absent, exactly like an Android install (which never bundles
-them). Phones defer the tier out of the BOOT path only — **not out of the
+`studyEpoch` refreshing any open panel; until they land, the morphology gloss is
+simply absent, exactly like an Android install (which never bundles
+it). Phones defer the tier out of the BOOT path only — **not out of the
 session** (revised 2026-07-27 from the 2026-07-26 defer-until-asked rule): it
 loads itself once first paint is behind us, so the reader is never asked twice.
 The explicit "Load analysis" offer survives for exactly one case, a device on
 Data Saver that hasn't got the pack yet; when the pack is already cached the
-load costs no network at all and asking about a "~4 MB download" that will not
-happen is theatre. A study waiting on it says so ONCE — the pack's own progress
-line, with the generic slow-first-read note suppressed underneath it. Both machine-tier artifacts ship **packed**, because the browser cannot
+load costs no network at all and asking about a download that will not
+happen is theatre. **The stage shrank on 2026-07-30**, from 4.0 MB gzipped to
+1.3 MB, when the concept embedding left with the last features that read it; what
+remains is `morphology.morphb` and the never-read `text-witness.json`, so any
+copy quoting the old size is stale. A study waiting on it says so ONCE — the
+pack's own progress line, with the generic slow-first-read note suppressed
+underneath it. The morphology sidecar ships **packed**, because the browser cannot
 keep a parsed artifact between launches and so repeated the whole parse on
 every start (2026-07-27):
 
 | artifact | packed as | why | wasm parse |
 |---|---|---|---|
-| `concept-vectors.vec` | `.vecb` — f32 rows, stored RAW so the reader's own normalisation still applies | 742,600 atof calls | 34ms → 9ms |
 | `morphology.jsonl` | `.morphb` — interned string table + fixed-width records | 31,091 serde calls, 355,603 entries over only 13,990 Strong's / 2,840 codes / 6 homographs | 82ms → 44ms |
 
-`plumbline-hydrate vecb` / `morphb` write them; `embed::load_embedding` and
-`morph::load_morph` prefer them and fall back to the text for any home that
+`plumbline-hydrate morphb` writes it; `morph::load_morph` prefers it and falls
+back to the text for any home that
 lacks one (an older pack, a hand-built home, an unreadable packed file), so the
-text forms stay valid. Whole rnd stage ~244ms → ~106ms in wasm. Wire cost is
-near neutral: `.vecb` is ~383 KB bigger (f32 mantissas gzip worse than short
-decimals), `.morphb` ~230 KB smaller. **Still owed:** morphology's remaining
+text form stays valid. `.morphb` is also ~230 KB smaller over the wire than the
+JSONL, so there is no trade. (`concept-vectors.vec` was packed the same way, to
+`.vecb`; that row and the `vecb` subcommand behind it went on 2026-07-30 with the
+artifact.) **Still owed:** morphology's remaining
 cost is allocation, not parsing — 355,603 entries × three owned `String`s — so
 lazy per-verse decoding off the packed bytes would take most of the rest;
 `entries()` has exactly one caller (`plumbline_engine_morph_json`), which wants
@@ -1261,16 +1271,20 @@ lines would wrap where they are not drawn.)
   `kjv.jsonl`, `kjv-notes.jsonl`, `strongs.json`, `cross-references.tsv` and
   `akjv.akjvb`, plus `assets/bridge/` (abbott-smith, lxx-alignment,
   stepbible-tipnr) — extracted to `filesDir` once behind the `.data-v2` marker
-  (`MainActivity`). It bundles **no** `concept-vectors.vec` and **no**
-  `morphology.jsonl`, and nothing calls `LoadRndData`. Consequences, all
-  observable: the morphology gloss line never appears; SIMILAR CONCEPTS and
-  "verses like this" are always empty; the concept map has community spokes only.
-  The corpus-derived machine tiers — ALONGSIDE, WHERE IT CONCENTRATES, LEITWORT —
+  (`MainActivity`). It bundles **no** `morphology.jsonl`, and nothing calls
+  `LoadRndData`. One observable consequence is left: the morphology gloss line
+  never appears.
+  The corpus-derived machine tiers — ALONGSIDE, MOST USED IN, LEITWORT —
   **do** work, because `Concept::build` folds the corpus and needs no artifact.
-  The cross-testament bridge row works too, off the bundled `bridge/*.json`.
   (An earlier note here said the bridge data was unreachable because
   `OpenFromBytes` has no home; the shell opens from `filesDir` and copies the
   bridge assets in, so that has not been true for some time.)
+
+  This delta used to be four consequences wide. `concept-vectors.vec` was the
+  other missing artifact, and the three features it fed — SIMILAR CONCEPTS,
+  "verses like this", and the concept map's embedding spokes — were all empty or
+  thinned on Android. All three were removed on 2026-07-30, so the gap they
+  described is gone with them.
 
 - **On-device feedback round 3 (2026-07-24/25, v0.4.0–v0.5.0).** Landed
   Android-first from on-device street-use feedback; the web has since matched all
@@ -1309,10 +1323,15 @@ lines would wrap where they are not drawn.)
     **Delta (deliberate, matches the church one):** an Android reader *sends*
     `at` but never receives it — a plumblinebible.org link opens the PWA, not
     the APK.
-  - **Embedded study maps** (`ui/StudyMaps.kt`): the concept map + canon
-    dispersion heatmap as scaled-down, first-class cards inside the word-study
-    panel (before the first titled section), tapping through to the fullscreen
-    map / a book jump. Matched on the web by `study/EmbedMaps.svelte`.
+  - **Embedded study maps** — **REMOVED 2026-07-30, both shells** (`ui/StudyMaps.kt`
+    and `study/EmbedMaps.svelte`, both deleted). Two cards inside the word-study
+    panel: the embedded concept map, which went with the popup, and the canon
+    dispersion heatmap beside it. The heatmap looked salvageable and was not: it
+    read `byBook` off the **concept-map** payload, a canon-ordered `List<Int>`
+    carrying `otNtDivide` and `bookCount`. `concept_json`'s `byBook` is an
+    unordered `Map<String, Int>` with neither, so keeping the strip meant writing
+    a new producer, not retaining a feature. Both shells reached that conclusion
+    separately, so no delta opened.
   - **Notes browser** (`ui/Notes.kt`, Explore ▸ Notes): every personal note,
     browsable; tap → passage, Edit in place. Matched on the web (Explore ▸ Notes →
     the `notesBrowser` panel).
@@ -1339,14 +1358,13 @@ lines would wrap where they are not drawn.)
 - **What the Compose shell paints (all of it, as of 2026-07-29).** The reader
   (`ui/ReaderPane.kt`) + word study + search + the fold layouts, plus:
   **memorization** (review drill · coverage · activity — `ui/Memorize.kt`); the
-  **concept / constellation / chord** maps as pinch-zoom/pan canvases
-  (`ui/Maps.kt`, incl. the cross-testament bridge row) and the same three
-  embedded in the study pane (`ui/StudyMaps.kt`); the **whole panel
+  **constellation / chord** maps as pinch-zoom/pan canvases
+  (`ui/Maps.kt`); the **whole panel
   content-model** — every `*_blocks_json` / `*_blocks2_json` payload walked by
   `ui/StudyPane.kt` into `AnnotatedString` runs with the palette colour-role map,
   which is how the **RENDERINGS tier and the authority-tier marks (✝ † ≈ ⚗) and
   legend** arrive without Android owning any tier code; **link routing** through
-  `plumbline_route_link_json` for 16 of the 20 verbs; the **verse-action sheet**
+  `plumbline_route_link_json` for 15 of the 19 verbs; the **verse-action sheet**
   (`ui/VerseActions.kt`: copy · copy chapter · share · tag · note · thread ·
   memorize · mark-chapter-read, plus the tag and thread pickers and
   `PassageEndPicker`); **Explore** (notes · threads · tags · weaves+suggested ·
@@ -1359,7 +1377,7 @@ lines would wrap where they are not drawn.)
   **Live authoring gap:** `editThreadNotes` / `editWeaveNotes` / `editEntryNote` /
   `untag` are the four verbs `StudyScreen.onLink` does not handle — they need an
   index→name lookup, and the comment saying so is in the code beside the `when`.
-  The web routes all twenty (`study/links.ts`). Also still untested on hardware:
+  The web routes all nineteen (`study/links.ts`). Also still untested on hardware:
   posture-driven fold-mode switching.
 - The Kotlin/JNA binding (`crates/ffi/bindings/kotlin/Plumbline.kt`, package
   `dev.plumbline.core`) is the low-level `PlumblineNative` interface +
@@ -1445,13 +1463,15 @@ lines would wrap where they are not drawn.)
   PWA, so `App.svelte`'s incoming-church capture has no Compose counterpart; and
   Church/Welcome are overflow (⋮) items rather than top-bar buttons, because the
   phone top bar is deliberately tight.
-- **Proper nouns are not concepts (2026-07-27, engine-wide).** The concept map's
-  neighbour rings and the concept card's collocate/community lists drop proper
-  nouns (`strongs::is_proper_noun`) — "faith" ringed by Ephraim, Jerusalem and
-  Shechem read as noise. Names stay fully reachable as map **centres**, in word
+- **Proper nouns are not concepts (2026-07-27, engine-wide).** The concept card's
+  collocate/community lists drop proper
+  nouns (`strongs::is_proper_noun`) — "faith" sitting next to Ephraim, Jerusalem
+  and Shechem read as noise. Names stay fully reachable in word
   study, concordance and search; `CONCEPT_KEEP_NAMES` keeps the divine name and
   Christ, which in this corpus are concepts rather than incidental names.
-  Candidates are over-fetched before filtering so a ring never comes back short.
+  Candidates are over-fetched before filtering so a list never comes back short.
+  (This rule also governed the concept map's neighbour rings, which went on
+  2026-07-30.)
 - **A cold read explains itself (2026-07-27, both shells).** The first
   definition of a session builds the occurrence index and the first analytical
   map sweeps the corpus; a bare flash of "loading" (or blank paper) for seconds

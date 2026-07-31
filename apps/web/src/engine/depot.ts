@@ -214,7 +214,7 @@ export async function depotResponse(url: string): Promise<Response> {
 
 /** Ask the browser not to evict us under storage pressure.
  *
- *  Worth asking because the whole offline promise rests on ~14 MB surviving,
+ *  Worth asking because the whole offline promise rests on ~11 MB surviving,
  *  and eviction is the one failure the app cannot detect until a reader is
  *  already offline and short. Chrome auto-grants on engagement or install;
  *  Safari grants only for home-screen apps; others prompt or decline.

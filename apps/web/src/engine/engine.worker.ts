@@ -47,7 +47,7 @@ import {
   takePackTrace,
   verifyStored,
 } from "./pack";
-import { depotBytes, depotDelete, depotGet, depotHas, depotKeys, depotPut } from "./depot";
+import { depotBytes, depotDelete, depotHas, depotKeys } from "./depot";
 import { PERF } from "./perf";
 import { measureFor, readerFont, fontExtent } from "../reader/measure";
 import {
@@ -234,61 +234,13 @@ function layoutChapter(m: LayoutReq): LaidOut | null {
 /** Let queued messages (layout, taps) run before the next synchronous chunk. */
 const yieldTask = () => new Promise<void>((r) => setTimeout(r, 0));
 
-// ── the saved "verses like this" model ────────────────────────────────────────
-// The most expensive thing a launch does — 11.2 s of phone CPU, 41 sweeps of the
-// whole corpus (2026-07-28) — for a model that is a pure function of the corpus
-// and the embedding, both of which the device already holds. It was recomputed
-// on every single open because nothing an engine builds survives the tab.
-//
-// It lives in the DEPOT rather than IndexedDB, by the rule that governs both: the
-// depot holds what can be re-derived, IndexedDB holds what cannot. This can be
-// rebuilt from bytes already on the device, so losing it to eviction costs one
-// slow launch and nothing else.
-const SIF_URL = "__depot/verse-sim.simb";
-
-/** What the model was built FROM. A cached model served against a different
- *  corpus or embedding answers with the WRONG VERSES and nothing throws — so the
- *  stamp is the whole safety story, and a mismatch means rebuild, never repair. */
-function sifStamp(): string {
-  return `sif1/${booted!.packVersion}`;
-}
-
-/** Restore the saved model, if this device has a matching one. */
-async function loadSavedVerseSim(): Promise<boolean> {
-  try {
-    const hit = await depotGet(assetUrl(SIF_URL));
-    if (!hit) return false;
-    const bytes = new Uint8Array(await hit.arrayBuffer());
-    const t0 = performance.now();
-    const ok = booted!.engine.verseSimLoad(bytes, sifStamp());
-    booted!.trace.push([
-      ok ? "verses-like-this RESTORED (no rebuild)" : "verses-like-this cache refused",
-      Math.round(performance.now() - t0),
-    ]);
-    return ok;
-  } catch {
-    return false; // storage blocked or unreadable: build it, same as a first run
-  }
-}
-
-/** Save it, once, after the warm has built it. */
-async function saveVerseSim(): Promise<void> {
-  try {
-    const t0 = performance.now();
-    const bytes = booted!.engine.verseSimSave(sifStamp());
-    if (!bytes) return; // not built (no analysis pack on this device)
-    const stored = await depotPut(assetUrl(SIF_URL), bytes, "application/octet-stream");
-    if (PERF && stored) {
-      booted!.trace.push([
-        `verses-like-this saved (KB)`,
-        Math.round(bytes.length / 1024),
-      ]);
-      booted!.trace.push(["verses-like-this save", Math.round(performance.now() - t0)]);
-    }
-  } catch {
-    /* quota or blocked storage: the reader just pays the rebuild next launch */
-  }
-}
+// NOTHING THE ENGINE BUILDS IS PERSISTED ANY MORE. There was one exception: the
+// "verses like this" (SIF) model, the most expensive thing a launch did — 11.2 s
+// of phone CPU, 41 sweeps of the whole corpus (2026-07-28) — which this worker
+// saved into the depot after the warm built it and reinstalled on the next open.
+// The feature was removed 2026-07-30 with the concept embedding it was built
+// from, and the saved blob with it: prune is an allowlist, so any copy still on a
+// device is reclaimed on that device's next launch.
 
 // ── engine calls ──────────────────────────────────────────────────────────────
 // EVERY engine request the shell makes arrives as `call` or `static`, and until
@@ -343,7 +295,7 @@ let firstLayoutServed: (() => void) | null = null;
 const firstLayout = new Promise<void>((r) => (firstLayoutServed = r));
 
 /** Warm the lazy indexes one per macrotask (idempotent; safe to re-run after
- *  the R&D pack lands — the SIF model only builds once the embedding is in). */
+ *  the R&D pack lands — the machine-tier indexes only build once it is in). */
 let warmRun: Promise<void> | null = null;
 function warmChunked(): Promise<void> {
   // SINGLE-FLIGHTED, like the R&D load below. Two callers reach here: the
@@ -359,11 +311,11 @@ function warmChunked(): Promise<void> {
   // which is what keeps layout and tap RPCs answerable.
   //
   // What it does buy is a well-defined re-warm. With two drivers the "run again
-  // after the R&D pack lands, to pick up the SIF model" pass was racy — whichever
-  // loop happened to still be alive absorbed the second call. Now the second
-  // caller joins the live pass, and because `warmRun` is cleared on completion a
-  // genuinely later call still gets a fresh one. The engine's tail phase goes back
-  // for the SIF model once an embedding is present, so joining mid-pass is safe.
+  // after the R&D pack lands, to pick up the machine-tier indexes" pass was racy —
+  // whichever loop happened to still be alive absorbed the second call. Now the
+  // second caller joins the live pass, and because `warmRun` is cleared on
+  // completion a genuinely later call still gets a fresh one. Every phase is
+  // idempotent and the counter is shared, so joining mid-pass is safe.
   return (warmRun ??= (async () => {
     for (let step = 0; ; step++) {
       await yieldTask();
@@ -394,11 +346,11 @@ function loadRndChunked(): Promise<void> {
     );
     booted!.trace.push(["rnd fetch+gunzip", Math.round(performance.now() - t0)]);
     await yieldTask();
-    // Downloaded; now the expensive part. Parsing the embedding and the
-    // morphology is ~17 MB of text, seconds of it on a phone — one artifact
-    // per macrotask so a tap in between is still answered, and the shell is
-    // told we've moved from downloading to preparing (the bar sat at 0% and
-    // the study sheet said "— loading —" through the whole thing).
+    // Downloaded; now the expensive part. Parsing the morphology is megabytes of
+    // text, seconds of it on a phone — one artifact per macrotask so a tap in
+    // between is still answered, and the shell is told we've moved from
+    // downloading to preparing (the bar sat at 0% and the study sheet said
+    // "— loading —" through the whole thing).
     self.postMessage({ type: "rndPreparing" });
     booted!.home.addFiles(files);
     for (let step = 0; ; step++) {
@@ -406,25 +358,12 @@ function loadRndChunked(): Promise<void> {
       const more = timedChunk(`rnd load step ${step}`, () => booted!.engine.loadRndStep(step));
       if (!more) break;
     }
-    // The embedding and the morphology are parsed into wasm memory by the steps
-    // above and never re-read; the two vector sidecars are only ever arguments to
-    // that same parse, so they go as one unit with it.
-    const freedRnd = booted!.home.evict([
-      "data/concept-vectors.vecb",
-      "data/concept-vectors.vec.meta",
-      "data/concept-vectors.vec.freq",
-      "data/morphology.morphb",
-      "data/text-witness.json",
-    ]);
+    // Both are parsed into wasm memory by the steps above and never re-read. The
+    // concept vectors used to be evicted here too; that artifact was dropped from
+    // the pack on 2026-07-30 with the features that read it.
+    const freedRnd = booted!.home.evict(["data/morphology.morphb", "data/text-witness.json"]);
     if (freedRnd) booted!.trace.push(["home evict after analysis (KB)", Math.round(freedRnd / 1024)]);
-    // The saved model, before the warm would rebuild it. The embedding has just
-    // landed, which is the earliest moment a stored model can be installed — and
-    // installing it makes the warm's SIF phase a no-op instead of 11 seconds.
-    const restored = await loadSavedVerseSim();
     await warmChunked();
-    // Built for the first time on this device: keep it. Off the critical path,
-    // after the reader already has everything.
-    if (!restored) await saveVerseSim();
     self.postMessage({ type: "rndReady" });
   })().catch((e) => {
     rndRun = null; // offline — the Settings toggle or next boot retries
@@ -440,8 +379,8 @@ function loadRndChunked(): Promise<void> {
 const saveData = (): boolean => (navigator as any).connection?.saveData === true;
 
 /** Is the machine-tier pack already on this device? Then loading it costs no
- *  network at all, and putting a "one-time ~4 MB download" button in front of a
- *  download that will not happen is theatre. The deferral exists to protect the
+ *  network at all, and putting a one-time-download button in front of a download
+ *  that will not happen is theatre. The deferral exists to protect the
  *  reader's data and their first paint; neither is at stake once the bytes are
  *  cached (feedback 2026-07-27). */
 async function rndAlreadyCached(): Promise<boolean> {
@@ -522,9 +461,10 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
     self.postMessage({ type: "coreReady" });
     await warmChunked();
     // BEFORE the analysis pack, not after. Reconciling is normally one 5 KB
-    // manifest fetch and a pile of hash comparisons; queueing it behind ~4 MB of
-    // optional analytics meant a device could sit on a stale pin for the length
-    // of that download, and pick the update up a launch later than it needed to.
+    // manifest fetch and a pile of hash comparisons; queueing it behind a
+    // megabyte of optional analytics meant a device could sit on a stale pin for
+    // the length of that download, and pick the update up a launch later than it
+    // needed to.
     // In its own try: a failed update must not cost the reader anything they
     // already have, and being offline here is the normal case, not an error.
     try {
@@ -570,11 +510,10 @@ async function pruneToPin(shell: string[]): Promise<number> {
   // From boot.ts, which is also what prefetches it: an allowlist that spells the
   // URL out for itself deletes the engine the day the spelling changes.
   keep.add(engineUrl());
-  // The saved "verses like this" model. Prune is an ALLOWLIST, so anything not
-  // named here is deleted — and this was, on the very next launch, which is why
-  // the first version of it re-saved 12 MB every open and never once restored.
-  // Its own stamp handles staleness; prune must not second-guess that.
-  keep.add(assetUrl(SIF_URL));
+  // NOTHING ELSE IS EXEMPT. The saved "verses like this" model (`verse-sim.simb`)
+  // was named here until 2026-07-30; with the feature gone the blob is unknown to
+  // this list, which is exactly right — an allowlist reclaims it on the next
+  // launch of a device that still carries one.
 
   let gone = 0;
   for (const url of await depotKeys()) {

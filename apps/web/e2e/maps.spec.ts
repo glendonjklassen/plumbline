@@ -1,9 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// The three analytical maps — Weave map (ChordMap), Constellation, Concept map —
-// had no test of any kind. ~500 lines of canvas drawing, hit-testing and paging,
-// reached from Explore and from the study panel, entirely unexercised (v1.0.0
-// audit, item I).
+// The analytical maps — Weave map (ChordMap) and Constellation — had no test of
+// any kind. ~500 lines of canvas drawing, hit-testing and paging, reached from
+// Explore, entirely unexercised (v1.0.0 audit, item I).
+//
+// There was a third, the concept map, and this file covered it the same three
+// ways. Both it and its test were removed 2026-07-30: it drew the concept
+// embedding, which is no longer shipped. The two here are weave visualisations
+// and are unaffected.
 //
 // WHAT A SMOKE TEST HAS TO DO HERE. These surfaces DRAW. "The popup opened" is
 // not a passing grade, because every way they break leaves the popup open: they
@@ -11,19 +15,19 @@ import { expect, test, type Page } from "@playwright/test";
 // arrives late. So every map here is asserted three ways —
 //
 //   1. its canvas really has ink on it, in the places that map's own drawing
-//      contract puts ink (the canon axis spans the full width; the dispersion
-//      strip sits at the foot; lane names live in the left gutter);
+//      contract puts ink (the canon axis spans the full width; ribbons arc above
+//      it; lane names live in the left gutter);
 //   2. something the reader points at answers — a hovered node names its verse,
-//      a tapped spoke recentres the map, a tapped book opens that book. A hit
-//      test can only answer if `paint()` really ran, because paint() is what
-//      fills the position tables the hit test reads;
+//      a tapped book opens that book. A hit test can only answer if `paint()`
+//      really ran, because paint() is what fills the position tables the hit
+//      test reads;
 //   3. the page logged nothing broken, and the surface can be opened,
 //      interacted with and dismissed without taking the reader with it.
 //
 // The pixel reads are deliberately about STRUCTURE (which regions carry ink, and
 // whether every column does) rather than about a total that happens to be right
 // today. Measured on this machine 2026-07-29 for the record: weave map 8.9% ink,
-// constellation 8.5%, concept map 9.3%, all 64/64 columns.
+// constellation 8.5%, both 64/64 columns.
 //
 // WHAT IT FOUND, on the first run. Both Explore maps are broken today:
 //
@@ -31,8 +35,8 @@ import { expect, test, type Page } from "@playwright/test";
 //     guards `!canvas || !host` but not `!model`, and `model` is null on the
 //     first run (the read-through cache answers null and fires the fetch). So
 //     paint() dereferences `m.bookCount`, the effect throws, Svelte disables it,
-//     and when the model lands a beat later nothing repaints. ConceptMap and
-//     Constellation both have the `|| !model` guard; ChordMap does not.
+//     and when the model lands a beat later nothing repaints. Constellation has
+//     the `|| !model` guard; ChordMap does not.
 //   * Constellation NEVER renders, at all. `pins` is `$state<number[]>([])` — a
 //     Svelte proxy — and `q("constellation", page, pins)` hands it to
 //     `postMessage`, which cannot structured-clone a Proxy: "DataCloneError:
@@ -81,19 +85,17 @@ function watchPage(page: Page): string[] {
   return problems;
 }
 
-/** Boot to the reader. `tiers` ticks the analysis checkboxes on the way past —
- *  they are opt-in since v0.32.0, and the concept map's route in (the study
- *  panel's "where it concentrates" card) is machine-tier gated. */
-async function boot(page: Page, tiers = false): Promise<void> {
+/** Boot to the reader. The analysis tiers are left OFF — both maps here are
+ *  built from weaves, which ship in the core pack. (This helper used to take a
+ *  `tiers` flag for the concept map, whose route in was machine-tier gated; it
+ *  went with that map on 2026-07-30.) */
+async function boot(page: Page): Promise<void> {
   await page.setViewportSize(VIEWPORT);
   await page.goto("/");
   const established = page.getByRole("button", { name: "Established believer" });
   await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
   if (await established.isVisible().catch(() => false)) {
     await established.click();
-    if (tiers)
-      for (const box of await page.locator(".dialog label.card input[type=checkbox]").all())
-        if (!(await box.isChecked())) await box.check();
     await page.getByRole("button", { name: "Start reading" }).click();
   }
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
@@ -105,24 +107,13 @@ async function boot(page: Page, tiers = false): Promise<void> {
  * Not politeness — correctness. Both `onWarmReady` and `onRndReady` call the
  * whole-cache `invalidate()`, which drops the map's model out from under an open
  * popup and puts "— building —" back over its canvas for a beat. A pixel read
- * that lands in that beat sees blank paper and blames the map. And the concept
- * map genuinely NEEDS the warm: `concept_ready()` answers None while the sliced
- * warm is running (crates/ffi `defer_builds` — a reader's tap must never build an
- * index), so `conceptMap` returns null until the warm's concept phase is done.
- * ~8 s on this machine, 1,198 warm steps.
+ * that lands in that beat sees blank paper and blames the map.
  *
  * `expect.poll`, NOT `page.waitForFunction`: an async predicate handed to
  * waitForFunction is a promise, promises are truthy, and it returns on the first
  * tick having waited for nothing.
  */
-async function settleBackground(page: Page, tiers = false): Promise<void> {
-  if (tiers) {
-    // A plain synchronous predicate, so waitForFunction is safe here.
-    await page.waitForFunction(() => (window as any).__plumbline.rndState === "ready", null, {
-      timeout: 180_000,
-      polling: 500,
-    });
-  }
+async function settleBackground(page: Page): Promise<void> {
   let previous = -1;
   let sawWarm = false;
   await expect
@@ -460,124 +451,34 @@ test("the constellation draws its lanes, names a star, pages and pins", async ({
   expect(distinct(problems), "the constellation should not log anything broken").toEqual([]);
 });
 
-test("the concept map draws a code's neighbourhood, and a spoke recentres it", async ({ page }) => {
-  const problems = watchPage(page);
-  // Machine tier ON. The concept map's route in — the study panel's "where it
-  // concentrates" card — is gated on it (StudyPanel's `studyCode` requires
-  // `gates & 2`), and with the analysis pack loaded the spokes carry cosine
-  // weights, which is what the distance test below needs. Ticked at first run,
-  // the way app.spec.ts does it; on this machine the pack is ready 8 s in.
-  await boot(page, true);
-  await settleBackground(page, true);
-
-  // A code study, then the card. Driving the panel through session state (as the
-  // destination-bar sweep does) keeps this about the MAP: which word was tapped
-  // to get a code is ReaderPane's business and is tested there.
-  await page.evaluate(() => ((window as any).__plumbline.panel = { kind: "codeStudy", code: "G2316", word: null }));
-  const card = page.locator(".panel").getByRole("button", { name: /most used in/ });
-  await expect(card, "the study panel should offer the concept map").toBeVisible({ timeout: 60_000 });
-  await card.click();
-  await openedMap(page, "Concept map — G2316");
-
-  // ConceptMap's contract: the radial neighbourhood over the top two thirds, the
-  // gold canon-dispersion strip at y = H − 92 (34 px tall), and the indigo
-  // cross-testament bridge row beneath it at y = H − 52. Both strips have to be
-  // there — the bridge row is the whole point of "Christ reveals where Messiah
-  // occurs" — and so does the centre node with its gloss and lemma.
-  // Measured: 9.3% ink, 64/64 columns, centre 17%, strip 30%, bridge 46%.
-  const p = await drawnProfile(
-    page,
-    { centre: [0.42, 0.36, 0.58, 0.5], strip: [0, 0.84, 1, 0.895], bridge: [0, 0.91, 1, 0.985] },
-    problems,
-  );
-  expect(p.unpainted, `the concept map's canvas was never drawn on (${p.size})`).toBe(0);
-  expect(p.columns, `the dispersion strip spans the canon, so every column should carry ink (${p.size})`).toBe(COLUMNS);
-  expect(p.bands.centre, "the centre node, its gloss and its lemma are drawn").toBeGreaterThan(0.02);
-  expect(p.bands.strip, "the canon dispersion strip is drawn").toBeGreaterThan(0.05);
-  expect(p.bands.bridge, "the cross-testament bridge row is drawn beneath it").toBeGreaterThan(0.05);
-  await expect(
-    page.locator(".popup .bar .caption"),
-    "and the frame names the testament partners",
-  ).toHaveText(/across the testaments: /);
-
-  // ── a spoke recentres the map ──
-  // The spoke clicked is the one nearest the CENTRE, and that is the point.
-  // Relatedness became distance on 2026-07-26: the strongest neighbour is drawn
-  // at rOuter × 0.55 and community spokes at rOuter. A shell that ignored the
-  // weights would draw this spoke at the outer ring, ~63 model px away, and this
-  // click would land on empty paper and change nothing.
-  const spoke = await page.evaluate(() => {
-    const m = (window as any).__plumbline.q("conceptMap", "G2316");
-    const W = 720;
-    const H = 560;
-    const stripH = 40;
-    const bridgeH = m.bridge ? 52 : 0;
-    const cx = W / 2;
-    const cy = (H - stripH - bridgeH) / 2;
-    const rOuter = Math.min(W, H - stripH - bridgeH) / 2 - 95;
-    const rInner = rOuter * 0.55;
-    const weights = m.spokes.map((s: any) => s.weight).filter((v: any) => typeof v === "number");
-    const wMin = Math.min(...weights);
-    const wMax = Math.max(...weights);
-    const radius = (w: unknown) =>
-      typeof w === "number" && wMax > wMin ? rOuter - (rOuter - rInner) * ((w - wMin) / (wMax - wMin)) : rOuter;
-    let best = 0;
-    m.spokes.forEach((sp: any, i: number) => {
-      if (radius(sp.weight) < radius(m.spokes[best].weight)) best = i;
-    });
-    const angle = (best / (m.spokes.length || 1)) * Math.PI * 2 - Math.PI / 2;
-    const r = radius(m.spokes[best].weight);
-    return {
-      x: cx + Math.cos(angle) * r,
-      y: cy + Math.sin(angle) * r,
-      code: m.spokes[best].code,
-      spokes: m.spokes.length,
-      nearest: r,
-      outer: rOuter,
-      W,
-      H,
-    };
-  });
-  expect(spoke.spokes, "G2316 should have a neighbourhood to draw").toBeGreaterThan(2);
-  expect(spoke.nearest, "the strongest neighbour should be drawn inside the outer ring").toBeLessThan(spoke.outer);
-
-  await page.mouse.click(...(await pointAt(page, spoke.x, spoke.y, spoke.W, spoke.H)));
-  await openedMap(page, `Concept map — ${spoke.code}`);
-  expect(await drawnProfile(page, {}), "the recentred map draws too").toMatchObject({ unpainted: 0 });
-
-  // ── the dispersion strip is a way into the text ──
-  // Below the radial area, x maps to a book. The far left is the first book.
-  const box = (await mapCanvas(page).boundingBox())!;
-  await page.mouse.click(box.x + 3, box.y + box.height - 4);
-  await expect(page.locator(".popup")).toHaveCount(0);
-  expect(await pane(page)).toMatchObject({ book: "Gen", chapter: 1 });
-
-  expect(distinct(problems), "the concept map should not log anything broken").toEqual([]);
-});
-
 test("every way out of a map leaves the reader exactly where it was", async ({ page }) => {
   await boot(page);
   await settleBackground(page);
 
   // Raised through session state, one at a time, because what is under test is
-  // the way OUT — the three routes in are covered above. The reader is behind
-  // these (rather than the Explore screen, which replaces it), which is the case
-  // that matters: dismissing a popup must not disturb the chapter underneath.
+  // the way OUT — the routes in are covered above. The reader is behind these
+  // (rather than the Explore screen, which replaces it), which is the case that
+  // matters: dismissing a popup must not disturb the chapter underneath.
+  //
+  // THREE ways out over two maps, deliberately. The backdrop case used to ride on
+  // the concept map, which was removed 2026-07-30; the way out is a property of
+  // MapFrame rather than of any one map, so it moved onto the weave map rather
+  // than going with it.
   const before = await pane(page);
-  const ways: { kind: string; open: string; out: (p: Page) => Promise<void> }[] = [
+  const ways: { name: string; open: string; out: (p: Page) => Promise<void> }[] = [
     {
-      kind: "chord",
+      name: "chord ✕",
       open: `s.mapPopup = { kind: "chord" }`,
       out: async (p) => p.locator('.popup .bar button[aria-label="Close"]').click(),
     },
     {
-      kind: "constellation",
+      name: "constellation Escape",
       open: `s.mapPopup = { kind: "constellation" }`,
       out: async (p) => p.keyboard.press("Escape"),
     },
     {
-      kind: "conceptMap",
-      open: `s.mapPopup = { kind: "conceptMap", code: "G2316" }`,
+      name: "chord backdrop",
+      open: `s.mapPopup = { kind: "chord" }`,
       // `.backdrop` is shared by ten sheets, so insist there is exactly one on
       // screen before using it — with two surfaces open this would otherwise
       // dismiss whichever happened to be first in the DOM. Clicked beside the
@@ -593,12 +494,12 @@ test("every way out of a map leaves the reader exactly where it was", async ({ p
 
   for (const way of ways) {
     await page.evaluate(`(() => { const s = window.__plumbline; ${way.open}; })()`);
-    await expect(mapCanvas(page), `${way.kind} should open`).toBeVisible({ timeout: 30_000 });
+    await expect(mapCanvas(page), `${way.name} should open`).toBeVisible({ timeout: 30_000 });
     await way.out(page);
-    await expect(page.locator(".popup"), `${way.kind} should close`).toHaveCount(0);
-    expect(await page.evaluate(() => (window as any).__plumbline.mapPopup), `${way.kind} should be forgotten`).toBeNull();
+    await expect(page.locator(".popup"), `${way.name} should close`).toHaveCount(0);
+    expect(await page.evaluate(() => (window as any).__plumbline.mapPopup), `${way.name} should be forgotten`).toBeNull();
     await expect(page.locator(".pane canvas").first(), "the reader should still be there").toBeVisible();
-    expect(await pane(page), `${way.kind} should not have moved the reader`).toMatchObject({
+    expect(await pane(page), `${way.name} should not have moved the reader`).toMatchObject({
       book: before.book,
       chapter: before.chapter,
     });

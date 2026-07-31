@@ -212,13 +212,6 @@ pub struct StudyXrefView {
     pub end_display: Option<String>,
 }
 
-/// A "verses like this" hit.
-#[derive(Debug, Clone)]
-pub struct SimilarView {
-    pub verse: String,
-    pub display: String,
-}
-
 /// A thread (an ordered passage trail).
 #[derive(Debug, Clone, Default)]
 pub struct ThreadView {
@@ -365,7 +358,6 @@ pub trait PanelSource {
 
     fn verse_xrefs(&self, verse: &str) -> Vec<XrefView>;
     fn study_xrefs(&self, verse: &str) -> Vec<StudyXrefView>;
-    fn similar_verses(&self, verse: &str, k: usize) -> (Vec<SimilarView>, Vec<SimilarView>);
     /// The tags holding a verse, as `(tag index, name)`.
     fn verse_tags(&self, verse: &str) -> Vec<(usize, String)>;
     fn verse_notes(&self, verse: &str) -> Vec<String>;
@@ -430,10 +422,6 @@ pub enum PanelLink {
     },
     Weave {
         index: usize,
-    },
-    /// `conceptmap:CODE` — open the radial concept map popup.
-    ConceptMap {
-        code: String,
     },
     /// `addtag:REF` / `addthread:REF` — prompt, then author onto REF.
     AddTag {
@@ -509,7 +497,6 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
         "thread" => PanelLink::Thread { index: rest.parse().ok()? },
         "tag" => PanelLink::Tag { index: rest.parse().ok()? },
         "weave" => PanelLink::Weave { index: rest.parse().ok()? },
-        "conceptmap" => PanelLink::ConceptMap { code: rest.to_string() },
         "addtag" => PanelLink::AddTag { refkey: rest.to_string() },
         "addthread" => PanelLink::AddThread { refkey: rest.to_string() },
         "untag" => {
@@ -803,14 +790,10 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
             ]));
         }
     }
-
-    out.push(Block::para(vec![
-        Run::new("▸ open concept map", sz::SMALL, Color::Gold).link(format!("conceptmap:{code}"))
-    ]));
 }
 
 /// The per-verse extras after a word's code blocks: author actions, weave + TSK
-/// cross-references, "verses like this", tags, and margin notes. Author
+/// cross-references, tags, and margin notes. Author
 /// actions and the verse's tags are the reader's own data — never gated
 /// (tags accumulate in any mode; the weave comes later).
 fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<Block>) {
@@ -862,25 +845,6 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
                 out.push(Block::para(vec![
                     Run::new(format!("… {} more", sx.len() - 40), sz::CAPTION, Color::Faded).italic()
                 ]));
-            }
-        }
-    }
-
-    if gates.machine {
-        let (in_t, cross_t) = src.similar_verses(verse, 6);
-        if !in_t.is_empty() || !cross_t.is_empty() {
-            out.push(Block::para(vec![
-                Run::new("verses like this", sz::LABEL, Color::Ink).bold(),
-                Run::new("  ≈", sz::MARK, Color::TierMachine),
-            ]));
-            for v in in_t.iter().take(6) {
-                out.push(Block::para(vec![go(&v.verse, &v.display, sz::LIST)]));
-            }
-            if !cross_t.is_empty() {
-                out.push(Block::para(vec![Run::new("across the testaments:", sz::CAPTION, Color::Faded).italic()]));
-                for v in cross_t.iter().take(4) {
-                    out.push(Block::para(vec![go(&v.verse, &v.display, sz::LIST)]));
-                }
             }
         }
     }

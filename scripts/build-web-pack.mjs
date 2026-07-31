@@ -56,9 +56,6 @@ const STOCK = join(repo, "apps/android/app/src/main/assets/stock");
 const STAGE = {
   "data/kjv.jsonl.idxcache": "text",
   "data/morphology.morphb": "analysis",
-  "data/concept-vectors.vecb": "analysis",
-  "data/concept-vectors.vec.freq": "analysis",
-  "data/concept-vectors.vec.meta": "analysis",
   // No runtime reader anywhere in the tree: the only code that opens it is
   // witness.rs's own tests, and the fused bridge does not consume it. Staged out
   // of the boot path rather than dropped, because crates/hydrate lists it as an
@@ -71,15 +68,14 @@ const STAGE = {
  *  the seeded marker and the NEXT boot re-seeds from these bytes. */
 const SEED_ONCE_DIRS = new Set(["threads", "tags", "weaves"]);
 
-// The concept vectors ship PACKED (`.vecb`, built below), never as the 6.4 MB
-// text: the browser cannot keep a parsed embedding between launches, so the text
-// cost 742,600 atof calls on every single start. Both names are swept out here —
-// the text because the packed form supersedes it, and any `.vecb` sitting in
-// data/ because it is added explicitly below with its `rnd` flag (swept in, it
-// would be treated as a core file and fetched on the boot path).
-const VEC_TEXT = "concept-vectors.vec";
-const VEC_PACKED = "concept-vectors.vecb";
-// Same story for the morphology sidecar: 10.4 MB of JSONL, 31,091 serde calls
+// The concept embedding is NOT shipped, as of 2026-07-30. `concept-vectors.vec`,
+// its `.meta` / `.freq` sidecars and any packed `.vecb` sitting in data/ are all
+// swept out by this prefix. The two features that read it — "verses like this"
+// and the concept map — were removed the same day, so the remaining 3.08 MB of
+// the analysis tier was a download nothing would ever open. The files stay in
+// data/ as an offline-pipeline artifact; see BIBLIOGRAPHY.md.
+const VEC_PREFIX = "concept-vectors.";
+// The morphology sidecar DOES ship, and ships packed: 10.4 MB of JSONL, 31,091 serde calls
 // building 355,603 entries, repeated on every launch. Packed it is both faster
 // to read AND ~230 KB smaller over the wire, so there is no trade here at all.
 const MORPH_TEXT = "morphology.jsonl";
@@ -107,8 +103,7 @@ const SOURCES = [
     (n) =>
       !n.endsWith(".idxcache") &&
       n !== KJV_TEXT &&
-      n !== VEC_TEXT &&
-      n !== VEC_PACKED &&
+      !n.startsWith(VEC_PREFIX) &&
       n !== MORPH_TEXT &&
       n !== MORPH_PACKED &&
       n !== AKJV_TEXT &&
@@ -182,7 +177,7 @@ for (const [src, dir, keep, seedOnce] of SOURCES) {
 // the engine reads it with zero in-wasm inflation. Marked `cache` so the
 // loader fetches it only when IndexedDB doesn't already hold one.
 //
-// `--locked` on all four generated artifacts, deliberately: their bytes ARE
+// `--locked` on all three generated artifacts, deliberately: their bytes ARE
 // bincode's encoding, so an unpinned serde/bincode bump would silently change
 // the biggest file in the pack — and every reader would re-download it with no
 // data having changed. The pack version is a content hash; it can only mean
@@ -200,23 +195,6 @@ rmSync(cacheTmp, { force: true });
 // is stage-1 — it is the one file whose presence decides whether the engine
 // takes the fast open or parses the JSONL that is no longer shipped.
 emit("data", "kjv.jsonl.idxcache", cacheRaw, { stage: "text", role: "corpusCache" });
-
-// The concept vectors as packed f32 (`.vecb`) instead of word2vec text. The
-// engine reads the rows with a copy rather than 742,600 atof calls — measured
-// 22.15ms -> 7.08ms native, and it is the parse a phone repeats on EVERY launch
-// because the parsed embedding lives in wasm memory and cannot outlive the tab
-// (feedback 2026-07-27). Costs ~383 KB more over the wire than the text, which
-// gzips better; that is paid once and cached, the parse was paid every time.
-const vecbTmp = join(tmpdir(), `plumbline-vecb-${process.pid}`);
-execFileSync(
-  "cargo",
-  ["run", "--release", "--locked", "-q", "-p", "plumbline-hydrate", "--", "vecb",
-   "--from", join(repo, "data", VEC_TEXT), "--out", vecbTmp],
-  { cwd: repo, stdio: ["ignore", "inherit", "inherit"] },
-);
-const vecbRaw = readFileSync(vecbTmp);
-rmSync(vecbTmp, { force: true });
-emit("data", VEC_PACKED, vecbRaw);
 
 const morphTmp = join(tmpdir(), `plumbline-morphb-${process.pid}`);
 execFileSync(

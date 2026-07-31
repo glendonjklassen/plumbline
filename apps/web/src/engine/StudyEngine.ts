@@ -241,26 +241,12 @@ export class StudyEngine {
 
   // ── R&D tier ────────────────────────────────────────────────────────────────
 
-  conceptNeighbours(code: string, k: number): any {
-    const s = this.#call(
-      (c) => this.#w.takeStr((this.#w.exports.plumbline_engine_concept_neighbours_json as Function)(this.#engine, c, k) as number),
-      [code],
-    );
-    return s === null ? null : JSON.parse(s);
-  }
   bridgePartners(code: string): any {
     return this.#json("plumbline_engine_bridge_partners_json", code);
   }
   morph(refKey: string, tokenIndex: number): any {
     const s = this.#call(
       (r) => this.#w.takeStr((this.#w.exports.plumbline_engine_morph_json as Function)(this.#engine, r, tokenIndex) as number),
-      [refKey],
-    );
-    return s === null ? null : JSON.parse(s);
-  }
-  similarVerses(refKey: string, k: number): any {
-    const s = this.#call(
-      (r) => this.#w.takeStr((this.#w.exports.plumbline_engine_similar_verses_json as Function)(this.#engine, r, k) as number),
       [refKey],
     );
     return s === null ? null : JSON.parse(s);
@@ -287,59 +273,11 @@ export class StudyEngine {
   deferBuilds(on: boolean): void {
     (this.#w.exports.plumbline_engine_defer_builds as Function)(this.#engine, on ? 1 : 0);
   }
-  /** The built "verses like this" model as storable bytes, or null if it hasn't
-   *  been built yet (wasm-only export).
-   *
-   *  Worth storing because rebuilding it is the most expensive thing a launch
-   *  does — 11.2 s of phone CPU, 41 sweeps of the whole corpus — for a model that
-   *  is a pure function of data already on the device (2026-07-28).
-   *
-   *  `stamp` records what it was built FROM and is checked on load. */
-  verseSimSave(stamp: string): Uint8Array | null {
-    const lenPtr = (this.#w.exports.plumbline_web_alloc as Function)(4) as number;
-    const sPtr = this.#w.inStr(stamp);
-    try {
-      const ptr = (this.#w.exports.plumbline_engine_verse_sim_save as Function)(
-        this.#engine,
-        sPtr,
-        lenPtr,
-      ) as number;
-      if (!ptr) return null;
-      const len = new DataView(this.#w.exports.memory.buffer).getUint32(lenPtr, true);
-      // COPY before returning: this is a view into wasm linear memory, which is
-      // freed on the next line and can be moved wholesale by any later
-      // allocation that grows it.
-      const bytes = new Uint8Array(this.#w.exports.memory.buffer, ptr, len).slice();
-      (this.#w.exports.plumbline_web_free as Function)(ptr, len);
-      return bytes;
-    } finally {
-      this.#w.freeStr(sPtr);
-      (this.#w.exports.plumbline_web_free as Function)(lenPtr, 4);
-    }
-  }
-
-  /** Install a saved "verses like this" model. False when the bytes were built
-   *  from other data, are damaged, or one is already loaded — every one of which
-   *  means "build it instead". */
-  verseSimLoad(bytes: Uint8Array, stamp: string): boolean {
-    const ptr = (this.#w.exports.plumbline_web_alloc as Function)(bytes.length) as number;
-    const sPtr = this.#w.inStr(stamp);
-    try {
-      if (!ptr) return false;
-      new Uint8Array(this.#w.exports.memory.buffer, ptr, bytes.length).set(bytes);
-      return (
-        ((this.#w.exports.plumbline_engine_verse_sim_load as Function)(
-          this.#engine,
-          ptr,
-          bytes.length,
-          sPtr,
-        ) as number) === 1
-      );
-    } finally {
-      if (ptr) (this.#w.exports.plumbline_web_free as Function)(ptr, bytes.length);
-      this.#w.freeStr(sPtr);
-    }
-  }
+  // NO verseSimSave / verseSimLoad. The "verses like this" (SIF) model was the
+  // most expensive thing a launch did, so the shell stored the built model in
+  // the depot and reinstalled it through a pair of wasm-only exports. Feature
+  // and exports both removed 2026-07-30; nothing the engine builds now is worth
+  // persisting between tabs.
 
   /** Load the R&D artifacts from the home if they arrived after open (the
    *  deferred pack); no-op when already loaded or still missing. */
@@ -361,9 +299,6 @@ export class StudyEngine {
 
   chordMap(): any {
     return this.#json("plumbline_engine_chord_map_json");
-  }
-  conceptMap(code: string): any {
-    return this.#json("plumbline_engine_concept_map_json", code);
   }
   constellation(page: number, pins: number[]): any {
     const s = this.#call(

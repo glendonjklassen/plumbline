@@ -59,20 +59,17 @@ top to bottom — and how much weight to give each tier:
   proper-name links), each chip naming its sources. *“disputed by usage”*
   marks a link a self-trained text model disbelieves — the text's own usage
   pushing back on the tradition.
-- **SIMILAR CONCEPTS** — distributional near-synonyms from embeddings trained
-  on Strong's sequences (never the English surface), with cross-testament
-  neighbours on a marked line. English-first labels: *love ἀγαπάω*.
 - **APPEARS ALONGSIDE** — the collocation community: concepts that share this
-  one's verses (symbolic co-occurrence, a different signal than the embedding).
-- **WHERE IT CONCENTRATES** — top books by occurrence count (`Genesis ×12`)
-  and the OT/NT split.
+  one's verses.
+- **MOST USED IN** — top books by occurrence count (`Genesis ×12`) and the
+  OT/NT split.
 - **LEITWORT** — flagged when the word's occurrences pack into one stretch far
   denser than chance (a repeated motif), with the span and how many of its
   uses cluster there.
-- **▸ open concept map** — a radial diagram of the neighbourhood (gold spokes:
-  distributional; green: collocation) over a dispersion strip of the canon.
-- **verses like this** — thematically similar verses by concept composition,
-  in-testament and across.
+
+Removed 2026-07-30, all three machine-generated from the concept embedding and
+judged to be noise: SIMILAR CONCEPTS, the radial concept map, and "verses like
+this". The embedding artifact no longer ships.
 
 **Curated tier:**
 

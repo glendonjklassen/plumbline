@@ -22,7 +22,7 @@ async function boot(page: Page): Promise<void> {
   // Either the first-run chooser (fresh storage, which is every test here) or the
   // reader canvas. The analysis tiers are deliberately left OFF: nothing in a bug
   // report header comes from the analysis pack, so there is no reason to make
-  // these two tests wait for a ~4 MB download.
+  // these two tests wait for that download.
   const established = page.getByRole("button", { name: "Established believer" });
   await expect(established.or(page.locator(".pane canvas").first())).toBeVisible({ timeout: 90_000 });
   if (await established.isVisible().catch(() => false)) {

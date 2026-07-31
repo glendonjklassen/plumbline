@@ -435,7 +435,7 @@
       <label class="toggle">
         <span class="body">
           <span class="name">Machine analysis</span>
-          <span class="desc">Appears-alongside, verses-like-this, concept maps.</span>
+          <span class="desc">Appears-alongside, where a word concentrates, leitwort.</span>
         </span>
         <input
           type="checkbox"
@@ -452,7 +452,7 @@
                 : `Downloading the analysis pack — ${Math.round(s.rndProgress * 100)}%`}
             </span>
           {:else}
-            <span>Analysis pack not downloaded (~4 MB).</span>
+            <span>Analysis pack not downloaded (~1.5 MB).</span>
             <button class="rnd-now" onclick={() => void s.ensureRnd()}>Download now</button>
           {/if}
         </div>

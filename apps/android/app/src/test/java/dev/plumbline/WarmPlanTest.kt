@@ -2,9 +2,9 @@ package dev.plumbline
 
 // What a cold start is allowed to build.
 //
-// The shell used to force all eight lazy indexes at every launch, machine tier
+// The shell used to force every lazy index at every launch, machine tier
 // included — and the machine tier has been OFF by default since the tiers went
-// opt-in, so a reader who never asked for concept/leitwort/SIF analysis paid its
+// opt-in, so a reader who never asked for concept/leitwort analysis paid its
 // corpus-wide scans on every single launch, for panels the gates then refuse to
 // draw. The decision is [warmPlan]; these tests are the decision, pinned. There
 // is nothing on-device to run here: it is a pure function of the reader's two
@@ -17,9 +17,11 @@ import org.junit.Test
 
 class WarmPlanTest {
 
-    /** The indexes only a tier's own panels can reach. */
-    private val machineSet = listOf(WarmIndex.Concept, WarmIndex.Leitwort, WarmIndex.VerseSim)
-    private val humanSet = listOf(WarmIndex.Renderings, WarmIndex.StudyXrefs)
+    /** The indexes only a tier's own panels can reach. The bridge is the curated
+     *  tier's since 2026-07-30 — `panel.rs` reaches `bridge_partners` under
+     *  `gates.human` alone, and the concept map that banded it is gone. */
+    private val machineSet = listOf(WarmIndex.Concept, WarmIndex.Leitwort)
+    private val humanSet = listOf(WarmIndex.Renderings, WarmIndex.StudyXrefs, WarmIndex.Bridge)
 
     /** The four reader settings there are. */
     private val allTiers = listOf(false to false, true to false, false to true, true to true)
@@ -55,9 +57,8 @@ class WarmPlanTest {
         for (ix in machineSet) {
             assertTrue("machineAnalysis=true does not warm $ix (plan: $plan)", plan.contains(ix))
         }
-        // The bridge bands the concept map's partner row, so this tier needs it.
-        assertTrue("machine tier without the bridge (plan: $plan)", plan.contains(WarmIndex.Bridge))
-        // …and it is the MACHINE set, not everything: the curated tier is off.
+        // …and it is the MACHINE set, not everything: the curated tier is off,
+        // and the bridge went with it when the concept map's partner band died.
         for (ix in humanSet) {
             assertFalse("machine-only warm still builds $ix (plan: $plan)", plan.contains(ix))
         }
@@ -66,7 +67,7 @@ class WarmPlanTest {
     @Test
     fun humanOnWarmsTheCuratedSetAndNoAnalytics() {
         val plan = warmPlan(humanAnalysis = true, machineAnalysis = false)
-        for (ix in humanSet + WarmIndex.Bridge) {
+        for (ix in humanSet) {
             assertTrue("humanAnalysis=true does not warm $ix (plan: $plan)", plan.contains(ix))
         }
         for (ix in machineSet) {
@@ -101,9 +102,9 @@ class WarmPlanTest {
     fun bothTiersOnWarmsEveryIndex() {
         // The reader who asked for everything gets exactly what this shell always
         // did — and MainActivity spots that case by size, taking the single
-        // `WarmIndexes()` call instead of eight probes.
+        // `WarmIndexes()` call instead of a probe per index.
         val plan = warmPlan(humanAnalysis = true, machineAnalysis = true)
-        assertEquals("both tiers on must cover all eight indexes", WarmIndex.entries.size, plan.size)
+        assertEquals("both tiers on must cover every index", WarmIndex.entries.size, plan.size)
         for (ix in WarmIndex.entries) {
             assertTrue("both tiers on does not warm $ix (plan: $plan)", plan.contains(ix))
         }
@@ -111,9 +112,9 @@ class WarmPlanTest {
 
     @Test
     fun noPlanRepeatsAStep() {
-        // What makes the size check above sound: a duplicated step could reach
-        // eight without covering eight, and the shell would then take the
-        // build-everything path for a reader who asked for one tier.
+        // What makes the size check above sound: a duplicated step could reach the
+        // full count without covering every index, and the shell would then take
+        // the build-everything path for a reader who asked for one tier.
         for ((human, machine) in allTiers) {
             val plan = warmPlan(humanAnalysis = human, machineAnalysis = machine)
             assertEquals(

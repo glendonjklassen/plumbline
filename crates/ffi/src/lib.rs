@@ -67,7 +67,7 @@ use plumbline_core::thread::{self, LoadedThread, ThreadEntry};
 use plumbline_core::weave::{self, Link, LoadedWeave, WeaveKind};
 use plumbline_core::{canon, export, notes, theme, usernote, VRef};
 use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure, MeasureMemo, Memoized};
-use plumbline_rnd::{bridge, burst, concept, embed, morph};
+use plumbline_rnd::{bridge, burst, concept, morph};
 
 pub mod reading_map;
 mod wire;
@@ -162,14 +162,9 @@ pub struct PlumblineEngine {
     concept_partial: std::sync::Mutex<Option<concept::ConceptBuilder>>,
     xref_partial: std::sync::Mutex<Option<crossref::XRefIxBuilder>>,
     leitwort_partial: std::sync::Mutex<Option<burst::LeitwortBuilder>>,
-    /// Sliced builder for the SIF model — the LAST heavy warm phase to get one.
-    /// As a single-shot build it held the web's engine worker for 54,859 ms on a
-    /// real phone (2026-07-28 boot trace), answering no layout or tap throughout.
-    verse_sim_partial: std::sync::Mutex<Option<embed::VerseSimBuilder>>,
     /// How far the chunked warm has got. An explicit phase (rather than
     /// "build the next thing that is missing") guarantees the loop terminates
-    /// even when a build legitimately cannot happen yet — the SIF model, for
-    /// instance, needs an embedding the R&D pack may never bring.
+    /// even when a build legitimately cannot happen yet.
     warm_phase: std::sync::atomic::AtomicUsize,
     /// Whether a SLICED warm is driving this engine. Set by the first
     /// `warm_next` call and never cleared.
@@ -191,11 +186,6 @@ pub struct PlumblineEngine {
     /// which builds everything up front in well under a second — so this stays
     /// false there and nothing about that shell changes.
     defer_builds: std::sync::atomic::AtomicBool,
-    /// Whether the SIF model has been attempted since an embedding arrived.
-    /// The warm re-runs after the R&D pack lands, and the phase counter is
-    /// monotonic, so without this the model is never warmed and the reader's
-    /// first click builds it.
-    sif_attempted: std::sync::atomic::AtomicBool,
     occ_ix: OnceLock<OccurrenceIx>,
     /// The rendering lens: code → English renderings and surface word → codes,
     /// both corpus-derived and immutable after open (like `occ_ix`).
@@ -209,19 +199,14 @@ pub struct PlumblineEngine {
     /// to share across threads for reads, and a C# shell may author off its UI
     /// thread while another thread reads.
     study: std::sync::RwLock<StudyData>,
-    /// R&D tier: the fused OT↔NT bridge plus the optional artifacts (concept
-    /// embeddings, morphology). The artifacts load at open when present in the
+    /// R&D tier: the fused OT↔NT bridge plus the optional morphology artifact.
+    /// The artifact loads at open when present in the
     /// home, but they may also *arrive after open* — the web shell boots on
     /// the core pack and fetches the R&D pack in the background, then calls
     /// [`plumbline_engine_load_rnd_data`] — hence `OnceLock` (set-once through
     /// `&self`, thread-safe): unset means "not (yet) available".
     bridge: OnceLock<bridge::FusedBridge>,
-    embedding: OnceLock<embed::Embedding>,
     morph: OnceLock<morph::MorphData>,
-    /// SIF "verses like this" — built lazily on the first similar-verses query
-    /// (or a warm call) and cached. Never set while the embedding is absent,
-    /// so a warm that ran before the R&D pack arrived doesn't pin it empty.
-    verse_sim: OnceLock<embed::VerseSim>,
     /// TSK topical cross-references (parsed lazily from the home — an 8.5 MB
     /// TSV nobody should pay for at every open).
     xref_ix: OnceLock<XRefIx>,
@@ -266,13 +251,9 @@ impl PlumblineEngine {
         // probed at all (a CWD-relative probe would be nondeterministic and a
         // mild data-injection surface).
 
-        let embedding = OnceLock::new();
         let morph = OnceLock::new();
         if let Some(h) = &home {
             let data = h.join("data");
-            if let Some(e) = embed::load_embedding(canon::TOKENIZATION_VERSION, data.join("concept-vectors.vec")) {
-                let _ = embedding.set(e);
-            }
             if let Some(m) = morph::load_morph(canon::TOKENIZATION_VERSION, data.join("morphology.jsonl")) {
                 let _ = morph.set(m);
             }
@@ -288,18 +269,14 @@ impl PlumblineEngine {
             concept_partial: std::sync::Mutex::new(None),
             xref_partial: std::sync::Mutex::new(None),
             leitwort_partial: std::sync::Mutex::new(None),
-            verse_sim_partial: std::sync::Mutex::new(None),
             warm_phase: std::sync::atomic::AtomicUsize::new(0),
             defer_builds: std::sync::atomic::AtomicBool::new(false),
-            sif_attempted: std::sync::atomic::AtomicBool::new(false),
             occ_ix: OnceLock::new(),
             renderings: OnceLock::new(),
             home,
             study: std::sync::RwLock::new(study),
             bridge: OnceLock::new(),
-            embedding,
             morph,
-            verse_sim: OnceLock::new(),
             xref_ix: OnceLock::new(),
             akjv: OnceLock::new(),
             akjv_on: std::sync::atomic::AtomicBool::new(false),
@@ -321,38 +298,13 @@ impl PlumblineEngine {
         self.study.write().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    /// The SIF model, built lazily on first use from the embedding + corpus.
-    /// Deliberately NOT `get_or_init`: while the embedding is absent this
-    /// returns `None` without caching anything, so it builds correctly once
-    /// the R&D pack arrives (see [`Self::load_rnd_data`]).
-    fn verse_sim(&self) -> Option<&embed::VerseSim> {
-        if let Some(v) = self.verse_sim.get() {
-            return Some(v);
-        }
-        let emb = self.embedding.get()?;
-        let _ = self.verse_sim.set(embed::VerseSim::build(emb, &self.corpus));
-        self.verse_sim.get()
-    }
-
-    /// Load the optional R&D artifacts (concept embeddings, morphology) from
-    /// the home if they were absent at open. Idempotent; nothing loads twice.
-    /// The web loads them one at a time (`plumbline_engine_load_rnd_step`) so
-    /// the worker can answer between two multi-second parses.
+    /// Load the optional R&D artifact (morphology) from the home if it was
+    /// absent at open. Idempotent; nothing loads twice.
+    ///
+    /// The concept embedding used to load here too. It went with the last thing
+    /// that read it (2026-07-30) and no longer ships in the pack.
     fn load_rnd_data(&self) {
-        self.load_embedding_only();
         self.load_morph_only();
-    }
-
-    /// The concept embedding alone (~6 MB of vector text to parse).
-    fn load_embedding_only(&self) {
-        let Some(h) = &self.home else { return };
-        if self.embedding.get().is_some() {
-            return;
-        }
-        let path = h.join("data").join("concept-vectors.vec");
-        if let Some(e) = embed::load_embedding(canon::TOKENIZATION_VERSION, path) {
-            let _ = self.embedding.set(e);
-        }
     }
 
     /// The morphology sidecar alone (~10 MB of JSONL to parse).
@@ -462,43 +414,6 @@ impl PlumblineEngine {
         self.defer_builds.load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    /// The built SIF model as storable bytes, stamped with what it was built
-    /// from. `None` until it exists — there is nothing to save before then.
-    ///
-    /// `allow(dead_code)`: only `wasm.rs` saves and restores the model, because
-    /// only the web pays the rebuild on every tab.
-    #[allow(dead_code)]
-    pub(crate) fn verse_sim_encode(&self, stamp: &str) -> Option<Vec<u8>> {
-        Some(self.verse_sim.get()?.encode(stamp))
-    }
-
-    /// Install a saved SIF model instead of building one. False when the bytes
-    /// are for other data, are damaged, or a model is already present.
-    ///
-    /// This is the 11.2 s of a launch that never needed to happen twice: the model
-    /// is a pure function of the embedding and the corpus, and the phone was
-    /// recomputing it on every open (2026-07-28).
-    ///
-    /// `allow(dead_code)`: the counterpart to `verse_sim_encode`, and wasm-only
-    /// for the same reason.
-    #[allow(dead_code)]
-    pub(crate) fn verse_sim_load(&self, bytes: &[u8], stamp: &str) -> bool {
-        if self.verse_sim.get().is_some() {
-            return false;
-        }
-        match embed::VerseSim::decode(bytes, stamp) {
-            Some(vs) => {
-                let ok = self.verse_sim.set(vs).is_ok();
-                if ok {
-                    // Nothing left for the warm's tail to come back for.
-                    self.sif_attempted.store(true, std::sync::atomic::Ordering::Relaxed);
-                }
-                ok
-            }
-            None => false,
-        }
-    }
-
     /// Declare that this shell warms in slices, so nothing may be built inside a
     /// reader's request.
     ///
@@ -575,14 +490,6 @@ impl PlumblineEngine {
         }
     }
 
-    fn verse_sim_ready(&self) -> Option<&embed::VerseSim> {
-        if self.deferring() {
-            self.verse_sim.get()
-        } else {
-            self.verse_sim()
-        }
-    }
-
     /// Fold `n` more verses into the occurrence index. 1 while work remains.
     fn warm_occ_slice(&self, n: usize) -> i32 {
         if self.occ_ix.get().is_some() {
@@ -638,32 +545,7 @@ impl PlumblineEngine {
                     self.bridge();
                     0
                 }
-                7 => {
-                    // Needs the embedding. With the R&D pack absent this is a
-                    // no-op and the phase still advances — the tail below comes
-                    // back to it if the pack lands later.
-                    if self.embedding.get().is_none() {
-                        0
-                    } else {
-                        // SLICED, unlike every previous version of this arm. It
-                        // called `verse_sim()` — the whole build, in one call, on
-                        // the only thread that can answer a tap.
-                        let more = self.warm_verse_sim_slice(slice);
-                        if more == 0 {
-                            self.sif_attempted.store(true, Ordering::Relaxed);
-                        }
-                        more
-                    }
-                }
-                _ => {
-                    // The R&D pack landed after the warm had run out of phases:
-                    // go back for the SIF model, at most once.
-                    if self.embedding.get().is_some() && !self.sif_attempted.load(Ordering::Relaxed) {
-                        self.warm_phase.store(7, Ordering::Relaxed);
-                        continue;
-                    }
-                    return 0;
-                }
+                _ => return 0,
             };
             if more == 1 {
                 return 1; // same phase, more slices to feed
@@ -693,39 +575,6 @@ impl PlumblineEngine {
         }
         if let Some(model) = b.take() {
             let _ = self.concept.set(model);
-        }
-        *guard = None;
-        0
-    }
-
-    /// Advance the SIF model by one budgeted slice. 1 while work remains.
-    ///
-    /// The phase this replaces was a bare `verse_sim()` call: the entire model in
-    /// one synchronous block, which measured **54,859 ms** on the maintainer's
-    /// phone against a ~300 ms median warm chunk (boot trace, 2026-07-28). For all
-    /// of it the engine worker — the only thread that answers layout, taps and
-    /// word studies — was unavailable, which is what a reader experiences as "it
-    /// says loading and the first one takes longer, every time I reopen it".
-    ///
-    /// Slicing does not make the work smaller; it makes the thread answerable
-    /// between the pieces. The work itself got smaller separately, in
-    /// [`embed::VerseSimBuilder`], by not copying the matrix twice per build.
-    fn warm_verse_sim_slice(&self, n: usize) -> i32 {
-        if self.verse_sim.get().is_some() {
-            return 0;
-        }
-        let Some(emb) = self.embedding.get() else {
-            return 0; // no artifact: nothing to build from
-        };
-        let Ok(mut guard) = self.verse_sim_partial.lock() else {
-            return 0; // poisoned: leave it to the build-on-first-use path
-        };
-        let b = guard.get_or_insert_with(|| embed::VerseSimBuilder::new(emb, &self.corpus));
-        if b.step(emb, &self.corpus, n) {
-            return 1;
-        }
-        if let Some(model) = b.take() {
-            let _ = self.verse_sim.set(model);
         }
         *guard = None;
         0
@@ -1722,38 +1571,11 @@ pub unsafe extern "C" fn plumbline_engine_suggested_weaves_json(engine: *const P
     })
 }
 
-// ── R&D tier: read (concept embeddings, morphology, fused bridge) ────────────────
+// ── R&D tier: read (morphology, fused bridge) ────────────────────────────────
 //
 // These consume the offline artifacts loaded at open (see `data-prep`). Each
 // returns null when its artifact is absent (or the engine/ref is invalid), so a
 // shell shows the section exactly when it exists — no training happens here.
-
-/// Concept neighbours of a Strong's code as JSON:
-/// `{"code","near":[{code,score}],"cross":[{code,score}]}` (same-testament, then
-/// cross-testament — the latter empty unless the embedding is aligned). Null
-/// when no embedding is loaded or the args are invalid.
-///
-/// # Safety
-/// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_concept_neighbours_json(
-    engine: *const PlumblineEngine,
-    code: *const c_char,
-    k: u32,
-) -> *mut c_char {
-    guard(ptr::null_mut(), || {
-        let (Some(e), Some(code)) = (engine.as_ref(), opt_str(code)) else {
-            return ptr::null_mut();
-        };
-        let Some(emb) = e.embedding.get() else { return ptr::null_mut() };
-        let k = k as usize;
-        out_json(&wire::WireConceptNeighbours {
-            code: code.to_string(),
-            near: wire::scored_to_wire(emb.nearest_concepts(code, k)),
-            cross: wire::scored_to_wire(emb.cross_concepts(code, k)),
-        })
-    })
-}
 
 /// The fused OT↔NT bridge partners of a Strong's code as JSON:
 /// `{"code","partners":[{code,sources,prior}]}`, ranked by trust prior. The
@@ -1814,35 +1636,6 @@ pub unsafe extern "C" fn plumbline_engine_morph_json(
         };
         let Some(gloss) = md.gloss(&vref, token_index) else { return ptr::null_mut() };
         out_json(&wire::WireMorph { verse: vref.ref_key(), token_index, code: entry.code.clone(), gloss })
-    })
-}
-
-/// "Verses like this one" (SIF) as JSON:
-/// `{"verse","in":[{verse,display,score}],"cross":[…]}`. The SIF model is built
-/// lazily on the first call (heavy) and cached. Null when no embedding is
-/// loaded or the reference is unparseable.
-///
-/// # Safety
-/// `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_similar_verses_json(
-    engine: *const PlumblineEngine,
-    ref_key: *const c_char,
-    k: u32,
-) -> *mut c_char {
-    guard(ptr::null_mut(), || {
-        let (Some(e), Some(rk)) = (engine.as_ref(), opt_str(ref_key)) else {
-            return ptr::null_mut();
-        };
-        let (Some(vs), Some(vref)) = (e.verse_sim_ready(), VRef::parse_ref_key(rk)) else {
-            return ptr::null_mut();
-        };
-        let k = k as usize;
-        out_json(&wire::WireSimilarVerses {
-            verse: vref.ref_key(),
-            within: wire::similar_to_wire(vs.similar_verses_in(&vref, k)),
-            cross: wire::similar_to_wire(vs.similar_verses_cross(&vref, k)),
-        })
     })
 }
 
@@ -2503,9 +2296,6 @@ pub unsafe extern "C" fn plumbline_engine_concept_json(
     })
 }
 
-/// How many spokes each side (semantic / community) of the concept map shows.
-const CONCEPT_MAP_SPOKES: usize = 6;
-
 /// The proper nouns that stay in a concept neighbourhood. In this corpus the
 /// divine name and Christ *are* concepts, not incidental names — everything
 /// the book says about salvation runs through them.
@@ -2513,109 +2303,10 @@ const CONCEPT_KEEP_NAMES: &[&str] = &["H3068", "H3069", "H3050", "H136", "G2424"
 
 /// Whether `code` is a proper noun that has no business ringing a concept:
 /// "faith" surrounded by Ephraim, Jerusalem and Shechem reads as noise rather
-/// than meaning (feedback 2026-07-27). Names stay fully reachable — as concept
-/// map *centres*, in word study, concordance and search — only the neighbour
-/// rings and collocate lists drop them.
+/// than meaning (feedback 2026-07-27). Names stay fully reachable in word study,
+/// concordance and search; only the collocate lists drop them.
 fn name_noise(e: &PlumblineEngine, code: &str) -> bool {
     !CONCEPT_KEEP_NAMES.contains(&code) && e.strongs().get(code).is_some_and(strongs::is_proper_noun)
-}
-
-/// A concept-map node label: the English gloss over the lemma (`\n`-separated),
-/// falling back to whichever exists, then the bare code. Mirrors the GTK
-/// `label_of` closure so every shell labels the radial nodes identically.
-fn concept_label(e: &PlumblineEngine, code: &str) -> String {
-    let gloss = english_gloss(e, code);
-    let lemma = e.strongs().get(code).and_then(|s| s.lemma.clone());
-    match (gloss, lemma) {
-        (Some(g), Some(l)) => format!("{g}\n{l}"),
-        (Some(g), None) => g,
-        (None, Some(l)) => l,
-        (None, None) => code.to_string(),
-    }
-}
-
-/// The concept map for a code: the radial neighbourhood (embedding neighbours ∪
-/// collocation community, deduped, labels pre-baked) plus the per-book
-/// dispersion counts in canon order. One call replaces the shell's spoke
-/// assembly and its four separate lookups (neighbours / concept / gloss /
-/// lemma). Never null on a live engine + valid code — a code with no stats
-/// still yields its centre label and any embedding spokes (empty dispersion).
-///
-/// # Safety
-/// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_concept_map_json(
-    engine: *const PlumblineEngine,
-    code: *const c_char,
-) -> *mut c_char {
-    guard(ptr::null_mut(), || {
-        let (Some(e), Some(code)) = (engine.as_ref(), opt_str(code)) else {
-            return ptr::null_mut();
-        };
-        // Semantic neighbours (gold) — empty without an embedding artifact.
-        // The cosine scores travel out as spoke weights so the shells can
-        // scale distance by relatedness (equidistant spokes read as "equally
-        // related", which the data never said).
-        // Ask for extra candidates, then drop the proper nouns: filtering after
-        // a k-sized fetch would leave short rings whenever names crowded the top.
-        let near_scored: Vec<(String, f32)> = e
-            .embedding
-            .get()
-            .map(|emb| emb.nearest_concepts(code, CONCEPT_MAP_SPOKES * 4))
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|(c, _)| !name_noise(e, c))
-            .take(CONCEPT_MAP_SPOKES)
-            .collect();
-        let near: Vec<String> = near_scored.iter().map(|(c, _)| c.clone()).collect();
-        // THE 10,205 ms CALL. `conceptMap` reached straight past the panel's
-        // "ready" accessors and built the concept model inside the request.
-        let Some(ce) = e.concept_ready() else {
-            return ptr::null_mut();
-        };
-        let community: Vec<String> = ce.community(code).into_iter().filter(|c| !name_noise(e, c)).collect();
-        let spokes = concept::radial_spokes(&near, &community, CONCEPT_MAP_SPOKES)
-            .into_iter()
-            .map(|(c, semantic)| wire::WireConceptSpoke {
-                label: concept_label(e, &c),
-                weight: near_scored.iter().find(|(n, _)| *n == c).map(|(_, s)| *s),
-                code: c,
-                semantic,
-            })
-            .collect();
-        // Dispersion in canon order (0 where the concept never occurs).
-        let by_book = ce
-            .stat(code)
-            .map(|s| canon::BOOKS.iter().map(|b| s.by_book.get(b.id).copied().unwrap_or(0)).collect())
-            .unwrap_or_else(|| vec![0; canon::BOOKS.len()]);
-        // Cross-testament bridge row: the strongest other-testament partners and
-        // their unioned dispersion (so Christ reveals where Messiah occurs).
-        let partners = e.bridge_ready().map(|b| b.partners(code)).unwrap_or_default();
-        let bridge = (!partners.is_empty()).then(|| {
-            let top: Vec<&bridge::Partner> = partners.iter().take(concept::BRIDGE_ROW_PARTNERS).collect();
-            let union = ce.union_by_book(top.iter().map(|p| p.code.as_str()));
-            wire::WireConceptBridge {
-                partners: top
-                    .iter()
-                    .map(|p| wire::WireBridgeNode {
-                        label: concept_label(e, &p.code),
-                        code: p.code.clone(),
-                        prior: p.prior,
-                    })
-                    .collect(),
-                by_book: canon::BOOKS.iter().map(|b| union.get(b.id).copied().unwrap_or(0)).collect(),
-            }
-        });
-        out_json(&wire::WireConceptMap {
-            center_label: concept_label(e, code),
-            code: code.to_string(),
-            spokes,
-            by_book,
-            ot_nt_divide: plumbline_core::reference::OT_NT_DIVIDE,
-            book_count: canon::BOOKS.len(),
-            bridge,
-        })
-    })
 }
 
 /// A short English gloss for a Strong's code — the modal KJV rendering across
@@ -2780,15 +2471,6 @@ impl PanelSource for PlumblineEngine {
                 .collect(),
             None => Vec::new(),
         }
-    }
-    fn similar_verses(&self, verse: &str, k: usize) -> (Vec<panel::SimilarView>, Vec<panel::SimilarView>) {
-        let (Some(vs), Some(v)) = (self.verse_sim_ready(), VRef::parse_ref_key(verse)) else {
-            return (Vec::new(), Vec::new());
-        };
-        let map = |items: Vec<(VRef, f32)>| {
-            items.into_iter().map(|(r, _)| panel::SimilarView { verse: r.ref_key(), display: r.display() }).collect()
-        };
-        (map(vs.similar_verses_in(&v, k)), map(vs.similar_verses_cross(&v, k)))
     }
     fn verse_tags(&self, verse: &str) -> Vec<(usize, String)> {
         self.study_read()
@@ -3535,13 +3217,10 @@ pub unsafe extern "C" fn plumbline_theme_palette_json(theme: *const c_char) -> *
     })
 }
 
-/// Force the lazy analytics indexes (concept engine, leitwort scan, SIF verse
-/// similarity) to build now — call once on a background thread at startup in
-/// Full mode so the first study click doesn't stall. Safe to call from any
-/// thread (the builds are `OnceLock`-guarded) and idempotent — except that the
-/// SIF model builds only once the embedding artifact is loaded, so a shell
-/// that fetches the R&D pack late calls this *again* after
-/// [`plumbline_engine_load_rnd_data`]. Null on success, else an owned error.
+/// Force the lazy analytics indexes (concept engine, leitwort scan) to build
+/// now — call once on a background thread at startup in Full mode so the first
+/// study click doesn't stall. Safe to call from any thread (the builds are
+/// `OnceLock`-guarded) and idempotent. Null on success, else an owned error.
 ///
 /// # Safety
 /// `engine` is a live engine (or null → an error string).
@@ -3558,7 +3237,6 @@ pub unsafe extern "C" fn plumbline_engine_warm_indexes(engine: *const PlumblineE
         e.bridge();
         e.concept();
         e.leitwort();
-        e.verse_sim();
         ptr::null_mut()
     })
 }
@@ -3582,13 +3260,12 @@ pub unsafe extern "C" fn plumbline_engine_load_core_data(engine: *const Plumblin
     })
 }
 
-/// Load the optional R&D artifacts (concept embeddings, morphology sidecar)
-/// from the engine's home if they were absent at open. The web shell boots on
-/// the core data pack for a fast first paint, fetches the R&D pack in the
-/// background, writes the files into the home, then calls this — followed by
-/// [`plumbline_engine_warm_indexes`] to build the SIF model the new embedding
-/// enables. Idempotent (nothing loads twice), cheap when the files are still
-/// missing, safe from any thread. Null on success, else an owned error.
+/// Load the optional R&D artifact (the morphology sidecar) from the engine's
+/// home if it was absent at open. The web shell boots on the core data pack for
+/// a fast first paint, fetches the R&D pack in the background, writes the files
+/// into the home, then calls this. Idempotent (nothing loads twice), cheap when
+/// the file is still missing, safe from any thread. Null on success, else an
+/// owned error.
 ///
 /// # Safety
 /// `engine` is a live engine (or null → an error string).

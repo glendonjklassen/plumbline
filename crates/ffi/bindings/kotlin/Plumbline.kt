@@ -79,11 +79,8 @@ internal interface PlumblineNative : Library {
     fun plumbline_engine_verse_xrefs_json(engine: Pointer, refKey: String): Pointer?
     fun plumbline_engine_suggested_weaves_json(engine: Pointer): Pointer?
 
-    // ── R&D layer: concept neighbours / bridge / morphology / similarity ────
-    fun plumbline_engine_concept_neighbours_json(engine: Pointer, code: String, k: Int): Pointer?
     fun plumbline_engine_bridge_partners_json(engine: Pointer, code: String): Pointer?
     fun plumbline_engine_morph_json(engine: Pointer, refKey: String, tokenIndex: Int): Pointer?
-    fun plumbline_engine_similar_verses_json(engine: Pointer, refKey: String, k: Int): Pointer?
 
     // ── study data (author; owned return: null = success, else error) ───────
     fun plumbline_engine_thread_add(
@@ -121,7 +118,6 @@ internal interface PlumblineNative : Library {
 
     // ── symbolic concept engine + gloss ─────────────────────────────────────
     fun plumbline_engine_concept_json(engine: Pointer, code: String): Pointer?
-    fun plumbline_engine_concept_map_json(engine: Pointer, code: String): Pointer?
     fun plumbline_engine_gloss(engine: Pointer, code: String): Pointer?
 
     // ── study-panel content model (typed block lists) ───────────────────────

@@ -40,9 +40,8 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       s.panel = { kind: "compare", index: link.index };
       await openWeavePassages(s, link.index);
       break;
-    case "conceptMap":
-      s.mapPopup = { kind: "conceptMap", code: link.code };
-      break;
+    // No `conceptMap` case: the `conceptmap:` verb left the core's link
+    // vocabulary on 2026-07-30 when the concept map was removed.
     case "guide":
       s.panel = { kind: "guide" };
       break;

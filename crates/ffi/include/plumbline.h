@@ -354,17 +354,6 @@ char *plumbline_engine_verse_xrefs_json(const struct PlumblineEngine *engine, co
 // `engine` is a valid engine pointer.
 char *plumbline_engine_suggested_weaves_json(const struct PlumblineEngine *engine);
 
-// Concept neighbours of a Strong's code as JSON:
-// `{"code","near":[{code,score}],"cross":[{code,score}]}` (same-testament, then
-// cross-testament — the latter empty unless the embedding is aligned). Null
-// when no embedding is loaded or the args are invalid.
-//
-// # Safety
-// `engine` is valid; `code` is a valid NUL-terminated UTF-8 string.
-char *plumbline_engine_concept_neighbours_json(const struct PlumblineEngine *engine,
-                                               const char *code,
-                                               uint32_t k);
-
 // The fused OT↔NT bridge partners of a Strong's code as JSON:
 // `{"code","partners":[{code,sources,prior}]}`, ranked by trust prior. The
 // etymology layer works from the dictionary alone, so this is available even
@@ -384,17 +373,6 @@ char *plumbline_engine_bridge_partners_json(const struct PlumblineEngine *engine
 char *plumbline_engine_morph_json(const struct PlumblineEngine *engine,
                                   const char *ref_key,
                                   uint32_t token_index);
-
-// "Verses like this one" (SIF) as JSON:
-// `{"verse","in":[{verse,display,score}],"cross":[…]}`. The SIF model is built
-// lazily on the first call (heavy) and cached. Null when no embedding is
-// loaded or the reference is unparseable.
-//
-// # Safety
-// `engine` is valid; `ref_key` is a valid NUL-terminated UTF-8 string.
-char *plumbline_engine_similar_verses_json(const struct PlumblineEngine *engine,
-                                           const char *ref_key,
-                                           uint32_t k);
 
 // Add the whole verse `ref_key` to the thread named `name` (created on first
 // use). `note` may be null; `added` is a caller-supplied UTC timestamp.
@@ -592,17 +570,6 @@ char *plumbline_engine_constellation_json(const struct PlumblineEngine *engine,
 // # Safety
 // `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
 char *plumbline_engine_concept_json(const struct PlumblineEngine *engine, const char *code);
-
-// The concept map for a code: the radial neighbourhood (embedding neighbours ∪
-// collocation community, deduped, labels pre-baked) plus the per-book
-// dispersion counts in canon order. One call replaces the shell's spoke
-// assembly and its four separate lookups (neighbours / concept / gloss /
-// lemma). Never null on a live engine + valid code — a code with no stats
-// still yields its centre label and any embedding spokes (empty dispersion).
-//
-// # Safety
-// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
-char *plumbline_engine_concept_map_json(const struct PlumblineEngine *engine, const char *code);
 
 // A short English gloss for a Strong's code — the modal KJV rendering across
 // its occurrences (≤80 sampled), falling back to a distilled dictionary
@@ -812,13 +779,10 @@ char *plumbline_engine_user_note_set(struct PlumblineEngine *engine,
 // `theme` is null or valid NUL-terminated UTF-8 for the call.
 char *plumbline_theme_palette_json(const char *theme);
 
-// Force the lazy analytics indexes (concept engine, leitwort scan, SIF verse
-// similarity) to build now — call once on a background thread at startup in
-// Full mode so the first study click doesn't stall. Safe to call from any
-// thread (the builds are `OnceLock`-guarded) and idempotent — except that the
-// SIF model builds only once the embedding artifact is loaded, so a shell
-// that fetches the R&D pack late calls this *again* after
-// [`plumbline_engine_load_rnd_data`]. Null on success, else an owned error.
+// Force the lazy analytics indexes (concept engine, leitwort scan) to build
+// now — call once on a background thread at startup in Full mode so the first
+// study click doesn't stall. Safe to call from any thread (the builds are
+// `OnceLock`-guarded) and idempotent. Null on success, else an owned error.
 //
 // # Safety
 // `engine` is a live engine (or null → an error string).
@@ -834,13 +798,12 @@ char *plumbline_engine_warm_indexes(const struct PlumblineEngine *engine);
 // `engine` is a live engine (or null → an error string).
 char *plumbline_engine_load_core_data(const struct PlumblineEngine *engine);
 
-// Load the optional R&D artifacts (concept embeddings, morphology sidecar)
-// from the engine's home if they were absent at open. The web shell boots on
-// the core data pack for a fast first paint, fetches the R&D pack in the
-// background, writes the files into the home, then calls this — followed by
-// [`plumbline_engine_warm_indexes`] to build the SIF model the new embedding
-// enables. Idempotent (nothing loads twice), cheap when the files are still
-// missing, safe from any thread. Null on success, else an owned error.
+// Load the optional R&D artifact (the morphology sidecar) from the engine's
+// home if it was absent at open. The web shell boots on the core data pack for
+// a fast first paint, fetches the R&D pack in the background, writes the files
+// into the home, then calls this. Idempotent (nothing loads twice), cheap when
+// the file is still missing, safe from any thread. Null on success, else an
+// owned error.
 //
 // # Safety
 // `engine` is a live engine (or null → an error string).

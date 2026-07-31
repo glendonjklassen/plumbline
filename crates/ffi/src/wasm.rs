@@ -104,87 +104,6 @@ pub unsafe extern "C" fn plumbline_engine_defer_builds(engine: *const PlumblineE
     }
 }
 
-/// The built SIF model as bytes the shell can store, or null if it is not built
-/// yet. Writes the length through `out_len`; release with [`plumbline_web_free`].
-///
-/// Saving it is worth an export of its own because rebuilding it is the most
-/// expensive thing a launch does — 11.2 s of phone CPU, 41 sweeps of the corpus,
-/// repeated every open for a model that is a pure function of data the device
-/// already holds (2026-07-28).
-///
-/// `stamp` is what it was built FROM (tokenization + pack version). It is written
-/// into the bytes and checked on load: a model served against a different corpus
-/// or embedding answers with the wrong verses and nothing anywhere would notice.
-///
-/// # Safety
-/// `engine` is a live engine or null; `out_len` is writable; `stamp` is a
-/// NUL-terminated UTF-8 string.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_verse_sim_save(
-    engine: *const PlumblineEngine,
-    stamp: *const c_char,
-    out_len: *mut u32,
-) -> *mut u8 {
-    guard(core::ptr::null_mut(), || {
-        let (Some(e), Some(stamp)) = (unsafe { engine.as_ref() }, unsafe { crate::opt_str(stamp) }) else {
-            return core::ptr::null_mut();
-        };
-        let Some(bytes) = e.verse_sim_encode(stamp) else {
-            return core::ptr::null_mut();
-        };
-        let len = bytes.len();
-        let mut boxed = bytes.into_boxed_slice();
-        let ptr = boxed.as_mut_ptr();
-        core::mem::forget(boxed);
-        if !out_len.is_null() {
-            unsafe { *out_len = len as u32 };
-        }
-        ptr
-    })
-}
-
-/// Install a previously saved SIF model. 1 when it was accepted, 0 when the bytes
-/// are for other data, are damaged, or a model is already loaded — all of which
-/// mean "build it instead", never "repair it".
-///
-/// # Safety
-/// `engine` is a live engine or null; `bytes`/`len` describe a readable buffer.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_verse_sim_load(
-    engine: *const PlumblineEngine,
-    bytes: *const u8,
-    len: usize,
-    stamp: *const c_char,
-) -> i32 {
-    guard(0, || {
-        let (Some(e), Some(stamp)) = (unsafe { engine.as_ref() }, unsafe { crate::opt_str(stamp) }) else {
-            return 0;
-        };
-        if bytes.is_null() {
-            return 0;
-        }
-        let slice = unsafe { core::slice::from_raw_parts(bytes, len) };
-        e.verse_sim_load(slice, stamp) as i32
-    })
-}
-
-/// Advance ONLY the SIF model by one budgeted slice, without running the rest of
-/// the warm. 1 while work remains, 0 when it is built (or cannot be).
-///
-/// The shell uses this to build the model on FIRST NEED rather than on every
-/// launch: it is the most expensive thing the warm does and it powers one
-/// section, so a reader who never opens a word study should never pay for it.
-///
-/// # Safety
-/// `engine` is a live engine or null.
-#[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_verse_sim_step(engine: *const PlumblineEngine) -> i32 {
-    let Some(e) = (unsafe { engine.as_ref() }) else {
-        return 0;
-    };
-    guard(0, || e.warm_verse_sim_slice(crate::WARM_SLICE))
-}
-
 /// Load ONE machine-tier artifact: step 0 the concept embedding, step 1 the
 /// morphology sidecar. Returns 1 while steps remain, 0 when done (or on a null
 /// engine). Idempotent — an artifact already loaded, or still missing from the
@@ -204,10 +123,7 @@ pub unsafe extern "C" fn plumbline_engine_load_rnd_step(engine: *const Plumbline
         return 0;
     };
     guard(0, || match step {
-        0 => {
-            e.load_embedding_only();
-            1
-        }
+        0 => 1,
         1 => {
             e.load_morph_only();
             0

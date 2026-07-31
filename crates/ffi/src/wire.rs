@@ -538,16 +538,6 @@ pub struct WireScored {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WireConceptNeighbours {
-    pub code: String,
-    /// Same-testament distributional neighbours.
-    pub near: Vec<WireScored>,
-    /// Cross-testament neighbours (empty unless the embedding is aligned).
-    pub cross: Vec<WireScored>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct WireMorph {
     pub verse: String,
     pub token_index: u32,
@@ -582,31 +572,8 @@ pub struct WireBridgePartners {
     pub partners: Vec<WireBridgePartner>,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireSimilarVerse {
-    pub verse: String,
-    pub display: String,
-    pub score: f32,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireSimilarVerses {
-    pub verse: String,
-    /// Same-testament thematic neighbours.
-    #[serde(rename = "in")]
-    pub within: Vec<WireSimilarVerse>,
-    /// Cross-testament neighbours (empty unless the embedding is aligned).
-    pub cross: Vec<WireSimilarVerse>,
-}
-
 pub fn scored_to_wire(items: Vec<(String, f32)>) -> Vec<WireScored> {
     items.into_iter().map(|(code, score)| WireScored { code, score }).collect()
-}
-
-pub fn similar_to_wire(items: Vec<(VRef, f32)>) -> Vec<WireSimilarVerse> {
-    items.into_iter().map(|(v, score)| WireSimilarVerse { verse: v.ref_key(), display: v.display(), score }).collect()
 }
 
 // ── margin notes ──────────────────────────────────────────────────────────────
@@ -1008,77 +975,6 @@ pub struct WireLeitwort {
 
 // ── concept map (radial neighbourhood + dispersion strip) ─────────────────────
 
-/// Everything the concept-map popup paints for one code: the centre + its
-/// spokes (near ∪ community, deduped, labels pre-baked) and the per-book
-/// dispersion counts. One producer replaces the shell's assembly + its four
-/// lookups (neighbours / concept / gloss / lemma) with a single call. Assembled
-/// in `lib.rs` because the labels need the gloss + dictionary.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireConceptMap {
-    pub code: String,
-    /// The centre node's label (English gloss over lemma, `\n`-separated;
-    /// falls back to lemma, then the bare code).
-    pub center_label: String,
-    pub spokes: Vec<WireConceptSpoke>,
-    /// Per-book dispersion counts in **canon order** (length = `book_count`); a
-    /// book the concept never occurs in is 0. The strip places cell `i` at
-    /// `i / book_count` — no book-id table needed in the shell.
-    pub by_book: Vec<u32>,
-    pub ot_nt_divide: usize,
-    pub book_count: usize,
-    /// The cross-testament **bridge row**: the strongest other-testament
-    /// equivalents of `code` and their unioned dispersion. Absent when the code
-    /// has no cross-testament partner. This is what makes viewing *Christ*
-    /// (Greek) light up where *Messiah* (Hebrew) occurs — the OT half of the
-    /// strip fills in even though `by_book` (this code) is NT-only.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub bridge: Option<WireConceptBridge>,
-}
-
-/// One spoke of the concept map: a neighbour code, its pre-baked label, and
-/// whether it is a **semantic** (embedding) neighbour — gold — or a collocation
-/// community member — green.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireConceptSpoke {
-    pub code: String,
-    pub label: String,
-    pub semantic: bool,
-    /// Cosine similarity to the centre concept (semantic spokes only) — the
-    /// shells scale spoke distance by it, so more-related concepts sit closer.
-    /// Absent for community spokes, which draw at the outer ring. Additive
-    /// wire evolution (2026-07-26): older shells ignore it.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub weight: Option<f32>,
-}
-
-/// The dispersion strip's cross-testament overlay (see [`WireConceptMap::bridge`]):
-/// the other-testament partner lemmas plus their unioned per-book dispersion,
-/// rendered as a second row beneath the concept's own.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireConceptBridge {
-    /// The other-testament partners, strongest-first. `label` is the English
-    /// gloss over lemma, exactly like the centre and spoke labels.
-    pub partners: Vec<WireBridgeNode>,
-    /// The partners' unioned per-book dispersion in **canon order**
-    /// (length = `book_count`) — so the shell paints it exactly like `by_book`.
-    pub by_book: Vec<u32>,
-}
-
-/// One cross-testament partner node in a [`WireConceptBridge`].
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireBridgeNode {
-    pub code: String,
-    pub label: String,
-    /// The fused trust prior of the strongest witness tying this partner (0–1).
-    pub prior: f32,
-}
-
-// ── study-panel content model (the typed block list) ──────────────────────────
-
 /// A panel view as a list of typed blocks (see `plumbline_core::panel`). The shell
 /// walks these with a small per-block renderer; it derives nothing.
 #[derive(Serialize)]
@@ -1146,7 +1042,6 @@ pub enum WirePanelLink {
     Thread { index: usize },
     Tag { index: usize },
     Weave { index: usize },
-    ConceptMap { code: String },
     AddTag { ref_key: String },
     AddThread { ref_key: String },
     Untag { tag: usize, ref_key: String },
@@ -1170,7 +1065,6 @@ pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
         PanelLink::Thread { index } => WirePanelLink::Thread { index },
         PanelLink::Tag { index } => WirePanelLink::Tag { index },
         PanelLink::Weave { index } => WirePanelLink::Weave { index },
-        PanelLink::ConceptMap { code } => WirePanelLink::ConceptMap { code },
         PanelLink::AddTag { refkey } => WirePanelLink::AddTag { ref_key: refkey },
         PanelLink::AddThread { refkey } => WirePanelLink::AddThread { ref_key: refkey },
         PanelLink::Untag { tag, refkey } => WirePanelLink::Untag { tag, ref_key: refkey },

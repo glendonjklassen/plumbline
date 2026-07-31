@@ -14,7 +14,7 @@
 // shows. The traps that would have silently undone it are all avoided at the
 // call sites: no StudyPane is nested inside a parent `verticalScroll`, nothing
 // asks it for an intrinsic height, and the four call sites all give it bounded
-// height (StudyScreen.kt lines ~663 / ~1291 / ~1423 / ~1509).
+// height (StudyScreen.kt lines ~641 / ~1263 / ~1392 / ~1478).
 //
 // Author D (Compose UI).
 
@@ -62,7 +62,7 @@ private val BLOCK_GAP = 8.dp
  *  slot and would open a gap over empty space. */
 private val PAINTED_KINDS = setOf("rule", "section", "para")
 
-/** A caller's slot (header / footer / embed) inside one lazy item.
+/** A caller's slot (header / footer) inside one lazy item.
  *
  *  The slots emit SEVERAL siblings — AkjvHeader is two Texts and a rule,
  *  VersionFooter a rule and two Texts — and a lazy item stacks its root nodes
@@ -81,9 +81,11 @@ private fun SlotItem(content: @Composable () -> Unit) {
  *
  * @param blocksJson a plumbline_engine_*_blocks_json payload (or null).
  * @param onLink invoked with a run's URI when a link is tapped.
- * @param embed an optional composable (the concept map + canon heatmap cards)
- *   slotted into the block flow just before the first titled section — after
- *   the headline paras, before the study tiers — so it reads first-class.
+ *
+ * There used to be a third slot, `embed`, which cut the block flow open just
+ * before the first titled section for the concept map + canon heatmap cards.
+ * Both cards were embedding-backed and went on 2026-07-30; the blocks now run
+ * unbroken from header to footer.
  */
 @Composable
 fun StudyPane(
@@ -92,7 +94,6 @@ fun StudyPane(
     modifier: Modifier = Modifier,
     scale: Float = 1f,
     onLink: (String) -> Unit = {},
-    embed: (@Composable () -> Unit)? = null,
     /** A study read is in flight — see [loading] handling below. */
     loading: Boolean = false,
     /** Rendered after the blocks — About uses it for the build stamp. */
@@ -147,21 +148,14 @@ fun StudyPane(
         }
         // Refreshing over existing content: the note still explains a long wait.
         if (header != null) item(key = "header") { SlotItem(header) }
-        // Where the embed goes: before the first titled section, or after
-        // everything if the payload has no section at all.
-        val embedAt = if (embed == null) {
-            blocks.size
-        } else {
-            blocks.indexOfFirst { it.kind == "section" }.let { if (it < 0) blocks.size else it }
-        }
-        blockItems(blocks, 0, embedAt, palette, scale, onLink)
-        if (embed != null) item(key = "embed") { SlotItem(embed) }
-        blockItems(blocks, embedAt, blocks.size, palette, scale, onLink)
+        blockItems(blocks, palette, scale, onLink)
         if (footer != null) item(key = "footer") { SlotItem(footer) }
     }
 }
 
-/** `blocks[from until until]` as one lazy item each.
+/** Every block as one lazy item. (It used to take a `from`/`until` window,
+ *  because the `embed` slot cut the flow in two; with that slot gone there is
+ *  one span, and the keys are the plain indices again.)
  *
  *  Keys are index-derived rather than content-derived on purpose: a study
  *  payload can repeat a rule or a title verbatim, and a duplicate key is a
@@ -172,19 +166,16 @@ fun StudyPane(
  *  building one from scratch. */
 private fun LazyListScope.blockItems(
     blocks: List<PanelBlock>,
-    from: Int,
-    until: Int,
     palette: ReaderPalette,
     scale: Float,
     onLink: (String) -> Unit,
 ) {
-    if (until <= from) return
     items(
-        count = until - from,
-        key = { "b${from + it}" },
-        contentType = { blocks[from + it].kind },
-    ) { offset ->
-        val b = blocks[from + offset]
+        count = blocks.size,
+        key = { "b$it" },
+        contentType = { blocks[it].kind },
+    ) { i ->
+        val b = blocks[i]
         when (b.kind) {
             "rule" -> HorizontalDivider(color = palette.rule)
             "section" -> SectionBlock(b, palette, scale)

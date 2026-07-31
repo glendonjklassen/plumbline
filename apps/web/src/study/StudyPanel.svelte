@@ -4,24 +4,16 @@
   // dismissible bottom sheet (Compose-phone pattern). Re-fetches after any
   // authoring write via studyEpoch (write → reload → re-fetch, never mutate).
   import BlockList from "./BlockList.svelte";
-  import EmbedMaps from "./EmbedMaps.svelte";
   import { dispatchLink } from "./links";
   import { getSession } from "../state/session.svelte";
 
   const s = getSession();
 
-  // The Strong's code behind the current study — drives the embedded map
-  // cards (Android StudyMaps parity; machine-tier, so gate-checked).
-  const studyCode = $derived.by(() => {
-    const p = s.panel;
-    if (!p || !(s.gates & 2)) return null;
-    if (p.kind === "codeStudy" || p.kind === "concordance") return p.code;
-    if (p.kind === "wordStudy") {
-      const tok = s.q("token", p.refKey, p.tokenIndex);
-      return (tok?.strongs?.[0] as string | undefined) ?? null;
-    }
-    return null;
-  });
+  // NO EMBEDDED MAP CARD. The study surface used to open with a compact canon
+  // strip that tapped through to the concept map; both went on 2026-07-30 with
+  // the concept embedding behind them. The machine tier's remaining sections are
+  // the symbolic concept engine's, and they are ordinary blocks — they come
+  // through `blocks` below like everything else.
 
   // Notes browser (Explore ▸ Notes parity): every personal note, tap → verse,
   // edit in place. Built shell-side from user_notes_json (no block producer).
@@ -99,8 +91,8 @@
   // reader on Data Saver who has not got the pack, where downloading it is their
   // decision to make. `rndDeferred` is false whenever the load is already coming,
   // so this stays invisible for everyone else — before that, every phone launch
-  // put a "one-time ~4 MB download" button in front of someone who had already
-  // taken the download (feedback 2026-07-27).
+  // put a one-time-download button in front of someone who had already taken the
+  // download (feedback 2026-07-27).
   const rndOffer = $derived.by(() => {
     const k = s.panel?.kind;
     if (!(k === "wordStudy" || k === "codeStudy" || k === "concordance")) return false;
@@ -155,12 +147,9 @@
       {:else}
         {#if rndOffer}
           <div class="rnd-offer">
-            <span class="rnd-note">Verses-like-this and concept maps are a one-time ~4 MB download.</span>
+            <span class="rnd-note">The machine-analysis sections are a one-time ~1.5 MB download.</span>
             <button class="rnd-load" onclick={() => void s.ensureRnd()}>Load analysis</button>
           </div>
-        {/if}
-        {#if studyCode}
-          <EmbedMaps code={studyCode} />
         {/if}
         {#if akjvWord}
           <p class="akjv">

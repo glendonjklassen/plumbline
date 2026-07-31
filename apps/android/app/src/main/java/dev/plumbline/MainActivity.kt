@@ -170,10 +170,12 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Build the lazy indexes THIS reader's settings actually use, off the UI
-     *  thread, so their first search / word study / map isn't a cold stall.
+     *  thread, so their first search / word study isn't a cold stall. (It used
+     *  to say "/ map" too — that was the concept map, which went 2026-07-30; the
+     *  weave maps that are left read the weave library, not these indexes.)
      *
-     *  It used to be one `WarmIndexes()` call, which forces all eight —
-     *  including the machine tier (concept, leitwort, SIF), which has been OFF
+     *  It used to be one `WarmIndexes()` call, which forces the lot —
+     *  including the machine tier (concept, leitwort), which has been OFF
      *  by default since the tiers went opt-in (`core::config`
      *  `machine_analysis: false`). A reader who never asked for machine analysis
      *  paid its corpus-wide scans at every single cold start, for panels the
@@ -493,11 +495,14 @@ internal fun writeThroughTemp(
 
 /** One lazily-built engine index.
  *
- *  These eight are exactly what `plumbline_engine_warm_indexes` forces, in the
+ *  These seven are exactly what `plumbline_engine_warm_indexes` forces, in the
  *  order it forces them (`crates/ffi/src/lib.rs`), and each is built once per
  *  session on first use. Which TIER owns which is `core::config`'s own division:
  *  **human** (curated scholarship) owns renderings, same-root and TSK; **machine**
- *  (learned/statistical) owns embeddings, concept, SIF and leitwort. */
+ *  (learned/statistical) owns the concept fold and leitwort.
+ *
+ *  There was an eighth, the SIF "verses like this" model. It went with the rest
+ *  of the machine-similarity features on 2026-07-30. */
 internal enum class WarmIndex {
     /** Full-text search over the corpus + the reader's notes. Ungated: the
      *  search overlay is not analysis, and it is one tap from the reader. */
@@ -516,25 +521,19 @@ internal enum class WarmIndex {
      *  `gates.human`. */
     StudyXrefs,
 
-    /** The fused OT↔NT bridge. `gates.human` in the word study (SAME ROOT
-     *  ACROSS TESTAMENTS), and also the partner band of the concept map. */
+    /** The fused OT↔NT bridge — the word study's SAME ROOT ACROSS TESTAMENTS.
+     *  `gates.human`, and only that since 2026-07-30: the concept map's partner
+     *  band was the machine tier's one reader of it, and the map is gone. */
     Bridge,
 
-    /** The concept model — a corpus-wide co-occurrence fold. `gates.machine`.
-     *
-     *  READ THE NOTE ON [warmPlan] BEFORE CHANGING THIS. The panel gate is only
-     *  half the story: the embedded concept-map card asks for it with no gate at
-     *  all, in BOTH shells. */
+    /** The concept model — a corpus-wide co-occurrence fold, behind APPEARS
+     *  ALONGSIDE and MOST USED IN. `gates.machine`. Symbolic statistics, not
+     *  embeddings; unrelated to the concept map that was removed. */
     Concept,
 
     /** The leitwort scan, discovered over the whole corpus. `gates.machine`.
      *  Reachable only through `concept_json`, which the panel gates. */
     Leitwort,
-
-    /** SIF "verses like this". `gates.machine`, and inert on this shell until an
-     *  embedding artifact exists to build it from (the APK bundles none, and
-     *  nothing here calls `LoadRndData`), so warming it is free either way. */
-    VerseSim,
 }
 
 /** Which indexes a cold start should build for a reader with these tiers.
@@ -542,24 +541,19 @@ internal enum class WarmIndex {
  *  Search and the occurrence index are for everybody — both are reachable
  *  without turning any analysis on. Everything else is warmed only for the tier
  *  that owns it, because an index the gates will not let a panel draw is an
- *  index nobody asked to be built. The bridge answers to either tier: the human
- *  word study lists same-root partners, the concept map bands them.
+ *  index nobody asked to be built.
  *
- *  ONE PLACE STILL DISAGREES, and it is not this function's to fix. The embedded
- *  concept-map card is drawn for any tapped code with no tier check —
- *  `StudyScreen.kt`'s `studyEmbed` on Android, `study/StudyPanel.svelte`'s
- *  `{#if studyCode}` on the web — and `plumbline_engine_concept_map_json` reaches
- *  `concept_ready()` and `bridge_ready()`, so a reader with both tiers off can
- *  still make the engine build the concept model. While that is true, gating
- *  Concept here moves that build out of the background warm and into the tap that
- *  opens the card, behind `synchronized(engine)`. How long that costs on a phone
- *  is UNMEASURED HERE — the one number the tree has for this call is the web
- *  engine worker's ("THE 10,205 ms CALL", `plumbline_engine_concept_map_json` in
- *  `crates/ffi/src/lib.rs`), and a wasm worker is not this shell. It is the same
- *  corpus-wide fold either way. The fix belongs in the shells — either gate the
- *  card on the machine tier, or accept that the card is ungated and warm for it —
- *  and it is a product call, not a warm-plan one. Reported with this change; do
- *  not paper over it here.
+ *  The bridge used to answer to EITHER tier — the human word study lists
+ *  same-root partners, and the concept map banded them. The map went on
+ *  2026-07-30, and `panel.rs` reaches `bridge_partners` only under `gates.human`,
+ *  so the bridge is the curated tier's alone now.
+ *
+ *  There was also a disagreement worth recording as closed: the embedded
+ *  concept-map card was drawn for any tapped code with no tier check at all, in
+ *  both shells, so a reader with both tiers off could still make the engine build
+ *  the concept model on a tap. Removing the card removed that path — every
+ *  machine-tier build is now behind the machine gate, which is what this plan
+ *  assumes.
  *
  *  Order matters — see [warmTouch] on why Search goes first. */
 internal fun warmPlan(humanAnalysis: Boolean, machineAnalysis: Boolean): List<WarmIndex> = buildList {
@@ -569,11 +563,10 @@ internal fun warmPlan(humanAnalysis: Boolean, machineAnalysis: Boolean): List<Wa
         add(WarmIndex.Renderings)
         add(WarmIndex.StudyXrefs)
     }
-    if (humanAnalysis || machineAnalysis) add(WarmIndex.Bridge)
+    if (humanAnalysis) add(WarmIndex.Bridge)
     if (machineAnalysis) {
         add(WarmIndex.Concept)
         add(WarmIndex.Leitwort)
-        add(WarmIndex.VerseSim)
     }
 }
 
@@ -588,8 +581,8 @@ private const val PROBE_REF = "Gen 1:1"
 
 /** Force ONE index to build, by asking the engine a question that needs it.
  *
- *  The C ABI has no per-index warm: `plumbline_engine_warm_indexes` is all eight
- *  or nothing. (A sliced `warm_step` exists, but only on the wasm-only surface —
+ *  The C ABI has no per-index warm: `plumbline_engine_warm_indexes` is all of
+ *  them or nothing. (A sliced `warm_step` exists, but only on the wasm-only surface —
  *  promoting it is TODO §H, and this item is not allowed to add ABI surface.) So
  *  a shell that wants a subset has to reach each build through a reader-facing
  *  read. Every call below is a pure read that changes nothing the reader sees.
@@ -618,6 +611,5 @@ private fun warmTouch(e: StudyEngine, ix: WarmIndex) {
         // through it — there is no other route to the leitwort map — so the
         // second of these two steps finds both built and costs one lookup.
         WarmIndex.Concept, WarmIndex.Leitwort -> e.ConceptJson(PROBE_CODE)
-        WarmIndex.VerseSim -> e.SimilarVersesJson(PROBE_REF, 1)
     }
 }
