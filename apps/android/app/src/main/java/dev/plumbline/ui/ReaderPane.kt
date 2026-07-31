@@ -14,6 +14,19 @@
 // once per layout. Keep it that way: one composition-phase read of `scroll` puts
 // a full recomposition back on every frame.
 //
+// The text itself is worked out once per layout too: it is RECORDED into an
+// android.graphics.Picture and replayed with a single drawPicture. A screenful of
+// this page is 400–900 words, each of them its own display item, and each one was
+// a Canvas.drawText from Kotlin — a JNI crossing, a String marshalled across it
+// and a shaping lookup — on every frame of every drag. What may be baked into
+// that recording and what may not is the whole risk of it: ChapterPaintKey
+// enumerates every input, and the washes, the note dots and the pinned span stay
+// LIVE beneath the replay so their z-order holds and a tap costs no re-record.
+//
+// The chapters just behind the reader stay laid out in a small LRU
+// (CHAPTER_CACHE), keyed by everything the line-breaker saw, so a back-swipe
+// repaints instead of re-laying out. That cache OWNS every native handle in it.
+//
 // A laid-out chapter is a native handle, and the layout effect is cancelled every
 // time a reader turns a page before the last one finished. Every allocation goes
 // through publishOrClose, which either hands the handle to the pane or frees it —
@@ -25,6 +38,7 @@ package dev.plumbline.ui
 
 import android.content.Context
 import android.graphics.Paint
+import android.graphics.Picture
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.Orientation
@@ -74,6 +88,7 @@ import kotlinx.coroutines.withContext
 import java.io.Closeable
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 
@@ -83,6 +98,18 @@ import kotlin.math.min
 // "lots of whitespace" feedback (2026-07-24) — so both scale by density here.
 private const val MARGIN_DP = 28f      // GTK MARGIN — all sides
 private const val MAX_COLUMN_DP = 720f // GTK MAX_COLUMN
+
+/** How many laid-out chapters to keep. Two is what a back-swipe needs (the page
+ *  on screen and the one behind it); three covers swiping back and forth over a
+ *  boundary without ever paying for the layout twice. It stops there because an
+ *  entry is not free: ~327 bytes per display item on the JVM (measured) plus
+ *  ~185 native, which is ~350 KB for an average 691-item chapter and ~1.3 MB for
+ *  Psalm 119's 2,643 — a phone would not thank us for ten of those.
+ *
+ *  It may never drop below 2. The chapter on screen is the most recently used
+ *  entry and eviction takes the least recently used, so 2 is the smallest bound
+ *  at which the pane cannot free the page it is painting (see [ChapterCache]). */
+internal const val CHAPTER_CACHE = 3
 
 /** A pinned word span (single tap sets a one-word anchor; parity-lite with the
  *  desktop pin — full widen-on-second-tap is a TODO). */
@@ -180,8 +207,13 @@ fun ReaderPane(
     // A single space's advance, measured as the desktop does ("n n" − "nn").
     val space = max(1f, regular.measureText("n n") - regular.measureText("nn"))
 
-    var dl by remember { mutableStateOf<DisplayList?>(null) }
-    var chapterHandle by remember { mutableStateOf<Chapter?>(null) }
+    // The chapter on screen, and the small LRU that owns it along with the ones
+    // just behind it. `current` is always the cache's most recently used entry —
+    // that is the discipline the cache's safety rests on, so publish through
+    // `show` and nowhere else.
+    val chapters = remember { ChapterCache<ChapterKey, LaidOutChapter>(CHAPTER_CACHE) }
+    var current by remember { mutableStateOf<LaidOutChapter?>(null) }
+    val dl = current?.list
     var problem by remember { mutableStateOf<String?>(null) }
     var pin by remember { mutableStateOf<PinSpan?>(null) }
     var noteVerses by remember { mutableStateOf<Set<Int>>(emptySet()) }
@@ -204,8 +236,9 @@ fun ReaderPane(
     var viewportH by remember { mutableFloatStateOf(0f) }
     var swipeDx by remember { mutableFloatStateOf(0f) }   // accumulated horizontal drag
 
-    // Free the native display list when this pane leaves the tree.
-    DisposableEffect(Unit) { onDispose { chapterHandle?.close() } }
+    // Free every native display list when this pane leaves the tree — the cache
+    // holds the one on screen too, so this is the only place they are all freed.
+    DisposableEffect(Unit) { onDispose { chapters.close() } }
 
     BoxWithConstraints(modifier.fillMaxSize()) {
         val widthPx = with(density) { maxWidth.toPx() }
@@ -213,10 +246,42 @@ fun ReaderPane(
         val column = min(widthPx - 2 * sidePx, with(density) { MAX_COLUMN_DP.dp.toPx() })
         val originX = (widthPx - column) / 2f
 
+        // Everything the core's line-breaker will see. ONE list, used twice — it
+        // is what re-triggers the layout and what keys the cache — so the two can
+        // never drift apart and hand back a chapter laid out for other inputs.
+        val chapterKey = ChapterKey(
+            book = book,
+            chapter = chapter,
+            column = column,
+            fontPx = fontPx,
+            lineHeight = lineH,
+            spaceWidth = space,
+            versePerLine = versePerLine,
+            akjvOverlay = akjvOverlay,
+        )
+
+        // Publish a laid-out chapter, and make it the cache's most recent entry
+        // in the same breath. Resets exactly as a fresh layout always has: to the
+        // top, with no pin. The cache is there to save the layout, not to
+        // remember where the reader was.
+        fun show(laid: LaidOutChapter) {
+            current = laid
+            problem = null
+            scroll.floatValue = 0f
+            pin = null
+        }
+
         // (Re)lay out the chapter whenever an input that affects it changes
         // (margin/spacing change the column width + rhythm, so re-lay out too).
-        LaunchedEffect(book, chapter, widthPx, fontPx, versePerLine, sideMargin, lineSpacing, akjvOverlay) {
+        LaunchedEffect(chapterKey) {
             if (widthPx < 60f) return@LaunchedEffect
+            // A back-swipe: the chapter is still laid out, so there is no native
+            // line-break and no JSON parse to do — just show it again.
+            val cached = chapters.get(chapterKey)
+            if (cached != null) {
+                show(cached)
+                return@LaunchedEffect
+            }
             val cfg = PlumblineLayoutConfig.ByValue().apply {
                 width = column
                 lineHeight = lineH
@@ -251,12 +316,17 @@ fun ReaderPane(
                 },
                 derive = { chap -> parseWire<DisplayList>(chap.Json()) },
                 publish = { chap, parsed ->
-                    chapterHandle?.close()
-                    chapterHandle = chap; dl = parsed; problem = null; scroll.floatValue = 0f; pin = null
+                    // The cache takes ownership here — of this handle, and of the
+                    // chapter this one replaces, which stays laid out for the
+                    // swipe back. Nothing else in the pane closes a handle.
+                    val laid = LaidOutChapter(chap, parsed)
+                    chapters.put(chapterKey, laid)
+                    show(laid)
                 },
                 onProblem = {
-                    chapterHandle?.close()
-                    chapterHandle = null; dl = null; problem = it.message ?: "layout failed"
+                    // The chapters already laid out are still good — this is one
+                    // chapter that would not lay out, not a poisoned cache.
+                    current = null; problem = it.message ?: "layout failed"
                 },
             )
         }
@@ -405,6 +475,23 @@ fun ReaderPane(
             out
         }
 
+        // And the text, recorded once and replayed per frame. Every input to that
+        // recording is named in the key — read ChapterPaintKey before adding
+        // anything to recordChapter, because what is missing from the key is what
+        // stays on screen after it changes.
+        val paintKey = ChapterPaintKey(
+            layout = Same(dl),
+            fonts = Same(typefaces),
+            fontPx = fontPx,
+            textH = textH,
+            ascent = fm.ascent,
+            inks = inks,
+        )
+        val recorder = remember { Recorded<Picture>() }
+        val chapterPicture = dl?.let { list ->
+            recorder.of(paintKey) { recordChapter(list, regular, italic, bold, inks, textH, fm.ascent) }
+        }
+
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
@@ -434,10 +521,10 @@ fun ReaderPane(
                         swipeDx = 0f
                     },
                 )
-                .pointerInput(chapterHandle) {
+                .pointerInput(current) {
                     detectTapGestures(
                         onTap = { pos ->
-                            val chap = chapterHandle ?: return@detectTapGestures
+                            val chap = current?.handle ?: return@detectTapGestures
                             val x = pos.x - originXNow.value
                             val y = pos.y - marginPx + scroll.floatValue
                             val hj = runCatching {
@@ -449,7 +536,7 @@ fun ReaderPane(
                             onWordTap(hit)
                         },
                         onLongPress = { pos ->
-                            val verse = verseAt(dl, pos, originXNow.value, scroll.floatValue, marginPx, book, chapter, engine, chapterHandle)
+                            val verse = verseAt(dl, pos, originXNow.value, scroll.floatValue, marginPx, book, chapter, engine, current?.handle)
                             if (verse != null) onVerseLongPress(verse)
                         },
                     )
@@ -457,8 +544,10 @@ fun ReaderPane(
         ) {
             drawRect(palette.paper, size = size)
 
-            val list = dl
-            if (list == null) {
+            // The recording exists exactly when the chapter does (it is derived
+            // from the same `dl` a line above), so the two are one question.
+            val picture = chapterPicture
+            if (picture == null) {
                 // "loading…" / an error, at the top margin.
                 drawContext.canvas.nativeCanvas.drawText(
                     problem ?: "loading…", marginPx, marginPx - fm.ascent, problemPaint,
@@ -476,9 +565,16 @@ fun ReaderPane(
             val viewH = size.height
 
             translate(left = originX, top = marginPx - scrollY) {
-                // Same viewport cull the text uses (§5): a wash/band for an item
-                // scrolled off-screen must not paint — otherwise it lands over the
-                // chrome above the pane on scroll. clipToBounds is the safety net.
+                // The three live layers, in the order they have always painted and
+                // all of them UNDER the recorded text (§5). They stay live because
+                // they are tens of rectangles that change without a re-layout — a
+                // tap moves the pin, a search moves the bands — and re-recording
+                // 400–900 words for one of those would give the frame back the
+                // cost this whole arrangement removes.
+                //
+                // Each still culls to the viewport: a wash for an item scrolled
+                // off-screen must not paint, or it lands over the chrome above the
+                // pane on scroll. clipToBounds is the safety net.
                 fun onScreen(y: Float, h: Float) = y + h >= top && y <= top + viewH
 
                 // 1. Search hits — a soft band per line.
@@ -501,54 +597,100 @@ fun ReaderPane(
                     drawCircle(color = palette.gutterDot, radius = 5f, center = Offset(d.cx, d.cy))
                 }
 
-                // 5. The text itself.
-                val canvas = drawContext.canvas.nativeCanvas
-                for (it in list.items) {
-                    if (it.y + it.h < top || it.y > top + viewH) continue
-                    val dyTop = it.y + (it.h - textH) * 0.5f
-                    val baseline = dyTop - fm.ascent
-
-                    if (it.kind == "verseNumber") {
-                        bold.color = inks.gold
-                        canvas.drawText(it.text, it.x, baseline, bold)
-                        continue
-                    }
-                    val flags = it.flags
-                    val added = flags and PlumblineFlags.ADDED != 0
-                    val divine = flags and PlumblineFlags.DIVINE != 0
-                    val title = flags and PlumblineFlags.TITLE != 0
-                    val paint = if (added) italic else regular
-                    paint.color = when {
-                        added -> inks.added
-                        divine -> inks.divine
-                        title -> inks.title
-                        else -> inks.ink
-                    }
-                    canvas.drawText(it.text, it.x, baseline, paint)
-                    // NO mark for a Strong's-tagged word. There used to be a
-                    // faint gold rule under every one, and since most words
-                    // carry a Strong's number it amounted to underlining the
-                    // Bible: noise that told the reader nothing they act on.
-                    // Whether a word answers when tapped is learned once, not
-                    // repeated by the page (2026-07-28). Web twin: paint.ts.
-                    //
-                    // The AKJV overlay's mark: DOTTED, at the natural underline
-                    // depth — it sat lower while it had to clear the Strong's
-                    // rule, and moved up when that went. Not bold or grey —
-                    // italic already means "supplied by the translator", and at
-                    // 6.9% of words a heavy mark reads as a ransom note.
-                    if (flags and PlumblineFlags.RERENDERED != 0) {
-                        var dx = it.x
-                        val dy = it.y + it.h - 3f
-                        while (dx < it.x + it.w) {
-                            drawRect(palette.gold, Offset(dx, dy), Size(1.5f, 1f))
-                            dx += 4f
-                        }
-                    }
-                }
+                // 5. The text itself — one call, whatever the chapter's length.
+                // The per-word loop, and the viewport cull that went with it, are
+                // inside the recording now (recordChapter); Skia rejects the lines
+                // off-screen during playback, in native code, per frame.
+                drawContext.canvas.nativeCanvas.drawPicture(picture)
             }
         }
     }
+}
+
+// ── the chapter, recorded once ──────────────────────────────────────────────
+
+/**
+ * Record a laid-out chapter's text into a [Picture]: the verse numbers, the
+ * words, and the overlay's dotted mark, in the display list's own coordinate
+ * space (the pane translates for the margin and the scroll when it replays).
+ *
+ * Painted straight, a screenful is 400–900 `Canvas.drawText` calls per frame —
+ * a JNI crossing, a Java String marshalled across it and a shaping lookup for
+ * every word, sixty times a second while a thumb is moving. Recorded, the
+ * shaping happens once and a frame is a single `drawPicture`.
+ *
+ * Which is why what goes in here is load-bearing: a frame replays this without
+ * consulting anything, so anything drawn here that changes without a re-record
+ * is a chapter that stays on screen after the thing that changed it. Every
+ * input this function reads is named in [ChapterPaintKey]; add nothing here
+ * without adding it there.
+ */
+private fun recordChapter(
+    list: DisplayList,
+    regular: Paint,
+    italic: Paint,
+    bold: Paint,
+    inks: ReaderInks,
+    textH: Float,
+    ascent: Float,
+): Picture {
+    val picture = Picture()
+    // The recording's size is a CULL HINT, not a clip — no bounding-box hierarchy
+    // is built for it, so playback still draws what falls outside — but a hint
+    // that lies is worth nothing: this is the whole document, plus slack for the
+    // last dot of an overlay mark at the right edge.
+    val canvas = picture.beginRecording(
+        ceil(list.width).toInt() + 4,
+        ceil(list.height).toInt() + 4,
+    )
+    // The overlay's dotted rule gets its own paint: the text paints carry
+    // typefaces and this is a filled 1.5×1 box. Anti-aliased, because the Compose
+    // drawRect it replaces was.
+    val mark = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = inks.gold }
+    for (it in list.items) {
+        val dyTop = it.y + (it.h - textH) * 0.5f
+        val baseline = dyTop - ascent
+
+        if (it.kind == "verseNumber") {
+            bold.color = inks.gold
+            canvas.drawText(it.text, it.x, baseline, bold)
+            continue
+        }
+        val flags = it.flags
+        val added = flags and PlumblineFlags.ADDED != 0
+        val divine = flags and PlumblineFlags.DIVINE != 0
+        val title = flags and PlumblineFlags.TITLE != 0
+        val paint = if (added) italic else regular
+        // Safe to mutate a shared Paint between draws: a recording COPIES the
+        // paint into each op, so the colour set here is the colour that replays.
+        paint.color = when {
+            added -> inks.added
+            divine -> inks.divine
+            title -> inks.title
+            else -> inks.ink
+        }
+        canvas.drawText(it.text, it.x, baseline, paint)
+        // NO mark for a Strong's-tagged word. There used to be a faint gold rule
+        // under every one, and since most words carry a Strong's number it
+        // amounted to underlining the Bible: noise that told the reader nothing
+        // they act on. Whether a word answers when tapped is learned once, not
+        // repeated by the page (2026-07-28). Web twin: paint.ts.
+        //
+        // The AKJV overlay's mark: DOTTED, at the natural underline depth — it
+        // sat lower while it had to clear the Strong's rule, and moved up when
+        // that went. Not bold or grey — italic already means "supplied by the
+        // translator", and at 6.9% of words a heavy mark reads as a ransom note.
+        if (flags and PlumblineFlags.RERENDERED != 0) {
+            var dx = it.x
+            val dy = it.y + it.h - 3f
+            while (dx < it.x + it.w) {
+                canvas.drawRect(dx, dy, dx + 1.5f, dy + 1f, mark)
+                dx += 4f
+            }
+        }
+    }
+    picture.endRecording()
+    return picture
 }
 
 /** The verse under a tap: the hit word's verse, else the nearest verse-number by
@@ -581,6 +723,194 @@ private fun verseAt(
         if (d < bestD) { bestD = d; best = it }
     }
     return best?.refOf(book, chapter)
+}
+
+// ── what a recording depends on, and when it is stale ───────────────────────
+
+/**
+ * Reference identity as a value: `==` on the wrapper asks "the very same
+ * object?".
+ *
+ * That is both the question a paint key wants — a re-layout produces a NEW
+ * display list, and the same object is by definition the same words in the same
+ * boxes — and the only cheap one. `DisplayList` is a data class, so its own `==`
+ * walks all ~700 items of an average chapter, and a key is compared on every
+ * recomposition.
+ */
+internal class Same(val of: Any?) {
+    override fun equals(other: Any?) = other is Same && of === other.of
+    override fun hashCode() = System.identityHashCode(of)
+    override fun toString() = "Same@${Integer.toHexString(System.identityHashCode(of))}"
+}
+
+/**
+ * Everything the recorded chapter [Picture] is made of. A frame replays that
+ * recording without looking at any of this, so an input missing HERE is text
+ * that stays on screen after the thing that changed it — a stale chapter, which
+ * is a far worse bug than the per-frame cost the recording removes.
+ *
+ * The inputs, and why each is its own field:
+ *
+ *  - [layout] — the display list, by reference. It carries every layout input
+ *    with it: book, chapter, column width, line spacing, verse-per-line and the
+ *    AKJV overlay all reach the page only by producing a new one.
+ *  - [fonts] — the typefaces. Loaded once per pane today and so constant, keyed
+ *    anyway: the day a face becomes a reader pref is not the day to remember
+ *    this list existed.
+ *  - [fontPx] — the paints' text size. NOT covered by [layout]: the paints
+ *    change in the composition that reads the new pref, the display list only
+ *    when the background layout lands, and between those two the page must be
+ *    redrawn at the new size.
+ *  - [textH] / [ascent] — the font metrics the baseline arithmetic uses.
+ *  - [inks] — the palette's five text colours, packed. THE input with no layout
+ *    behind it: a theme change re-lays out nothing, so this field alone is what
+ *    repaints the chapter in the new ink.
+ *
+ * What is deliberately NOT here, because it is not recorded: the scroll offset
+ * (a draw-phase read, applied as a translate over the replay), the search bands,
+ * the note dots and the pinned span. Those three paint live beneath the picture
+ * — they are tens of rectangles, they keep their z-order that way, and a tap
+ * that moves the pin must not re-record 900 words. Move any of them into
+ * [recordChapter] and its input belongs in this key.
+ */
+internal data class ChapterPaintKey(
+    val layout: Same,
+    val fonts: Same,
+    val fontPx: Float,
+    val textH: Float,
+    val ascent: Float,
+    val inks: ReaderInks,
+)
+
+/**
+ * A recording and the key it was made for: [of] hands back the recording,
+ * re-making it exactly when the key changes.
+ *
+ * The pane could lean on Compose's `remember(key)` for this. It doesn't, because
+ * then "an input changed, so the chapter was re-recorded" would be a fact about
+ * Compose rather than something this repo can put a JVM test on — and the cost
+ * of getting it wrong is a page that lies to the reader. ChapterPaintKeyTest
+ * drives this class directly.
+ */
+internal class Recorded<T : Any> {
+    private var key: ChapterPaintKey? = null
+    private var value: T? = null
+
+    /** How many recordings have actually been made — what the tests count. */
+    var records: Int = 0
+        private set
+
+    fun of(key: ChapterPaintKey, record: (ChapterPaintKey) -> T): T {
+        val held = value
+        if (held != null && this.key == key) return held
+        val made = record(key)
+        this.key = key
+        value = made
+        records++
+        return made
+    }
+}
+
+// ── the chapters just behind the reader ─────────────────────────────────────
+
+/**
+ * What identifies a laid-out chapter: the passage, plus every input the core's
+ * line-breaker saw.
+ *
+ * [column] already folds the pane's width and the reader's side margin — and
+ * only those two, because the margin moves the text sideways at DRAW time, so a
+ * margin change that leaves the column clamped at MAX_COLUMN correctly reuses
+ * the layout. [lineHeight] folds the text size and the line-spacing pref,
+ * [spaceWidth] the text size and the typeface, and the rest of
+ * `PlumblineLayoutConfig` is derived from those two. [fontPx] is redundant with
+ * them in all practical cases and kept regardless: a cached layout painted at
+ * another size is mangled text, and the field costs nothing.
+ */
+internal data class ChapterKey(
+    val book: String,
+    val chapter: Int,
+    val column: Float,
+    val fontPx: Float,
+    val lineHeight: Float,
+    val spaceWidth: Float,
+    val versePerLine: Boolean,
+    val akjvOverlay: Boolean,
+)
+
+/** A chapter the core has laid out: the native display list (which hit-tests
+ *  taps, and which only [close] frees) and the parsed copy the pane paints. */
+internal class LaidOutChapter(val handle: Chapter, val list: DisplayList) : Closeable {
+    override fun close() = handle.close()
+}
+
+/**
+ * The last few laid-out chapters, least recently used first.
+ *
+ * A back-swipe goes to a chapter the reader was on seconds ago, and re-reaching
+ * it means a native line-break of every word plus a JSON parse of the result.
+ * Keeping it instead costs ~350 KB for an average chapter (691 display items at
+ * a measured ~327 bytes on the JVM plus ~185 native) and ~1.3 MB for Psalm 119's
+ * 2,643 items, which is why this is bounded at [CHAPTER_CACHE] and not at
+ * "chapters visited".
+ *
+ * The cache OWNS every entry: an evicted one is closed here, and nothing else in
+ * the pane closes a handle. That is safe only because of one discipline, which
+ * the pane keeps and ChapterPaintCacheTest pins — the chapter on screen is
+ * always the entry most recently [get] or [put], and eviction only ever takes
+ * the least recent. With [capacity] of two or more the entry being painted and
+ * hit-tested therefore cannot be the victim; at one it would be freed under the
+ * reader's thumb, which is why the constructor refuses.
+ *
+ * A change that re-shapes every chapter — the text size, the column — strands the
+ * entries laid out the old way: they can never be asked for again, and they leave
+ * as the next few layouts push them out. Bounded by [capacity] and so not worth a
+ * mechanism; deliberately not a sweep, because the only entry it would be safe to
+ * close early is the one the pane is painting.
+ */
+internal class ChapterCache<K : Any, V : Closeable>(private val capacity: Int) : Closeable {
+
+    init {
+        require(capacity >= 2) {
+            "a chapter cache of $capacity would evict the chapter on screen"
+        }
+    }
+
+    /** Least recently used first — a LinkedHashMap keeps insertion order, and
+     *  re-inserting on every touch is the whole LRU at these sizes. */
+    private val entries = LinkedHashMap<K, V>()
+
+    /** The entry for [key], now the most recently used. */
+    fun get(key: K): V? {
+        val held = entries.remove(key) ?: return null
+        entries[key] = held
+        return held
+    }
+
+    /** Take ownership of [value] as the most recently used entry, closing the
+     *  least recently used one if that puts the cache over [capacity]. */
+    fun put(key: K, value: V) {
+        // Replacing a key: whatever was there can no longer be reached, so it is
+        // freed here. The pane never arrives this way — it looks a key up before
+        // laying it out — but a leak that depends on a call order is not a leak
+        // worth keeping.
+        entries.remove(key)?.let { if (it !== value) it.close() }
+        entries[key] = value
+        while (entries.size > capacity) {
+            val oldest = entries.keys.first()
+            entries.remove(oldest)?.close()
+        }
+    }
+
+    /** Keys, least recently used first — the tests' window on the ordering. */
+    fun lruOrder(): List<K> = entries.keys.toList()
+
+    val size: Int get() = entries.size
+
+    /** Free every chapter: the pane has left the tree. */
+    override fun close() {
+        for (held in entries.values) held.close()
+        entries.clear()
+    }
 }
 
 // ── the native handle: published or closed, never dropped ───────────────────
@@ -658,13 +988,26 @@ private class LayoutDot(val cx: Float, val cy: Float, val y: Float, val h: Float
 
 /** The reader's inks as packed ARGB — what android.graphics.Paint takes. Built
  *  once per palette: converting a Compose [Color] per word per frame was ~900
- *  conversions a frame for five values that change only with the theme. */
-private class ReaderInks(palette: ReaderPalette) {
-    val ink = palette.ink.toArgbInt()
-    val added = palette.inkFaded.toArgbInt()
-    val divine = palette.divine.toArgbInt()
-    val title = palette.titleInk.toArgbInt()
-    val gold = palette.gold.toArgbInt()
+ *  conversions a frame for five values that change only with the theme.
+ *
+ *  A data class on purpose. These five numbers are the only trace the theme
+ *  leaves in [ChapterPaintKey], and comparing them by VALUE is what makes a
+ *  theme change re-record the chapter — identity would not, because the palette
+ *  object is rebuilt whether or not its colours moved. */
+internal data class ReaderInks(
+    val ink: Int,
+    val added: Int,
+    val divine: Int,
+    val title: Int,
+    val gold: Int,
+) {
+    constructor(palette: ReaderPalette) : this(
+        ink = palette.ink.toArgbInt(),
+        added = palette.inkFaded.toArgbInt(),
+        divine = palette.divine.toArgbInt(),
+        title = palette.titleInk.toArgbInt(),
+        gold = palette.gold.toArgbInt(),
+    )
 }
 
 /** One verse's vertical landmarks in a laid-out chapter, in the display list's
