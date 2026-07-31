@@ -125,7 +125,13 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   const engineBytes = prefetchEngine();
   void engineBytes.catch(() => {});
 
-  onPhase({ phase: "download", fraction: 0 });
+  // PREPARE, not download. The ladder below has not decided anything yet, and on
+  // a warm boot it never asks the network at all — so opening with
+  // "Fetching scripture data — 0%" told the common case a lie about itself
+  // (audit D-11), and told it for the whole of the pin read and the stage-1
+  // depot read. `download` is announced at the one place a download really
+  // starts: the cold rung.
+  onPhase({ phase: "prepare" });
   // THE LADDER. First rung that works, wins.
   //
   //  1. A pin whose stage-1 files are all in the depot → zero network requests.
@@ -154,6 +160,9 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   }
 
   if (!manifest || !pack) {
+    // THE COLD RUNG, and the only place the reader is told a download is
+    // happening — because it is the only place one does.
+    onPhase({ phase: "download", fraction: 0 });
     // The text arrives as the parsed-corpus cache — the pack's copy on a first
     // visit, this device's own copy afterwards. Either way the engine never
     // parses JSONL (8.4 s on a 2026 flagship phone; 2026-07-26 trace) and never

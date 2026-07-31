@@ -276,9 +276,24 @@ test("an engine binary that will not download reaches the reader, not an unhandl
     // boot RPC, onto the splash in the browser's own words, with a Retry.
     const shown = page.locator(".splash .error");
     await expect(shown).toBeVisible({ timeout: 120_000 });
-    await expect(shown).toContainText("plumbline_ffi.wasm");
-    await expect(shown).toContainText("HTTP 503");
     await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+
+    // The RAW string moved one disclosure away on 2026-07-30 (audit D-11): the
+    // reader now gets a sentence they can act on and `<details>` keeps the
+    // machine words. This test's subject is unchanged — that the failure is
+    // DELIVERED, naming the file and the status, because that is what a bug
+    // report pastes — so it follows the string rather than asserting where it
+    // used to sit. Both halves matter: `.error` must NOT be the raw exception,
+    // and the raw must still be somewhere on the screen.
+    expect(
+      await shown.textContent(),
+      "the reader was shown the raw exception instead of a sentence they can act on",
+    ).not.toContain("HTTP 503");
+    const raw = page.locator(".splash details pre");
+    await expect(raw, "the raw string is not reachable anywhere on the error screen").toContainText(
+      "plumbline_ffi.wasm",
+    );
+    await expect(raw).toContainText("HTTP 503");
 
     // Nothing may have reached the runtime unhandled. The splash above proves the
     // error was DELIVERED; this proves it was delivered ONCE, down the path the

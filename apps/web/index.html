@@ -74,6 +74,72 @@
     <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon-180.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="stylesheet" href="./fonts.css" />
+
+    <!-- THE PAGE'S COLOURS BEFORE ANY OF THE APP EXISTS.
+         `session.applyTheme()` has always written the resolved palette to
+         localStorage "so the boot snapshot can paint before the engine exists" —
+         and nothing has read it since the boot snapshot was removed. So every
+         launch painted cream paper and then repainted in the reader's real
+         theme once the engine answered: a dark-theme reader got a full-screen
+         cream flash on EVERY launch, warm boots included (audit D-11).
+
+         Two layers, cheapest first:
+           1. these defaults, so a first-ever visit (nothing stored yet) still
+              opens in the scheme the device asked for — the same bet the
+              noscript block below makes, and the same one `ThemeChoice::System`
+              makes once the engine is up;
+           2. the inline script, which overrides them with last session's ACTUAL
+              resolved palette (a reader on Night, or on a theme that disagrees
+              with the OS, is not served by a media query).
+         Both are then overwritten by `applyTheme()` the moment the engine
+         answers, so neither can be wrong for longer than the splash.
+
+         Only the roles the splash and the bare page paint: paper, ink, faded,
+         gold, rule, and tierResearch (the app's one alarm colour, which the boot
+         error is written in — and a boot error is exactly the case where nothing
+         has been stored yet). Values are Theme::Light / Theme::Dark from
+         crates/core/src/theme.rs, and `e2e/splash.spec.ts` re-derives every one
+         of them from that file rather than trusting this comment. -->
+    <style>
+      :root {
+        --paper: #fcf9f4;
+        --ink: #211f1a;
+        --faded: #6c665d;
+        --gold: #7d632c;
+        --rule: #d8cba8;
+        --tierResearch: #aa4838;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #1f1b16;
+          --ink: #e8e0d0;
+          --faded: #9a9385;
+          --gold: #c8a24e;
+          --rule: #4a4234;
+          --tierResearch: #d17261;
+        }
+      }
+    </style>
+    <!-- A classic, blocking, inline script ON PURPOSE: the whole value of this
+         is that it runs before the first paint, and a module script (or one in
+         the bundle) is deferred until after the document has been laid out —
+         which is exactly the flash it exists to remove. It is also why it stays
+         here and not in App.svelte: Svelte mounts long after the browser has
+         already shown the reader a page. -->
+    <script>
+      try {
+        var stored = JSON.parse(localStorage.getItem("plumbline:palette") || "null");
+        // Every string role, not a hand-picked five: the writer is
+        // `applyTheme()`, which sets one custom property per string field, and
+        // reproducing its subset here would be a second list to keep in step.
+        if (stored)
+          for (var role in stored)
+            if (typeof stored[role] === "string")
+              document.documentElement.style.setProperty("--" + role, stored[role]);
+      } catch (e) {
+        /* storage blocked or unparseable: the defaults above still paint */
+      }
+    </script>
   </head>
   <body>
     <div id="app"></div>

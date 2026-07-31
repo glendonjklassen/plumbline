@@ -9,6 +9,7 @@
   // and reading text you can't touch reads as broken, not fast (feedback
   // 2026-07-26). Honest progress beats a decoy — the work now goes into
   // making the wait short rather than disguising it.
+  import { bootErrorCopy } from "./engine/bootError";
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
   import { churchFromQuery, hasChurch, sharedAtRef, startsAsNewBeliever } from "./shell/church";
   import { initSession, type Session } from "./state/session.svelte";
@@ -16,7 +17,11 @@
   import FirstRun from "./shell/FirstRun.svelte";
   import Shell from "./shell/Shell.svelte";
 
-  let phase = $state<WorkerProgress>({ phase: "download", fraction: 0 });
+  // PREPARE, not download. Boot's own first message says the same thing now
+  // (engine/boot.ts) — this is the value the splash paints in the milliseconds
+  // before the worker has said anything at all, and a warm boot, which downloads
+  // nothing, must not open by claiming to be fetching (audit D-11).
+  let phase = $state<WorkerProgress>({ phase: "prepare" });
   let error = $state<string | null>(null);
   let session = $state<Session | null>(null);
 
@@ -196,8 +201,15 @@
     <h1>Plumbline</h1>
     <p class="sub">The Holy Bible</p>
     {#if error}
-      <p class="error">{error}</p>
+      <!-- The reader gets a sentence they can act on; the RAW string stays one
+           disclosure away, because it is what a bug report pastes and the only
+           evidence of which rung of the boot ladder broke (audit D-11). -->
+      <p class="error">{bootErrorCopy(error)}</p>
       <button onclick={() => location.reload()}>Retry</button>
+      <details>
+        <summary>Technical details</summary>
+        <pre>{error}</pre>
+      </details>
     {:else}
       <div class="bar">
         <div
@@ -207,6 +219,12 @@
         ></div>
       </div>
       <p class="detail">{phaseLabel}</p>
+      {#if phase.phase === "download"}
+        <!-- Only while something is actually being downloaded — which, now that
+             boot opens in `prepare`, is only ever a cold visit. Saying it on a
+             warm boot would be a bill for a purchase already made. -->
+        <p class="once">≈3 MB, one time — then Plumbline works with no connection</p>
+      {/if}
     {/if}
   </div>
 {/if}
@@ -231,12 +249,19 @@
     align-items: center;
     justify-content: center;
     gap: 10px;
-    background: #fcf9f4;
-    color: #211f1a;
+    /* EVERY COLOUR HERE IS THE PALETTE'S, not a literal (audit D-11). These were
+       the light theme's hexes, so a dark-theme reader got a full-screen cream
+       flash on every launch — warm boots included — before `applyTheme()`
+       arrived with the truth. The variables are set in index.html's head, from
+       last session's stored palette, BEFORE the first paint; the fallbacks after
+       the comma are the light theme's own (crates/core/src/theme.rs) and only
+       ever apply if that inline block has been removed. */
+    background: var(--paper, #fcf9f4);
+    color: var(--ink, #211f1a);
   }
   .mark {
     font-size: 28px;
-    color: #9e7d38;
+    color: var(--gold, #7d632c);
   }
   h1 {
     font-weight: 500;
@@ -244,7 +269,7 @@
     letter-spacing: 0.04em;
   }
   .sub {
-    color: #8a8276;
+    color: var(--faded, #6c665d);
     font-style: italic;
   }
   .bar {
@@ -252,12 +277,12 @@
     height: 5px;
     margin-top: 18px;
     border-radius: 3px;
-    background: #ece5d8;
+    background: var(--rule, #d8cba8);
     overflow: hidden;
   }
   .fill {
     height: 100%;
-    background: #9e7d38;
+    background: var(--gold, #7d632c);
     border-radius: 3px;
     transition: width 0.15s ease;
   }
@@ -275,18 +300,48 @@
   }
   .detail {
     font-size: 13px;
-    color: #8a8276;
+    color: var(--faded, #6c665d);
+  }
+  /* Quieter than the phase line above it: it is reassurance, not progress. */
+  .once {
+    font-size: 12px;
+    color: var(--faded, #6c665d);
+    opacity: 0.85;
+    max-width: 32em;
+    text-align: center;
+    padding: 0 16px;
   }
   .error {
-    color: #b04a3a;
+    color: var(--tierResearch, #b04a3a);
     max-width: 40em;
     text-align: center;
+    padding: 0 16px;
   }
-  button {
+  .splash button {
     margin-top: 8px;
     padding: 6px 18px;
-    border: 1px solid #9e7d38;
+    border: 1px solid var(--gold, #7d632c);
     border-radius: 6px;
-    color: #9e7d38;
+    color: var(--gold, #7d632c);
   }
+  /* The raw string, one disclosure away. Monospace and scrollable because it is
+     meant to be READ and COPIED into a bug report, not skimmed. */
+  details {
+    max-width: min(48em, calc(100vw - 32px));
+    font-size: 12px;
+    color: var(--faded, #6c665d);
+  }
+  summary {
+    cursor: pointer;
+  }
+  details pre {
+    margin-top: 6px;
+    max-height: 8em;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    user-select: text;
+  }
+
 </style>
