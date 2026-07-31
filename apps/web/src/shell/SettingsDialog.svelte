@@ -235,18 +235,33 @@
   // appending to the boot trace (Strong's, warm steps, the analysis pack),
   // and the turn split describes whichever chapter was last laid out — turn
   // a few pages, then open this.
+  //
+  // Read with PERF OFF too, which is the whole of D-20: `fromPin` — did this
+  // launch come off the device with no request? — is measured by nothing, boot.ts
+  // just records the rung it took, and the `diagnostics` op is not PERF-gated
+  // either. So the bug-report header below reads the same in a release build as
+  // in a measuring one; with the flag off the numbers alongside it come back
+  // empty and zeroed, and `reportMeasurements` refuses to print them.
   let diag = $state<WorkerDiagnostics | null>(null);
   let copied = $state(false);
   $effect(() => {
-    if (!PERF || !s.showSettings) return;
+    if (!s.showSettings) return;
     // ONE round trip, so the trace, the stall total and the per-file costs are
     // all from the same instant. Three separate reads drift while the background
     // load is still running, which is exactly when someone is reading this.
-    void s.rpc.diagnostics().then((d) => {
-      diag = d;
-      s.bootTrace = d.trace;
-      s.turnTrace = d.turn;
-    });
+    void s.rpc
+      .diagnostics()
+      .then((d) => {
+        diag = d;
+        s.bootTrace = d.trace;
+        s.turnTrace = d.turn;
+      })
+      // A dead worker rejects every call, and this one now runs in every session
+      // rather than only in a measuring build. Nothing in the header needs it
+      // (version, build, engine and pack version are all held on this thread), so
+      // a failure here costs the reader one warm-boot note — it must not become an
+      // unhandled rejection while they are reporting the very crash that caused it.
+      .catch(() => {});
   });
 
   /** kilobytes, counts and milliseconds all shared one " ms" suffix, so the
@@ -257,15 +272,27 @@
     return " ms";
   }
 
-  /** The whole diagnostic picture as plain text, for pasting into a bug report.
-   *  Screenshots of this panel cost a round trip every time and cut off exactly
-   *  the rows that mattered (2026-07-28). */
-  function report(): string {
+  /** The header of a bug report: which build, which data, what kind of device.
+   *
+   *  NOT PERF-gated, and no line in here may become so (D-20). Every value below
+   *  is a fact the app knows whatever the perf switch says — so flipping PERF
+   *  cannot change one character of this, and a release build with measurement
+   *  off still pastes something answerable. While this lived inside the PERF
+   *  block the choice was to ship a debug build or to ship with nothing to paste.
+   *
+   *  Screenshots are not the fallback: they cost a round trip every time and cut
+   *  off exactly the rows that mattered (2026-07-28). */
+  function reportHeader(): string[] {
     const nav = navigator as any;
     const c = nav.connection ?? {};
     const L: string[] = [];
     L.push(`Plumbline ${__APP_VERSION__} · build ${__BUILD_ID__} · engine ${s.engineVersion}`);
-    L.push(`data pack ${diag?.packVersion ?? "?"}${diag?.fromPin ? " (warm: stage 1 off the device)" : ""}`);
+    // The pack version off the SESSION (it arrives in BootInfo), not out of the
+    // diagnostics round trip: the two are the same `manifest.version`, and this
+    // one is still there when the worker is gone — which is when a report matters
+    // most. `fromPin` has no such twin, and needs none: boot.ts records the rung
+    // it took whether or not anything is being timed.
+    L.push(`data pack ${s.packVersion || "?"}${diag?.fromPin ? " (warm: stage 1 off the device)" : ""}`);
     L.push("");
     L.push("DEVICE");
     L.push(`  ua              ${navigator.userAgent}`);
@@ -278,6 +305,19 @@
     L.push(`  screen          ${screen.width}x${screen.height} @${devicePixelRatio}`);
     L.push(`  storage used    ${offline?.bytesOnDevice ? mb(offline.bytesOnDevice) : "?"} · persisted ${offline?.persisted ?? "?"}`);
     L.push(`  pack files      ${offline?.totalFiles ?? "?"} · missing ${offline?.missing.length ?? "?"}`);
+    return L;
+  }
+
+  /** The measured half of a report — present only when this build measured
+   *  itself. Missing whole rather than zeroed: with PERF off the stall meter is
+   *  never started and no engine call is timed, so `total 0 ms across 0 stalls`
+   *  would read as a device that never stalled instead of one nobody watched, and
+   *  the boot trace would be just those pushes that happen not to be gated — a
+   *  trace missing its stages, which is worse than no trace. One line says which
+   *  kind of build it was, so nobody reads silence as good news. */
+  function reportMeasurements(): string[] {
+    if (!PERF) return ["", "(this build is not measuring itself — no boot trace, no stall meter)"];
+    const L: string[] = [];
     if (diag) {
       L.push("");
       L.push("ENGINE THREAD UNAVAILABLE (the stall meter)");
@@ -312,11 +352,21 @@
         for (const [k, v] of diag.turn) L.push(`  ${k.padEnd(34)} ${v}${unitOf(k)}`);
       }
     }
-    return L.join("\n");
+    return L;
   }
 
-  async function copyDiagnostics(): Promise<void> {
-    const text = report();
+  /** The whole paste: the facts first, then whatever was measured. */
+  function report(): string {
+    return [...reportHeader(), ...reportMeasurements()].join("\n");
+  }
+  /** Shown as well as copied. The clipboard can be refused (see below), and
+   *  "select the text and copy it by hand" needs text on the screen to select —
+   *  the diagnostic tables used to be that text, and they are gone in a release
+   *  build. Derived, so what the reader reads is what the button copies. */
+  const reportText = $derived(report());
+
+  async function copyReport(): Promise<void> {
+    const text = reportText;
     try {
       await navigator.clipboard.writeText(text);
       copied = true;
@@ -570,13 +620,29 @@
         The same zip restores on Android and the web. Restoring replaces items with the same
         name; everything else is kept.
       </p>
+      <hr />
+      <p class="label">Report a problem</p>
+      <!-- ALWAYS here, whether or not this build is measuring itself. This used to
+           live inside the PERF block below, so shipping with the perf switch off —
+           which is how it must ship — shipped with nothing to paste, and the only
+           other option was handing readers a debug build (D-20). -->
+      <p class="desc-note">
+        Which build you're running, which data pack, and what kind of device — the facts that make
+        a report answerable. Nothing about your notes, your study or your church is in it.
+      </p>
+      <div class="row">
+        <button class="action" onclick={copyReport}>{copied ? "Copied ✓" : "Copy bug report"}</button>
+      </div>
+      <details class="diag">
+        <summary>Show what gets copied</summary>
+        <pre class="report">{reportText}</pre>
+      </details>
       {#if PERF && s.bootTrace.length}
         <hr />
         <details class="diag">
+          <!-- The numbers only, and only in a measuring build: the button above
+               already copies them when they exist. -->
           <summary>Boot diagnostics — this device</summary>
-          <button class="action copy-diag" onclick={copyDiagnostics}>
-            {copied ? "Copied ✓" : "Copy diagnostics"}
-          </button>
           {#if diag}
             <p class="diag-sub">Engine thread unavailable</p>
             <table>
@@ -813,9 +879,21 @@
     font-variant-numeric: tabular-nums;
     color: var(--ink, #211f1a);
   }
-  .copy-diag {
-    margin-top: 8px;
-    align-self: flex-start;
+  /* The report itself, on screen: the answer to "what are you sending?" and the
+     fallback when the clipboard is refused, so it has to be selectable. */
+  .report {
+    margin-top: 6px;
+    max-height: 38vh;
+    overflow: auto;
+    white-space: pre-wrap;
+    /* The user-agent string is one ~130-character token with no spaces in it, and
+       without this it widens the dialog past the edge of a phone. */
+    overflow-wrap: anywhere;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--faded, #8a8276);
+    user-select: text;
   }
   .diag-note {
     margin-top: 4px;

@@ -214,9 +214,13 @@ sideload block is already fixed and guarded by a test.
   spec's scope table.
 - [ ] **[opus]** Wire the dead `packUpdated` signal to the existing update-toast
   wording; capture `beforeinstallprompt` → "Install" in the ≡ menu.
-- [ ] **[opus]** Decouple the pasteable bug-report header from `PERF`
+- [x] **[opus]** Decouple the pasteable bug-report header from `PERF`
   (`SettingsDialog.svelte:176-216`), then flip `PERF` off for release (its own
-  docstring says it shouldn't ship on).
+  docstring says it shouldn't ship on). **DONE 2026-07-30.** Flipping it off turned
+  two `app.spec.ts` tests red, correctly: the boot TRACE was PERF-gated in
+  `boot.ts` while every trace push in `engine.worker.ts` was not. The trace is the
+  flight recorder the suite reads, so it is ungated now; PERF keeps only what costs
+  per turn, per engine call or per text measurement.
 - [x] **[opus]** Weave connectors drawn ~23 px off: measure the nav strip with
   `bind:this` + ResizeObserver instead of the stale `NAV_H = 33` const
   (`ConnectorsOverlay.svelte:10`) — same pattern as `--bottomNavH`.

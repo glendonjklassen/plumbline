@@ -26,7 +26,6 @@ import { depotAvailable, depotHas, depotResponse } from "./depot";
 import { buildHome, dropLegacyIdxcache, type VirtualHome } from "./home";
 import { assetUrl, fetchManifest, fetchPack, fetchStageLocal, type PackManifest } from "./pack";
 import { manifestFromPin, readPin, writePin } from "./pin";
-import { PERF } from "./perf";
 import { StudyEngine } from "./StudyEngine";
 
 /** Where the engine binary lives — content-addressed on the build id, so a new
@@ -89,8 +88,24 @@ export interface BootResult {
 
 export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult> {
   const trace: [string, number][] = [];
+  // NOT PERF-gated, deliberately — and it used to be (fixed with D-20, when
+  // flipping PERF off for release turned two tests red and would have quietly
+  // hollowed out more).
+  //
+  // The trace is this app's FLIGHT RECORDER, not a measurement: which rung the
+  // boot took, whether the idxcache fast path fired, how many KB the home freed.
+  // `e2e/app.spec.ts` reads exactly those to prove "a first visit never parses the
+  // corpus" and "read pack files are freed", and the whole suite's
+  // `settleBackground` barrier polls it to know the background pipeline has gone
+  // quiet — which is why every trace push in `engine.worker.ts` was already
+  // ungated. This file was the inconsistent one.
+  //
+  // What PERF still gates is instrumentation that costs something per turn, per
+  // engine call or per text measurement: the per-turn cost split, the slow-call
+  // list, the stall meter, the crossing counter in the measure hot path, and the
+  // Settings diagnostics tables. This is a `performance.now()` pair per boot
+  // STAGE — about twenty of them, once.
   const timed = async <T>(label: string, f: () => T | Promise<T>): Promise<T> => {
-    if (!PERF) return f();
     const t0 = performance.now();
     const v = await f();
     trace.push([label, Math.round(performance.now() - t0)]);
@@ -161,7 +176,7 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   // the engine download IS the critical path, which is a different fix (a smaller
   // binary) and worth being able to tell apart on a real device.
   const handedOff = await timed("engine bytes wait (overlapped)", () => engineBytes);
-  if (PERF && !handedOff) trace.push(["engine bytes not stored — instantiate refetches", 1]);
+  if (!handedOff) trace.push(["engine bytes not stored — instantiate refetches", 1]);
   const wasm = await timed("wasm compile+instantiate", () => instantiate(home.root));
 
   onPhase({ phase: "open" });
@@ -197,13 +212,13 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   // and MOVES the bytes into the engine's own buffer, which every unvisited
   // chapter is then decoded out of. The node here is a pure duplicate of ~37 MB.
   const freed = home.evict(["data/kjv.jsonl.idxcache"]);
-  if (PERF && freed) trace.push(["home evict after open (KB)", Math.round(freed / 1024)]);
+  if (freed) trace.push(["home evict after open (KB)", Math.round(freed / 1024)]);
 
   // Reclaim the legacy IndexedDB copy of the corpus cache, but only now — after
   // an open that PROVED the depot can supply the text. Deleting it before that
   // would take away the one copy a device with an evicted depot still had.
   void dropLegacyIdxcache().then((n) => {
-    if (PERF && n) trace.push(["legacy IDB idxcache dropped (KB)", Math.round(n / 1024)]);
+    if (n) trace.push(["legacy IDB idxcache dropped (KB)", Math.round(n / 1024)]);
   });
 
   return { engine, wasm, home, manifest, packVersion: manifest.version, trace, fromPin };
