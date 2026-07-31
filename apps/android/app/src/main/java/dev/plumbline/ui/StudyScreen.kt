@@ -107,10 +107,12 @@ import dev.plumbline.Toc
 import dev.plumbline.TocBook
 import dev.plumbline.UserNote
 import dev.plumbline.WeaveLib
+import dev.plumbline.WeaveLink1
 import dev.plumbline.ConfigState
 import dev.plumbline.PlumblineJson
 import dev.plumbline.StudyConfig
 import dev.plumbline.parseWire
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -128,6 +130,13 @@ enum class Library { Threads, Tags, Weaves, Suggested, Guide, About }
 
 /** A one-field text-input authoring dialog (add tag / add thread / edit note). */
 private data class AuthorPrompt(val title: String, val initial: String, val onConfirm: (String) -> Unit)
+
+/** One word tap's whole answer, gathered in a single background read: the study
+ *  card, and what the plain-English overlay did to the tapped word. */
+private class WordStudy(val blocks: String?, val akjv: AkjvToken?)
+
+/** One weave tap's whole answer: where the reader lands, and the compare card. */
+private class WeaveOpened(val opening: WeaveOpening?, val blocks: String?)
 
 /**
  * The app root. Resolves a palette from the current theme and mounts [StudyScreen].
@@ -175,6 +184,10 @@ fun StudyScreen(
         runCatching { parseWire<Toc>(engine.TocJson()).books }.getOrElse { emptyList() }
     }
     val scope = rememberCoroutineScope()
+    // Who owns the study surface right now — see [StudyTurns] and [engineCall] at
+    // the foot of this file. Every engine call the reader's taps make goes through
+    // them, so a second tap can never be repainted by the first.
+    val turns = remember { StudyTurns() }
 
     // Persisted reader config (shared, cross-shell): last-viewed passage, reader
     // prefs, and reading history all restore from it.
@@ -355,19 +368,23 @@ fun StudyScreen(
         if (mode == UiMode.FoldFullscreen) secondPane = SecondPane.Study else studySheet = true
     }
 
+    // Reveal the surface and put it in its loading state — what every read that
+    // will paint a card does before it starts, so the tap answers on the frame it
+    // happened even when the card behind it is a cold corpus sweep.
+    fun beginStudy() {
+        revealStudy()
+        studyLoading = true
+    }
+
     // Produce a study block-list OFF the main thread, then show it. The word
     // study / concordance / weave producers can be heavy (they build the lazy
     // analytics on first use) — running them on the UI thread is the tap→load
     // lag. Reveal immediately (previous content stays until the new arrives).
     fun loadStudy(producer: () -> String?) {
-        revealStudy()
-        studyLoading = true
-        scope.launch {
-            val b = withContext(Dispatchers.Default) {
-                runCatching { synchronized(engine) { producer() } }.getOrNull()
-            }
-            if (b != null) studyBlocks = b
+        beginStudy()
+        scope.engineCall(engine, turns, producer) { blocks ->
             studyLoading = false
+            if (blocks != null) studyBlocks = blocks
         }
     }
 
@@ -376,18 +393,35 @@ fun StudyScreen(
     // canon heatmap cards inside the study pane.
     fun onWord(hit: Hit) {
         studyCode = hit.strongs.firstOrNull()
-        // What the overlay did to this word, if anything — shown under the
-        // headword and above the Strong's, because the codes are keyed to the
-        // KJV word. Only while the overlay is on: with it off there is nothing
-        // to explain.
-        studyAkjv = if (akjvOverlay) {
-            runCatching {
-                synchronized(engine) { engine.AkjvTokenJson(hit.verse, hit.tokenIndex.toInt()) }
-            }.getOrNull()?.let { runCatching { parseWire<AkjvToken>(it) }.getOrNull() }
-        } else {
-            null
+        val overlayOn = akjvOverlay
+        beginStudy()
+        // The card and the overlay header come back from ONE read: the header
+        // names the word THIS card is about, so the two must not be able to land
+        // out of order. The lookup itself is a span hit, but it takes the engine
+        // monitor, and on the main thread that waits out whatever else is holding
+        // it — a cold word study sweeps the corpus.
+        scope.engineCall(
+            engine, turns,
+            {
+                WordStudy(
+                    blocks = engine.WordStudyBlocks2Json(hit.verse, hit.tokenIndex.toInt(), gates),
+                    // What the overlay did to this word, if anything — shown under
+                    // the headword and above the Strong's, because the codes are
+                    // keyed to the KJV word. Only while the overlay is on: with it
+                    // off there is nothing to explain.
+                    akjv = if (overlayOn) {
+                        engine.AkjvTokenJson(hit.verse, hit.tokenIndex.toInt())
+                            ?.let { runCatching { parseWire<AkjvToken>(it) }.getOrNull() }
+                    } else {
+                        null
+                    },
+                )
+            },
+        ) { w ->
+            studyLoading = false
+            studyAkjv = w?.akjv
+            if (w?.blocks != null) studyBlocks = w.blocks
         }
-        loadStudy { engine.WordStudyBlocks2Json(hit.verse, hit.tokenIndex.toInt(), gates) }
     }
 
     // Navigate the reader to a refKey ("John 3:16"), scrolling the verse into view.
@@ -407,17 +441,33 @@ fun StudyScreen(
     // (product 2026-07-25, both shells — the web opens both in split panes):
     // the reader shows endpoint `a`; the fold's second pane picks up `b` so
     // flipping back to the Bible lands on the other side.
-    fun openWeavePassages(index: Int) {
-        val lib = engine.WeavesJson()?.let { j -> runCatching { parseWire<WeaveLib>(j) }.getOrNull() } ?: return
-        val links = lib.weaves.getOrNull(index)?.links ?: return
-        val link = links.firstOrNull { it.resolved } ?: links.firstOrNull() ?: return
-        goToRef(link.a)
-        val sp = link.b.lastIndexOf(' ')
-        val bBook = if (sp > 0) link.b.substring(0, sp) else return
-        val bCh = link.b.substring(sp + 1).substringBefore(':').toIntOrNull() ?: return
-        if (bBook != book || bCh != chapter) {
-            secondBook = bBook
-            secondChapter = bCh
+    //
+    // The library read and the compare card are ONE turn, because which passages
+    // and which card are one answer: split across two turns the second would
+    // cancel the first. [weaveOpening] is the whole decision, and it is pure.
+    fun openWeave(index: Int) {
+        studyCode = null
+        studyIsAbout = false
+        beginStudy()
+        scope.engineCall(
+            engine, turns,
+            {
+                WeaveOpened(
+                    opening = engine.WeavesJson()
+                        ?.let { j -> runCatching { parseWire<WeaveLib>(j) }.getOrNull() }
+                        ?.weaves?.getOrNull(index)?.links
+                        ?.let { weaveOpening(it) },
+                    blocks = engine.CompareBlocksJson(index, true),
+                )
+            },
+        ) { w ->
+            studyLoading = false
+            if (w == null) return@engineCall
+            w.opening?.let { o ->
+                goToRef(o.primary)
+                o.second?.let { s -> secondBook = s.book; secondChapter = s.chapter }
+            }
+            if (w.blocks != null) studyBlocks = w.blocks
         }
     }
 
@@ -440,15 +490,29 @@ fun StudyScreen(
         }
     }
 
-    // ── link routing: navigate, open a map, or load a study card into the surface.
-    //    Authoring verbs (addTag/addThread/approve/reject/edit*) are pass 3. ────
-    fun onLink(uri: String) {
-        val j = runCatching { StudyEngine.RouteLinkJson(uri) }.getOrNull() ?: return
-        val link = runCatching { parseWire<PanelLinkData>(j) }.getOrNull() ?: return
+    // Writing a note is a FILE write through the atomic store, so it never
+    // belonged on the main thread — and it needs the engine monitor like every
+    // other write (Notes.kt, VerseActions.kt). No turn: a study card the reader
+    // asked for in the meantime must not swallow the repaint of their own note.
+    //
+    // The marks re-fetch when the write LANDS. Bumping the epoch first re-read the
+    // notes straight away, and that read takes the same monitor — nothing ordered
+    // it behind the write, so the mark could go missing until the next chapter.
+    // The engine's error message is dropped, exactly as it was here before; the
+    // note editor with retry lives in Notes.kt.
+    fun saveNote(ref: String, text: String) {
+        scope.engineCall(engine, null, { engine.UserNoteSet(ref, text, nowUtc()) }) { noteEpoch++ }
+    }
+
+    // What a routed link does. Pure UI state (navigate, open a map, open a picker)
+    // lands here on the main thread; anything that asks the engine a question goes
+    // through [loadStudy] / [engineCall], so no branch of this `when` can block the
+    // frame it runs on.
+    fun route(link: PanelLinkData) {
         // Every routed card clears the About footer; the `about` verb re-sets it.
-        fun show(blocks: String?) {
+        fun show(producer: () -> String?) {
             studyIsAbout = false
-            if (blocks != null) { studyBlocks = blocks; revealStudy() }
+            loadStudy(producer)
         }
         when (link.verb) {
             "go" -> if (link.book != null && link.chapter != null) {
@@ -457,24 +521,29 @@ fun StudyScreen(
                 dest = Dest.Read
             }
             "conceptMap" -> link.code?.let { conceptCode = it }
-            "occurrences" -> link.code?.let { studyCode = it; show(engine.ConcordanceBlocksJson(it)) }
+            // Named rather than `it` throughout: the producer is a second lambda
+            // now, and it is read on another thread — what it captures should be
+            // spelled out.
+            "occurrences" -> link.code?.let { code -> studyCode = code; show { engine.ConcordanceBlocksJson(code) } }
             "rendering" -> if (link.code != null && link.rendering != null) {
-                studyCode = link.code
-                show(engine.RenderingConcordanceBlocksJson(link.code!!, link.rendering!!))
+                val code = link.code!!
+                val rendering = link.rendering!!
+                studyCode = code
+                show { engine.RenderingConcordanceBlocksJson(code, rendering) }
             }
-            "codeStudy" -> link.code?.let { studyCode = it; show(engine.CodeStudyBlocks2Json(it, link.word, gates)) }
-            "thread" -> link.index?.let { studyCode = null; show(engine.ThreadBlocksJson(it)) }
-            "tag" -> link.index?.let { studyCode = null; show(engine.TagBlocksJson(it)) }
-            "weave" -> link.index?.let {
-                studyCode = null
-                openWeavePassages(it)
-                show(engine.CompareBlocksJson(it, true))
+            "codeStudy" -> link.code?.let { code ->
+                val word = link.word
+                studyCode = code
+                show { engine.CodeStudyBlocks2Json(code, word, gates) }
             }
+            "thread" -> link.index?.let { at -> studyCode = null; show { engine.ThreadBlocksJson(at) } }
+            "tag" -> link.index?.let { at -> studyCode = null; show { engine.TagBlocksJson(at) } }
+            "weave" -> link.index?.let { openWeave(it) }
             // Tag→weave: the accumulate-then-organize flow — pick the members
             // (default all), name it, chain it through the canon.
             "makeWeave" -> link.tag?.let { makeWeaveTag = it }
-            "guide" -> { studyCode = null; show(StudyEngine.GuideBlocksJson()) }
-            "about" -> { studyCode = null; show(StudyEngine.AboutBlocksJson()); studyIsAbout = true }
+            "guide" -> { studyCode = null; show { StudyEngine.GuideBlocksJson() } }
+            "about" -> { studyCode = null; show { StudyEngine.AboutBlocksJson() }; studyIsAbout = true }
             // Tagging offers the existing tags first; freetext is the secondary
             // path inside the picker (product call, 2026-07-24).
             "addTag" -> link.refKey?.let { ref -> tagPickRef = ref }
@@ -482,12 +551,26 @@ fun StudyScreen(
             // field made you retype an existing name exactly, and a typo forked a
             // second thread instead of failing (2026-07-28 feedback).
             "addThread" -> link.refKey?.let { ref -> threadPickRef = ref }
+            // The note the reader already has comes back off the main thread too;
+            // the dialog opens with it when it lands. "" is "no note yet", which is
+            // also what an unreadable one falls back to.
             "editNote" -> link.refKey?.let { ref ->
-                val cur = engine.UserNoteJson(ref)
-                    ?.let { runCatching { parseWire<UserNote>(it).text }.getOrNull() } ?: ""
-                prompt = AuthorPrompt("Note on $ref", cur) { text -> engine.UserNoteSet(ref, text, nowUtc()) }
+                scope.engineCall(
+                    engine, turns,
+                    {
+                        engine.UserNoteJson(ref)
+                            ?.let { runCatching { parseWire<UserNote>(it).text }.getOrNull() } ?: ""
+                    },
+                ) { cur ->
+                    prompt = AuthorPrompt("Note on $ref", cur ?: "") { text -> saveNote(ref, text) }
+                }
             }
-            "approve" -> link.index?.let { engine.WeaveApprove(it); openLibrary(Library.Suggested) }
+            // The write, then the list it changed. Turn-guarded unlike [saveNote],
+            // because re-listing Suggested IS a claim on the study surface: if the
+            // reader has tapped something else since, they keep what they tapped.
+            "approve" -> link.index?.let { idx ->
+                scope.engineCall(engine, turns, { engine.WeaveApprove(idx) }) { openLibrary(Library.Suggested) }
+            }
             // Rejecting DELETES the suggestion — it does not come back for review
             // — so it asks first, like every other destructive action (2026-07-29).
             "reject" -> link.index?.let { idx ->
@@ -495,10 +578,31 @@ fun StudyScreen(
                     title = "Reject this suggested weave?",
                     body = "It is deleted, not hidden — it will not come back for review.",
                     verb = "Reject",
-                ) { engine.WeaveReject(idx); openLibrary(Library.Suggested) }
+                ) {
+                    scope.engineCall(engine, turns, { engine.WeaveReject(idx) }) { openLibrary(Library.Suggested) }
+                }
             }
             // editThreadNotes / editWeaveNotes / editEntryNote / untag need an
             // index→name lookup — a documented follow-up (rarer authoring).
+        }
+    }
+
+    // ── link routing: navigate, open a map, or load a study card into the surface.
+    //    Routing the URI is itself an ABI call, so the whole tap — the routing and
+    //    the card it asks for — happens off the main thread. This handler used to
+    //    make up to ten blocking engine calls in a row on the main thread, each one
+    //    waiting on the monitor a cold study read can hold for seconds.
+    fun onLink(uri: String) {
+        scope.engineCall(
+            engine, turns,
+            { StudyEngine.RouteLinkJson(uri)?.let { runCatching { parseWire<PanelLinkData>(it) }.getOrNull() } },
+        ) { link ->
+            // This tap owns the study surface now, and so owns its spinner: a card
+            // still in flight from an earlier tap was superseded by this turn and
+            // will never clear it itself. A verb that loads a card sets it again on
+            // this same frame.
+            studyLoading = false
+            if (link != null) route(link)
         }
     }
 
@@ -818,9 +922,11 @@ fun StudyScreen(
                 text = { OutlinedTextField(value = text, onValueChange = { text = it }) },
                 confirmButton = {
                     TextButton(onClick = {
+                        // onConfirm writes off the main thread and bumps noteEpoch
+                        // itself when the write lands — bumping it here re-read the
+                        // notes before the write had taken the monitor.
                         p.onConfirm(text)
                         prompt = null
-                        noteEpoch++ // note indicators / washes re-fetch
                     }) { Text("Save") }
                 },
                 dismissButton = { TextButton(onClick = { prompt = null }) { Text("Cancel") } },
@@ -860,7 +966,7 @@ fun StudyScreen(
                     if (ref != null) {
                         if (mode == UiMode.FoldFullscreen) {
                             // Beside John: the referenced passage in the second pane
-                            // (the same shape openWeavePassages uses).
+                            // (the same shape openWeave uses).
                             val sp = ref.refKey.lastIndexOf(' ')
                             secondBook = ref.refKey.substring(0, sp)
                             secondChapter =
@@ -876,14 +982,15 @@ fun StudyScreen(
                 onSharing = {
                     showFirstRun = false
                     persistCfg()
-                    scope.launch {
-                        val t = withContext(Dispatchers.Default) {
-                            runCatching { synchronized(engine) { engine.ThreadsJson() } }.getOrNull()
-                                ?.let { runCatching { parseWire<Threads>(it).threads }.getOrNull() }
-                        }?.firstOrNull { it.name == "Romans Road" }
+                    // No turn: first run happens once, and nothing else is
+                    // competing for the presentation.
+                    scope.engineCall(
+                        engine, null,
+                        { engine.ThreadsJson()?.let { runCatching { parseWire<Threads>(it).threads }.getOrNull() } },
+                    ) { threads ->
                         // Straight into the trail; if the stock thread was somehow
                         // removed the picker shows instead.
-                        presentThread = t
+                        presentThread = threads?.firstOrNull { it.name == "Romans Road" }
                         showPresent = true
                     }
                 },
@@ -915,6 +1022,119 @@ fun StudyScreen(
     }
     }
 }
+
+// ── off the main thread ──────────────────────────────────────────────────────
+//
+// Every engine call is a blocking native call behind the `synchronized(engine)`
+// monitor the two reader panes and the study surface share, so making one on the
+// main thread costs however long the LONGEST call already running takes — and the
+// first word study, concordance or search sweeps the whole corpus building a lazy
+// index. Two handlers used to do exactly that: routing a panel link made up to ten
+// blocking calls in a row, and searching made two.
+
+/**
+ * Which read owns the surface it paints into.
+ *
+ * A tap opens a turn; only the newest turn may paint. Without it two taps in a row
+ * leave whichever read finished LAST on screen, and nothing orders them: they run
+ * on `Dispatchers.Default` and contend for the engine monitor, so the first tap
+ * can win the monitor second and paint its card over the second tap's.
+ *
+ * Main-thread only, and so needs no synchronization of its own: turns are opened
+ * from Compose event handlers and read from continuations that resume on the same
+ * dispatcher.
+ */
+internal class StudyTurns {
+    private var issued = 0
+
+    /** Take the newest turn — everything older may no longer paint. */
+    fun open(): Int = ++issued
+
+    /** May [turn]'s result be painted? Only if nothing newer has been asked for. */
+    fun isCurrent(turn: Int): Boolean = turn == issued
+
+    /** Nothing in flight may paint any more: the reader emptied the field the
+     *  results were for, so landing them would repaint what they just cleared. */
+    fun abandon() {
+        issued++
+    }
+}
+
+/**
+ * The one way this screen reaches the engine: [call] runs on `Dispatchers.Default`
+ * holding [lock], [paint] runs back on the caller's thread with the lock released.
+ *
+ * [lock] is the engine object — the monitor every shell call takes. It is typed
+ * `Any` because that is all it is used as, which is also what lets the JVM unit
+ * tests drive this function without a native engine (`EngineCallTest`).
+ *
+ * The monitor is never held across a suspension point: [call] cannot suspend, and
+ * [paint] runs only after the `withContext` has returned. Held across one, a
+ * `Default` worker would sit on the monitor waiting for a main-thread continuation
+ * — with the main thread able to be waiting on the same monitor.
+ *
+ * [turns] makes the newest tap the only one that may paint (see [StudyTurns]).
+ * Pass null for work nothing can supersede — a write whose result is a repaint of
+ * the reader's own data rather than a claim on the study surface.
+ *
+ * [paint] runs even when [call] returned null or threw, so a caller can drop its
+ * spinner on a read that produced nothing.
+ */
+internal fun <T> CoroutineScope.engineCall(
+    lock: Any,
+    turns: StudyTurns?,
+    call: () -> T?,
+    paint: (T?) -> Unit,
+) {
+    val turn = turns?.open() ?: 0
+    launch {
+        val v = withContext(Dispatchers.Default) {
+            runCatching { synchronized(lock) { call() } }.getOrNull()
+        }
+        if (turns != null && !turns.isCurrent(turn)) return@launch
+        paint(v)
+    }
+}
+
+/** A book + chapter: where a pane is parked. */
+internal data class ChapterRef(val book: String, val chapter: Int)
+
+/** Where tapping a weave lands the reader. */
+internal data class WeaveOpening(
+    /** The refKey the reader's own pane opens — the link's `a` end. */
+    val primary: String,
+    /** The `b` end, for the fold's second pane, or null when it is the same
+     *  chapter as [primary] (two panes on one chapter show nothing new). */
+    val second: ChapterRef? = null,
+)
+
+/**
+ * Which passages a weave tap opens: its first resolved link (else its first link
+ * at all), `a` in the reader and `b` in the fold's second pane.
+ *
+ * A link whose `a` end is not a refKey opens NOTHING — it used to park the second
+ * pane on `b` while the reader's own pane stayed where it was, which reads as the
+ * app ignoring the tap and then moving the wrong pane.
+ */
+internal fun weaveOpening(links: List<WeaveLink1>): WeaveOpening? {
+    val link = links.firstOrNull { it.resolved } ?: links.firstOrNull() ?: return null
+    val a = chapterRefOf(link.a) ?: return null
+    val b = chapterRefOf(link.b)
+    return WeaveOpening(link.a, if (b != null && b != a) b else null)
+}
+
+/** A refKey's book and chapter ("Gen 1:7" → Gen 1), or null if it is not one. */
+private fun chapterRefOf(refKey: String): ChapterRef? {
+    val sp = refKey.lastIndexOf(' ')
+    if (sp <= 0) return null
+    val ch = refKey.substring(sp + 1).substringBefore(':').toIntOrNull() ?: return null
+    return ChapterRef(refKey.substring(0, sp), ch)
+}
+
+/** True when a search answer is a reference to open rather than hits to list.
+ *  Both halves matter: the engine has to say `goto` AND say where — the reader's
+ *  own pane is navigated on the strength of it. */
+internal fun SearchResult.opensAPassage(): Boolean = kind == "goto" && book != null && chapter != null
 
 /** A pane's own compact navigation: ‹ Book Ch › opening the passage navigator
  *  (fold mode, one per Bible pane, so the two panes navigate independently). */
@@ -1076,6 +1296,10 @@ private fun StudySheet(
     }
 }
 
+/** What a search turned out to be, decided ONCE in the background read: a
+ *  reference to open, or hits to band in the reader plus the result card. */
+private class SearchAnswer(val goto: SearchResult?, val hits: Set<String>, val blocks: String?)
+
 /** The full-screen search surface behind the top-bar 🔍: a query field over a
  *  live result list. A reference goes straight to the passage (and closes);
  *  a word/phrase bands the reader's hits and lists the results here. Tapping a
@@ -1095,22 +1319,55 @@ private fun SearchOverlay(
 ) {
     var q by remember { mutableStateOf(initialQuery) }
     var blocks by remember { mutableStateOf<String?>(null) }
+    var searching by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    val turns = remember { StudyTurns() }
     BackHandler(onBack = onClose)
 
+    // Searching crosses the ABI twice — the query's answer, then its result card —
+    // and the first search of a session builds the search index, which is a corpus
+    // sweep. On the main thread that was the keyboard and the field freezing on
+    // Enter. Both calls ride ONE background turn: they are one answer, so a `goto`
+    // can never arrive after the hits it replaces, and only the newest Enter paints.
     fun run() {
         val query = q.trim()
-        if (query.isEmpty()) { blocks = null; onHits(emptySet()); return }
-        val sj = runCatching { engine.SearchJson(query) }.getOrNull() ?: return
-        val r = runCatching { parseWire<SearchResult>(sj) }.getOrNull() ?: return
-        if (r.kind == "goto" && r.book != null && r.chapter != null) {
+        if (query.isEmpty()) {
+            // Nothing already in flight may paint over a field the reader cleared.
+            turns.abandon()
+            searching = false
+            blocks = null
             onHits(emptySet())
-            onNavigate(r.book!!, r.chapter!!.toInt())
-            onQueryChange("")
-            onClose()
-        } else {
-            onHits(r.hits?.map { it.verse }?.toSet() ?: emptySet())
-            blocks = runCatching { engine.SearchBlocksJson(query) }.getOrNull()
+            return
+        }
+        searching = true
+        scope.engineCall(
+            engine, turns,
+            {
+                val r = engine.SearchJson(query)
+                    ?.let { runCatching { parseWire<SearchResult>(it) }.getOrNull() }
+                when {
+                    r == null -> null
+                    // A reference goes straight to the passage: no card to build.
+                    r.opensAPassage() -> SearchAnswer(goto = r, hits = emptySet(), blocks = null)
+                    else -> SearchAnswer(
+                        goto = null,
+                        hits = r.hits?.map { it.verse }?.toSet() ?: emptySet(),
+                        blocks = engine.SearchBlocksJson(query),
+                    )
+                }
+            },
+        ) { a ->
+            searching = false
+            if (a == null) return@engineCall
+            onHits(a.hits)
+            if (a.goto != null) {
+                onNavigate(a.goto.book!!, a.goto.chapter!!.toInt())
+                onQueryChange("")
+                onClose()
+            } else {
+                blocks = a.blocks
+            }
         }
     }
 
@@ -1130,7 +1387,16 @@ private fun SearchOverlay(
                     singleLine = true,
                     trailingIcon = {
                         if (q.isNotEmpty()) {
-                            IconButton(onClick = { q = ""; onQueryChange(""); onHits(emptySet()); blocks = null }) {
+                            // Clearing abandons an in-flight search too, or its
+                            // results paint over the empty field they came from.
+                            IconButton(onClick = {
+                                q = ""
+                                turns.abandon()
+                                searching = false
+                                onQueryChange("")
+                                onHits(emptySet())
+                                blocks = null
+                            }) {
                                 Icon(Icons.Filled.Close, contentDescription = "Clear", tint = palette.ink)
                             }
                         }
@@ -1143,7 +1409,7 @@ private fun SearchOverlay(
         }
         HorizontalDivider(color = palette.rule)
         Box(Modifier.fillMaxSize()) {
-            if (blocks == null) {
+            if (blocks == null && !searching) {
                 Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                     Text(
                         "Search the Holy Bible — a word, a phrase, or a reference like “John 3:16”.",
@@ -1152,8 +1418,12 @@ private fun SearchOverlay(
                 }
             } else {
                 // Selecting a result jumps and closes — clear the query so the
-                // next 🔍 opens fresh.
-                StudyPane(blocks, palette, onLink = { uri -> onQueryChange(""); onLink(uri); onClose() }, scale = scale)
+                // next 🔍 opens fresh. The pane carries the wait now that the
+                // search is off the main thread (StudyPane says why past ~1s).
+                StudyPane(
+                    blocks, palette, scale = scale, loading = searching,
+                    onLink = { uri -> onQueryChange(""); onLink(uri); onClose() },
+                )
             }
         }
     }

@@ -336,9 +336,13 @@ sideload block is already fixed and guarded by a test.
   cancellation (`ReaderPane.kt:221`) — try/finally; and give the three Settings
   sliders `onValueChangeFinished` (a 2 s drag currently fires ~120 full layouts,
   ~119 leaked).
-- [ ] **[opus]** `onLink` (~10 blocking engine calls) and `SearchOverlay.run()` onto
+- [x] **[opus]** `onLink` (~10 blocking engine calls) and `SearchOverlay.run()` onto
   `Dispatchers.Default` via the existing `loadStudy` pattern
-  (`StudyScreen.kt:444-500, 1100-1112`).
+  (`StudyScreen.kt:444-500, 1100-1112`). **DONE 2026-07-30**, 25 JVM tests over the
+  extracted decisions. Still on the main thread and out of scope: `TocJson` /
+  `StudyConfig.LoadJson` / `PaletteJson` in `remember { }` during first composition
+  — first-frame boot cost rather than a tap stall, and fixing it needs a loading
+  state for the whole screen.
 - [ ] **[FABLE]** Replace the coarse `synchronized(engine)` monitor (49 sites) — the
   core is documented thread-safe for reads; a tap during a cold study build
   currently blocks the main thread for seconds (ANR class). Read-write lock or
