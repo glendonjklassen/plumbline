@@ -57,11 +57,7 @@ fn check_ref(key: &str, at: &Path) {
         at.display(),
         r.book,
     );
-    assert!(
-        r.chapter >= 1 && r.verse >= 1,
-        "{}: `{key}` has a zero chapter or verse",
-        at.display(),
-    );
+    assert!(r.chapter >= 1 && r.verse >= 1, "{}: `{key}` has a zero chapter or verse", at.display(),);
 }
 
 #[test]
@@ -98,12 +94,7 @@ fn every_stock_thread_loads() {
         let bytes = std::fs::read(&f).unwrap();
         let t: plumbline_core::thread::Thread = serde_json::from_slice(&bytes)
             .unwrap_or_else(|e| panic!("{}: the core cannot load this thread: {e}", f.display()));
-        assert_eq!(
-            t.tok_version,
-            TOKENIZATION_VERSION,
-            "{}: tokenization stamp is stale",
-            f.display(),
-        );
+        assert_eq!(t.tok_version, TOKENIZATION_VERSION, "{}: tokenization stamp is stale", f.display(),);
         for e in &t.entries {
             check_ref(&e.vref.ref_key(), &f);
         }
@@ -121,12 +112,7 @@ fn every_stock_weave_loads() {
         let bytes = std::fs::read(f).unwrap();
         let w: plumbline_core::weave::Weave = serde_json::from_slice(&bytes)
             .unwrap_or_else(|e| panic!("{}: the core cannot load this weave: {e}", f.display()));
-        assert_eq!(
-            w.tok_version,
-            TOKENIZATION_VERSION,
-            "{}: tokenization stamp is stale",
-            f.display(),
-        );
+        assert_eq!(w.tok_version, TOKENIZATION_VERSION, "{}: tokenization stamp is stale", f.display(),);
         assert!(!w.links.is_empty(), "{}: a weave with no links", f.display());
         for l in &w.links {
             check_ref(&l.a.ref_key(), f);

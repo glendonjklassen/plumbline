@@ -76,21 +76,62 @@ type Table = &'static [(char, &'static str)];
 
 fn hebrew_stems() -> Table {
     &[
-        ('q', "qal"), ('N', "niphal"), ('p', "piel"), ('P', "pual"), ('h', "hiphil"),
-        ('H', "hophal"), ('t', "hithpael"), ('o', "polel"), ('O', "polal"), ('r', "hithpolel"),
-        ('m', "poel"), ('M', "poal"), ('k', "palel"), ('K', "pulal"), ('Q', "qal passive"),
-        ('l', "pilpel"), ('L', "polpal"), ('f', "hithpalpel"), ('D', "nithpael"), ('j', "pealal"),
-        ('i', "pilel"), ('u', "hothpaal"), ('c', "tiphil"), ('v', "hishtaphel"), ('w', "nithpalel"),
-        ('y', "nithpoel"), ('z', "hithpoel"),
+        ('q', "qal"),
+        ('N', "niphal"),
+        ('p', "piel"),
+        ('P', "pual"),
+        ('h', "hiphil"),
+        ('H', "hophal"),
+        ('t', "hithpael"),
+        ('o', "polel"),
+        ('O', "polal"),
+        ('r', "hithpolel"),
+        ('m', "poel"),
+        ('M', "poal"),
+        ('k', "palel"),
+        ('K', "pulal"),
+        ('Q', "qal passive"),
+        ('l', "pilpel"),
+        ('L', "polpal"),
+        ('f', "hithpalpel"),
+        ('D', "nithpael"),
+        ('j', "pealal"),
+        ('i', "pilel"),
+        ('u', "hothpaal"),
+        ('c', "tiphil"),
+        ('v', "hishtaphel"),
+        ('w', "nithpalel"),
+        ('y', "nithpoel"),
+        ('z', "hithpoel"),
     ]
 }
 fn aramaic_stems() -> Table {
     &[
-        ('q', "peal"), ('Q', "peil"), ('u', "hithpeel"), ('p', "pael"), ('P', "ithpaal"),
-        ('M', "hithpaal"), ('a', "aphel"), ('h', "haphel"), ('s', "saphel"), ('e', "shaphel"),
-        ('H', "hophal"), ('i', "ithpeel"), ('t', "hishtaphel"), ('v', "ishtaphel"), ('w', "hithaphel"),
-        ('o', "polel"), ('z', "ithpoel"), ('r', "hithpolel"), ('f', "hithpalpel"), ('b', "hephal"),
-        ('c', "tiphel"), ('m', "poel"), ('l', "palpel"), ('L', "ithpalpel"), ('O', "ithpolel"),
+        ('q', "peal"),
+        ('Q', "peil"),
+        ('u', "hithpeel"),
+        ('p', "pael"),
+        ('P', "ithpaal"),
+        ('M', "hithpaal"),
+        ('a', "aphel"),
+        ('h', "haphel"),
+        ('s', "saphel"),
+        ('e', "shaphel"),
+        ('H', "hophal"),
+        ('i', "ithpeel"),
+        ('t', "hishtaphel"),
+        ('v', "ishtaphel"),
+        ('w', "hithaphel"),
+        ('o', "polel"),
+        ('z', "ithpoel"),
+        ('r', "hithpolel"),
+        ('f', "hithpalpel"),
+        ('b', "hephal"),
+        ('c', "tiphel"),
+        ('m', "poel"),
+        ('l', "palpel"),
+        ('L', "ithpalpel"),
+        ('O', "ithpolel"),
         ('G', "ittaphal"),
     ]
 }
@@ -101,9 +142,17 @@ fn stems_of(lang: MorphLang) -> Table {
     }
 }
 const CONJUGATIONS: Table = &[
-    ('p', "perfect"), ('q', "weqatal"), ('i', "imperfect"), ('w', "wayyiqtol"),
-    ('h', "cohortative"), ('j', "jussive"), ('v', "imperative"), ('r', "active participle"),
-    ('s', "passive participle"), ('a', "infinitive absolute"), ('c', "infinitive construct"),
+    ('p', "perfect"),
+    ('q', "weqatal"),
+    ('i', "imperfect"),
+    ('w', "wayyiqtol"),
+    ('h', "cohortative"),
+    ('j', "jussive"),
+    ('v', "imperative"),
+    ('r', "active participle"),
+    ('s', "passive participle"),
+    ('a', "infinitive absolute"),
+    ('c', "infinitive construct"),
 ];
 const PERSONS: Table = &[('1', "1st"), ('2', "2nd"), ('3', "3rd")];
 const GENDERS: Table = &[('b', "both"), ('c', "common"), ('f', "feminine"), ('m', "masculine")];
@@ -116,8 +165,14 @@ const PRONOUN_TYPES: Table =
 const SUFFIX_TYPES: Table =
     &[('d', "directional he"), ('h', "paragogic he"), ('n', "paragogic nun"), ('p', "pronominal")];
 const PARTICLE_TYPES: Table = &[
-    ('a', "affirmation"), ('d', "definite article"), ('e', "exhortation"), ('i', "interrogative"),
-    ('j', "interjection"), ('m', "demonstrative"), ('n', "negative"), ('o', "direct object marker"),
+    ('a', "affirmation"),
+    ('d', "definite article"),
+    ('e', "exhortation"),
+    ('i', "interrogative"),
+    ('j', "interjection"),
+    ('m', "demonstrative"),
+    ('n', "negative"),
+    ('o', "direct object marker"),
     ('r', "relative"),
 ];
 
@@ -246,11 +301,9 @@ fn gns(cs: &[char], raw: &str) -> Result<Triple, String> {
         [] => Ok((None, None, None)),
         [g] => Ok((code(GENDERS, "gender", *g, raw)?, None, None)),
         [g, n] => Ok((code(GENDERS, "gender", *g, raw)?, code(NUMBERS, "number", *n, raw)?, None)),
-        [g, n, st] => Ok((
-            code(GENDERS, "gender", *g, raw)?,
-            code(NUMBERS, "number", *n, raw)?,
-            code(STATES, "state", *st, raw)?,
-        )),
+        [g, n, st] => {
+            Ok((code(GENDERS, "gender", *g, raw)?, code(NUMBERS, "number", *n, raw)?, code(STATES, "state", *st, raw)?))
+        }
         _ => Err(format!("trailing letters {} in {raw}", cs.iter().collect::<String>())),
     }
 }
@@ -272,16 +325,24 @@ fn pgn(cs: &[char], raw: &str) -> Result<Triple, String> {
 
 // ── Robinson (Greek) parser ─────────────────────────────────────────────────
 
-const TENSES: Table = &[
-    ('P', "present"), ('I', "imperfect"), ('F', "future"), ('A', "aorist"), ('R', "perfect"), ('L', "pluperfect"),
-];
+const TENSES: Table =
+    &[('P', "present"), ('I', "imperfect"), ('F', "future"), ('A', "aorist"), ('R', "perfect"), ('L', "pluperfect")];
 const VOICES: Table = &[
-    ('A', "active"), ('M', "middle"), ('P', "passive"), ('E', "middle/passive"),
-    ('D', "middle deponent"), ('O', "passive deponent"), ('N', "middle/passive deponent"),
+    ('A', "active"),
+    ('M', "middle"),
+    ('P', "passive"),
+    ('E', "middle/passive"),
+    ('D', "middle deponent"),
+    ('O', "passive deponent"),
+    ('N', "middle/passive deponent"),
 ];
 const MOODS: Table = &[
-    ('I', "indicative"), ('S', "subjunctive"), ('O', "optative"), ('M', "imperative"),
-    ('N', "infinitive"), ('P', "participle"),
+    ('I', "indicative"),
+    ('S', "subjunctive"),
+    ('O', "optative"),
+    ('M', "imperative"),
+    ('N', "infinitive"),
+    ('P', "participle"),
 ];
 const CASES: Table = &[('N', "nominative"), ('V', "vocative"), ('G', "genitive"), ('D', "dative"), ('A', "accusative")];
 const GNUMBERS: Table = &[('S', "singular"), ('P', "plural")];
@@ -765,9 +826,7 @@ pub fn encode_morph_bin(tok_version: &str, text: &str) -> Option<Vec<u8>> {
     // Deterministic order — the pack manifest hashes this file, so an unstable
     // traversal would churn the pack version on every build.
     let mut refs: Vec<&VRef> = data.ix.keys().collect();
-    refs.sort_by(|a, b| {
-        (&a.book, a.chapter, a.verse).cmp(&(&b.book, b.chapter, b.verse))
-    });
+    refs.sort_by(|a, b| (&a.book, a.chapter, a.verse).cmp(&(&b.book, b.chapter, b.verse)));
 
     let mut strings: Vec<&str> = Vec::new();
     let mut sx: HashMap<&str, u16> = HashMap::new();
@@ -852,9 +911,8 @@ pub fn parse_morph_bin(tok_version: &str, bytes: &[u8]) -> Option<MorphData> {
     if bytes.len() < MORPHB_HEADER || &bytes[..8] != MORPHB_MAGIC {
         return None;
     }
-    let u32_at = |o: usize| -> Option<usize> {
-        Some(u32::from_le_bytes(bytes.get(o..o + 4)?.try_into().ok()?) as usize)
-    };
+    let u32_at =
+        |o: usize| -> Option<usize> { Some(u32::from_le_bytes(bytes.get(o..o + 4)?.try_into().ok()?) as usize) };
     let verse_count = u32_at(8)?;
     let entry_count = u32_at(12)?;
     let string_count = u32_at(16)?;
@@ -946,7 +1004,10 @@ mod tests {
         // Object marker particle, and the article preposition.
         assert_eq!(heb("HTo"), "direct object marker");
         // Pronominal suffix on a construct noun.
-        assert_eq!(heb("HNcmsc/Sp2ms"), "common noun, masculine singular construct; with 2nd masculine singular pronominal suffix");
+        assert_eq!(
+            heb("HNcmsc/Sp2ms"),
+            "common noun, masculine singular construct; with 2nd masculine singular pronominal suffix"
+        );
     }
 
     #[test]
@@ -986,7 +1047,8 @@ mod tests {
 
     // ── the packed `.morphb` form ──────────────────────────────────────────────
 
-    const SIDECAR: &str = "{\"format\":\"overlay-morphology-v1\",\"tokenization\":\"kjv1769-tok2\",\"source\":\"OSHB + TR\"}\n\
+    const SIDECAR: &str =
+        "{\"format\":\"overlay-morphology-v1\",\"tokenization\":\"kjv1769-tok2\",\"source\":\"OSHB + TR\"}\n\
         {\"b\":\"Gen\",\"c\":1,\"v\":1,\"e\":[[2,\"H7225\",null,\"HNcfsa\"],[4,\"H1254\",\"a\",\"HVqp3ms\"]]}\n\
         {\"b\":\"Gen\",\"c\":1,\"v\":2,\"e\":[[1,\"H776\",null,\"HNcfsa\"]]}\n\
         {\"b\":\"John\",\"c\":3,\"v\":16,\"e\":[[3,\"G2316\",null,\"N-NSM\"]]}\n";

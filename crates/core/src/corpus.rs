@@ -54,14 +54,7 @@ type TokenRepr = (String, String, String, Vec<String>, u32);
 
 impl Serialize for Token {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        (
-            &self.pre,
-            &self.word,
-            &self.post,
-            &self.strongs,
-            &self.flags,
-        )
-            .serialize(s)
+        (&self.pre, &self.word, &self.post, &self.strongs, &self.flags).serialize(s)
     }
 }
 
@@ -105,11 +98,7 @@ impl Verse {
 /// Render a run of tokens space-separated (each token keeps its own
 /// punctuation). Ported from `renderTokens`.
 pub fn render_tokens<'a, I: IntoIterator<Item = &'a Token>>(tokens: I) -> String {
-    tokens
-        .into_iter()
-        .map(Token::render)
-        .collect::<Vec<_>>()
-        .join(" ")
+    tokens.into_iter().map(Token::render).collect::<Vec<_>>().join(" ")
 }
 
 /// One chapter's storage: its position in canonical verse order, and either
@@ -192,10 +181,7 @@ impl Corpus {
 
     /// A verse by address.
     pub fn verse(&self, r: &VRef) -> Option<&Verse> {
-        self.slot_of(&r.book, r.chapter)?
-            .verses(&self.raw)
-            .iter()
-            .find(|v| v.verse == r.verse)
+        self.slot_of(&r.book, r.chapter)?.verses(&self.raw).iter().find(|v| v.verse == r.verse)
     }
 
     /// The tokenization version stamped in the file header.
@@ -243,7 +229,7 @@ pub fn load_corpus(path: impl AsRef<Path>) -> Result<Corpus, Error> {
     // mtime, and tokenization) — skip re-parsing the ~19 MB of JSONL.
     match stamp {
         Some((len, mtime)) => {
-            if let Some(c) = load_cache(&cache_path(path), Some((len, mtime))) {
+            if let Some(c) = load_cache(cache_path(path), Some((len, mtime))) {
                 return Ok(c);
             }
         }
@@ -252,7 +238,7 @@ pub fn load_corpus(path: impl AsRef<Path>) -> Result<Corpus, Error> {
         // nothing ever reads, since the cache supersedes it. Accepted on the
         // tokenization stamp, which is what actually has to match.
         None => {
-            if let Some(c) = load_cache(&cache_path(path), None) {
+            if let Some(c) = load_cache(cache_path(path), None) {
                 return Ok(c);
             }
         }
@@ -260,10 +246,7 @@ pub fn load_corpus(path: impl AsRef<Path>) -> Result<Corpus, Error> {
 
     // Slow path: parse the JSONL, then write the cache (best-effort — a failed
     // or torn cache write just means the next launch re-parses).
-    let raw = std::fs::read_to_string(path).map_err(|e| Error::Io {
-        path: path.display().to_string(),
-        source: e,
-    })?;
+    let raw = std::fs::read_to_string(path).map_err(|e| Error::Io { path: path.display().to_string(), source: e })?;
     let corpus = from_str(&raw)?;
     if let Some((len, mtime)) = stamp {
         let _ = write_dir_cache(&cache_path(path), &corpus, len, mtime);
@@ -351,9 +334,7 @@ fn encode_dir_cache(corpus: &Corpus, src_len: u64, src_mtime: i64) -> Result<Vec
         .flat_map(|(book, by_chapter)| by_chapter.iter().map(move |(&chapter, &ix)| (book, chapter, ix)))
         .collect();
     order.sort_by(|&(ba, ca, _), &(bb, cb, _)| {
-        let pos = |id: &String| {
-            crate::canon::BOOKS.iter().position(|b| b.id == id.as_str()).unwrap_or(usize::MAX)
-        };
+        let pos = |id: &String| crate::canon::BOOKS.iter().position(|b| b.id == id.as_str()).unwrap_or(usize::MAX);
         // The book id breaks ties: every non-canonical book shares
         // `usize::MAX`, and a stable sort would otherwise fall back to the
         // HashMap order that this function exists to eliminate.
@@ -365,22 +346,11 @@ fn encode_dir_cache(corpus: &Corpus, src_len: u64, src_mtime: i64) -> Result<Vec
     for (book, chapter, ix) in order {
         let verses = corpus.slots[ix].verses(&corpus.raw);
         let blob = bincode::serialize(verses).map_err(|e| Error::Parse(e.to_string()))?;
-        chapters.push((
-            book.clone(),
-            chapter,
-            verses.len() as u32,
-            payload.len() as u32,
-            blob.len() as u32,
-        ));
+        chapters.push((book.clone(), chapter, verses.len() as u32, payload.len() as u32, blob.len() as u32));
         payload.extend_from_slice(&blob);
     }
-    let dir = bincode::serialize(&DirCache {
-        src_len,
-        src_mtime,
-        tok: corpus.tok_version.clone(),
-        chapters,
-    })
-    .map_err(|e| Error::Parse(e.to_string()))?;
+    let dir = bincode::serialize(&DirCache { src_len, src_mtime, tok: corpus.tok_version.clone(), chapters })
+        .map_err(|e| Error::Parse(e.to_string()))?;
 
     let mut out = Vec::with_capacity(DIR_CACHE_MAGIC.len() + 4 + dir.len() + payload.len());
     out.extend_from_slice(DIR_CACHE_MAGIC);
@@ -394,22 +364,14 @@ fn write_dir_cache(path: &Path, corpus: &Corpus, src_len: u64, src_mtime: i64) -
     crate::store::write_atomic_bytes(path, &encode_dir_cache(corpus, src_len, src_mtime)?)
 }
 
-
 /// Parse `src` and write `out` as its idxcache, stamped `(len(src), mtime)`.
 /// Offline data-prep for shells whose filesystem reports a FIXED mtime — the
 /// web's WASI shim reports 0 for every file — so their very first boot takes
 /// the cache fast path instead of re-parsing ~19 MB of JSONL (8.4 s on a 2026
 /// flagship phone).
-pub fn build_cache_stamped(
-    src: impl AsRef<Path>,
-    out: impl AsRef<Path>,
-    src_mtime: i64,
-) -> Result<(), Error> {
+pub fn build_cache_stamped(src: impl AsRef<Path>, out: impl AsRef<Path>, src_mtime: i64) -> Result<(), Error> {
     let src = src.as_ref();
-    let raw = std::fs::read_to_string(src).map_err(|e| Error::Io {
-        path: src.display().to_string(),
-        source: e,
-    })?;
+    let raw = std::fs::read_to_string(src).map_err(|e| Error::Io { path: src.display().to_string(), source: e })?;
     let corpus = from_str(&raw)?;
     write_dir_cache(out.as_ref(), &corpus, raw.len() as u64, src_mtime)
 }
@@ -446,17 +408,11 @@ struct DirCache {
     chapters: Vec<(String, u16, u32, u32, u32)>,
 }
 
-
 /// `(len, mtime-seconds)` of the source file, or `None` if it can't be stat'd
 /// (then the cache is skipped and the JSONL is parsed directly).
 fn source_stamp(path: &Path) -> Option<(u64, i64)> {
     let md = std::fs::metadata(path).ok()?;
-    let mtime = md
-        .modified()
-        .ok()?
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()?
-        .as_secs() as i64;
+    let mtime = md.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs() as i64;
     Some((md.len(), mtime))
 }
 
@@ -472,15 +428,12 @@ pub fn from_str(raw: &str) -> Result<Corpus, Error> {
     let mut lines = raw.lines();
     let header = lines.next().ok_or_else(|| Error::Corpus("corpus file is empty".into()))?;
 
-    let hdr: serde_json::Value = serde_json::from_str(header)
-        .map_err(|e| Error::Corpus(format!("bad corpus header: {e}")))?;
-    let obj = hdr
-        .as_object()
-        .ok_or_else(|| Error::Corpus("corpus header is not an object".into()))?;
-    let declared = obj
-        .get("verses")
-        .and_then(|v| v.as_u64())
-        .ok_or_else(|| Error::Corpus("header missing verse count".into()))? as usize;
+    let hdr: serde_json::Value =
+        serde_json::from_str(header).map_err(|e| Error::Corpus(format!("bad corpus header: {e}")))?;
+    let obj = hdr.as_object().ok_or_else(|| Error::Corpus("corpus header is not an object".into()))?;
+    let declared =
+        obj.get("verses").and_then(|v| v.as_u64()).ok_or_else(|| Error::Corpus("header missing verse count".into()))?
+            as usize;
     let tok_version = obj
         .get("tokenization")
         .and_then(|v| v.as_str())
@@ -501,10 +454,7 @@ pub fn from_str(raw: &str) -> Result<Corpus, Error> {
 
     check_ascending(&verses)?;
     if verses.len() != declared {
-        return Err(Error::Corpus(format!(
-            "verse count mismatch: header says {declared}, file has {}",
-            verses.len()
-        )));
+        return Err(Error::Corpus(format!("verse count mismatch: header says {declared}, file has {}", verses.len())));
     }
 
     Ok(mk_corpus(tok_version, verses))
@@ -520,16 +470,9 @@ fn check_ascending(verses: &[Verse]) -> Result<(), Error> {
     for v in verses {
         let cur = (v.book.as_str(), v.chapter, v.verse);
         if let Some((pb, pc, pn)) = prev {
-            let out_of_order = if cur.0 == pb {
-                (cur.1, cur.2) <= (pc, pn)
-            } else {
-                seen.contains(cur.0)
-            };
+            let out_of_order = if cur.0 == pb { (cur.1, cur.2) <= (pc, pn) } else { seen.contains(cur.0) };
             if out_of_order {
-                return Err(Error::Corpus(format!(
-                    "corpus not in canonical order at {}",
-                    v.vref().ref_key()
-                )));
+                return Err(Error::Corpus(format!("corpus not in canonical order at {}", v.vref().ref_key())));
             }
         }
         seen.insert(v.book.as_str());
@@ -574,13 +517,7 @@ struct CorpusBuilder {
 
 impl CorpusBuilder {
     fn new(tok_version: String) -> Self {
-        Self {
-            slots: Vec::new(),
-            chapters: HashMap::new(),
-            chapter_ix: HashMap::new(),
-            total: 0,
-            tok_version,
-        }
+        Self { slots: Vec::new(), chapters: HashMap::new(), chapter_ix: HashMap::new(), total: 0, tok_version }
     }
 
     /// Register a chapter, allocating its book key only on first sight.
@@ -705,9 +642,7 @@ mod tests {
         }
         format!(
             "{}\n{body}",
-            format_args!(
-                r#"{{"format":"overlay-kjv-canonical","tokenization":"kjv1769-tok2","verses":{verses}}}"#
-            )
+            format_args!(r#"{{"format":"overlay-kjv-canonical","tokenization":"kjv1769-tok2","verses":{verses}}}"#)
         )
     }
 
@@ -751,15 +686,11 @@ mod tests {
         // And the directory really is canonical, so the check above is anchored
         // to canon order rather than to whatever order happened to be emitted.
         let canonical: Vec<(String, u16)> = {
-            let mut v: Vec<(String, u16)> =
-                dir.chapters.iter().map(|(b, c, ..)| (b.clone(), *c)).collect();
-            v.sort_by_key(|(b, c)| {
-                (crate::canon::BOOKS.iter().position(|k| k.id == b.as_str()).unwrap(), *c)
-            });
+            let mut v: Vec<(String, u16)> = dir.chapters.iter().map(|(b, c, ..)| (b.clone(), *c)).collect();
+            v.sort_by_key(|(b, c)| (crate::canon::BOOKS.iter().position(|k| k.id == b.as_str()).unwrap(), *c));
             v
         };
-        let emitted: Vec<(String, u16)> =
-            dir.chapters.iter().map(|(b, c, ..)| (b.clone(), *c)).collect();
+        let emitted: Vec<(String, u16)> = dir.chapters.iter().map(|(b, c, ..)| (b.clone(), *c)).collect();
         assert_eq!(emitted, canonical, "directory is not in canonical order");
     }
 
@@ -887,13 +818,7 @@ mod tests {
 
     #[test]
     fn token_json_is_positional_array() {
-        let tok = Token {
-            pre: "".into(),
-            word: "God".into(),
-            post: "".into(),
-            strongs: vec!["H430".into()],
-            flags: 0,
-        };
+        let tok = Token { pre: "".into(), word: "God".into(), post: "".into(), strongs: vec!["H430".into()], flags: 0 };
         let json = serde_json::to_string(&tok).unwrap();
         assert_eq!(json, r#"["","God","",["H430"],0]"#);
         let back: Token = serde_json::from_str(&json).unwrap();

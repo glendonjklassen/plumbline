@@ -103,12 +103,7 @@ mod tests {
 
     // Only meaningful in a featureless build (a plain `cargo test`); skip it
     // when any R&D feature is enabled on the command line.
-    #[cfg(not(any(
-        feature = "bridge",
-        feature = "embeddings",
-        feature = "morphology",
-        feature = "concept"
-    )))]
+    #[cfg(not(any(feature = "bridge", feature = "embeddings", feature = "morphology", feature = "concept")))]
     #[test]
     fn default_build_has_no_rnd() {
         assert!(!any_enabled());
@@ -120,12 +115,7 @@ mod tests {
     // could have gone permanently all-false in the build that ships (every
     // shipped build has all four — see `crates/ffi/Cargo.toml`) and only the
     // featureless job, where all-false is CORRECT, would have been watching.
-    #[cfg(all(
-        feature = "bridge",
-        feature = "embeddings",
-        feature = "morphology",
-        feature = "concept"
-    ))]
+    #[cfg(all(feature = "bridge", feature = "embeddings", feature = "morphology", feature = "concept"))]
     #[test]
     fn full_build_reports_every_tier() {
         assert!(any_enabled());

@@ -82,11 +82,9 @@ pub fn note_file(home: impl AsRef<Path>, vref: &VRef) -> PathBuf {
 pub fn load_notes(home: impl AsRef<Path>) -> (HashMap<VRef, LoadedNote>, Vec<String>) {
     let dir = notes_dir(home);
     let files: Vec<PathBuf> = match std::fs::read_dir(&dir) {
-        Ok(entries) => entries
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|x| x == "json"))
-            .collect(),
+        Ok(entries) => {
+            entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect()
+        }
         Err(_) => Vec::new(),
     };
     let mut out = HashMap::new();
@@ -97,12 +95,8 @@ pub fn load_notes(home: impl AsRef<Path>) -> (HashMap<VRef, LoadedNote>, Vec<Str
             Ok(bytes) => match serde_json::from_slice::<NoteRepr>(&bytes) {
                 Ok(r) if r.format == FORMAT => match VRef::parse_ref_key(&r.ref_key) {
                     Some(vref) => {
-                        let note = UserNote {
-                            vref: vref.clone(),
-                            text: r.text,
-                            created: r.created,
-                            updated: r.updated,
-                        };
+                        let note =
+                            UserNote { vref: vref.clone(), text: r.text, created: r.created, updated: r.updated };
                         out.insert(vref, LoadedNote { file: path, note });
                     }
                     None => errors.push(format!("{}: bad ref {}", path.display(), r.ref_key)),
@@ -120,12 +114,7 @@ pub fn load_notes(home: impl AsRef<Path>) -> (HashMap<VRef, LoadedNote>, Vec<Str
 /// `stamp` is a caller-supplied UTC timestamp; `created` is preserved across
 /// edits when a note already exists. Returns the file written (or `None` when
 /// the note was removed).
-pub fn set_note(
-    home: impl AsRef<Path>,
-    vref: &VRef,
-    text: &str,
-    stamp: &str,
-) -> Result<Option<PathBuf>, Error> {
+pub fn set_note(home: impl AsRef<Path>, vref: &VRef, text: &str, stamp: &str) -> Result<Option<PathBuf>, Error> {
     let path = note_file(&home, vref);
     if text.trim().is_empty() {
         // Delete on empty; a missing file is fine.
@@ -171,11 +160,8 @@ pub fn set_note(
                 }
             },
         };
-        let created = existing
-            .as_ref()
-            .map(|r| r.created.clone())
-            .filter(|c| !c.is_empty())
-            .unwrap_or_else(|| stamp.to_string());
+        let created =
+            existing.as_ref().map(|r| r.created.clone()).filter(|c| !c.is_empty()).unwrap_or_else(|| stamp.to_string());
         let repr = NoteRepr {
             format: FORMAT.to_string(),
             ref_key: vref.ref_key(),
@@ -184,9 +170,7 @@ pub fn set_note(
             updated: stamp.to_string(),
             extra: existing.map(|r| r.extra).unwrap_or_default(),
         };
-        let json = serde_json::to_string_pretty(&repr)
-            .map(|s| s + "\n")
-            .map_err(|e| Error::Parse(e.to_string()))?;
+        let json = serde_json::to_string_pretty(&repr).map(|s| s + "\n").map_err(|e| Error::Parse(e.to_string()))?;
         crate::store::write_atomic(&path, &json)?;
         Ok(Some(path))
     }
@@ -274,8 +258,7 @@ mod tests {
         .unwrap();
 
         set_note(&home, &v, "God's love for the world", "2026-02-02T00:00:00Z").unwrap();
-        let back: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let back: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(back["text"], "God's love for the world", "the edit itself must land");
         assert_eq!(back["created"], "2026-01-01T00:00:00Z");
         assert_eq!(back["updated"], "2026-02-02T00:00:00Z");
@@ -285,11 +268,7 @@ mod tests {
             serde_json::json!({"lang":"en","clip":"jn3-16.ogg"}),
             "an unknown object was stripped"
         );
-        assert_eq!(
-            back["linkedTo"],
-            serde_json::json!(["Rom 5:8", "1John 4:9"]),
-            "an unknown array was stripped"
-        );
+        assert_eq!(back["linkedTo"], serde_json::json!(["Rom 5:8", "1John 4:9"]), "an unknown array was stripped");
 
         let _ = std::fs::remove_dir_all(&home);
     }
@@ -327,14 +306,23 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
         let dir = home.join("notes");
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("truncated.json"), r#"{"format":"pure-note-v1","ref":"John 3:16","text":"half"#).unwrap();
-        std::fs::write(dir.join("later.json"), r#"{"format":"pure-note-v2","ref":"John 3:17","text":"x","created":"t","updated":"t"}"#).unwrap();
+        std::fs::write(dir.join("truncated.json"), r#"{"format":"pure-note-v1","ref":"John 3:16","text":"half"#)
+            .unwrap();
+        std::fs::write(
+            dir.join("later.json"),
+            r#"{"format":"pure-note-v2","ref":"John 3:17","text":"x","created":"t","updated":"t"}"#,
+        )
+        .unwrap();
         // No chapter:verse at all. Note the frozen parser does NOT check the
         // book against the canon (`VRef::parse_ref_key` splits on the last space
         // and the colon, nothing more), so "Nowhere 3:16" would load as a note on
         // a book that does not exist — harmless, since it can never match a verse
         // being read, and not this test's business.
-        std::fs::write(dir.join("badref.json"), r#"{"format":"pure-note-v1","ref":"John","text":"x","created":"t","updated":"t"}"#).unwrap();
+        std::fs::write(
+            dir.join("badref.json"),
+            r#"{"format":"pure-note-v1","ref":"John","text":"x","created":"t","updated":"t"}"#,
+        )
+        .unwrap();
         // And one good one beside them: three bad files must not cost the reader
         // the note that is fine.
         set_note(&home, &VRef::new("Gen", 1, 1), "in the beginning", "2026-01-01T00:00:00Z").unwrap();
@@ -408,7 +396,8 @@ mod tests {
         let v = VRef::new("John", 3, 16);
         let path = note_file(&home, &v);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, r#"{"format":"pure-note-v2","ref":"John 3:16","text":"x","created":"t","updated":"t"}"#).unwrap();
+        std::fs::write(&path, r#"{"format":"pure-note-v2","ref":"John 3:16","text":"x","created":"t","updated":"t"}"#)
+            .unwrap();
 
         remove_note(&home, &v).unwrap();
         assert!(!path.exists(), "the reader asked for it to be gone");

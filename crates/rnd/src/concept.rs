@@ -14,9 +14,9 @@
 
 use std::collections::{HashMap, HashSet};
 
+use plumbline_core::canon;
 use plumbline_core::corpus::Corpus;
 use plumbline_core::reference::OT_NT_DIVIDE;
-use plumbline_core::canon;
 
 /// How many of a concept's strongest cross-testament partners feed the
 /// dispersion strip's "bridge" row — kept small so the row shows the
@@ -228,12 +228,7 @@ fn communities_ids(max_rounds: usize, n_ids: usize, edges: &HashMap<u64, f32>) -
             let best = pull.values().copied().fold(f32::MIN, f32::max);
             // Smallest label among the heaviest — order-independent, and id
             // order == string order, so this matches the String tie-break.
-            let chosen = pull
-                .iter()
-                .filter(|(_, w)| **w >= best)
-                .map(|(l, _)| *l)
-                .min()
-                .unwrap_or(labels[v]);
+            let chosen = pull.iter().filter(|(_, w)| **w >= best).map(|(l, _)| *l).min().unwrap_or(labels[v]);
             if chosen != next[v] {
                 next[v] = chosen;
                 changed = true;
@@ -282,23 +277,14 @@ pub fn ppmi(
 ) -> HashMap<(String, String), f32> {
     let (names, co_ids) = intern_edges(co);
     let df_vec: Vec<u32> = names.iter().map(|n| df.get(n).copied().unwrap_or(1)).collect();
-    ppmi_ids(n_verses, &df_vec, &co_ids)
-        .iter()
-        .map(|(&key, &w)| (name_pair(&names, key), w))
-        .collect()
+    ppmi_ids(n_verses, &df_vec, &co_ids).iter().map(|(&key, &w)| (name_pair(&names, key), w)).collect()
 }
 
 /// Keep only mutual top-`k` edges: `(a,b)` survives iff `b` is among `a`'s
 /// `k` strongest neighbours *and* vice versa.
-pub fn mutual_knn(
-    k: usize,
-    edges: &HashMap<(String, String), f32>,
-) -> HashMap<(String, String), f32> {
+pub fn mutual_knn(k: usize, edges: &HashMap<(String, String), f32>) -> HashMap<(String, String), f32> {
     let (names, ids) = intern_edges(edges);
-    mutual_knn_ids(k, names.len(), &ids)
-        .iter()
-        .map(|(&key, &w)| (name_pair(&names, key), w))
-        .collect()
+    mutual_knn_ids(k, names.len(), &ids).iter().map(|(&key, &w)| (name_pair(&names, key), w)).collect()
 }
 
 /// Label-propagation communities over an edge graph: groups of ≥3 codes,
@@ -376,13 +362,7 @@ impl Concept {
     pub fn collocates(&self, code: &str, k: usize) -> Vec<(String, f32)> {
         self.collocates
             .get(code)
-            .map(|v| {
-                v.iter()
-                    .filter(|(c, _)| !crate::stopwords::is_function_word(c))
-                    .take(k)
-                    .cloned()
-                    .collect()
-            })
+            .map(|v| v.iter().filter(|(c, _)| !crate::stopwords::is_function_word(c)).take(k).cloned().collect())
             .unwrap_or_default()
     }
 
@@ -441,12 +421,18 @@ mod tests {
     /// an isolated code with no edges (must not join a community), and codes
     /// spread over two books (dispersion).
     const GRAPH: &str = concat!(
-        r#"{"format":"x","tokenization":"kjv1769-tok2","verses":6}"#, "\n",
-        r#"{"b":"Gen","c":1,"v":1,"t":[["","a","",["H1"],0],["","b","",["H2"],0],["","c","",["H3"],0]]}"#, "\n",
-        r#"{"b":"Gen","c":1,"v":2,"t":[["","a","",["H1"],0],["","b","",["H2"],0]]}"#, "\n",
-        r#"{"b":"Gen","c":1,"v":3,"t":[["","a","",["H1"],0],["","c","",["H3"],0]]}"#, "\n",
-        r#"{"b":"John","c":1,"v":1,"t":[["","d","",["G4"],0],["","e","",["G5"],0]]}"#, "\n",
-        r#"{"b":"John","c":1,"v":2,"t":[["","d","",["G4"],0],["","e","",["G5"],0],["","f","",["G6"],0]]}"#, "\n",
+        r#"{"format":"x","tokenization":"kjv1769-tok2","verses":6}"#,
+        "\n",
+        r#"{"b":"Gen","c":1,"v":1,"t":[["","a","",["H1"],0],["","b","",["H2"],0],["","c","",["H3"],0]]}"#,
+        "\n",
+        r#"{"b":"Gen","c":1,"v":2,"t":[["","a","",["H1"],0],["","b","",["H2"],0]]}"#,
+        "\n",
+        r#"{"b":"Gen","c":1,"v":3,"t":[["","a","",["H1"],0],["","c","",["H3"],0]]}"#,
+        "\n",
+        r#"{"b":"John","c":1,"v":1,"t":[["","d","",["G4"],0],["","e","",["G5"],0]]}"#,
+        "\n",
+        r#"{"b":"John","c":1,"v":2,"t":[["","d","",["G4"],0],["","e","",["G5"],0],["","f","",["G6"],0]]}"#,
+        "\n",
         r#"{"b":"John","c":1,"v":3,"t":[["","z","",["G9"],0]]}"#,
     );
 
@@ -473,7 +459,11 @@ mod tests {
                     whole.stat(code).map(|s| (s.total, s.by_book.clone())),
                     "budget {budget}: stat {code}",
                 );
-                assert_eq!(sliced.collocates(code, 10), whole.collocates(code, 10), "budget {budget}: collocates {code}");
+                assert_eq!(
+                    sliced.collocates(code, 10),
+                    whole.collocates(code, 10),
+                    "budget {budget}: collocates {code}"
+                );
                 assert_eq!(sliced.community(code), whole.community(code), "budget {budget}: community {code}");
             }
             assert_eq!(sliced.community_count(), whole.community_count(), "budget {budget}: community count");
@@ -529,9 +519,10 @@ mod tests {
 
     #[test]
     fn top_books_and_split() {
-        let mut s = ConceptStat::default();
-        s.total = 10;
-        s.by_book = [("Gen", 5), ("John", 3), ("Ps", 2)].iter().map(|(b, c)| (b.to_string(), *c)).collect();
+        let s = ConceptStat {
+            total: 10,
+            by_book: [("Gen", 5), ("John", 3), ("Ps", 2)].iter().map(|(b, c)| (b.to_string(), *c)).collect(),
+        };
         assert_eq!(top_books(&s, 2), vec![("Gen".into(), 5), ("John".into(), 3)]);
         // Gen + Ps are OT (8), John is NT (2).
         assert_eq!(testament_split(&s), (7, 3));
@@ -583,9 +574,12 @@ mod tests {
 
     #[test]
     fn ppmi_is_positive_only() {
-        let df: HashMap<String, u32> = [("A", 10), ("B", 10), ("C", 2)].iter().map(|(k, v)| (k.to_string(), *v)).collect();
-        let co: HashMap<(String, String), u32> =
-            [(("A", "B"), 1u32), (("A", "C"), 2)].iter().map(|((a, b), c)| ((a.to_string(), b.to_string()), *c)).collect();
+        let df: HashMap<String, u32> =
+            [("A", 10), ("B", 10), ("C", 2)].iter().map(|(k, v)| (k.to_string(), *v)).collect();
+        let co: HashMap<(String, String), u32> = [(("A", "B"), 1u32), (("A", "C"), 2)]
+            .iter()
+            .map(|((a, b), c)| ((a.to_string(), b.to_string()), *c))
+            .collect();
         let p = ppmi(100, &df, &co);
         // A·C are rare + co-occur → positive; A·B common but weak → check A·C kept.
         assert!(p.contains_key(&("A".to_string(), "C".to_string())));
@@ -738,7 +732,7 @@ impl ConceptBuilder {
                 self.id_of = sorted.iter().enumerate().map(|(i, s)| (s.clone(), i as u32)).collect();
                 self.df = vec![0u32; sorted.len()];
                 self.names = sorted;
-                self.to_stage(Stage::Co)
+                self.enter_stage(Stage::Co)
             }
             Stage::Co => {
                 let end = self.advance(corpus.len(), budget);
@@ -746,9 +740,7 @@ impl ConceptBuilder {
                 for i in self.cursor..end {
                     let Some(v) = corpus.verse_at(i) else { continue };
                     present.clear();
-                    present.extend(
-                        v.tokens.iter().flat_map(|t| &t.strongs).map(|s| self.id_of[s.as_str()]),
-                    );
+                    present.extend(v.tokens.iter().flat_map(|t| &t.strongs).map(|s| self.id_of[s.as_str()]));
                     present.sort_unstable(); // id order == string order
                     present.dedup();
                     for (j, &a) in present.iter().enumerate() {
@@ -768,7 +760,7 @@ impl ConceptBuilder {
                 // label), so edge order cannot reach the output. Sorting 600k
                 // pairs to get the same answer cost a 259ms chunk — the single
                 // worst thing the warm did (2026-07-27).
-                self.to_stage(Stage::Ppmi)
+                self.enter_stage(Stage::Ppmi)
             }
             Stage::Ppmi => {
                 let n = (corpus.len().max(1)) as f64;
@@ -869,12 +861,8 @@ impl ConceptBuilder {
                         *pull.entry(self.labels[u as usize]).or_insert(0.0) += w;
                     }
                     let best = pull.values().copied().fold(f32::MIN, f32::max);
-                    let chosen = pull
-                        .iter()
-                        .filter(|(_, w)| **w >= best)
-                        .map(|(l, _)| *l)
-                        .min()
-                        .unwrap_or(self.labels[v]);
+                    let chosen =
+                        pull.iter().filter(|(_, w)| **w >= best).map(|(l, _)| *l).min().unwrap_or(self.labels[v]);
                     if chosen != self.next_labels[v] {
                         self.next_labels[v] = chosen;
                         self.changed = true;
@@ -890,7 +878,7 @@ impl ConceptBuilder {
                     self.labels = std::mem::take(&mut self.next_labels);
                 }
                 if !self.changed || self.round >= COMMUNITY_ROUNDS {
-                    return self.to_stage(Stage::Assemble);
+                    return self.enter_stage(Stage::Assemble);
                 }
                 true
             }
@@ -919,23 +907,16 @@ impl ConceptBuilder {
                     g.sort_unstable();
                 }
                 comm_ids.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.first().cmp(&b.first())));
-                let communities: Vec<Vec<String>> = comm_ids
-                    .into_iter()
-                    .map(|g| g.into_iter().map(|i| names[i as usize].clone()).collect())
-                    .collect();
+                let communities: Vec<Vec<String>> =
+                    comm_ids.into_iter().map(|g| g.into_iter().map(|i| names[i as usize].clone()).collect()).collect();
                 let mut community_of = HashMap::new();
                 for (i, grp) in communities.iter().enumerate() {
                     for code in grp {
                         community_of.insert(code.clone(), i);
                     }
                 }
-                self.out = Some(Concept {
-                    ix: std::mem::take(&mut self.ix),
-                    collocates,
-                    communities,
-                    community_of,
-                });
-                self.to_stage(Stage::Done)
+                self.out = Some(Concept { ix: std::mem::take(&mut self.ix), collocates, communities, community_of });
+                self.enter_stage(Stage::Done)
             }
             Stage::Done => false,
         }
@@ -975,12 +956,12 @@ impl ConceptBuilder {
     fn finish_span(&mut self, end: usize, len: usize, next: Stage) -> bool {
         self.cursor = end;
         if end >= len {
-            self.to_stage(next);
+            self.enter_stage(next);
         }
         true
     }
 
-    fn to_stage(&mut self, next: Stage) -> bool {
+    fn enter_stage(&mut self, next: Stage) -> bool {
         self.stage = next;
         self.cursor = 0;
         next != Stage::Done

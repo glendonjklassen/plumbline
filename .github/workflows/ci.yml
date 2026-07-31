@@ -57,12 +57,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Test plumbline-rnd with default (no) features
         run: cargo test --locked -p plumbline-rnd
+      # Linted here rather than in `lint` for the same isolation reason the job
+      # exists at all.
+      - name: Lint plumbline-rnd with default (no) features
+        run: cargo clippy --locked -p plumbline-rnd --all-targets -- -D warnings
 
-  # Formatting + clippy. Both steps are advisory (continue-on-error) until the
-  # tree is brought clean — see the TODOs on each step.
+  # Formatting + clippy, both HARD gates since 2026-07-30. They were advisory
+  # (continue-on-error) for as long as the tree was unclean, which is the state
+  # in which an advisory step buys nothing: nobody reads a green run's warnings.
+  # The tree was brought to zero and `rustfmt.toml` writes the house line budget
+  # down, so a warning is now a failure.
   lint:
     runs-on: ubuntu-latest
     # fork-guard: see `test`.
@@ -86,23 +95,25 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          # For the wasm clippy pass below.
+          targets: wasm32-wasip1
       - uses: Swatinem/rust-cache@v2
-      # TODO(lint): advisory for now — `cargo fmt --check` currently fails
-      # across the crates. Not reformatting yet because those files are being
-      # edited in-flight; drop `continue-on-error` after a dedicated
-      # `cargo fmt` commit lands.
       - name: rustfmt
-        run: cargo fmt --check
-        continue-on-error: true
-      # TODO(lint): advisory for now — clippy -D warnings fails in plumbline-core:
-      #   - clippy::manual_filter at crates/core/src/search.rs:451
-      #   - clippy::trim_split_whitespace at crates/core/src/strongs.rs:136
-      # plumbline-core fails to compile under -D warnings, so downstream crates
-      # (layout, rnd, ffi, hydrate) haven't been fully linted yet and may hide
-      # more. Fix those two, re-run, then drop `continue-on-error`.
+        run: cargo fmt --all --check
+      # `--all-targets`, which the advisory version did not have: the old command
+      # linted the libs and nothing else, so every test module in the tree was
+      # unlinted. `--all-features` reaches plumbline-rnd's analytics and the
+      # bindgen bin.
       - name: clippy
-        run: cargo clippy --locked -p plumbline-core -p plumbline-layout -p plumbline-rnd -p plumbline-ffi -p plumbline-hydrate -- -D warnings
-        continue-on-error: true
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+      # The R&D crate's shipped feature set, linted the way it is tested.
+      - name: clippy (the R&D features)
+        run: cargo clippy --locked -p plumbline-rnd --all-targets --features "bridge embeddings morphology concept" -- -D warnings
+      # And the web engine's own target. `crates/ffi` carries `cfg(target_arch =
+      # "wasm32")` code — the whole `wasm.rs` shim, plus the sliced-warm cluster
+      # that only it and the tests call — which a host-target clippy never sees.
+      - name: clippy (wasm32-wasip1, the web engine's target)
+        run: cargo clippy --locked -p plumbline-ffi --target wasm32-wasip1 --all-targets -- -D warnings
 
   # The workspace declares rust-version = "1.85"; make sure the portable
   # crates actually still compile on that toolchain, not just on stable.

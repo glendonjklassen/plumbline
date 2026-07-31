@@ -19,16 +19,16 @@
 use serde::{Deserialize, Serialize};
 
 use plumbline_core::config::{Config, PaneRef, StudyMode};
-use plumbline_core::panel::{Block, Color, PanelLink, Run};
-use plumbline_core::theme::ThemeChoice;
 use plumbline_core::corpus::{Corpus, Token, Verse};
 use plumbline_core::crossref::CrossRef;
 use plumbline_core::memory;
+use plumbline_core::panel::{Block, Color, PanelLink, Run};
 use plumbline_core::reading;
 use plumbline_core::reference::VRef;
 use plumbline_core::search::{SearchAnswer, SearchHit};
 use plumbline_core::strongs::StrongsEntry;
 use plumbline_core::tag::{LoadedTag, TagTarget};
+use plumbline_core::theme::ThemeChoice;
 use plumbline_core::thread::LoadedThread;
 use plumbline_core::weave::LoadedWeave;
 use plumbline_layout::{DisplayList, Hit, ItemKind};
@@ -144,13 +144,9 @@ pub fn display_list_to_wire(dl: &DisplayList) -> WireDisplayList {
         .map(|it| {
             let (kind, verse, verse_display, token_index, verse_number) = match &it.kind {
                 ItemKind::VerseNumber(n) => ("verseNumber", None, None, None, Some(*n)),
-                ItemKind::Word { verse, token_index } => (
-                    "word",
-                    Some(verse.ref_key()),
-                    Some(verse.display()),
-                    Some(*token_index),
-                    None,
-                ),
+                ItemKind::Word { verse, token_index } => {
+                    ("word", Some(verse.ref_key()), Some(verse.display()), Some(*token_index), None)
+                }
             };
             WireItem {
                 x: it.x,
@@ -279,12 +275,7 @@ pub struct WireWordCodes {
 #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum WireSearch {
     /// The query resolved to a reference.
-    Goto {
-        book: String,
-        chapter: u16,
-        verse: Option<u16>,
-        display: String,
-    },
+    Goto { book: String, chapter: u16, verse: Option<u16>, display: String },
     /// The query matched verses.
     Hits {
         /// Human phrase describing how the hits were found.
@@ -309,12 +300,7 @@ pub struct WireSearchHit {
 }
 
 fn search_hit_to_wire(h: &SearchHit) -> WireSearchHit {
-    WireSearchHit {
-        verse: h.vref.ref_key(),
-        display: h.vref.display(),
-        note: h.note,
-        why: h.why.clone(),
-    }
+    WireSearchHit { verse: h.vref.ref_key(), display: h.vref.display(), note: h.note, why: h.why.clone() }
 }
 
 // ── threads ────────────────────────────────────────────────────────────────
@@ -417,9 +403,7 @@ pub fn tags_to_wire(loaded: &[LoadedTag]) -> WireTags {
                         .iter()
                         .map(|m| {
                             let (kind, verse, display, strongs) = match &m.target {
-                                TagTarget::Verse(v) => {
-                                    ("verse", Some(v.ref_key()), Some(v.display()), None)
-                                }
+                                TagTarget::Verse(v) => ("verse", Some(v.ref_key()), Some(v.display()), None),
                                 TagTarget::Concept(c) => ("concept", None, None, Some(c.clone())),
                             };
                             WireTagMember {
@@ -622,10 +606,7 @@ pub fn scored_to_wire(items: Vec<(String, f32)>) -> Vec<WireScored> {
 }
 
 pub fn similar_to_wire(items: Vec<(VRef, f32)>) -> Vec<WireSimilarVerse> {
-    items
-        .into_iter()
-        .map(|(v, score)| WireSimilarVerse { verse: v.ref_key(), display: v.display(), score })
-        .collect()
+    items.into_iter().map(|(v, score)| WireSimilarVerse { verse: v.ref_key(), display: v.display(), score }).collect()
 }
 
 // ── margin notes ──────────────────────────────────────────────────────────────
@@ -747,8 +728,7 @@ pub fn weaves_to_wire(loaded: &[LoadedWeave], corpus: &Corpus) -> WireWeaves {
                             approved: l.approved,
                             span_a: l.span_a.map(|(lo, hi)| [lo, hi]),
                             span_b: l.span_b.map(|(lo, hi)| [lo, hi]),
-                            resolved: corpus.verse(&l.a).is_some()
-                                && corpus.verse(&l.b).is_some(),
+                            resolved: corpus.verse(&l.a).is_some() && corpus.verse(&l.b).is_some(),
                         })
                         .collect(),
                 }
@@ -1216,11 +1196,9 @@ pub fn blocks_to_wire(blocks: Vec<Block>) -> WirePanel {
                     mark_glyph: mark.as_ref().map(|(g, _)| g.clone()),
                     mark_color: mark.map(|(_, c)| color_token(c)),
                 },
-                Block::Para { runs, indent, top_gap } => WireBlock::Para {
-                    runs: runs.into_iter().map(run_to_wire).collect(),
-                    indent,
-                    top_gap,
-                },
+                Block::Para { runs, indent, top_gap } => {
+                    WireBlock::Para { runs: runs.into_iter().map(run_to_wire).collect(), indent, top_gap }
+                }
                 Block::Rule => WireBlock::Rule,
             })
             .collect(),
@@ -1351,11 +1329,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         panes: w
             .open_panes
             .iter()
-            .map(|p| PaneRef {
-                book: p.book.clone(),
-                chapter: p.chapter.max(1),
-                verse: p.verse.filter(|v| *v >= 1),
-            })
+            .map(|p| PaneRef { book: p.book.clone(), chapter: p.chapter.max(1), verse: p.verse.filter(|v| *v >= 1) })
             .collect(),
         active: w.active_pane,
         verse_per_line: w.verse_per_line,
@@ -1409,12 +1383,7 @@ pub fn search_to_wire(a: &SearchAnswer) -> WireSearch {
                 Some(v) => plumbline_core::VRef::new(book.clone(), *chapter, *v).display(),
                 None => format!("{} {}", plumbline_core::canon::display_name(book), chapter),
             };
-            WireSearch::Goto {
-                book: book.clone(),
-                chapter: *chapter,
-                verse: *verse,
-                display,
-            }
+            WireSearch::Goto { book: book.clone(), chapter: *chapter, verse: *verse, display }
         }
         SearchAnswer::Hits { how, total, hits } => WireSearch::Hits {
             how: how.clone(),
@@ -1444,7 +1413,6 @@ pub struct WireUserNote {
 pub struct WireUserNotes {
     pub notes: Vec<WireUserNote>,
 }
-
 
 // ── memorization (Tier 2 #15) — SRS cards, coverage/activity, drills ─────────
 

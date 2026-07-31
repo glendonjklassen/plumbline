@@ -310,10 +310,7 @@ pub fn load_book(home: impl AsRef<Path>, book: &str) -> Result<Vec<ChapterReadin
     }
     match serde_json::from_slice::<BookFile>(&bytes) {
         Ok(f) if f.format == FORMAT && f.book == book => Ok(f.chapters),
-        _ => Err(Error::Corpus(format!(
-            "{} exists but could not be read — refusing to overwrite",
-            path.display()
-        ))),
+        _ => Err(Error::Corpus(format!("{} exists but could not be read — refusing to overwrite", path.display()))),
     }
 }
 
@@ -364,10 +361,7 @@ pub fn ensure_since(home: impl AsRef<Path>, now: &str) -> Result<String, Error> 
     // Getting here means `since` could not use the file, so anything in it is
     // content we do not understand rather than an absence.
     if std::fs::read(&path).is_ok_and(|b| !b.iter().all(|b| b.is_ascii_whitespace())) {
-        return Err(Error::Corpus(format!(
-            "{} exists but could not be read — refusing to overwrite",
-            path.display()
-        )));
+        return Err(Error::Corpus(format!("{} exists but could not be read — refusing to overwrite", path.display())));
     }
     let date = day_of(now);
     let f = SinceFile { format: FORMAT.to_string(), since: date.clone() };
@@ -422,11 +416,7 @@ impl ChapterWords {
 
     /// Words in one chapter; 0 if the chapter isn't in the corpus.
     pub fn words(&self, book: &str, chapter: u16) -> u32 {
-        self.by_book
-            .get(book)
-            .and_then(|v| v.get(chapter.checked_sub(1)? as usize))
-            .copied()
-            .unwrap_or(0)
+        self.by_book.get(book).and_then(|v| v.get(chapter.checked_sub(1)? as usize)).copied().unwrap_or(0)
     }
 
     /// Chapter count for a book as the corpus has it.
@@ -550,13 +540,7 @@ fn pass_pct(corpus: &Corpus, book: &str, r: &ChapterReading, words: u32) -> f32 
 }
 
 /// Turn one stored chapter record into paintable numbers.
-fn heat_of(
-    corpus: &Corpus,
-    book: &str,
-    r: Option<&ChapterReading>,
-    words: u32,
-    now: &str,
-) -> Heat {
+fn heat_of(corpus: &Corpus, book: &str, r: Option<&ChapterReading>, words: u32, now: &str) -> Heat {
     let last_read = r.and_then(|r| r.last_read.clone());
     let touched = r.and_then(|r| r.touched.clone());
 
@@ -567,11 +551,7 @@ fn heat_of(
     // answer: the map's question is "where have you not been lately", and you
     // were just there. (2026-07-29: reading Jude and being shown a bronze glow
     // for it was this rule missing.)
-    let contact = [last_read.as_deref(), touched.as_deref()]
-        .into_iter()
-        .flatten()
-        .filter_map(date_to_days)
-        .max();
+    let contact = [last_read.as_deref(), touched.as_deref()].into_iter().flatten().filter_map(date_to_days).max();
     // UPGRADE AMNESTY. `touched` is additive, so a pass that was under way before
     // it existed has progress and no date — and would glow as if the reader had
     // never been there, which is the very complaint this rule answers. A record
@@ -610,13 +590,7 @@ fn heat_of(
 }
 
 /// Every chapter of `book`, in order — the chapter grid's data.
-pub fn book_chapters(
-    corpus: &Corpus,
-    words: &ChapterWords,
-    store: &Store,
-    book: &str,
-    now: &str,
-) -> Vec<ChapterHeat> {
+pub fn book_chapters(corpus: &Corpus, words: &ChapterWords, store: &Store, book: &str, now: &str) -> Vec<ChapterHeat> {
     let recs = store.get(book);
     (1..=words.chapters(book))
         .map(|c| {
@@ -636,12 +610,7 @@ pub fn book_chapters(
 /// over a book that is half unread would be a number about nothing. It reports
 /// the **most recent** full read anywhere in the book — the answer to "when was
 /// I last in Judges".
-pub fn books(
-    corpus: &Corpus,
-    words: &ChapterWords,
-    store: &Store,
-    now: &str,
-) -> Vec<BookHeat> {
+pub fn books(corpus: &Corpus, words: &ChapterWords, store: &Store, now: &str) -> Vec<BookHeat> {
     canon::book_ids()
         .map(|book| {
             let chapters = book_chapters(corpus, words, store, book, now);
@@ -708,6 +677,12 @@ pub struct Recorded {
 ///
 /// Crossing [`COMPLETE_AT`] snaps coverage to a full read at `now` and clears
 /// the pass, so the next time through starts clean.
+///
+/// Eight arguments, one over clippy's default: three are the loaded core the
+/// shell already holds and five are the tick itself, arriving as separate
+/// scalars off the C ABI. A params struct here would exist only to be
+/// constructed at the single call site and destructured again immediately.
+#[allow(clippy::too_many_arguments)]
 pub fn record(
     home: impl AsRef<Path>,
     corpus: &Corpus,
@@ -993,10 +968,7 @@ mod tests {
         // did not exist yet. It must NOT glow — these records are a day old, and
         // reading the amnesty the other way would leave the glow on precisely the
         // chapters whose glow was reported as a false positive.
-        store.insert(
-            "Gen".into(),
-            vec![ChapterReading { chapter: 1, reached: 4, dwell: 600.0, ..Default::default() }],
-        );
+        store.insert("Gen".into(), vec![ChapterReading { chapter: 1, reached: 4, dwell: 600.0, ..Default::default() }]);
         let ch = &book_chapters(&c, &w, &store, "Gen", NOW)[0];
         assert_eq!(ch.heat.standing, Standing::Partial);
         assert_eq!(ch.heat.glow, 0.0, "an undated pass is read as recent, not as never");
@@ -1139,11 +1111,7 @@ mod tests {
         store.insert(
             "Gen".into(),
             (1..=3)
-                .map(|ch| ChapterReading {
-                    chapter: ch,
-                    last_read: Some("2026-07-20".into()),
-                    ..Default::default()
-                })
+                .map(|ch| ChapterReading { chapter: ch, last_read: Some("2026-07-20".into()), ..Default::default() })
                 .collect(),
         );
         let gen = books(&c, &w, &store, NOW).into_iter().find(|b| b.book == "Gen").unwrap();
@@ -1235,8 +1203,7 @@ mod tests {
         // corrupt bytes, and a well-formed file from a build newer than this one.
         // Neither is "nothing read yet" — both are the reader's history, and
         // every write path here reads the whole file and writes it back.
-        let future =
-            r#"{"format":"plumbline-reading-v9","book":"Gen","chapters":[{"c":1,"lastRead":"2019-01-01"}]}"#;
+        let future = r#"{"format":"plumbline-reading-v9","book":"Gen","chapters":[{"c":1,"lastRead":"2019-01-01"}]}"#;
         for content in ["{ not json".to_string(), future.to_string()] {
             crate::store::write_atomic(&path, &content).unwrap();
             assert!(load_book(&home, "Gen").is_err(), "must not read as no history: {content}");

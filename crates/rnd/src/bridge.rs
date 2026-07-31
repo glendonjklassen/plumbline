@@ -150,11 +150,8 @@ pub fn load_sources(home: impl AsRef<Path>) -> Vec<SourceLink> {
     let home = home.as_ref();
     let mut files: Vec<std::path::PathBuf> = Vec::new();
     if let Ok(entries) = std::fs::read_dir(home.join("bridge")) {
-        let mut here: Vec<_> = entries
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|x| x == "json"))
-            .collect();
+        let mut here: Vec<_> =
+            entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();
         here.sort();
         files.extend(here);
     }
@@ -173,7 +170,7 @@ pub fn load_sources(home: impl AsRef<Path>) -> Vec<SourceLink> {
 
 /// Per-source trust priors (`data/source-priors.json`), fitted offline against
 /// the Abbott-Smith gold. `prior(source)` falls back to `_default`, then 0.5.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Priors {
     map: HashMap<String, f32>,
 }
@@ -184,20 +181,10 @@ struct PriorsWire {
     priors: HashMap<String, f32>,
 }
 
-impl Default for Priors {
-    fn default() -> Priors {
-        Priors { map: HashMap::new() }
-    }
-}
-
 impl Priors {
     /// The prior for a source; `_default` if unlisted, else 0.5.
     pub fn prior(&self, source: &str) -> f32 {
-        self.map
-            .get(source)
-            .copied()
-            .or_else(|| self.map.get("_default").copied())
-            .unwrap_or(0.5)
+        self.map.get(source).copied().or_else(|| self.map.get("_default").copied()).unwrap_or(0.5)
     }
 }
 
@@ -251,8 +238,7 @@ impl Tier {
 pub fn source_tiers(source: &str) -> &'static [Tier] {
     match source {
         "quotation" => &[Tier::God, Tier::Machine],
-        "etymology" | "rendering" | "abbott-smith" | "stepbible-tbesg" | "stepbible-tipnr"
-        | "tsk" => &[Tier::Human],
+        "etymology" | "rendering" | "abbott-smith" | "stepbible-tbesg" | "stepbible-tipnr" | "tsk" => &[Tier::Human],
         "lxx" | "embedding" | "text-witness" => &[Tier::Machine],
         _ => &[Tier::Machine],
     }
@@ -334,11 +320,7 @@ impl FusedBridge {
     /// no filesystem is probed (a CWD-relative probe would be
     /// nondeterministic and a mild injection surface).
     pub fn etymology_only(dict: &StrongsDict) -> FusedBridge {
-        FusedBridge {
-            etymology: Bridge::from_etymology(dict),
-            source_ix: HashMap::new(),
-            priors: Priors::default(),
-        }
+        FusedBridge { etymology: Bridge::from_etymology(dict), source_ix: HashMap::new(), priors: Priors::default() }
     }
 
     /// How many external source links were loaded (for reporting).
@@ -386,14 +368,7 @@ mod tests {
     use plumbline_core::strongs::StrongsEntry;
 
     fn entry(deriv: Option<&str>) -> StrongsEntry {
-        StrongsEntry {
-            lemma: None,
-            xlit: None,
-            pron: None,
-            deriv: deriv.map(String::from),
-            def: None,
-            kjv: None,
-        }
+        StrongsEntry { lemma: None, xlit: None, pron: None, deriv: deriv.map(String::from), def: None, kjv: None }
     }
 
     #[test]
@@ -430,16 +405,10 @@ mod tests {
     #[test]
     fn tiers_of_unions_and_orders_god_human_machine() {
         // A quotation alone already spans God + Machine.
-        assert_eq!(
-            tiers_of(&["quotation".to_string()]),
-            vec![Tier::God, Tier::Machine]
-        );
+        assert_eq!(tiers_of(&["quotation".to_string()]), vec![Tier::God, Tier::Machine]);
         // Etymology (Human) + LXX (Machine) fused on one partner: both marks,
         // ordered God→Human→Machine (no God here).
-        assert_eq!(
-            tiers_of(&["etymology".to_string(), "lxx".to_string()]),
-            vec![Tier::Human, Tier::Machine]
-        );
+        assert_eq!(tiers_of(&["etymology".to_string(), "lxx".to_string()]), vec![Tier::Human, Tier::Machine]);
         // All three tiers present, deduped and ordered.
         assert_eq!(
             tiers_of(&["quotation".to_string(), "etymology".to_string()]),
@@ -475,11 +444,8 @@ mod tests {
             r#"{"format":"overlay-bridge-sources-v1","links":[{"h":"H1","g":"G43","source":"lxx"},{"h":"H1","g":"G99","source":"lxx"}]}"#,
         )
         .unwrap();
-        std::fs::write(
-            home.join("data").join("source-priors.json"),
-            r#"{"priors":{"lxx":0.85,"_default":0.5}}"#,
-        )
-        .unwrap();
+        std::fs::write(home.join("data").join("source-priors.json"), r#"{"priors":{"lxx":0.85,"_default":0.5}}"#)
+            .unwrap();
 
         let fb = FusedBridge::build(&dict, &home);
         assert_eq!(fb.source_link_count(), 2);

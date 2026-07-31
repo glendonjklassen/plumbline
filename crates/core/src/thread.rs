@@ -83,8 +83,8 @@ impl ThreadEntry {
 impl<'de> Deserialize<'de> for ThreadEntry {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let r = EntryRepr::deserialize(d)?;
-        let vref = VRef::parse_ref_key(&r.ref_key)
-            .ok_or_else(|| D::Error::custom(format!("bad entry ref: {}", r.ref_key)))?;
+        let vref =
+            VRef::parse_ref_key(&r.ref_key).ok_or_else(|| D::Error::custom(format!("bad entry ref: {}", r.ref_key)))?;
         Ok(ThreadEntry { vref, span: r.span, text: r.text, note: r.note, added: r.added })
     }
 }
@@ -255,11 +255,9 @@ pub struct LoadedThread {
 pub fn load_threads(home: impl AsRef<Path>) -> (Vec<LoadedThread>, Vec<String>) {
     let dir = home.as_ref().join("threads");
     let mut files: Vec<PathBuf> = match std::fs::read_dir(&dir) {
-        Ok(entries) => entries
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|x| x == "json"))
-            .collect(),
+        Ok(entries) => {
+            entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect()
+        }
         Err(_) => Vec::new(),
     };
     files.sort();
@@ -275,12 +273,9 @@ pub fn load_threads(home: impl AsRef<Path>) -> (Vec<LoadedThread>, Vec<String>) 
             },
         }
     }
-    loaded.sort_by(|a, b| a.thread.name.to_lowercase().cmp(&b.thread.name.to_lowercase()));
-    let loaded = crate::store::resolve_duplicate_ids(
-        loaded,
-        |lt| lt.thread.id.as_deref(),
-        |lt| lt.thread.updated.as_deref(),
-    );
+    loaded.sort_by_key(|a| a.thread.name.to_lowercase());
+    let loaded =
+        crate::store::resolve_duplicate_ids(loaded, |lt| lt.thread.id.as_deref(), |lt| lt.thread.updated.as_deref());
     (loaded, errors)
 }
 
@@ -394,12 +389,7 @@ fn find_thread<'a>(loaded: &'a [LoadedThread], name: &str) -> Result<&'a LoadedT
 
 /// Replace the running notes document of the thread named `name`. The thread
 /// must already exist among `loaded`.
-pub fn set_thread_notes(
-    loaded: &[LoadedThread],
-    name: &str,
-    notes: &str,
-    now: &str,
-) -> Result<PathBuf, Error> {
+pub fn set_thread_notes(loaded: &[LoadedThread], name: &str, notes: &str, now: &str) -> Result<PathBuf, Error> {
     let lt = find_thread(loaded, name)?;
     let mut thread = lt.thread.clone();
     thread.notes = notes.to_string();
@@ -418,10 +408,8 @@ pub fn set_entry_note(
 ) -> Result<PathBuf, Error> {
     let lt = find_thread(loaded, name)?;
     let mut thread = lt.thread.clone();
-    let entry = thread
-        .entries
-        .get_mut(index)
-        .ok_or_else(|| Error::Corpus(format!("thread {name} has no entry {index}")))?;
+    let entry =
+        thread.entries.get_mut(index).ok_or_else(|| Error::Corpus(format!("thread {name} has no entry {index}")))?;
     // An empty note reads as "no note".
     entry.note = note.filter(|n| !n.trim().is_empty());
     write_thread(&lt.file, &thread, now)?;
@@ -453,7 +441,9 @@ mod tests {
 
     #[test]
     fn rejects_wrong_format_and_bad_ref() {
-        assert!(serde_json::from_str::<Thread>(r#"{"format":"nope","name":"x","tokenization":"t","created":"c"}"#).is_err());
+        assert!(
+            serde_json::from_str::<Thread>(r#"{"format":"nope","name":"x","tokenization":"t","created":"c"}"#).is_err()
+        );
         let bad = r#"{"format":"overlay-thread-v1","name":"x","tokenization":"t","created":"c",
             "entries":[{"ref":"garbage","span":[0,1],"text":[],"added":"a"}]}"#;
         assert!(serde_json::from_str::<Thread>(bad).is_err());
@@ -488,13 +478,15 @@ mod tests {
 
         // First add creates the file.
         let (loaded, _) = load_threads(&home);
-        let path = add_to_thread(&home, &loaded, "Romans Road", "kjv1769-tok2", entry(VRef::new("Rom", 3, 23), None)).unwrap();
+        let path =
+            add_to_thread(&home, &loaded, "Romans Road", "kjv1769-tok2", entry(VRef::new("Rom", 3, 23), None)).unwrap();
         assert!(path.exists());
 
         // Second add (reloading first) appends to the same thread.
         let (loaded, _) = load_threads(&home);
         assert_eq!(loaded.len(), 1);
-        add_to_thread(&home, &loaded, "romans road", "kjv1769-tok2", entry(VRef::new("Rom", 6, 23), Some("n"))).unwrap();
+        add_to_thread(&home, &loaded, "romans road", "kjv1769-tok2", entry(VRef::new("Rom", 6, 23), Some("n")))
+            .unwrap();
 
         let (loaded, errs) = load_threads(&home);
         assert!(errs.is_empty());
@@ -586,8 +578,7 @@ mod tests {
         )
         .unwrap();
 
-        let back: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let back: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(back["entries"].as_array().unwrap().len(), 2, "the append itself must land");
         assert_eq!(back["id"], "4b81aa", "an unknown scalar was stripped");
         assert_eq!(back["shared"], serde_json::json!({"with":"study group"}), "an unknown object was stripped");
@@ -611,8 +602,7 @@ mod tests {
         // not part of what identifies it.
         let (loaded, _) = load_threads(&home);
         set_entry_note(&loaded, "Romans Road", 0, Some("all have sinned".into()), "2026-07-30T00:00:00Z").unwrap();
-        let back: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let back: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(back["entries"][0]["note"], "all have sinned");
         assert_eq!(back["entries"][0]["colour"], "amber", "editing the note cost the entry its keys");
         assert_eq!(back["id"], "4b81aa");
@@ -644,8 +634,7 @@ mod tests {
 
         let (loaded, _) = load_threads(&home);
         set_thread_notes(&loaded, "Twins", "rewritten", "2026-07-30T00:00:00Z").unwrap();
-        let back: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let back: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         for e in back["entries"].as_array().unwrap() {
             assert!(e.get("colour").is_none(), "a key was copied onto an entry it may not belong to: {e}");
         }
@@ -718,9 +707,7 @@ mod tests {
             note: None,
             added: added.into(),
         };
-        let read = |path: &Path| -> Value {
-            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
-        };
+        let read = |path: &Path| -> Value { serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap() };
 
         let (loaded, _) = load_threads(&home);
         let path = add_to_thread(
@@ -738,7 +725,14 @@ mod tests {
 
         // Appending an entry: the entry's own `added` is the stamp.
         let (loaded, _) = load_threads(&home);
-        add_to_thread(&home, &loaded, "romans road", "kjv1769-tok2", entry(VRef::new("Rom", 6, 23), "2026-08-02T00:00:00Z")).unwrap();
+        add_to_thread(
+            &home,
+            &loaded,
+            "romans road",
+            "kjv1769-tok2",
+            entry(VRef::new("Rom", 6, 23), "2026-08-02T00:00:00Z"),
+        )
+        .unwrap();
         assert_eq!(read(&path)["updated"], "2026-08-02T00:00:00Z");
 
         // The notes document, and one entry's note: no stamp of their own, so

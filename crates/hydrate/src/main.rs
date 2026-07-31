@@ -23,11 +23,8 @@ use plumbline_rnd::{bridge, embed, morph};
 
 /// The pack files, relative to a home. Core files gate the reader; the R&D
 /// files are optional tiers. Sidecars ride with their primary file.
-const CORE_FILES: &[(&str, bool)] = &[
-    ("data/kjv.jsonl", true),
-    ("data/strongs.json", true),
-    ("data/kjv-notes.jsonl", false),
-];
+const CORE_FILES: &[(&str, bool)] =
+    &[("data/kjv.jsonl", true), ("data/strongs.json", true), ("data/kjv-notes.jsonl", false)];
 const RND_FILES: &[&str] = &[
     "data/cross-references.tsv",
     "data/concept-vectors.vec",
@@ -323,8 +320,7 @@ fn copy(from: &Path, to: &Path) -> std::io::Result<()> {
             ));
         }
     }
-    let all: Vec<&str> =
-        CORE_FILES.iter().map(|(r, _)| *r).chain(RND_FILES.iter().copied()).collect();
+    let all: Vec<&str> = CORE_FILES.iter().map(|(r, _)| *r).chain(RND_FILES.iter().copied()).collect();
     let mut copied = 0usize;
     for rel in all {
         let src = from.join(rel);
@@ -364,10 +360,7 @@ fn copy(from: &Path, to: &Path) -> std::io::Result<()> {
 /// atomic on Unix and Windows, so a crash mid-copy never leaves a truncated
 /// pack file behind). Returns the number of bytes copied.
 fn copy_atomic(src: &Path, dst: &Path) -> std::io::Result<u64> {
-    let name = dst
-        .file_name()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "out".to_string());
+    let name = dst.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "out".to_string());
     let tmp = dst.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
     let result = (|| {
         let mut reader = std::fs::File::open(src)?;
@@ -460,7 +453,9 @@ fn check(home: &Path) -> ExitCode {
             if ext == 0 {
                 println!("  ✓ etymology bridge — {ety} codes linked (from strongs.json; no external sources)");
             } else {
-                println!("  ✓ fused bridge — {ety} etymology codes + {ext} external source links (bridge/*.json + priors)");
+                println!(
+                    "  ✓ fused bridge — {ety} etymology codes + {ext} external source links (bridge/*.json + priors)"
+                );
             }
         }
         Err(_) => println!("  · etymology bridge — needs strongs.json"),
@@ -496,6 +491,22 @@ fn check(home: &Path) -> ExitCode {
     } else {
         println!("Reader is NOT hydrated — supply the core files (see data-prep/README.md).");
         ExitCode::FAILURE
+    }
+}
+
+/// Human-readable byte size.
+fn human(bytes: u64) -> String {
+    const U: [&str; 4] = ["B", "KB", "MB", "GB"];
+    let mut v = bytes as f64;
+    let mut i = 0;
+    while v >= 1024.0 && i < U.len() - 1 {
+        v /= 1024.0;
+        i += 1;
+    }
+    if i == 0 {
+        format!("{bytes} B")
+    } else {
+        format!("{v:.1} {}", U[i])
     }
 }
 
@@ -559,21 +570,5 @@ mod tests {
         assert!(leftovers.is_empty(), "temp files should be gone");
 
         let _ = fs::remove_dir_all(&root);
-    }
-}
-
-/// Human-readable byte size.
-fn human(bytes: u64) -> String {
-    const U: [&str; 4] = ["B", "KB", "MB", "GB"];
-    let mut v = bytes as f64;
-    let mut i = 0;
-    while v >= 1024.0 && i < U.len() - 1 {
-        v /= 1024.0;
-        i += 1;
-    }
-    if i == 0 {
-        format!("{bytes} B")
-    } else {
-        format!("{v:.1} {}", U[i])
     }
 }

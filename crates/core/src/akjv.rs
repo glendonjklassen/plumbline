@@ -146,12 +146,11 @@ impl Akjv {
         let mut ix: HashMap<VRef, Vec<AkjvSpan>> = HashMap::new();
         for line in lines {
             let Ok(w) = serde_json::from_str::<VerseWire>(line) else { continue };
-            let mut spans: Vec<AkjvSpan> = w
-                .d
-                .into_iter()
-                .filter(|(s, e, _)| s <= e)
-                .map(|(start, end, text)| AkjvSpan { start, end, text })
-                .collect();
+            let mut spans: Vec<AkjvSpan> =
+                w.d.into_iter()
+                    .filter(|(s, e, _)| s <= e)
+                    .map(|(start, end, text)| AkjvSpan { start, end, text })
+                    .collect();
             if spans.is_empty() {
                 continue;
             }
@@ -281,9 +280,8 @@ pub fn parse_akjv_bin(tok_version: &str, bytes: &[u8]) -> Option<Akjv> {
     if bytes.len() < AKJVB_HEADER || &bytes[..8] != AKJVB_MAGIC {
         return None;
     }
-    let u32_at = |o: usize| -> Option<usize> {
-        Some(u32::from_le_bytes(bytes.get(o..o + 4)?.try_into().ok()?) as usize)
-    };
+    let u32_at =
+        |o: usize| -> Option<usize> { Some(u32::from_le_bytes(bytes.get(o..o + 4)?.try_into().ok()?) as usize) };
     let verse_count = u32_at(8)?;
     let span_count = u32_at(12)?;
     let text_count = u32_at(16)?;
@@ -388,13 +386,15 @@ mod tests {
         // "For God so loved the world." — the overlay rewords tokens 2..3 as one
         // phrase and token 5 on its own.
         const KJV: &str = concat!(
-            r#"{"format":"x","tokenization":"kjv1769-tok2","verses":1}"#, "\n",
+            r#"{"format":"x","tokenization":"kjv1769-tok2","verses":1}"#,
+            "\n",
             r#"{"b":"John","c":3,"v":16,"t":[["","For","",[],0],["","God","",["G2316"],0],"#,
             r#"["","so","",[],0],["","loved",",",["G25"],0],["","the","",[],0],"#,
             r#"["","world",".",["G2889"],0]]}"#,
         );
         const OV: &str = concat!(
-            r#"{"format":"overlay-akjv-v1","tokenization":"kjv1769-tok2","source":"AKJV"}"#, "\n",
+            r#"{"format":"overlay-akjv-v1","tokenization":"kjv1769-tok2","source":"AKJV"}"#,
+            "\n",
             r#"{"b":"John","c":3,"v":16,"d":[[2,3,"so much loved"],[5,5,"earth"]]}"#,
         );
         let c = corpus::from_str(KJV).unwrap();
@@ -434,11 +434,13 @@ mod tests {
     fn a_span_past_the_end_of_the_verse_is_ignored() {
         use crate::corpus;
         const KJV: &str = concat!(
-            r#"{"format":"x","tokenization":"kjv1769-tok2","verses":1}"#, "\n",
+            r#"{"format":"x","tokenization":"kjv1769-tok2","verses":1}"#,
+            "\n",
             r#"{"b":"Gen","c":1,"v":1,"t":[["","In","",[],0],["","the","",[],0]]}"#,
         );
         const OV: &str = concat!(
-            r#"{"format":"overlay-akjv-v1","tokenization":"kjv1769-tok2","source":"x"}"#, "\n",
+            r#"{"format":"overlay-akjv-v1","tokenization":"kjv1769-tok2","source":"x"}"#,
+            "\n",
             r#"{"b":"Gen","c":1,"v":1,"d":[[0,0,"At"],[7,9,"nonsense"]]}"#,
         );
         let c = corpus::from_str(KJV).unwrap();

@@ -31,12 +31,8 @@ pub type StrongsDict = HashMap<String, StrongsEntry>;
 /// Load the merged Hebrew+Greek dictionary from `strongs.json`.
 pub fn load_strongs(path: impl AsRef<Path>) -> Result<StrongsDict, Error> {
     let path = path.as_ref();
-    let raw = std::fs::read(path).map_err(|e| Error::Io {
-        path: path.display().to_string(),
-        source: e,
-    })?;
-    serde_json::from_slice(&raw)
-        .map_err(|e| Error::Parse(format!("could not parse {}: {e}", path.display())))
+    let raw = std::fs::read(path).map_err(|e| Error::Io { path: path.display().to_string(), source: e })?;
+    serde_json::from_slice(&raw).map_err(|e| Error::Parse(format!("could not parse {}: {e}", path.display())))
 }
 
 /// Strong's ref → the verses containing it, in canonical (file) order.
@@ -64,11 +60,7 @@ impl OccurrenceIxBuilder {
         let end = (self.next + n).min(corpus.len());
         for i in self.next..end {
             let Some(v) = corpus.verse_at(i) else { continue };
-            let refs: BTreeSet<&str> = v
-                .tokens
-                .iter()
-                .flat_map(|t| t.strongs.iter().map(String::as_str))
-                .collect();
+            let refs: BTreeSet<&str> = v.tokens.iter().flat_map(|t| t.strongs.iter().map(String::as_str)).collect();
             let vr = v.vref();
             for r in refs {
                 // Allocate the key String only on first sight of a code (~14k
@@ -116,13 +108,7 @@ impl OccurrenceIx {
     /// co-occurrence count. Ported from `sharedVersesOf`.
     pub fn shared_verses(&self, a: &str, b: &str) -> Vec<VRef> {
         let bs: HashSet<&VRef> = self.map.get(b).into_iter().flatten().collect();
-        self.map
-            .get(a)
-            .into_iter()
-            .flatten()
-            .filter(|v| bs.contains(v))
-            .cloned()
-            .collect()
+        self.map.get(a).into_iter().flatten().filter(|v| bs.contains(v)).cloned().collect()
     }
 
     /// Every indexed Strong's ref.
@@ -135,8 +121,8 @@ impl OccurrenceIx {
 /// English pronouns/interjections that open a definition sentence. Ported
 /// verbatim from `nonNameCapitalizedWords`.
 const NON_NAME_CAPITALIZED: &[&str] = &[
-    "I", "THOU", "HE", "SHE", "WE", "YE", "THEY", "THIS", "THAT", "THESE",
-    "THOSE", "O", "OH", "AH", "ALAS", "LO", "BEHOLD", "WOE", "YEA", "NAY", "AMEN",
+    "I", "THOU", "HE", "SHE", "WE", "YE", "THEY", "THIS", "THAT", "THESE", "THOSE", "O", "OH", "AH", "ALAS", "LO",
+    "BEHOLD", "WOE", "YEA", "NAY", "AMEN",
 ];
 
 /// Whether a Strong's entry names a proper noun (person/place/people/demonym)
@@ -162,7 +148,7 @@ pub fn is_proper_noun(e: &StrongsEntry) -> bool {
 
 /// First word of `t` reduced to its alphabetic characters, if it has any.
 fn first_alpha_word(t: &str) -> Option<String> {
-    let w = t.trim().split_whitespace().next()?;
+    let w = t.split_whitespace().next()?;
     let alpha: String = w.chars().filter(|c| c.is_alphabetic()).collect();
     if alpha.is_empty() {
         None
@@ -193,9 +179,7 @@ fn segment_is_names(seg: &str) -> bool {
 fn capitalized_word(w: &str) -> bool {
     let alpha: String = w.chars().filter(|c| c.is_alphabetic()).collect();
     match alpha.chars().next() {
-        Some(c) => {
-            c.is_uppercase() && !NON_NAME_CAPITALIZED.contains(&alpha.to_uppercase().as_str())
-        }
+        Some(c) => c.is_uppercase() && !NON_NAME_CAPITALIZED.contains(&alpha.to_uppercase().as_str()),
         None => false,
     }
 }
@@ -256,22 +240,13 @@ mod tests {
 
     #[test]
     fn proper_noun_heuristic() {
-        let name = StrongsEntry {
-            def: Some("Nob, a place in Palestine".into()),
-            ..Default::default()
-        };
+        let name = StrongsEntry { def: Some("Nob, a place in Palestine".into()), ..Default::default() };
         assert!(is_proper_noun(&name));
 
-        let common = StrongsEntry {
-            def: Some("to drive (an animal, chariot)".into()),
-            ..Default::default()
-        };
+        let common = StrongsEntry { def: Some("to drive (an animal, chariot)".into()), ..Default::default() };
         assert!(!is_proper_noun(&common));
 
-        let pronoun = StrongsEntry {
-            def: Some("I exist".into()),
-            ..Default::default()
-        };
+        let pronoun = StrongsEntry { def: Some("I exist".into()), ..Default::default() };
         assert!(!is_proper_noun(&pronoun));
 
         // name detected via the kjv-renderings list when the def leads common.
@@ -281,6 +256,21 @@ mod tests {
             ..Default::default()
         };
         assert!(is_proper_noun(&via_kjv));
+    }
+
+    /// The 1890 prose is not uniformly trimmed, and the first *word* is what the
+    /// heuristic reads — not the first character. `split_whitespace` already
+    /// skips the leading run, which is why [`first_alpha_word`] does not trim;
+    /// a splitter that doesn't would hand back an empty first field and every
+    /// indented entry would stop looking like a name.
+    #[test]
+    fn proper_noun_reads_past_leading_whitespace() {
+        let indented = StrongsEntry { def: Some("  \n\tNob, a place in Palestine".into()), ..Default::default() };
+        assert!(is_proper_noun(&indented));
+
+        let indented_common =
+            StrongsEntry { def: Some("   to drive (an animal, chariot)".into()), ..Default::default() };
+        assert!(!is_proper_noun(&indented_common));
     }
 
     #[test]

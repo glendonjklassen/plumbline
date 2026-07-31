@@ -190,9 +190,7 @@ impl Card {
     /// crossing a chapter boundary can be allowed later without a format
     /// change.)
     pub fn new_passage(start: VRef, through: &VRef, tok_version: &str, created: &str) -> Card {
-        let spans = through.book == start.book
-            && through.chapter == start.chapter
-            && through.verse > start.verse;
+        let spans = through.book == start.book && through.chapter == start.chapter && through.verse > start.verse;
         Card { through: spans.then(|| through.clone()), ..Card::new(start, tok_version, created) }
     }
 
@@ -272,12 +270,7 @@ pub fn review(card: &mut Card, grade: Grade, now: &str) {
     }
 
     card.due = add_days(now, card.interval_days as i64);
-    card.reviews.push(Review {
-        at: now.to_string(),
-        grade,
-        interval_days: card.interval_days,
-        extra: Map::new(),
-    });
+    card.reviews.push(Review { at: now.to_string(), grade, interval_days: card.interval_days, extra: Map::new() });
 }
 
 /// Whether the card is due for review at `now` (RFC3339 UTC) — `due` on or
@@ -341,8 +334,7 @@ pub fn load_cards(home: impl AsRef<Path>) -> (HashMap<VRef, Card>, Vec<String>) 
 /// Shared with [`write_card`]'s refuse-to-clobber check so the reader and the
 /// writer can never disagree about which files we understand.
 fn parse_card(path: &Path, bytes: &[u8]) -> Result<Card, String> {
-    let r: CardRepr =
-        serde_json::from_slice(bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+    let r: CardRepr = serde_json::from_slice(bytes).map_err(|e| format!("{}: {e}", path.display()))?;
     if r.format != FORMAT {
         return Err(format!("{}: unknown memory format {}", path.display(), r.format));
     }
@@ -449,8 +441,8 @@ fn first_letter_hint(word: &str) -> String {
     let chars: Vec<char> = word.chars().collect();
     let lead: String = chars.iter().take_while(|c| !c.is_alphanumeric()).collect();
     let first = chars.iter().find(|c| c.is_alphanumeric()).copied();
-    let trail: String = chars.iter().rev().take_while(|c| !c.is_alphanumeric()).collect::<Vec<_>>()
-        .into_iter().rev().collect();
+    let trail: String =
+        chars.iter().rev().take_while(|c| !c.is_alphanumeric()).collect::<Vec<_>>().into_iter().rev().collect();
     match first {
         Some(c) => format!("{lead}{c}{trail}"),
         None => word.to_string(), // punctuation-only token
@@ -505,11 +497,7 @@ pub fn score_recall(typed: &str, actual: &str) -> RecallScore {
     let hits = lcs_hits(&exp_norm, &got_norm);
     let correct = hits.iter().filter(|&&h| h).count();
     let accuracy = if exp_norm.is_empty() { 0.0 } else { correct as f32 / exp_norm.len() as f32 };
-    let words = expected
-        .iter()
-        .zip(hits.iter())
-        .map(|(w, &ok)| WordHit { word: (*w).to_string(), ok })
-        .collect();
+    let words = expected.iter().zip(hits.iter()).map(|(w, &ok)| WordHit { word: (*w).to_string(), ok }).collect();
     RecallScore { accuracy, words }
 }
 
@@ -524,11 +512,7 @@ fn lcs_hits(expected: &[String], got: &[String]) -> Vec<bool> {
     let mut dp = vec![vec![0u16; m + 1]; n + 1];
     for i in (0..n).rev() {
         for j in (0..m).rev() {
-            dp[i][j] = if expected[i] == got[j] {
-                dp[i + 1][j + 1] + 1
-            } else {
-                dp[i + 1][j].max(dp[i][j + 1])
-            };
+            dp[i][j] = if expected[i] == got[j] { dp[i + 1][j + 1] + 1 } else { dp[i + 1][j].max(dp[i][j + 1]) };
         }
     }
     let mut hits = vec![false; n];
@@ -609,18 +593,21 @@ pub fn card_list(cards: &HashMap<VRef, Card>, now: &str) -> Vec<CardSummary> {
     let mut out: Vec<(_, CardSummary)> = cards
         .values()
         .map(|c| {
-            (c.verse.reading_key(), CardSummary {
-                ref_key: c.verse.ref_key(),
-                label: c.label(),
-                verses: c.verses().len() as u32,
-                mastery: mastery(c),
-                reps: c.reps,
-                lapses: c.lapses,
-                due: is_due(c, now),
-            })
+            (
+                c.verse.reading_key(),
+                CardSummary {
+                    ref_key: c.verse.ref_key(),
+                    label: c.label(),
+                    verses: c.verses().len() as u32,
+                    mastery: mastery(c),
+                    reps: c.reps,
+                    lapses: c.lapses,
+                    due: is_due(c, now),
+                },
+            )
         })
         .collect();
-    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out.sort_by_key(|a| a.0);
     out.into_iter().map(|(_, s)| s).collect()
 }
 
@@ -643,8 +630,7 @@ pub fn activity_by_day(cards: &HashMap<VRef, Card>) -> Vec<DayActivity> {
             }
         }
     }
-    let mut out: Vec<DayActivity> =
-        by_day.into_iter().map(|(day, reviews)| DayActivity { day, reviews }).collect();
+    let mut out: Vec<DayActivity> = by_day.into_iter().map(|(day, reviews)| DayActivity { day, reviews }).collect();
     out.sort_by(|a, b| a.day.cmp(&b.day));
     out
 }
@@ -666,10 +652,8 @@ pub struct SectionCoverage {
 /// Roll coverage up to [`crate::reference::CANON_SEGMENTS`].
 pub fn coverage_by_section(cards: &HashMap<VRef, Card>) -> Vec<SectionCoverage> {
     use crate::reference::CANON_SEGMENTS;
-    let mut acc: Vec<SectionCoverage> = CANON_SEGMENTS
-        .iter()
-        .map(|(label, _, _)| SectionCoverage { label, cards: 0, mature: 0, reviews: 0 })
-        .collect();
+    let mut acc: Vec<SectionCoverage> =
+        CANON_SEGMENTS.iter().map(|(label, _, _)| SectionCoverage { label, cards: 0, mature: 0, reviews: 0 }).collect();
     for c in cards.values() {
         let Some(bi) = crate::canon::book_order(&c.verse.book) else { continue };
         if let Some(si) = CANON_SEGMENTS.iter().position(|(_, lo, hi)| bi >= *lo && bi <= *hi) {
@@ -720,7 +704,7 @@ mod tests {
         let mut c = Card::new(VRef::new("Ps", 23, 1), "kjv1769-tok2", T0);
         assert_eq!(mastery(&c), Mastery::New);
         assert!(is_due(&c, T0)); // new cards are due now
-        // Grind Good until mature (interval crosses 21 days).
+                                 // Grind Good until mature (interval crosses 21 days).
         let mut day = 0i64;
         for _ in 0..6 {
             let now = add_days(T0, day) + "T00:00:00Z";
@@ -797,10 +781,13 @@ mod tests {
         assert_eq!(cov[0].reps, 2);
 
         let act = activity_by_day(&cards);
-        assert_eq!(act, vec![
-            DayActivity { day: "2026-01-01".into(), reviews: 1 },
-            DayActivity { day: "2026-01-03".into(), reviews: 1 },
-        ]);
+        assert_eq!(
+            act,
+            vec![
+                DayActivity { day: "2026-01-01".into(), reviews: 1 },
+                DayActivity { day: "2026-01-03".into(), reviews: 1 },
+            ]
+        );
 
         let sec = coverage_by_section(&cards);
         let gospels = sec.iter().find(|s| s.label == "Gospels").unwrap();

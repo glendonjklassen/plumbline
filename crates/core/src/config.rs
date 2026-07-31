@@ -275,11 +275,19 @@ fn default_line_spacing() -> f64 {
 
 /// A copy-style token, falling back to the default on an unknown value.
 fn normalize_copy_style(s: &str) -> String {
-    if COPY_STYLES.contains(&s) { s.to_string() } else { Config::default().copy_style }
+    if COPY_STYLES.contains(&s) {
+        s.to_string()
+    } else {
+        Config::default().copy_style
+    }
 }
 /// Clamp a finite value into `[lo, hi]`, else the fallback (guards a corrupt file).
 fn clamp_or(v: f64, lo: f64, hi: f64, fallback: f64) -> f64 {
-    if v.is_finite() && v >= lo && v <= hi { v } else { fallback }
+    if v.is_finite() && v >= lo && v <= hi {
+        v
+    } else {
+        fallback
+    }
 }
 
 impl Config {
@@ -349,12 +357,7 @@ impl Config {
             open_panes: self
                 .panes
                 .iter()
-                .map(|p| PaneWire {
-                    book: p.book.clone(),
-                    chapter: p.chapter,
-                    verse: p.verse,
-                    extra: Map::new(),
-                })
+                .map(|p| PaneWire { book: p.book.clone(), chapter: p.chapter, verse: p.verse, extra: Map::new() })
                 .collect(),
             active_pane: self.active,
             verse_per_line: self.verse_per_line,
@@ -366,12 +369,7 @@ impl Config {
                 .history
                 .iter()
                 .take(HISTORY_CAP)
-                .map(|p| PaneWire {
-                    book: p.book.clone(),
-                    chapter: p.chapter,
-                    verse: None,
-                    extra: Map::new(),
-                })
+                .map(|p| PaneWire { book: p.book.clone(), chapter: p.chapter, verse: None, extra: Map::new() })
                 .collect(),
             human_analysis: Some(self.human_analysis),
             machine_analysis: Some(self.machine_analysis),
@@ -426,8 +424,7 @@ pub fn config_dir() -> Option<PathBuf> {
     }
     #[cfg(target_os = "macos")]
     {
-        std::env::var_os("HOME")
-            .map(|home| Path::new(&home).join("Library").join("Application Support").join(app))
+        std::env::var_os("HOME").map(|home| Path::new(&home).join("Library").join("Application Support").join(app))
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
@@ -477,9 +474,7 @@ pub fn save_to(path: impl AsRef<Path>, config: &Config) -> Result<(), Error> {
     if let Some(old) = std::fs::read(path).ok().and_then(|b| serde_json::from_slice::<ConfigWire>(&b).ok()) {
         carry_unknown(old, &mut wire);
     }
-    let json = serde_json::to_string_pretty(&wire)
-        .map(|s| s + "\n")
-        .map_err(|e| Error::Parse(e.to_string()))?;
+    let json = serde_json::to_string_pretty(&wire).map(|s| s + "\n").map_err(|e| Error::Parse(e.to_string()))?;
     crate::store::write_atomic(path, &json)
 }
 
@@ -521,14 +516,20 @@ mod tests {
         let cfg = Config {
             mode: StudyMode::Full,
             body_size: 21.5,
-            panes: vec![PaneRef { book: "John".into(), chapter: 3, verse: Some(16) }, PaneRef { book: "Rom".into(), chapter: 8, verse: None }],
+            panes: vec![
+                PaneRef { book: "John".into(), chapter: 3, verse: Some(16) },
+                PaneRef { book: "Rom".into(), chapter: 8, verse: None },
+            ],
             active: 1,
             verse_per_line: true,
             theme: ThemeChoice::Night,
             copy_style: "verseMarkdown".to_string(),
             side_margin: 40.0,
             line_spacing: 1.6,
-            history: vec![PaneRef { book: "Gen".into(), chapter: 1, verse: None }, PaneRef { book: "Rom".into(), chapter: 8, verse: None }],
+            history: vec![
+                PaneRef { book: "Gen".into(), chapter: 1, verse: None },
+                PaneRef { book: "Rom".into(), chapter: 8, verse: None },
+            ],
             human_analysis: true,
             machine_analysis: false,
             present_shares_as_new: false,
@@ -696,7 +697,11 @@ mod tests {
             Value::Null,
             "a pane's keys must not be renamed on the way through"
         );
-        assert_eq!(back["openPanes"][0]["pinned"], serde_json::json!({"by":"reader"}), "a pane's unknown object was stripped");
+        assert_eq!(
+            back["openPanes"][0]["pinned"],
+            serde_json::json!({"by":"reader"}),
+            "a pane's unknown object was stripped"
+        );
         assert_eq!(back["history"][0]["openedFrom"], "search", "a history entry's unknown key was stripped");
 
         // A second load/save is still lossless — the keys are not one-shot.

@@ -73,7 +73,7 @@ mod tests {
         let gen = notes.get(&VRef::new("Gen", 1, 4)).unwrap();
         assert_eq!(gen, &["first note on 1:4", "second note on 1:4"]);
         assert_eq!(notes.get(&VRef::new("John", 3, 16)).unwrap().len(), 1);
-        assert!(notes.get(&VRef::new("Gen", 1, 5)).is_none());
+        assert!(!notes.contains_key(&VRef::new("Gen", 1, 5)));
     }
 
     #[test]

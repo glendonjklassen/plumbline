@@ -126,8 +126,7 @@ pub unsafe extern "C" fn plumbline_engine_verse_sim_save(
     out_len: *mut u32,
 ) -> *mut u8 {
     guard(core::ptr::null_mut(), || {
-        let (Some(e), Some(stamp)) = (unsafe { engine.as_ref() }, unsafe { crate::opt_str(stamp) })
-        else {
+        let (Some(e), Some(stamp)) = (unsafe { engine.as_ref() }, unsafe { crate::opt_str(stamp) }) else {
             return core::ptr::null_mut();
         };
         let Some(bytes) = e.verse_sim_encode(stamp) else {
@@ -158,8 +157,7 @@ pub unsafe extern "C" fn plumbline_engine_verse_sim_load(
     stamp: *const c_char,
 ) -> i32 {
     guard(0, || {
-        let (Some(e), Some(stamp)) = (unsafe { engine.as_ref() }, unsafe { crate::opt_str(stamp) })
-        else {
+        let (Some(e), Some(stamp)) = (unsafe { engine.as_ref() }, unsafe { crate::opt_str(stamp) }) else {
             return 0;
         };
         if bytes.is_null() {

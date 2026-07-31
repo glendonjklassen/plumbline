@@ -52,25 +52,25 @@ use std::path::PathBuf;
 use std::ptr;
 use std::sync::OnceLock;
 
+use plumbline_core::akjv;
 use plumbline_core::config;
 use plumbline_core::corpus::{self, Corpus};
 use plumbline_core::crossref::{self, XRefIx};
-use plumbline_core::akjv;
+use plumbline_core::memory;
+use plumbline_core::panel::{self, PanelSource};
+use plumbline_core::reading;
 use plumbline_core::renderings::{self, Renderings};
 use plumbline_core::search::{self, Notes, SearchIx};
 use plumbline_core::strongs::{self, OccurrenceIx, StrongsDict};
-use plumbline_core::memory;
-use plumbline_core::reading;
 use plumbline_core::tag::{self, LoadedTag, TagTarget};
 use plumbline_core::thread::{self, LoadedThread, ThreadEntry};
 use plumbline_core::weave::{self, Link, LoadedWeave, WeaveKind};
-use plumbline_core::panel::{self, PanelSource};
 use plumbline_core::{canon, export, notes, theme, usernote, VRef};
 use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure, MeasureMemo, Memoized};
 use plumbline_rnd::{bridge, burst, concept, embed, morph};
 
-mod wire;
 pub mod reading_map;
+mod wire;
 
 // ── token flag bits (mirror the core's `FLAG_*`; exported to bindings) ───────
 //
@@ -464,6 +464,10 @@ impl PlumblineEngine {
 
     /// The built SIF model as storable bytes, stamped with what it was built
     /// from. `None` until it exists — there is nothing to save before then.
+    ///
+    /// `allow(dead_code)`: only `wasm.rs` saves and restores the model, because
+    /// only the web pays the rebuild on every tab.
+    #[allow(dead_code)]
     pub(crate) fn verse_sim_encode(&self, stamp: &str) -> Option<Vec<u8>> {
         Some(self.verse_sim.get()?.encode(stamp))
     }
@@ -474,6 +478,10 @@ impl PlumblineEngine {
     /// This is the 11.2 s of a launch that never needed to happen twice: the model
     /// is a pure function of the embedding and the corpus, and the phone was
     /// recomputing it on every open (2026-07-28).
+    ///
+    /// `allow(dead_code)`: the counterpart to `verse_sim_encode`, and wasm-only
+    /// for the same reason.
+    #[allow(dead_code)]
     pub(crate) fn verse_sim_load(&self, bytes: &[u8], stamp: &str) -> bool {
         if self.verse_sim.get().is_some() {
             return false;
@@ -502,6 +510,10 @@ impl PlumblineEngine {
     /// prevent happened anyway: 26,042 ms, on the very build that shipped the fix
     /// (2026-07-28). A desktop hid it because stage 2 there takes 40 ms and the
     /// warm won the race.
+    ///
+    /// `allow(dead_code)`: only a slicing shell arms it, and the only slicing
+    /// shell is the web — Android builds everything up front.
+    #[allow(dead_code)]
     pub(crate) fn set_defer_builds(&self, on: bool) {
         self.defer_builds.store(on, std::sync::atomic::Ordering::Relaxed);
     }
@@ -600,6 +612,13 @@ impl PlumblineEngine {
     /// sliced phases come first because they are the biggest; what is left as a
     /// single build is only what measured small enough to be one — the bridge, at
     /// 3 ms (2026-07-30) — so a tap between phases is still answered. Re-running after the R&D pack lands picks up the SIF model.
+    ///
+    /// `allow(dead_code)` for the same reason as [`WARM_SLICE`]: the only callers
+    /// are the wasm-only export and the tests, and a plain host build compiles
+    /// neither. The allow covers the whole warm cluster this roots — the
+    /// `warm_*_slice` helpers and the `*_partial` / `warm_phase` fields they
+    /// touch — because rustc treats an allowed item as live and walks on from it.
+    #[allow(dead_code)]
     fn warm_next(&self, slice: usize) -> i32 {
         use std::sync::atomic::Ordering;
         // A shell that warms in slices has promised to keep this thread
@@ -757,9 +776,7 @@ impl PlumblineEngine {
             return 1;
         }
         if let Some(found) = b.take() {
-            let _ = self
-                .leitwort
-                .set(found.into_iter().map(|b| (b.strongs.clone(), b)).collect());
+            let _ = self.leitwort.set(found.into_iter().map(|b| (b.strongs.clone(), b)).collect());
         }
         *guard = None;
         0
@@ -808,7 +825,6 @@ impl PlumblineEngine {
                 .collect()
         })
     }
-
 }
 
 /// The reloadable personal study state (see [`PlumblineEngine::study`]).
@@ -827,8 +843,7 @@ struct StudyData {
 fn load_study(home: &Option<PathBuf>) -> StudyData {
     match home {
         Some(home) => StudyData {
-            notes: notes::load_notes(home.join("data").join("kjv-notes.jsonl"))
-                .unwrap_or_default(),
+            notes: notes::load_notes(home.join("data").join("kjv-notes.jsonl")).unwrap_or_default(),
             threads: thread::load_threads(home).0,
             tags: tag::load_tags(home).0,
             weaves: weave::load_weaves(home).0,
@@ -1007,10 +1022,7 @@ fn guard_err(f: impl FnOnce() -> *mut c_char) -> *mut c_char {
 /// before the epoch yields the epoch rather than a negative stamp.
 fn now_stamp() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
+    let secs = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
     plumbline_core::civil::stamp_from_epoch_secs(secs)
 }
 
@@ -1087,10 +1099,7 @@ pub unsafe extern "C" fn plumbline_string_free(ptr: *mut c_char) {
 /// `home` is a valid NUL-terminated UTF-8 path; `out_err` is null or a writable
 /// slot for one `*mut c_char`.
 #[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_open(
-    home: *const c_char,
-    out_err: *mut *mut c_char,
-) -> *mut PlumblineEngine {
+pub unsafe extern "C" fn plumbline_engine_open(home: *const c_char, out_err: *mut *mut c_char) -> *mut PlumblineEngine {
     guard(ptr::null_mut(), || {
         if !out_err.is_null() {
             *out_err = ptr::null_mut();
@@ -1212,11 +1221,7 @@ pub unsafe extern "C" fn plumbline_engine_toc_json(engine: *const PlumblineEngin
         };
         let books: Vec<wire::TocBook> = canon::BOOKS
             .iter()
-            .map(|b| wire::TocBook {
-                id: b.id,
-                name: b.name,
-                chapters: engine.corpus.chapter_count(b.id),
-            })
+            .map(|b| wire::TocBook { id: b.id, name: b.name, chapters: engine.corpus.chapter_count(b.id) })
             .collect();
         out_json(&wire::Toc { books })
     })
@@ -1229,15 +1234,10 @@ pub unsafe extern "C" fn plumbline_engine_toc_json(engine: *const PlumblineEngin
 /// # Safety
 /// `engine` is valid; `book` is a valid NUL-terminated UTF-8 string.
 #[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_chapter_count(
-    engine: *const PlumblineEngine,
-    book: *const c_char,
-) -> u32 {
-    guard(0, || {
-        match (engine.as_ref(), opt_str(book)) {
-            (Some(engine), Some(book)) => engine.corpus.chapter_count(book) as u32,
-            _ => 0,
-        }
+pub unsafe extern "C" fn plumbline_engine_chapter_count(engine: *const PlumblineEngine, book: *const c_char) -> u32 {
+    guard(0, || match (engine.as_ref(), opt_str(book)) {
+        (Some(engine), Some(book)) => engine.corpus.chapter_count(book) as u32,
+        _ => 0,
     })
 }
 
@@ -1253,17 +1253,15 @@ pub unsafe extern "C" fn plumbline_engine_chapter_verse_count(
     book: *const c_char,
     chapter: u32,
 ) -> u32 {
-    guard(0, || {
-        match (engine.as_ref(), opt_str(book)) {
-            (Some(engine), Some(book)) => engine
-                .corpus
-                .chapter_verses(book, chapter.min(u16::MAX as u32) as u16)
-                .iter()
-                .map(|v| v.verse as u32)
-                .max()
-                .unwrap_or(0),
-            _ => 0,
-        }
+    guard(0, || match (engine.as_ref(), opt_str(book)) {
+        (Some(engine), Some(book)) => engine
+            .corpus
+            .chapter_verses(book, chapter.min(u16::MAX as u32) as u16)
+            .iter()
+            .map(|v| v.verse as u32)
+            .max()
+            .unwrap_or(0),
+        _ => 0,
     })
 }
 
@@ -1311,11 +1309,7 @@ pub unsafe extern "C" fn plumbline_engine_token_json(
         let Some(vref) = VRef::parse_ref_key(rk) else {
             return ptr::null_mut();
         };
-        match engine
-            .corpus
-            .verse(&vref)
-            .and_then(|v| v.tokens.get(token_index as usize))
-        {
+        match engine.corpus.verse(&vref).and_then(|v| v.tokens.get(token_index as usize)) {
             Some(t) => out_json(&wire::token_to_wire(t)),
             None => ptr::null_mut(),
         }
@@ -1405,9 +1399,7 @@ pub unsafe extern "C" fn plumbline_engine_layout_chapter(
     measure_ctx: *mut c_void,
 ) -> *mut PlumblineDisplayList {
     guard(ptr::null_mut(), || {
-        let (Some(engine), Some(book), Some(measure)) =
-            (engine.as_ref(), opt_str(book), measure)
-        else {
+        let (Some(engine), Some(book), Some(measure)) = (engine.as_ref(), opt_str(book), measure) else {
             return ptr::null_mut();
         };
         // The ABI takes u32 to match the bindings' `uint`; a value outside the
@@ -1428,10 +1420,7 @@ pub unsafe extern "C" fn plumbline_engine_layout_chapter(
         let overlaid: Vec<plumbline_core::corpus::Verse>;
         let verses = match engine.akjv_view() {
             Some(a) => {
-                overlaid = verses
-                    .iter()
-                    .map(|v| a.overlay_verse(v).unwrap_or_else(|| v.clone()))
-                    .collect();
+                overlaid = verses.iter().map(|v| a.overlay_verse(v).unwrap_or_else(|| v.clone())).collect();
                 &overlaid[..]
             }
             None => verses,
@@ -1572,12 +1561,7 @@ pub unsafe extern "C" fn plumbline_engine_strongs_occurrences_json(
         let all = occ.verses(code);
         let total = all.len();
         let verses: Vec<String> = all.iter().take(OCCURRENCE_CAP).map(|v| v.ref_key()).collect();
-        out_json(&wire::Occurrences {
-            code: code.to_string(),
-            total,
-            capped: total > verses.len(),
-            verses,
-        })
+        out_json(&wire::Occurrences { code: code.to_string(), total, capped: total > verses.len(), verses })
     })
 }
 
@@ -1615,12 +1599,7 @@ pub unsafe extern "C" fn plumbline_engine_renderings_json(
                         span: [o.span.0, o.span.1],
                     })
                     .collect();
-                wire::WireRendering {
-                    rendering: r.label.to_string(),
-                    total,
-                    capped: total > refs.len(),
-                    refs,
-                }
+                wire::WireRendering { rendering: r.label.to_string(), total, capped: total > refs.len(), refs }
             })
             .collect();
         out_json(&wire::WireRenderings { code: code.to_string(), renderings })
@@ -1802,18 +1781,9 @@ pub unsafe extern "C" fn plumbline_engine_bridge_partners_json(
                 // Authority provenance, classified once here (overlay `Tier`):
                 // the additive tier set + research-grade flag travel with each
                 // partner so non-Rust shells need not reimplement the mapping.
-                let tiers = bridge::tiers_of(&p.sources)
-                    .into_iter()
-                    .map(|t| t.wire_name().to_string())
-                    .collect();
+                let tiers = bridge::tiers_of(&p.sources).into_iter().map(|t| t.wire_name().to_string()).collect();
                 let research_grade = p.sources.iter().any(|s| bridge::research_grade(s));
-                wire::WireBridgePartner {
-                    code: p.code,
-                    sources: p.sources,
-                    prior: p.prior,
-                    tiers,
-                    research_grade,
-                }
+                wire::WireBridgePartner { code: p.code, sources: p.sources, prior: p.prior, tiers, research_grade }
             })
             .collect();
         out_json(&wire::WireBridgePartners { code: code.to_string(), partners })
@@ -1843,12 +1813,7 @@ pub unsafe extern "C" fn plumbline_engine_morph_json(
             return ptr::null_mut();
         };
         let Some(gloss) = md.gloss(&vref, token_index) else { return ptr::null_mut() };
-        out_json(&wire::WireMorph {
-            verse: vref.ref_key(),
-            token_index,
-            code: entry.code.clone(),
-            gloss,
-        })
+        out_json(&wire::WireMorph { verse: vref.ref_key(), token_index, code: entry.code.clone(), gloss })
     })
 }
 
@@ -1909,8 +1874,7 @@ pub unsafe extern "C" fn plumbline_engine_thread_add(
         let Some(home) = engine.home.clone() else {
             return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
         };
-        let (Some(name), Some(rk), Some(added)) = (opt_str(name), opt_str(ref_key), opt_str(added))
-        else {
+        let (Some(name), Some(rk), Some(added)) = (opt_str(name), opt_str(ref_key), opt_str(added)) else {
             return out_string("null or invalid argument".to_string());
         };
         let Some(vref) = VRef::parse_ref_key(rk) else {
@@ -1923,13 +1887,7 @@ pub unsafe extern "C" fn plumbline_engine_thread_add(
             }
             None => ((0, 0), Vec::new()),
         };
-        let entry = ThreadEntry {
-            vref,
-            span,
-            text,
-            note: opt_str(note).map(str::to_string),
-            added: added.to_string(),
-        };
+        let entry = ThreadEntry { vref, span, text, note: opt_str(note).map(str::to_string), added: added.to_string() };
         let mut study = engine.study_write();
         match thread::add_to_thread(&home, &study.threads, name, canon::TOKENIZATION_VERSION, entry) {
             Ok(_) => {
@@ -2163,11 +2121,7 @@ pub unsafe extern "C" fn plumbline_engine_weave_from_tag(
             let set: std::collections::BTreeSet<String> = keys.into_iter().collect();
             refs.retain(|v| set.contains(&v.ref_key()));
         }
-        let name = opt_str(weave_name)
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .unwrap_or(&lt.tag.name)
-            .to_string();
+        let name = opt_str(weave_name).map(str::trim).filter(|s| !s.is_empty()).unwrap_or(&lt.tag.name).to_string();
         match weave::add_chain(
             &home,
             &study.weaves,
@@ -2189,12 +2143,7 @@ pub unsafe extern "C" fn plumbline_engine_weave_from_tag(
 /// The `index`-th suggested weave (as ordered by
 /// `plumbline_engine_suggested_weaves_json`) into the engine's flat weave list.
 fn nth_suggested(weaves: &[LoadedWeave], index: usize) -> Option<usize> {
-    weaves
-        .iter()
-        .enumerate()
-        .filter(|(_, lw)| weave::is_suggested(lw))
-        .nth(index)
-        .map(|(i, _)| i)
+    weaves.iter().enumerate().filter(|(_, lw)| weave::is_suggested(lw)).nth(index).map(|(i, _)| i)
 }
 
 /// **Approve** the `index`-th suggested weave: promote it into `home/weaves`
@@ -2381,10 +2330,7 @@ pub unsafe extern "C" fn plumbline_engine_verse_notes_json(
         };
         let study = e.study_read();
         match study.notes.get(&vref) {
-            Some(ns) if !ns.is_empty() => out_json(&wire::WireVerseNotes {
-                verse: vref.ref_key(),
-                notes: ns.clone(),
-            }),
+            Some(ns) if !ns.is_empty() => out_json(&wire::WireVerseNotes { verse: vref.ref_key(), notes: ns.clone() }),
             _ => ptr::null_mut(),
         }
     })
@@ -2496,14 +2442,8 @@ pub unsafe extern "C" fn plumbline_engine_constellation_json(
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let Some(e) = engine.as_ref() else { return ptr::null_mut() };
-        let pins: Vec<usize> =
-            opt_str(pins_json).and_then(|s| serde_json::from_str(s).ok()).unwrap_or_default();
-        out_json(&wire::constellation_to_wire(
-            &e.study_read().weaves,
-            &e.corpus,
-            page as usize,
-            &pins,
-        ))
+        let pins: Vec<usize> = opt_str(pins_json).and_then(|s| serde_json::from_str(s).ok()).unwrap_or_default();
+        out_json(&wire::constellation_to_wire(&e.study_read().weaves, &e.corpus, page as usize, &pins))
     })
 }
 
@@ -2535,11 +2475,7 @@ pub unsafe extern "C" fn plumbline_engine_concept_json(
             n: b.n,
             win_count: b.win_count,
             score: b.score,
-            label: burst::span_label(
-                |id| canon::display_name(id).to_string(),
-                &b.win_start,
-                &b.win_end,
-            ),
+            label: burst::span_label(|id| canon::display_name(id).to_string(), &b.win_start, &b.win_end),
         });
         out_json(&wire::WireConcept {
             code: code.to_string(),
@@ -2581,8 +2517,7 @@ const CONCEPT_KEEP_NAMES: &[&str] = &["H3068", "H3069", "H3050", "H136", "G2424"
 /// map *centres*, in word study, concordance and search — only the neighbour
 /// rings and collocate lists drop them.
 fn name_noise(e: &PlumblineEngine, code: &str) -> bool {
-    !CONCEPT_KEEP_NAMES.contains(&code)
-        && e.strongs().get(code).is_some_and(strongs::is_proper_noun)
+    !CONCEPT_KEEP_NAMES.contains(&code) && e.strongs().get(code).is_some_and(strongs::is_proper_noun)
 }
 
 /// A concept-map node label: the English gloss over the lemma (`\n`-separated),
@@ -2638,8 +2573,7 @@ pub unsafe extern "C" fn plumbline_engine_concept_map_json(
         let Some(ce) = e.concept_ready() else {
             return ptr::null_mut();
         };
-        let community: Vec<String> =
-            ce.community(code).into_iter().filter(|c| !name_noise(e, c)).collect();
+        let community: Vec<String> = ce.community(code).into_iter().filter(|c| !name_noise(e, c)).collect();
         let spokes = concept::radial_spokes(&near, &community, CONCEPT_MAP_SPOKES)
             .into_iter()
             .map(|(c, semantic)| wire::WireConceptSpoke {
@@ -2658,8 +2592,7 @@ pub unsafe extern "C" fn plumbline_engine_concept_map_json(
         // their unioned dispersion (so Christ reveals where Messiah occurs).
         let partners = e.bridge_ready().map(|b| b.partners(code)).unwrap_or_default();
         let bridge = (!partners.is_empty()).then(|| {
-            let top: Vec<&bridge::Partner> =
-                partners.iter().take(concept::BRIDGE_ROW_PARTNERS).collect();
+            let top: Vec<&bridge::Partner> = partners.iter().take(concept::BRIDGE_ROW_PARTNERS).collect();
             let union = ce.union_by_book(top.iter().map(|p| p.code.as_str()));
             wire::WireConceptBridge {
                 partners: top
@@ -2670,10 +2603,7 @@ pub unsafe extern "C" fn plumbline_engine_concept_map_json(
                         prior: p.prior,
                     })
                     .collect(),
-                by_book: canon::BOOKS
-                    .iter()
-                    .map(|b| union.get(b.id).copied().unwrap_or(0))
-                    .collect(),
+                by_book: canon::BOOKS.iter().map(|b| union.get(b.id).copied().unwrap_or(0)).collect(),
             }
         });
         out_json(&wire::WireConceptMap {
@@ -2695,10 +2625,7 @@ pub unsafe extern "C" fn plumbline_engine_concept_map_json(
 /// # Safety
 /// `engine` is a live engine; `code` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_gloss(
-    engine: *const PlumblineEngine,
-    code: *const c_char,
-) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_gloss(engine: *const PlumblineEngine, code: *const c_char) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let (Some(e), Some(code)) = (engine.as_ref(), opt_str(code)) else {
             return ptr::null_mut();
@@ -2826,7 +2753,11 @@ impl PanelSource for PlumblineEngine {
         });
         Some(panel::ConceptView {
             community: ce.community(code),
-            top_books: ce.top_books(code, 5).into_iter().map(|(b, n)| (canon::display_name(&b).to_string(), n)).collect(),
+            top_books: ce
+                .top_books(code, 5)
+                .into_iter()
+                .map(|(b, n)| (canon::display_name(&b).to_string(), n))
+                .collect(),
             ot,
             nt,
             leitwort,
@@ -3037,7 +2968,12 @@ impl PanelSource for PlumblineEngine {
                     capped,
                     hits: hits
                         .into_iter()
-                        .map(|h| panel::SearchHitView { verse: h.vref.ref_key(), display: h.vref.display(), note: h.note, why: h.why })
+                        .map(|h| panel::SearchHitView {
+                            verse: h.vref.ref_key(),
+                            display: h.vref.display(),
+                            note: h.note,
+                            why: h.why,
+                        })
                         .collect(),
                 }
             }
@@ -3203,7 +3139,10 @@ pub unsafe extern "C" fn plumbline_engine_threads_blocks_json(engine: *const Plu
 /// # Safety
 /// `engine` is a live engine (or null → null).
 #[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_thread_blocks_json(engine: *const PlumblineEngine, index: u32) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_thread_blocks_json(
+    engine: *const PlumblineEngine,
+    index: u32,
+) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(e) => out_json(&wire::blocks_to_wire(panel::thread_detail(e, index as usize))),
         None => ptr::null_mut(),
@@ -3326,11 +3265,7 @@ fn english_gloss(e: &PlumblineEngine, code: &str) -> Option<String> {
     }
     // No tagged occurrence — distil the dictionary as a last resort.
     let entry = e.strongs().get(code)?;
-    entry
-        .def
-        .as_deref()
-        .and_then(distil_gloss)
-        .or_else(|| entry.kjv.as_deref().and_then(distil_gloss))
+    entry.def.as_deref().and_then(distil_gloss).or_else(|| entry.kjv.as_deref().and_then(distil_gloss))
 }
 
 fn normalise_word(w: &str) -> String {
@@ -3351,10 +3286,7 @@ fn distil_gloss(raw: &str) -> Option<String> {
             _ => {}
         }
     }
-    let first = cleaned
-        .split(|c| c == ',' || c == ';')
-        .map(str::trim)
-        .find(|p| p.chars().any(|c| c.is_alphabetic()))?;
+    let first = cleaned.split([',', ';']).map(str::trim).find(|p| p.chars().any(|c| c.is_alphabetic()))?;
     let capped: String = first.chars().take(30).collect();
     let g = capped.trim_matches(|c: char| !c.is_alphanumeric()).to_string();
     if g.is_empty() {
@@ -3388,9 +3320,7 @@ pub unsafe extern "C" fn plumbline_engine_weave_add_link_spans(
             return out_string("null engine".to_string());
         };
         let Some(home) = engine.home.clone() else {
-            return out_string(
-                "engine has no home directory (opened from bytes); cannot author".to_string(),
-            );
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
         };
         let (Some(name), Some(a), Some(b), Some(added)) =
             (opt_str(name), opt_str(a_ref), opt_str(b_ref), opt_str(added))
@@ -3495,8 +3425,7 @@ pub unsafe extern "C" fn plumbline_engine_copy_text(
     kind: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
-        let (Some(e), Some(rk), Some(kind)) = (engine.as_ref(), opt_str(ref_key), opt_str(kind))
-        else {
+        let (Some(e), Some(rk), Some(kind)) = (engine.as_ref(), opt_str(ref_key), opt_str(kind)) else {
             return ptr::null_mut();
         };
         let (Some(vref), Some(kind)) = (VRef::parse_ref_key(rk), export::parse_kind(kind)) else {
@@ -3549,7 +3478,7 @@ pub unsafe extern "C" fn plumbline_engine_user_notes_json(engine: *const Plumbli
         let Some(e) = engine.as_ref() else { return ptr::null_mut() };
         let study = e.study_read();
         let mut notes: Vec<&usernote::LoadedNote> = study.user_notes.values().collect();
-        notes.sort_by(|a, b| a.note.vref.reading_key().cmp(&b.note.vref.reading_key()));
+        notes.sort_by_key(|a| a.note.vref.reading_key());
         let notes = notes
             .into_iter()
             .map(|ln| wire::WireUserNote {
@@ -3583,12 +3512,9 @@ pub unsafe extern "C" fn plumbline_engine_user_note_set(
             return out_string("null engine".to_string());
         };
         let Some(home) = engine.home.clone() else {
-            return out_string(
-                "engine has no home directory (opened from bytes); cannot author".to_string(),
-            );
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
         };
-        let (Some(rk), Some(text), Some(stamp)) = (opt_str(ref_key), opt_str(text), opt_str(stamp))
-        else {
+        let (Some(rk), Some(text), Some(stamp)) = (opt_str(ref_key), opt_str(text), opt_str(stamp)) else {
             return out_string("null or invalid argument".to_string());
         };
         let Some(v) = VRef::parse_ref_key(rk) else {
@@ -3617,7 +3543,6 @@ pub unsafe extern "C" fn plumbline_theme_palette_json(theme: *const c_char) -> *
         out_json(&theme::palette(t))
     })
 }
-
 
 /// Force the lazy analytics indexes (concept engine, leitwort scan, SIF verse
 /// similarity) to build now — call once on a background thread at startup in
@@ -3788,9 +3713,7 @@ pub unsafe extern "C" fn plumbline_engine_memory_add_passage(
         let Some(home) = engine.home.clone() else {
             return out_string("engine has no home directory; cannot author".to_string());
         };
-        let (Some(sr), Some(tr), Some(now)) =
-            (opt_str(start_ref), opt_str(through_ref), opt_str(now))
-        else {
+        let (Some(sr), Some(tr), Some(now)) = (opt_str(start_ref), opt_str(through_ref), opt_str(now)) else {
             return out_string("null or invalid argument".to_string());
         };
         let (Some(start), Some(through)) = (VRef::parse_ref_key(sr), VRef::parse_ref_key(tr)) else {
@@ -3805,8 +3728,7 @@ pub unsafe extern "C" fn plumbline_engine_memory_add_passage(
         if cards.contains_key(&start) {
             return ptr::null_mut();
         }
-        let card =
-            memory::Card::new_passage(start, &through, canon::TOKENIZATION_VERSION, now);
+        let card = memory::Card::new_passage(start, &through, canon::TOKENIZATION_VERSION, now);
         match memory::write_card(&home, &card) {
             Ok(()) => ptr::null_mut(),
             Err(e) => out_string(e.to_string()),
@@ -3852,9 +3774,7 @@ pub unsafe extern "C" fn plumbline_engine_memory_card_json(
     verse_ref: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
-        let (Some(e), Some(vref)) =
-            (engine.as_ref(), opt_str(verse_ref).and_then(VRef::parse_ref_key))
-        else {
+        let (Some(e), Some(vref)) = (engine.as_ref(), opt_str(verse_ref).and_then(VRef::parse_ref_key)) else {
             return ptr::null_mut();
         };
         let Some(home) = e.home.as_ref() else { return ptr::null_mut() };
@@ -3931,8 +3851,7 @@ pub unsafe extern "C" fn plumbline_engine_memory_activity_json(engine: *const Pl
 fn memory_span(e: &PlumblineEngine, vref: &VRef) -> Option<(String, String, u32)> {
     let card = e.home.as_ref().and_then(|h| memory::load_cards(h).0.remove(vref));
     let refs = card.as_ref().map_or_else(|| vec![vref.clone()], memory::Card::verses);
-    let bodies: Vec<String> =
-        refs.iter().filter_map(|r| e.corpus.verse(r)).map(|v| v.body()).collect();
+    let bodies: Vec<String> = refs.iter().filter_map(|r| e.corpus.verse(r)).map(|v| v.body()).collect();
     if bodies.is_empty() {
         return None;
     }
@@ -3954,9 +3873,7 @@ pub unsafe extern "C" fn plumbline_engine_memory_drill_json(
     level: u32,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
-        let (Some(e), Some(vref)) =
-            (engine.as_ref(), opt_str(verse_ref).and_then(VRef::parse_ref_key))
-        else {
+        let (Some(e), Some(vref)) = (engine.as_ref(), opt_str(verse_ref).and_then(VRef::parse_ref_key)) else {
             return ptr::null_mut();
         };
         let Some((label, text, verses)) = memory_span(e, &vref) else { return ptr::null_mut() };
@@ -4019,9 +3936,7 @@ unsafe fn parse_target(kind: *const c_char, value: *const c_char) -> Result<TagT
         return Err("null kind or value".to_string());
     };
     match kind {
-        "verse" => VRef::parse_ref_key(value)
-            .map(TagTarget::Verse)
-            .ok_or_else(|| format!("bad ref: {value}")),
+        "verse" => VRef::parse_ref_key(value).map(TagTarget::Verse).ok_or_else(|| format!("bad ref: {value}")),
         "concept" => Ok(TagTarget::Concept(value.to_string())),
         other => Err(format!("bad target kind: {other}")),
     }
@@ -4100,14 +4015,8 @@ mod measure_memo_over_the_abi {
     unsafe fn lay_out(engine: *mut PlumblineEngine, cfg: PlumblineLayoutConfig, word: &str) -> (f32, usize) {
         let before = CROSSINGS.load(Ordering::Relaxed);
         let book = CString::new("Gen").unwrap();
-        let dl = plumbline_engine_layout_chapter(
-            engine,
-            book.as_ptr(),
-            1,
-            cfg,
-            Some(counting_measure),
-            ptr::null_mut(),
-        );
+        let dl =
+            plumbline_engine_layout_chapter(engine, book.as_ptr(), 1, cfg, Some(counting_measure), ptr::null_mut());
         assert!(!dl.is_null(), "Gen 1 must lay out");
         let json_ptr = plumbline_layout_to_json(dl);
         let json = CStr::from_ptr(json_ptr).to_str().unwrap().to_string();
@@ -4129,13 +4038,7 @@ mod measure_memo_over_the_abi {
         // An empty Strong's dictionary: layout never consults it.
         const STRONGS: &str = "{}";
         let mut err: *mut c_char = ptr::null_mut();
-        let e = plumbline_engine_open_from_bytes(
-            KJV.as_ptr(),
-            KJV.len(),
-            STRONGS.as_ptr(),
-            STRONGS.len(),
-            &mut err,
-        );
+        let e = plumbline_engine_open_from_bytes(KJV.as_ptr(), KJV.len(), STRONGS.as_ptr(), STRONGS.len(), &mut err);
         assert!(err.is_null() && !e.is_null(), "engine should open");
         e
     }

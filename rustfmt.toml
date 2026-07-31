@@ -1,0 +1,16 @@
+# The tree's own line budget, written down so `cargo fmt --check` can be a gate
+# instead of an argument. Both options are stable — CI formats on
+# `dtolnay/rust-toolchain@stable` and must not need nightly.
+#
+# 120, not the default 100: the crates were written wider from the start (528
+# lines over 100 columns, 160 over 120), so the default would have re-wrapped
+# hundreds of deliberate one-liners and then fought every future edit written at
+# the same width.
+max_width = 120
+
+# And wide *inside* an expression too, which is the other half of the same
+# house style: single-line struct literals, calls and arrays up to the full
+# width. `Some(Akjv { ix, source: header.source })` and the one-line
+# `TagMemberView { … }` rows in the panel fixtures are the shape the code is
+# written in; "Default" caps those at 60 and explodes them.
+use_small_heuristics = "Max"

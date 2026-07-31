@@ -91,8 +91,7 @@ pub fn copy_text(corpus: &Corpus, vref: &VRef, kind: CopyKind) -> Option<String>
             if verses.is_empty() {
                 return None;
             }
-            let chapter_ref =
-                format!("{} {}", crate::canon::display_name(&vref.book), vref.chapter);
+            let chapter_ref = format!("{} {}", crate::canon::display_name(&vref.book), vref.chapter);
             let mut out = String::new();
             for v in verses {
                 let title = v.title();
@@ -114,12 +113,7 @@ pub fn copy_text(corpus: &Corpus, vref: &VRef, kind: CopyKind) -> Option<String>
                 CopyKind::Chapter => format!("{}\n— {chapter_ref} ({EDITION})", out.trim_end()),
                 CopyKind::ChapterMarkdown => {
                     // A blockquote of the whole chapter.
-                    let quoted = out
-                        .trim_end()
-                        .lines()
-                        .map(|l| format!("> {l}"))
-                        .collect::<Vec<_>>()
-                        .join("\n");
+                    let quoted = out.trim_end().lines().map(|l| format!("> {l}")).collect::<Vec<_>>().join("\n");
                     format!("{quoted}\n>\n> — *{chapter_ref}* ({EDITION})")
                 }
                 _ => unreachable!(),
@@ -154,14 +148,8 @@ mod tests {
         let c = from_str(SAMPLE).unwrap();
         let v = VRef::new("John", 3, 16);
         assert_eq!(copy_text(&c, &v, CopyKind::Verse).unwrap(), "For God so loved");
-        assert_eq!(
-            copy_text(&c, &v, CopyKind::VerseRef).unwrap(),
-            "For God so loved — John 3:16 (KJV)"
-        );
-        assert_eq!(
-            copy_text(&c, &v, CopyKind::VerseMarkdown).unwrap(),
-            "> For God so loved\n>\n> — *John 3:16* (KJV)"
-        );
+        assert_eq!(copy_text(&c, &v, CopyKind::VerseRef).unwrap(), "For God so loved — John 3:16 (KJV)");
+        assert_eq!(copy_text(&c, &v, CopyKind::VerseMarkdown).unwrap(), "> For God so loved\n>\n> — *John 3:16* (KJV)");
     }
 
     #[test]
@@ -185,13 +173,9 @@ mod tests {
 
     #[test]
     fn kind_tokens_roundtrip() {
-        for k in [
-            CopyKind::Verse,
-            CopyKind::VerseRef,
-            CopyKind::VerseMarkdown,
-            CopyKind::Chapter,
-            CopyKind::ChapterMarkdown,
-        ] {
+        for k in
+            [CopyKind::Verse, CopyKind::VerseRef, CopyKind::VerseMarkdown, CopyKind::Chapter, CopyKind::ChapterMarkdown]
+        {
             assert_eq!(parse_kind(k.token()), Some(k));
         }
         assert_eq!(parse_kind("nope"), None);

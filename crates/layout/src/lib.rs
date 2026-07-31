@@ -136,11 +136,7 @@ impl DisplayList {
     pub fn hit_test(&self, px: f32, py: f32) -> Option<Hit> {
         self.items.iter().find_map(|it| {
             if it.contains(px, py) {
-                it.word().map(|(v, ti)| Hit {
-                    verse: v.clone(),
-                    token_index: ti,
-                    strongs: it.strongs.clone(),
-                })
+                it.word().map(|(v, ti)| Hit { verse: v.clone(), token_index: ti, strongs: it.strongs.clone() })
             } else {
                 None
             }
@@ -176,9 +172,7 @@ pub fn layout_chapter<M: Measure>(verses: &[Verse], m: &M, cfg: &LayoutConfig) -
         // A paragraph flag on the verse's *first* word breaks the line before
         // the verse number is placed — otherwise the number strands at the end
         // of the previous line while its verse starts the next one.
-        if pen.line_started
-            && verse.tokens.first().is_some_and(|t| t.has_flag(FLAG_PARA))
-        {
+        if pen.line_started && verse.tokens.first().is_some_and(|t| t.has_flag(FLAG_PARA)) {
             pen.y += cfg.para_spacing;
             pen.newline(cfg);
             pen.x = cfg.para_indent;
@@ -318,11 +312,7 @@ mod tests {
         assert_eq!(dl.items.len(), 5);
 
         // Hit-test the word "God" (token index 3): find its box, click its centre.
-        let god = dl
-            .items
-            .iter()
-            .find(|it| it.word() == Some((&VRef::new("Gen", 1, 1), 3)))
-            .unwrap();
+        let god = dl.items.iter().find(|it| it.word() == Some((&VRef::new("Gen", 1, 1), 3))).unwrap();
         assert_eq!(god.text, "God");
         let hit = dl.hit_test(god.x + 1.0, god.y + 1.0).unwrap();
         assert_eq!(hit.token_index, 3);
@@ -342,8 +332,7 @@ mod tests {
         // Narrow column forces wrapping.
         let cfg = LayoutConfig { width: 60.0, ..Default::default() };
         let dl = layout_chapter(verses, &m, &cfg);
-        let distinct_ys: std::collections::BTreeSet<i32> =
-            dl.items.iter().map(|it| it.y as i32).collect();
+        let distinct_ys: std::collections::BTreeSet<i32> = dl.items.iter().map(|it| it.y as i32).collect();
         assert!(distinct_ys.len() > 1, "expected multiple lines, got {distinct_ys:?}");
         assert!(dl.height >= cfg.line_height);
     }
@@ -409,11 +398,8 @@ mod para_tests {
         };
         let dl = layout_chapter(c.chapter_verses("Gen", 1), &Mono, &cfg);
 
-        let num2 = dl
-            .items
-            .iter()
-            .find(|it| matches!(it.kind, ItemKind::VerseNumber(2)))
-            .expect("verse 2 number placed");
+        let num2 =
+            dl.items.iter().find(|it| matches!(it.kind, ItemKind::VerseNumber(2))).expect("verse 2 number placed");
         let thus = dl.items.iter().find(|it| it.text == "Thus").unwrap();
         let v1_word = dl.items.iter().find(|it| it.text == "In").unwrap();
 
@@ -448,11 +434,7 @@ mod para_tests {
             verse_break: false,
         };
         let dl = layout_chapter(c.chapter_verses("Gen", 1), &Mono, &cfg);
-        let num2 = dl
-            .items
-            .iter()
-            .find(|it| matches!(it.kind, ItemKind::VerseNumber(2)))
-            .unwrap();
+        let num2 = dl.items.iter().find(|it| matches!(it.kind, ItemKind::VerseNumber(2))).unwrap();
         let wide = dl.items.iter().find(|it| it.text == "wide").unwrap();
         assert_eq!(num2.y, wide.y, "the number wraps as a unit with its word");
     }

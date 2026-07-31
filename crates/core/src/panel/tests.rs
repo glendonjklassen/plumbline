@@ -123,7 +123,12 @@ impl PanelSource for Fake {
         self.bodies.get(refkey).cloned()
     }
     fn search(&self, _query: &str) -> SearchView {
-        self.search.clone().unwrap_or(SearchView::Hits { how: String::new(), total: 0, capped: false, hits: Vec::new() })
+        self.search.clone().unwrap_or(SearchView::Hits {
+            how: String::new(),
+            total: 0,
+            capped: false,
+            hits: Vec::new(),
+        })
     }
 }
 
@@ -184,10 +189,7 @@ fn parse_link_round_trips_the_producer_uris() {
         parse_link(&go_uri("1 John 3:16")),
         Some(PanelLink::Go { book: "1 John".into(), chapter: 3, verse: Some(16) })
     );
-    assert_eq!(
-        parse_link("go:John:3"),
-        Some(PanelLink::Go { book: "John".into(), chapter: 3, verse: None })
-    );
+    assert_eq!(parse_link("go:John:3"), Some(PanelLink::Go { book: "John".into(), chapter: 3, verse: None }));
 
     // Read verbs.
     assert_eq!(parse_link("occ:G25"), Some(PanelLink::Occurrences { code: "G25".into() }));
@@ -209,20 +211,14 @@ fn parse_link_round_trips_the_producer_uris() {
     // Write verbs (refkeys may contain spaces + a colon; only the verb splits).
     assert_eq!(parse_link("addtag:John 3:16"), Some(PanelLink::AddTag { refkey: "John 3:16".into() }));
     assert_eq!(parse_link("addthread:John 3:16"), Some(PanelLink::AddThread { refkey: "John 3:16".into() }));
-    assert_eq!(
-        parse_link("untag:1:John 3:16"),
-        Some(PanelLink::Untag { tag: 1, refkey: "John 3:16".into() })
-    );
+    assert_eq!(parse_link("untag:1:John 3:16"), Some(PanelLink::Untag { tag: 1, refkey: "John 3:16".into() }));
     assert_eq!(parse_link("makeweave:2"), Some(PanelLink::MakeWeave { tag: 2 }));
     assert_eq!(parse_link("makeweave:x"), None);
     assert_eq!(parse_link("approve:3"), Some(PanelLink::Approve { index: 3 }));
     assert_eq!(parse_link("reject:3"), Some(PanelLink::Reject { index: 3 }));
     assert_eq!(parse_link("editthreadnotes:2"), Some(PanelLink::EditThreadNotes { index: 2 }));
     assert_eq!(parse_link("editweavenotes:5"), Some(PanelLink::EditWeaveNotes { index: 5 }));
-    assert_eq!(
-        parse_link("editentrynote:2:4"),
-        Some(PanelLink::EditEntryNote { thread: 2, entry: 4 })
-    );
+    assert_eq!(parse_link("editentrynote:2:4"), Some(PanelLink::EditEntryNote { thread: 2, entry: 4 }));
 
     // Personal note + help verbs.
     assert_eq!(parse_link("editnote:John 3:16"), Some(PanelLink::EditNote { refkey: "John 3:16".into() }));
@@ -244,7 +240,12 @@ fn simple_word_study_is_just_display_word_and_dictionary() {
     f.occ_count.insert("G2316".into(), 1317);
     f.entries.insert(
         "G2316".into(),
-        StrongsView { lemma: Some("θεός".into()), def: Some("a deity".into()), kjv: Some("God".into()), ..Default::default() },
+        StrongsView {
+            lemma: Some("θεός".into()),
+            def: Some("a deity".into()),
+            kjv: Some("God".into()),
+            ..Default::default()
+        },
     );
 
     let blocks = word_study(&f, f.full, "John 3:16", 1, &["G2316".to_string()]);
@@ -277,17 +278,33 @@ fn untagged_word_says_so() {
 
 #[test]
 fn full_word_study_orders_the_tiers_and_marks_them() {
-    let mut f = Fake::default();
-    f.full = true;
+    let mut f = Fake { full: true, ..Default::default() };
     f.displays.insert("John 3:16".into(), "John 3:16".into());
     f.words.insert(("John 3:16".into(), 3), "loved".into());
     f.morph.insert(("John 3:16".into(), 3), "verb, aorist active".into());
     f.occ_count.insert("G25".into(), 43);
-    f.entries.insert("G25".into(), StrongsView { lemma: Some("ἀγαπάω".into()), def: Some("to love".into()), ..Default::default() });
-    f.renderings.insert("G25".into(), vec![RenderingView { rendering: "loved".into(), total: 30 }, RenderingView { rendering: "beloved".into(), total: 13 }]);
+    f.entries.insert(
+        "G25".into(),
+        StrongsView { lemma: Some("ἀγαπάω".into()), def: Some("to love".into()), ..Default::default() },
+    );
+    f.renderings.insert(
+        "G25".into(),
+        vec![
+            RenderingView { rendering: "loved".into(), total: 30 },
+            RenderingView { rendering: "beloved".into(), total: 13 },
+        ],
+    );
     f.word_codes.insert("loved".into(), vec!["G25".into(), "G5368".into()]);
     f.glosses.insert("G5368".into(), "to be a friend".into());
-    f.bridge.insert("G25".into(), vec![BridgePartnerView { code: "H157".into(), sources: vec!["Septuagint".into(), "1769 renderings".into()], tiers: vec!["human".into(), "machine".into()], research_grade: true }]);
+    f.bridge.insert(
+        "G25".into(),
+        vec![BridgePartnerView {
+            code: "H157".into(),
+            sources: vec!["Septuagint".into(), "1769 renderings".into()],
+            tiers: vec!["human".into(), "machine".into()],
+            research_grade: true,
+        }],
+    );
     f.glosses.insert("H157".into(), "to love".into());
     f.near.insert("G25".into(), (vec!["G5368".into()], vec!["H157".into()]));
     f.concept.insert(
@@ -319,10 +336,13 @@ fn full_word_study_orders_the_tiers_and_marks_them() {
     assert!(blocks.iter().any(|b| text_of(b) == "verb, aorist active"));
     // The tapped rendering "loved" is bold; "beloved" is not. (Match the
     // renderings list by its unique "beloved" run, not the big word display.)
-    let rend_para = blocks.iter().find_map(|b| match b {
-        Block::Para { runs, .. } if runs.iter().any(|r| r.text == "beloved") => Some(runs),
-        _ => None,
-    }).unwrap();
+    let rend_para = blocks
+        .iter()
+        .find_map(|b| match b {
+            Block::Para { runs, .. } if runs.iter().any(|r| r.text == "beloved") => Some(runs),
+            _ => None,
+        })
+        .unwrap();
     assert!(rend_para.iter().find(|r| r.text == "loved").unwrap().bold);
     assert!(!rend_para.iter().find(|r| r.text == "beloved").unwrap().bold);
     // The rendering chip routes rend:CODE:rendering.
@@ -345,14 +365,24 @@ fn full_word_study_orders_the_tiers_and_marks_them() {
 
 #[test]
 fn verse_extras_gate_on_full_and_prebake_author_uris() {
-    let mut f = Fake::default();
-    f.full = true;
+    let mut f = Fake { full: true, ..Default::default() };
     f.displays.insert("John 3:16".into(), "John 3:16".into());
     f.words.insert(("John 3:16".into(), 1), "God".into());
     f.occ_count.insert("G2316".into(), 1);
     f.entries.insert("G2316".into(), StrongsView { lemma: Some("θεός".into()), ..Default::default() });
-    f.xrefs.insert("John 3:16".into(), vec![XrefView { verse: "John 3:18".into(), display: "John 3:18".into(), weave: "Belief".into(), weave_index: Some(2) }]);
-    f.study_xrefs.insert("John 3:16".into(), vec![StudyXrefView { to: "Rom 5:8".into(), to_display: "Rom 5:8".into(), end: None, end_display: None }]);
+    f.xrefs.insert(
+        "John 3:16".into(),
+        vec![XrefView {
+            verse: "John 3:18".into(),
+            display: "John 3:18".into(),
+            weave: "Belief".into(),
+            weave_index: Some(2),
+        }],
+    );
+    f.study_xrefs.insert(
+        "John 3:16".into(),
+        vec![StudyXrefView { to: "Rom 5:8".into(), to_display: "Rom 5:8".into(), end: None, end_display: None }],
+    );
     f.verse_tags.insert("John 3:16".into(), vec![(0, "grace".into())]);
     f.notes.insert("John 3:16".into(), vec!["Or, begotten".into()]);
 
@@ -377,7 +407,7 @@ fn verse_extras_gate_on_full_and_prebake_author_uris() {
     assert!(su.iter().any(|x| x.starts_with("tag:")));
     assert!(!su.contains(&"go:Rom:5:8".to_string())); // TSK is human-gated
     assert!(sb.iter().any(|b| text_of(b) == "Or, begotten")); // margin notes survive
-    // Weave xrefs are the reader's own — still shown.
+                                                              // Weave xrefs are the reader's own — still shown.
     assert!(su.contains(&"go:John:3:18".to_string()));
 }
 
@@ -390,7 +420,10 @@ fn gates_split_human_and_machine_tiers() {
     f.entries.insert("G25".into(), StrongsView { lemma: Some("ἀγαπάω".into()), ..Default::default() });
     f.renderings.insert("G25".into(), vec![RenderingView { rendering: "loved".into(), total: 30 }]);
     f.near.insert("G25".into(), (vec!["G5368".into()], vec![]));
-    f.study_xrefs.insert("John 3:16".into(), vec![StudyXrefView { to: "Rom 5:8".into(), to_display: "Rom 5:8".into(), end: None, end_display: None }]);
+    f.study_xrefs.insert(
+        "John 3:16".into(),
+        vec![StudyXrefView { to: "Rom 5:8".into(), to_display: "Rom 5:8".into(), end: None, end_display: None }],
+    );
 
     // Human only: renderings + TSK, no machine analytics.
     let hb = word_study_gated(&f, Gates { human: true, machine: false }, "John 3:16", 3, &["G25".to_string()]);
@@ -411,10 +444,12 @@ fn gates_split_human_and_machine_tiers() {
 
 #[test]
 fn code_study_card_is_standalone_with_legend_in_full() {
-    let mut f = Fake::default();
-    f.full = true;
+    let mut f = Fake { full: true, ..Default::default() };
     f.occ_count.insert("G5368".into(), 25);
-    f.entries.insert("G5368".into(), StrongsView { lemma: Some("φιλέω".into()), def: Some("to be a friend".into()), ..Default::default() });
+    f.entries.insert(
+        "G5368".into(),
+        StrongsView { lemma: Some("φιλέω".into()), def: Some("to be a friend".into()), ..Default::default() },
+    );
     let blocks = code_study_card(&f, f.full, "G5368", "loved");
     assert_eq!(text_of(&blocks[0]), ""); // opens with a rule
     assert!(matches!(blocks[0], Block::Rule));
@@ -427,7 +462,10 @@ fn concordance_caps_and_counts() {
     f.entries.insert("G2316".into(), StrongsView { lemma: Some("θεός".into()), ..Default::default() });
     f.occurrences.insert(
         "G2316".into(),
-        OccurrencesView { total: 5, verses: vec![("John 3:16".into(), "John 3:16".into()), ("Rom 1:1".into(), "Rom 1:1".into())] },
+        OccurrencesView {
+            total: 5,
+            verses: vec![("John 3:16".into(), "John 3:16".into()), ("Rom 1:1".into(), "Rom 1:1".into())],
+        },
     );
     let blocks = concordance(&f, "G2316");
     assert_eq!(text_of(&blocks[0]), "G2316  θεός");
@@ -459,17 +497,19 @@ fn rendering_concordance_matches_by_normalized_key() {
 
 #[test]
 fn threads_list_and_detail() {
-    let mut f = Fake::default();
-    f.threads = vec![ThreadView {
-        name: "Grace".into(),
-        notes: "on unmerited favour".into(),
-        entries: vec![ThreadEntryView {
-            verse: "John 1:14".into(),
-            display: "John 1:14".into(),
-            text: vec!["full".into(), "of".into(), "grace".into()],
-            note: Some("the Word".into()),
+    let f = Fake {
+        threads: vec![ThreadView {
+            name: "Grace".into(),
+            notes: "on unmerited favour".into(),
+            entries: vec![ThreadEntryView {
+                verse: "John 1:14".into(),
+                display: "John 1:14".into(),
+                text: vec!["full".into(), "of".into(), "grace".into()],
+                note: Some("the Word".into()),
+            }],
         }],
-    }];
+        ..Default::default()
+    };
     let list = threads_list(&f);
     assert_eq!(text_of(&list[0]), "Threads (1)");
     assert!(uris(&list).contains(&"thread:0".to_string()));
@@ -489,20 +529,59 @@ fn threads_list_and_detail() {
 
 #[test]
 fn tags_list_and_detail_verse_and_code_members() {
-    let mut f = Fake::default();
-    f.tags = vec![TagView {
-        name: "kingdom".into(),
-        members: vec![
-            TagMemberView { kind: "verse".into(), verse: Some("Matt 6:33".into()), display: Some("Matt 6:33".into()), strongs: None, note: Some("seek first".into()) },
-            TagMemberView { kind: "strongs".into(), verse: None, display: None, strongs: Some("G932".into()), note: None },
-        ],
-    }];
+    let f = Fake {
+        tags: vec![TagView {
+            name: "kingdom".into(),
+            members: vec![
+                TagMemberView {
+                    kind: "verse".into(),
+                    verse: Some("Matt 6:33".into()),
+                    display: Some("Matt 6:33".into()),
+                    strongs: None,
+                    note: Some("seek first".into()),
+                },
+                TagMemberView {
+                    kind: "strongs".into(),
+                    verse: None,
+                    display: None,
+                    strongs: Some("G932".into()),
+                    note: None,
+                },
+            ],
+        }],
+        ..Default::default()
+    };
     assert!(uris(&tags_list(&f)).contains(&"tag:0".to_string()));
     let d = tag_detail(&f, 0);
     let u = uris(&d);
     assert!(u.contains(&"go:Matt:6:33".to_string()));
     assert!(u.contains(&"occ:G932".to_string()));
     assert!(d.iter().any(|b| text_of(b).contains("seek first")));
+}
+
+/// `kind` decides the row, not whether `verse` happens to be filled. A member
+/// tagged from a word study can carry both — a Strong's code and the verse it
+/// was tagged from — and it is still a code row. Reading the presence of
+/// `verse` alone turns every such member into a navigation link and loses the
+/// occurrence lookup that is the whole point of tagging a code.
+#[test]
+fn a_code_member_stays_a_code_row_even_when_it_carries_a_verse() {
+    let f = Fake {
+        tags: vec![TagView {
+            name: "kingdom".into(),
+            members: vec![TagMemberView {
+                kind: "strongs".into(),
+                verse: Some("Matt 6:33".into()),
+                display: Some("Matt 6:33".into()),
+                strongs: Some("G932".into()),
+                note: None,
+            }],
+        }],
+        ..Default::default()
+    };
+    let u = uris(&tag_detail(&f, 0));
+    assert!(u.contains(&"occ:G932".to_string()), "the code row is gone: {u:?}");
+    assert!(!u.contains(&"go:Matt:6:33".to_string()), "a code member was rendered as a verse link: {u:?}");
 }
 
 #[test]
@@ -515,7 +594,15 @@ fn weaves_list_sorts_by_link_count_desc() {
         notes: String::new(),
         suggested: false,
         links: (0..n)
-            .map(|_| WeaveLinkView { a: "Gen 1:1".into(), a_display: "Gen 1:1".into(), b: "John 1:1".into(), b_display: "John 1:1".into(), label: String::new(), span_a: None, span_b: None })
+            .map(|_| WeaveLinkView {
+                a: "Gen 1:1".into(),
+                a_display: "Gen 1:1".into(),
+                b: "John 1:1".into(),
+                b_display: "John 1:1".into(),
+                label: String::new(),
+                span_a: None,
+                span_b: None,
+            })
             .collect(),
     };
     f.weaves = vec![mk(0, "small", 1), mk(1, "big", 3)];
@@ -527,8 +614,7 @@ fn weaves_list_sorts_by_link_count_desc() {
 
 #[test]
 fn compare_card_spans_bold_and_added_italic() {
-    let mut f = Fake::default();
-    f.full = true;
+    let mut f = Fake { full: true, ..Default::default() };
     f.weaves = vec![WeaveView {
         index: 0,
         name: "Adam".into(),
@@ -547,11 +633,13 @@ fn compare_card_spans_bold_and_added_italic() {
     }];
     f.tokens.insert(
         "Gen 2:7".into(),
-        VerseTokensView { tokens: vec![
-            TokenView { render: "a".into(), added: false },
-            TokenView { render: "living".into(), added: false },
-            TokenView { render: "soul".into(), added: true },
-        ] },
+        VerseTokensView {
+            tokens: vec![
+                TokenView { render: "a".into(), added: false },
+                TokenView { render: "living".into(), added: false },
+                TokenView { render: "soul".into(), added: true },
+            ],
+        },
     );
     let blocks = compare_card(&f, f.full, 0);
     assert_eq!(text_of(&blocks[0]), "Adam   type");
@@ -559,10 +647,13 @@ fn compare_card_spans_bold_and_added_italic() {
     assert!(blocks.iter().any(|b| text_of(b) == "“living soul”"));
     // The Gen 2:7 token para: token 1 ("living") in span → bold; token 2
     // ("soul") is translator-added → italic + faded.
-    let side = blocks.iter().find_map(|b| match b {
-        Block::Para { runs, indent: true, .. } if runs.iter().any(|r| r.text.trim() == "living") => Some(runs),
-        _ => None,
-    }).unwrap();
+    let side = blocks
+        .iter()
+        .find_map(|b| match b {
+            Block::Para { runs, indent: true, .. } if runs.iter().any(|r| r.text.trim() == "living") => Some(runs),
+            _ => None,
+        })
+        .unwrap();
     assert!(side.iter().find(|r| r.text.trim() == "living").unwrap().bold);
     let soul = side.iter().find(|r| r.text.trim() == "soul").unwrap();
     assert!(soul.italic && soul.color == Color::Faded && !soul.bold);
@@ -570,15 +661,23 @@ fn compare_card_spans_bold_and_added_italic() {
 
 #[test]
 fn suggested_queue_actions() {
-    let mut f = Fake::default();
-    f.suggested = vec![SuggestedView {
-        index: 0,
-        name: "Ransom".into(),
-        kind: "prophecy".into(),
-        notes: String::new(),
-        lib_index: Some(4),
-        links: vec![SuggestedLinkView { a: "Isa 53:5".into(), a_display: "Isa 53:5".into(), b: "1Pet 2:24".into(), b_display: "1Pet 2:24".into(), label: "stripes".into() }],
-    }];
+    let f = Fake {
+        suggested: vec![SuggestedView {
+            index: 0,
+            name: "Ransom".into(),
+            kind: "prophecy".into(),
+            notes: String::new(),
+            lib_index: Some(4),
+            links: vec![SuggestedLinkView {
+                a: "Isa 53:5".into(),
+                a_display: "Isa 53:5".into(),
+                b: "1Pet 2:24".into(),
+                b_display: "1Pet 2:24".into(),
+                label: "stripes".into(),
+            }],
+        }],
+        ..Default::default()
+    };
     let blocks = suggested(&f);
     let u = uris(&blocks);
     assert!(u.contains(&"approve:0".to_string()));
@@ -591,28 +690,45 @@ fn suggested_queue_actions() {
 #[test]
 fn search_goto_vs_hits_with_snippet() {
     // Goto: a direct navigation link.
-    let mut g = Fake::default();
-    g.search = Some(SearchView::Goto { book: "John".into(), chapter: 3, verse: Some(16), display: "John 3:16".into() });
+    let g = Fake {
+        search: Some(SearchView::Goto {
+            book: "John".into(),
+            chapter: 3,
+            verse: Some(16),
+            display: "John 3:16".into(),
+        }),
+        ..Default::default()
+    };
     let gb = search(&g, "john 3:16");
     assert!(uris(&gb).contains(&"go:John:3:16".to_string()));
 
     // Hits: header + per-hit link + a snippet windowed around the match.
-    let mut f = Fake::default();
-    f.search = Some(SearchView::Hits {
-        how: "phrase".into(),
-        total: 2,
-        capped: true,
-        hits: vec![SearchHitView { verse: "John 3:16".into(), display: "John 3:16".into(), note: true, why: "3× love".into() }],
-    });
+    let mut f = Fake {
+        search: Some(SearchView::Hits {
+            how: "phrase".into(),
+            total: 2,
+            capped: true,
+            hits: vec![SearchHitView {
+                verse: "John 3:16".into(),
+                display: "John 3:16".into(),
+                note: true,
+                why: "3× love".into(),
+            }],
+        }),
+        ..Default::default()
+    };
     f.bodies.insert("John 3:16".into(), "For God so loved the world that he gave his only begotten Son".into());
     let blocks = search(&f, "loved");
     assert_eq!(text_of(&blocks[0]), "2 results");
     assert!(uris(&blocks).contains(&"go:John:3:16".to_string()));
     // The snippet bolds the matched word.
-    let snip = blocks.iter().find_map(|b| match b {
-        Block::Para { runs, indent: true, .. } => Some(runs),
-        _ => None,
-    }).unwrap();
+    let snip = blocks
+        .iter()
+        .find_map(|b| match b {
+            Block::Para { runs, indent: true, .. } => Some(runs),
+            _ => None,
+        })
+        .unwrap();
     assert!(snip.iter().any(|r| r.text == "loved" && r.bold));
     // capped → an "N more" tail (2 total − 1 shown).
     assert!(blocks.iter().any(|b| text_of(b) == "… 1 more"));
@@ -671,8 +787,10 @@ fn an_empty_weave_library_says_what_to_do() {
 /// search. The guidance names the three shapes a query can take.
 #[test]
 fn a_search_with_no_hits_says_what_a_query_can_be() {
-    let mut f = Fake::default();
-    f.search = Some(SearchView::Hits { how: String::new(), total: 0, capped: false, hits: Vec::new() });
+    let f = Fake {
+        search: Some(SearchView::Hits { how: String::new(), total: 0, capped: false, hits: Vec::new() }),
+        ..Default::default()
+    };
     let blocks = search(&f, "quinquagesima");
     assert_eq!(text_of(&blocks[0]), "0 results");
     assert!(blocks.len() > 1, "0 results with no guidance under it");
@@ -686,13 +804,20 @@ fn a_search_with_no_hits_says_what_a_query_can_be() {
 /// search WITH hits must not carry it.
 #[test]
 fn the_no_hits_guidance_stays_out_of_a_search_that_found_something() {
-    let mut f = Fake::default();
-    f.search = Some(SearchView::Hits {
-        how: String::new(),
-        total: 1,
-        capped: false,
-        hits: vec![SearchHitView { verse: "John 3:16".into(), display: "John 3:16".into(), note: false, why: String::new() }],
-    });
+    let f = Fake {
+        search: Some(SearchView::Hits {
+            how: String::new(),
+            total: 1,
+            capped: false,
+            hits: vec![SearchHitView {
+                verse: "John 3:16".into(),
+                display: "John 3:16".into(),
+                note: false,
+                why: String::new(),
+            }],
+        }),
+        ..Default::default()
+    };
     let body = search(&f, "loved").iter().map(text_of).collect::<Vec<_>>().join(" ");
     assert!(!body.contains("Nothing matched"), "the empty-state guidance leaked into a search with hits: {body}");
 }

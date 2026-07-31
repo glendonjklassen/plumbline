@@ -120,10 +120,7 @@ fn both_shells_display_one_derived_version() {
 
     // ...and there is exactly one place that turns the tag into that string.
     // Two derivations is how the last one drifted.
-    let strips: Vec<&str> = yml
-        .lines()
-        .filter(|l| !l.trim_start().starts_with('#') && l.contains("#v}"))
-        .collect();
+    let strips: Vec<&str> = yml.lines().filter(|l| !l.trim_start().starts_with('#') && l.contains("#v}")).collect();
     assert_eq!(
         strips.len(),
         1,
@@ -194,7 +191,8 @@ fn the_readme_names_no_version_but_the_one_it_ships() {
     for (n, line) in readme.lines().enumerate() {
         for found in version_literals(line) {
             assert_eq!(
-                found, want,
+                found,
+                want,
                 "README.md:{} names version {found} but this tree builds {want} — a reader \
                  following these steps downloads or hashes the wrong file. Prefer no literal \
                  at all (`releases/latest`, `plumbline-v*-android.apk`): {}",

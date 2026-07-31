@@ -156,10 +156,7 @@ pub fn parse_embedding(
 /// Meta: gate on tokenization; pick up `aligned` + the alias map. No meta at all
 /// is accepted (artifacts predate the stamp; the tokenization is frozen). `None`
 /// means STALE — the vectors address a different text.
-fn parse_meta(
-    tok_version: &str,
-    meta_json: Option<&str>,
-) -> Option<(bool, HashMap<String, String>)> {
+fn parse_meta(tok_version: &str, meta_json: Option<&str>) -> Option<(bool, HashMap<String, String>)> {
     match meta_json {
         None => Some((false, HashMap::new())),
         Some(raw) => {
@@ -315,9 +312,8 @@ pub fn parse_embedding_bin(
     if bytes.len() < VECB_HEADER || &bytes[..8] != VECB_MAGIC {
         return None;
     }
-    let u32_at = |o: usize| -> Option<usize> {
-        Some(u32::from_le_bytes(bytes.get(o..o + 4)?.try_into().ok()?) as usize)
-    };
+    let u32_at =
+        |o: usize| -> Option<usize> { Some(u32::from_le_bytes(bytes.get(o..o + 4)?.try_into().ok()?) as usize) };
     let dim = u32_at(8)?;
     let count = u32_at(12)?;
     let keys_len = u32_at(16)?;
@@ -366,7 +362,7 @@ pub fn load_embedding(tok_version: &str, path: impl AsRef<Path>) -> Option<Embed
     // only has the text `.vec` (an older pack, a hand-assembled home) still
     // works, and a packed file we can't read falls through to the text as well.
     let packed = vecb_path(path);
-    if let Some(bytes) = std::fs::read(&packed).ok() {
+    if let Ok(bytes) = std::fs::read(&packed) {
         if let Some(e) = parse_embedding_bin(tok_version, meta.as_deref(), &bytes, freq.as_deref()) {
             return Some(e);
         }
@@ -563,9 +559,7 @@ impl VerseSim {
     /// undetectable downstream. Never panics on hostile input: storage can hand
     /// back anything.
     pub fn decode(bytes: &[u8], stamp: &str) -> Option<VerseSim> {
-        let u32_at = |o: usize| -> Option<u32> {
-            Some(u32::from_le_bytes(bytes.get(o..o + 4)?.try_into().ok()?))
-        };
+        let u32_at = |o: usize| -> Option<u32> { Some(u32::from_le_bytes(bytes.get(o..o + 4)?.try_into().ok()?)) };
         if !bytes.starts_with(SIF_MAGIC) {
             return None;
         }
@@ -704,10 +698,8 @@ impl VerseSimBuilder {
         // Exactly the expression the one-shot build used, evaluated per code
         // instead of per (verse, code): `as f64 as f32` and the division order are
         // preserved deliberately, because the tie test compares bits.
-        let weights = counts
-            .iter()
-            .map(|(k, &c)| ((*k).to_string(), SIF_A / (SIF_A + c as f64 as f32 / total as f32)))
-            .collect();
+        let weights =
+            counts.iter().map(|(k, &c)| ((*k).to_string(), SIF_A / (SIF_A + c as f64 as f32 / total as f32))).collect();
         let d = emb.dim;
         VerseSimBuilder {
             stage: SifStage::Rows,
@@ -831,11 +823,7 @@ impl VerseSimBuilder {
             SifStage::Adjust => {
                 let end = self.cursor.saturating_add(budget).min(self.refs.len());
                 for i in self.cursor..end {
-                    let (mu, pc) = if self.nt[i] {
-                        (&self.mu_g, &self.pc_g)
-                    } else {
-                        (&self.mu_h, &self.pc_h)
-                    };
+                    let (mu, pc) = if self.nt[i] { (&self.mu_g, &self.pc_g) } else { (&self.mu_h, &self.pc_h) };
                     // In place: subtract the mean, remove the component's
                     // projection, normalise. The one-shot form allocated a fresh
                     // `Vec<f32>` per verse here and copied it into the output.
@@ -874,11 +862,7 @@ impl VerseSimBuilder {
     /// to a handful of verses is noise, and mean subtraction still runs.
     fn pc_step(&mut self, greek: bool) -> bool {
         let next_stage = if greek { SifStage::Adjust } else { SifStage::PcGreek };
-        let (idx, mu) = if greek {
-            (&self.greek, &self.mu_g)
-        } else {
-            (&self.hebrew, &self.mu_h)
-        };
+        let (idx, mu) = if greek { (&self.greek, &self.mu_g) } else { (&self.hebrew, &self.mu_h) };
         if idx.len() < SIF_PC_MIN_VERSES {
             return self.enter(next_stage);
         }
@@ -959,10 +943,8 @@ impl VerseSim {
         let Some(&i) = self.ix.get(reference) else { return Vec::new() };
         let q = self.row(i);
         let g = self.nt[i];
-        let mut scored: Vec<(usize, f32)> = (0..self.count())
-            .filter(|&j| j != i && keep(g, self.nt[j]))
-            .map(|j| (j, dot(q, self.row(j))))
-            .collect();
+        let mut scored: Vec<(usize, f32)> =
+            (0..self.count()).filter(|&j| j != i && keep(g, self.nt[j])).map(|j| (j, dot(q, self.row(j)))).collect();
         scored.sort_by(|a, b| b.1.total_cmp(&a.1));
         scored.truncate(k);
         scored.into_iter().map(|(j, s)| (self.refs[j].clone(), s)).collect()
@@ -1322,4 +1304,3 @@ mod tests {
         }
     }
 }
-

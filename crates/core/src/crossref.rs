@@ -44,8 +44,7 @@ pub fn parse_xref_line(line: &str) -> Option<(VRef, CrossRef)> {
     // Exactly four tab-separated columns, split without a per-row Vec (this
     // runs ~344k times at load).
     let mut it = line.split('\t');
-    let (Some(from), Some(to), Some(end), Some(votes), None) =
-        (it.next(), it.next(), it.next(), it.next(), it.next())
+    let (Some(from), Some(to), Some(end), Some(votes), None) = (it.next(), it.next(), it.next(), it.next(), it.next())
     else {
         return None;
     };
@@ -66,7 +65,7 @@ pub fn parse_cross_refs(text: &str) -> XRefIx {
         }
     }
     for refs in ix.values_mut() {
-        refs.sort_by(|a, b| b.votes.cmp(&a.votes));
+        refs.sort_by_key(|r| std::cmp::Reverse(r.votes));
     }
     ix
 }
@@ -133,7 +132,7 @@ impl XRefIxBuilder {
     /// Sort each verse's references best-voted first and hand over the index.
     pub fn finish(mut self) -> XRefIx {
         for refs in self.ix.values_mut() {
-            refs.sort_by(|a, b| b.votes.cmp(&a.votes));
+            refs.sort_by_key(|r| std::cmp::Reverse(r.votes));
         }
         self.ix
     }

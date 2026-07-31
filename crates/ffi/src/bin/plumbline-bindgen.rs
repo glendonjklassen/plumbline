@@ -84,9 +84,7 @@ fn verify_surface(crate_dir: &str) {
         while let Some(off) = text[i..].find("plumbline_") {
             let start = i + off;
             let mut end = start;
-            while end < bytes.len()
-                && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_')
-            {
+            while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
                 end += 1;
             }
             // A function name is followed by '(' (decl or import site).
@@ -97,8 +95,8 @@ fn verify_surface(crate_dir: &str) {
         }
         out
     };
-    let header = std::fs::read_to_string(Path::new(crate_dir).join("include/plumbline.h"))
-        .expect("read generated header");
+    let header =
+        std::fs::read_to_string(Path::new(crate_dir).join("include/plumbline.h")).expect("read generated header");
     let kotlin = std::fs::read_to_string(Path::new(crate_dir).join("bindings/kotlin/Plumbline.kt"))
         .expect("read Kotlin binding");
     let h: std::collections::BTreeSet<_> = names(&header);

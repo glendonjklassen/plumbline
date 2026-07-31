@@ -59,10 +59,7 @@ pub fn write_atomic_bytes(path: impl AsRef<Path>, bytes: &[u8]) -> Result<(), Er
 /// within the same directory (and thus the same filesystem — required for an
 /// atomic rename).
 fn temp_sibling(path: &Path) -> PathBuf {
-    let name = path
-        .file_name()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "out".to_string());
+    let name = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "out".to_string());
     let tmp_name = format!(".{name}.{}.tmp", temp_discriminator());
     match path.parent() {
         Some(p) if !p.as_os_str().is_empty() => p.join(tmp_name),
@@ -129,12 +126,8 @@ fn temp_discriminator() -> u64 {
 /// separators, words joined by `-`. Empty input falls back to `fallback`.
 /// Matches overlay's `threadFileFor` / `tagFileFor` slugging.
 pub fn slug(name: &str, fallback: &str) -> String {
-    let cleaned: String = name
-        .trim()
-        .to_lowercase()
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
-        .collect();
+    let cleaned: String =
+        name.trim().to_lowercase().chars().map(|c| if c.is_alphanumeric() { c } else { ' ' }).collect();
     let s = cleaned.split_whitespace().collect::<Vec<_>>().join("-");
     if s.is_empty() {
         fallback.to_string()
@@ -208,12 +201,7 @@ pub(crate) fn resolve_duplicate_ids<T>(
         }
     }
     let keep: std::collections::HashSet<usize> = best.into_values().collect();
-    items
-        .into_iter()
-        .enumerate()
-        .filter(|(i, it)| id_of(it).is_none() || keep.contains(i))
-        .map(|(_, it)| it)
-        .collect()
+    items.into_iter().enumerate().filter(|(i, it)| id_of(it).is_none() || keep.contains(i)).map(|(_, it)| it).collect()
 }
 
 /// Move an unparseable file to `<name>.bad` before anything writes over it.
@@ -350,8 +338,7 @@ mod tests {
         let threads = home.join("threads");
         write_atomic(threads.join("romans-road.json"), &thread_json("Romans Road")).unwrap();
         // Exactly what a kill between write and rename leaves behind.
-        write_atomic(threads.join(".romans-road.json.4242.tmp"), &thread_json("Stranded copy"))
-            .unwrap();
+        write_atomic(threads.join(".romans-road.json.4242.tmp"), &thread_json("Stranded copy")).unwrap();
         // And a dotted name that is NOT ours, which must still load.
         write_atomic(threads.join(".mine.json"), &thread_json("Mine")).unwrap();
 
@@ -433,10 +420,7 @@ mod tests {
         for _ in 0..20_000 {
             let id = new_id();
             assert_eq!(id.len(), 32, "not 32 chars: {id}");
-            assert!(
-                id.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
-                "not lowercase hex: {id}"
-            );
+            assert!(id.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)), "not lowercase hex: {id}");
             assert!(seen.insert(id.clone()), "minted {id} twice");
         }
     }
@@ -446,7 +430,10 @@ mod tests {
     /// arbitrary: the same two files must resolve the same way on every launch.
     #[test]
     fn a_tie_on_updated_keeps_the_earlier_item() {
-        let items = vec![("first", Some("x"), Some("2026-08-01T00:00:00Z")), ("second", Some("x"), Some("2026-08-01T00:00:00Z"))];
+        let items = vec![
+            ("first", Some("x"), Some("2026-08-01T00:00:00Z")),
+            ("second", Some("x"), Some("2026-08-01T00:00:00Z")),
+        ];
         let kept = resolve_duplicate_ids(items, |i| i.1, |i| i.2);
         assert_eq!(kept.len(), 1);
         assert_eq!(kept[0].0, "first");

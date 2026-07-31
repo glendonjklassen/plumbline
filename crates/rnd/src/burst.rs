@@ -258,7 +258,16 @@ pub fn discover_leitworter(bp: &BurstParams, corpus: &Corpus) -> Vec<Burst> {
             let start = vs[pv[i0] as usize].vref();
             let end = vs[pv[i1] as usize].vref();
             scored.push((
-                Burst { strongs: s.to_string(), score, p_value: p_adj, n, win_start: start, win_end: end, win_count: k, win_span: w as usize },
+                Burst {
+                    strongs: s.to_string(),
+                    score,
+                    p_value: p_adj,
+                    n,
+                    win_start: start,
+                    win_end: end,
+                    win_count: k,
+                    win_span: w as usize,
+                },
                 p_adj,
             ));
         }
@@ -310,7 +319,7 @@ pub struct LeitwortBuilder {
 impl LeitwortBuilder {
     pub fn new(bp: &BurstParams) -> LeitwortBuilder {
         LeitwortBuilder {
-            bp: bp.clone(),
+            bp: *bp,
             stage: 1,
             cursor: 0,
             nt_start: None,
@@ -372,8 +381,7 @@ impl LeitwortBuilder {
                         let levels = (n.saturating_sub(self.bp.min_k) + 1).max(1) as f64;
                         let p_adj = (raw_p * levels).min(1.0);
                         let score = -(p_adj.max(1.0e-300).log10());
-                        let (Some(a), Some(b)) =
-                            (corpus.verse_at(pv[i0] as usize), corpus.verse_at(pv[i1] as usize))
+                        let (Some(a), Some(b)) = (corpus.verse_at(pv[i0] as usize), corpus.verse_at(pv[i1] as usize))
                         else {
                             continue;
                         };
@@ -469,14 +477,22 @@ mod tests {
     /// need far more verses than this to call anything significant — so it exists
     /// to drive the builder's CURSOR through both stages, not to find leitwörter.
     const BURSTY: &str = concat!(
-        r#"{"format":"x","tokenization":"kjv1769-tok2","verses":8}"#, "\n",
-        r#"{"b":"Gen","c":1,"v":1,"t":[["","a","",["H1"],0],["","b","",["H2"],0]]}"#, "\n",
-        r#"{"b":"Gen","c":1,"v":2,"t":[["","a","",["H1"],0]]}"#, "\n",
-        r#"{"b":"Gen","c":1,"v":3,"t":[["","a","",["H1"],0],["","c","",["H3"],0]]}"#, "\n",
-        r#"{"b":"Gen","c":1,"v":4,"t":[["","a","",["H1"],0]]}"#, "\n",
-        r#"{"b":"Gen","c":1,"v":5,"t":[["","d","",["H4"],0]]}"#, "\n",
-        r#"{"b":"John","c":1,"v":1,"t":[["","e","",["G5"],0],["","f","",["G6"],0]]}"#, "\n",
-        r#"{"b":"John","c":1,"v":2,"t":[["","e","",["G5"],0]]}"#, "\n",
+        r#"{"format":"x","tokenization":"kjv1769-tok2","verses":8}"#,
+        "\n",
+        r#"{"b":"Gen","c":1,"v":1,"t":[["","a","",["H1"],0],["","b","",["H2"],0]]}"#,
+        "\n",
+        r#"{"b":"Gen","c":1,"v":2,"t":[["","a","",["H1"],0]]}"#,
+        "\n",
+        r#"{"b":"Gen","c":1,"v":3,"t":[["","a","",["H1"],0],["","c","",["H3"],0]]}"#,
+        "\n",
+        r#"{"b":"Gen","c":1,"v":4,"t":[["","a","",["H1"],0]]}"#,
+        "\n",
+        r#"{"b":"Gen","c":1,"v":5,"t":[["","d","",["H4"],0]]}"#,
+        "\n",
+        r#"{"b":"John","c":1,"v":1,"t":[["","e","",["G5"],0],["","f","",["G6"],0]]}"#,
+        "\n",
+        r#"{"b":"John","c":1,"v":2,"t":[["","e","",["G5"],0]]}"#,
+        "\n",
         r#"{"b":"John","c":1,"v":3,"t":[["","g","",["G7"],0]]}"#,
     );
 
@@ -508,8 +524,12 @@ mod tests {
             steps += 1;
             assert!(steps < 100_000, "the builder never finished");
         }
-        let got: HashMap<String, Burst> =
-            b.take().expect("finished builder yields its discoveries").into_iter().map(|b| (b.strongs.clone(), b)).collect();
+        let got: HashMap<String, Burst> = b
+            .take()
+            .expect("finished builder yields its discoveries")
+            .into_iter()
+            .map(|b| (b.strongs.clone(), b))
+            .collect();
 
         assert!(want.len() > 100, "fixture check: the real corpus should yield many leitwörter, got {}", want.len());
         assert!(steps > 2, "the whole thing ran in one step, so nothing was sliced");

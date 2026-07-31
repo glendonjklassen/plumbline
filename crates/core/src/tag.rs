@@ -211,11 +211,9 @@ pub fn tags_with<'a>(target: &TagTarget, tags: &'a [LoadedTag]) -> Vec<&'a Loade
 pub fn load_tags(home: impl AsRef<Path>) -> (Vec<LoadedTag>, Vec<String>) {
     let dir = home.as_ref().join("tags");
     let mut files: Vec<PathBuf> = match std::fs::read_dir(&dir) {
-        Ok(entries) => entries
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|x| x == "json"))
-            .collect(),
+        Ok(entries) => {
+            entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect()
+        }
         Err(_) => Vec::new(),
     };
     files.sort();
@@ -231,12 +229,8 @@ pub fn load_tags(home: impl AsRef<Path>) -> (Vec<LoadedTag>, Vec<String>) {
             },
         }
     }
-    loaded.sort_by(|a, b| a.tag.name.to_lowercase().cmp(&b.tag.name.to_lowercase()));
-    let loaded = crate::store::resolve_duplicate_ids(
-        loaded,
-        |lt| lt.tag.id.as_deref(),
-        |lt| lt.tag.updated.as_deref(),
-    );
+    loaded.sort_by_key(|a| a.tag.name.to_lowercase());
+    let loaded = crate::store::resolve_duplicate_ids(loaded, |lt| lt.tag.id.as_deref(), |lt| lt.tag.updated.as_deref());
     (loaded, errors)
 }
 
@@ -284,12 +278,7 @@ pub fn add_member(
     note: Option<String>,
     added: &str,
 ) -> Result<PathBuf, Error> {
-    let member = TagMember {
-        target: target.clone(),
-        note,
-        added: added.to_string(),
-        extra: Map::new(),
-    };
+    let member = TagMember { target: target.clone(), note, added: added.to_string(), extra: Map::new() };
     let wanted = name.trim().to_lowercase();
     if let Some(lt) = loaded.iter().find(|lt| lt.tag.name.to_lowercase() == wanted) {
         if lt.tag.member_of(&target) {
@@ -383,7 +372,16 @@ mod tests {
         add_member(&home, &loaded, "messianic", "kjv1769-tok2", isa.clone(), None, "2026-01-02T00:00:00Z").unwrap();
         // A second, different target joins the same tag.
         let (loaded, _) = load_tags(&home);
-        add_member(&home, &loaded, "Messianic", "kjv1769-tok2", concept.clone(), Some("Christ".into()), "2026-01-03T00:00:00Z").unwrap();
+        add_member(
+            &home,
+            &loaded,
+            "Messianic",
+            "kjv1769-tok2",
+            concept.clone(),
+            Some("Christ".into()),
+            "2026-01-03T00:00:00Z",
+        )
+        .unwrap();
 
         let (loaded, errs) = load_tags(&home);
         assert!(errs.is_empty());
@@ -581,7 +579,8 @@ mod tests {
         let home = id_home("stable");
         let target = TagTarget::Verse(VRef::new("Isa", 53, 5));
         let (loaded, _) = load_tags(&home);
-        let path = add_member(&home, &loaded, "Mercy", "kjv1769-tok2", target.clone(), None, "2026-08-01T00:00:00Z").unwrap();
+        let path =
+            add_member(&home, &loaded, "Mercy", "kjv1769-tok2", target.clone(), None, "2026-08-01T00:00:00Z").unwrap();
         let first = read_json(&path);
 
         let (loaded, _) = load_tags(&home);
@@ -611,7 +610,16 @@ mod tests {
         .unwrap();
 
         let (loaded, _) = load_tags(&home);
-        add_member(&home, &loaded, "Mercy", "kjv1769-tok2", TagTarget::Concept("G26".into()), None, "2026-08-01T00:00:00Z").unwrap();
+        add_member(
+            &home,
+            &loaded,
+            "Mercy",
+            "kjv1769-tok2",
+            TagTarget::Concept("G26".into()),
+            None,
+            "2026-08-01T00:00:00Z",
+        )
+        .unwrap();
         assert_eq!(read_json(&path)["id"], "NOT-32-HEX");
 
         let _ = std::fs::remove_dir_all(&home);

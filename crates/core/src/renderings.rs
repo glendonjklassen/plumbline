@@ -151,17 +151,10 @@ impl RenderingsBuilder {
                 // Close every open run whose code is absent here; its last
                 // token was the previous one (idx - 1, always ≥ 0 since a run
                 // can only be open once at least one token has passed).
-                let to_close: Vec<String> = open
-                    .keys()
-                    .filter(|k| !active.contains(&k.as_str()))
-                    .cloned()
-                    .collect();
+                let to_close: Vec<String> = open.keys().filter(|k| !active.contains(&k.as_str())).cloned().collect();
                 for code in to_close {
                     let (start, surface) = open.remove(&code).unwrap();
-                    record(by_code, &code, surface, RenderingOcc {
-                        vref: vr.clone(),
-                        span: (start, idx - 1),
-                    });
+                    record(by_code, &code, surface, RenderingOcc { vref: vr.clone(), span: (start, idx - 1) });
                 }
 
                 // Extend the still-open runs and open new ones.
@@ -180,10 +173,7 @@ impl RenderingsBuilder {
 
             // Close whatever is still open at verse end.
             for (code, (start, surface)) in open.drain() {
-                record(by_code, &code, surface, RenderingOcc {
-                    vref: vr.clone(),
-                    span: (start, last),
-                });
+                record(by_code, &code, surface, RenderingOcc { vref: vr.clone(), span: (start, last) });
             }
         }
         self.next = end;
@@ -200,9 +190,7 @@ impl RenderingsBuilder {
             .map(|(code, inner)| {
                 let inner = inner
                     .into_iter()
-                    .map(|(norm, b)| {
-                        (norm, Rendering { label: pick_label(&b.surfaces), occs: b.occs })
-                    })
+                    .map(|(norm, b)| (norm, Rendering { label: pick_label(&b.surfaces), occs: b.occs }))
                     .collect();
                 (code, inner)
             })
@@ -231,13 +219,8 @@ impl Renderings {
     /// callers pass a raw surface word (`"Love"`, `"charity,"`) directly.
     pub fn word_codes(&self, word: &str) -> Vec<(&str, usize)> {
         let key = normalize(word);
-        let mut out: Vec<(&str, usize)> = self
-            .by_word
-            .get(&key)
-            .into_iter()
-            .flatten()
-            .map(|(c, n)| (c.as_str(), *n))
-            .collect();
+        let mut out: Vec<(&str, usize)> =
+            self.by_word.get(&key).into_iter().flatten().map(|(c, n)| (c.as_str(), *n)).collect();
         out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
         out
     }
@@ -248,22 +231,13 @@ impl Renderings {
     /// through a link without carrying the internal key.
     pub fn rendering_occs(&self, code: &str, rendering: &str) -> &[RenderingOcc] {
         let key = normalize(rendering);
-        self.by_code
-            .get(code)
-            .and_then(|m| m.get(&key))
-            .map(|r| r.occs.as_slice())
-            .unwrap_or(&[])
+        self.by_code.get(code).and_then(|m| m.get(&key)).map(|r| r.occs.as_slice()).unwrap_or(&[])
     }
 }
 
 /// Record one closed run under its (code, normalized-rendering) bucket. A run
 /// whose surface has no letters at all (pure punctuation) is dropped.
-fn record(
-    by_code: &mut HashMap<String, HashMap<String, Bucket>>,
-    code: &str,
-    surface: String,
-    occ: RenderingOcc,
-) {
+fn record(by_code: &mut HashMap<String, HashMap<String, Bucket>>, code: &str, surface: String, occ: RenderingOcc) {
     let norm = normalize(&surface);
     if norm.is_empty() {
         return;
@@ -294,12 +268,7 @@ fn pick_label(surfaces: &HashMap<String, usize>) -> String {
 /// the rule — every build-time and query-time comparison goes through it.
 pub fn normalize(s: &str) -> String {
     s.split_whitespace()
-        .map(|w| {
-            w.chars()
-                .filter(|c| c.is_alphabetic())
-                .flat_map(|c| c.to_lowercase())
-                .collect::<String>()
-        })
+        .map(|w| w.chars().filter(|c| c.is_alphabetic()).flat_map(|c| c.to_lowercase()).collect::<String>())
         .filter(|w| !w.is_empty())
         .collect::<Vec<_>>()
         .join(" ")

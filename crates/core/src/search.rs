@@ -157,12 +157,8 @@ impl SearchIx {
     /// Attach the margin notes for fast note search: pre-lowercase each
     /// verse's notes once here instead of on every keystroke.
     pub fn attach_notes(&mut self, corpus: &Corpus, notes: &Notes) {
-        let mut lc: Vec<(usize, String)> = notes
-            .iter()
-            .filter_map(|(r, ns)| {
-                corpus.index_of(r).map(|i| (i, ns.join("\n").to_lowercase()))
-            })
-            .collect();
+        let mut lc: Vec<(usize, String)> =
+            notes.iter().filter_map(|(r, ns)| corpus.index_of(r).map(|i| (i, ns.join("\n").to_lowercase()))).collect();
         lc.sort_unstable_by_key(|(i, _)| *i);
         self.notes_lc = Some(lc);
     }
@@ -206,12 +202,7 @@ pub type Notes = HashMap<VRef, Vec<String>>;
 
 /// Answer a query against the corpus, its margin notes, and the index.
 /// `None` means the query is blank. Ported from `runSearch`.
-pub fn run_search(
-    corpus: &Corpus,
-    notes: &Notes,
-    ix: &SearchIx,
-    raw_query: &str,
-) -> Option<SearchAnswer> {
+pub fn run_search(corpus: &Corpus, notes: &Notes, ix: &SearchIx, raw_query: &str) -> Option<SearchAnswer> {
     let q = raw_query.trim();
     if q.is_empty() {
         return None;
@@ -223,20 +214,13 @@ pub fn run_search(
         return Some(form_search(corpus, ix, &fq));
     }
 
-    let qws: Vec<String> = q
-        .split_whitespace()
-        .map(normalize_word)
-        .filter(|w| !w.is_empty())
-        .collect();
+    let qws: Vec<String> = q.split_whitespace().map(normalize_word).filter(|w| !w.is_empty()).collect();
     if qws.is_empty() {
         return None;
     }
 
-    let (how, rows) = if qws.len() == 1 {
-        single_word(corpus, notes, ix, &qws[0])
-    } else {
-        multi_word(corpus, notes, ix, &qws)
-    };
+    let (how, rows) =
+        if qws.len() == 1 { single_word(corpus, notes, ix, &qws[0]) } else { multi_word(corpus, notes, ix, &qws) };
 
     let total = rows.len();
     let hits = rows
@@ -254,11 +238,7 @@ pub fn run_search(
 fn note_idxs(corpus: &Corpus, notes: &Notes, ix: &SearchIx, needle: &str) -> Vec<usize> {
     // Fast path: the pre-lowercased notes attached to the index.
     if let Some(lc) = &ix.notes_lc {
-        return lc
-            .iter()
-            .filter(|(_, text)| text.contains(needle))
-            .map(|(i, _)| *i)
-            .collect();
+        return lc.iter().filter(|(_, text)| text.contains(needle)).map(|(i, _)| *i).collect();
     }
     let mut idxs: Vec<usize> = notes
         .iter()
@@ -275,10 +255,8 @@ fn single_word(corpus: &Corpus, notes: &Notes, ix: &SearchIx, w: &str) -> (Strin
     let exact = ix.word_idxs(w).to_vec();
     let exact_set: HashSet<usize> = exact.iter().copied().collect();
 
-    let note_only: Vec<usize> = note_idxs(corpus, notes, ix, w)
-        .into_iter()
-        .filter(|i| !exact_set.contains(i))
-        .collect();
+    let note_only: Vec<usize> =
+        note_idxs(corpus, notes, ix, w).into_iter().filter(|i| !exact_set.contains(i)).collect();
 
     let mut seen: HashSet<usize> = exact_set;
     seen.extend(note_only.iter().copied());
@@ -294,11 +272,7 @@ fn single_word(corpus: &Corpus, notes: &Notes, ix: &SearchIx, w: &str) -> (Strin
 
     // Skip the full-vocabulary Levenshtein pass once the better tiers already
     // fill the cap — those near-spellings would be dropped anyway.
-    let typos = if upper.len() >= HIT_CAP {
-        Vec::new()
-    } else {
-        unique_by(&mut seen, fuzzy_hits(ix, w))
-    };
+    let typos = if upper.len() >= HIT_CAP { Vec::new() } else { unique_by(&mut seen, fuzzy_hits(ix, w)) };
 
     let label = if !exact.is_empty() || !note_only.is_empty() {
         "verses with the word"
@@ -392,11 +366,8 @@ fn multi_word(corpus: &Corpus, notes: &Notes, ix: &SearchIx, qws: &[String]) -> 
     // bigrams ("of the") this replaces rebuilding ~500k lowercased Strings per
     // keystroke with an allocation-free scan of a few hundred candidates.
     let every_word = and_idxs(&postings);
-    let phrase_idxs: Vec<usize> = every_word
-        .iter()
-        .copied()
-        .filter(|&i| corpus.verse_at(i).is_some_and(|v| phrase_in_verse(qws, v)))
-        .collect();
+    let phrase_idxs: Vec<usize> =
+        every_word.iter().copied().filter(|&i| corpus.verse_at(i).is_some_and(|v| phrase_in_verse(qws, v))).collect();
 
     let (label, text_idxs) = if !phrase_idxs.is_empty() {
         ("verses with the phrase", phrase_idxs)
@@ -406,10 +377,8 @@ fn multi_word(corpus: &Corpus, notes: &Notes, ix: &SearchIx, qws: &[String]) -> 
 
     let text_set: HashSet<usize> = text_idxs.iter().copied().collect();
     let needle = qws.join(" ");
-    let note_only: Vec<usize> = note_idxs(corpus, notes, ix, &needle)
-        .into_iter()
-        .filter(|i| !text_set.contains(i))
-        .collect();
+    let note_only: Vec<usize> =
+        note_idxs(corpus, notes, ix, &needle).into_iter().filter(|i| !text_set.contains(i)).collect();
 
     let mut rows: Rows = text_idxs.into_iter().map(|i| (i, false, String::new())).collect();
     rows.extend(note_only.into_iter().map(|i| (i, true, String::new())));
@@ -472,11 +441,8 @@ fn phrase_in_verse(qws: &[String], v: &crate::corpus::Verse) -> bool {
     if n == 0 || n > v.tokens.len() {
         return false;
     }
-    (0..=v.tokens.len() - n).any(|start| {
-        qws.iter()
-            .enumerate()
-            .all(|(k, qw)| word_eq_lower(&v.tokens[start + k].word, qw))
-    })
+    (0..=v.tokens.len() - n)
+        .any(|start| qws.iter().enumerate().all(|(k, qw)| word_eq_lower(&v.tokens[start + k].word, qw)))
 }
 
 /// Intersect two ascending, deduplicated lists.
@@ -503,10 +469,7 @@ fn intersect_asc(xs: &[usize], ys: &[usize]) -> Vec<usize> {
 /// word, so a query matches the index however typed or quoted. Ported from
 /// `normalizeWord`.
 pub fn normalize_word(w: &str) -> String {
-    w.to_lowercase()
-        .chars()
-        .filter(|&c| c.is_alphanumeric() || c == '\'' || c == '\u{2019}' || c == '-')
-        .collect()
+    w.to_lowercase().chars().filter(|&c| c.is_alphanumeric() || c == '\'' || c == '\u{2019}' || c == '-').collect()
 }
 
 /// A light inflectional stemmer over the 1769 English vocabulary — just enough
@@ -547,21 +510,9 @@ fn plural(t: &str) -> String {
 }
 
 fn verb(t: &str) -> String {
-    let peeled = if let Some(s) = t.strip_suffix("ing") {
-        if keepable(s) {
-            Some(s)
-        } else {
-            None
-        }
-    } else if let Some(s) = t.strip_suffix("ed") {
-        if keepable(s) {
-            Some(s)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
+    // "ed" is only tried when there was no "ing" to peel; an "ing" stem that
+    // isn't keepable does NOT fall through, it leaves the word whole.
+    let peeled = t.strip_suffix("ing").or_else(|| t.strip_suffix("ed")).filter(|s| keepable(s));
     match peeled {
         Some(s) => undouble(s),
         None => t.to_string(),
@@ -689,18 +640,10 @@ pub fn form_search(corpus: &Corpus, ix: &SearchIx, fq: &FormQuery) -> SearchAnsw
                 .iter()
                 .take(HIT_CAP)
                 .filter_map(|&i| {
-                    corpus.verse_at(i).map(|v| SearchHit {
-                        vref: v.vref(),
-                        note: false,
-                        why: String::new(),
-                    })
+                    corpus.verse_at(i).map(|v| SearchHit { vref: v.vref(), note: false, why: String::new() })
                 })
                 .collect();
-            return SearchAnswer::Hits {
-                how: format!("verses tagged {s}"),
-                total: idxs.len(),
-                hits,
-            };
+            return SearchAnswer::Hits { how: format!("verses tagged {s}"), total: idxs.len(), hits };
         }
     }
     SearchAnswer::Hits {
@@ -766,18 +709,12 @@ fn resolve_book(t: &str) -> Option<String> {
         return None;
     }
     // exact: OSIS id or display name (case-insensitive)
-    if let Some(b) = canon::BOOKS
-        .iter()
-        .find(|b| b.id.to_lowercase() == needle || b.name.to_lowercase() == needle)
-    {
+    if let Some(b) = canon::BOOKS.iter().find(|b| b.id.to_lowercase() == needle || b.name.to_lowercase() == needle) {
         return Some(b.id.to_string());
     }
     // unambiguous display-name prefix
-    let prefixed: Vec<&str> = canon::BOOKS
-        .iter()
-        .filter(|b| b.name.to_lowercase().starts_with(&needle))
-        .map(|b| b.id)
-        .collect();
+    let prefixed: Vec<&str> =
+        canon::BOOKS.iter().filter(|b| b.name.to_lowercase().starts_with(&needle)).map(|b| b.id).collect();
     if prefixed.len() == 1 {
         Some(prefixed[0].to_string())
     } else {
@@ -818,6 +755,17 @@ mod tests {
         // l/s/z doubles are preserved
         assert_eq!(stem_word("bless"), "bless");
         assert_eq!(levenshtein("beginning", "begining"), 1);
+    }
+
+    /// A suffix that *looks* verbal but leaves nothing keepable behind must
+    /// leave the word whole — "king" is not the "-ing" of "k". The peel and the
+    /// keepable test are one expression in [`verb`], and a rewrite that peels
+    /// first and asks afterwards silently folds every such word onto a stub.
+    #[test]
+    fn unkeepable_verb_stems_leave_the_word_whole() {
+        for w in ["king", "ring", "thing", "bed", "red", "seed"] {
+            assert_eq!(stem_word(w), w, "{w} was peeled to a stub");
+        }
     }
 
     #[test]
@@ -965,17 +913,13 @@ mod review_tests {
         let ix = SearchIx::build(&c);
         let notes = Notes::new();
 
-        let Some(SearchAnswer::Hits { how, total, .. }) =
-            run_search(&c, &notes, &ix, "paste sat")
-        else {
+        let Some(SearchAnswer::Hits { how, total, .. }) = run_search(&c, &notes, &ix, "paste sat") else {
             panic!("expected hits");
         };
         assert_eq!(how, "verses with the phrase");
         assert_eq!(total, 2); // v1 and v3 contain "paste sat" consecutively
 
-        let Some(SearchAnswer::Hits { how, total, .. }) =
-            run_search(&c, &notes, &ix, "sat the")
-        else {
+        let Some(SearchAnswer::Hits { how, total, .. }) = run_search(&c, &notes, &ix, "sat the") else {
             panic!("expected hits");
         };
         assert!(how.starts_with("no exact phrase"));
@@ -984,15 +928,11 @@ mod review_tests {
 
     /// attach_notes serves the same rows as the fallback scan.
     #[test]
-    fn attached_notes_match_the_fallback_path()
-    {
+    fn attached_notes_match_the_fallback_path() {
         let c = tiny();
         let mut ix = SearchIx::build(&c);
         let mut notes = Notes::new();
-        notes.insert(
-            crate::VRef::new("Gen", 1, 2),
-            vec!["Heb. Winged Mouse".to_string()],
-        );
+        notes.insert(crate::VRef::new("Gen", 1, 2), vec!["Heb. Winged Mouse".to_string()]);
 
         let slow = note_idxs(&c, &notes, &SearchIx::build(&c), "winged");
         ix.attach_notes(&c, &notes);

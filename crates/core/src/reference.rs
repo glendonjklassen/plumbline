@@ -28,11 +28,7 @@ impl VRef {
     /// canonicalize weave links and sort passages the way a reader expects.
     /// An unknown book sorts last.
     pub fn reading_key(&self) -> (usize, u16, u16) {
-        (
-            canon::book_order(&self.book).unwrap_or(usize::MAX),
-            self.chapter,
-            self.verse,
-        )
+        (canon::book_order(&self.book).unwrap_or(usize::MAX), self.chapter, self.verse)
     }
 
     /// Compact canonical ref form, e.g. `"Gen 1:7"` — used by thread entries
@@ -52,11 +48,7 @@ impl VRef {
         let s = s.trim();
         let (book, cv) = s.rsplit_once(' ')?;
         let (c, v) = cv.split_once(':')?;
-        Some(VRef {
-            book: book.trim().to_string(),
-            chapter: c.parse().ok()?,
-            verse: v.parse().ok()?,
-        })
+        Some(VRef { book: book.trim().to_string(), chapter: c.parse().ok()?, verse: v.parse().ok()? })
     }
 }
 

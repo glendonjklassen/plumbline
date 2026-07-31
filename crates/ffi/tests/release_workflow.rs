@@ -46,10 +46,7 @@ fn read(rel: &str) -> String {
 /// guards, and a comment that talks about one is not one — the header alone
 /// names `deploy-pages` and the dispatch guard.
 fn code(yml: &str) -> String {
-    let kept: Vec<&str> = yml
-        .lines()
-        .filter(|l| !l.trim_start().starts_with('#'))
-        .collect();
+    let kept: Vec<&str> = yml.lines().filter(|l| !l.trim_start().starts_with('#')).collect();
     kept.join("\n")
 }
 
@@ -81,10 +78,7 @@ fn steps(job: &str) -> Vec<&str> {
 
 /// The `on:` block: from `on:` to the next key at column 0.
 fn triggers(yml: &str) -> String {
-    let start = yml
-        .find("\non:\n")
-        .expect("the workflow has no `on:` block")
-        + 1;
+    let start = yml.find("\non:\n").expect("the workflow has no `on:` block") + 1;
     let rest = &yml[start..];
     let mut out = String::new();
     for (i, line) in rest.lines().enumerate() {
@@ -98,11 +92,7 @@ fn triggers(yml: &str) -> String {
 }
 
 fn job(yml: &str, name: &str) -> String {
-    jobs(yml)
-        .into_iter()
-        .find(|(n, _)| *n == name)
-        .unwrap_or_else(|| panic!("release.yml has no `{name}` job"))
-        .1
+    jobs(yml).into_iter().find(|(n, _)| *n == name).unwrap_or_else(|| panic!("release.yml has no `{name}` job")).1
 }
 
 /// The type check has to run, and it has to run before anything it could stop:
@@ -117,9 +107,7 @@ fn the_pages_job_type_checks_before_it_builds_or_deploys() {
         "the `pages` job never runs `npm run check` — a tag can ship a type error that CI \
          catches on every push, straight to plumblinebible.org",
     );
-    let build = pages
-        .find("npm run build")
-        .expect("the `pages` job no longer builds the web bundle at all");
+    let build = pages.find("npm run build").expect("the `pages` job no longer builds the web bundle at all");
     let deploy = pages
         .find("actions/deploy-pages")
         .expect("the `pages` job no longer deploys — this test is checking the wrong job");
@@ -135,19 +123,10 @@ fn the_pages_job_type_checks_before_it_builds_or_deploys() {
     );
 
     // A check whose failure is swallowed is worse than no check: it reads green.
-    let line = pages
-        .lines()
-        .find(|l| l.contains("npm run check"))
-        .expect("unreachable: found the check above");
-    assert!(
-        !line.contains("||"),
-        "the type check's failure is swallowed in the `pages` job: {}",
-        line.trim()
-    );
-    let step = steps(&pages)
-        .into_iter()
-        .find(|s| s.contains("npm run check"))
-        .expect("unreachable: found the check above");
+    let line = pages.lines().find(|l| l.contains("npm run check")).expect("unreachable: found the check above");
+    assert!(!line.contains("||"), "the type check's failure is swallowed in the `pages` job: {}", line.trim());
+    let step =
+        steps(&pages).into_iter().find(|s| s.contains("npm run check")).expect("unreachable: found the check above");
     assert!(
         !step.contains("continue-on-error"),
         "the step that type-checks the web shell is advisory (`continue-on-error`), so a tag \
@@ -212,17 +191,13 @@ fn a_manual_run_builds_but_cannot_publish() {
         // A guard on the job covers its steps; the reverse is not true, and
         // `create-release` is guarded per step on purpose (a skipped job skips
         // everything that needs it, and the dry run has to keep building).
-        let job_guarded = body
-            .lines()
-            .any(|l| l.starts_with("    if:") && l.contains(GUARD));
+        let job_guarded = body.lines().any(|l| l.starts_with("    if:") && l.contains(GUARD));
         for step in steps(&body) {
             let Some(marker) = PUBLISHES.iter().find(|m| step.contains(**m)) else {
                 continue;
             };
             guarded += 1;
-            let step_guarded = step
-                .lines()
-                .any(|l| l.trim_start().starts_with("if:") && l.contains(GUARD));
+            let step_guarded = step.lines().any(|l| l.trim_start().starts_with("if:") && l.contains(GUARD));
             assert!(
                 job_guarded || step_guarded,
                 "job `{name}` publishes ({marker}) without `{GUARD}`, so a manual run can \

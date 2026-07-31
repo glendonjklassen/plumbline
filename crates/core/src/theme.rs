@@ -293,7 +293,6 @@ pub fn palette(theme: Theme) -> Palette {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,14 +342,8 @@ mod tests {
     fn panel_color_maps_and_ink_inherits() {
         let p = palette(Theme::Light);
         assert_eq!(p.panel_color(crate::panel::Color::Ink), None);
-        assert_eq!(
-            p.panel_color(crate::panel::Color::Gold),
-            Some(p.gold.as_str())
-        );
-        assert_eq!(
-            p.panel_color(crate::panel::Color::TierHuman),
-            Some(p.tier_human.as_str())
-        );
+        assert_eq!(p.panel_color(crate::panel::Color::Gold), Some(p.gold.as_str()));
+        assert_eq!(p.panel_color(crate::panel::Color::TierHuman), Some(p.tier_human.as_str()));
     }
 }
 
@@ -381,13 +374,9 @@ mod contrast {
 
     /// `#rrggbb` → WCAG relative luminance.
     fn luminance(hex: &str) -> f64 {
-        let h = hex
-            .strip_prefix('#')
-            .unwrap_or_else(|| panic!("{hex} is not #rrggbb"));
+        let h = hex.strip_prefix('#').unwrap_or_else(|| panic!("{hex} is not #rrggbb"));
         assert_eq!(h.len(), 6, "{hex} is not #rrggbb");
-        let byte = |i: usize| {
-            u8::from_str_radix(&h[i..i + 2], 16).unwrap_or_else(|_| panic!("{hex} is not hex"))
-        };
+        let byte = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).unwrap_or_else(|_| panic!("{hex} is not hex"));
         0.2126 * linear(byte(0)) + 0.7152 * linear(byte(2)) + 0.0722 * linear(byte(4))
     }
 
@@ -434,29 +423,17 @@ mod contrast {
     /// test below can prove nothing slipped past a contrast decision.
     const NOT_TEXT: &[(&str, &str)] = &[
         ("dark", "a flag, not a colour"),
-        (
-            "pin",
-            "the weave-authoring selection band; shells draw it with alpha",
-        ),
+        ("pin", "the weave-authoring selection band; shells draw it with alpha"),
         // 1.5:1 on paper. A 3:1 hairline would turn every divider in a
         // paper-and-ink reader into a hard line, and the controls that draw it as a
         // border all carry their own legible label — but a text field's border IS
         // its only affordance, so this one wants the maintainer's eye.
-        (
-            "rule",
-            "a decorative hairline, never an only-affordance boundary",
-        ),
+        ("rule", "a decorative hairline, never an only-affordance boundary"),
         // Tile paint, not type: the shells composite these at ≤0.30 alpha for the
         // fill and ≤0.80 for the border, so the raw hex never reaches the screen,
         // and every tile also states its standing in its own tooltip.
-        (
-            "readUnread",
-            "reading-map tile paint, composited with alpha",
-        ),
-        (
-            "readPartial",
-            "reading-map tile paint, composited with alpha",
-        ),
+        ("readUnread", "reading-map tile paint, composited with alpha"),
+        ("readPartial", "reading-map tile paint, composited with alpha"),
         ("readDone", "reading-map tile paint, composited with alpha"),
     ];
 
@@ -489,8 +466,7 @@ mod contrast {
         let surf: Vec<&str> = surfaces(&p).into_iter().map(|(n, _)| n).collect();
         for key in keys.keys() {
             let k = key.as_str();
-            let known =
-                text.contains(&k) || surf.contains(&k) || NOT_TEXT.iter().any(|(n, _)| *n == k);
+            let known = text.contains(&k) || surf.contains(&k) || NOT_TEXT.iter().any(|(n, _)| *n == k);
             assert!(
                 known,
                 "palette role `{k}` is new: add it to text_roles() — where it must \

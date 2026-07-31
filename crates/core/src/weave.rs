@@ -51,13 +51,7 @@ impl Link {
     /// so swapping endpoints swaps the spans in lockstep. This is the sole
     /// structural constructor — every span-aware caller routes through it so
     /// the endpoint/span pairing can never desync. Ported from `canonLinkSpan`.
-    pub fn canon_span(
-        a: VRef,
-        b: VRef,
-        label: impl Into<String>,
-        span_a: Option<Span>,
-        span_b: Option<Span>,
-    ) -> Link {
+    pub fn canon_span(a: VRef, b: VRef, label: impl Into<String>, span_a: Option<Span>, span_b: Option<Span>) -> Link {
         let label = label.into();
         if a.reading_key() <= b.reading_key() {
             Link { a, b, label, approved: false, span_a, span_b, extra: Map::new() }
@@ -78,13 +72,7 @@ impl Link {
 
     /// Edge identity: endpoints, label, spans (ignoring approval).
     pub fn key(&self) -> LinkKey {
-        (
-            self.a.clone(),
-            self.b.clone(),
-            self.label.clone(),
-            self.span_a,
-            self.span_b,
-        )
+        (self.a.clone(), self.b.clone(), self.label.clone(), self.span_a, self.span_b)
     }
 }
 
@@ -128,12 +116,8 @@ pub enum WeaveKind {
 }
 
 impl WeaveKind {
-    pub const ALL: [WeaveKind; 4] = [
-        WeaveKind::Retelling,
-        WeaveKind::Typological,
-        WeaveKind::Prophecy,
-        WeaveKind::Quotation,
-    ];
+    pub const ALL: [WeaveKind; 4] =
+        [WeaveKind::Retelling, WeaveKind::Typological, WeaveKind::Prophecy, WeaveKind::Quotation];
 
     /// Frozen on-disk token.
     pub fn token(self) -> &'static str {
@@ -233,7 +217,12 @@ pub struct Weave {
 
 impl Weave {
     /// A fresh, empty weave (no links yet). Ported from `emptyWeave`.
-    pub fn empty(name: impl Into<String>, kind: WeaveKind, tok_version: impl Into<String>, created: impl Into<String>) -> Weave {
+    pub fn empty(
+        name: impl Into<String>,
+        kind: WeaveKind,
+        tok_version: impl Into<String>,
+        created: impl Into<String>,
+    ) -> Weave {
         Weave {
             name: name.into(),
             kind,
@@ -318,9 +307,7 @@ impl Weave {
     /// The links with at least one endpoint among the given verses (for ambient
     /// rendering). Ported from `linksTouching`.
     pub fn links_touching<'a>(&'a self, verses: &'a HashSet<VRef>) -> impl Iterator<Item = &'a Link> {
-        self.links
-            .iter()
-            .filter(move |l| verses.contains(&l.a) || verses.contains(&l.b))
+        self.links.iter().filter(move |l| verses.contains(&l.a) || verses.contains(&l.b))
     }
 }
 
@@ -361,10 +348,7 @@ pub fn components(links: &[Link]) -> Vec<Vec<VRef>> {
 /// All verses linked (transitively) to a verse, the verse included. Ported
 /// from `componentOf`.
 pub fn component_of(links: &[Link], v: &VRef) -> Vec<VRef> {
-    components(links)
-        .into_iter()
-        .find(|c| c.contains(v))
-        .unwrap_or_else(|| vec![v.clone()])
+    components(links).into_iter().find(|c| c.contains(v)).unwrap_or_else(|| vec![v.clone()])
 }
 
 /// Build links from a per-pane selection. Two equal-length panes zip 1:1;
@@ -374,11 +358,7 @@ pub fn smart_links(panes: &[Vec<VRef>]) -> Vec<Link> {
     let non_empty: Vec<&Vec<VRef>> = panes.iter().filter(|p| !p.is_empty()).collect();
     if let [a, b] = non_empty.as_slice() {
         if a.len() == b.len() {
-            return a
-                .iter()
-                .zip(b.iter())
-                .map(|(x, y)| Link::canon(x.clone(), y.clone()))
-                .collect();
+            return a.iter().zip(b.iter()).map(|(x, y)| Link::canon(x.clone(), y.clone())).collect();
         }
     }
     let mut out = Vec::new();
@@ -441,10 +421,8 @@ impl<'de> Deserialize<'de> for Link {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         use serde::de::Error as _;
         let w = LinkWire::deserialize(d)?;
-        let a = VRef::parse_ref_key(&w.a)
-            .ok_or_else(|| D::Error::custom(format!("bad link ref: {}", w.a)))?;
-        let b = VRef::parse_ref_key(&w.b)
-            .ok_or_else(|| D::Error::custom(format!("bad link ref: {}", w.b)))?;
+        let a = VRef::parse_ref_key(&w.a).ok_or_else(|| D::Error::custom(format!("bad link ref: {}", w.a)))?;
+        let b = VRef::parse_ref_key(&w.b).ok_or_else(|| D::Error::custom(format!("bad link ref: {}", w.b)))?;
         // Route through the canonical constructor so the endpoint/span swap
         // stays paired even for hand-edited, out-of-order on-disk links.
         let mut link = Link::canon_span(a, b, w.label, w.span_a, w.span_b);
@@ -522,8 +500,8 @@ impl<'de> Deserialize<'de> for Weave {
         if w.format != "overlay-weave-v2" {
             return Err(D::Error::custom(format!("not overlay-weave-v2: {}", w.format)));
         }
-        let kind = WeaveKind::parse(&w.kind)
-            .ok_or_else(|| D::Error::custom(format!("unknown weave kind: {}", w.kind)))?;
+        let kind =
+            WeaveKind::parse(&w.kind).ok_or_else(|| D::Error::custom(format!("unknown weave kind: {}", w.kind)))?;
         let notes_source = NotesSource::parse(&w.notes_source)
             .ok_or_else(|| D::Error::custom(format!("unknown notesSource: {}", w.notes_source)))?;
         Ok(Weave {
@@ -586,16 +564,14 @@ pub fn link_pairs(weaves: &[LoadedWeave]) -> Vec<(VRef, VRef)> {
 pub fn chord_pairs(weaves: &[LoadedWeave]) -> (Vec<(usize, usize, u32)>, u32) {
     let mut counts: HashMap<(usize, usize), u32> = HashMap::new();
     for (a, b) in link_pairs(weaves) {
-        let (Some(ia), Some(ib)) = (crate::canon::book_order(&a.book), crate::canon::book_order(&b.book))
-        else {
+        let (Some(ia), Some(ib)) = (crate::canon::book_order(&a.book), crate::canon::book_order(&b.book)) else {
             continue;
         };
         let key = if ia <= ib { (ia, ib) } else { (ib, ia) };
         *counts.entry(key).or_insert(0) += 1;
     }
     let max = counts.values().copied().max().unwrap_or(1);
-    let mut pairs: Vec<(usize, usize, u32)> =
-        counts.into_iter().map(|((a, b), c)| (a, b, c)).collect();
+    let mut pairs: Vec<(usize, usize, u32)> = counts.into_iter().map(|((a, b), c)| (a, b, c)).collect();
     // Deterministic order (HashMap iteration is not): by book pair. The shells
     // re-sort by weight for painting, so this only fixes the wire/test output.
     pairs.sort_unstable();
@@ -721,12 +697,7 @@ fn constellation_caption(n_pins: usize, free_total: usize, page: usize) -> Strin
 /// indices into `weaves`, the same handles the lanes carry). Pinned lanes come
 /// first and stay put; the free lanes page past them. Recomputed per event —
 /// the weave library is small.
-pub fn constellation(
-    weaves: &[LoadedWeave],
-    corpus: &Corpus,
-    page: usize,
-    pins: &[usize],
-) -> Constellation {
+pub fn constellation(weaves: &[LoadedWeave], corpus: &Corpus, page: usize, pins: &[usize]) -> Constellation {
     // Witness degree over the whole library: how many weave links touch each
     // verse (both endpoints, every weave). The busiest verse sets the scale, so
     // node size is stable across pages.
@@ -763,8 +734,7 @@ pub fn constellation(
     let n_pins = pinned_flag.iter().filter(|p| **p).count();
     let free_total = usable.len() - n_pins;
     let free_lanes = CONSTELLATION_LANES.saturating_sub(n_pins);
-    let max_page =
-        if free_lanes == 0 || free_total == 0 { 0 } else { (free_total - 1) / free_lanes };
+    let max_page = if free_lanes == 0 || free_total == 0 { 0 } else { (free_total - 1) / free_lanes };
     let page = page.min(max_page);
 
     let make_lane = |i: usize, links: &[(VRef, VRef)], pinned: bool| -> ConstellationLane {
@@ -801,12 +771,8 @@ pub fn constellation(
         }
     }
     if free_lanes > 0 {
-        for ((i, links), _) in usable
-            .iter()
-            .zip(&pinned_flag)
-            .filter(|(_, p)| !**p)
-            .skip(page * free_lanes)
-            .take(free_lanes)
+        for ((i, links), _) in
+            usable.iter().zip(&pinned_flag).filter(|(_, p)| !**p).skip(page * free_lanes).take(free_lanes)
         {
             lanes.push(make_lane(*i, links, false));
         }
@@ -840,11 +806,8 @@ pub fn load_weaves(home: impl AsRef<Path>) -> (Vec<LoadedWeave>, Vec<String>) {
     let mut files: Vec<std::path::PathBuf> = Vec::new();
     for dir in &dirs {
         if let Ok(entries) = std::fs::read_dir(dir) {
-            let mut here: Vec<std::path::PathBuf> = entries
-                .flatten()
-                .map(|e| e.path())
-                .filter(|p| p.extension().is_some_and(|x| x == "json"))
-                .collect();
+            let mut here: Vec<std::path::PathBuf> =
+                entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();
             here.sort();
             files.extend(here);
         }
@@ -861,12 +824,9 @@ pub fn load_weaves(home: impl AsRef<Path>) -> (Vec<LoadedWeave>, Vec<String>) {
             },
         }
     }
-    loaded.sort_by(|x, y| x.weave.name.to_lowercase().cmp(&y.weave.name.to_lowercase()));
-    let loaded = crate::store::resolve_duplicate_ids(
-        loaded,
-        |lw| lw.weave.id.as_deref(),
-        |lw| lw.weave.updated.as_deref(),
-    );
+    loaded.sort_by_key(|x| x.weave.name.to_lowercase());
+    let loaded =
+        crate::store::resolve_duplicate_ids(loaded, |lw| lw.weave.id.as_deref(), |lw| lw.weave.updated.as_deref());
     (loaded, errors)
 }
 
@@ -906,10 +866,7 @@ pub fn add_link(
     let wanted = name.trim().to_lowercase();
     // Match canonical weaves only: appending a user's link to a *suggestion*
     // would silently delete it if the suggestion is later rejected.
-    if let Some(lw) = loaded
-        .iter()
-        .find(|lw| !is_suggested(lw) && lw.weave.name.to_lowercase() == wanted)
-    {
+    if let Some(lw) = loaded.iter().find(|lw| !is_suggested(lw) && lw.weave.name.to_lowercase() == wanted) {
         let mut weave = lw.weave.clone();
         weave.add_links([link]);
         write_weave(&lw.file, &weave, created)?;
@@ -949,20 +906,12 @@ pub fn add_chain(
     ordered.sort_by_key(|r| r.reading_key());
     ordered.dedup();
     if ordered.len() < 2 {
-        return Err(Error::Corpus(
-            "a weave needs at least two distinct passages".into(),
-        ));
+        return Err(Error::Corpus("a weave needs at least two distinct passages".into()));
     }
-    let links: Vec<Link> = ordered
-        .windows(2)
-        .map(|w| Link::canon(w[0].clone(), w[1].clone()))
-        .collect();
+    let links: Vec<Link> = ordered.windows(2).map(|w| Link::canon(w[0].clone(), w[1].clone())).collect();
 
     let wanted = name.trim().to_lowercase();
-    if let Some(lw) = loaded
-        .iter()
-        .find(|lw| !is_suggested(lw) && lw.weave.name.to_lowercase() == wanted)
-    {
+    if let Some(lw) = loaded.iter().find(|lw| !is_suggested(lw) && lw.weave.name.to_lowercase() == wanted) {
         let mut weave = lw.weave.clone();
         weave.add_links(links);
         write_weave(&lw.file, &weave, created)?;
@@ -987,10 +936,7 @@ pub fn add_chain(
 /// (often machine-generated) weaves awaiting the reader's review. Checked by
 /// the immediate parent directory name, so it is OS-path-separator agnostic.
 pub fn is_suggested(lw: &LoadedWeave) -> bool {
-    lw.file
-        .parent()
-        .and_then(|p| p.file_name())
-        .is_some_and(|n| n == "suggested")
+    lw.file.parent().and_then(|p| p.file_name()).is_some_and(|n| n == "suggested")
 }
 
 /// **Approve** a weave: mark every link approved and land it in the canonical
@@ -1001,11 +947,7 @@ pub fn is_suggested(lw: &LoadedWeave) -> bool {
 /// approved. Returns the canonical file written. Cross-platform: the write goes
 /// through [`crate::store`]'s atomic write and the old file (if any) is removed
 /// with `std::fs::remove_file`.
-pub fn approve_weave(
-    home: impl AsRef<Path>,
-    lw: &LoadedWeave,
-    now: &str,
-) -> Result<std::path::PathBuf, Error> {
+pub fn approve_weave(home: impl AsRef<Path>, lw: &LoadedWeave, now: &str) -> Result<std::path::PathBuf, Error> {
     let dest = weave_file_in(home.as_ref().join("weaves"), &lw.weave.name);
 
     // Start from any existing canonical weave of this name so approval merges
@@ -1078,7 +1020,16 @@ mod tests {
         let home = std::env::temp_dir().join(format!("plumbline-weave-notes-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         let (loaded, _) = load_weaves(&home);
-        add_link(&home, &loaded, "Lamb", WeaveKind::Typological, "kjv1769-tok2", "c", Link::canon(r("Gen", 22, 8), r("John", 1, 29))).unwrap();
+        add_link(
+            &home,
+            &loaded,
+            "Lamb",
+            WeaveKind::Typological,
+            "kjv1769-tok2",
+            "c",
+            Link::canon(r("Gen", 22, 8), r("John", 1, 29)),
+        )
+        .unwrap();
 
         let (loaded, _) = load_weaves(&home);
         set_weave_notes(&loaded, "lamb", "God will provide himself a lamb", "2026-07-30T00:00:00Z").unwrap();
@@ -1143,7 +1094,8 @@ mod tests {
         // Same-named suggestion with a different link.
         let mut sug = Weave::empty("Lamb", WeaveKind::Typological, "kjv1769-tok2", "s");
         sug.add_links([Link::canon(r("Exod", 12, 3), r("Rev", 5, 6))]);
-        write_weave(weave_file_in(home.join("weaves").join("suggested"), "Lamb"), &sug, "2026-07-30T00:00:00Z").unwrap();
+        write_weave(weave_file_in(home.join("weaves").join("suggested"), "Lamb"), &sug, "2026-07-30T00:00:00Z")
+            .unwrap();
 
         let (loaded, _) = load_weaves(&home);
         let suggestion = loaded.iter().find(|lw| is_suggested(lw)).unwrap();
@@ -1163,15 +1115,42 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
 
         let (loaded, _) = load_weaves(&home);
-        add_link(&home, &loaded, "My Links", WeaveKind::Quotation, "kjv1769-tok2", "2026-01-01T00:00:00Z", Link::canon(r("Gen", 15, 6), r("Rom", 4, 3))).unwrap();
+        add_link(
+            &home,
+            &loaded,
+            "My Links",
+            WeaveKind::Quotation,
+            "kjv1769-tok2",
+            "2026-01-01T00:00:00Z",
+            Link::canon(r("Gen", 15, 6), r("Rom", 4, 3)),
+        )
+        .unwrap();
 
         let (loaded, _) = load_weaves(&home);
         assert_eq!(loaded.len(), 1);
-        add_link(&home, &loaded, "my links", WeaveKind::Quotation, "kjv1769-tok2", "x", Link::canon(r("Gen", 15, 6), r("Gal", 3, 6))).unwrap();
+        add_link(
+            &home,
+            &loaded,
+            "my links",
+            WeaveKind::Quotation,
+            "kjv1769-tok2",
+            "x",
+            Link::canon(r("Gen", 15, 6), r("Gal", 3, 6)),
+        )
+        .unwrap();
 
         // A duplicate of the first link must not be added twice.
         let (loaded, _) = load_weaves(&home);
-        add_link(&home, &loaded, "My Links", WeaveKind::Quotation, "kjv1769-tok2", "x", Link::canon(r("Gen", 15, 6), r("Rom", 4, 3))).unwrap();
+        add_link(
+            &home,
+            &loaded,
+            "My Links",
+            WeaveKind::Quotation,
+            "kjv1769-tok2",
+            "x",
+            Link::canon(r("Gen", 15, 6), r("Rom", 4, 3)),
+        )
+        .unwrap();
 
         let (loaded, errs) = load_weaves(&home);
         assert!(errs.is_empty());
@@ -1190,8 +1169,16 @@ mod tests {
         // and deduped: Gen 15:6 → Rom 4:3 → Gal 3:6 as two links.
         let refs = [r("Rom", 4, 3), r("Gen", 15, 6), r("Gal", 3, 6), r("Gen", 15, 6)];
         let (loaded, _) = load_weaves(&home);
-        add_chain(&home, &loaded, "Faith Counted", WeaveKind::Typological, "kjv1769-tok2", "2026-07-25T00:00:00Z", &refs)
-            .unwrap();
+        add_chain(
+            &home,
+            &loaded,
+            "Faith Counted",
+            WeaveKind::Typological,
+            "kjv1769-tok2",
+            "2026-07-25T00:00:00Z",
+            &refs,
+        )
+        .unwrap();
 
         let (loaded, errs) = load_weaves(&home);
         assert!(errs.is_empty());
@@ -1213,7 +1200,8 @@ mod tests {
 
         // One ref is not a weave.
         let (loaded, _) = load_weaves(&home);
-        assert!(add_chain(&home, &loaded, "too small", WeaveKind::Typological, "kjv1769-tok2", "x", &[r("Gen", 1, 1)]).is_err());
+        assert!(add_chain(&home, &loaded, "too small", WeaveKind::Typological, "kjv1769-tok2", "x", &[r("Gen", 1, 1)])
+            .is_err());
 
         let _ = std::fs::remove_dir_all(&home);
     }
@@ -1262,19 +1250,14 @@ mod tests {
         // Two weaves that share one link (Gen 1:1–John 1:1, endpoints given in
         // opposite order) plus one unique link each.
         let mut w1 = Weave::empty("a", WeaveKind::Retelling, "kjv1769-tok2", "now");
-        w1.add_links([
-            Link::canon(r("Gen", 1, 1), r("John", 1, 1)),
-            Link::canon(r("Gen", 2, 4), r("Matt", 19, 4)),
-        ]);
+        w1.add_links([Link::canon(r("Gen", 1, 1), r("John", 1, 1)), Link::canon(r("Gen", 2, 4), r("Matt", 19, 4))]);
         let mut w2 = Weave::empty("b", WeaveKind::Quotation, "kjv1769-tok2", "now");
         w2.add_links([
             Link::canon(r("John", 1, 1), r("Gen", 1, 1)), // same pair, reversed
             Link::canon(r("Exod", 12, 3), r("Rev", 5, 6)),
         ]);
-        let loaded = vec![
-            LoadedWeave { file: "a.json".into(), weave: w1 },
-            LoadedWeave { file: "b.json".into(), weave: w2 },
-        ];
+        let loaded =
+            vec![LoadedWeave { file: "a.json".into(), weave: w1 }, LoadedWeave { file: "b.json".into(), weave: w2 }];
 
         let pairs = link_pairs(&loaded);
         // The shared pair appears once → three pairs total.
@@ -1300,10 +1283,8 @@ mod tests {
         ]);
         let mut w2 = Weave::empty("b", WeaveKind::Quotation, "kjv1769-tok2", "now");
         w2.add_links([Link::canon(r("John", 1, 1), r("Gen", 1, 1))]); // dup of w1's first
-        let loaded = vec![
-            LoadedWeave { file: "a.json".into(), weave: w1 },
-            LoadedWeave { file: "b.json".into(), weave: w2 },
-        ];
+        let loaded =
+            vec![LoadedWeave { file: "a.json".into(), weave: w1 }, LoadedWeave { file: "b.json".into(), weave: w2 }];
 
         let (pairs, max) = chord_pairs(&loaded);
         let gen = crate::canon::book_order("Gen").unwrap();
@@ -1333,16 +1314,11 @@ mod tests {
         let corpus = crate::corpus::from_str(jsonl).unwrap();
 
         let mut w1 = Weave::empty("alpha", WeaveKind::Retelling, "kjv1769-tok2", "now");
-        w1.add_links([
-            Link::canon(r("Gen", 1, 1), r("John", 3, 16)),
-            Link::canon(r("Gen", 1, 2), r("John", 3, 16)),
-        ]);
+        w1.add_links([Link::canon(r("Gen", 1, 1), r("John", 3, 16)), Link::canon(r("Gen", 1, 2), r("John", 3, 16))]);
         let mut w2 = Weave::empty("beta", WeaveKind::Quotation, "kjv1769-tok2", "now");
         w2.add_links([Link::canon(r("Gen", 1, 1), r("Gen", 1, 2))]);
-        let loaded = vec![
-            LoadedWeave { file: "a.json".into(), weave: w1 },
-            LoadedWeave { file: "b.json".into(), weave: w2 },
-        ];
+        let loaded =
+            vec![LoadedWeave { file: "a.json".into(), weave: w1 }, LoadedWeave { file: "b.json".into(), weave: w2 }];
 
         // Unpinned: the larger lane (w1, 2 links) comes first, then w2.
         let c = constellation(&loaded, &corpus, 0, &[]);
@@ -1570,9 +1546,7 @@ mod review_tests {
     fn a_weave_gains_an_id_once_and_keeps_it() {
         let home = std::env::temp_dir().join(format!("plumbline-weave-ids-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
-        let read = |path: &Path| -> Value {
-            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
-        };
+        let read = |path: &Path| -> Value { serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap() };
 
         let (loaded, _) = load_weaves(&home);
         let path = add_link(

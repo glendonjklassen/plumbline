@@ -68,8 +68,7 @@ pub fn data_dir() -> Option<PathBuf> {
     }
     #[cfg(target_os = "macos")]
     {
-        std::env::var_os("HOME")
-            .map(|h| Path::new(&h).join("Library").join("Application Support").join(app))
+        std::env::var_os("HOME").map(|h| Path::new(&h).join("Library").join("Application Support").join(app))
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
