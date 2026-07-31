@@ -176,9 +176,11 @@ sideload block is already fixed and guarded by a test.
   stepbar, pickers — full list in the audit).
 - [ ] **[opus]** Safe-area insets: header, `.present`, and landscape left/right —
   only the bottom nav honours them today (`Shell.svelte:561`).
-- [ ] **[opus]** Raw OSIS refKeys in web UI copy ("Tag 1Cor 13:4") — use
+- [x] **[opus]** Raw OSIS refKeys in web UI copy ("Tag 1Cor 13:4") — use
   verse display names at the 5 sites (ContextMenu, TagPicker, ThreadPicker,
-  PassagePicker, toasts); Android already does.
+  PassagePicker, toasts); Android already does. **DONE 2026-07-30** at the three
+  sites that had the bug; PassagePicker and the toasts were already display-name
+  clean, so five sites turned out to be three.
 - [ ] **[opus]** Dialog focus management: a `use:modal` action (focus in, trap Tab,
   restore on close, local Escape) across the 9 `aria-modal` dialogs; Escape while
   focus is in an input currently does nothing. Add `role="status"` to the main

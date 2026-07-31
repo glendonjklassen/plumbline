@@ -16,11 +16,17 @@
   import { getSession } from "../state/session.svelte";
   import { nowStamp } from "../engine/StudyEngine";
   import { dispatchLink } from "../study/links";
+  import { refDisplay } from "./refname";
   import { hasChurch, PWA_URL, shareUrl } from "../shell/church";
 
   const s = getSession();
 
   const menu = $derived(s.contextMenu);
+
+  /** The verse as a reader says it ("Isaiah 53:5"), for the menu's own heading
+   *  and for every sentence this menu speaks. `menu.refKey` stays the OSIS form
+   *  wherever it is SENT — the engine calls and the `?at=` link below. */
+  const shown = $derived(menu ? refDisplay(s, menu.refKey) : "");
 
   function close(): void {
     s.contextMenu = null;
@@ -57,9 +63,14 @@
    *  to do nothing reads as a broken app. */
   async function shareLink(): Promise<void> {
     const ref = menu!.refKey;
+    // Read the display form BEFORE close(): `shown` derives from
+    // `s.contextMenu`, which close() nulls, and a stale $derived recomputes the
+    // moment it is read again (the bug PassagePicker.commit documents). What the
+    // recipient READS is the book's name; what travels in `?at=` is `ref`.
+    const said = shown;
     close();
     const url = shareUrl(PWA_URL, s.church, { at: ref });
-    const title = hasChurch(s.church) ? `Plumbline — ${ref}, from ${s.church.name}` : `Plumbline — ${ref}`;
+    const title = hasChurch(s.church) ? `Plumbline — ${said}, from ${s.church.name}` : `Plumbline — ${said}`;
     // Reached with no await before it on purpose: the share sheet is gated on the
     // click's transient user activation, which awaiting anything first can lose.
     if (navigator.share) {
@@ -75,7 +86,7 @@
     }
     try {
       await navigator.clipboard.writeText(url);
-      s.showToast(`Link copied — it opens at ${ref}`);
+      s.showToast(`Link copied — it opens at ${said}`);
     } catch {
       s.showToast("Couldn't share the link — this browser blocked the clipboard.");
     }
@@ -119,8 +130,9 @@
 
   function memorize(): void {
     const ref = menu!.refKey;
+    const said = shown;
     close();
-    void s.author("memoryAdd", ref, nowStamp()).then((err) => s.showToast(err ?? `Memorizing ${ref}`));
+    void s.author("memoryAdd", ref, nowStamp()).then((err) => s.showToast(err ?? `Memorizing ${said}`));
   }
 
   /** A whole section as one card — this verse starts it, the picker ends it. */
@@ -147,7 +159,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={close} oncontextmenu={(e) => (e.preventDefault(), close())}></div>
   <div class="menu" bind:this={el} style:left="{pos.x}px" style:top="{pos.y}px">
-    <div class="ref">{menu.refKey}</div>
+    <div class="ref">{shown}</div>
     <button onclick={() => copy(copyStyle)}>Copy</button>
     <button onclick={() => copy("chapter")}>Copy chapter</button>
     <button onclick={shareLink}>Share link</button>

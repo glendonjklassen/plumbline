@@ -4,8 +4,14 @@
   // are gone, so plain alphabetical is the whole ordering.
   import { getSession } from "../state/session.svelte";
   import { nowStamp } from "../engine/StudyEngine";
+  import { refDisplay } from "../reader/refname";
 
   const s = getSession();
+
+  /** The verse being tagged, named the way a reader says it ("1 Corinthians
+   *  13:4"). `s.tagPickFor` stays the refKey — that is what `tagAdd` writes into
+   *  the tag file, and the on-disk form is frozen. */
+  const shown = $derived(s.tagPickFor ? refDisplay(s, s.tagPickFor) : "");
 
   const tags = $derived.by(() => {
     void s.studyEpoch;
@@ -22,8 +28,11 @@
   }
   function pick(name: string): void {
     const ref = s.tagPickFor!;
+    // Both read before close() nulls `s.tagPickFor`: `shown` derives from it, and
+    // a stale $derived recomputes on the next read (PassagePicker.commit).
+    const said = shown;
     void s.author("tagAdd", name, "verse", ref, null, nowStamp()).then((err) =>
-      s.showToast(err ?? `Tagged ${ref} — ${name}`),
+      s.showToast(err ?? `Tagged ${said} — ${name}`),
     );
     close();
   }
@@ -33,7 +42,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={close}></div>
   <div class="sheet" role="dialog" aria-modal="true" data-surface="tag picker">
-    <h2>Tag {s.tagPickFor}</h2>
+    <h2>Tag {shown}</h2>
     <div class="list">
       {#each tags as t (t.name)}
         <button class="tag" onclick={() => pick(t.name)}>

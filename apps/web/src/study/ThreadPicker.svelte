@@ -11,8 +11,14 @@
   // out at all before.
   import { getSession } from "../state/session.svelte";
   import { nowStamp } from "../engine/StudyEngine";
+  import { refDisplay } from "../reader/refname";
 
   const s = getSession();
+
+  /** The verse being filed, named the way a reader says it ("1 Peter 5:7").
+   *  `s.threadPickFor` stays the refKey — that is what `threadAdd` writes into
+   *  the thread file, and the on-disk form is frozen. */
+  const shown = $derived(s.threadPickFor ? refDisplay(s, s.threadPickFor) : "");
 
   const threads = $derived.by(() => {
     void s.studyEpoch;
@@ -30,8 +36,11 @@
 
   function pick(name: string): void {
     const ref = s.threadPickFor!;
+    // Both read before close() nulls `s.threadPickFor`: `shown` derives from it,
+    // and a stale $derived recomputes on the next read (PassagePicker.commit).
+    const said = shown;
     void s.author("threadAdd", name, ref, null, nowStamp()).then((err) =>
-      s.showToast(err ?? `Added ${ref} to ${name}`),
+      s.showToast(err ?? `Added ${said} to ${name}`),
     );
     close();
   }
@@ -54,7 +63,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={close}></div>
   <div class="sheet" role="dialog" aria-modal="true" data-surface="thread picker">
-    <h2>Add {s.threadPickFor} to a thread</h2>
+    <h2>Add {shown} to a thread</h2>
     <div class="list">
       {#each threads as t (t.name)}
         <div class="row">
