@@ -94,8 +94,32 @@
       // its reader had never asked for.
       s.rndDeferred = deferRnd && !info.rndAuto && s.config.machineAnalysis === true;
       await Promise.all([s.fetchQ("toc"), s.fetchQ("canonSegments")]);
+      // An incoming ADDRESS beats the restored position — that is the whole point
+      // of a link somebody sent, and of a bookmark. Applied here for two reasons:
+      // after the TOC, so a hash naming a book nobody has falls through to the
+      // restored session instead of opening a pane on nothing; and before the
+      // shell mounts, so a routed arrival never flashes last session's chapter
+      // first. `history: false` — the reader never saw the restored chapter, so
+      // it is not somewhere for Back to return to.
+      //
+      // ARRIVALS ONLY. A reload's address is not incoming information — it is the
+      // one this app stamped itself last session — while the config underneath it
+      // may have been REPLACED: restoring a backup mutes every config write and
+      // reloads, so honouring the address there would open the chapter the old
+      // session was in instead of the one the backup was last in
+      // (e2e/legacy-restore.spec.ts is the guard: the backup's Revelation 22
+      // against the live John 3). On every other reload the two agree anyway,
+      // because `pagehide` flushes the session before the document goes.
+      const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+      // No entry at all (an engine without the API) is treated as an arrival: a
+      // shared link that opens nowhere is the worse of the two failures.
+      const routed = nav?.type === "reload" ? null : s.routeFromHash(location.hash);
+      if (routed) s.navigate(0, routed.book, routed.chapter, null, { history: false });
+      s.installRouter();
       session = s;
-      // After the TOC is in, so navigation clamps against a real canon.
+      // After the TOC is in, so navigation clamps against a real canon. AFTER the
+      // hash too, and deliberately: `?at=` names a verse, so it is the more
+      // specific of the two and wins when a link carries both.
       if (at) void dispatchLink(s, goUri(at));
       // The on-device boot numbers (also under Settings → boot diagnostics).
       void rpc.bootTrace().then((t) => {
@@ -120,6 +144,26 @@
     }
   }
   start();
+
+  // The address bar follows pane 0 wherever it goes. An EFFECT rather than a line
+  // inside `navigate`, because a pane's chapter moves down half a dozen paths —
+  // the canon strip, a history step, a weave tapped in Explore, the passage
+  // navigator, `?at=`, session restore — and the URL has to follow all of them,
+  // not the ones somebody remembered to instrument.
+  $effect(() => {
+    session?.syncUrl();
+  });
+
+  // The phone's Back button, wired to the surface stack: an open surface owns a
+  // history entry, so Back closes it instead of exiting the PWA. Android has had
+  // this since it shipped (BackHandler); on the web, Back out of a study sheet
+  // left an installed app entirely — there was nothing under it but the launch.
+  $effect(() => {
+    const s = session;
+    if (!s) return;
+    if (s.transientOpen) s.pushSurfaceEntry();
+    else s.dropSurfaceEntry();
+  });
 
   const phaseLabel = $derived(
     phase.phase === "download"

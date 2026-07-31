@@ -203,8 +203,7 @@ export class Session {
   } | null>(null);
 
   /**
-   * Close every transient surface — dialogs, sheets, pickers, popups, the study
-   * panel. What a destination tap does before it opens anything.
+   * Every transient surface, as field → the value that means CLOSED.
    *
    * This lives HERE, next to the declarations, and not in the shell, because the
    * shell's version was a hand-kept list of five and there are thirteen of these
@@ -215,34 +214,64 @@ export class Session {
    * without adding it here is now a one-file omission a reviewer can see, rather
    * than a bug in a different file that nobody thinks to look at.
    *
+   * A TABLE rather than a run of assignments, because there are now two questions
+   * to ask about this set and not one: [[dismissTransient]] closes them all, and
+   * [[transientOpen]] asks whether any is open — which is what the phone's Back
+   * button needs to know. Two hand-kept lists of sixteen fields is the same trap
+   * one level up.
+   *
+   * `keyof Session` is the point of the `satisfies`: a typo'd field name would
+   * otherwise assign a brand-new property and silently stop closing a surface.
+   *
+   * NOT showFirstRun: a reader who has never chosen a path must not be able to
+   * tab past the question. It closes by being answered.
+   */
+  static readonly TRANSIENT = [
+    ["screen", "read"],
+    ["panel", null],
+    ["mapPopup", null],
+    ["memorize", null],
+    ["contextMenu", null],
+    ["tagPickFor", null],
+    ["threadPickFor", null],
+    ["tagWeaveFor", null],
+    ["memorizePassageFrom", null],
+    ["markReadFor", null],
+    ["bookNavFor", null],
+    ["reopenIntro", null],
+    ["showHistory", false],
+    ["showSettings", false],
+    ["showShortcuts", false],
+    ["showPresent", false],
+  ] as const satisfies readonly (readonly [keyof Session, unknown])[];
+
+  /**
+   * Close every transient surface — dialogs, sheets, pickers, popups, the study
+   * panel. What a destination tap does before it opens anything, and what the
+   * Back button does on a phone.
+   *
    * `promptReq` is RESOLVED, not just nulled: `askText` handed a promise to a
    * caller that is still awaiting it, and dropping the request on the floor would
    * leave that caller hanging forever.
    */
   dismissTransient(): void {
-    this.screen = "read";
     this.cancelPrompt();
     // A pending confirmation resolves NO. Anything else would leave a caller
     // awaiting a promise that never settles, or worse, destroy something because
     // the reader navigated away.
     this.cancelConfirm();
-    this.panel = null;
-    this.mapPopup = null;
-    this.memorize = null;
-    this.contextMenu = null;
-    this.tagPickFor = null;
-    this.threadPickFor = null;
-    this.tagWeaveFor = null;
-    this.memorizePassageFrom = null;
-    this.markReadFor = null;
-    this.bookNavFor = null;
-    this.reopenIntro = null;
-    this.showHistory = false;
-    this.showSettings = false;
-    this.showShortcuts = false;
-    this.showPresent = false;
-    // NOT showFirstRun: a reader who has never chosen a path must not be able to
-    // tab past the question. It closes by being answered.
+    for (const [field, closed] of Session.TRANSIENT) {
+      (this as unknown as Record<string, unknown>)[field] = closed;
+    }
+  }
+
+  /** Whether anything [[dismissTransient]] would close is on screen — the
+   *  question the phone's Back button asks (see [[installRouter]]). */
+  get transientOpen(): boolean {
+    if (this.promptReq || this.confirmReq) return true;
+    return Session.TRANSIENT.some(
+      ([field, closed]) => (this as unknown as Record<string, unknown>)[field] !== closed,
+    );
   }
 
   /** An open confirmation. One mechanism for every destructive action, so that
@@ -901,6 +930,165 @@ export class Session {
       chapter = dir < 0 ? Number(adj.chapters) || 1 : 1;
     }
     this.navigate(paneIdx, book, chapter);
+  }
+
+  // ── the address bar: one bookmarkable address per chapter ───────────────────
+  //
+  // Nothing was bookmarkable before this (audit item D-05): every chapter in the
+  // Bible lived at `/`, so a reader could not send anyone a passage without
+  // going through the verse-share menu, and a browser reload was the only way
+  // back to where they were.
+
+  /** Pane 0's chapter as a hash route — `#/John/3`.
+   *
+   *  The book travels as its OSIS ID (`John`, `1John`, `Song`), never as the
+   *  display name: the id is the frozen wire form, it is a single word so nothing
+   *  in it needs escaping, and it is the form `public/404.html` already forwards
+   *  intact (e2e/entry.spec.ts). */
+  static hashRoute(book: string, chapter: number): string {
+    return `#/${book}/${chapter}`;
+  }
+
+  /**
+   * The chapter an address asks for, or null when it asks for nothing we have.
+   *
+   * Liberal on the way IN — `#/john/3` and `#/1 John/3` both resolve, because
+   * these get hand-typed and forwarded through mail clients — and strict about
+   * the answer: an unknown book or an out-of-range chapter returns null so every
+   * caller falls back to the restored session. A blank reader is the one thing a
+   * bad link must never produce.
+   *
+   * Resolved against the TOC, so callers need it loaded — it is prefetched at
+   * boot and pinned in the cache ([[PINNED_READS]]).
+   */
+  routeFromHash(hash: string): { book: string; chapter: number } | null {
+    let raw = hash;
+    try {
+      raw = decodeURIComponent(hash);
+    } catch {
+      /* a stray % is simply an address we don't understand */
+    }
+    const m = /^#\/([^/]+)\/(\d{1,3})$/.exec(raw);
+    if (!m) return null;
+    const want = m[1].toLowerCase().replace(/\s+/g, "");
+    const books: any[] = this.q("toc")?.books ?? [];
+    const hit =
+      books.find((b) => String(b.id).toLowerCase() === want) ??
+      books.find((b) => String(b.name).toLowerCase().replace(/\s+/g, "") === want);
+    if (!hit) return null;
+    const chapter = Number(m[2]);
+    if (chapter < 1 || chapter > (Number(hit.chapters) || 0)) return null;
+    return { book: String(hit.id), chapter };
+  }
+
+  /**
+   * Mirror pane 0 into `location.hash`.
+   *
+   * REPLACE, never push. A reader flicking through Psalms would otherwise need
+   * forty Back presses to get out of the app; pushing is reserved for surfaces,
+   * where Back means "close this" ([[pushSurfaceEntry]]).
+   *
+   * The search string is carried through untouched: App.svelte strips `?at=` /
+   * `?church=` on purpose, and this must neither resurrect them nor drop a query
+   * it was not asked to drop. `history.state` is carried through for the same
+   * reason — see [[pushSurfaceEntry]].
+   */
+  syncUrl(): void {
+    const pane = this.panes[0];
+    if (!pane) return;
+    const url = location.pathname + location.search + Session.hashRoute(pane.book, pane.chapter);
+    if (url === location.pathname + location.search + location.hash) return;
+    history.replaceState(history.state, "", url);
+  }
+
+  /**
+   * Whether a history entry we pushed for an open surface is still on the stack.
+   *
+   * An instance flag rather than a marker in `history.state`, because
+   * `history.state` outlives a reload and an open sheet does not: a reader who
+   * reloads while the marker is current would come back to a claim that a
+   * surface is open when the app has just booted with nothing on screen.
+   */
+  #surfaceEntry = false;
+  /** A `history.back()` WE asked for is in flight, to hand back an entry whose
+   *  surface has already closed some other way. It must not be mistaken for the
+   *  reader pressing Back — see [[dropSurfaceEntry]]. */
+  #spending = false;
+
+  /** Give an open surface its own history entry, so the phone's Back button
+   *  closes the surface instead of leaving the PWA — the behaviour Android has
+   *  had since it shipped (BackHandler in StudyScreen / Memorize / Present). One
+   *  entry for the whole stack, because `dismissTransient` closes the stack. */
+  pushSurfaceEntry(): void {
+    // Never while a spend is in flight: `history.back()` is queued as a delta, so
+    // pushing under it would send the traversal somewhere nobody asked for. The
+    // spend lands in a task and re-pushes then if a surface has re-opened.
+    if (this.#surfaceEntry || this.#spending) return;
+    this.#surfaceEntry = true;
+    history.pushState(null, "", location.href);
+  }
+
+  /** The surface closed some other way (Escape, its own ✕, a destination tap):
+   *  hand the entry back now, or the reader's next Back press does nothing at
+   *  all. Not `#surfaceEntry = false` on the spot — the popstate handler has to
+   *  be able to tell our own traversal from the reader's. */
+  dropSurfaceEntry(): void {
+    if (!this.#surfaceEntry || this.#spending) return;
+    this.#spending = true;
+    history.back();
+  }
+
+  /**
+   * Wire the address bar to this session. Called once, after the TOC is in.
+   */
+  installRouter(): void {
+    this.syncUrl();
+    addEventListener("popstate", () => {
+      // Neither branch below ROUTES, and that is the whole reason the flags
+      // exist. Because chapter turns replace instead of pushing, the entry under
+      // a surface entry still holds whatever address it was last stamped with,
+      // which can be several chapters stale — a weave tapped in Explore moves the
+      // reader while the surface entry is the current one. Routing from that
+      // stale address would drag them back to the chapter they left, so both
+      // branches re-stamp the entry they land on instead.
+      if (this.#spending) {
+        this.#spending = false;
+        this.#surfaceEntry = false;
+        this.syncUrl();
+        // Something re-opened while the traversal was in flight (a menu action
+        // that closes itself and then awaits the engine before raising a prompt).
+        // It gets its own entry now rather than inheriting a spent one.
+        if (this.transientOpen) this.pushSurfaceEntry();
+        return;
+      }
+      if (this.#surfaceEntry) {
+        this.#surfaceEntry = false;
+        this.dismissTransient();
+        this.syncUrl();
+        return;
+      }
+      this.#routeFromUrl();
+    });
+    // Editing the fragment in the address bar is a navigation rather than a
+    // traversal, so it arrives here and not as a popstate.
+    addEventListener("hashchange", () => this.#routeFromUrl());
+  }
+
+  /** Take the current address as a navigation request. An address we cannot read
+   *  is answered by putting the real one back, never by moving the reader. */
+  #routeFromUrl(): void {
+    const pane = this.panes[0];
+    if (!pane) return;
+    const to = this.routeFromHash(location.hash);
+    if (!to) {
+      this.syncUrl();
+      return;
+    }
+    // Already there: do NOTHING. `navigate` resets the scroll offset and the
+    // banded verse, so answering a no-op traversal with it would throw a reader
+    // who is halfway down a chapter back to verse 1.
+    if (to.book === pane.book && to.chapter === pane.chapter) return;
+    this.navigate(0, to.book, to.chapter);
   }
 
   addPane(afterIdx: number): void {

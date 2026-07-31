@@ -136,9 +136,13 @@ sideload block is already fixed and guarded by a test.
   translate see nothing): hidden text mirror rebuilt from the display list +
   `role`/`aria-label` on the wrapper (`ReaderPane.svelte:438-451`). Also
   role/label/keyboard path for `CanonStrip.svelte:85-87`.
-- [ ] **[opus]** URL routing: mirror pane 0 into `location.hash` (`#/John/3`),
+- [x] **[opus]** URL routing: mirror pane 0 into `location.hash` (`#/John/3`),
   `pushState` when a transient surface opens, `popstate` → `dismissTransient()` so
   Back closes overlays instead of exiting the PWA. Nothing is bookmarkable today.
+  **DONE 2026-07-30.** Three `Shell.svelte`-local surfaces are still outside Back's
+  reach (`searchOpen`, `shareApp`, `menuOpen` are component `$state`, not Session
+  fields, so `transientOpen` cannot see them) — folded into the `use:modal` item
+  below, which touches those dialogs anyway.
 - [x] **[opus]** "Share link" verse action in `ContextMenu` →
   `shareUrl(PWA_URL, s.church, {at: refKey})` — the `?at=` plumbing exists, only
   Present's QR uses it.

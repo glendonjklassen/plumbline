@@ -52,6 +52,12 @@ import { expect, test, type Page } from "@playwright/test";
 // The arrival poll was also checked for vacuity — asked for John 3 instead, it
 // reported Isa 53:5, so it is reading the pane the app actually moved rather than
 // passing on anything.
+//
+// Amended 2026-07-30 (D-13): the menu, the share title and the fallback toast now
+// name the book in full, so those three assertions moved from REF to SHOWN. The
+// `?at=` assertions did NOT move, and a new one says the query cannot contain the
+// display name at all — the split between what a person reads and what the wire
+// carries is now something this file holds rather than something it assumes.
 
 async function boot(page: Page, url = "/"): Promise<void> {
   await page.goto(url);
@@ -104,8 +110,10 @@ async function openVerseMenu(page: Page, refKey: string): Promise<void> {
     (window as any).__plumbline.contextMenu = { x: 40, y: 180, refKey: ref };
   }, refKey);
   // `.menu` is also the header's utilities menu, so pin the one under test by the
-  // verse it names.
-  await expect(page.locator(".menu .ref")).toHaveText(refKey);
+  // verse it names — and it names it the way a reader would (D-13, 2026-07-30),
+  // which is why this asserts the display name while `?at=` below still gets the
+  // refKey. The two forms differing is the whole point.
+  await expect(page.locator(".menu .ref")).toHaveText(SHOWN);
 }
 
 /** Press the verse menu's share action.
@@ -125,6 +133,10 @@ async function clickShareLink(page: Page): Promise<void> {
 // A verse far from where the app lands on its own (John 3), so "it opened at the
 // shared verse" cannot be satisfied by the reader having been there already.
 const REF = "Isa 53:5";
+/** The same verse as the reader is shown it. Every string a PERSON reads here —
+ *  the menu heading, the share title, the fallback toast — is this one; every
+ *  string the MACHINE reads is `REF`. */
+const SHOWN = "Isaiah 53:5";
 
 test("the verse menu shares a link, and that link opens the reader at that verse", async ({ page }) => {
   await recordShares(page);
@@ -136,9 +148,13 @@ test("the verse menu shares a link, and that link opens the reader at that verse
 
   const shared: { title?: string; url?: string }[] = await page.evaluate(() => (window as any).__shared);
   expect(shared, "the platform share sheet was never handed anything").toHaveLength(1);
-  expect(shared[0].title, "the share should name the verse, whatever the target does with a url").toContain(REF);
+  expect(shared[0].title, "the share should name the verse, whatever the target does with a url").toContain(SHOWN);
 
   const url = new URL(shared[0].url!);
+  // The display name is for the sentence, never for the link: a URL carrying
+  // "Isaiah 53:5" opens nowhere, since `sharedAtRef` and `go:` only take the
+  // frozen compact form.
+  expect(url.search, "a display name must not reach the wire").not.toContain("Isaiah");
   expect(
     url.origin + url.pathname,
     "the link must point at the hosted PWA — a relative link is no link to anyone else",
@@ -226,5 +242,5 @@ test("with no share sheet, Share link copies the link and says so", async ({ pag
   // closed was the only thing on screen that did.
   const toast = page.locator(".toast");
   await expect(toast, "a silent clipboard fallback tells the reader nothing").toBeVisible({ timeout: 5_000 });
-  await expect(toast).toContainText(REF);
+  await expect(toast).toContainText(SHOWN);
 });
