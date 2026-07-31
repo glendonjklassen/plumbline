@@ -234,13 +234,23 @@
     top: 0;
     left: 0;
     right: 0;
-    bottom: var(--bottomNavH, 0px);
+    /* `max` and not a sum: in portrait `--bottomNavH` is the bar's MEASURED
+       height and the bar already carries the inset inside it, so adding the
+       inset here would count the home indicator twice. In landscape the bar is
+       gone (`--bottomNavH` is 0) and the inset is all there is — and landscape
+       is exactly how this screen gets held up to someone. */
+    bottom: max(var(--bottomNavH, 0px), var(--safeBottom));
     z-index: 60;
     background: #fcf9f4;
     color: #211f1a;
     display: flex;
     flex-direction: column;
     font-family: "EB Garamond", Georgia, serif;
+    /* Present is `position: fixed`, so it escapes the frame's insets and has to
+       carry its own: it is the one surface that covers the status bar and both
+       edges. The ✕ used to sit under the clock, and a verse set in 54px type ran
+       under the camera cutout. Bottom is the `max()` above, not padding. */
+    padding: var(--safeTop) var(--safeRight) 0 var(--safeLeft);
   }
   .bar {
     display: flex;

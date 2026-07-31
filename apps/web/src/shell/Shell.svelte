@@ -507,16 +507,31 @@
     display: flex;
     flex-direction: column;
     background: var(--paper, #fcf9f4);
+    /* LANDSCAPE, which is a reading posture and not an edge case: rotate a
+       notched phone and the cutout eats a 47px column out of one side of the
+       page. Insetting the frame rather than each surface inside it is what
+       protects the TEXT — the reader paints into whatever width it is given, and
+       nothing else in the tree would have covered it. The chrome's own
+       backgrounds stop at the inset, which is the honest thing to show: the
+       strip beside them is not screen the app can use. */
+    padding-left: var(--safeLeft);
+    padding-right: var(--safeRight);
   }
   /* The top bar was too small to use comfortably (feedback 2026-07-29). Android
      sets the standard here: 48dp touch targets and text you do not lean in for.
      Every control below is sized off that rather than off how little room it can
      be squeezed into — this bar holds the passage the reader taps most. */
   header {
+    /* Stated once and added to below: two declarations of one padding drift the
+       moment either is touched, which is the lesson `--bottomNavH` was taught. */
+    --headerPadY: 10px;
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 14px;
+    padding: var(--headerPadY) 14px;
+    /* Under the status bar in an installed PWA — the title and the ≡ were behind
+       the clock. Horizontal insets are the frame's job (see `.frame`). */
+    padding-top: calc(var(--headerPadY) + var(--safeTop));
     min-height: 52px;
     background: var(--paneNavBg, #efeae1);
     border-bottom: 1px solid var(--rule, #d8cba8);
@@ -581,8 +596,10 @@
          geometry was right — one mechanism, not two. */
       position: relative;
       z-index: 46;
-      /* Clear of the home indicator / gesture bar on a notched phone. */
-      padding-bottom: env(safe-area-inset-bottom, 0px);
+      /* Clear of the home indicator / gesture bar on a notched phone. The one
+         surface that always did this; it reads the shared variable now (app.css)
+         so every surface says it the same way and a test can drive all of them. */
+      padding-bottom: var(--safeBottom);
     }
     .bottom-nav button {
       flex: 1;

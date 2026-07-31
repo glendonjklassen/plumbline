@@ -17,6 +17,26 @@ body,
   overscroll-behavior: none;
 }
 
+/* THE NOTCH, NAMED ONCE.
+   `index.html` asks for `viewport-fit=cover`, so in an installed PWA the page
+   runs under the status bar, the home indicator and — held sideways, which is
+   how someone reads — the camera cutout. Only the bottom bar honoured any of
+   that; the header sat under the clock and the reader's first characters sat
+   behind the notch.
+
+   These four are the only place `env()` is written. Every surface reads the
+   variable, which is worth an indirection twice over: the insets stop being
+   restated per file, and a test can SET them. There is no way to give a headless
+   browser a notch, so a safe-area fix stated directly in `env()` can never be
+   exercised — and `e2e/safe-area.spec.ts` overrides these four to prove the
+   chrome actually moves, which is the difference between a fix and a hope. */
+:root {
+  --safeTop: env(safe-area-inset-top, 0px);
+  --safeRight: env(safe-area-inset-right, 0px);
+  --safeBottom: env(safe-area-inset-bottom, 0px);
+  --safeLeft: env(safe-area-inset-left, 0px);
+}
+
 html {
   /* NO tap flash. Mobile WebKit/Blink paint a translucent overlay on whatever
      element a tap lands on — and the reader is a single <canvas> at width:100%
