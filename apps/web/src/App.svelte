@@ -124,14 +124,12 @@
             `layout is being measured with fallback metrics`,
         );
       }
-      // Prime what synchronous readers need on their first frame: the theme
-      // palettes and the TOC/canon shape.
-      const [light, dark, night] = await Promise.all([
-        rpc.static("themePalette", "light"),
-        rpc.static("themePalette", "dark"),
-        rpc.static("themePalette", "night"),
-      ]);
-      const s = initSession(rpc, info, { light, dark, night }, info.bundledOn);
+      // The palettes RIDE ON THE BOOT REPLY (audit F-11). They used to be three
+      // more `static` calls awaited here, and the engine lives in ONE worker
+      // thread — so on the single path where nothing else can proceed, that was
+      // three full queue hops for three compiled-in colour tables the boot reply
+      // could have carried. See BOOT_READS in engine/worker-client.ts.
+      const s = initSession(rpc, info, info.palettes ?? {}, info.bundledOn);
       // A shared link can carry the sender's church. Save it as this reader's
       // own (theirs wins if they've already set one), then strip it from the
       // address bar so a bookmark or a reload isn't a link about a church.
@@ -162,7 +160,19 @@
       // every phone would be shown StudyPanel's "Load analysis" offer for a tier
       // its reader had never asked for.
       s.rndDeferred = deferRnd && !info.rndAuto && s.config.machineAnalysis === true;
-      await Promise.all([s.fetchQ("toc"), s.fetchQ("canonSegments")]);
+      // The TOC, seeded into the read-through cache. NOT a round trip any more:
+      // it came back on the boot reply and `rpc.call` hands it straight over
+      // (BOOT_READS, engine/worker-client.ts), so this is a local write into the
+      // cache under the key `q("toc")` reads — awaited only because the two lines
+      // below genuinely need a canon to clamp and route against.
+      await s.fetchQ("toc");
+      // `canonSegments` IS NOT AWAITED, and is not asked for here at all (audit
+      // F-11). Nothing on the path to first text reads it — the canon strip, the
+      // passage navigator and the maps do, and all four go through `q()`, which
+      // fetches on first render and repaints when the answer lands. Awaiting it
+      // here made a read that only the CHROME needs a barrier in front of the
+      // TEXT, which is the one thing boot is racing for.
+
       // An incoming ADDRESS beats the restored position — that is the whole point
       // of a link somebody sent, and of a bookmark. Applied here for two reasons:
       // after the TOC, so a hash naming a book nobody has falls through to the

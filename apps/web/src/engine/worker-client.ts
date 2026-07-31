@@ -17,7 +17,23 @@ export interface BootInfo {
    *  silent otherwise, and it degrades to platform-serif METRICS while the main
    *  thread paints real Garamond — wrong wrap points, no error. */
   fontFaces: number;
+  /** The three theme palettes (light/dark/night), so `applyTheme()` is
+   *  synchronous from the first frame without three more round trips. */
+  palettes: Record<string, any>;
+  /** The table of contents. Handed over here rather than fetched, and then
+   *  served back out of [[BOOT_READS]] — see `call`. */
+  toc: any;
 }
+
+/** Engine reads the BOOT REPLY already carries, by the method name the shell
+ *  asks for them under. Answered without a message at all (see `call`).
+ *
+ *  Only session-IMMUTABLES may be listed here. The TOC qualifies for the same
+ *  reason session.svelte.ts pins it: it is derived from a corpus that cannot
+ *  change while a session runs, so a value handed over at boot can never go
+ *  stale underneath a later read. Anything the engine can rewrite — study data,
+ *  config, the reading map — must keep going to the worker. */
+const BOOT_READS = ["toc"] as const;
 
 /** One snapshot of everything the engine worker measured about this boot. */
 export interface WorkerDiagnostics {
@@ -70,6 +86,8 @@ export class EngineRpc {
   #silenceMs: number;
   /** The last boot stage the worker reported, for the watchdog's message. */
   #stage: WorkerProgress["phase"] | null = null;
+  /** [[BOOT_READS]] as the boot reply delivered them, keyed by method name. */
+  #bootReads = new Map<string, unknown>();
   /** Boot progress (drives the splash). */
   onProgress: (p: WorkerProgress) => void = () => {};
   /** An authoring write landed (worker persisted it) — re-fetch study data. */
@@ -226,10 +244,26 @@ export class EngineRpc {
       fontUrl: new URL(READER_FONT_FILES.normal, base).href,
       italicUrl: new URL(READER_FONT_FILES.italic, base).href,
       deferRnd: opts.deferRnd === true,
-    }).finally(() => this.#disarm());
+    })
+      .then((info: BootInfo) => {
+        for (const m of BOOT_READS) {
+          const v = info?.[m];
+          if (v != null) this.#bootReads.set(m, v);
+        }
+        return info;
+      })
+      .finally(() => this.#disarm());
   }
-  /** A StudyEngine method by name — reads AND authoring calls alike. */
+  /** A StudyEngine method by name — reads AND authoring calls alike.
+   *
+   *  A [[BOOT_READS]] method rides back on the boot reply, so it is answered from
+   *  here with no message and no queue hop — the shell's own read path, minus the
+   *  round trip. Only for the no-argument form: the boot reply carries one value,
+   *  and an argument means a different question. */
   call(method: string, ...args: unknown[]): Promise<any> {
+    if (!this.#dead && !args.length && this.#bootReads.has(method)) {
+      return Promise.resolve(this.#bootReads.get(method));
+    }
     return this.#send({ op: "call", method, args });
   }
   /** An engine-independent fn (configLoad/Save, themePalette, guide…). */

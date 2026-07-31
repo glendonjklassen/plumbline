@@ -11,7 +11,9 @@
 // wasm-only `warmStep` export instead of one monolithic `warmIndexes` call.
 //
 // Protocol (structured-clone JSON):
-//   in:  { id, op: "boot", base, fontUrl, italicUrl, deferRnd } → boots; progress streams
+//   in:  { id, op: "boot", base, fontUrl, italicUrl, deferRnd } → boots; progress
+//        streams, and the reply carries the session-immutables the shell needs
+//        before first text (palettes, toc) so they are not four more queue hops
 //   in:  { id, op: "call", method, args }           → StudyEngine[method](...args)
 //   in:  { id, op: "static", fn, args }             → engine-independent fns
 //   in:  { id, op: "layout", book, chapter, cfg, font } → display-list JSON
@@ -777,6 +779,19 @@ self.onmessage = async (ev: MessageEvent) => {
         // Tell the shell up front, so it never offers a "Load analysis" button
         // for a load that is already on its way (feedback 2026-07-27).
         const rndAuto = await willAutoLoadRnd(machineOn, m.deferRnd === true);
+        // What the folded-in reads actually cost this device, in the same trace
+        // as every other boot stage — so the thing F-11 moved is a number on a
+        // real phone rather than an argument. It is the same work either way;
+        // what changed is that it no longer needs four more queue hops to
+        // deliver it.
+        const x0 = performance.now();
+        const palettes = {
+          light: themePalette(booted.wasm, "light"),
+          dark: themePalette(booted.wasm, "dark"),
+          night: themePalette(booted.wasm, "night"),
+        };
+        const toc = booted.engine.toc();
+        booted.trace.push(["boot reply extras (palettes + toc)", Math.round(performance.now() - x0)]);
         void backgroundLoad(machineOn, m.deferRnd === true);
         reply({
           packVersion: booted.packVersion,
@@ -785,6 +800,19 @@ self.onmessage = async (ev: MessageEvent) => {
           bundledOn: booted.home.bundledOn,
           rndAuto,
           fontFaces,
+          // FOLDED INTO THE BOOT REPLY (audit F-11). This thread is the only one
+          // that can answer anything, so the shell's first four reads — three
+          // theme palettes and the TOC — were four more full queue hops between
+          // the boot reply and the first layout request, on the one path where
+          // nothing else can proceed. They are pure functions of the engine that
+          // just opened, so the reply that says "open" can carry them.
+          //
+          // Both are session-immutable and that is why this is safe to hand over
+          // once: the palettes are compiled-in tables (crates/core/src/theme.rs)
+          // and the TOC is corpus-derived, which is the same reason
+          // session.svelte.ts PINS the TOC in its read-through cache.
+          palettes,
+          toc,
         });
         break;
       }
