@@ -25,11 +25,46 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Only the ABIs we cross-compile the core for: device (arm64-v8a) and
-        // the AOSP emulator (x86_64). cargo-ndk drops the .so into
-        // src/main/jniLibs/<abi>/libplumbline_ffi.so; JNA's @aar carries its own.
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+        // NOTE: the ABI allow-list is `splits.abi` below, not `ndk.abiFilters`.
+        // AGP refuses to configure a project that sets both ("Conflicting
+        // configuration : 'arm64-v8a,x86_64' in ndk abiFilters cannot be present
+        // when splits abi filters are set"), and splits do the same filtering —
+        // an ABI with no split gets no APK, so JNA's @aar contributions for
+        // armeabi-v7a/x86 stay out exactly as abiFilters kept them out.
+    }
+
+    // One APK per ABI instead of one APK carrying both. The two ABIs are the ones
+    // we cross-compile the core for — the device (arm64-v8a) and the AOSP
+    // emulator (x86_64); cargo-ndk drops each .so into
+    // src/main/jniLibs/<abi>/libplumbline_ffi.so and JNA's @aar carries its own
+    // libjnidispatch.so per ABI.
+    //
+    // A phone install was paying 2.59 MB for x86_64 it can never load
+    // (libplumbline_ffi.so 2,466,760 B + libjnidispatch.so 126,912 B +
+    // libandroidx.graphics.path.so 10,760 B) out of a 19.2 MB download — the
+    // emulator's copy of the engine, shipped to every reader. x86_64 is still
+    // BUILT (it is how a release build gets smoke-tested on the emulator, and
+    // ChromeOS/WSA installs are real); it just isn't in the phone's file.
+    //
+    // No universal APK on purpose: it is precisely the artifact being removed,
+    // and there is no Play Store here to hand a device the right split
+    // (distribution is a file a reader downloads from a GitHub Release). For the
+    // same reason versionCode is NOT offset per ABI — the usual per-split offset
+    // exists to order variants inside Play, nothing here reads it, and both
+    // splits install in place over the previous release.
+    //
+    // THE OUTPUT FILENAMES CHANGE, for every variant: `app-release.apk` becomes
+    // `app-arm64-v8a-release.apk` + `app-x86_64-release.apk`, and the same for
+    // debug. Anything that copies a built APK by name has to be updated with
+    // this change — .github/workflows/release.yml attaches one file to the
+    // release, and the name readers download (plumbline-<tag>-android.apk) must
+    // keep meaning "the one for a phone", i.e. the arm64-v8a split.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = false
         }
     }
 
@@ -55,8 +90,30 @@ android {
             isMinifyEnabled = false
         }
         release {
-            // No obfuscation of the JNA/serialization surfaces — see proguard rules.
-            isMinifyEnabled = false
+            // R8 SHRINKS AND OPTIMIZES BUT DOES NOT RENAME (`-dontobfuscate` sits
+            // in proguard-rules.pro). Shrinking is what pays: 22,773,588 bytes of
+            // dex across two files became 3,748,844 in one, because a Compose app
+            // links far more of Material3/AndroidX than it calls. Together with
+            // the ABI split above, the phone's APK went 20,116,989 → 11,099,262
+            // bytes (measured 2026-07-30, both builds unsigned).
+            //
+            // Renaming on top of that is worth 82,179 bytes — 0.7% — because most
+            // of what is left is assets, and it is refused at that price for two
+            // reasons particular to this product. The JNA binding and the wire
+            // model are both reached BY NAME at runtime, so a keep rule that
+            // misses one has no compile-time signal and surfaces as a dead feature
+            // or a silently dropped JSON field on a reader's device. And the APK
+            // is sideloaded from a GitHub Release: the only crash report this
+            // project will ever get is a stack trace pasted into an issue, with no
+            // Play Console to symbolicate it and mapping.txt discarded with the CI
+            // runner that built it.
+            isMinifyEnabled = true
+            // Resources only. ASSETS ARE NOT TOUCHED by resource shrinking, so
+            // the corpus, Strong's, the fonts and the stock study set all ship
+            // whole — the shrinker's scope is res/ and resources.arsc, where what
+            // it removes is unreferenced AndroidX drawables/strings. Safe mode is
+            // the default (anything reachable via getIdentifier is kept).
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -140,6 +197,17 @@ dependencies {
 
     // WindowInfoTracker / FoldingFeature — source of truth for the hinge.
     implementation("androidx.window:window:1.5.0")
+
+    // Installs the ART baseline profile (src/main/baseline-prof.txt, which AGP
+    // compiles into assets/dexopt/baseline.prof) into the app's reference profile
+    // on first launch, so ART AOT-compiles the startup path from the second
+    // launch on. REQUIRED for it to do anything at all here: the alternative
+    // installer is the Play Store's cloud profile, and this product ships a
+    // sideloaded APK by decision. Without this line the profile ships and is
+    // inert, which is what every release through v0.35.0 did: the build before
+    // this change already put 8,175 bytes of merged Compose/AndroidX profile in
+    // assets/dexopt/baseline.prof, with nothing on the device to read it.
+    implementation("androidx.profileinstaller:profileinstaller:1.4.0")
 
     // Activity + lifecycle-aware Compose entry points.
     implementation("androidx.activity:activity-compose:1.9.3")

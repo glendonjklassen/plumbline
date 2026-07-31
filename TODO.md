@@ -352,10 +352,15 @@ sideload block is already fixed and guarded by a test.
   the machine tier on `machineAnalysis`, and instrument on-device first
   (`MainActivity.kt:118-120`). Proper fix is `warm_step` in the C ABI — see the
   capabilities item in section H.
-- [ ] **[opus]** Baseline profile + profileinstaller (20–40% typical Compose
+- [x] **[opus]** Baseline profile + profileinstaller (20–40% typical Compose
   cold-start win; works sideloaded); R8 shrink-only (`isMinifyEnabled = true`, keep
   rules already written and correct); ABI splits (2.6 MB of dead x86_64 in every
   install); `mutableFloatStateOf`/`mutableIntStateOf` for scroll-path state.
+  **DONE 2026-07-30, with one part device-gated:** the profile is HAND-AUTHORED,
+  because a real one comes from a macrobenchmark run on a device and there is none
+  on this machine. Release APKs now 11.1 MB (arm64) / 11.4 MB (x86_64), separately.
+  release.yml and ci.yml both had to change — the split filenames broke the one
+  `cp` the release job does, inside a step a `workflow_dispatch` dry run skips.
 - [ ] **[opus]** `StudyPane` → LazyColumn (eager Column lays out every block before
   first frame); process-wide Typeface cache (EB Garamond re-parsed per pane
   instance on main thread); buffered asset extraction + `noCompress` for

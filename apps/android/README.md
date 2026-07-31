@@ -76,7 +76,8 @@ surface, so a call added for one shell has an obvious twin in the other.
   ≥ 35.2.10). `./gradlew installDebug` or Run in Android Studio. Fold/unfold with
   Ctrl+F / Ctrl+U to make `FoldingFeature` fire.
 - **On the phone (GrapheneOS, no cable):** `./gradlew assembleDebug` →
-  `app/build/outputs/apk/debug/app-debug.apk`, move it over via Syncthing / a
+  `app/build/outputs/apk/debug/app-arm64-v8a-debug.apk` (ABI splits, 2026-07-30 —
+  `app-x86_64-debug.apk` beside it is for an emulator), move it over via Syncthing / a
   cloud drive / `python -m http.server`, then tap to install; or use wireless
   adb (`adb pair` → `adb connect` → `adb install`). Sign with a consistent key
   (the debug key is fine) — switching keys forces an uninstall on update.

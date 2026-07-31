@@ -1,0 +1,123 @@
+# Plumbline's ART baseline profile — HAND-AUTHORED. Read that first.
+#
+# WHAT IT DOES. AGP compiles this file (plus the profiles Compose/AndroidX ship
+# inside their AARs) into assets/dexopt/baseline.prof, and
+# androidx.profileinstaller writes it into the app's reference profile on first
+# launch. From then on ART runs these methods AOT-compiled instead of
+# interpreting them while JIT catches up — the usual 20–40% off a Compose cold
+# start. That library dependency is not optional here: a cloud profile is
+# something the Play Store installs, this product ships a sideloaded APK from a
+# GitHub Release on purpose, and without profileinstaller the profile in the APK
+# is inert. (It already was: every release through v0.35.0 shipped an 8,175-byte
+# baseline.prof of merged library profiles with nothing on the device to read it.)
+#
+# WHAT WOULD REPLACE IT. A real profile is MEASURED, not written by hand: a
+# :macrobenchmark module running BaselineProfileRule over a scripted cold start
+# on a real device, whose output is exactly the classes and methods that start
+# actually touched, with ART's own hot/startup flags. There is no device in this
+# build environment, so this file is reasoned from the startup path instead —
+# MainActivity → asset extraction → engine open → LoadCoreData → the reader's
+# first chapter layout and paint. When a device run exists, REPLACE THE WHOLE
+# FILE with its output; do not merge a generated profile into this one by hand,
+# and do not trust these flags over measured ones.
+#
+# WHAT IS DELIBERATELY ABSENT. Compose, Activity, Lifecycle, Material3 and the
+# rest of AndroidX ship their own baseline profiles and AGP merges them in. A
+# hand-copied duplicate of someone else's profile only rots.
+#
+# FORMAT (profgen). `Lpkg/Class;` = load this class during startup.
+# `HSPL<class>-><method>` = Hot, Startup, Post-startup. `**` is a wildcard, and
+# it is what keeps this file from listing Compose's generated lambda classes
+# (`ReaderPaneKt$$ExternalSyntheticLambda7`, renumbered by every recompile) or
+# every `$$serializer`. A rule that matches nothing is dropped silently — safe
+# against renames, but also silent about them.
+
+# ── the process: Activity → writable home → engine → first frame ────────────
+# onCreate sets XDG_CONFIG_HOME, loads the cdylib, extracts assets and opens the
+# engine; the free functions in MainActivityKt (copyAsset / writeThroughTemp /
+# sameStream / shouldSeed / warmPlan) copy 32,713,184 bytes of assets/data +
+# assets/bridge on a first install, and re-run the seed checks every launch.
+Ldev/plumbline/MainActivity;
+HSPLdev/plumbline/MainActivity**->**(**)**
+HSPLdev/plumbline/MainActivityKt**->**(**)**
+
+# ── the JNA binding: the whole ABI surface is on the startup path ────────────
+# Every engine call in this shell goes through the PlumblineNative proxy, and
+# the layout call also crosses back per word through MeasureCallback. JNA
+# publishes no baseline profile of its own, and its proxy/Structure machinery is
+# reflection-heavy — exactly the code JIT is slowest to reach.
+Ldev/plumbline/core/PlumblineNative;
+Ldev/plumbline/core/PlumblineNative$Companion;
+Ldev/plumbline/core/PlumblineLayoutConfig;
+Ldev/plumbline/core/PlumblineLayoutConfig$ByValue;
+Ldev/plumbline/core/MeasureCallback;
+HSPLdev/plumbline/core/**->**(**)**
+Lcom/sun/jna/Native;
+Lcom/sun/jna/Library$Handler;
+Lcom/sun/jna/Function;
+Lcom/sun/jna/Structure;
+Lcom/sun/jna/Pointer;
+HSPLcom/sun/jna/Native**->**(**)**
+HSPLcom/sun/jna/Library**->**(**)**
+HSPLcom/sun/jna/Function**->**(**)**
+HSPLcom/sun/jna/Structure**->**(**)**
+HSPLcom/sun/jna/Pointer**->**(**)**
+HSPLcom/sun/jna/Memory**->**(**)**
+HSPLcom/sun/jna/NativeLong**->**(**)**
+HSPLcom/sun/jna/CallbackReference**->**(**)**
+HSPLcom/sun/jna/ptr/PointerByReference**->**(**)**
+
+# ── the Kotlin wrappers over that ABI ───────────────────────────────────────
+Ldev/plumbline/StudyEngine;
+Ldev/plumbline/StudyEngine$Companion;
+Ldev/plumbline/Chapter;
+Ldev/plumbline/StudyConfig;
+HSPLdev/plumbline/StudyEngine**->**(**)**
+HSPLdev/plumbline/StudyEngineKt**->**(**)**
+HSPLdev/plumbline/Chapter**->**(**)**
+HSPLdev/plumbline/StudyConfig**->**(**)**
+HSPLdev/plumbline/PlumblineFlags**->**(**)**
+
+# ── the display list: the biggest JSON decode a chapter turn does ────────────
+# A laid-out chapter arrives as one JSON document of a DisplayItem per word
+# (~900 items for a long chapter), and config/toc/palette/notes are decoded
+# before the first frame. kotlinx.serialization ships no baseline profile, so
+# its lexer and streaming decoder — the actual per-token loop — are here.
+Ldev/plumbline/DisplayList;
+Ldev/plumbline/DisplayItem;
+HSPLdev/plumbline/WireKt**->**(**)**
+HSPLdev/plumbline/DisplayList**->**(**)**
+HSPLdev/plumbline/DisplayItem**->**(**)**
+HSPLdev/plumbline/Hit**->**(**)**
+HSPLdev/plumbline/Toc**->**(**)**
+HSPLdev/plumbline/ConfigState**->**(**)**
+HSPLdev/plumbline/PaneRef1**->**(**)**
+HSPLdev/plumbline/ChurchState**->**(**)**
+HSPLdev/plumbline/PaletteData**->**(**)**
+HSPLdev/plumbline/UserNote**->**(**)**
+HSPLkotlinx/serialization/json/Json**->**(**)**
+HSPLkotlinx/serialization/json/internal/**->**(**)**
+HSPLkotlinx/serialization/internal/**->**(**)**
+
+# ── the reader pane and the chrome around it ─────────────────────────────────
+# StudyScreen builds the shell, ReaderPane lays out and paints the first
+# chapter, and the precomputed scroll-path helpers (verseExtents / ReaderInks /
+# LayoutRect) run before the reader's first drag. FirstRunKt is on the path
+# exactly once per install — which is the coldest start the reader ever sees.
+Ldev/plumbline/ui/ReaderPaneKt;
+Ldev/plumbline/ui/StudyScreenKt;
+Ldev/plumbline/ui/ReaderPalette;
+Ldev/plumbline/ui/ReaderPalette$Companion;
+HSPLdev/plumbline/ui/ReaderPalette**->**(**)**
+HSPLdev/plumbline/ui/ReaderPaneKt**->**(**)**
+HSPLdev/plumbline/ui/VerseExtent**->**(**)**
+HSPLdev/plumbline/ui/ReaderInks**->**(**)**
+HSPLdev/plumbline/ui/LayoutRect**->**(**)**
+HSPLdev/plumbline/ui/LayoutDot**->**(**)**
+HSPLdev/plumbline/ui/StudyScreenKt**->**(**)**
+HSPLdev/plumbline/ui/StudyPaneKt**->**(**)**
+HSPLdev/plumbline/ui/TypographyKt**->**(**)**
+HSPLdev/plumbline/ui/FoldModeKt**->**(**)**
+HSPLdev/plumbline/ui/NavIconsKt**->**(**)**
+HSPLdev/plumbline/ui/ReadingTrackerKt**->**(**)**
+HSPLdev/plumbline/ui/FirstRunKt**->**(**)**

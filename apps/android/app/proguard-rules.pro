@@ -1,6 +1,14 @@
-# Plumbline ProGuard / R8 rules.
-# Release builds currently ship with minification off, but these keep rules make
-# it safe to flip isMinifyEnabled on later.
+# Plumbline ProGuard / R8 rules. Release builds run R8 (isMinifyEnabled = true).
+#
+# SHRINK AND OPTIMIZE, DO NOT RENAME. Everything below keeps a name that
+# something reads at runtime; -dontobfuscate makes the whole question moot
+# instead of leaving it to the completeness of these rules, which is the right
+# trade for an app whose two runtime-reflective surfaces are its native ABI and
+# its on-disk/wire data model, and whose crash reports arrive as text in an issue
+# (sideloaded APK, no Play Console, no retained mapping.txt). Keep the rules
+# anyway: they are also what stops the shrinker DELETING these members, which
+# -dontobfuscate does nothing about.
+-dontobfuscate
 
 # ── JNA ─────────────────────────────────────────────────────────────────────
 # JNA maps interfaces/structures to native memory via reflection; obfuscating

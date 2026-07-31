@@ -324,7 +324,12 @@ fun ReaderPane(
 
         // Scroll the navigator's target verse into view once the layout lands.
         // Epoch-guarded so a re-layout (font/margin change) doesn't re-jump.
-        var appliedTarget by remember { mutableStateOf(-1) }
+        // Int state, like every other primitive on this path: a generic
+        // mutableStateOf boxes the Int on each write, and the lint check that
+        // would catch that — AutoboxingStateCreation — is one of the four
+        // disabled in app/build.gradle.kts because AGP 8.7's lint crashes on
+        // them, so nothing but this comment enforces it.
+        var appliedTarget by remember { mutableIntStateOf(-1) }
         LaunchedEffect(dl, targetEpoch) {
             val tv = targetVerse ?: return@LaunchedEffect
             val list = dl ?: return@LaunchedEffect

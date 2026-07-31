@@ -230,8 +230,33 @@ jobs:
           export ANDROID_NDK_HOME="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_ROOT}"
           cargo ndk -t arm64-v8a -t x86_64 --platform 26 \
             -o apps/android/app/src/main/jniLibs build -p plumbline-ffi --release
-      - name: Assemble the debug APK, run the JVM unit tests, and lint
+      - name: Assemble both APK variants, run the JVM unit tests, and lint
         run: |
           chmod +x apps/android/gradlew
           apps/android/gradlew -p apps/android \
             :app:assembleDebug :app:testDebugUnitTest :app:lintDebug --console=plain
+      # The RELEASE variant too, added 2026-07-30 with R8 shrinking and the ABI
+      # splits. Debug does not shrink, so a keep-rule that stops keeping a
+      # reflected wire type — a silent data bug — or a baseline profile that stops
+      # compiling would otherwise first appear at `git tag`, on a build nobody can
+      # iterate on. Unsigned here (the keystore secrets belong to the release
+      # workflow); an unsigned assemble still runs R8, the resource shrinker and
+      # the profile packaging, which is the part that can break.
+      - name: Assemble the release variant (R8 + splits) — unsigned
+        run: |
+          apps/android/gradlew -p apps/android :app:assembleRelease --console=plain
+          ls -l apps/android/app/build/outputs/apk/release/
+      # The arm64 split — the one the release workflow copies by name — still comes
+      # out under the name that workflow expects. A split rename would otherwise
+      # first fail at `git tag`, inside a step a workflow_dispatch dry run skips.
+      #
+      # Either name counts, and the difference is the signature: with a keystore
+      # (the release workflow) AGP writes `app-arm64-v8a-release.apk`; without one
+      # (here, and locally) it writes `…-release-unsigned.apk`. Asserting only the
+      # signed name would fail this job on every push — which is exactly what the
+      # first version of this step did.
+      - name: The release workflow's APK filename still exists
+        run: |
+          cd apps/android/app/build/outputs/apk/release
+          ls -l
+          test -f app-arm64-v8a-release.apk || test -f app-arm64-v8a-release-unsigned.apk

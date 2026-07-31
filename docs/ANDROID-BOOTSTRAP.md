@@ -84,7 +84,8 @@ toolbar **Ctrl+F / Ctrl+U**, or Extended controls → **Virtual sensors** (hinge
 ## Testing on the phone — emulator-first, sideload good builds, NO USB
 Iterate on the emulator; only put a build on the phone once it's worth it. Two
 no-cable paths:
-1. **Dump the file & tap it** — `./gradlew assembleDebug` → `app-debug.apk`; move it
+1. **Dump the file & tap it** — `./gradlew assembleDebug` → `app-arm64-v8a-debug.apk`
+   (one APK per ABI since the splits landed 2026-07-30); move it
    over via Syncthing / cloud / a quick `python -m http.server`; open in the
    GrapheneOS Files app → tap → install (grant "install unknown apps" once; no Play
    Protect nag on GrapheneOS).

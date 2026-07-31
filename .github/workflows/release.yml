@@ -168,9 +168,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # ABI splits (2026-07-30) mean there is no `app-release.apk` any more —
+          # `assembleRelease` writes one APK per ABI. The reader-facing name keeps
+          # meaning "the one for a phone", i.e. the arm64-v8a split; the x86_64
+          # split rides along under its own name for emulators, ChromeOS and WSA.
+          #
+          # Named explicitly rather than globbed: a glob would silently attach
+          # whichever file sorted first if a third ABI ever appeared, and `cp`
+          # failing loudly at tag time is the better outcome.
           OUT="plumbline-${{ github.ref_name }}-android.apk"
-          cp apps/android/app/build/outputs/apk/release/app-release.apk "$OUT"
+          cp apps/android/app/build/outputs/apk/release/app-arm64-v8a-release.apk "$OUT"
           gh release upload "${{ github.ref_name }}" "$OUT" --clobber
+          OUT64="plumbline-${{ github.ref_name }}-android-x86_64.apk"
+          cp apps/android/app/build/outputs/apk/release/app-x86_64-release.apk "$OUT64"
+          gh release upload "${{ github.ref_name }}" "$OUT64" --clobber
 
   # Deploy the PWA to GitHub Pages — the install path for everyone without an
   # APK (hosting decided 2026-07-25). Same pipeline CI verifies: data pack →
