@@ -277,9 +277,14 @@ sideload block is already fixed and guarded by a test.
   Levenshtein) for short/prefix queries; truncate postings to HIT_CAP before
   materializing; cap or exempt `searchBlocks` from the cache
   (`Shell.svelte:342`, `search.rs:275-378`).
-- [ ] **[opus]** Slice warm phases 3/5/6 (xref 8.5 MB TSV parse, leitwort, bridge) the
+- [x] **[opus]** Slice warm phases 3/5/6 (xref 8.5 MB TSV parse, leitwort, bridge) the
   way SearchIxBuilder already is — they're the same shape as the fixed 54 s block
-  (`crates/ffi/src/lib.rs:577-631`).
+  (`crates/ffi/src/lib.rs:577-631`). **DONE 2026-07-30 for 3 and 5; 6 measured and
+  deliberately left.** Desktop numbers: xref 117 ms → worst slice 7.1 ms, leitwort
+  84 ms → 11.6 ms, **bridge 3 ms** — an order of magnitude under the ~300 ms chunk
+  budget even at a phone's 5–10×, so slicing it would add a builder, a mutex and a
+  cursor to buy nothing. Profile tests (`--ignored xref_slice_profile`,
+  `leitwort_slice_profile`) print the numbers on demand.
 - [x] **[opus]** Cache-layer quick fixes: the `startsWith("toc ")` exemption never
   fires (space vs `\0` — one-character bug, `session.svelte.ts:325-330`); bound
   `#cache` (LRU); memoize `weaveDots`/`noteVerses` with content comparison so

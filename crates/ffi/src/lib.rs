@@ -160,6 +160,8 @@ pub struct PlumblineEngine {
     occ_partial: std::sync::Mutex<Option<strongs::OccurrenceIxBuilder>>,
     renderings_partial: std::sync::Mutex<Option<renderings::RenderingsBuilder>>,
     concept_partial: std::sync::Mutex<Option<concept::ConceptBuilder>>,
+    xref_partial: std::sync::Mutex<Option<crossref::XRefIxBuilder>>,
+    leitwort_partial: std::sync::Mutex<Option<burst::LeitwortBuilder>>,
     /// Sliced builder for the SIF model — the LAST heavy warm phase to get one.
     /// As a single-shot build it held the web's engine worker for 54,859 ms on a
     /// real phone (2026-07-28 boot trace), answering no layout or tap throughout.
@@ -274,6 +276,8 @@ impl PlumblineEngine {
             occ_partial: std::sync::Mutex::new(None),
             renderings_partial: std::sync::Mutex::new(None),
             concept_partial: std::sync::Mutex::new(None),
+            xref_partial: std::sync::Mutex::new(None),
+            leitwort_partial: std::sync::Mutex::new(None),
             verse_sim_partial: std::sync::Mutex::new(None),
             warm_phase: std::sync::atomic::AtomicUsize::new(0),
             defer_builds: std::sync::atomic::AtomicBool::new(false),
@@ -582,9 +586,9 @@ impl PlumblineEngine {
     /// FIRST USE otherwise, and none of them survives the tab, so the reader's
     /// first word click of every session paid for all of them at once — "it
     /// loads for a while, every time I reopen it" (feedback 2026-07-27). The
-    /// three sliced phases come first because they are the biggest; the rest
-    /// are single builds, one per call, so a tap between them is still
-    /// answered. Re-running after the R&D pack lands picks up the SIF model.
+    /// sliced phases come first because they are the biggest; what is left as a
+    /// single build is only what measured small enough to be one — the bridge, at
+    /// 3 ms (2026-07-30) — so a tap between phases is still answered. Re-running after the R&D pack lands picks up the SIF model.
     fn warm_next(&self, slice: usize) -> i32 {
         use std::sync::atomic::Ordering;
         // A shell that warms in slices has promised to keep this thread
@@ -597,15 +601,9 @@ impl PlumblineEngine {
                 0 => self.warm_search_slice(slice),
                 1 => self.warm_occ_slice(slice),
                 2 => self.warm_renderings_slice(slice),
-                3 => {
-                    self.xref_ix();
-                    0
-                }
+                3 => self.warm_xref_slice(slice),
                 4 => self.warm_concept_slice(slice),
-                5 => {
-                    self.leitwort();
-                    0
-                }
+                5 => self.warm_leitwort_slice(slice),
                 6 => {
                     self.bridge();
                     0
@@ -698,6 +696,59 @@ impl PlumblineEngine {
         }
         if let Some(model) = b.take() {
             let _ = self.verse_sim.set(model);
+        }
+        *guard = None;
+        0
+    }
+
+    /// Parse `n` more rows of the cross-reference TSV. 1 while work remains.
+    ///
+    /// 344k rows, 89 ms in one call on the maintainer's desktop (measured
+    /// 2026-07-30) — a phone's whole warm-chunk budget, spent with the worker
+    /// unable to answer a tap. Sliced, like the three phases before it.
+    fn warm_xref_slice(&self, n: usize) -> i32 {
+        if self.xref_ix.get().is_some() {
+            return 0;
+        }
+        let Ok(mut guard) = self.xref_partial.lock() else {
+            return 0; // poisoned: leave it to the build-on-first-use path
+        };
+        let b = guard.get_or_insert_with(|| match &self.home {
+            Some(h) => crossref::XRefIxBuilder::from_path(crossref::cross_refs_path(h)),
+            // No home: the same empty index `xref_ix()` would have made.
+            None => crossref::XRefIxBuilder::empty(),
+        });
+        // Rows, not verses: at ~12 references per source verse a verse-sized
+        // slice would be a twelfth of the work the other phases do per call.
+        if b.feed(n * 8) {
+            return 1;
+        }
+        if let Some(b) = guard.take() {
+            let _ = self.xref_ix.set(b.finish());
+        }
+        0
+    }
+
+    /// Advance leitwort discovery by one budgeted slice. 1 while work remains.
+    ///
+    /// Two cursored stages (positions over the corpus, then the burst scan over
+    /// the codes) — 83 ms as a single call, measured the same day as the xref
+    /// parse above.
+    fn warm_leitwort_slice(&self, n: usize) -> i32 {
+        if self.leitwort.get().is_some() {
+            return 0;
+        }
+        let Ok(mut guard) = self.leitwort_partial.lock() else {
+            return 0;
+        };
+        let b = guard.get_or_insert_with(|| burst::LeitwortBuilder::new(&burst::BurstParams::default()));
+        if b.step(&self.corpus, n) {
+            return 1;
+        }
+        if let Some(found) = b.take() {
+            let _ = self
+                .leitwort
+                .set(found.into_iter().map(|b| (b.strongs.clone(), b)).collect());
         }
         *guard = None;
         0

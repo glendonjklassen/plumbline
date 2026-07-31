@@ -269,6 +269,154 @@ pub fn discover_leitworter(bp: &BurstParams, corpus: &Corpus) -> Vec<Burst> {
     sig
 }
 
+/// The same discovery, one bite at a time — for the boot warm.
+///
+/// [`discover_leitworter`] walks the whole corpus building a positions map, then
+/// scans every code for a burst, in ONE call on the only thread that answers
+/// layout, taps and word studies. Measured 2026-07-30 on the maintainer's
+/// desktop: **83 ms**, against a ~300 ms warm-chunk budget — which on a phone
+/// (5–10× slower) is the whole budget for one phase, and the reader feels it as
+/// the app being unavailable.
+///
+/// Two stages, each cursored, so [`step`](Self::step) can stop anywhere:
+///
+/// 1. **positions** — walk `budget` verses, recording which absolute verse
+///    indices each Strong's code occurs in.
+/// 2. **scoring** — scan `budget` codes for a significant burst.
+///
+/// Then the Benjamini-Hochberg gate and the sort, which are over ~8k scored
+/// items and cheap.
+///
+/// One deliberate difference from the one-shot version: this scores codes in
+/// **sorted** order rather than `HashMap` order, so its output is deterministic
+/// run to run. `discover_leitworter` is not — it collects in hash order and both
+/// later sorts are stable — so the two agree code for code but can disagree on
+/// the ORDER of exact score ties. The engine keys these by code, so nothing
+/// downstream can tell; the test compares code for code for that reason.
+pub struct LeitwortBuilder {
+    bp: BurstParams,
+    stage: u8,
+    /// Verse index in stage 1, code index in stage 2.
+    cursor: usize,
+    /// Absolute index of the first NT verse, filled as stage 1 walks.
+    nt_start: Option<usize>,
+    positions: HashMap<String, Vec<i64>>,
+    /// The codes to score, sorted — materialised when stage 1 finishes.
+    codes: Vec<String>,
+    scored: Vec<(Burst, f64)>,
+    out: Option<Vec<Burst>>,
+}
+
+impl LeitwortBuilder {
+    pub fn new(bp: &BurstParams) -> LeitwortBuilder {
+        LeitwortBuilder {
+            bp: bp.clone(),
+            stage: 1,
+            cursor: 0,
+            nt_start: None,
+            positions: HashMap::new(),
+            codes: Vec::new(),
+            scored: Vec::new(),
+            out: None,
+        }
+    }
+
+    /// Do up to `budget` units of work. `true` while any remain.
+    pub fn step(&mut self, corpus: &Corpus, budget: usize) -> bool {
+        let budget = budget.max(1);
+        let total = corpus.len();
+        match self.stage {
+            1 => {
+                let end = (self.cursor + budget).min(total);
+                for i in self.cursor..end {
+                    let Some(v) = corpus.verse_at(i) else { continue };
+                    if self.nt_start.is_none() && is_nt(&v.book) {
+                        self.nt_start = Some(i);
+                    }
+                    let mut codes: Vec<&str> =
+                        v.tokens.iter().flat_map(|t| t.strongs.iter().map(String::as_str)).collect();
+                    codes.sort_unstable();
+                    codes.dedup();
+                    for s in codes {
+                        self.positions.entry(s.to_string()).or_default().push(i as i64);
+                    }
+                }
+                self.cursor = end;
+                if end < total {
+                    return true;
+                }
+                self.codes = self.positions.keys().cloned().collect();
+                self.codes.sort_unstable();
+                self.stage = 2;
+                self.cursor = 0;
+                true
+            }
+            2 => {
+                let nt_start = self.nt_start.unwrap_or(total);
+                let (n_ot, n_nt) = (nt_start as i64, (total - nt_start) as i64);
+                let end = (self.cursor + budget).min(self.codes.len());
+                for ci in self.cursor..end {
+                    let s = &self.codes[ci];
+                    let Some(pv) = self.positions.get(s) else { continue };
+                    let n = pv.len();
+                    if n == 0 {
+                        continue;
+                    }
+                    let first_nt = pv[0] as usize >= nt_start;
+                    let last_nt = pv[n - 1] as usize >= nt_start;
+                    if first_nt != last_nt {
+                        continue; // a mixed OT/NT run is a tagging anomaly — skip
+                    }
+                    let big_n = if first_nt { n_nt } else { n_ot };
+                    if let Some((raw_p, k, w, i0, i1)) = scan_burst(&self.bp, big_n, pv) {
+                        let levels = (n.saturating_sub(self.bp.min_k) + 1).max(1) as f64;
+                        let p_adj = (raw_p * levels).min(1.0);
+                        let score = -(p_adj.max(1.0e-300).log10());
+                        let (Some(a), Some(b)) =
+                            (corpus.verse_at(pv[i0] as usize), corpus.verse_at(pv[i1] as usize))
+                        else {
+                            continue;
+                        };
+                        self.scored.push((
+                            Burst {
+                                strongs: s.clone(),
+                                score,
+                                p_value: p_adj,
+                                n,
+                                win_start: a.vref(),
+                                win_end: b.vref(),
+                                win_count: k,
+                                win_span: w as usize,
+                            },
+                            p_adj,
+                        ));
+                    }
+                }
+                self.cursor = end;
+                if end < self.codes.len() {
+                    return true;
+                }
+                let mut sig = benjamini_hochberg(self.bp.fdr_alpha, &self.scored);
+                sig.sort_by(|a, b| b.score.total_cmp(&a.score));
+                self.out = Some(sig);
+                // The positions map is the big allocation; let it go now rather
+                // than holding it until the caller collects.
+                self.positions = HashMap::new();
+                self.codes = Vec::new();
+                self.scored = Vec::new();
+                self.stage = 3;
+                false
+            }
+            _ => false,
+        }
+    }
+
+    /// The finished discoveries, once [`step`](Self::step) has returned `false`.
+    pub fn take(&mut self) -> Option<Vec<Burst>> {
+        self.out.take()
+    }
+}
+
 /// Book (OSIS id) → its discovered leitwörter (window-opening book), strongest
 /// first.
 pub fn leitwort_by_book(bursts: &[Burst]) -> HashMap<String, Vec<Burst>> {
@@ -314,5 +462,115 @@ mod tests {
         let items = vec![("a", 0.001), ("b", 0.6), ("c", 0.8), ("d", 0.9)];
         let sig = benjamini_hochberg(0.05, &items);
         assert_eq!(sig, vec!["a"]); // only the tiny p-value survives
+    }
+
+    /// A corpus with an OT and an NT half, one code packed into a run of verses
+    /// (the shape a burst is) and one spread thin. Small — the discovery rules
+    /// need far more verses than this to call anything significant — so it exists
+    /// to drive the builder's CURSOR through both stages, not to find leitwörter.
+    const BURSTY: &str = concat!(
+        r#"{"format":"x","tokenization":"kjv1769-tok2","verses":8}"#, "\n",
+        r#"{"b":"Gen","c":1,"v":1,"t":[["","a","",["H1"],0],["","b","",["H2"],0]]}"#, "\n",
+        r#"{"b":"Gen","c":1,"v":2,"t":[["","a","",["H1"],0]]}"#, "\n",
+        r#"{"b":"Gen","c":1,"v":3,"t":[["","a","",["H1"],0],["","c","",["H3"],0]]}"#, "\n",
+        r#"{"b":"Gen","c":1,"v":4,"t":[["","a","",["H1"],0]]}"#, "\n",
+        r#"{"b":"Gen","c":1,"v":5,"t":[["","d","",["H4"],0]]}"#, "\n",
+        r#"{"b":"John","c":1,"v":1,"t":[["","e","",["G5"],0],["","f","",["G6"],0]]}"#, "\n",
+        r#"{"b":"John","c":1,"v":2,"t":[["","e","",["G5"],0]]}"#, "\n",
+        r#"{"b":"John","c":1,"v":3,"t":[["","g","",["G7"],0]]}"#,
+    );
+
+    /// Slicing is a scheduling change; it must not change the answer. Run against
+    /// the REAL corpus, because the interesting disagreement — an exact score tie
+    /// coming out in a different order — cannot happen in a five-verse fixture.
+    ///
+    /// Compared code for code rather than as a sequence: `discover_leitworter`
+    /// collects in `HashMap` order, so ITS tie order varies run to run while the
+    /// builder's does not (see [`LeitwortBuilder`]). Every discovery, and every
+    /// number on it, must match.
+    ///
+    /// `cargo test -p plumbline-rnd -- --ignored sliced_leitwort`
+    #[test]
+    #[ignore]
+    fn sliced_leitwort_discovery_matches_the_one_shot_version() {
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let Ok(corpus) = plumbline_core::corpus::load_corpus(repo.join("data/kjv.jsonl")) else {
+            println!("no data pack; skipping");
+            return;
+        };
+        let bp = BurstParams::default();
+        let want: HashMap<String, Burst> =
+            discover_leitworter(&bp, &corpus).into_iter().map(|b| (b.strongs.clone(), b)).collect();
+
+        let mut b = LeitwortBuilder::new(&bp);
+        let mut steps = 0;
+        while b.step(&corpus, 2048) {
+            steps += 1;
+            assert!(steps < 100_000, "the builder never finished");
+        }
+        let got: HashMap<String, Burst> =
+            b.take().expect("finished builder yields its discoveries").into_iter().map(|b| (b.strongs.clone(), b)).collect();
+
+        assert!(want.len() > 100, "fixture check: the real corpus should yield many leitwörter, got {}", want.len());
+        assert!(steps > 2, "the whole thing ran in one step, so nothing was sliced");
+        assert_eq!(got.len(), want.len(), "different number of discoveries");
+        for (code, w) in &want {
+            let g = got.get(code).unwrap_or_else(|| panic!("{code} missing from the sliced discovery"));
+            assert_eq!(g, w, "{code} came out different");
+        }
+    }
+
+    /// The warm loop relies on both halves of this: nothing before the end, and
+    /// the result only once.
+    #[test]
+    fn a_leitwort_builder_yields_nothing_until_it_is_done() {
+        let corpus = plumbline_core::corpus::from_str(BURSTY).unwrap();
+        let mut b = LeitwortBuilder::new(&BurstParams::default());
+        assert!(b.take().is_none(), "nothing before the first step");
+        b.step(&corpus, 1);
+        assert!(b.take().is_none(), "nothing mid-build");
+        let mut guard = 0;
+        while b.step(&corpus, 1) {
+            guard += 1;
+            assert!(guard < 10_000, "step(1) never finished");
+        }
+        assert!(b.take().is_some());
+        assert!(b.take().is_none(), "taken once only");
+    }
+
+    /// What the worst single leitwort slice costs — the number the slicing exists
+    /// to hold down, next to the one-shot cost it replaces.
+    /// `cargo test --release -p plumbline-rnd -- --ignored --nocapture leitwort_slice_profile`
+    #[test]
+    #[ignore]
+    fn leitwort_slice_profile() {
+        use std::time::Instant;
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let Ok(corpus) = plumbline_core::corpus::load_corpus(repo.join("data/kjv.jsonl")) else {
+            println!("no data pack; skipping");
+            return;
+        };
+        let bp = BurstParams::default();
+
+        let t = Instant::now();
+        let _ = discover_leitworter(&bp, &corpus);
+        let whole = t.elapsed().as_micros();
+
+        let mut b = LeitwortBuilder::new(&bp);
+        let (mut worst, mut steps) = (0u128, 0usize);
+        loop {
+            let t = Instant::now();
+            let more = b.step(&corpus, 2048);
+            worst = worst.max(t.elapsed().as_micros());
+            steps += 1;
+            if !more {
+                break;
+            }
+        }
+        println!(
+            "leitwort: one shot {:.1}ms | sliced: {steps} slices, worst {:.1}ms",
+            whole as f64 / 1000.0,
+            worst as f64 / 1000.0
+        );
     }
 }
