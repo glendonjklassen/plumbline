@@ -167,10 +167,58 @@ android {
         }
     }
 
+    // Uncompressed data assets — OFF, and the measurement is why.
+    //
+    // `noCompress` would let the first-run extraction read kjv.jsonl and friends
+    // straight out of the APK instead of inflating them on the way into the
+    // writable home. Measured against the assets actually shipped in
+    // app-arm64-v8a-release-unsigned.apk (2026-07-30): the four files this
+    // covers — kjv.jsonl, cross-references.tsv, akjv.akjvb, kjv-notes.jsonl —
+    // are 29,079,604 bytes raw and 4,936,245 stored, so keeping them whole adds
+    // 24,143,359. The phone's APK goes 11,099,262 → ~35,242,621 bytes: a 3.2×
+    // download for a product whose distribution IS a file pulled by hand from a
+    // GitHub Release, with no store to hand out deltas. Installed footprint
+    // rises by the same 24 MB, because the extracted copy exists either way.
+    //
+    // Against that: one inflate, once, on first launch. Reading the same 32.2 MB
+    // of data assets took 48 ms deflated and 12 ms stored on this workstation
+    // (median of five, 256 KB buffer) — so a few hundred milliseconds on a
+    // phone, once per install. Refused at 24 MB a release.
+    //
+    // The switch stays rather than being deleted because the trade inverts the
+    // day the engine can open the pack IN PLACE instead of extracting it: then
+    // the 24 MB replaces the extracted copy rather than joining it, and the
+    // inflate disappears from every launch rather than the first.
+    //
+    //   apps/android/gradlew -PplumblineNoCompressData :app:assembleRelease
+    androidResources {
+        if (project.hasProperty("plumblineNoCompressData")) {
+            noCompress += listOf("jsonl", "tsv", "akjvb")
+        }
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+
+// Compose compiler diagnostics, opt-in.
+//
+// Writes the per-module stability metrics (CSV) and the per-composable report
+// (which functions are restartable and skippable, which parameters the compiler
+// judged unstable) under app/build/compose-metrics and app/build/compose-reports
+// — the numbers you need before claiming a recomposition fix, rather than
+// reading the code and hoping. Behind a property because it adds an output to
+// every Kotlin compilation in the module, and this is a switch to throw for an
+// investigation, not a tax on every build.
+//
+//   apps/android/gradlew -PplumblineComposeMetrics :app:assembleDebug
+composeCompiler {
+    if (project.hasProperty("plumblineComposeMetrics")) {
+        metricsDestination.set(layout.buildDirectory.dir("compose-metrics"))
+        reportsDestination.set(layout.buildDirectory.dir("compose-reports"))
     }
 }
 

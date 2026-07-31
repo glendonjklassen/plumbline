@@ -29,6 +29,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import dev.plumbline.ui.PlumblineApp
+import dev.plumbline.ui.warmSerifType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -64,6 +65,16 @@ class MainActivity : ComponentActivity() {
         runCatching { System.loadLibrary("plumbline_ffi") }
         bundledOn = !File(filesDir, ".no-bundle").exists()
 
+        // Parse the 1.6 MB of bundled EB Garamond into the process-wide cache
+        // (ui/Typography.kt) off the main thread, before anything composes a
+        // theme. Its OWN coroutine, not the extraction block below: on a first
+        // run that block copies 32 MB of assets, and the type is wanted long
+        // before it finishes. applicationContext, so nothing about the cache
+        // outlives this Activity by holding it.
+        lifecycleScope.launch(Dispatchers.Default) {
+            runCatching { warmSerifType(applicationContext) }
+        }
+
         // Open from a WRITABLE home so authored study data — notes, tags,
         // tags, threads, weaves, memorization — persists (a bytes-opened engine
         // has no home and rejects every write). Extract the bundled read-only
@@ -74,6 +85,12 @@ class MainActivity : ComponentActivity() {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     val home = filesDir
+                    // ONE buffer for the whole extraction pass — see
+                    // [COPY_BUFFER_BYTES]. Reused rather than made per file
+                    // because the stock seed below is hundreds of files of a
+                    // few KB each, and a fresh 256 KB array for each of those
+                    // is the opposite of the point.
+                    val buf = ByteArray(COPY_BUFFER_BYTES)
                     // v2: the bundled set gained akjv.akjvb (the plain-English
                     // overlay). An install that already holds .data-v1 would
                     // never re-extract, so the overlay would reach new installs
@@ -81,9 +98,9 @@ class MainActivity : ComponentActivity() {
                     // device that already has the app.
                     val corpus = File(home, ".data-v2")
                     if (!corpus.exists()) {
-                        copyAsset("data", File(home, "data"))
+                        copyAsset("data", File(home, "data"), buf = buf)
                         if ((assets.list("bridge")?.size ?: 0) > 0) {
-                            copyAsset("bridge", File(home, "bridge"))
+                            copyAsset("bridge", File(home, "bridge"), buf = buf)
                         }
                         corpus.createNewFile()
                     }
@@ -91,7 +108,7 @@ class MainActivity : ComponentActivity() {
                     // disabled — its own marker, independent of the corpus extraction.
                     val stock = File(home, ".stock-seeded")
                     if (bundledOn && !stock.exists()) {
-                        seedStock(home)
+                        seedStock(home, buf)
                         stock.createNewFile()
                     }
                     val opened = StudyEngine.Open(home.absolutePath)
@@ -197,10 +214,10 @@ class MainActivity : ComponentActivity() {
     /** Seed the committed stock study set (threads / weaves / tags) into the home.
      *  A file that is already there is the reader's and is left alone — see
      *  [shouldSeed]. */
-    private fun seedStock(home: File) {
+    private fun seedStock(home: File, buf: ByteArray = ByteArray(COPY_BUFFER_BYTES)) {
         for (kind in listOf("weaves", "threads", "tags")) {
             if ((assets.list("stock/$kind")?.size ?: 0) > 0) {
-                copyAsset("stock/$kind", File(home, kind), keepExisting = true)
+                copyAsset("stock/$kind", File(home, kind), keepExisting = true, buf = buf)
             }
         }
     }
@@ -264,16 +281,22 @@ class MainActivity : ComponentActivity() {
     /** Recursively copy an asset path (file or directory) into [dest]. Every file
      *  lands through [writeThroughTemp], so an interrupted copy can never leave a
      *  truncated one. With [keepExisting] a file already at the destination is
-     *  left exactly as the reader left it ([shouldSeed]). */
-    private fun copyAsset(path: String, dest: File, keepExisting: Boolean = false) {
+     *  left exactly as the reader left it ([shouldSeed]). [buf] is threaded all
+     *  the way down so one array serves a whole pass. */
+    private fun copyAsset(
+        path: String,
+        dest: File,
+        keepExisting: Boolean = false,
+        buf: ByteArray = ByteArray(COPY_BUFFER_BYTES),
+    ) {
         val children = assets.list(path) ?: emptyArray()
         if (children.isEmpty()) {
             if (keepExisting && !shouldSeed(dest)) return
             dest.parentFile?.mkdirs()
-            assets.open(path).use { input -> writeThroughTemp(dest, input) }
+            assets.open(path).use { input -> writeThroughTemp(dest, input, buf) }
         } else {
             dest.mkdirs()
-            for (c in children) copyAsset("$path/$c", File(dest, c), keepExisting)
+            for (c in children) copyAsset("$path/$c", File(dest, c), keepExisting, buf)
         }
     }
 
@@ -285,9 +308,13 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** The boot spinner. NO serif typography, deliberately: this is the composition
+ *  that draws the app's first frame, it has not one glyph in it, and asking for
+ *  the family here would put the TTF parse in front of that frame — racing the
+ *  background warm `onCreate` kicked off, which is the whole point of it. */
 @Composable
 private fun LoadingScreen() {
-    MaterialTheme(typography = dev.plumbline.ui.rememberSerifTypography()) {
+    MaterialTheme {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
@@ -381,17 +408,25 @@ private fun fill(s: InputStream, buf: ByteArray): Int {
     return got
 }
 
+/** How much of an asset moves per read/write while extracting.
+ *
+ *  `copyTo`'s default is 8 KB, which put the bundled 34.8 MB of assets through
+ *  roughly 4,400 read/write pairs on a first run — and on Android each of those
+ *  reads is a JNI hop into the asset's inflater, not a plain `read(2)`.
+ *  Measured on this workstation over the shipped 32.2 MB of `data` assets,
+ *  deflated exactly as they ship, median of five: 57 ms at 8 KB, 49 ms at
+ *  64 KB, 48 ms at 256 KB, and nothing further at 512 KB or 1 MB. A phone is
+ *  slower on every leg, but the shape of that curve is the syscall count rather
+ *  than the CPU, so the plateau lands in the same place. 256 KB is the near
+ *  edge of it — big enough that the count stops mattering, small enough to be
+ *  one array reused for a whole pass. */
+private const val COPY_BUFFER_BYTES = 256 * 1024
+
 /** The unique-per-copy part of a temp name. The core's `store::write_atomic_bytes`
  *  uses the pid; there is one process here, so a counter gives the same
  *  collision-freedom. */
 private val tempSeq = AtomicLong()
 
-/** Copy [input] into [dest] through a hidden temp sibling, then rename — so an
- *  interrupted copy leaves either the old file or the whole new one, never a
- *  half-written one. Same shape as the core's `store::write_atomic_bytes`: a
- *  sibling temp (rename is only atomic within one filesystem), flushed to disk
- *  before the rename, and cleaned up best-effort if anything throws. The name is
- *  dotted and `.tmp`-suffixed so a stranded one is ignorable. */
 /** Does this file name belong to a half-finished atomic write?
  *
  *  The third statement of one rule. `store::is_temp_name` in the core is the
@@ -414,11 +449,33 @@ internal fun isTempName(name: String): Boolean {
     return rest.substring(cut + 1).all { it in '0'..'9' }
 }
 
-internal fun writeThroughTemp(dest: File, input: InputStream) {
+/** Copy [input] into [dest] through a hidden temp sibling, then rename — so an
+ *  interrupted copy leaves either the old file or the whole new one, never a
+ *  half-written one. Same shape as the core's `store::write_atomic_bytes`: a
+ *  sibling temp (rename is only atomic within one filesystem), flushed to disk
+ *  before the rename, and cleaned up best-effort if anything throws. The name is
+ *  dotted and `.tmp`-suffixed so a stranded one is ignorable.
+ *
+ *  (This comment had drifted two declarations up the file and was sitting on
+ *  [isTempName]; put back where it belongs while the signature changed.) */
+internal fun writeThroughTemp(
+    dest: File,
+    input: InputStream,
+    // A caller with a whole pass to run supplies its own; anything else gets
+    // what `copyTo` used to give every file here.
+    buf: ByteArray = ByteArray(DEFAULT_BUFFER_SIZE),
+) {
     val tmp = File(dest.absoluteFile.parentFile, ".${dest.name}.${tempSeq.incrementAndGet()}.tmp")
     try {
         FileOutputStream(tmp).use { out ->
-            input.copyTo(out)
+            // The loop `copyTo` runs, over a buffer the caller owns. A stream is
+            // free to return a short read and an asset stream does, so `n` — not
+            // the buffer's length — is what gets written.
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                out.write(buf, 0, n)
+            }
             out.flush()
             out.fd.sync()
         }

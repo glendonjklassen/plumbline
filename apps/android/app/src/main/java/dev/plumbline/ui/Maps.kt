@@ -166,9 +166,11 @@ fun Modifier.zoomable(state: ZoomState): Modifier =
 
 // ── shared paint helpers (ReaderPane's convention: measure + draw via Paint) ──
 
-private fun mapTypeface(context: Context): Typeface =
-    runCatching { Typeface.createFromAsset(context.assets, "fonts/EBGaramond-Regular.ttf") }
-        .getOrNull() ?: Typeface.SERIF
+/** The reader's own regular face, not a fourth parse of the same file: the map
+ *  popups draw the same Garamond the chapter does, and [readerTypefaces] has
+ *  already paid for it once per process (its fallback to the platform serif
+ *  covers the missing-asset case this used to handle itself). */
+private fun mapTypeface(context: Context): Typeface = readerTypefaces(context).regular
 
 @Composable
 internal fun rememberMapPaint(): Paint {

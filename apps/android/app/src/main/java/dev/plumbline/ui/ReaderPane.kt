@@ -115,7 +115,22 @@ internal const val CHAPTER_CACHE = 3
  *  desktop pin — full widen-on-second-tap is a TODO). */
 private data class PinSpan(val verse: String, val lo: Int, val hi: Int)
 
-private data class ReaderTypefaces(val regular: Typeface, val italic: Typeface, val bold: Typeface)
+internal data class ReaderTypefaces(val regular: Typeface, val italic: Typeface, val bold: Typeface)
+
+/** The three canvas faces, parsed at most once per PROCESS.
+ *
+ *  This was a `remember` inside the pane, so it was once per pane INSTANCE:
+ *  three panes meant three parses of the same 1.6 MB of variable TTF, and
+ *  every pane add, fold change and Activity recreate paid again — on the main
+ *  thread, in front of first paint. The platform's own Typeface cache is nine
+ *  entries shared process-wide with everything else that names a font, so it
+ *  was never a promise worth leaning on.
+ *
+ *  Holding these forever is the point and costs nothing extra: they are the
+ *  faces the reader is always looking at, and a [Typeface] holds no Context. */
+private val TYPEFACES = Once<ReaderTypefaces>()
+
+internal fun readerTypefaces(context: Context): ReaderTypefaces = TYPEFACES.get { loadTypefaces(context) }
 
 private fun loadTypefaces(context: Context): ReaderTypefaces {
     fun asset(path: String): Typeface? =
@@ -191,7 +206,7 @@ fun ReaderPane(
     val fontPx = with(density) { fontSizeSp.sp.toPx() }
     val marginPx = with(density) { MARGIN_DP.dp.toPx() }
 
-    val typefaces = remember { loadTypefaces(context) }
+    val typefaces = remember(context) { readerTypefaces(context) }
     val paints = remember(fontPx) {
         fun p(tf: Typeface) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = tf; textSize = fontPx

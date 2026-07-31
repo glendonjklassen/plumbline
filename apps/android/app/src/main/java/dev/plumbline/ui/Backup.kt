@@ -17,11 +17,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.plumbline.isTempName
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -40,6 +44,19 @@ private val BACKUP_DIRS = listOf("tags", "threads", "weaves", "notes", "memory",
  *  home on purpose: the move-in is a rename, and a rename is only atomic within
  *  one filesystem (the cache dir can be a different one). */
 private const val RESTORE_STAGE = ".restore-tmp"
+
+/** One restore at a time, because [RESTORE_STAGE] is ONE directory for the
+ *  whole process and the first thing a restore does is wipe it.
+ *
+ *  This was free while the zip ran on the main thread — two restores could not
+ *  overlap because the UI could not accept the second tap — and moving the I/O
+ *  to a background dispatcher is exactly what takes that away. Two overlapping
+ *  restores would have the second's `deleteRecursively` delete the first's
+ *  staged files out from under it, and the first would then fail its
+ *  did-everything-unpack check, having already told the reader nothing.
+ *  Serialized here rather than in the UI so the invariant belongs to the thing
+ *  that owns the directory (ConcurrentRestoreTest). */
+private val restoreLock = Any()
 
 /** Archives written before the Plumbline rename carry the config under
  *  "pure-study/"; the live home uses "plumbline/". Restore-side only — nothing
@@ -88,7 +105,7 @@ internal fun restoreDestination(entryName: String): String? {
  *  download or a bad CRC leaves the reader's study data exactly as it was;
  *  streaming entries straight over the home, as this used to, left it
  *  half-overwritten with no way back. */
-internal fun restoreZipInto(home: File, openZip: () -> InputStream): Int {
+internal fun restoreZipInto(home: File, openZip: () -> InputStream): Int = synchronized(restoreLock) {
     val stage = File(home, RESTORE_STAGE)
     stage.deleteRecursively() // an attempt that died mid-flight leaves one behind
     try {
@@ -199,32 +216,55 @@ fun restoreBackupZip(context: Context, home: File, uri: Uri): Int =
     restoreZipInto(home) { context.contentResolver.openInputStream(uri)!! }
 
 /** The two Settings rows: back up to a zip, restore from one (then the
- *  activity recreates so the engine re-opens over the restored home). */
+ *  activity recreates so the engine re-opens over the restored home).
+ *
+ *  BOTH ZIPS RUN OFF THE MAIN THREAD (2026-07-30). They used to run inside the
+ *  SAF result callback, which is the main thread: a backup walks every authored
+ *  dir and deflates it into a stream the content provider owns, and a restore
+ *  unpacks, fsyncs and renames every entry — file I/O of unbounded size on the
+ *  thread that draws.
+ *
+ *  The `runCatching` stays INSIDE the dispatch, and that placement is the whole
+ *  of the error contract. It turns a throw into the same -1 the reader was
+ *  always told about; let it escape `withContext` instead and the failure would
+ *  cancel the scope with no toast at all — a backup that silently did nothing,
+ *  which is the one outcome worse than a slow one. The three restore verdicts
+ *  (recreate / nothing-of-ours / failed) are unchanged, and both toasts are
+ *  raised after the dispatch returns, back on the main thread. */
 @Composable
 fun BackupRestoreRows(palette: ReaderPalette) {
     val context = LocalContext.current
     val home = context.filesDir
+    val scope = rememberCoroutineScope()
 
     val backupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip"),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val n = runCatching { writeBackupZip(context, home, uri) }.getOrElse { -1 }
-        Toast.makeText(
-            context,
-            if (n >= 0) "Backed up $n files" else "Backup failed",
-            Toast.LENGTH_SHORT,
-        ).show()
+        scope.launch {
+            val n = withContext(Dispatchers.IO) {
+                runCatching { writeBackupZip(context, home, uri) }.getOrElse { -1 }
+            }
+            Toast.makeText(
+                context,
+                if (n >= 0) "Backed up $n files" else "Backup failed",
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
     }
     val restoreLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val n = runCatching { restoreBackupZip(context, home, uri) }.getOrElse { -1 }
-        when {
-            n > 0 -> (context as? Activity)?.recreate()
-            n == 0 -> Toast.makeText(context, "No study data found in that zip", Toast.LENGTH_SHORT).show()
-            else -> Toast.makeText(context, "Restore failed", Toast.LENGTH_SHORT).show()
+        scope.launch {
+            val n = withContext(Dispatchers.IO) {
+                runCatching { restoreBackupZip(context, home, uri) }.getOrElse { -1 }
+            }
+            when {
+                n > 0 -> (context as? Activity)?.recreate()
+                n == 0 -> Toast.makeText(context, "No study data found in that zip", Toast.LENGTH_SHORT).show()
+                else -> Toast.makeText(context, "Restore failed", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
