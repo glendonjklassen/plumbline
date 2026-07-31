@@ -36,6 +36,70 @@
    *  parse/format reaches the ABI. */
   const goUri = (refKey: string): string => `go:${refKey.replace(/ (?=\S*$)/, ":")}`;
 
+  // ── the last net (audit D-12) ───────────────────────────────────────────────
+  // There was no global handler anywhere in this product. An exception thrown in
+  // an effect, a component that failed to render, a rejected promise nobody
+  // awaited — every one of them went to the console of a device that has no
+  // console, and the reader was left with a screen that had quietly stopped
+  // answering. This says so, and offers the one remedy there is.
+  //
+  // A NET, not a diagnosis. It deliberately does not swallow anything (no
+  // `preventDefault`), so the console, the browser's own reporting and every
+  // existing catch still see exactly what they saw before.
+  let mishap = $state<string | null>(null);
+  /** Whether the bar has already been raised (or refused) this session. */
+  let mishapSpent = false;
+  /** The document is going away. A reload or a close abandons everything in
+   *  flight — an engine read mid-answer, a depot write mid-put — and the
+   *  rejections that follow are teardown, not a fault the reader can act on.
+   *  They are also the likeliest false positive this bar has, because Retry and
+   *  the update notice both reload on purpose. */
+  let leaving = false;
+  addEventListener("pagehide", () => (leaving = true));
+
+  /** Raise the bar for a fault nothing else surfaced.
+   *
+   *  ONCE PER SESSION, and that is the whole anti-spam rule. Faults arrive in
+   *  storms — a render that throws throws again on every reactive pass, a poll
+   *  that rejects rejects again on its next tick — and a bar that re-rendered,
+   *  or even re-counted, per event would become the failure. The first one
+   *  raises it; the rest go to the console, because the message could not change
+   *  anyway: there is exactly one thing to offer.
+   *
+   *  Dismissal is final for the same reason. Reloading is the remedy, and a
+   *  reader who has declined it should not be asked again by the very loop that
+   *  is broken.
+   *
+   *  NOT WHILE THE SPLASH IS UP, which is exactly `session === null`. Boot
+   *  failure has its own screen — mapped copy, the raw string behind a details,
+   *  and a Retry (D-11) — and a bar over it would be the same news twice, told
+   *  worse. (Testing `error` as well would be wrong, not merely redundant: it can
+   *  only be set alongside a live session by a throw in the tail of `start()`,
+   *  after the shell is up, and that is a fault worth reporting.) */
+  function noteMishap(detail: string): void {
+    if (mishapSpent || leaving || !session) return;
+    mishapSpent = true;
+    mishap = detail;
+  }
+
+  /** The one fault this net deliberately drops. Chromium dispatches a window
+   *  `error` reading "ResizeObserver loop completed with undelivered
+   *  notifications" whenever an observer callback runs out of passes — it is a
+   *  notice, not a failure, nothing is broken by it, and this shell runs three
+   *  observers (the reader pane, the canon strip, the connectors overlay). It is
+   *  the classic false positive of every global handler ever written, and a bar
+   *  that cries wolf on a window resize is worse than no bar. */
+  const BENIGN = /^ResizeObserver loop/;
+
+  addEventListener("error", (e: ErrorEvent) => {
+    if (BENIGN.test(e.message ?? "")) return;
+    noteMishap(e.error instanceof Error ? `${e.error.name}: ${e.error.message}` : e.message || "error");
+  });
+  addEventListener("unhandledrejection", (e: PromiseRejectionEvent) => {
+    const r = e.reason;
+    noteMishap(r instanceof Error ? `${r.name}: ${r.message}` : String(r));
+  });
+
   async function start(): Promise<void> {
     try {
       const rpc = new EngineRpc();
@@ -122,6 +186,13 @@
       if (routed) s.navigate(0, routed.book, routed.chapter, null, { history: false });
       s.installRouter();
       session = s;
+      // The worker dying AFTER boot had nowhere to go — worker-death.spec.ts says
+      // so in as many words ("the shell has no post-boot fatal UI to show yet…
+      // the hook is where that UI will attach"). It is not a window `error`, so
+      // the net above cannot see it; it is attached HERE, after the splash has
+      // handed over, so a death DURING boot is still the splash's to report and
+      // is never told twice.
+      rpc.onFatal = (e) => noteMishap(e.message);
       // After the TOC is in, so navigation clamps against a real canon. AFTER the
       // hash too, and deliberately: `?at=` names a verse, so it is the more
       // specific of the two and wins when a link carries both.
@@ -180,6 +251,20 @@
           : "Opening the text…",
   );
 </script>
+
+{#if mishap}
+  <!-- Outside the session block on purpose: whatever broke may be the thing that
+       renders the app, so this must not be nested inside it. -->
+  <div class="mishap" role="alert">
+    <span class="what">Something went wrong — reload</span>
+    <button class="act" onclick={() => location.reload()}>Reload</button>
+    <button class="act" onclick={() => (mishap = null)}>Dismiss</button>
+    <details>
+      <summary>Technical details</summary>
+      <pre>{mishap}</pre>
+    </details>
+  </div>
+{/if}
 
 {#if session}
   {#if session.showFirstRun}
@@ -344,4 +429,47 @@
     user-select: text;
   }
 
+  /* ── the global failure bar (audit D-12) ─────────────────────────────────── */
+  /* A TOP bar, where the shell's two sticky notices are bottom ones: this can
+     appear at the same time as either, and the one thing it must not do is land
+     on top of the notice about the reader's unsaved work. Above everything
+     (the app's ceiling is z-index 60) — if this is showing, it is the most
+     important thing on the screen. */
+  .mishap {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 70;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    /* An installed PWA draws under the status bar (viewport-fit=cover), so the
+       inset is the difference between a readable bar and one behind the clock.
+       Through the shared variable, not `env()` directly: app.css names the four
+       insets once and is the only place that writes `env()`, which is what lets
+       a headless browser — which has no notch and never will — drive them. */
+    padding: calc(8px + var(--safeTop, 0px)) 12px 8px;
+    background: var(--ink, #211f1a);
+    color: var(--paper, #fcf9f4);
+    border-bottom: 4px solid var(--tierResearch, #b04a3a);
+    font-size: 14px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  }
+  .mishap .what {
+    flex: 1 1 auto;
+  }
+  .mishap .act {
+    padding: 5px 12px;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  .mishap details {
+    flex: 1 1 100%;
+    color: inherit;
+    opacity: 0.8;
+  }
 </style>
