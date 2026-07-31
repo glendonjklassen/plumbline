@@ -45,6 +45,8 @@ interface AxNode {
   /** A slider's spoken value (`aria-valuetext`), which is what matters here: the
    *  numeric `aria-valuenow` is "book 43 of 66", and nobody can act on that. */
   valuetext: string;
+  /** `"polite"` / `"assertive"` on a live region, `""` otherwise. */
+  live: string;
 }
 
 /**
@@ -70,6 +72,38 @@ async function axTree(page: Page): Promise<AxNode[]> {
       valuetext: String(
         (n.properties ?? []).find((p: any) => p.name === "valuetext")?.value?.value ?? "",
       ),
+      live: String((n.properties ?? []).find((p: any) => p.name === "live")?.value?.value ?? ""),
+    }));
+}
+
+/**
+ * Chromium's live regions and the text each one currently holds.
+ *
+ * A live region's own accessible NAME is empty — `role="status"` does not take
+ * its name from its contents — so what a screen reader would speak is the text
+ * of the subtree, which means walking `childIds` rather than reading one node.
+ * `InlineTextBox` children are dropped for the same reason as above: they repeat
+ * their StaticText parent and would say every book twice.
+ */
+async function axLiveRegions(page: Page): Promise<{ role: string; live: string; text: string }[]> {
+  const cdp = await page.context().newCDPSession(page);
+  const { nodes } = (await cdp.send("Accessibility.getFullAXTree" as any)) as any;
+  await cdp.detach();
+  const kept = (nodes as any[]).filter((n) => !n.ignored && n.role?.value !== "InlineTextBox");
+  const byId = new Map(kept.map((n) => [n.nodeId, n]));
+  const text = (n: any): string =>
+    [
+      String(n.name?.value ?? "") || String(n.value?.value ?? ""),
+      ...(n.childIds ?? []).map((id: string) => byId.get(id)).filter(Boolean).map(text),
+    ]
+      .join(" ")
+      .trim();
+  return kept
+    .filter((n) => (n.properties ?? []).some((p: any) => p.name === "live" && p.value?.value))
+    .map((n) => ({
+      role: String(n.role?.value ?? ""),
+      live: String((n.properties ?? []).find((p: any) => p.name === "live").value.value),
+      text: text(n),
     }));
 }
 
@@ -303,21 +337,96 @@ test("the canon strip is reachable and operable by keyboard", async ({ page }) =
   // And it reaches the accessibility tree as ONE named slider, positioned where
   // the markup says it is.
   //
-  // This used to assert the tree's `valuetext` was "Revelation" and it no longer
-  // can: Chromium stopped computing `aria-valuetext` for a canvas with
+  // This used to assert the tree's `valuetext` was "Revelation" and it cannot:
+  // Chromium stopped computing `aria-valuetext` for a canvas with
   // `role="slider"`. The node comes back with `valuetext: ""` and
   // `value: <aria-valuenow>` — verified against a tree dump on 2026-07-30, with
   // the DOM carrying `aria-valuetext="John"` at the same instant, and it fails
-  // the same way on a tree with none of that day's changes in it. So the
-  // assertion moved to what this shell controls (the attributes, checked three
-  // times above) plus what the tree still reports. **That leaves a real question
-  // for a screen reader on Chromium — it would announce the position as "42"
-  // rather than "Revelation" — logged as its own item in TODO §D rather than
-  // papered over here.**
+  // the same way on a tree with none of that day's changes in it. So what is
+  // asserted here is what this shell controls (the attributes, checked three
+  // times above) plus what the tree still reports, and the `valuetext: ""` below
+  // is pinned deliberately: it is the browser behaviour this is working around,
+  // and if Chromium ever starts computing it again, that line is what says so.
+  //
+  // The position a screen reader is actually GIVEN — "Revelation" and not "42" —
+  // is a second channel, a polite live region beside the canvas, and it has a
+  // test of its own directly below. Neither test stands without the other: the
+  // attributes are right and unheard, the live region is heard and carries no
+  // position of its own.
   const tree = await axTree(page);
   const sliders = tree.filter((n) => n.role === "slider" && n.name === "Jump to a book");
   expect(sliders, "the canon strip is not one named slider in the tree").toHaveLength(1);
   const now = await strip.getAttribute("aria-valuenow");
   expect(sliders[0].value, "the tree's position disagrees with aria-valuenow").toBe(String(now));
   expect(await strip.getAttribute("aria-valuetext")).toBe("Revelation");
+  expect(
+    sliders[0].valuetext,
+    "Chromium is computing valuetext for a canvas slider again — the live region below may no longer be needed",
+  ).toBe("");
+});
+
+// The second channel: the book, spoken.
+//
+// Because `aria-valuetext` is not computed for this node, everything the strip
+// says about WHERE IT IS has to reach a screen reader some other way. A polite
+// live region does it, and this test is about the region BEHAVING as one — in
+// Chromium's own tree, with the book's name in it — rather than about markup
+// that looks right. An `aria-live` attribute on an element the tree has dropped
+// (`display: none`, `visibility: hidden`, an `aria-hidden` ancestor) reads
+// perfectly in the DOM and announces nothing at all, which is precisely the
+// class of mistake this file exists to catch.
+//
+// Mutations, all three run:
+//   * deleting `spoken = book.name ?? book.id;` from `goTo` → 'Error: the canon
+//     strip announced nothing when it moved  expect(received).toBe(expected)
+//     Expected: "Acts"  Received: ""'.
+//   * `.announce { display: none }` → 'Error: the announcement is not in the
+//     accessibility tree, so nothing will speak it  expect(received).toEqual
+//     (expected)  - Array ["polite"]  + Array []'. Every DOM assertion above it
+//     still passes: the attribute is there, the text is there, and a screen
+//     reader hears nothing. That gap is the reason the tree is consulted at all.
+//   * removing BOTH `aria-live="polite"` and `role="status"` → 'Error:
+//     expect(locator).toHaveAttribute() failed  Locator: locator(".strip
+//     [aria-live]")  Error: element(s) not found'. Both have to go: Chromium
+//     reports `live: "polite"` for either one on its own.
+test("the canon strip announces the book it lands on", async ({ page }) => {
+  await boot(page);
+  await settleBackground(page); // it announces a NAME, so it needs the TOC
+
+  const announce = page.locator(".strip [aria-live]");
+  await expect(announce).toHaveAttribute("aria-live", "polite");
+  // Silent until the strip is moved: a region that arrives already full would
+  // speak the book on every page load, over whatever else is being read out.
+  await expect(announce).toHaveText("");
+
+  const strip = page.getByRole("slider", { name: "Jump to a book" });
+  await strip.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(announce, "the canon strip announced nothing when it moved").toHaveText("Acts");
+
+  // Chromium agrees it is a live region, and the book is inside it — the two
+  // halves of "a screen reader will say this".
+  const spoken = await axLiveRegions(page);
+  const withBook = spoken.filter((r) => r.text.includes("Acts"));
+  expect(
+    withBook.map((r) => r.live),
+    "the announcement is not in the accessibility tree, so nothing will speak it",
+  ).toEqual(["polite"]);
+
+  // It follows the strip, and it says the BOOK — not "42", and not a chapter.
+  await page.keyboard.press("End");
+  await expect(announce).toHaveText("Revelation");
+
+  // And it stays quiet for everything that is not the strip moving. Stepping a
+  // chapter is the same book, and navigating from elsewhere already announces
+  // itself through the pane's own region — a second voice would talk over it.
+  await page.evaluate(() => (window as any).__plumbline.stepChapter(0, 1));
+  await expect(page.locator(".pane .nav .passage")).toHaveText("Revelation 2 ▾");
+  await expect(announce, "a chapter step is not a move along the canon").toHaveText("Revelation");
+  await page.evaluate(() => (window as any).__plumbline.navigate(0, "Gen", 1));
+  await expect(page.getByRole("region", { name: "Genesis 1" })).toBeVisible();
+  await expect(
+    announce,
+    "navigating from somewhere else made the strip speak over whatever took the reader there",
+  ).toHaveText("Revelation");
 });

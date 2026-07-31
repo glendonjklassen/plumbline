@@ -79,9 +79,30 @@
     });
   });
 
+  // WHAT THE STRIP SAYS OUT LOUD.
+  //
+  // Chromium no longer computes `aria-valuetext` for a canvas with
+  // `role="slider"`: a full AX-tree dump on 2026-07-30 has the node coming back
+  // with `valuetext: ""` and `value` set to `aria-valuenow`, while the DOM
+  // carries `aria-valuetext="Revelation"` at that same instant. So a screen
+  // reader driving this strip was told the position was "42".
+  //
+  // The attributes below stay — they are correct, and they are what other AT
+  // reads. This is a second channel beside them: a polite live region carrying
+  // the BOOK'S NAME.
+  //
+  // Set here, in the one function that moves the strip, and not derived from the
+  // active pane: a live region fed by the pane would also speak when the reader
+  // navigated from BookNav, a link or a search result, announcing the book on top
+  // of whatever took them there. It speaks when the strip is what moved.
+  // Assigning the same name twice is silence, which is right — nothing moved.
+  let spoken = $state("");
+
   function goTo(idx: number): void {
     const book = toc?.books?.[Math.min(bookCount - 1, Math.max(0, idx))];
-    if (book) s.navigate(s.activePane, book.id, 1);
+    if (!book) return;
+    spoken = book.name ?? book.id;
+    s.navigate(s.activePane, book.id, 1);
   }
 
   function onClick(e: MouseEvent): void {
@@ -134,6 +155,11 @@
     onclick={onClick}
     onkeydown={onKeydown}
   ></canvas>
+  <!-- The book, spoken. See `spoken` above for why this exists beside attributes
+       that are already correct. Hidden the same way ReaderPane's text mirror is
+       — a clipped 1px box, never `display: none` or `aria-hidden`, either of
+       which takes it out of the accessibility tree and silences it. -->
+  <span class="announce" role="status" aria-live="polite">{spoken}</span>
 </div>
 
 <style>
@@ -150,5 +176,20 @@
   canvas:focus-visible {
     outline: 2px solid var(--gold, #9e7d38);
     outline-offset: -2px;
+  }
+  /* Hidden to the eye, present to everything else — ReaderPane's `.mirror`
+     technique, and for the same reason: `display: none` and `visibility: hidden`
+     both drop a live region out of the tree, and a live region that is not in the
+     tree announces nothing. `position: fixed` keeps the box out of the 30px band
+     rather than adding a row to it. */
+  .announce {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 </style>
