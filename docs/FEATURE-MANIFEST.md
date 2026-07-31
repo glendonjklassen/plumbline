@@ -483,6 +483,32 @@ The segments + divide are the **single source** `core::reference::CANON_SEGMENTS
 Neither shell hardcodes the bands; both fetch the endpoint once and share the
 answer between the strip/navigator and the map popups.
 
+## Addressable chapters (2026-07-30) — WEB ONLY, by nature
+
+Pane 0 mirrors into `location.hash` as `#/John/3`, so a chapter can be
+bookmarked, shared or reloaded onto itself. `replaceState` on an ordinary
+chapter turn, `pushState` only when a transient surface opens — that
+distinction is the feature, not an implementation detail: without it a reader
+flicking through Psalms needs forty Back presses to leave, and Back steps them
+back through their own reading instead of closing the sheet in front of them.
+
+Precedence, all asserted in `e2e/routing.spec.ts`: an incoming address beats the
+position the reader left; a `?at=` share link beats a stale hash in the same
+URL; a malformed address falls through to the normal restore path rather than to
+a blank reader — "an address the app cannot read" is what a shared link becomes
+after a rename, and a blank first screen is the worst possible answer to it.
+
+**Delta — and it runs both ways.** Android has no URL surface to mirror into, so
+there is nothing to port: the popstate handler's twin is the `BackHandler` that
+Android has always had, and this change closed that delta from the web side
+rather than opening a new one. What is still open is the reverse: `AndroidManifest.xml`
+declares only a `MAIN`/`LAUNCHER` intent filter, so a `plumblinebible.org` link
+**opens the PWA in a browser even on a phone with the APK installed**. Closing it
+means an `android:autoVerify` App Links filter plus the hosted
+`.well-known/assetlinks.json`, which pins the app's signing certificate — that
+ties a shell delta to the release keystore, so it is a deliberate decision
+rather than an oversight.
+
 ## Search (M:660, 3739)
 
 Live per keystroke; empty query closes the panel. `goto` answer → big "go to"
