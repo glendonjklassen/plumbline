@@ -114,7 +114,7 @@ sideload block is already fixed and guarded by a test.
 - [x] **[opus]** Social metadata: meta description + full OG/Twitter block + static
   1200×630 og-image + `apple-touch-icon-180` in `index.html`; register new assets in
   `vite.config.ts` publicFiles.
-- [ ] **[opus]** **NEW 2026-07-29, found by the WebKit project (`I-01`).** `sw.js`'s
+- [x] **[opus]** **NEW 2026-07-29, found by the WebKit project (`I-01`).** `sw.js`'s
   `mayCache()` recognises "the shell document asked for as data" by comparing
   `url.href`, so ANY query string walks past it: `index.html?x`, `/?x` and
   `manifest.webmanifest?x` are all written to the cache by a non-navigation fetch.

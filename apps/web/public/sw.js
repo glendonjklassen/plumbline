@@ -60,8 +60,13 @@ const shellKey = () => new URL("./index.html", location.href).href;
  *     next offline launch is served a shell that asks for a bundle nobody has. */
 function mayCache(req, url) {
   if (req.cache === "no-store" || req.cache === "no-cache") return false;
-  const isShellDoc = url.href === shellKey() || url.href === new URL("./", location.href).href;
-  if (isShellDoc && req.mode !== "navigate") return false;
+  // By PATHNAME, not href (2026-07-30): compared as full URLs, any query string
+  // walked straight past refusal 2 — `index.html?x`, `/?x`, a cache-buster on an
+  // update check — and the document was cached by a plain fetch after all. The
+  // refusal existed for exactly that request shape, so it was closed only for the
+  // one spelling nobody uses.
+  const shellPaths = [new URL("./index.html", location.href).pathname, new URL("./", location.href).pathname];
+  if (shellPaths.includes(url.pathname) && req.mode !== "navigate") return false;
   return true;
 }
 

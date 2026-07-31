@@ -61,6 +61,7 @@ const OFFLINE_ON_WEBKIT = [
   /Settings can make the app completely offline/,
   /a stalled navigation still reaches the reader/,
   /a stalled network cannot hang the boot/,
+  /checking for an update cannot poison the cached shell/,
 ];
 
 /** Whether playwright's WebKit was ever downloaded. `executablePath()` answers

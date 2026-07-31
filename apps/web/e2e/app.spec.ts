@@ -830,12 +830,41 @@ test("checking for an update cannot poison the cached shell", async ({ page }) =
   // device holding all of scripture.
   //
   // Two rules now hold: no-store responses are never cached, and index.html is
-  // only cached for an actual navigation.
+  // only cached for an actual navigation — recognised by PATHNAME, because for a
+  // while it was recognised by full URL and `?as-data-probe` sailed past it.
   await boot(page);
-  await page.waitForTimeout(1_500);
+  // The refusals only mean anything if the worker is in the request path at all.
+  await expect
+    .poll(async () => page.evaluate(() => !!navigator.serviceWorker.controller), { timeout: 30_000 })
+    .toBe(true);
 
-  const { noStoreCached, dataDocCached } = await page.evaluate(async () => {
+  const { controlMs, noStoreCached, dataDocCached } = await page.evaluate(async () => {
     const cache = await caches.open("plumbline-v1");
+    const seen = (u: string) => cache.match(u, { ignoreVary: true }).then((h) => !!h);
+    /** Wait up to `ms` for `u` to appear; the wait it actually took, or null. */
+    const settle = async (u: string, ms: number): Promise<number | null> => {
+      const t0 = performance.now();
+      for (;;) {
+        if (await seen(u)) return performance.now() - t0;
+        if (performance.now() - t0 >= ms) return null;
+        await new Promise((r) => setTimeout(r, 25));
+      }
+    };
+
+    // DO NOT read the cache straight after the fetch. The service worker's
+    // cache.put is fire-and-forget (not awaited, not in waitUntil), so an
+    // immediate cache.match measures the race and not the rule: this test passed
+    // on chromium against the LIVE bug because the read got there first, while on
+    // WebKit the same read landed after the put and reported the truth.
+    //
+    // So the window is DERIVED from this machine, not a constant: a response the
+    // worker IS supposed to cache goes first and is timed on its way in, then a
+    // refused one gets an order of magnitude longer than that to show up anyway.
+    const control = new URL("icon.svg?control-probe", location.href).href;
+    await fetch(control).catch(() => {});
+    const controlMs = await settle(control, 20_000);
+    const grace = Math.max(1_000, (controlMs ?? 1_000) * 10);
+
     // A no-store request for something not otherwise stored.
     const probe = new URL("icon.svg?no-store-probe", location.href).href;
     await fetch(probe, { cache: "no-store" }).catch(() => {});
@@ -843,10 +872,16 @@ test("checking for an update cannot poison the cached shell", async ({ page }) =
     const asData = new URL("index.html?as-data-probe", location.href).href;
     await fetch(asData).catch(() => {});
     return {
-      noStoreCached: !!(await cache.match(probe, { ignoreVary: true })),
-      dataDocCached: !!(await cache.match(asData, { ignoreVary: true })),
+      controlMs,
+      noStoreCached: (await settle(probe, grace)) !== null,
+      dataDocCached: (await settle(asData, grace)) !== null,
     };
   });
+  expect(
+    controlMs,
+    "the control response never reached the cache, so this worker cached nothing at all and the two " +
+      "refusals below would pass for the wrong reason",
+  ).not.toBeNull();
   expect(noStoreCached, "a no-store response was cached — the request asked not to be answered from cache").toBe(
     false,
   );
