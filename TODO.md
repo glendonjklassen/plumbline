@@ -292,7 +292,7 @@ sideload block is already fixed and guarded by a test.
 - [ ] **[FABLE]** Dependency-aware invalidation design: the `authored` event should
   carry what changed; per-key/method epochs instead of one global `cacheEpoch`
   (today one write refetches the world and every fill re-runs every derived).
-- [ ] **[opus]** Move the measure memo to the Rust side of `FfiMeasure`
+- [x] **[opus]** Move the measure memo to the Rust side of `FfiMeasure`
   (`lib.rs:825-846`): kills ~60% of wasm↔JS crossings cold, ~100% on re-layout,
   and benefits Android identically (JNA upcall per token today).
 - [ ] **[FABLE]** Display-list transport: dropping `verseDisplay`/string-verse is a

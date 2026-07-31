@@ -19,9 +19,18 @@
 use plumbline_core::corpus::{Verse, FLAG_PARA, FLAG_TITLE};
 use plumbline_core::VRef;
 
+pub mod memo;
+
+pub use memo::{MeasureMemo, Memoized};
+
 /// Something that can measure the advance width of a run of text in the
 /// reader's scripture font at the current size. Implemented by each UI over
 /// its native text stack; a synthetic monospace impl backs the tests.
+///
+/// A measurement is expensive where it matters — on both shipped shells it is a
+/// call out of Rust into the platform's text stack — and scripture repeats
+/// itself, so callers should wrap their impl in [`Memoized`] rather than
+/// caching in their own language (see [`memo`] for the counted redundancy).
 pub trait Measure {
     /// Advance width of `text` in device pixels.
     fn text_width(&self, text: &str) -> f32;

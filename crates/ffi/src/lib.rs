@@ -66,7 +66,7 @@ use plumbline_core::thread::{self, LoadedThread, ThreadEntry};
 use plumbline_core::weave::{self, Link, LoadedWeave, WeaveKind};
 use plumbline_core::panel::{self, PanelSource};
 use plumbline_core::{canon, export, notes, theme, usernote, VRef};
-use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure};
+use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure, MeasureMemo, Memoized};
 use plumbline_rnd::{bridge, burst, concept, embed, morph};
 
 mod wire;
@@ -242,6 +242,16 @@ pub struct PlumblineEngine {
     /// Built on first use and cached: the navigator asks for all 1,189 chapters
     /// every time it opens, and re-walking 31,102 verses per open buys nothing.
     reading_words: OnceLock<reading::ChapterWords>,
+    /// Remembered text widths, so a run the shell has already measured is never
+    /// measured across the ABI again (see [`font_identity`] and
+    /// `plumbline_layout::memo`). Engine-scoped rather than global: it dies with
+    /// the engine, and each test gets its own.
+    ///
+    /// A Mutex because Android lays out on `Dispatchers.Default` — a pool thread
+    /// that differs from turn to turn, so a thread-local memo would be cold on
+    /// most chapter turns there. The lock is never held across the measurement
+    /// callback itself.
+    measure_memo: std::sync::Mutex<MeasureMemo>,
 }
 
 impl PlumblineEngine {
@@ -296,6 +306,7 @@ impl PlumblineEngine {
             concept: OnceLock::new(),
             leitwort: OnceLock::new(),
             reading_words: OnceLock::new(),
+            measure_memo: std::sync::Mutex::new(MeasureMemo::new()),
         }
     }
 
@@ -887,9 +898,23 @@ impl From<PlumblineLayoutConfig> for LayoutConfig {
 /// undefined behaviour — on .NET it fast-fails the process, on JNA it is
 /// swallowed and reported as `0.0`. A returned `NaN`/negative is clamped to
 /// `0.0` here (a degraded but safe layout) rather than corrupting line-breaking.
+///
+/// # Contract — the config must describe the font the callback measures with
+/// Widths are **memoized on this side of the ABI** (see [`font_identity`]), and
+/// nothing in this ABI names a typeface. So a shell that changes the font the
+/// callback measures with must also move `line_height` or `space_width` in the
+/// [`PlumblineLayoutConfig`] it passes with it. Both shipped shells do so by
+/// construction, because they derive those two BY MEASURING in the current font
+/// — the web's `space_width` is `measure(" ")` through this very callback, and
+/// Android's is `Paint.measureText("n n") − measureText("nn")` off the same Paint,
+/// with `line_height` coming from that font's own metrics. A shell that switched
+/// typeface while holding both bit-identical would be handed the previous
+/// typeface's widths: a mis-laid-out chapter.
 pub type PlumblineMeasureFn = Option<extern "C" fn(ctx: *mut c_void, text: *const c_char) -> f32>;
 
 /// Adapts a C measurement callback to the [`Measure`] trait the layout wants.
+/// Wrapped in a [`Memoized`] before it reaches the layout, so only text this
+/// engine has never measured in this font actually crosses back out.
 struct FfiMeasure {
     f: extern "C" fn(*mut c_void, *const c_char) -> f32,
     ctx: *mut c_void,
@@ -911,6 +936,42 @@ impl Measure for FfiMeasure {
             0.0
         }
     }
+}
+
+/// The identity of the font the shell is measuring with, as far as this ABI can
+/// see it — the key the width memo is held under. Two layouts that agree on it
+/// may share remembered widths; anything else re-measures.
+///
+/// Nothing in this ABI names a typeface or a size, so the identity is the only
+/// two config fields a shell derives FROM the font it measures with:
+///
+///  - `space_width` — both shells obtain it by measuring in the current font, the
+///    web literally by calling the measure callback with `" "` at every layout, so
+///    it is a live probe of the text stack rather than a stored setting. That is
+///    what makes it notice a webfont that finished loading between two layouts.
+///  - `line_height` — that font's own extent times the reader's line spacing.
+///
+/// Deliberately NOT in it:
+///
+///  - The **callback's own address**. JNA allocates a native trampoline per
+///    `Callback` instance and `StudyEngine.LayoutChapter` builds a fresh
+///    `MeasureCallback` inside every call, so on Android that address changes from
+///    one chapter turn to the next (and can be reused after GC) — keying on it
+///    would empty the memo on every turn of the gold-standard shell. `measure_ctx`
+///    is null on Android and 0 on the web, so it discriminates nothing either.
+///  - `width` and `verse_break`, which cannot change a glyph's advance. Leaving
+///    them out is what makes a rotation, a margin drag or a verse-per-line toggle
+///    re-lay out the chapter with **zero** crossings — the case the memo exists
+///    for. `para_indent`, `para_spacing` and `verse_num_gap` are arithmetic on the
+///    two fields above and would add nothing.
+///  - The AKJV overlay. It changes the TEXT, and the text is the memo's key, so a
+///    re-worded verse simply misses.
+fn font_identity(cfg: &PlumblineLayoutConfig) -> u64 {
+    // Packed rather than hashed: two f32s fit a u64 exactly, so this identity is
+    // lossless and there is no collision to reason about. Bit equality is the
+    // right test — a value that differs at all was computed from different font
+    // state, and the cost of an unnecessary clear is one slow layout.
+    ((cfg.line_height.to_bits() as u64) << 32) | cfg.space_width.to_bits() as u64
 }
 
 // ── small helpers ─────────────────────────────────────────────────────────────
@@ -1359,7 +1420,7 @@ pub unsafe extern "C" fn plumbline_engine_layout_chapter(
         if verses.is_empty() {
             return ptr::null_mut();
         }
-        let m = FfiMeasure { f: measure, ctx: measure_ctx };
+        let shell = FfiMeasure { f: measure, ctx: measure_ctx };
         // The overlay is applied HERE, on the way into the layout, so the
         // corpus itself is never touched and a verse the AKJV leaves alone
         // costs nothing (`overlay_verse` returns None and the original is laid
@@ -1375,6 +1436,15 @@ pub unsafe extern "C" fn plumbline_engine_layout_chapter(
             }
             None => verses,
         };
+        // Measure through the engine's memo. Counted from `data/kjv.jsonl`
+        // (2026-07-30): 58% of a cold chapter's measurements are of a run this
+        // layout already measured (Gen 1: 828 runs, 229 distinct), 84% over twenty
+        // consecutive chapters through one memo, and a re-layout at the same font
+        // measures nothing at all. It sits below the ABI, so Android's JNA upcalls
+        // and the web's wasm→JS crossings both shrink from one implementation —
+        // and the web's `measureCalls()` diagnostic stays honest, because a memo
+        // hit never reaches the callback that increments it.
+        let m = Memoized::new(&engine.measure_memo, font_identity(&cfg), &shell);
         let dl = layout_chapter(verses, &m, &cfg.into());
         Box::into_raw(Box::new(PlumblineDisplayList { inner: dl }))
     })
@@ -3959,3 +4029,175 @@ unsafe fn parse_target(kind: *const c_char, value: *const c_char) -> Result<TagT
 
 #[cfg(test)]
 mod tests;
+
+/// The width memo, exercised through the real C entry point rather than through
+/// `plumbline_layout`'s own tests: what is at stake here is the *wiring* — that
+/// the memo lives on the engine and so survives between two
+/// [`plumbline_engine_layout_chapter`] calls, and that [`font_identity`] notices a
+/// font change the shell only reveals through its config.
+///
+/// (These live in `lib.rs` rather than `tests.rs` because the module they cover
+/// is here; the mechanism itself is tested in `crates/layout/src/memo.rs`.)
+#[cfg(test)]
+mod measure_memo_over_the_abi {
+    use super::*;
+    use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+    use std::sync::Mutex;
+
+    const KJV: &str = concat!(
+        r#"{"format":"x","tokenization":"kjv1769-tok2","verses":2}"#,
+        "\n",
+        r#"{"b":"Gen","c":1,"t":[["","In","",[],0],["","the","",[],0],["","beginning","",["H7225"],0],["","God","",["H430"],0]],"v":1}"#,
+        "\n",
+        r#"{"b":"Gen","c":1,"t":[["","And","",[],0],["","the","",[],0],["","Spirit","",[],0],["","of","",[],0],["","God","",["H430"],0],["","moved",".",[],0]],"v":2}"#,
+    );
+
+    /// One increment is one crossing of the C ABI — a canvas `measureText` on the
+    /// web, a `Paint` upcall on Android, and exactly what the web shell's
+    /// `measureCalls()` diagnostic counts.
+    static CROSSINGS: AtomicUsize = AtomicUsize::new(0);
+    /// Every run that crossed, in order — so "measured only once" can be checked
+    /// as a fact about the text, not just a total.
+    static SEEN: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    /// The pretend font: px per character. A shell changes this without telling
+    /// the ABI, exactly as a text-size change does.
+    static CHAR_W: AtomicU32 = AtomicU32::new(10);
+    /// These tests share the statics above, and `cargo test` runs them in
+    /// parallel.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
+    extern "C" fn counting_measure(_ctx: *mut c_void, text: *const c_char) -> f32 {
+        CROSSINGS.fetch_add(1, Ordering::Relaxed);
+        let s = unsafe { CStr::from_ptr(text) }.to_str().unwrap_or("").to_string();
+        let w = s.chars().count() as f32 * CHAR_W.load(Ordering::Relaxed) as f32;
+        SEEN.lock().unwrap().push(s);
+        w
+    }
+
+    /// Claim the shared statics and reset the counters.
+    fn start(char_w: u32) -> std::sync::MutexGuard<'static, ()> {
+        let g = SERIAL.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        CROSSINGS.store(0, Ordering::Relaxed);
+        CHAR_W.store(char_w, Ordering::Relaxed);
+        SEEN.lock().unwrap().clear();
+        g
+    }
+
+    fn cfg(line_height: f32, space_width: f32, width: f32) -> PlumblineLayoutConfig {
+        PlumblineLayoutConfig {
+            width,
+            line_height,
+            space_width,
+            verse_num_gap: 4.0,
+            para_indent: 16.0,
+            para_spacing: 8.0,
+            verse_break: 0,
+        }
+    }
+
+    /// Lay Gen 1 out through the ABI and return the width of the box painting
+    /// `word`, plus how many runs crossed during this call.
+    unsafe fn lay_out(engine: *mut PlumblineEngine, cfg: PlumblineLayoutConfig, word: &str) -> (f32, usize) {
+        let before = CROSSINGS.load(Ordering::Relaxed);
+        let book = CString::new("Gen").unwrap();
+        let dl = plumbline_engine_layout_chapter(
+            engine,
+            book.as_ptr(),
+            1,
+            cfg,
+            Some(counting_measure),
+            ptr::null_mut(),
+        );
+        assert!(!dl.is_null(), "Gen 1 must lay out");
+        let json_ptr = plumbline_layout_to_json(dl);
+        let json = CStr::from_ptr(json_ptr).to_str().unwrap().to_string();
+        plumbline_string_free(json_ptr);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let w = parsed["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|i| i["text"] == word)
+            .unwrap_or_else(|| panic!("no box paints {word}"))["w"]
+            .as_f64()
+            .unwrap() as f32;
+        plumbline_layout_free(dl);
+        (w, CROSSINGS.load(Ordering::Relaxed) - before)
+    }
+
+    unsafe fn open() -> *mut PlumblineEngine {
+        // An empty Strong's dictionary: layout never consults it.
+        const STRONGS: &str = "{}";
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open_from_bytes(
+            KJV.as_ptr(),
+            KJV.len(),
+            STRONGS.as_ptr(),
+            STRONGS.len(),
+            &mut err,
+        );
+        assert!(err.is_null() && !e.is_null(), "engine should open");
+        e
+    }
+
+    #[test]
+    fn each_distinct_run_crosses_the_abi_once_and_a_re_layout_crosses_not_at_all() {
+        let _serial = start(10);
+        unsafe {
+            let engine = open();
+
+            // 12 runs are laid out (2 verse numbers + 10 tokens) but "the" and
+            // "God" each occur twice, so only 10 distinct ones may cross.
+            let (god, cold) = lay_out(engine, cfg(20.0, 5.0, 10_000.0), "God");
+            assert_eq!(god, 30.0);
+            assert_eq!(cold, 10, "one crossing per DISTINCT run, not per token");
+            let seen = SEEN.lock().unwrap().clone();
+            let mut once = seen.clone();
+            once.sort();
+            once.dedup();
+            assert_eq!(once.len(), seen.len(), "a run crossed twice: {seen:?}");
+
+            // The same chapter again, same font: the memo is on the ENGINE, so
+            // this is free.
+            let (again, warm) = lay_out(engine, cfg(20.0, 5.0, 10_000.0), "God");
+            assert_eq!(warm, 0, "a re-layout must not cross at all");
+            assert_eq!(again, god);
+
+            // A narrower column re-wraps the chapter without re-measuring a
+            // glyph: `width` is deliberately outside the font identity, which is
+            // what makes a rotation or a margin drag free too.
+            let (narrow, resized) = lay_out(engine, cfg(20.0, 5.0, 200.0), "God");
+            assert_eq!(resized, 0, "a resize measures nothing new");
+            assert_eq!(narrow, god);
+
+            plumbline_engine_free(engine);
+        }
+    }
+
+    #[test]
+    fn a_text_size_change_re_measures_instead_of_reusing_the_old_widths() {
+        let _serial = start(10);
+        unsafe {
+            let engine = open();
+            let (small, _) = lay_out(engine, cfg(20.0, 5.0, 10_000.0), "God");
+            assert_eq!(small, 30.0);
+
+            // The reader bumps the text size: the shell measures with a bigger
+            // font and passes the line height + space advance it derived from
+            // that same font. Nothing else tells this ABI anything changed.
+            CHAR_W.store(20, Ordering::Relaxed);
+            let (big, crossings) = lay_out(engine, cfg(40.0, 10.0, 10_000.0), "God");
+            assert_eq!(big, 60.0, "the new size's width, not the remembered one");
+            assert_eq!(crossings, 10, "every run is re-measured at the new size");
+
+            // …and the new widths are what is remembered now: going back to the
+            // small size re-measures rather than serving these.
+            CHAR_W.store(10, Ordering::Relaxed);
+            let (back, recrossed) = lay_out(engine, cfg(20.0, 5.0, 10_000.0), "God");
+            assert_eq!(back, 30.0);
+            assert_eq!(recrossed, 10);
+
+            plumbline_engine_free(engine);
+        }
+    }
+}

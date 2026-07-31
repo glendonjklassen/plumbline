@@ -80,6 +80,18 @@ typedef struct PlumblineLayoutConfig {
 // undefined behaviour — on .NET it fast-fails the process, on JNA it is
 // swallowed and reported as `0.0`. A returned `NaN`/negative is clamped to
 // `0.0` here (a degraded but safe layout) rather than corrupting line-breaking.
+//
+// # Contract — the config must describe the font the callback measures with
+// Widths are **memoized on this side of the ABI** (see [`font_identity`]), and
+// nothing in this ABI names a typeface. So a shell that changes the font the
+// callback measures with must also move `line_height` or `space_width` in the
+// [`PlumblineLayoutConfig`] it passes with it. Both shipped shells do so by
+// construction, because they derive those two BY MEASURING in the current font
+// — the web's `space_width` is `measure(" ")` through this very callback, and
+// Android's is `Paint.measureText("n n") − measureText("nn")` off the same Paint,
+// with `line_height` coming from that font's own metrics. A shell that switched
+// typeface while holding both bit-identical would be handed the previous
+// typeface's widths: a mis-laid-out chapter.
 typedef float (*PlumblineMeasureFn)(void *ctx, const char *text);
 
 #ifdef __cplusplus
