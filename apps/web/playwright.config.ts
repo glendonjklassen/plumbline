@@ -30,30 +30,31 @@ import { existsSync } from "node:fs";
  *      the device, not merely whatever this page happened to load.
  *    - "Settings can make the app completely offline …" — every pack file really
  *      is there, which is the claim a tighter storage budget falsifies quietly.
- *    - the two stalled-origin boots in network.spec.ts — the document served
- *      from cache with no usable network. They stand in for the offline test
- *      below, because their "offline" is a real held-open socket underneath the
- *      browser rather than the browser's own emulation.
+ *    - "checking for an update cannot poison the cached shell" — added
+ *      2026-07-30, and it is here because it FAILED here. WebKit reported the
+ *      document as cached while chromium passed, and WebKit was right: mayCache()
+ *      recognised "index.html asked for as data" by comparing whole URLs, so any
+ *      query string walked past it. Chromium cached it too and passed only
+ *      because the page read the cache before the worker's un-awaited put landed.
+ *      The comparison is by pathname now and the test waits out the put — this is
+ *      the engine that noticed, so this is the engine that keeps watching.
+ *    - the stalled- and dead-origin boots in network.spec.ts — the document
+ *      served from cache with no usable network. Their "offline" is a real socket
+ *      underneath the browser rather than the browser's own emulation, which is
+ *      the only kind WebKit can be tested with at all (see below).
  *
- *  Two are missing on purpose, and both are findings rather than tidying:
+ *  One is missing on purpose, and it is a finding rather than tidying:
  *
- *    - "boots offline after ONE visit" CANNOT run on WebKit. Playwright's
- *      context.setOffline(true) stops WebKit consulting the service worker at
- *      all: the reload dies with "WebKit encountered an internal error" and a
- *      page fetch throws TypeError. That is the harness, not us — a minimal
- *      cache-first service worker on a throwaway origin fails identically,
- *      while Chromium serves it from cache. The same WebKit device booted to
- *      John 3 in 222 ms with its origin genuinely refusing connections, which
- *      is why the stalled-origin pair above is the honest substitute.
- *    - "checking for an update cannot poison the cached shell" FAILS on WebKit,
- *      and the assertion is the one telling the truth: sw.js's mayCache()
- *      recognises "index.html asked for as data" by comparing url.href, so any
- *      query string walks straight past it and the document IS cached. Chromium
- *      caches it too — cache.keys() lists the entry — and passes only because
- *      the page reads the cache before the service worker's un-awaited put has
- *      landed. It belongs in this list once sw.js compares pathnames and the
- *      test stops racing the write; until then leaving it out is not weakening
- *      it, because it still runs (and still passes for that reason) on chromium.
+ *    - "boots offline after ONE visit" COULD NOT run on WebKit while its offline
+ *      was context.setOffline(true): Playwright's offline emulation stops WebKit
+ *      consulting the service worker at all — the reload dies with "WebKit
+ *      encountered an internal error" and a page fetch throws TypeError. That is
+ *      the harness, not us; a minimal cache-first service worker on a throwaway
+ *      origin fails identically, while chromium serves it from cache. It now kills
+ *      a real origin instead (network.spec.ts), which is the fix and not a
+ *      substitute — the same WebKit device booted to John 3 in 222 ms with its
+ *      origin genuinely refusing connections. It stays out of this list only
+ *      until someone has watched it pass here; add the title, do not assume it.
  */
 const OFFLINE_ON_WEBKIT = [
   /a warm boot never asks the network for the pack or the engine/,

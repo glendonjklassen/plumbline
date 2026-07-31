@@ -16,7 +16,11 @@ import type { AddressInfo } from "node:net";
 const UPSTREAM = "http://localhost:4173";
 
 /** A forwarding origin whose `stall` predicate holds matching requests open
- *  (no response, no error) for as long as the test needs. */
+ *  (no response, no error) for as long as the test needs.
+ *
+ *  `close()` also KILLS the origin mid-test — the port stops listening and every
+ *  socket is dropped, so the next request is refused rather than answered. That is
+ *  the only "offline" WebKit can be tested with (see the offline test below). */
 function stallableOrigin(): Promise<{
   url: string;
   stall: (match: string | null) => void;
@@ -49,6 +53,11 @@ function stallableOrigin(): Promise<{
         close: () =>
           new Promise((done) => {
             for (const r of held) r.destroy();
+            // closeAllConnections BEFORE close's callback is waited on: the
+            // browser holds keep-alive sockets to this origin, and server.close()
+            // resolves only once every connection has ended — so without this the
+            // await simply never returns and the test's own cleanup is the hang.
+            server.closeAllConnections();
             server.close(() => done());
           }),
       });
@@ -59,7 +68,14 @@ function stallableOrigin(): Promise<{
 /** Reload and return how long it took to get text on screen. */
 async function timedReload(page: Page): Promise<number> {
   const t0 = Date.now();
-  await page.reload();
+  // An explicit navigation timeout. Every test in this file gets 240 s
+  // (test.setTimeout below), so a navigation that never resolves spends the whole
+  // budget and is then reported as the TEST timing out, which names nothing. That
+  // is exactly how the held-back first-run fix presented (TODO D-08, 2026-07-29):
+  // this file went from 27 s and 3/3 to 4.3 min with one test hung out to the
+  // timeout, and no line in the log pointed at a reload. 45 s matches the canvas
+  // budget below, so a navigation that cannot land fails as itself.
+  await page.reload({ timeout: 45_000 });
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 45_000 });
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/);
   return Date.now() - t0;
@@ -135,6 +151,62 @@ test("a stalled navigation still reaches the reader (app shell from cache)", asy
     await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 45_000 });
   } finally {
     await origin.close();
+  }
+});
+
+test("boots offline after ONE visit — the whole promise of the thing", async ({ page }) => {
+  // A first visit must leave the device self-sufficient: someone opens a shared
+  // link once, then reads on a plane. The service worker cannot manage this alone
+  // (it isn't controlling the page while the shell loads, and it claims the engine
+  // worker mid-boot — a race the pack used to lose), so the page and the worker
+  // stash their own downloads.
+  //
+  // OFFLINE HERE IS A DEAD ORIGIN, not context.setOffline(true), and that is not
+  // a stylistic preference. Playwright's offline emulation makes WebKit stop
+  // consulting the service worker at all: the reload dies with "WebKit
+  // encountered an internal error" and a page fetch throws TypeError. It was
+  // proven to be the harness and not us — a minimal cache-first service worker on
+  // a throwaway origin fails identically there, while chromium serves it from
+  // cache — so this test simply could not run on the one engine where the Cache
+  // API, eviction and the storage budget actually differ, and on iOS is the only
+  // engine there is. A closed port is what a plane does anyway: it sits below the
+  // browser where no emulation can intervene, and the same WebKit device booted
+  // to John 3 in 222 ms through one.
+  const origin = await stallableOrigin();
+  let dead = false;
+  try {
+    await firstVisit(page, origin.url);
+    // The document can only come out of storage if the worker is CONTROLLING: on
+    // a first visit it claims clients somewhere mid-boot, and a reload started
+    // before that reaches the network with nothing in its path to answer for it.
+    await expect
+      .poll(async () => page.evaluate(() => !!navigator.serviceWorker.controller), { timeout: 30_000 })
+      .toBe(true);
+    // And the shell has to be COMPLETE before the network goes away. The precache
+    // runs at the first idle after boot; polling it beats the 1.5 s sleep in
+    // firstVisit, because a reload missing one lazily-imported bundle white-screens
+    // for a reason that has nothing to do with what this test is about.
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(async () => {
+            const m = await (await fetch("shell-manifest.json")).json();
+            const cache = await caches.open("plumbline-v1");
+            for (const f of m.files)
+              if (!(await cache.match(new URL(f, location.href).href, { ignoreVary: true }))) return f;
+            return null;
+          }),
+        { timeout: 60_000, message: "the shell precache never finished, so going offline proves nothing yet" },
+      )
+      .toBeNull();
+
+    // Kill it. From here every request is refused at the socket, so anything the
+    // boot still needs from the network is a failure and not a slow pass.
+    await origin.close();
+    dead = true;
+    await timedReload(page);
+  } finally {
+    if (!dead) await origin.close();
   }
 });
 

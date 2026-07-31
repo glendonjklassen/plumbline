@@ -641,35 +641,18 @@ test("backup round-trips through a zip", async ({ page }, testInfo) => {
 // The bugs these cover all shipped: two panes of John 3 on a phone, the intro
 // on every launch, a reload that hung on "preparing your study tools", an
 // 8.4 s cold parse, and an app that could not actually run offline.
-
-test("boots offline after ONE visit — the whole promise of the thing", async ({ page, context }) => {
-  // A first visit must leave the device self-sufficient: someone opens a
-  // shared link once, then reads on a plane. The service worker cannot manage
-  // this alone (it isn't controlling the page while the shell loads, and it
-  // claims the engine worker mid-boot — a race the pack used to lose), so the
-  // page and the worker stash their own downloads.
-  await boot(page);
-  await expect
-    .poll(async () => page.evaluate(() => (window as any).__plumbline?.bootTrace?.length ?? 0), {
-      timeout: 30_000,
-    })
-    .toBeGreaterThan(0); // boot finished; precache runs at the following idle
-  await page.waitForTimeout(1_500);
-
-  await context.setOffline(true);
-  try {
-    await page.reload();
-    await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 60_000 });
-    await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/);
-  } finally {
-    await context.setOffline(false);
-  }
-});
+//
+// "boots offline after ONE visit" used to live here. It moved to
+// network.spec.ts (2026-07-30) because its offline had to become a DEAD ORIGIN:
+// context.setOffline(true) makes WebKit stop consulting the service worker
+// altogether, so the one engine where the offline promise is hardest to keep was
+// the one engine that could not check it. The stallable origin it now needs is
+// that file's machinery.
 
 test("a warm boot never asks the network for the pack or the engine", async ({ page }) => {
-  // The offline test above cannot tell depot-served from service-worker-served:
-  // with both in play it passes either way, so it would go green against a boot
-  // that secretly still depends on the SW being in the request path. That
+  // The offline test (network.spec.ts) cannot tell depot-served from service-
+  // worker-served: with both in play it passes either way, so it would go green
+  // against a boot that secretly still depends on the SW being in its path. That
   // dependency is what the depot exists to remove — on a first visit the SW is
   // not controlling the page while the shell loads, and it claims the engine
   // worker mid-boot, so whether the pack reached the cache was a race.

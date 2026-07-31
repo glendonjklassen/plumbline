@@ -416,7 +416,7 @@ sideload block is already fixed and guarded by a test.
 - [x] **[opus]** WebKit Playwright project running at least the offline trio — the
   offline promise is untested on the engine where Cache API/eviction actually
   differ.
-- [ ] **[opus]** **NEW 2026-07-29 (`I-01`).** Rewrite "boots offline after ONE visit"
+- [x] **[opus]** **NEW 2026-07-29 (`I-01`).** Rewrite "boots offline after ONE visit"
   so its offline is a DEAD ORIGIN rather than `context.setOffline(true)`. Playwright's
   emulation makes WebKit stop consulting the service worker entirely — the reload dies
   with "WebKit encountered an internal error" — proven to be the harness and not us by a
