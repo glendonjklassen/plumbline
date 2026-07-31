@@ -436,7 +436,7 @@
     <h2>Share Plumbline</h2>
     <p class="share-sub">
       {hasChurch(s.church)
-        ? `Free, offline, no account — and your church's details travel with it.`
+        ? `Free, private, offline, no account required.`
         : "Free, offline, no account."}
     </p>
     <QrCode size={220} text={link} />

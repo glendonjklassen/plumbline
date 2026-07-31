@@ -50,8 +50,8 @@
   <div class="sheet" role="dialog" aria-modal="true">
     <h2>Make a weave — {tag.name}</h2>
     <p class="hint">
-      Chains the checked passages through the canon. Run it again after the tag grows to add the
-      new links.
+      Links the verses you have ticked into a weave. Run it again later to add verses you have
+      tagged since.
     </p>
     <div class="list">
       {#each members as m (m.verse)}

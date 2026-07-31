@@ -1445,12 +1445,12 @@ private fun ExploreScreen(
 ) {
     MapOverlay("Explore", palette, onClose) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            ExploreCard("Notes", "Everything you've written on a verse, in one browsable place.", palette, onNotes)
-            ExploreCard("Threads", "Ordered trails of passages you've linked — follow a theme across the canon.", palette, onThreads)
-            ExploreCard("Tags", "Labelled sets of verses — group passages by topic.", palette, onTags)
-            ExploreCard("Weaves", "Parallel passages tied together — see how Scripture echoes itself.", palette, onWeaves)
-            ExploreCard("Constellation", "The whole weave library as lanes across the canon — tap a node to jump there.", palette, onConstellation)
-            ExploreCard("Chord map", "How strongly each pair of books is woven, drawn as arcs over the canon.", palette, onChord)
+            ExploreCard("Notes", "Everything you've written about a verse.", palette, onNotes)
+            ExploreCard("Threads", "Passages you have linked together for sermons or study themes.", palette, onThreads)
+            ExploreCard("Tags", "Labelled verses by topic.", palette, onTags)
+            ExploreCard("Weaves", "Parallel passages tied together.", palette, onWeaves)
+            ExploreCard("Constellation", "Every weave drawn as a row of dots across the Bible. Tap a dot to open that verse.", palette, onConstellation)
+            ExploreCard("Chord map", "A visualization of weaves across the Bible.", palette, onChord)
         }
     }
 }
@@ -1617,7 +1617,7 @@ private fun SettingsDialog(
                 )
                 SettingToggle(
                     "Machine analysis",
-                    "Similar concepts, appears-alongside, verses-like-this, concept maps.",
+                    "Appears-alongside, verses-like-this, concept maps.",
                     machineAnalysis, palette, onToggleMachine,
                 )
                 // A reading aid over the SAME text, not a version picker: the
@@ -1741,11 +1741,11 @@ private fun SettingsDialog(
                 )
                 SettingToggle(
                     "Present shares as a new believer",
-                    "A link shared from Present opens on the welcome for someone meeting the Bible.",
+                    "When someone opens a link you shared from Present, they see the new believer welcome first.",
                     presentSharesAsNew, palette, onPresentSharesAsNew,
                 )
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
-                SettingToggle("Bundled study set", "Ship-with-app threads, tags, and weaves.", bundledOn, palette, onToggleBundled)
+                SettingToggle("Bundled study set", "Threads, tags, and weaves that come with the app.", bundledOn, palette, onToggleBundled)
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 BackupRestoreRows(palette)
             }

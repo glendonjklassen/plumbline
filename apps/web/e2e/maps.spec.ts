@@ -474,7 +474,7 @@ test("the concept map draws a code's neighbourhood, and a spoke recentres it", a
   // destination-bar sweep does) keeps this about the MAP: which word was tapped
   // to get a code is ReaderPane's business and is tested there.
   await page.evaluate(() => ((window as any).__plumbline.panel = { kind: "codeStudy", code: "G2316", word: null }));
-  const card = page.locator(".panel").getByRole("button", { name: /where it concentrates/ });
+  const card = page.locator(".panel").getByRole("button", { name: /most used in/ });
   await expect(card, "the study panel should offer the concept map").toBeVisible({ timeout: 60_000 });
   await card.click();
   await openedMap(page, "Concept map — G2316");

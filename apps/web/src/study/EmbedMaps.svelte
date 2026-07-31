@@ -65,7 +65,7 @@
 {#if model}
   <button class="card" onclick={() => (s.mapPopup = { kind: "conceptMap", code })}>
     <span class="head">
-      <span class="title">where it concentrates</span>
+      <span class="title">most used in</span>
       <span class="open">▸ open concept map</span>
     </span>
     <div class="strip" bind:this={host}>

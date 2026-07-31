@@ -844,7 +844,7 @@ fun ThreadPickerSheet(
     fun askDelete(name: String) {
         confirmDelete = ConfirmRequest(
             title = "Delete “$name”?",
-            body = "The thread and every passage on it go. The verses themselves are untouched.",
+            body = "Do you really want to delete this?",
             verb = "Delete thread",
         ) { delete(name) }
     }

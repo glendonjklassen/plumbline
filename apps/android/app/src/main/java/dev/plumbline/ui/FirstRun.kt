@@ -555,8 +555,8 @@ private fun Tiers(
     )
     TierCard(
         palette, machine, onMachine, "Machine analysis ≈",
-        "Statistical patterns to weigh for yourself: similar concepts, words that appear " +
-            "alongside, verses like this one, and the concept maps.",
+        "Statistical patterns to weigh for yourself: words that appear alongside, verses " +
+            "like this one, and the concept maps.",
     )
     Spacer(Modifier.height(8.dp))
     Text(

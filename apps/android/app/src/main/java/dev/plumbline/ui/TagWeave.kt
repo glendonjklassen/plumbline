@@ -75,7 +75,7 @@ fun TagWeaveSheet(
         ) {
             Text("Make a weave — ${tag.name}", color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             Text(
-                "Chains the checked passages through the canon. Run it again after the tag grows to add the new links.",
+                "Links the verses you have ticked into a weave. Run it again later to add verses you have tagged since.",
                 color = palette.inkFaded,
                 fontSize = 12.5.sp,
                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),

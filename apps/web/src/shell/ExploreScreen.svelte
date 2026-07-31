@@ -15,13 +15,13 @@
   const s = getSession();
 
   const cards = [
-    { label: "Notes", desc: "Every note you've written, tap to revisit.", go: () => (s.panel = { kind: "notesBrowser" }) },
-    { label: "Threads", desc: "Trails you make — passages in your order, for your reason.", go: () => (s.panel = { kind: "threads" }) },
-    { label: "Tags", desc: "Your topics — accumulate now, weave later.", go: () => (s.panel = { kind: "tags" }) },
-    { label: "Weaves", desc: "Connections found in the text: the same passage twice.", go: () => (s.panel = { kind: "weaves" }) },
+    { label: "Notes", desc: "Everything you've written about a verse.", go: () => (s.panel = { kind: "notesBrowser" }) },
+    { label: "Threads", desc: "Passages you have linked together for sermons or study themes.", go: () => (s.panel = { kind: "threads" }) },
+    { label: "Tags", desc: "Labelled verses by topic.", go: () => (s.panel = { kind: "tags" }) },
+    { label: "Weaves", desc: "Parallel passages tied together.", go: () => (s.panel = { kind: "weaves" }) },
     { label: "Suggested", desc: "Proposed weaves awaiting your review.", go: () => (s.panel = { kind: "suggested" }) },
-    { label: "Constellation", desc: "Every weave as lanes of stars across the canon.", go: () => (s.mapPopup = { kind: "constellation" }) },
-    { label: "Weave map", desc: "Book-to-book ribbons of every link.", go: () => (s.mapPopup = { kind: "chord" }) },
+    { label: "Constellation", desc: "Every weave drawn as a row of dots across the Bible. Tap a dot to open that verse.", go: () => (s.mapPopup = { kind: "constellation" }) },
+    { label: "Weave map", desc: "A visualization of weaves across the Bible.", go: () => (s.mapPopup = { kind: "chord" }) },
   ];
 </script>
 

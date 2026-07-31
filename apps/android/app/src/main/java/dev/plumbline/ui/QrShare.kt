@@ -126,9 +126,9 @@ fun ShareAppDialog(
             Spacer(Modifier.height(4.dp))
             Text(
                 if (hasChurch(church)) {
-                    "Free, offline, no account — and your church's details travel with it."
+                    "Free, private, offline, no account required."
                 } else {
-                    "Free, offline, no account."
+                    "Free, private, offline, no account required."
                 },
                 color = Color(0xFF5A564E), fontSize = 13.sp, textAlign = TextAlign.Center,
             )

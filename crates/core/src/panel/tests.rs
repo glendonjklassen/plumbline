@@ -22,7 +22,6 @@ struct Fake {
     word_codes: HashMap<String, Vec<String>>,
     occurrences: HashMap<String, OccurrencesView>,
     bridge: HashMap<String, Vec<BridgePartnerView>>,
-    near: HashMap<String, (Vec<String>, Vec<String>)>,
     concept: HashMap<String, ConceptView>,
     xrefs: HashMap<String, Vec<XrefView>>,
     study_xrefs: HashMap<String, Vec<StudyXrefView>>,
@@ -79,9 +78,6 @@ impl PanelSource for Fake {
     }
     fn bridge_partners(&self, code: &str) -> Vec<BridgePartnerView> {
         self.bridge.get(code).cloned().unwrap_or_default()
-    }
-    fn concept_near(&self, code: &str, _k: usize) -> (Vec<String>, Vec<String>) {
-        self.near.get(code).cloned().unwrap_or_default()
     }
     fn concept(&self, code: &str) -> Option<ConceptView> {
         self.concept.get(code).cloned()
@@ -306,7 +302,6 @@ fn full_word_study_orders_the_tiers_and_marks_them() {
         }],
     );
     f.glosses.insert("H157".into(), "to love".into());
-    f.near.insert("G25".into(), (vec!["G5368".into()], vec!["H157".into()]));
     f.concept.insert(
         "G25".into(),
         ConceptView {
@@ -323,14 +318,7 @@ fn full_word_study_orders_the_tiers_and_marks_them() {
     // Tier order is fixed and complete.
     assert_eq!(
         titles,
-        vec![
-            "RENDERINGS",
-            "SAME ROOT ACROSS TESTAMENTS",
-            "SIMILAR CONCEPTS",
-            "APPEARS ALONGSIDE",
-            "WHERE IT CONCENTRATES",
-            "LEITWORT",
-        ]
+        vec!["RENDERINGS", "SAME ROOT ACROSS TESTAMENTS", "APPEARS ALONGSIDE", "MOST USED IN", "LEITWORT",]
     );
     // The morph gloss appears (Full only).
     assert!(blocks.iter().any(|b| text_of(b) == "verb, aorist active"));
@@ -419,7 +407,7 @@ fn gates_split_human_and_machine_tiers() {
     f.occ_count.insert("G25".into(), 43);
     f.entries.insert("G25".into(), StrongsView { lemma: Some("ἀγαπάω".into()), ..Default::default() });
     f.renderings.insert("G25".into(), vec![RenderingView { rendering: "loved".into(), total: 30 }]);
-    f.near.insert("G25".into(), (vec!["G5368".into()], vec![]));
+    f.concept.insert("G25".into(), ConceptView { community: vec!["G5368".into()], ..Default::default() });
     f.study_xrefs.insert(
         "John 3:16".into(),
         vec![StudyXrefView { to: "Rom 5:8".into(), to_display: "Rom 5:8".into(), end: None, end_display: None }],
@@ -429,7 +417,7 @@ fn gates_split_human_and_machine_tiers() {
     let hb = word_study_gated(&f, Gates { human: true, machine: false }, "John 3:16", 3, &["G25".to_string()]);
     let ht = section_titles(&hb);
     assert!(ht.contains(&"RENDERINGS".to_string()));
-    assert!(!ht.contains(&"SIMILAR CONCEPTS".to_string()));
+    assert!(!ht.contains(&"APPEARS ALONGSIDE".to_string()));
     assert!(uris(&hb).contains(&"go:Rom:5:8".to_string()));
     assert!(!uris(&hb).iter().any(|u| u.starts_with("conceptmap:")));
 
@@ -437,7 +425,7 @@ fn gates_split_human_and_machine_tiers() {
     let mb = word_study_gated(&f, Gates { human: false, machine: true }, "John 3:16", 3, &["G25".to_string()]);
     let mt = section_titles(&mb);
     assert!(!mt.contains(&"RENDERINGS".to_string()));
-    assert!(mt.contains(&"SIMILAR CONCEPTS".to_string()));
+    assert!(mt.contains(&"APPEARS ALONGSIDE".to_string()));
     assert!(!uris(&mb).contains(&"go:Rom:5:8".to_string()));
     assert!(uris(&mb).iter().any(|u| u.starts_with("conceptmap:")));
 }

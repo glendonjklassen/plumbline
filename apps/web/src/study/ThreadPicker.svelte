@@ -50,7 +50,7 @@
     // destructive action in the app asks the same way now.
     const ok = await s.askConfirm(
       `Delete “${name}”?`,
-      "The thread and every passage on it go. The verses themselves are untouched.",
+      "Do you really want to delete this?",
       "Delete thread",
     );
     if (!ok) return;

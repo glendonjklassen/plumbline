@@ -44,7 +44,7 @@
   async function removeCard(ref: string, label: string): Promise<void> {
     const ok = await s.askConfirm(
       `Stop memorizing ${label}?`,
-      "The card goes, along with its review history and everything it had learned about how well you know it. The verse itself is untouched.",
+      "Do you really want to delete this?",
       "Remove card",
     );
     if (!ok) return;

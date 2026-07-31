@@ -155,7 +155,7 @@
       {:else}
         {#if rndOffer}
           <div class="rnd-offer">
-            <span class="rnd-note">Similar concepts, verses-like-this, and concept maps are a one-time ~4 MB download.</span>
+            <span class="rnd-note">Verses-like-this and concept maps are a one-time ~4 MB download.</span>
             <button class="rnd-load" onclick={() => void s.ensureRnd()}>Load analysis</button>
           </div>
         {/if}

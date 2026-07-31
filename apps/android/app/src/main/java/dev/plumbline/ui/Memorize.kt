@@ -623,7 +623,7 @@ fun MemorizeActivity(engine: StudyEngine, palette: ReaderPalette, onClose: () ->
                 LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
                     item {
                         Text(
-                            "History — most recent first",
+                            "History",
                             color = palette.faded, fontSize = 12.sp,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                         )

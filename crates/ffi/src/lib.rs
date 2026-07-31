@@ -2732,15 +2732,6 @@ impl PanelSource for PlumblineEngine {
             })
             .collect()
     }
-    fn concept_near(&self, code: &str, k: usize) -> (Vec<String>, Vec<String>) {
-        match self.embedding.get() {
-            Some(emb) => (
-                emb.nearest_concepts(code, k).into_iter().map(|(c, _)| c).collect(),
-                emb.cross_concepts(code, k).into_iter().map(|(c, _)| c).collect(),
-            ),
-            None => (Vec::new(), Vec::new()),
-        }
-    }
     fn concept(&self, code: &str) -> Option<panel::ConceptView> {
         let ce = self.concept_ready()?;
         ce.stat(code)?;

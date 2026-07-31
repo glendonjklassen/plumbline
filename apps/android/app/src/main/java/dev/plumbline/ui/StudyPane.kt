@@ -32,7 +32,6 @@ import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,12 +49,8 @@ import dev.plumbline.PanelBlock
 import dev.plumbline.PanelData
 import dev.plumbline.PanelRun
 import dev.plumbline.parseWire
-import kotlinx.coroutines.delay
 
 private const val LINK_TAG = "link"
-
-/** How long a study read may take before it explains itself. */
-private const val SLOW_READ_MS = 600L
 
 /** The gap between blocks — the pane's vertical rhythm, and the reason the
  *  slot wrappers below exist. */
@@ -66,20 +61,6 @@ private val BLOCK_GAP = 8.dp
  *  unknown kind, but a lazy item that emits nothing still takes an arrangement
  *  slot and would open a gap over empty space. */
 private val PAINTED_KINDS = setOf("rule", "section", "para")
-
-/** The one-time-cost note shown under a slow study read. Deliberately still —
- *  an explanation should sit and be read, not pulse. */
-@Composable
-private fun FirstRunSlowNote(palette: ReaderPalette, scale: Float) {
-    Text(
-        "The first one takes a few seconds while the analysis is built for this text. " +
-            "Every look after this is instant.",
-        color = palette.faded,
-        fontSize = (12.5 * scale).sp,
-        lineHeight = (18 * scale).sp,
-        modifier = Modifier.padding(top = 6.dp),
-    )
-}
 
 /** A caller's slot (header / footer / embed) inside one lazy item.
  *
@@ -124,16 +105,15 @@ fun StudyPane(
             runCatching { parseWire<PanelData>(it).blocks }.getOrNull()
         }?.filter { it.kind in PAINTED_KINDS }
     }
-    // Once a read outlasts a frame or two, say why it is slow and promise the
-    // rest are fast. Timed rather than flagged: whatever index is cold, the wait
-    // itself is the honest signal. Web twin: StudyPanel.svelte's `slowRead`.
-    var slowRead by remember { mutableStateOf(false) }
-    LaunchedEffect(loading, blocksJson) {
-        slowRead = false
-        if (!loading) return@LaunchedEffect
-        delay(SLOW_READ_MS)
-        slowRead = true
-    }
+    // GONE, matching the web (StudyPanel.svelte): "The first one takes a few
+    // seconds... Every look after this is instant."
+    //
+    // It apologised for a wait that no longer happens — the engine stopped
+    // building indexes inside a reader's request — and it was never true anyway:
+    // "every look after this" meant until the process died, so someone who had
+    // used the app for days kept being told it was their first time. A message
+    // explaining a wait the reader is not having is worse than silence.
+    // "— loading —" stays for the moment the engine really is still answering.
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -153,7 +133,6 @@ fun StudyPane(
                             fontStyle = FontStyle.Italic,
                             fontSize = (14 * scale).sp,
                         )
-                        if (slowRead) FirstRunSlowNote(palette, scale)
                     }
                 } else {
                     Text(
@@ -167,7 +146,6 @@ fun StudyPane(
             return@LazyColumn
         }
         // Refreshing over existing content: the note still explains a long wait.
-        if (loading && slowRead) item(key = "slow") { FirstRunSlowNote(palette, scale) }
         if (header != null) item(key = "header") { SlotItem(header) }
         // Where the embed goes: before the first titled section, or after
         // everything if the payload has no section at all.
@@ -252,7 +230,7 @@ fun VersionFooter(palette: ReaderPalette, scale: Float) {
         modifier = Modifier.padding(top = 8.dp),
     )
     Text(
-        "Android · sideloaded builds do not auto-update",
+        "Sideloaded builds do not update automatically.",
         color = palette.faded,
         fontSize = (11.5f * scale).sp,
     )

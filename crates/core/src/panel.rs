@@ -361,7 +361,6 @@ pub trait PanelSource {
     fn bridge_partners(&self, code: &str) -> Vec<BridgePartnerView>;
     /// `(near, cross)` embedding neighbour codes (Full study; empty w/o an
     /// embedding).
-    fn concept_near(&self, code: &str, k: usize) -> (Vec<String>, Vec<String>);
     fn concept(&self, code: &str) -> Option<ConceptView>;
 
     fn verse_xrefs(&self, verse: &str) -> Vec<XrefView>;
@@ -778,16 +777,6 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
         return;
     }
 
-    let (near, cross) = src.concept_near(code, 6);
-    if !near.is_empty() {
-        out.push(Block::section_marked("SIMILAR CONCEPTS", "≈", Color::TierMachine));
-        out.push(Block::para(concept_chips(src, sz::LIST, &near)));
-    }
-    if !cross.is_empty() {
-        out.push(Block::para(vec![Run::new("across the testaments —", sz::CAPTION, Color::Faded).italic()]));
-        out.push(Block::para(concept_chips(src, sz::LIST, &cross)));
-    }
-
     if let Some(c) = src.concept(code) {
         if !c.community.is_empty() {
             out.push(Block::section_marked("APPEARS ALONGSIDE", "≈", Color::TierMachine));
@@ -795,7 +784,7 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
             out.push(Block::para(concept_chips(src, sz::LIST, &take)));
         }
         if !c.top_books.is_empty() {
-            out.push(Block::section_marked("WHERE IT CONCENTRATES", "≈", Color::TierMachine));
+            out.push(Block::section_marked("MOST USED IN", "≈", Color::TierMachine));
             let joined = c.top_books.iter().map(|(b, n)| format!("{b} ×{n}")).collect::<Vec<_>>().join(" · ");
             out.push(Block::para(vec![
                 Run::new(joined, sz::SMALL, Color::Ink),

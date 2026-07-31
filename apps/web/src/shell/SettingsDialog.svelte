@@ -435,7 +435,7 @@
       <label class="toggle">
         <span class="body">
           <span class="name">Machine analysis</span>
-          <span class="desc">Similar concepts, appears-alongside, verses-like-this, concept maps.</span>
+          <span class="desc">Appears-alongside, verses-like-this, concept maps.</span>
         </span>
         <input
           type="checkbox"
@@ -531,7 +531,7 @@
       <label class="toggle">
         <span class="body">
           <span class="name">Bundled study set</span>
-          <span class="desc">Ship-with-app threads, tags, and weaves (reloads the app).</span>
+          <span class="desc">Threads, tags, and weaves that come with the app. Changing this reloads the app.</span>
         </span>
         <input type="checkbox" checked={s.bundledOn} onchange={toggleBundled} />
       </label>

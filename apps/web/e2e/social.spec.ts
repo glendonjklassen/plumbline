@@ -70,9 +70,16 @@ test("a pasted link has everything a crawler needs to draw a card", async ({ pag
 
   // The sentence a stranger reads. Long enough to say what this is, short enough
   // that no scraper cuts it mid-word.
+  //
+  // The floor was 60 and is 40, because the description was deliberately cut to
+  // "The Holy Bible in a free, private, offline application." (54 chars,
+  // 2026-07-30). That is shorter than a search result or a social card will
+  // happily show — both have room for roughly 155 — so there is unused space
+  // here. It is a judgement about voice, not an oversight, and the floor exists
+  // to catch an EMPTY or one-word description rather than to enforce a length.
   const description = await meta(page, "description");
   expect(description.length, "no meta description — a pasted link says nothing about the app").toBeGreaterThan(
-    60,
+    40,
   );
   expect(description.length, "the description will be truncated in the card").toBeLessThan(200);
   expect(description).toContain("The Holy Bible");

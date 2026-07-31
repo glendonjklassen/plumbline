@@ -233,11 +233,15 @@ producer emits*, not shell code.
      its sources' tiers (✝/†/≈, + ⚗ if any source is research-grade); "· disputed
      by usage" in `#b04a3a` when the text-witness disbelieves (shipped data never
      grades, so silent).
-   - **SIMILAR CONCEPTS** *(Machine ≈)* — embedding neighbours (6); "across the
-     testaments —" cross (6). Grammatical function words (articles,
-     conjunctions, prepositions, pronouns, be-verbs — `rnd::stopwords`) never
-     appear as neighbours (2026-07-25: *believe* was offering *because*);
-     they remain directly studyable.
+   - **SIMILAR CONCEPTS** — **REMOVED 2026-07-30**, at Glendon's call: embedding
+     neighbours plus an "across the testaments" cross list. Cut from
+     `panel.rs`, so it went from both shells at once, along with the
+     `concept_near` trait method and its FFI implementation, which had no other
+     caller. The embedding index STAYS: `VerseSim` ("verses like this") is built
+     from it, so the ~4 MB analysis pack is unchanged in size and the machine
+     tier still earns its download. The function-word filter this section needed
+     (`rnd::stopwords` — 2026-07-25, *believe* was offering *because*) is still
+     live for APPEARS ALONGSIDE below.
    - **APPEARS ALONGSIDE** *(Machine ≈)* — concept community (8), same
      function-word filter.
    - **WHERE IT CONCENTRATES** *(Machine ≈)* — top books (5) "Book ×N · …" + "(OT x · NT y)".

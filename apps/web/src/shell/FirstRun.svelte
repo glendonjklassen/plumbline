@@ -441,8 +441,8 @@
         <span class="body">
           <span class="name">Machine analysis <span class="mark machine">≈</span></span>
           <span class="desc">
-            Statistical patterns to weigh for yourself: similar concepts, words that appear
-            alongside, verses like this one, and the concept maps.
+            Statistical patterns to weigh for yourself: words that appear alongside, verses
+            like this one, and the concept maps.
           </span>
         </span>
       </label>
