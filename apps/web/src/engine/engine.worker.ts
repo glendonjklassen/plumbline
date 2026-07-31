@@ -141,7 +141,22 @@ function startStallMeter(): void {
 // authoring never invalidates this — only a width/font/spacing change does,
 // and that changes the key. Small and LRU: a handful of chapters is enough to
 // make paging back and forth free, without holding the canon in memory.
-const TURN_CACHE_MAX = 8;
+//
+// 16, because the working set is larger than "a handful" suggests. Every pane
+// prefetches BOTH its neighbours (ReaderPane.prefetchNeighbours) and three panes
+// can be open, so a settled three-pane session is 9 live keys — at 8, the last
+// prefetch evicted the first pane's own chapter and the prefetch became pure cost.
+// The remaining 7 are a stale generation's grace for the one event that re-keys
+// every pane at once (a width, font or spacing change): what is on screen has to
+// outlive what it replaced, or the reader pays for it twice.
+//
+// A turn costs what its display list weighs. Measured under V8 with --expose-gc,
+// heapUsed across 40 retained JSON.parse copies of one chapter's list: 322 B/item
+// for Psalm 119 (2,643 items → 831 KB), 235 B/item for Gen 1, 343 B/item for John
+// 3. The mean chapter is 691 items, so 16 turns is ~3 MB; even at the p99 chapter
+// (1,701 items) the ceiling is ~8 MB, against the ~235 MB all 822,057 items of the
+// canon would be.
+const TURN_CACHE_MAX = 16;
 type LaidOut = { items: unknown[]; height: number };
 const turnCache = new Map<string, LaidOut>();
 /** Whether the AKJV overlay is on. Tracked HERE because it changes the words a

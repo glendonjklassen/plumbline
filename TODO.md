@@ -280,9 +280,11 @@ sideload block is already fixed and guarded by a test.
 - [ ] **[opus]** Consolidate boot RPCs: boot reply carries palettes + toc (+ first
   chapter display list); `canonSegments` must not be a boot barrier
   (`App.svelte:49-86`).
-- [ ] **[opus]** Debounce resize ~120 ms trailing (undebounced ResizeObserver
+- [x] **[opus]** Debounce resize ~120 ms trailing (undebounced ResizeObserver
   re-lays-out per tick and thrashes the turn cache); consider raising
   `TURN_CACHE_MAX` (`ReaderPane.svelte:261-268`, `engine.worker.ts:139`).
+  **DONE 2026-07-30**; `TURN_CACHE_MAX` 8 → 16, sized against three panes each
+  prefetching both neighbours (9 live keys) with a measured ~3 MB cost.
 - [ ] **[opus]** Search: 150–200 ms debounce; skip `fuzzy_hits` (full-vocabulary
   Levenshtein) for short/prefix queries; truncate postings to HIT_CAP before
   materializing; cap or exempt `searchBlocks` from the cache

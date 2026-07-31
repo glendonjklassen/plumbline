@@ -1,3 +1,47 @@
+<script module lang="ts">
+  /**
+   * What the resize path asks the engine for, counted rather than timed.
+   *
+   * The same device as `__plumblinePaint` in `src/reader/paint.ts`, for the same
+   * reason: a ResizeObserver fires once per frame for as long as a window is being
+   * dragged, so the only honest test of the debounce below compares the layouts it
+   * ASKED FOR against the ticks it was handed. A millisecond ceiling would be
+   * satisfied by the bug — the working rules record two tests that passed against
+   * exactly what they described (2026-07-26).
+   *
+   * Module-scoped, so the counts cover every pane on screen. Present in
+   * production builds on purpose (the e2e suite runs the production bundle): the
+   * cost is three integer increments per resize tick, and nothing here sits on the
+   * scroll or paint path.
+   */
+  interface ResizeProbe {
+    /** Engine layout requests this shell issued — all panes, all causes. */
+    requests: number;
+    /** Observer callbacks that reported a CHANGED width: what the debounce is
+     *  being asked to collapse. */
+    ticks: number;
+    /** Trailing debounce timers that actually fired. */
+    timerFires: number;
+    /** `timerFires` as it stood when the FIRST layout request went out. A cold
+     *  boot must not wait 120 ms for its text, so this must be 0. Deliberately
+     *  NOT cleared by `reset()` — there is only ever one first layout. */
+    firstRequestTimerFires: number | null;
+    reset(): void;
+  }
+  const resizeProbe: ResizeProbe = {
+    requests: 0,
+    ticks: 0,
+    timerFires: 0,
+    firstRequestTimerFires: null,
+    reset(): void {
+      this.requests = 0;
+      this.ticks = 0;
+      this.timerFires = 0;
+    },
+  };
+  (globalThis as any).__plumblineResize = resizeProbe;
+</script>
+
 <script lang="ts">
   // One reading column: nav strip + chapter canvas. Layout comes from the
   // core (display list over the measure callback); this component owns
@@ -120,6 +164,9 @@
         s.paneVerseGeom[paneIdx] = new Map();
       });
     }
+    resizeProbe.requests++;
+    if (resizeProbe.firstRequestTimerFires === null)
+      resizeProbe.firstRequestTimerFires = resizeProbe.timerFires;
     s.rpc
       .layout(pane.book, pane.chapter, {
         font: fontPx,
@@ -312,13 +359,70 @@
     );
   }
 
+  // ── resize: measure every tick, RE-LAY OUT ONLY WHEN IT SETTLES ──
+  // A ResizeObserver fires once per frame for as long as a window is being dragged
+  // or a phone is mid-rotation, and `cssW` feeds the layout effect above — so every
+  // one of those frames was an engine round trip for the whole chapter. Where the
+  // column really changed width (a phone, or any pane under 776 px, below
+  // MAX_COLUMN) that was a fresh turn-cache key and a real re-layout, and eight
+  // frames — an eighth of a second of dragging — was enough to push every entry out
+  // of the worker's cache as it then stood, including the two neighbours this pane
+  // had just prefetched, so the page turn after a resize paid full price for
+  // chapters the device already had. Where the column was capped and the key
+  // repeated, the cost was still Psalm 119's 2,643 items structured-cloned back over
+  // postMessage per frame, and the text mirror rebuilt from them.
+  //
+  // TRAILING, not leading: the size the reader stopped at is the size the text has
+  // to be correct for, and a leading-edge layout is a layout for a width that has
+  // already gone. Each tick re-arms the timer, so the last size wins.
+  //
+  // THE FIRST MEASUREMENT IS NEVER DELAYED, and the two cases are told apart by
+  // `cssW === 0` — which is precisely "no layout has been on screen yet", the same
+  // condition the layout effect itself waits for. A cold boot therefore lays out
+  // inside the observer's first callback rather than 120 ms after it; only a change
+  // to a width the reader can already see is worth waiting out. (A pane that has
+  // been measured at zero — collapsed, or hidden behind a dialog — is in that same
+  // state, and rightly lays out at once when it comes back.)
+  //
+  // `cssH` is applied on EVERY tick regardless: it drives the paint, the canvas
+  // box and the scroll spacer, not the layout, so holding it back would letterbox
+  // the canvas mid-drag (a blank strip under a growing pane) and save nothing.
+  const RESIZE_SETTLE_MS = 120;
   $effect(() => {
+    let settle: ReturnType<typeof setTimeout> | null = null;
+    let pendingW = 0;
     const ro = new ResizeObserver(() => {
-      cssW = container.clientWidth;
       cssH = container.clientHeight;
+      pendingW = container.clientWidth;
+      if (settle) clearTimeout(settle);
+      settle = null;
+      // Also covers a drag that came back to where it started: the layout on
+      // screen is already the right one, so there is nothing pending to apply.
+      if (pendingW === cssW) return;
+      resizeProbe.ticks++;
+      if (cssW === 0) {
+        cssW = pendingW;
+        return;
+      }
+      settle = setTimeout(() => {
+        settle = null;
+        resizeProbe.timerFires++;
+        cssW = pendingW;
+      }, RESIZE_SETTLE_MS);
     });
     ro.observe(container);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      // A pending settle must not outlive the pane. Svelte has already destroyed
+      // the effects that would react to it, so the write itself wakes nothing —
+      // what is left is a timer holding this closure, and through `container` its
+      // detached DOM, alive until it fires, plus a state write into a component
+      // that no longer exists. Neither is worth keeping (closing a pane while a
+      // drag is in flight is exactly how the reader gets both at once: closing one
+      // resizes the others).
+      if (settle) clearTimeout(settle);
+      settle = null;
+    };
   });
 
   // ── input ──
