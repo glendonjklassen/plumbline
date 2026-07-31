@@ -417,9 +417,12 @@ sideload block is already fixed and guarded by a test.
   `network.spec.ts` already has the machinery (`stallableOrigin` — close it instead of
   stalling), and it works on both engines. Same WebKit device booted to John 3 in 222 ms
   with its origin genuinely refusing connections.
-- [ ] **[opus]** One UI-level authoring e2e: create a tag from the verse menu → add a
+- [x] **[opus]** One UI-level authoring e2e: create a tag from the verse menu → add a
   second verse → convert to a weave (largest untested block; all authoring in
-  tests today goes through back-door RPC).
+  tests today goes through back-door RPC). **DONE 2026-07-30.** Found one gap worth
+  fixing later: `TagWeave.svelte` is the only surface in the flow with no
+  `data-surface` attribute, so the locator has to go through `role="dialog"` + text,
+  and it is missing from `e2e/surfaces.spec.ts`'s SURFACES table too.
 - [x] **[opus]** `store.rs` interrupted-write test; `usernote.rs` malformed-input +
   forward-compat tests (frozen format already inside shipped backup zips).
   **DONE 2026-07-30.** Writing them found two real gaps in `set_note`, both fixed
