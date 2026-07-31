@@ -61,3 +61,6 @@ apps/web/node_modules/
 apps/web/dist/
 apps/web/public/pack/
 apps/web/public/plumbline_ffi.wasm
+
+# Kotlin/Gradle scratch dir (appears under apps/android on any gradle run)
+.kotlin/
