@@ -149,7 +149,9 @@
   }
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+    /* 44 and not 42: the tap floor (app.css) is the button's minimum width, and a
+       track narrower than the thing standing in it overflows the cell. */
+    grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
     gap: 6px;
   }
   .grid button {

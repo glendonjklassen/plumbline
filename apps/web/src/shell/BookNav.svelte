@@ -198,7 +198,6 @@
   }
   .crumb {
     padding: 8px 6px;
-    min-height: 44px;
   }
   .crumb-title {
     color: var(--ink, #211f1a);
@@ -212,7 +211,6 @@
   }
   .tab {
     padding: 8px 8px;
-    min-height: 44px;
     font-size: 14px;
     white-space: nowrap;
     color: var(--faded, #8a8276);
@@ -225,7 +223,6 @@
     color: var(--faded, #8a8276);
     font-size: 18px;
     padding: 8px 12px;
-    min-height: 44px;
   }
   .legend {
     padding: 8px 14px;

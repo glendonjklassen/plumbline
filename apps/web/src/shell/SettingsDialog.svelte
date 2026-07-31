@@ -972,6 +972,12 @@
     border-radius: 7px;
     cursor: pointer;
     font-size: 14px;
+    /* "Restore from backup…" is a `<label>` wrapping a file input, so the 44px
+       tap floor (app.css) does not reach it — but it stretches to the row's
+       height beside a button that the floor DID reach, and a label does not
+       centre its own text the way a button does. Without this the two controls
+       in the row are the same size with their words at different heights. */
+    align-content: center;
   }
   .action:hover {
     border-color: var(--gold, #9e7d38);

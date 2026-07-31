@@ -268,7 +268,6 @@
     font-size: 22px;
     line-height: 1;
     padding: 8px 14px;
-    min-height: 44px;
     border-radius: 6px;
     color: var(--gold, #9e7d38);
   }

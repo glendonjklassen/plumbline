@@ -108,6 +108,15 @@
     padding: 0;
     text-decoration: none;
     cursor: pointer;
+    /* The one control the 44px tap floor in app.css is wrong for, and
+       `display: inline` does not save it: a `<button>` is blockified to
+       inline-block whatever display says, so the floor reaches it and a 44px
+       word in the middle of a sentence sets the whole paragraph's line height
+       to 44px. A cross-reference inside running study prose is aimed at as a
+       WORD — the sentence around it is the target's context, and there is no
+       neighbouring control to mis-hit. */
+    min-height: 0;
+    min-width: 0;
   }
   .link:hover {
     text-decoration: underline;

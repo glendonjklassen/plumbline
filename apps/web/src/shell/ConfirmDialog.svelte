@@ -82,7 +82,6 @@
   }
   .row button {
     padding: 10px 16px;
-    min-height: 44px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 8px;
     font-size: 15px;

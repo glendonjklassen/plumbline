@@ -195,6 +195,13 @@
     padding: 6px;
     display: flex;
     flex-direction: column;
+    /* Nine rows at the 44px tap floor (app.css) plus separators is taller than a
+       phone held sideways, and `pos` places this menu from its MEASURED height —
+       so a menu taller than the viewport is pushed off the TOP, losing Copy and
+       Note… rather than the last row. Capped, it keeps its first row on screen
+       and scrolls the rest, as the ≡ menu already does. */
+    max-height: calc(100dvh - 16px);
+    overflow-y: auto;
   }
   .ref {
     font-size: 12px;

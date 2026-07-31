@@ -52,3 +52,33 @@ textarea {
   font: inherit;
   color: inherit;
 }
+
+/* THE TAP-TARGET FLOOR, declared once for the whole chrome.
+
+   Every control a thumb has to find is at least 44×44. This used to be stated
+   per component — seven `min-height: 44px` lines across five files — and the
+   consequence of a rule you have to remember is the controls nobody remembered:
+   the search glass was 20px wide, the ≡ menu 27px, and the study sheet's ✕, the
+   context-menu rows and the Present stepbar were all a padding value away from
+   being un-hittable. One declaration cannot be forgotten by the next dialog.
+
+   A FLOOR IS NOT A SIZE. Nothing here inflates a glyph: `min-*` only does
+   anything where padding and content already fall short, so every control that
+   was comfortable keeps the size it was drawn at and only the small ones grow
+   into the space around them.
+
+   `align-content: center` is for `<summary>` — a `<button>` centres its own
+   content inside a taller box, a list-item does not, so without it "Show the
+   verse" would sit at the top of a 44px band. On a flex button (the bottom nav,
+   Present's thread cards) it is inert: a single-line flex container ignores it.
+
+   THE READER IS NOT IN THIS. `.pane .nav` sets its own floor and its scoped
+   selectors out-specify this one, so the text column is untouched. The single
+   exception in the other direction is `BlockList`'s in-sentence links, which
+   turn it back off where it is stated — see the note there. */
+button,
+summary {
+  min-height: 44px;
+  min-width: 44px;
+  align-content: center;
+}

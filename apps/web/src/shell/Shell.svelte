@@ -544,7 +544,6 @@
   .browse button {
     font-size: 16px;
     padding: 8px 13px;
-    min-height: 44px;
     border-radius: 6px;
     color: var(--gold, #9e7d38);
   }
@@ -625,6 +624,12 @@
        and while searching the field owns the row. */
     header {
       flex-wrap: nowrap;
+      /* The air between controls gives before the controls do. With the app's
+         name, Welcome, Church, Share, the glass and the ≡ all in one nowrap row,
+         the 44px tap floor (app.css) costs 40px that a 360px phone has not got —
+         and what runs off the end is the ≡, which is the way to Settings. At
+         44px each they are their own separation and do not need 10px of it. */
+      gap: 6px;
     }
     /* `header` prefix so these beat the base rules further down the file. */
     header .glass {
@@ -790,8 +795,10 @@
     border-color: #9e7d38;
   }
   .toast {
+    /* Stated once so the stacked notice below can be expressed in terms of it. */
+    --toastBottom: 22px;
     position: fixed;
-    bottom: 22px;
+    bottom: var(--toastBottom);
     left: 50%;
     transform: translateX(-50%);
     z-index: 50;
@@ -841,8 +848,12 @@
   .toast.warn .upd {
     background: var(--tierResearch, #b04a3a);
   }
-  /* Both sticky notices at once: this one sits above the update. */
+  /* Both sticky notices at once: this one sits above the update.
+     Its clearance is the update toast's own height, spelled out — a 44px control
+     (the tap floor in app.css) inside 8px of padding top and bottom — plus a gap.
+     The number that was here before was measured off a 27px button, so the two
+     notices overlapped the moment the floor applied to Update and ✕. */
   .toast.warn.stacked {
-    bottom: 74px;
+    bottom: calc(var(--toastBottom) + 44px + 16px + 12px);
   }
 </style>
