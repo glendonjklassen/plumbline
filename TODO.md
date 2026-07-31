@@ -150,7 +150,7 @@ sideload block is already fixed and guarded by a test.
   `gold` → ~#846327 in `theme.rs:200-212` (fixes both shells); fix Present
   `.linkbtn` (~1.5:1!) and `.stepbar`; restate literal light values inside the
   white `.share-dialog`; dim MapFrame paper in night.
-- [ ] **[opus]** A stray tap outside the first-run card permanently loses onboarding:
+- [x] **[opus]** A stray tap outside the first-run card permanently loses onboarding:
   make the choose stage non-dismissible or always write `config.intro`
   (`FirstRun.svelte:207-216`). **HELD BACK 2026-07-29 — written and working, NOT
   committed.** The fix (choose/tiers/church non-dismissible; welcome/curious dismiss
@@ -164,18 +164,18 @@ sideload block is already fixed and guarded by a test.
   offline promise. Held at
   `…/scratchpad/d08-held/{FirstRun.svelte,firstrun.spec.ts,android-firstrun.patch}`.
   Next step: give `page.reload()` in `timedReload` an explicit navigation timeout so the
-  hang fails fast and names itself instead of eating the test budget.
-- [ ] **[opus]** Splash: read the cached palette (written but never read — dark users
+  hang fails fast and names itself instead of eating the test budget. **DONE 2026-07-30 — the retry worked.** choose/tiers/church are questions and ignore a miss; welcome/curious exit through `startInJohn()` so `intro` is always written. Android's `BackHandler` is disabled on the chooser so the system closes the app with nothing decided. The 2026-07-29 hang DID NOT REPRODUCE: network.spec.ts is 29 s and 4/4 on three consecutive runs with the fix in the tree, full suite 185/185. The 45 s navigation timeout stays as the guard.
+- [x] **[opus]** Splash: read the cached palette (written but never read — dark users
   get a cream flash every launch); say "≈3 MB, one time — then Plumbline works with
   no connection"; start phase as `prepare` not `download` (warm boots claim to be
-  fetching); map boot errors to human copy with raw string behind `<details>`.
-- [ ] **[opus]** Global `error`/`unhandledrejection` handler → dismissible
-  "something went wrong — reload" bar (none exists anywhere).
-- [ ] **[opus]** Touch targets: one `min-height/width: 44px` rule across the chrome
+  fetching); map boot errors to human copy with raw string behind `<details>`. **DONE 2026-07-30.** Palette read is a blocking inline script in index.html's head (Svelte mounts after first paint); head `<style>` gives light/dark defaults from theme.rs, re-derived by the test. New `engine/bootError.ts` maps failures to reader copy, raw behind `<details>`. Writing it found a real copy bug — the network rule said "scripture data" when the ENGINE BINARY had failed — so it names no payload now.
+- [x] **[opus]** Global `error`/`unhandledrejection` handler → dismissible
+  "something went wrong — reload" bar (none exists anywhere). **DONE 2026-07-30.** Once per session, never during boot (the splash owns that), and `ResizeObserver loop` filtered as the classic false positive. Also wired `rpc.onFatal`, which existed and was connected to nothing.
+- [x] **[opus]** Touch targets: one `min-height/width: 44px` rule across the chrome
   (search glass, ≡ menu, menu rows, study-sheet close, context-menu rows, Present
-  stepbar, pickers — full list in the audit).
-- [ ] **[opus]** Safe-area insets: header, `.present`, and landscape left/right —
-  only the bottom nav honours them today (`Shell.svelte:561`).
+  stepbar, pickers — full list in the audit). **DONE 2026-07-30** as one `button, summary` rule. Exposed two real bugs: the stacked toast's 74px clearance was measured off a 27px button and overlapped once the floor applied, and the header could not afford 10px gaps at 44px. **RESIDUAL:** below ~340px the header overflows when Welcome+Church+Share are all present (354px in 320px). Hiding the app name there is a product call — left for Glendon.
+- [x] **[opus]** Safe-area insets: header, `.present`, and landscape left/right —
+  only the bottom nav honours them today (`Shell.svelte:561`). **DONE 2026-07-30.** Four insets named once on `:root` in app.css, which is now the ONLY place `env()` is written — that is what lets `e2e/safe-area.spec.ts` override them and prove the chrome moves, since a headless browser has no notch. Bottom inset for non-Present surfaces deliberately left (would double-count against the nav).
 - [x] **[opus]** Raw OSIS refKeys in web UI copy ("Tag 1Cor 13:4") — use
   verse display names at the 5 sites (ContextMenu, TagPicker, ThreadPicker,
   PassagePicker, toasts); Android already does. **DONE 2026-07-30** at the three
@@ -188,7 +188,7 @@ sideload block is already fixed and guarded by a test.
 - [x] **[opus]** BookNav: OT/NT toggle + current-book marker (port from
   `ui/BookNav.kt:142-149, 265-268`) + one-line reading-tint legend (title= never
   fires on touch).
-- [ ] **[opus]** **NEW 2026-07-30.** Chromium no longer computes `aria-valuetext`
+- [x] **[opus]** **NEW 2026-07-30.** Chromium no longer computes `aria-valuetext`
   for a canvas with `role="slider"`, so a screen reader on it announces the canon
   strip's position as **"42"** instead of "Revelation". Evidence: a full AX-tree
   dump shows `valuetext: ""` and `value: <aria-valuenow>` while the DOM carries
@@ -197,8 +197,7 @@ sideload block is already fixed and guarded by a test.
   region announcing the book on change is the cheap fix; `role="slider"` on a
   canvas may simply be the wrong primitive. `e2e/a11y.spec.ts` asserts the
   attributes and the tree's numeric position, and says so where it used to assert
-  the book name.
-
+  the book name. **DONE 2026-07-30.** A polite live region beside the canvas, announcing the book on change; the attributes stay, since they are correct and other AT may use them. The test carries a canary: if Chromium computes `valuetext` for a canvas slider again, it says so and this channel can go.
 - [x] **[opus]** Empty states in `panel.rs`: search "0 results" gets guidance; weaves(0)
   gets a body; web `{#if blocks}` should treat `[]` as empty (fixing core fixes
   both shells). **DONE 2026-07-30**, with a test that NO list producer can answer
@@ -250,9 +249,9 @@ sideload block is already fixed and guarded by a test.
 - [x] **[opus]** README: 4-step sideload instructions + APK sha256 + 3-4 more
   screenshots; BIBLIOGRAPHY.md: name the actual source module/edition for the 1769
   margin notes (ask Glendon if not derivable).
-- [ ] **[opus]** Clippy/rustfmt gates: fix `search.rs:451` + `strongs.rs:136`, run
+- [x] **[opus]** Clippy/rustfmt gates: fix `search.rs:451` + `strongs.rs:136`, run
   `-D warnings` across all crates (ffi has never been fully linted), drop both
-  `continue-on-error` lines in ci.yml.
+  `continue-on-error` lines in ci.yml. **DONE 2026-07-30.** 36 distinct sites across four configurations (workspace/all-targets/all-features, rnd featureless, rnd full, wasm32) — the old step linted libs only. No crate-root blanket; five narrow `#[allow(dead_code)]` on the cfg(wasm32)-only warm entry points. New `rustfmt.toml` records the tree's real 120-col style, cutting the reformat from 859 hunks/42 files to 437/37. Both `continue-on-error` lines gone.
 - [x] **[opus]** Android lint: replace the blanket `abortOnError = false` with a
   targeted `disable += "NonNullableMutableLiveData"`.
 - [ ] **[opus]** Split `crates/ffi/src/lib.rs` (3,861 lines; repo rule is 3k) —
@@ -277,9 +276,9 @@ sideload block is already fixed and guarded by a test.
 - [x] **[opus]** Overlap the wasm fetch+compile with the stage-1 read (start
   un-awaited at the top of `boot()`, await at the instantiate site); start
   `loadFonts` un-awaited too (`boot.ts:86-97`, `engine.worker.ts:615-617`).
-- [ ] **[opus]** Consolidate boot RPCs: boot reply carries palettes + toc (+ first
+- [x] **[opus]** Consolidate boot RPCs: boot reply carries palettes + toc (+ first
   chapter display list); `canonSegments` must not be a boot barrier
-  (`App.svelte:49-86`).
+  (`App.svelte:49-86`). **DONE 2026-07-30.** 6 messages across 3 await barriers → 1 message in 1 barrier. Palettes + TOC ride the boot reply (`BOOT_READS` allow-list: session-immutable, zero-arg); `canonSegments` is off the path entirely — the strip/navigator/maps fetch it through `q()`. Test stalls it forever and asserts the text still arrives.
 - [x] **[opus]** Debounce resize ~120 ms trailing (undebounced ResizeObserver
   re-lays-out per tick and thrashes the turn cache); consider raising
   `TURN_CACHE_MAX` (`ReaderPane.svelte:261-268`, `engine.worker.ts:139`).
@@ -361,16 +360,15 @@ sideload block is already fixed and guarded by a test.
   on this machine. Release APKs now 11.1 MB (arm64) / 11.4 MB (x86_64), separately.
   release.yml and ci.yml both had to change — the split filenames broke the one
   `cp` the release job does, inside a step a `workflow_dispatch` dry run skips.
-- [ ] **[opus]** `StudyPane` → LazyColumn (eager Column lays out every block before
+- [x] **[opus]** `StudyPane` → LazyColumn (eager Column lays out every block before
   first frame); process-wide Typeface cache (EB Garamond re-parsed per pane
   instance on main thread); buffered asset extraction + `noCompress` for
   jsonl/tsv/akjvb (34.8 MB through an 8 KB pipe today); backup zip I/O off the
-  main thread; compose-compiler metrics/reports config.
-- [ ] **[opus]** Chapter paint: record once per layout into an
+  main thread; compose-compiler metrics/reports config. **DONE 2026-07-30, except `noCompress` which is measured and OFF.** LazyColumn, buffered extraction, backup off the main thread, compose metrics behind a property. The Typeface fix is two caches, not one: Compose's `FontFamily` AND ReaderPane's three canvas `Typeface`s (the per-pane parse the item names) — both process-wide now, warmed off-thread. `noCompress` ships off behind `-PplumblineNoCompressData`: a real A/B release build says +24,143,359 bytes (11.10 → 35.24 MB, +218%) to save a few hundred ms of inflate once per install. Wrong trade for a sideloaded download.
+- [x] **[opus]** Chapter paint: record once per layout into an
   `android.graphics.Picture` and `drawPicture` per frame (today ~400–900 shaped
   `drawText` JNI calls per frame); 2–4 entry chapter display-list LRU so
-  back-swipe is instant.
-
+  back-swipe is instant. **DONE 2026-07-30.** Explicit enumerated `ChapterPaintKey` drives both re-layout and re-record so they cannot drift; per-frame/per-tap layers (scroll, search bands, pin, note dots) stay out of the Picture. 16 JVM tests, 6 mutations proven. NOT device-verified: watch for stale text after a theme or text-size change.
 ## H. Architecture consolidation (post-1.0 track)
 
 - [ ] **[FABLE]** Wire-type codegen: emit Kotlin + TS from `wire.rs` via the existing
