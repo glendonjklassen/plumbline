@@ -237,11 +237,11 @@ private fun Choose(palette: ReaderPalette, serif: FontFamily, onPath: (Int) -> U
     // first-time reader of the two, and the path that asks the least of someone
     // should be the one they see first. Web twin: FirstRun.svelte's choose stage.
     PathCard(palette, "Curious about the Bible", "I'm not sure what I believe — where do I start?") { onPath(3) }
-    PathCard(palette, "New in the faith", "I've just put my faith in Jesus — where do I start?") { onPath(1) }
-    PathCard(palette, "Sharing the gospel", "Walk someone down the Romans Road, right now.", onSharing)
+    PathCard(palette, "New believer", "Where to start if you have just put your faith in Jesus.") { onPath(1) }
+    PathCard(palette, "Sharing the gospel", "Share the gospel and your church from your phone.", onSharing)
     PathCard(
         palette, "Established believer",
-        "Set up your Bible for study and memorization, and prepare to share the good news with others.",
+        "Set up your Bible for study and memorization and prepare to share the good news with others.",
     ) { onPath(2) }
 }
 
@@ -339,7 +339,7 @@ private fun Welcome(
     Para("No one can take it away from you, and you can know that for certain:")
     Quote(KEPT, KNOW)
     Para(
-        "One day you will be perfected, but not yet — and so while you are here, you are " +
+        "One day you will be perfected, but not yet, and so while you are here, you are " +
             "imperfect but you are forgiven:",
     )
     Quote(PERFECTED, FORGIVEN)
@@ -354,14 +354,14 @@ private fun Welcome(
     )
     Spacer(Modifier.height(10.dp))
     Text(
-        "Tap any verse reference to open it beside the book of John.",
+        "Tap any verse reference to open it.",
         color = palette.faded, fontSize = 14.5.sp, fontStyle = FontStyle.Italic,
     )
     Spacer(Modifier.height(16.dp))
     Button(
         onClick = onStart,
         colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
-    ) { Text(closeLabel ?: "Open the book of John", fontSize = 18.5.sp) }
+    ) { Text(closeLabel ?: "Open the Bible", fontSize = 18.5.sp) }
 }
 
 /**
@@ -443,14 +443,14 @@ private fun Curious(
     Quote(STRUGGLE)
     Spacer(Modifier.height(10.dp))
     Text(
-        "Tap any verse reference to open it beside the book of John.",
+        "Tap any verse reference to open it.",
         color = palette.faded, fontSize = 14.5.sp, fontStyle = FontStyle.Italic,
     )
     Spacer(Modifier.height(16.dp))
     Button(
         onClick = onStart,
         colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
-    ) { Text(closeLabel ?: "Open the book of John", fontSize = 18.5.sp) }
+    ) { Text(closeLabel ?: "Open the Bible", fontSize = 18.5.sp) }
 }
 
 /** The three optional church fields, with the reason they are being asked. */
@@ -465,9 +465,9 @@ private fun ChurchFields(
     onUrl: (String) -> Unit,
 ) {
     Text(
-        "Optional. If you add your church, the links and QR codes you share carry it, so whoever " +
-            "you hand the Bible to can also find your church. It stays on your device otherwise — " +
-            "nothing is sent anywhere.",
+        "If you add your church, the links and QR codes you share contain your church " +
+            "information, so whoever you hand the Bible to can also find your church. It stays " +
+            "on your device and your data remains private.",
         color = palette.faded, fontSize = 14.5.sp,
     )
     OutlinedTextField(
@@ -503,8 +503,8 @@ private fun ChurchBeforeSharing(
     )
     Spacer(Modifier.height(6.dp))
     Text(
-        "You're about to walk someone down the Romans Road. If they keep the app afterwards, this " +
-            "is how they find their way back to you.",
+        "This app will enable you to easily share the gospel with someone. If they keep the " +
+            "app afterwards, this is how they find your church.",
         color = palette.faded, fontSize = 16.sp,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
@@ -514,7 +514,7 @@ private fun ChurchBeforeSharing(
     Button(
         onClick = onGo,
         colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
-    ) { Text("Open the Romans Road", fontSize = 18.5.sp) }
+    ) { Text("Open the presentation screen", fontSize = 18.5.sp) }
     TextButton(onClick = onGo) { Text("Skip for now", color = palette.faded) }
 }
 
@@ -542,8 +542,8 @@ private fun Tiers(
     ChurchFields(palette, cName, cInfo, cUrl, onName, onInfo, onUrl)
     HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 14.dp))
     Text(
-        "The Holy Bible is always on — reading, search, and your own tags, notes, " +
-            "and threads. Choose which layers of analysis sit alongside it:",
+        "Reading, search, memorization, tags, and notes are all available in this " +
+            "application. Choose which additional analysis tools are installed with the Bible.",
         color = palette.faded, fontSize = 16.sp,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )

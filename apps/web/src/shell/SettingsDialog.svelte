@@ -207,7 +207,7 @@
   /** Preparing is not downloading; say so separately or not at all. */
   const preparingNote = $derived(
     offlineComplete && s.rndState !== "ready"
-      ? "The analysis is already downloaded and is being prepared — that finishes on its own."
+      ? "The analysis is already downloaded and is being prepared."
       : "",
   );
 
@@ -224,7 +224,7 @@
       if (s.rndState !== "ready") await s.ensureRnd();
       offline = await completeOffline((f) => (offlineProgress = f));
     } catch {
-      s.showToast("Couldn't finish downloading — check your connection.");
+      s.showToast("Couldn't finish downloading. Please check your connection.");
     } finally {
       offlineBusy = false;
       offlineProgress = 0;
@@ -320,7 +320,7 @@
     const L: string[] = [];
     if (diag) {
       L.push("");
-      L.push("ENGINE THREAD UNAVAILABLE (the stall meter)");
+      L.push("ENGINE THREAD UNAVAILABLE");
       L.push(`  total           ${Math.round(diag.stall.totalMs)} ms across ${diag.stall.count} stalls`);
       L.push(`  worst single    ${Math.round(diag.stall.worstMs)} ms`);
       // Reported, and EXCLUDED from the numbers above. A hidden tab has its
@@ -330,7 +330,7 @@
       L.push("  (time this thread could not answer a tap, a layout, OR its own downloads)");
       if (diag.slowCalls.length) {
         L.push("");
-        L.push("SLOWEST ENGINE CALLS (worst first)");
+        L.push("SLOWEST ENGINE CALLS");
         for (const [name, ms] of diag.slowCalls) L.push(`  ${String(ms).padStart(7)} ms  ${name}`);
       }
       if (diag.packFiles.length) {

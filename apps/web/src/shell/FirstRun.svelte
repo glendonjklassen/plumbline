@@ -258,9 +258,9 @@
 
 {#snippet churchFields()}
   <p class="ch-why">
-    Optional. If you add your church, the links and QR codes you share carry it, so whoever you
-    hand the Bible to can also find your church. It stays on your device otherwise — nothing is
-    sent anywhere.
+    If you add your church, the links and QR codes you share contain your church information, so
+    whoever you hand the Bible to can also find your church. It stays on your device and your
+    data remains private.
   </p>
   <input class="ch-field" placeholder="Church name" bind:value={churchName} />
   <input class="ch-field" placeholder="When and where — e.g. Sundays 10am, 12 Long Street" bind:value={churchInfo} />
@@ -274,7 +274,7 @@
     {#if stage === "choose"}
       <h2>Welcome to Plumbline</h2>
       {@render sharedBy()}
-      <p class="sub">The Holy Bible, free and offline. Where would you like to begin?</p>
+      <p class="sub">The Holy Bible in a free, offline app. Where would you like to begin?</p>
       <!-- Curious leads (2026-07-28): a stranger to the Bible is the likelier
            first-time reader of the two, and the path that asks the least of
            someone should be the one they see first. -->
@@ -283,8 +283,8 @@
         <span class="desc">I'm not sure what I believe — where do I start?</span>
       </button>
       <button class="path" onclick={() => (stage = "welcome")}>
-        <span class="name">New in the faith</span>
-        <span class="desc">I've just put my faith in Jesus — where do I start?</span>
+        <span class="name">New believer</span>
+        <span class="desc">Where to start if you have just put your faith in Jesus.</span>
       </button>
       <!-- A link shared from Present was handed to someone in person, so it
            offers only the two paths it was meant for: the rest is setup for a
@@ -292,12 +292,12 @@
       {#if !s.startAsNewBeliever}
       <button class="path" onclick={sharing}>
         <span class="name">Sharing the gospel</span>
-        <span class="desc">Walk someone down the Romans Road, right now.</span>
+        <span class="desc">Share the gospel and your church from your phone.</span>
       </button>
       <button class="path" onclick={() => (stage = "tiers")}>
         <span class="name">Established believer</span>
         <span class="desc">
-          Set up your Bible for study and memorization, and prepare to share the good news with
+          Set up your Bible for study and memorization and prepare to share the good news with
           others.
         </span>
       </button>
@@ -349,7 +349,7 @@
         <p>No one can take it away from you, and you can know that for certain:</p>
         {@render vquote([REF.kept, REF.know])}
         <p>
-          One day you will be perfected, but not yet — and so while you are here, you are imperfect
+          One day you will be perfected, but not yet, and so while you are here, you are imperfect
           but you are forgiven:
         </p>
         {@render vquote([REF.perfected, REF.forgiven])}
@@ -366,10 +366,10 @@
           May the peace and joy of Christ be with you, and may you share that peace and joy with
           others. God bless you!
         </p>
-        <p class="hint">Tap any verse reference to open it beside the book of John.</p>
+        <p class="hint">Tap any verse reference to open it.</p>
       </div>
       <button class="start" onclick={() => (rereading ? (s.reopenIntro = null) : startInJohn())}>
-        {rereading ? "Close" : "Open the book of John"}
+        {rereading ? "Close" : "Open the Bible"}
       </button>
     {:else if stage === "curious"}
       <h2>I'm glad you're curious about the Bible.</h2>
@@ -402,19 +402,19 @@
         {@render vquote([REF.ask, REF.seek])}
         <p>If you are in a difficult place in your life, ask God to help you with your struggles:</p>
         {@render vquote([REF.struggle])}
-        <p class="hint">Tap any verse reference to open it beside the book of John.</p>
+        <p class="hint">Tap any verse reference to open it.</p>
       </div>
       <button class="start" onclick={() => (rereading ? (s.reopenIntro = null) : startInJohn())}>
-        {rereading ? "Close" : "Open the book of John"}
+        {rereading ? "Close" : "Open the Bible"}
       </button>
     {:else if stage === "church"}
       <h2>Before you share it</h2>
       <p class="sub">
-        You're about to walk someone down the Romans Road. If they keep the app afterwards, this
-        is how they find their way back to you.
+        This app will enable you to easily share the gospel with someone. If they keep the app
+        afterwards, this is how they find your church.
       </p>
       {@render churchFields()}
-      <button class="start" onclick={toRomansRoad}>Open the Romans Road</button>
+      <button class="start" onclick={toRomansRoad}>Open the presentation screen</button>
       <button class="ch-skip" onclick={toRomansRoad}>Skip for now</button>
     {:else}
       <h2>Welcome to Plumbline</h2>
@@ -422,8 +422,8 @@
       {@render churchFields()}
       <hr class="ch-rule" />
       <p class="sub">
-        The Holy Bible is always on — reading, search, and your own tags, notes, and
-        threads. Choose which layers of analysis sit alongside it:
+        Reading, search, memorization, tags, and notes are all available in this application.
+        Choose which additional analysis tools are installed with the Bible.
       </p>
       <label class="card">
         <input type="checkbox" bind:checked={human} />

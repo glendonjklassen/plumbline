@@ -83,7 +83,7 @@ test("boots to the reader with the stock set seeded", async ({ page }) => {
 
 test("first-run: the welcome owns the boot screen, with no reader behind it", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "New in the faith" })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole("button", { name: "New believer" })).toBeVisible({ timeout: 90_000 });
   // John 3 used to paint underneath and then get asked a question — the
   // reader must not mount until a path is chosen (feedback 2026-07-26).
   await expect(page.locator(".pane canvas")).toHaveCount(0);
@@ -92,7 +92,7 @@ test("first-run: the welcome owns the boot screen, with no reader behind it", as
 
 test("first-run: a new believer's welcome reference opens beside John", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "New in the faith" }).click({ timeout: 90_000 });
+  await page.getByRole("button", { name: "New believer" }).click({ timeout: 90_000 });
   await expect(page.getByText("I'm so glad you've put your faith in Jesus")).toBeVisible();
   await page.getByRole("button", { name: "Psalm 12:6–7" }).click();
   const panes = await page.evaluate(() => {
@@ -110,10 +110,10 @@ test("first-run: sharing the gospel asks for your church, then opens the Romans 
   // The reader about to hand this to someone is asked for their church, and
   // told why (2026-07-27) — it is optional, and skipping goes straight on.
   await expect(page.getByText("Before you share it")).toBeVisible();
-  await expect(page.getByText(/links and QR codes you share carry it/)).toBeVisible();
+  await expect(page.getByText(/links and QR codes you share contain your church/)).toBeVisible();
   await page.getByPlaceholder("Church name").fill("Grace Bible Church");
   await page.getByPlaceholder(/When and where/).fill("Sundays 10am, 12 Long Street");
-  await page.getByRole("button", { name: "Open the Romans Road" }).click();
+  await page.getByRole("button", { name: "Open the presentation screen" }).click();
   await expect(page.locator(".present .title")).toContainText("Romans Road");
   await expect(page.getByText("For all have sinned")).toBeVisible();
 
@@ -1140,7 +1140,7 @@ test("the welcome's verses are the corpus text, verbatim and instant", async ({ 
   // (feedback 2026-07-27). A copy can drift, so this compares every quote on
   // screen against the corpus itself.
   await page.goto("/");
-  await page.getByRole("button", { name: "New in the faith" }).click({ timeout: 90_000 });
+  await page.getByRole("button", { name: "New believer" }).click({ timeout: 90_000 });
   await expect(page.getByText("I'm so glad you've put your faith in Jesus")).toBeVisible();
 
   // The quotes are present in the very first paint of this screen, not filled
@@ -1221,7 +1221,7 @@ test("the share QR encodes the church, not just the app", async ({ page }) => {
 test("Present shares the passage as a QR whose link opens at the first verse", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Sharing the gospel" }).click({ timeout: 90_000 });
-  await page.getByRole("button", { name: "Open the Romans Road" }).click();
+  await page.getByRole("button", { name: "Open the presentation screen" }).click();
   await expect(page.locator(".present .title")).toContainText("Romans Road");
 
   // Record what the copy button hands over, without needing clipboard perms.
@@ -1401,7 +1401,7 @@ test("a Present link names the church and drops the setup paths", async ({ page 
   // still names whoever handed it over.
   await page.goto("/?church=Grace+Bible+Church&start=new");
   await expect(page.getByText("Shared with you by")).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByRole("button", { name: "New in the faith" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New believer" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Curious about the Bible" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Established believer" })).toHaveCount(0);
   expect(await page.evaluate(() => location.search)).toBe("");
@@ -1416,7 +1416,7 @@ test("first-run: curious about the Bible is its own path, and stays re-readable"
   await expect(page.getByText("I'm glad you're curious about the Bible")).toBeVisible();
   await expect(page.getByText(/help thou mine unbelief/)).toBeVisible();
   await expect(page.getByText(/contrite spirit/)).toBeVisible(); // the struggles verse
-  await page.getByRole("button", { name: "Open the book of John" }).click();
+  await page.getByRole("button", { name: "Open the Bible" }).click();
   await expect(page.locator(".subtitle")).toContainText("John 1");
 
   // Back to it from the top bar, without changing anything.
@@ -1435,7 +1435,7 @@ test("a Present link offers only the two paths it was meant for", async ({ page 
   // Handed to someone in person: new believer or curious. Setting up study
   // tiers is not what that moment is for.
   await page.goto("/?start=new");
-  await expect(page.getByRole("button", { name: "New in the faith" })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole("button", { name: "New believer" })).toBeVisible({ timeout: 90_000 });
   await expect(page.getByRole("button", { name: "Curious about the Bible" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Established believer" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Sharing the gospel" })).toHaveCount(0);
@@ -1482,7 +1482,7 @@ test("the welcome points a new believer at the church that shared it", async ({ 
   await page.goto(
     "/?church=Grace+Bible+Church&churchInfo=Sundays+10AM&churchUrl=https%3A%2F%2Fexample.org&start=new",
   );
-  await page.getByRole("button", { name: "New in the faith" }).click({ timeout: 90_000 });
+  await page.getByRole("button", { name: "New believer" }).click({ timeout: 90_000 });
   const findChurch = page.locator(".welcome p", { hasText: "Find a church" });
   await expect(findChurch).toContainText("shared with you by");
   await expect(findChurch).toContainText("Grace Bible Church");
@@ -1495,7 +1495,7 @@ test("the welcome points a new believer at the church that shared it", async ({ 
 
 test("with no church shared, the welcome keeps its general advice", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "New in the faith" }).click({ timeout: 90_000 });
+  await page.getByRole("button", { name: "New believer" }).click({ timeout: 90_000 });
   const findChurch = page.locator(".welcome p", { hasText: "Find a church" });
   await expect(findChurch).toContainText("If someone shared this app with you");
   await expect(findChurch).not.toContainText("shared with you by");

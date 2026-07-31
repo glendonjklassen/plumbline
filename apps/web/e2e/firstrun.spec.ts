@@ -74,8 +74,8 @@ test("a tap outside the tiers page answers nothing", async ({ page }) => {
 test("however first run ends, the welcome stays reachable", async ({ page }) => {
   await firstRun(page);
   // The read-and-go path: a tap outside the welcome is "got it", not "undo".
-  await page.getByRole("button", { name: "New in the faith" }).click();
-  await expect(page.getByRole("button", { name: "Open the book of John" })).toBeVisible();
+  await page.getByRole("button", { name: "New believer" }).click();
+  await expect(page.getByRole("button", { name: "Open the Bible" })).toBeVisible();
   await tapOutside(page);
 
   // It ended, and it ended by RECORDING itself.

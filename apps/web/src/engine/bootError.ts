@@ -40,14 +40,14 @@ const RULES: Rule[] = [
   // transaction. Both mean the same thing to the reader.
   {
     when: /QuotaExceeded|quota|storage is full|no space left/i,
-    say: "There is no room left on this device to store the Bible. Free some space and try again — Plumbline needs about 3 MB for the text.",
+    say: "There is no room left on this device to store the Bible.",
   },
 
   // Storage refused outright rather than being full: private windows, a browser
   // set to block site data, an IndexedDB the profile has disowned.
   {
     when: /SecurityError|IDBFactory|access to storage|not allowed to (use|access)/i,
-    say: "This browser is not letting Plumbline store anything on the device. Site data (cookies and storage) has to be allowed for this address — a private window blocks it too.",
+    say: "This browser is not letting Plumbline store anything on the device. Site data (cookies and storage) has to be allowed for this address. A private window may block it too.",
   },
 
   // The network. `Failed to fetch` is chromium, `Load failed` is WebKit,
@@ -62,7 +62,7 @@ const RULES: Rule[] = [
   // identical either way, so the sentence does not need to guess.
   {
     when: /Failed to fetch|Load failed|NetworkError|ERR_|HTTP \d{3}|data pack (manifest|file)/i,
-    say: "Plumbline could not finish downloading what it needs to open. Check the connection and try again — once it is on the device it opens with no connection at all.",
+    say: "Plumbline could not finish downloading what it needs to open. Check the connection and try again. Once it is on the device it opens with no connection at all.",
   },
 
   // The engine binary itself would not compile or start.

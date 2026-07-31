@@ -233,7 +233,7 @@ test("a cold boot says what it is downloading and why; a warm boot claims nothin
   expect(
     cold,
     "a first visit never said what the wait costs or that it is one-time",
-  ).toContain("≈3 MB, one time — then Plumbline works with no connection");
+  ).toContain("3 MB download");
 
   // Same device, second launch. Every byte is already here. The watcher does not
   // need re-installing and must not be: an init script runs on every navigation,

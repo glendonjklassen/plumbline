@@ -318,7 +318,7 @@
         <!-- Only while something is actually being downloaded — which, now that
              boot opens in `prepare`, is only ever a cold visit. Saying it on a
              warm boot would be a bill for a purchase already made. -->
-        <p class="once">≈3 MB, one time — then Plumbline works with no connection</p>
+        <p class="once">3 MB download</p>
       {/if}
     {/if}
   </div>
