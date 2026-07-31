@@ -198,6 +198,18 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
   test the last engine you packed and report failures that are stale by
   construction. This has cost time twice (2026-07-29): once on a theme colour that
   looked unchanged, once on removed ABI endpoints that looked still-present.
+- **Same rule for Android, and it is easier to miss: gradle does NOT build the
+  engine.** The APK embeds whatever `.so` is sitting in
+  `apps/android/app/src/main/jniLibs`, and only `cargo ndk` puts it there. A
+  gradle build after a crate change succeeds, its unit tests pass (they are JVM
+  tests and never load the native library), lint is clean — and the APK you hand
+  over runs the engine from whenever you last cross-compiled. Caught 2026-07-30
+  with the `.so` **two days stale**, so an on-device UAT would have been testing an
+  engine that predated the whole batch. Before building an APK for anyone to run:
+  `ANDROID_NDK_HOME=/opt/android-ndk cargo ndk -t arm64-v8a -t x86_64 --platform 26
+  -o apps/android/app/src/main/jniLibs build -p plumbline-ffi --release`. To check
+  an APK really has it, `unzip -l` it and compare the `.so`'s size with the one on
+  disk.
 - No 3k-line source files.
 
 ## Releases
