@@ -147,13 +147,28 @@ fun FirstRunOverlay(
         if (hasChurch(c)) onChurch(c)
     }
 
-    // Back closes a re-read; in first run it steps to the chooser, and from the
-    // chooser it keeps the defaults (mirrors the web's click-away behaviour).
-    BackHandler {
+    // Back closes a re-read. Within first run it mirrors the web's click-away
+    // rule exactly (FirstRun.svelte's `dismiss()`), because it had the identical
+    // hole: `onEstablished()` from the chooser ended onboarding for good while
+    // writing no `intro`, so the top bar's Welcome button — the only way back to
+    // it — never appeared again.
+    //
+    // Welcome and curious are read-and-go, so Back there means "got it" and
+    // takes the same exit the page's own Start button takes, recording which
+    // welcome was read. Tiers and church are questions: Back steps to the
+    // chooser and answers nothing.
+    //
+    // From the chooser itself the handler is DISABLED, so the system takes the
+    // press and the app closes with nothing decided — first run is there again
+    // next launch. That is the honest answer to "I don't want to choose yet",
+    // and it is the one thing a Compose BackHandler cannot express by handling
+    // the event.
+    BackHandler(enabled = reread != null || stage != 0) {
         when {
             reread != null -> onCloseReread()
-            stage != 0 -> stage = 0
-            else -> onEstablished(human, machine)
+            stage == 1 -> onNewBeliever(null, "new")
+            stage == 3 -> onNewBeliever(null, "curious")
+            else -> stage = 0
         }
     }
 

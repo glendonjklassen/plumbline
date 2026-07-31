@@ -209,10 +209,22 @@
       s.reopenIntro = null;
       return;
     }
-    // Clicking away on the chooser/tiers keeps the old behaviour (defaults);
-    // the welcome page asks for an explicit choice, and so does the church
-    // step — dismissing it would silently skip a question just asked.
-    if (stage !== "welcome" && stage !== "church") finish(human, machine);
+    // A STRAY TAP MUST NOT END ONBOARDING (audit D-08).
+    //
+    // `finish()` closes first run for good — `showFirstRun = false`, flushed —
+    // but `config.intro` is written only by `startInJohn()`. So a tap on the
+    // backdrop of the chooser both answered a question nobody had answered AND
+    // left `intro` null, which is what the top bar's Welcome button keys off
+    // (`session.intro`, `Shell.svelte`). The welcome was then unreachable
+    // forever: no way back short of erasing the reader's data.
+    //
+    // choose / tiers / church are QUESTIONS. A tap outside them is a miss, and a
+    // miss answers nothing — the card stays.
+    //
+    // welcome / curious are READ-AND-GO. There is nothing left to answer, so a
+    // tap there means "got it": record which welcome they read and land them in
+    // John, exactly as the page's own Start button does.
+    if (stage === "welcome" || stage === "curious") startInJohn();
   }
 </script>
 
