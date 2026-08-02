@@ -213,9 +213,13 @@ pub struct PlumblineEngine {
     /// TSV nobody should pay for at every open).
     xref_ix: OnceLock<XRefIx>,
     /// The hymnal, parsed lazily: nobody pays for it before the hymn tab opens.
-    /// Read exactly once per engine, but `data/hymnal.json` is deliberately NOT
-    /// on the web's eviction list — the first read can come at any point in a
-    /// session, so the bytes have to still be there when it does.
+    /// Set only from a NON-EMPTY parse (the [`Self::strongs`] stance) — on the
+    /// web `data/hymnal.json` rides the study stage and lands moments AFTER
+    /// open, so a hymn tab opened in that gap probes empty, and caching that
+    /// probe would keep the book empty for the whole session. The file is
+    /// deliberately NOT on the web's eviction list — the first successful read
+    /// can come at any point in a session, so the bytes have to still be there
+    /// when it does.
     hymnal: OnceLock<hymnal::Hymnal>,
     /// The plain-English overlay (the AKJV delta), when the home carries one.
     /// A READING aid: it re-words the reader's view and nothing else — never a
@@ -676,14 +680,27 @@ impl PlumblineEngine {
         })
     }
 
-    /// The hymnal, parsed from the home on first use. Unreadable data answers
-    /// as an empty book — same stance as the other optional home files
-    /// (`load_study`): the ABI degrades, the pack checks catch bad data.
+    /// The hymnal, parsed from the home on first use — but NEVER cached-empty
+    /// (the same stance as [`Self::strongs`], for the same reason). On the web
+    /// `data/hymnal.json` rides the study stage, which lands moments AFTER the
+    /// engine opens; a reader who taps the hymn tab in that window must get the
+    /// book on the shell's re-fetch, not an empty tab for the whole session.
+    /// Unreadable data also answers empty — the ABI degrades, the pack checks
+    /// catch bad data at build time.
     fn hymnal(&self) -> &hymnal::Hymnal {
-        self.hymnal.get_or_init(|| match &self.home {
-            Some(h) => hymnal::load(h.join("data").join("hymnal.json")).unwrap_or_default(),
-            None => hymnal::Hymnal::default(),
-        })
+        if let Some(book) = self.hymnal.get() {
+            return book;
+        }
+        static EMPTY: OnceLock<hymnal::Hymnal> = OnceLock::new();
+        let empty = || EMPTY.get_or_init(hymnal::Hymnal::default);
+        let Some(h) = &self.home else { return empty() };
+        match hymnal::load(h.join("data").join("hymnal.json")) {
+            Ok(book) if !book.hymns.is_empty() => {
+                let _ = self.hymnal.set(book);
+                self.hymnal.get().expect("just set")
+            }
+            _ => empty(),
+        }
     }
 
     /// The concept engine, built lazily on the first concept query.

@@ -143,7 +143,10 @@ test("a bilingual hymn switches language and keeps the tune's chart", async ({ p
   const firstText = await page.locator(".lyric").first().textContent();
   const firstChords = await page.locator(".chord").allTextContents();
 
-  await langs.nth(1).click();
+  // The OTHER language — the chips render in a fixed order (de before en),
+  // so nth(1) can be the one already showing. Clicking the active chip
+  // changes nothing and the assertion below would test a no-op.
+  await page.locator(".langs .chip:not(.on)").click();
   await expect(page.locator(".lyric").first()).not.toHaveText(firstText ?? "");
   // ONE hymn, one tune: the other language's chart opens on the same chord.
   // (Both texts are sung to the same melody — that is why they are one entry.)

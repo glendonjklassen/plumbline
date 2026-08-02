@@ -2478,3 +2478,45 @@ fn hymnal_absent_is_empty_book() {
         plumbline_engine_free(e);
     }
 }
+
+#[test]
+fn hymnal_arriving_after_open_is_not_cached_empty() {
+    use std::ffi::CString;
+    unsafe {
+        // The web's real sequence: the engine opens on stage 1, and
+        // data/hymnal.json lands with the study stage moments later. A hymn
+        // tab opened in the gap probes an empty book — and that probe must
+        // not become the session's answer.
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-hymnal-late-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null());
+        assert!(!e.is_null());
+
+        // Probed before the file exists: empty, not an error.
+        let before: Value = serde_json::from_str(&take(plumbline_engine_hymnal_json(e)).unwrap()).unwrap();
+        assert_eq!(before["hymns"].as_array().unwrap().len(), 0);
+
+        // The study stage arrives.
+        std::fs::write(
+            home.join("data").join("hymnal.json"),
+            r#"{"format":"hymnal-v1","hymns":[{"id":"amazing-grace","number":14,"tune":"NEW BRITAIN","meter":"8.6.8.6","key":"G","texts":{"en":{"title":"Amazing Grace","author":"John Newton","stanzas":["A[G]mazing grace"],"chorus":null}}}]}"#,
+        )
+        .unwrap();
+
+        // The shell's re-fetch (invalidate() on coreReady) asks again — and
+        // now the book is here. This is the line the OnceLock used to break.
+        let after: Value = serde_json::from_str(&take(plumbline_engine_hymnal_json(e)).unwrap()).unwrap();
+        assert_eq!(after["hymns"].as_array().unwrap().len(), 1, "a late hymnal must fill on re-fetch");
+        assert!(!plumbline_engine_hymn_json(e, c"amazing-grace".as_ptr(), 0).is_null());
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
