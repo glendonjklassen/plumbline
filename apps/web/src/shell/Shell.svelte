@@ -25,6 +25,7 @@
   import QrCode from "./QrCode.svelte";
   import { churchTitle as churchLabel, hasChurch, visitChurch as openChurchSite } from "./church";
   import { modal } from "../lib/modal";
+  import { uiScale } from "../lib/uiScale";
   import { getSession } from "../state/session.svelte";
   import { startReadingTracker } from "../state/readingTracker";
 
@@ -203,6 +204,12 @@
   // it, `s.screen` IS the destination now that Explore and Memorize are screens.
   const dest = $derived(s.showPresent ? "present" : s.screen);
 
+  // The reader's text size as a factor of the 18px the chrome was drawn at. The
+  // scale itself is published on `:root` by `use:uiScale` on the probe below —
+  // this is only the reader's half of it; the browser's own font preference is
+  // the other half and the probe measures that. See lib/uiScale.ts.
+  const readerScale = $derived(Number(s.config.bodySize ?? 18) / 18);
+
   // The church button opens their site; with no site to open it at least
   // tells the reader who and when, which is all we were given.
   // Both of these live in church.ts now, which is pinned to `core::church` by a
@@ -288,6 +295,18 @@
       // the reader can see. The destination screens are the last layer before the
       // text, which is why they come after the panel: Escape out of a study panel
       // opened from Explore should land back in Explore, not in Genesis.
+      //
+      // THE DIALOGS ANSWER FIRST NOW. Every `aria-modal` surface carries
+      // `use:modal` (lib/modal.ts), which takes focus and stops Escape at the
+      // dialog — so while one is open this ladder is not reached at all, and the
+      // press cannot peel a second layer out from under it. The dialog rungs stay
+      // as the fallback for a press that arrives with focus outside any of them.
+      // What the ladder still OWNS is everything that is not a dialog: the map
+      // popup, the study panel, and the destination screens.
+      //
+      // Note the early return at the top of this function: it drops every key
+      // that came from a field, which is precisely why Escape used to do nothing
+      // while the reader was typing in one.
       case "Escape":
         if (shareApp) shareApp = false;
         else if (s.promptReq) s.cancelPrompt();
@@ -318,6 +337,10 @@
 <svelte:window onkeydown={onKeydown} />
 
 <div class="frame">
+  <!-- One rem wide, and that is the whole of it: the browser's own default text
+       size, as a box a ResizeObserver can watch. lib/uiScale.ts turns it and the
+       reader's setting into `--uiScale`. -->
+  <div class="rem-probe" aria-hidden="true" use:uiScale={readerScale}></div>
   <header>
     <span class="title">Plumbline</span>
     <span class="subtitle">{subtitle}</span>
@@ -437,7 +460,14 @@
 {#if shareApp}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="share-backdrop" onclick={() => (shareApp = false)}></div>
-  <div class="share-dialog" role="dialog" aria-modal="true" aria-label="Share Plumbline">
+  <div
+    class="share-dialog"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Share Plumbline"
+    data-surface="share app"
+    use:modal={{ close: () => (shareApp = false) }}
+  >
     <h2>Share Plumbline</h2>
     <p class="share-sub">
       {hasChurch(s.church)
@@ -461,8 +491,13 @@
   </div>
 {/if}
 
+<!-- `role="status"`, as the update and storage notices below already have. Every
+     confirmation this app gives — "Copied", "Tagged Isaiah 53:5", "Couldn't make
+     the backup" — arrives here and nowhere else, and without a live region a
+     screen reader was told none of them: the toast appears, sits for 2.2
+     seconds, and goes, all in silence. -->
 {#if s.toast}
-  <div class="toast">{s.toast}</div>
+  <div class="toast" role="status">{s.toast}</div>
 {/if}
 
 <!-- A deploy landed while this session was open (an installed PWA can sit for
@@ -522,6 +557,18 @@
     padding-left: var(--safeLeft);
     padding-right: var(--safeRight);
   }
+  /* Measured, never seen: out of flow, out of the accessibility tree, and out of
+     the way of a tap. `visibility: hidden` and not `display: none` on purpose —
+     a display:none box has no size to observe. */
+  .rem-probe {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 1rem;
+    height: 1rem;
+    visibility: hidden;
+    pointer-events: none;
+  }
   /* The top bar was too small to use comfortably (feedback 2026-07-29). Android
      sets the standard here: 48dp touch targets and text you do not lean in for.
      Every control below is sized off that rather than off how little room it can
@@ -550,11 +597,11 @@
   .title {
     font-weight: 600;
     letter-spacing: 0.03em;
-    font-size: 18px;
+    font-size: calc(18px * var(--uiScale, 1));
   }
   .subtitle {
     color: var(--faded, #8a8276);
-    font-size: 16px;
+    font-size: calc(16px * var(--uiScale, 1));
   }
   .browse {
     display: flex;
@@ -562,7 +609,7 @@
     margin-left: 8px;
   }
   .browse button {
-    font-size: 16px;
+    font-size: calc(16px * var(--uiScale, 1));
     padding: 8px 13px;
     border-radius: 6px;
     color: var(--gold, #9e7d38);
@@ -571,7 +618,7 @@
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
   }
   .share-first {
-    font-size: 15px;
+    font-size: calc(15px * var(--uiScale, 1));
     padding: 9px 14px;
     border: 1px solid var(--gold, #9e7d38);
     border-radius: 6px;
@@ -635,17 +682,25 @@
       background: color-mix(in srgb, var(--gold, #9e7d38) 14%, transparent);
     }
     .bottom-nav span {
-      font-size: 11px;
+      font-size: calc(11px * var(--uiScale, 1));
       letter-spacing: 0.01em;
     }
     .browse,
     .subtitle {
       display: none;
     }
-    /* One row, always: the glass stands in for the field until it's wanted,
-       and while searching the field owns the row. */
+    /* One row where it fits, a second row where it does not.
+       The glass stands in for the field until it's wanted, and while searching
+       the field owns the row, so at the default text size this is one row.
+
+       It used to be `flex-wrap: nowrap`, which does not mean "one row" — it
+       means the row overflows and what runs off the end is the ≡, i.e. the way
+       to Settings, on the narrowest phones (below ~340px it already did). Now
+       that the chrome follows the reader's text size, someone reading at 36px
+       reaches that width on any phone, and a control pushed off the screen is
+       worse than a header two rows tall. Wrapping is the graceful version of
+       the same overflow. */
     header {
-      flex-wrap: nowrap;
       /* The air between controls gives before the controls do. With the app's
          name, Welcome, Church, Share, the glass and the ≡ all in one nowrap row,
          the 44px tap floor (app.css) costs 40px that a 360px phone has not got —
@@ -680,7 +735,7 @@
   }
   .glass {
     display: none; /* wide screens keep the field itself */
-    font-size: 20px;
+    font-size: calc(20px * var(--uiScale, 1));
     line-height: 1;
     padding: 0 6px;
     color: var(--gold, #9e7d38);
@@ -691,13 +746,13 @@
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 6px;
     padding: 4px 9px;
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
   }
   .menu-host {
     position: relative;
   }
   .menu-btn {
-    font-size: 20px;
+    font-size: calc(20px * var(--uiScale, 1));
     padding: 0 8px;
   }
   .backdrop {
@@ -776,21 +831,21 @@
     box-shadow: 0 12px 48px rgba(0, 0, 0, 0.3);
   }
   .share-dialog h2 {
-    font-size: 18px;
+    font-size: calc(18px * var(--uiScale, 1));
     font-weight: 600;
   }
   .share-sub,
   .share-url {
     color: #5a564e;
-    font-size: 13px;
+    font-size: calc(13px * var(--uiScale, 1));
   }
   .share-with {
-    font-size: 13px;
+    font-size: calc(13px * var(--uiScale, 1));
     font-weight: 600;
     color: #9e7d38;
   }
   .church-btn {
-    font-size: 13.5px;
+    font-size: calc(13.5px * var(--uiScale, 1));
     padding: 4px 12px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 6px;
@@ -828,7 +883,7 @@
     color: var(--paper, #fcf9f4);
     padding: 8px 16px;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
   }
   /* A toast that stays until acted on carries its own buttons. */
@@ -847,7 +902,7 @@
     border: none;
     border-radius: 6px;
     padding: 5px 12px;
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
@@ -858,7 +913,7 @@
     border: none;
     color: inherit;
     opacity: 0.7;
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
     cursor: pointer;
   }
   /* The app's one alarm colour (--tierResearch, as ConfirmDialog's destructive

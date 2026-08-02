@@ -67,14 +67,14 @@
     box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
   }
   h2 {
-    font-size: 17px;
+    font-size: calc(17px * var(--uiScale, 1));
     font-weight: 600;
     margin-bottom: 12px;
   }
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
   }
   td {
     padding: 4px 6px;

@@ -151,7 +151,7 @@
     overflow-y: auto;
   }
   .note {
-    font-size: 13.5px;
+    font-size: calc(13.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     margin-bottom: 9px;
   }
@@ -180,7 +180,7 @@
     margin-top: 11px;
     padding-top: 9px;
     border-top: 1px solid color-mix(in srgb, var(--rule, #d8cba8) 70%, transparent);
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
     line-height: 1.5;
   }
   .foot {

@@ -138,7 +138,7 @@
     }
   }
   h2 {
-    font-size: 16px;
+    font-size: calc(16px * var(--uiScale, 1));
     font-weight: 600;
     color: var(--ink, #211f1a);
     margin: 0 0 8px;
@@ -164,7 +164,7 @@
     padding: 10px 8px;
     text-align: left;
     color: var(--ink, #211f1a);
-    font-size: 15px;
+    font-size: calc(15px * var(--uiScale, 1));
     border-radius: 6px;
   }
   .thread:hover {
@@ -172,20 +172,20 @@
   }
   .count {
     margin-left: auto;
-    font-size: 12px;
+    font-size: calc(12px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }
   .del {
     padding: 8px 10px;
     color: var(--faded, #8a8276);
     border-radius: 6px;
-    font-size: 13px;
+    font-size: calc(13px * var(--uiScale, 1));
   }
   .del:hover {
     color: var(--tierResearch, #b04a3a);
   }
   .empty {
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     margin: 8px 4px;
   }
@@ -201,14 +201,14 @@
     border-radius: 6px;
     background: var(--paper, #fcf9f4);
     color: var(--ink, #211f1a);
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
   }
   .new button {
     padding: 8px 14px;
     border: 1px solid var(--gold, #9e7d38);
     border-radius: 6px;
     color: var(--gold, #9e7d38);
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
   }
   .new button:disabled {
     opacity: 0.4;

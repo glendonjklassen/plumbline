@@ -117,13 +117,13 @@
     box-shadow: 0 14px 56px rgba(0, 0, 0, 0.3);
   }
   h2 {
-    font-size: 18px;
+    font-size: calc(18px * var(--uiScale, 1));
     font-weight: 600;
     color: var(--ink, #211f1a);
     margin: 0 0 6px;
   }
   .sub {
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
     line-height: 1.45;
     color: var(--faded, #8a8276);
     margin: 0 0 14px;
@@ -140,7 +140,7 @@
     border-radius: 999px;
     background: var(--paper, #fcf9f4);
     color: var(--gold, #9e7d38);
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
   }
   .quick button:hover {
     border-color: var(--gold, #9e7d38);
@@ -150,7 +150,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
     color: var(--ink, #211f1a);
     padding-bottom: 14px;
     border-bottom: 1px solid var(--rule, #d8cba8);
@@ -161,7 +161,7 @@
     border-radius: 7px;
     background: var(--paper, #fcf9f4);
     color: var(--ink, #211f1a);
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
   }
   .row {
     display: flex;
@@ -175,7 +175,7 @@
   .row button {
     padding: 8px 14px;
     border-radius: 7px;
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }
   .row .clear {

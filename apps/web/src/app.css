@@ -35,6 +35,22 @@ body,
   --safeRight: env(safe-area-inset-right, 0px);
   --safeBottom: env(safe-area-inset-bottom, 0px);
   --safeLeft: env(safe-area-inset-left, 0px);
+
+  /* THE CHROME'S TEXT SIZE, NAMED ONCE.
+     Every font-size outside the reader is written `calc(Npx * var(--uiScale, 1))`,
+     where N is the size the control was drawn at. At 1 nothing moves.
+
+     Overwritten on this element by lib/uiScale.ts as an inline style, which is
+     how it beats this declaration. Two things go into it: the reader's own text
+     size (Settings ▸ Text size, 18px is 1) and the browser's default font size,
+     which a chrome written in px cannot otherwise hear. Declared here as well so
+     the chrome has a value before the shell mounts and after it unmounts.
+
+     NOT THE READER. The scripture is painted into a canvas from the engine's own
+     font size, and the canvas takes no CSS font-size at all — turning the text
+     up moves the page and the chrome together, through two separate mechanisms
+     reading the same setting. */
+  --uiScale: 1;
 }
 
 html {
@@ -95,7 +111,14 @@ textarea {
    THE READER IS NOT IN THIS. `.pane .nav` sets its own floor and its scoped
    selectors out-specify this one, so the text column is untouched. The single
    exception in the other direction is `BlockList`'s in-sentence links, which
-   turn it back off where it is stated — see the note there. */
+   turn it back off where it is stated — see the note there.
+
+   IT STAYS IN PX WHILE THE TEXT SCALES (`--uiScale`), and that is the right way
+   round rather than an oversight. This is the size of a THUMB, and a thumb does
+   not get bigger when a reader turns the text up. It cannot fight the scaling
+   either: `min-height` is a floor, so a control whose label has grown past 44px
+   simply grows with it, and one whose label has shrunk keeps a target a finger
+   can still land on — which is the whole reason the number is here. */
 button,
 summary {
   min-height: 44px;

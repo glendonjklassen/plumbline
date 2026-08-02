@@ -265,7 +265,7 @@
     overflow: hidden;
   }
   .back {
-    font-size: 22px;
+    font-size: calc(22px * var(--uiScale, 1));
     line-height: 1;
     padding: 8px 14px;
     border-radius: 6px;
@@ -286,7 +286,7 @@
   }
   .navbtn {
     color: var(--gold, #9e7d38);
-    font-size: 13.5px;
+    font-size: calc(13.5px * var(--uiScale, 1));
   }
   .spacer {
     flex: 1;
@@ -318,7 +318,7 @@
   }
   .empty {
     color: var(--faded, #8a8276);
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
   }
   .card {
     display: flex;
@@ -334,22 +334,22 @@
     text-decoration: underline;
   }
   .mastery {
-    font-size: 12px;
+    font-size: calc(12px * var(--uiScale, 1));
   }
   .due {
-    font-size: 11px;
+    font-size: calc(11px * var(--uiScale, 1));
     color: var(--tierResearch, #b04a3a);
     border: 1px solid currentColor;
     border-radius: 4px;
     padding: 0 4px;
   }
   .drill {
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--uiScale, 1));
     color: var(--gold, #9e7d38);
   }
   .remove {
     color: var(--faded, #8a8276);
-    font-size: 12px;
+    font-size: calc(12px * var(--uiScale, 1));
   }
   .drillref {
     font-weight: 600;
@@ -357,7 +357,7 @@
   .pos {
     color: var(--faded, #8a8276);
     font-weight: 400;
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--uiScale, 1));
   }
   .modes {
     display: flex;
@@ -367,14 +367,14 @@
     padding: 3px 10px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 6px;
-    font-size: 13px;
+    font-size: calc(13px * var(--uiScale, 1));
   }
   .modes button.checked {
     border-color: var(--gold, #9e7d38);
     color: var(--gold, #9e7d38);
   }
   .drilltext {
-    font-size: 17px;
+    font-size: calc(17px * var(--uiScale, 1));
     line-height: 1.5;
   }
   .drilltext .miss {
@@ -401,12 +401,12 @@
   }
   .accuracy {
     color: var(--faded, #8a8276);
-    font-size: 13px;
+    font-size: calc(13px * var(--uiScale, 1));
   }
   .reveal summary {
     cursor: pointer;
     color: var(--faded, #8a8276);
-    font-size: 13px;
+    font-size: calc(13px * var(--uiScale, 1));
   }
   .grades {
     display: flex;
@@ -424,7 +424,7 @@
   }
   .sections {
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
     width: 100%;
   }
   .sections th,
@@ -436,10 +436,10 @@
   .sections th {
     color: var(--faded, #8a8276);
     font-weight: 500;
-    font-size: 12px;
+    font-size: calc(12px * var(--uiScale, 1));
   }
   h3 {
-    font-size: 13px;
+    font-size: calc(13px * var(--uiScale, 1));
     color: var(--section, #a0894a);
     margin-top: 10px;
     text-transform: uppercase;
@@ -449,7 +449,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--uiScale, 1));
   }
   .date {
     color: var(--faded, #8a8276);

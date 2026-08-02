@@ -58,13 +58,13 @@
     box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
   }
   h2 {
-    font-size: 15px;
+    font-size: calc(15px * var(--uiScale, 1));
     font-weight: 600;
     margin-bottom: 8px;
   }
   .empty {
     color: var(--faded, #8a8276);
-    font-size: 13.5px;
+    font-size: calc(13.5px * var(--uiScale, 1));
   }
   .list {
     display: flex;

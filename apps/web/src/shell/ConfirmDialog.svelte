@@ -77,13 +77,13 @@
   }
   h2 {
     margin: 0 0 8px;
-    font-size: 18px;
+    font-size: calc(18px * var(--uiScale, 1));
     font-weight: 600;
     color: var(--ink, #211f1a);
   }
   p {
     margin: 0 0 16px;
-    font-size: 15px;
+    font-size: calc(15px * var(--uiScale, 1));
     line-height: 1.5;
     color: var(--faded, #8a8276);
   }
@@ -96,7 +96,7 @@
     padding: 10px 16px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 8px;
-    font-size: 15px;
+    font-size: calc(15px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }
   .row .danger {

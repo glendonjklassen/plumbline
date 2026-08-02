@@ -58,7 +58,7 @@
     border-bottom: 1px solid var(--rule, #d8cba8);
   }
   .back {
-    font-size: 22px;
+    font-size: calc(22px * var(--uiScale, 1));
     line-height: 1;
     padding: 8px 14px;
     border-radius: 6px;
@@ -69,7 +69,7 @@
   }
   h2 {
     margin: 0;
-    font-size: 18px;
+    font-size: calc(18px * var(--uiScale, 1));
     font-weight: 600;
     color: var(--ink, #211f1a);
   }
@@ -96,12 +96,12 @@
     border-color: var(--gold, #9e7d38);
   }
   .ex-name {
-    font-size: 17px;
+    font-size: calc(17px * var(--uiScale, 1));
     font-weight: 600;
     color: var(--ink, #211f1a);
   }
   .ex-desc {
-    font-size: 14.5px;
+    font-size: calc(14.5px * var(--uiScale, 1));
     line-height: 1.4;
     color: var(--faded, #8a8276);
   }

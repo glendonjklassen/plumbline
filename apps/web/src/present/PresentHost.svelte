@@ -260,11 +260,11 @@
     border-bottom: 1px solid #d8cba8;
   }
   .close {
-    font-size: 18px;
+    font-size: calc(18px * var(--uiScale, 1));
     color: #211f1a;
   }
   .title {
-    font-size: 19px;
+    font-size: calc(19px * var(--uiScale, 1));
     font-weight: 600;
   }
   .spacer {
@@ -274,7 +274,7 @@
     border: 1.5px solid #7d632c;
     border-radius: 8px;
     padding: 4px 14px;
-    font-size: 15px;
+    font-size: calc(15px * var(--uiScale, 1));
     color: #6b5417;
   }
   .empty {
@@ -282,7 +282,7 @@
     max-width: 26em;
     text-align: center;
     color: #6c665d;
-    font-size: 17px;
+    font-size: calc(17px * var(--uiScale, 1));
     padding: 24px;
   }
   .picker {
@@ -332,12 +332,12 @@
     color: var(--faded, #6c665d);
   }
   .pick .name {
-    font-size: 22px;
+    font-size: calc(22px * var(--uiScale, 1));
     font-weight: 600;
   }
   .pick .n {
     color: #6c665d;
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
   }
   .overview {
     overflow-y: auto;
@@ -355,14 +355,14 @@
   }
   .entry .ref {
     font-weight: 700;
-    font-size: 15px;
+    font-size: calc(15px * var(--uiScale, 1));
     color: #6b5417;
     letter-spacing: 0.06em;
     font-variant: small-caps;
     text-transform: lowercase;
   }
   .entry .body {
-    font-size: 21px;
+    font-size: calc(21px * var(--uiScale, 1));
     line-height: 1.45;
   }
   .focus {
@@ -374,6 +374,11 @@
     gap: 3vh;
     cursor: pointer;
   }
+  /* The two sizes in this shell that `--uiScale` deliberately does not touch.
+     A passage held up for someone else to read is sized by the SCREEN it is on,
+     not by the owner's reading preference, and it is already as large as the
+     viewport allows — multiplying a clamp whose ceiling is 54px by 2 would push
+     a verse off the sides of the phone it is being shown on. */
   .fref {
     font-size: clamp(18px, 3.2vw, 30px);
     font-weight: 700;
@@ -389,16 +394,16 @@
     gap: 22px;
     padding: 12px;
     border-top: 1px solid #d8cba8;
-    font-size: 15px;
+    font-size: calc(15px * var(--uiScale, 1));
     color: #6c665d;
   }
   .stepbar button {
-    font-size: 22px;
+    font-size: calc(22px * var(--uiScale, 1));
     color: #101010;
     padding: 0 12px;
   }
   .ovbtn {
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
     color: #6c665d;
     text-decoration: underline;
   }
@@ -414,7 +419,7 @@
   }
   .endcard .mark {
     color: #7d632c;
-    font-size: 26px;
+    font-size: calc(26px * var(--uiScale, 1));
   }
   .endnote {
     color: #6c665d;
@@ -433,7 +438,7 @@
   }
   .linkbtn {
     margin-top: 8px;
-    font-size: 13px;
+    font-size: calc(13px * var(--uiScale, 1));
     font-weight: 600;
     color: #6b5417;
     border: 1px solid #7d632c;
@@ -442,6 +447,6 @@
   }
   .qrnote {
     color: #6c665d;
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
   }
 </style>

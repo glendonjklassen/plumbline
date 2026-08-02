@@ -769,7 +769,7 @@
     gap: 10px;
   }
   h2 {
-    font-size: 17px;
+    font-size: calc(17px * var(--uiScale, 1));
     font-weight: 600;
   }
   /* Above every other surface, the confirmation included: this one reports a
@@ -800,7 +800,7 @@
     box-shadow: 0 16px 64px rgba(0, 0, 0, 0.32);
   }
   .err-body {
-    font-size: 14.5px;
+    font-size: calc(14.5px * var(--uiScale, 1));
     line-height: 1.5;
     color: var(--faded, #8a8276);
   }
@@ -808,12 +808,12 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     padding: 0 0 6px 2px;
   }
   .rnd-now {
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--uiScale, 1));
     font-weight: 600;
     color: var(--gold, #9e7d38);
     border: 1px solid var(--gold, #9e7d38);
@@ -821,7 +821,7 @@
     padding: 1px 9px;
   }
   .diag summary {
-    font-size: 13px;
+    font-size: calc(13px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     cursor: pointer;
   }
@@ -831,7 +831,7 @@
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 6px;
     padding: 6px 9px;
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
     margin-bottom: 6px;
     box-sizing: border-box;
   }
@@ -846,13 +846,13 @@
     color: var(--tierHuman, #6f8f6a);
   }
   .off-note {
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     line-height: 1.4;
   }
   .off-go {
     align-self: flex-start;
-    font-size: 13px;
+    font-size: calc(13px * var(--uiScale, 1));
     font-weight: 600;
     color: var(--gold, #9e7d38);
     border: 1px solid var(--gold, #9e7d38);
@@ -875,14 +875,14 @@
   }
   .diag-sub {
     margin-top: 8px;
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--uiScale, 1));
     font-weight: 600;
     color: var(--faded, #8a8276);
   }
   .diag table {
     width: 100%;
     margin-top: 6px;
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     border-collapse: collapse;
   }
@@ -905,14 +905,14 @@
        without this it widens the dialog past the edge of a phone. */
     overflow-wrap: anywhere;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
+    font-size: calc(11px * var(--uiScale, 1));
     line-height: 1.35;
     color: var(--faded, #8a8276);
     user-select: text;
   }
   .diag-note {
     margin-top: 4px;
-    font-size: 11.5px;
+    font-size: calc(11.5px * var(--uiScale, 1));
     line-height: 1.35;
     color: var(--faded, #8a8276);
   }
@@ -934,10 +934,10 @@
     flex-direction: column;
   }
   .toggle .name {
-    font-size: 15px;
+    font-size: calc(15px * var(--uiScale, 1));
   }
   .toggle .desc {
-    font-size: 12px;
+    font-size: calc(12px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }
   .toggle input,
@@ -952,7 +952,7 @@
     margin: 6px 0;
   }
   .label {
-    font-size: 12px;
+    font-size: calc(12px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }
   .aa {
@@ -965,7 +965,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 14.5px;
+    font-size: calc(14.5px * var(--uiScale, 1));
     cursor: pointer;
     padding: 2px 0;
   }
@@ -986,7 +986,7 @@
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 7px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
     /* "Restore from backup…" is a `<label>` wrapping a file input, so the 44px
        tap floor (app.css) does not reach it — but it stretches to the row's
        height beside a button that the floor DID reach, and a label does not
@@ -999,7 +999,7 @@
     color: var(--gold, #9e7d38);
   }
   .desc-note {
-    font-size: 11.5px;
+    font-size: calc(11.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }
 </style>

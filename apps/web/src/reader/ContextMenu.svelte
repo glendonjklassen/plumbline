@@ -204,7 +204,7 @@
     overflow-y: auto;
   }
   .ref {
-    font-size: 12px;
+    font-size: calc(12px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     padding: 4px 8px 6px;
     font-weight: 600;
@@ -213,7 +213,7 @@
     text-align: left;
     padding: 5px 9px;
     border-radius: 5px;
-    font-size: 14.5px;
+    font-size: calc(14.5px * var(--uiScale, 1));
   }
   .menu > button:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);

@@ -118,11 +118,15 @@
   // The reader's text-size setting scales the whole study surface too —
   // fixed 380px/13px chrome reads tiny on a 4K display (feedback 2026-07-25).
   // Everything inside multiplies by --uiScale (1 at the default 18px body).
-  const uiScale = $derived(Number(s.config.bodySize ?? 18) / 18);
+  //
+  // The variable is published on `:root` now (app.css, lib/uiScale.ts) and the
+  // rest of the chrome multiplies by the same one, so this panel no longer
+  // computes a private copy of it. It was the only surface that scaled; that it
+  // had to say so itself is what kept the other thirteen from doing it.
 </script>
 
 {#if s.panel}
-  <aside class="panel" style:--uiScale={uiScale} data-surface="study panel">
+  <aside class="panel" data-surface="study panel">
     <div class="bar">
       <div class="grip" aria-hidden="true"></div>
       <button class="close" onclick={() => (s.panel = null)} aria-label="Close panel">✕</button>

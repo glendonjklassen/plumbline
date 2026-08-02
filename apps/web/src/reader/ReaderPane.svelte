@@ -649,7 +649,7 @@
     gap: 6px;
     padding: 6px 10px;
     background: var(--paneNavBg, #efeae1);
-    font-size: 16px;
+    font-size: calc(16px * var(--uiScale, 1));
   }
   .nav .passage {
     border: 1px solid var(--rule, #d8cba8);
@@ -657,14 +657,14 @@
     padding: 9px 16px;
     min-height: 44px;
     font-weight: 600;
-    font-size: 16.5px;
+    font-size: calc(16.5px * var(--uiScale, 1));
   }
   .nav button {
     padding: 9px 13px;
     min-height: 44px;
     min-width: 40px;
     border-radius: 6px;
-    font-size: 17px;
+    font-size: calc(17px * var(--uiScale, 1));
   }
   .nav button:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 14%, transparent);

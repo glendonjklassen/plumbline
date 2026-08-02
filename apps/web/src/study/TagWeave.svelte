@@ -120,11 +120,11 @@
     }
   }
   h2 {
-    font-size: 15px;
+    font-size: calc(15px * var(--uiScale, 1));
     font-weight: 600;
   }
   .hint {
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }
   .list {
@@ -158,7 +158,7 @@
   }
   .count {
     flex: 1;
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }
   .actions button {

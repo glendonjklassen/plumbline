@@ -194,7 +194,7 @@
   .crumb,
   .crumb-title {
     font-weight: 600;
-    font-size: 17px;
+    font-size: calc(17px * var(--uiScale, 1));
     color: var(--gold, #9e7d38);
   }
   .crumb {
@@ -212,7 +212,7 @@
   }
   .tab {
     padding: 8px 8px;
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
     white-space: nowrap;
     color: var(--faded, #8a8276);
   }
@@ -222,13 +222,13 @@
   }
   .close {
     color: var(--faded, #8a8276);
-    font-size: 18px;
+    font-size: calc(18px * var(--uiScale, 1));
     padding: 8px 12px;
   }
   .legend {
     padding: 8px 14px;
     border-bottom: 1px solid var(--rule, #d8cba8);
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--uiScale, 1));
     line-height: 1.45;
     color: var(--faded, #8a8276);
   }
@@ -251,7 +251,7 @@
     padding: 12px 14px 20px;
   }
   .sect {
-    font-size: 13.5px;
+    font-size: calc(13.5px * var(--uiScale, 1));
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--section, #a0894a);
@@ -280,7 +280,7 @@
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 8px;
     background: var(--paper, #fcf9f4);
-    font-size: 16px;
+    font-size: calc(16px * var(--uiScale, 1));
   }
   .grid button:hover {
     border-color: var(--gold, #9e7d38);

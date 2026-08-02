@@ -113,7 +113,7 @@
     }
   }
   h2 {
-    font-size: 15px;
+    font-size: calc(15px * var(--uiScale, 1));
     font-weight: 600;
     margin-bottom: 10px;
   }
@@ -137,12 +137,12 @@
   }
   .count {
     margin-left: auto;
-    font-size: 12px;
+    font-size: calc(12px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }
   .empty {
     color: var(--faded, #8a8276);
-    font-size: 13.5px;
+    font-size: calc(13.5px * var(--uiScale, 1));
     padding: 6px 8px;
   }
   .new {

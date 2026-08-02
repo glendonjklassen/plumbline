@@ -126,12 +126,12 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 13px;
+    font-size: calc(13px * var(--uiScale, 1));
     color: #6c665d;
   }
   .pager button {
     padding: 0 8px;
-    font-size: 16px;
+    font-size: calc(16px * var(--uiScale, 1));
     color: #211f1a;
   }
   .pager button:disabled {
@@ -139,7 +139,7 @@
   }
   .caption {
     flex: 1;
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--uiScale, 1));
     color: #6c665d;
     white-space: nowrap;
     overflow: hidden;
@@ -175,12 +175,12 @@
   }
   .waitline {
     color: #6c665d;
-    font-size: 13.5px;
+    font-size: calc(13.5px * var(--uiScale, 1));
     animation: waitpulse 1.1s ease-in-out infinite;
   }
   .waitnote {
     color: #6c665d;
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--uiScale, 1));
     line-height: 1.5;
     max-width: 46ch;
   }

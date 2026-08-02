@@ -501,12 +501,12 @@
     white-space: nowrap;
   }
   h2 {
-    font-size: 23px;
+    font-size: calc(23px * var(--uiScale, 1));
     font-weight: 500;
     text-align: center;
   }
   .sub {
-    font-size: 16px;
+    font-size: calc(16px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     text-align: center;
   }
@@ -528,7 +528,7 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    font-size: 17px;
+    font-size: calc(17px * var(--uiScale, 1));
     line-height: 1.55;
   }
   .vq {
@@ -541,7 +541,7 @@
   }
   .vq-text {
     font-family: "EB Garamond", Georgia, serif;
-    font-size: 17.5px;
+    font-size: calc(17.5px * var(--uiScale, 1));
     line-height: 1.5;
     font-style: italic;
   }
@@ -552,7 +552,7 @@
     display: inline;
     color: var(--gold, #9e7d38);
     font-weight: 600;
-    font-size: 15.5px;
+    font-size: calc(15.5px * var(--uiScale, 1));
     padding: 0 2px;
   }
   .ref:hover {
@@ -564,7 +564,7 @@
     font-weight: 400;
   }
   .hint {
-    font-size: 14.5px;
+    font-size: calc(14.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     font-style: italic;
   }
@@ -573,7 +573,7 @@
     text-align: center;
   }
   .ch-why {
-    font-size: 14.5px;
+    font-size: calc(14.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     line-height: 1.45;
     text-align: center;
@@ -584,7 +584,7 @@
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 7px;
     padding: 8px 10px;
-    font-size: 17px;
+    font-size: calc(17px * var(--uiScale, 1));
     box-sizing: border-box;
   }
   .ch-rule {
@@ -595,7 +595,7 @@
   }
   .ch-skip {
     align-self: center;
-    font-size: 15.5px;
+    font-size: calc(15.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     text-decoration: underline;
   }
@@ -610,21 +610,21 @@
     padding: 10px 14px;
   }
   .fc-lead {
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--faded, #8a8276);
   }
   .fc-name {
-    font-size: 19.5px;
+    font-size: calc(19.5px * var(--uiScale, 1));
     font-weight: 600;
     color: var(--gold, #9e7d38);
   }
   .fc-info {
-    font-size: 15.5px;
+    font-size: calc(15.5px * var(--uiScale, 1));
   }
   .fc-url {
-    font-size: 15px;
+    font-size: calc(15px * var(--uiScale, 1));
     color: var(--gold, #9e7d38);
     text-decoration: underline;
     word-break: break-all;
@@ -663,12 +663,12 @@
     color: var(--tierMachine, #999);
   }
   .desc {
-    font-size: 15.5px;
+    font-size: calc(15.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     line-height: 1.4;
   }
   .note {
-    font-size: 14px;
+    font-size: calc(14px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     text-align: center;
   }
@@ -678,6 +678,6 @@
     background: var(--gold, #9e7d38);
     color: #fff;
     border-radius: 8px;
-    font-size: 18.5px;
+    font-size: calc(18.5px * var(--uiScale, 1));
   }
 </style>

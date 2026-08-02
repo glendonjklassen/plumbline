@@ -464,7 +464,10 @@
     background: var(--ink, #211f1a);
     color: var(--paper, #fcf9f4);
     border-bottom: 4px solid var(--tierResearch, #b04a3a);
-    font-size: 14px;
+    /* Scaled like the rest of the chrome (D-23). The splash below is NOT, and
+       correctly so: it paints before Shell mounts, so `--uiScale` has not been
+       published yet and the fallback of 1 is the honest value there. */
+    font-size: calc(14px * var(--uiScale, 1));
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
   }
   .mishap .what {
