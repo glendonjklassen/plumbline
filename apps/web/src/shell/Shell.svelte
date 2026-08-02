@@ -23,7 +23,7 @@
   import ThreadPicker from "../study/ThreadPicker.svelte";
   import TagWeave from "../study/TagWeave.svelte";
   import QrCode from "./QrCode.svelte";
-  import { hasChurch, safeChurchUrl } from "./church";
+  import { churchTitle as churchLabel, hasChurch, visitChurch as openChurchSite } from "./church";
   import { getSession } from "../state/session.svelte";
   import { startReadingTracker } from "../state/readingTracker";
 
@@ -197,14 +197,11 @@
 
   // The church button opens their site; with no site to open it at least
   // tells the reader who and when, which is all we were given.
-  const churchTitle = $derived(
-    [s.church.name, s.church.info].filter(Boolean).join(" — ") || "Your church",
-  );
-  function visitChurch(): void {
-    const url = safeChurchUrl(s.church.url);
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
-    else s.showToast(churchTitle);
-  }
+  // Both of these live in church.ts now, which is pinned to `core::church` by a
+  // shared vector table (H-10). The local copies here were the seventh and eighth
+  // implementations of the same two lines.
+  const churchTitle = $derived(churchLabel(s.church));
+  const visitChurch = (): void => openChurchSite(s.church, s.showToast);
 
   // ── global keys (manifest §Keyboard + wheel) ──
   function isEditable(t: EventTarget | null): boolean {

@@ -46,7 +46,9 @@ import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import dev.plumbline.ChurchState
 
-const val PWA_URL = "https://plumblinebible.org/"
+// PWA_URL used to be declared here. It lives in Church.kt now, and comes from
+// the core's `church::PWA_URL` — the hosted address was written down in three
+// places (here, church.ts, and the core had none).
 
 /** The QR modules for [text] as rows of booleans (true = dark), or null if it
  *  could not be encoded (absurdly long input — never for our links). */
@@ -89,11 +91,11 @@ fun QrCode(text: String, size: Dp, modifier: Modifier = Modifier) {
 /** Fire the system share sheet with the link this reader hands over — the app
  *  plus their church, when they have set one. */
 fun shareAppLink(context: Context, church: ChurchState?, startAsNewBeliever: Boolean = false) {
-    val url = shareUrl(PWA_URL, church, startAsNewBeliever)
-    val from = if (hasChurch(church)) " from ${cleanChurch(church).name}" else ""
+    val share = shareOf(church, startAsNewBeliever)
+    val from = if (share.hasChurch) " from ${share.church.name}" else ""
     val send = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, "Plumbline — the Holy Bible, free and offline$from: $url")
+        putExtra(Intent.EXTRA_TEXT, "Plumbline — the Holy Bible, free and offline$from: ${share.url}")
     }
     context.startActivity(Intent.createChooser(send, "Share Plumbline"))
 }
@@ -113,7 +115,9 @@ fun ShareAppDialog(
     onWelcome: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val link = shareUrl(PWA_URL, church, startAsNewBeliever)
+    // One trip to the core per church, not one per field read: the link, the
+    // "with …" line and the hasChurch test all come off the same answer.
+    val share = remember(church, startAsNewBeliever) { shareOf(church, startAsNewBeliever) }
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier
@@ -125,21 +129,20 @@ fun ShareAppDialog(
             Text("Share Plumbline", color = Color(0xFF101010), fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
             Text(
-                if (hasChurch(church)) {
-                    "Free, private, offline, no account required."
-                } else {
-                    "Free, private, offline, no account required."
-                },
+                "Free, private, offline, no account required.",
                 color = Color(0xFF5A564E), fontSize = 13.sp, textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(16.dp))
-            QrCode(text = link, size = 220.dp)
+            QrCode(text = share.url, size = 220.dp)
             Spacer(Modifier.height(10.dp))
-            Text("plumblinebible.org", color = Color(0xFF5A564E), fontSize = 12.sp, textAlign = TextAlign.Center)
-            if (hasChurch(church)) {
+            Text(
+                share.base.substringAfter("://").trimEnd('/'),
+                color = Color(0xFF5A564E), fontSize = 12.sp, textAlign = TextAlign.Center,
+            )
+            if (share.hasChurch) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "with ${cleanChurch(church).name}",
+                    "with ${share.church.name}",
                     color = Color(0xFF101010), fontSize = 13.sp, fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
                 )
