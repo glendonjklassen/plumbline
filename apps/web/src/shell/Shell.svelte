@@ -692,10 +692,16 @@
     padding: 8px;
     border-radius: 6px;
     color: var(--gold, #9e7d38);
+    /* Sized in font-size even though it draws no text, and the glyph below is
+       in `em`. An icon has to grow with the reader's text setting like every
+       other piece of chrome, and expressing that as a font-size is what lets
+       `e2e/text-scale.spec.ts` hold it to that with the same measurement it
+       uses for everything else. */
+    font-size: calc(20px * var(--uiScale, 1));
   }
   .share-first svg {
-    width: calc(21px * var(--uiScale, 1));
-    height: calc(21px * var(--uiScale, 1));
+    width: 1.05em;
+    height: 1.05em;
     display: block;
   }
   .share-first:hover {

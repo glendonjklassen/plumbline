@@ -2424,8 +2424,7 @@ fn hymnal_round_trip_via_abi() {
 
         // One hymn, untransposed: chords split into parts as authored.
         let g: Value =
-            serde_json::from_str(&take(plumbline_engine_hymn_json(e, c"amazing-grace".as_ptr(), 0)).unwrap())
-                .unwrap();
+            serde_json::from_str(&take(plumbline_engine_hymn_json(e, c"amazing-grace".as_ptr(), 0)).unwrap()).unwrap();
         assert_eq!(
             g.as_object().unwrap().keys().collect::<Vec<_>>(),
             ["id", "key", "meter", "number", "texts", "transpose", "transposedKey", "tune"]
@@ -2439,8 +2438,7 @@ fn hymnal_round_trip_via_abi() {
 
         // Transposed +3 from G: the target key is Bb, so chords spell FLAT.
         let up: Value =
-            serde_json::from_str(&take(plumbline_engine_hymn_json(e, c"amazing-grace".as_ptr(), 3)).unwrap())
-                .unwrap();
+            serde_json::from_str(&take(plumbline_engine_hymn_json(e, c"amazing-grace".as_ptr(), 3)).unwrap()).unwrap();
         assert_eq!((up["transpose"].as_i64(), up["transposedKey"].as_str()), (Some(3), Some("Bb")));
         let uline = &up["texts"]["en"]["stanzas"][0]["lines"][0]["parts"];
         assert_eq!(uline[1]["chord"], "Bb");
@@ -2450,8 +2448,7 @@ fn hymnal_round_trip_via_abi() {
 
         // Both languages ship on one hymn; the chorus carries its own chart.
         let burg: Value =
-            serde_json::from_str(&take(plumbline_engine_hymn_json(e, c"ein-feste-burg".as_ptr(), 0)).unwrap())
-                .unwrap();
+            serde_json::from_str(&take(plumbline_engine_hymn_json(e, c"ein-feste-burg".as_ptr(), 0)).unwrap()).unwrap();
         assert_eq!(burg["texts"]["en"]["translator"], "Frederick H. Hedge");
         assert_eq!(burg["texts"]["de"]["translator"], Value::Null);
         assert_eq!(burg["texts"]["de"]["chorus"]["lines"][0]["parts"][0]["chord"], "F");
@@ -2459,8 +2456,7 @@ fn hymnal_round_trip_via_abi() {
         // Unknown id is null; a wild transpose folds into one octave.
         assert!(plumbline_engine_hymn_json(e, c"no-such-hymn".as_ptr(), 0).is_null());
         let far: Value =
-            serde_json::from_str(&take(plumbline_engine_hymn_json(e, c"amazing-grace".as_ptr(), 15)).unwrap())
-                .unwrap();
+            serde_json::from_str(&take(plumbline_engine_hymn_json(e, c"amazing-grace".as_ptr(), 15)).unwrap()).unwrap();
         assert_eq!(far["transposedKey"], "Bb", "15 semitones is 3");
 
         plumbline_engine_free(e);

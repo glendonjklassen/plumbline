@@ -1598,14 +1598,17 @@ pub fn hymn_to_wire(h: &hymnal::Hymn, semis: i32) -> WireHymn {
             .texts
             .iter()
             .map(|(lang, t)| {
-                (lang.clone(), WireHymnText {
-                    title: t.title.clone(),
-                    author: t.author.clone(),
-                    translator: t.translator.clone(),
-                    year: t.year,
-                    stanzas: t.stanzas.iter().map(|s| stanza_to_wire(s, semis, flats)).collect(),
-                    chorus: t.chorus.as_ref().map(|c| stanza_to_wire(c, semis, flats)),
-                })
+                (
+                    lang.clone(),
+                    WireHymnText {
+                        title: t.title.clone(),
+                        author: t.author.clone(),
+                        translator: t.translator.clone(),
+                        year: t.year,
+                        stanzas: t.stanzas.iter().map(|s| stanza_to_wire(s, semis, flats)).collect(),
+                        chorus: t.chorus.as_ref().map(|c| stanza_to_wire(c, semis, flats)),
+                    },
+                )
             })
             .collect(),
     }

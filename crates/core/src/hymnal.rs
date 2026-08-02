@@ -195,8 +195,8 @@ pub fn stanza_lines(stanza: &str, semis: i32, flats: bool) -> Vec<Vec<Segment>> 
 /// scan takes the first prefix match, so every token must come before its own
 /// prefixes (`maj7` before `m`, `add9` before `9`, `dim7` before `dim`).
 const QUALITIES: [&str; 23] = [
-    "mmaj7", "7sus4", "add11", "add13", "m7b5", "maj7", "dim7", "aug7", "sus2", "sus4", "add9", "add2", "maj",
-    "min", "dim", "aug", "m7", "11", "13", "m", "6", "7", "9",
+    "mmaj7", "7sus4", "add11", "add13", "m7b5", "maj7", "dim7", "aug7", "sus2", "sus4", "add9", "add2", "maj", "min",
+    "dim", "aug", "m7", "11", "13", "m", "6", "7", "9",
 ];
 
 /// Note letter → pitch class.
@@ -399,10 +399,10 @@ mod tests {
 
     #[test]
     fn plain_line_is_one_chordless_segment() {
-        assert_eq!(parse_line("Was blind, but now I see."), vec![Segment {
-            chord: None,
-            text: "Was blind, but now I see.".into()
-        }]);
+        assert_eq!(
+            parse_line("Was blind, but now I see."),
+            vec![Segment { chord: None, text: "Was blind, but now I see.".into() }]
+        );
         // The empty line still paints as a line.
         assert_eq!(parse_line(""), vec![Segment { chord: None, text: "".into() }]);
     }
@@ -426,7 +426,10 @@ mod tests {
 
     #[test]
     fn chord_grammar() {
-        for ok in ["G", "F#", "Bb", "Em", "C7", "Gmaj7", "Dsus4", "Am7", "D/F#", "G7/B", "Cm7b5", "Baug7", "Fadd9", "C7sus4", "Emadd9"] {
+        for ok in [
+            "G", "F#", "Bb", "Em", "C7", "Gmaj7", "Dsus4", "Am7", "D/F#", "G7/B", "Cm7b5", "Baug7", "Fadd9", "C7sus4",
+            "Emadd9",
+        ] {
             assert!(is_chord(ok), "{ok} should parse");
         }
         for bad in ["", "H", "Gx", "G#b", "Selah", "G/", "G/H", "Gmaj7x", "Gm7b5x", "7"] {
