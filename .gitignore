@@ -64,3 +64,8 @@ apps/web/public/plumbline_ffi.wasm
 
 # Kotlin/Gradle scratch dir (appears under apps/android on any gradle run)
 .kotlin/
+
+# Generated on demand by scripts/hymnal-review.mjs for a read-through of the
+# hymn texts and charts. Not a source file and not worth versioning: it is one
+# command away whenever it is wanted.
+HYMNAL-REVIEW.md

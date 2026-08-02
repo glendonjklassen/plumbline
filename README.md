@@ -9,9 +9,9 @@
 **Plumbline** is a Bible-study tool: a clean parallel-passage reader with two
 optional layers of analysis beside the text — **Scholars'** (Strong's, word
 grammar, the same root traced across the testaments, the Treasury's
-cross-references) and **Machine** (statistical patterns to weigh for yourself).
-Everything runs on your device and works offline — no account, no sign-in,
-nothing phoned home.
+cross-references) and **Machine** (statistical patterns).
+Everything runs on your device and works offline. No account and no sign-in,
+and your data remains local and private.
 
 ![Isaiah 2 and Micah 4 open side by side, joined by weave connector lines,
 with the study panel on "treasures" — Strong's H214, its morphology, every
@@ -20,14 +20,14 @@ canon](assets/readme/reader-weaves.png)
 
 ## Install
 
-### Web — the way most people should get it
+### Web
 
 **[plumblinebible.org](https://plumblinebible.org/)** —
 open it in any browser and install it from the address bar (phone or
 desktop). It works offline after the first visit, and your study data lives
 in browser storage.
 
-### Android — sideload the APK
+### Android
 
 No Play Store, no Google account: you download one file and open it. Four
 steps, all on the phone.

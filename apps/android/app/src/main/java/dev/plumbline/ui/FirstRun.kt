@@ -555,7 +555,7 @@ private fun Tiers(
     )
     TierCard(
         palette, machine, onMachine, "Machine analysis ≈",
-        "Statistical patterns to weigh for yourself: the words a word keeps company with, " +
+        "Statistical patterns: the words a word keeps company with, " +
             "where in the Bible it is most used, and where its repetitions cluster.",
     )
     Spacer(Modifier.height(8.dp))
