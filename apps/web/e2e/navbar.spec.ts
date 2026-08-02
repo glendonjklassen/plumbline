@@ -11,26 +11,93 @@ async function boot(page: Page): Promise<void> {
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
 }
 
-test("phone: the four destinations are in the bottom bar, not the menu", async ({ page }) => {
+test("phone: the five destinations are in the bottom bar, not the menu", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await boot(page);
   const nav = page.locator(".bottom-nav");
   await expect(nav).toBeVisible();
-  await expect(nav.locator("button")).toHaveCount(4);
-  for (const label of ["Read", "Explore", "Present", "Memorize"]) {
+  await expect(nav.locator("button")).toHaveCount(5);
+  for (const label of ["Read", "Explore", "Present", "Memorize", "Hymnal"]) {
     await expect(nav.getByRole("button", { name: label })).toBeVisible();
   }
   // Read is current on arrival, and the icons really are icons.
   await expect(nav.locator("button.on")).toHaveText(/Read/);
-  await expect(nav.locator("svg")).toHaveCount(4);
+  await expect(nav.locator("svg")).toHaveCount(5);
 
   // The menu keeps utilities ONLY — the whole point of moving them out.
   await page.getByLabel("Menu").click();
   const menu = page.locator(".menu");
   await expect(menu.getByRole("button", { name: "Settings" })).toBeVisible();
-  for (const gone of ["Explore", "Present", "Memorize"]) {
+  for (const gone of ["Explore", "Present", "Memorize", "Hymnal"]) {
     await expect(menu.getByRole("button", { name: gone })).toHaveCount(0);
   }
+});
+
+// The phone header used to be TWO strips of chrome: the app's name, a search
+// glass, a bordered "Share" and the ≡ on one row, and the pane's own
+// ‹ John 3 ▾ › nav on a second one underneath. Android has never looked like
+// that — it has one bar, no title, and icons — and the doubled strip cost ~40px
+// of a phone screen to say what one row already said (feedback 2026-08-02).
+//
+// Mutation-tested 2026-08-02: restoring the `.title` span, or dropping the
+// `.reading :global(.pane > .nav) { display: none }` rule, each makes the height
+// assertion fail. The height is derived from the header's own computed
+// min-height rather than a constant, so a font-size or padding change cannot
+// silently turn this green.
+test("phone: one bar of chrome above the text, with no app title", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await boot(page);
+
+  // The name of the app is not a control and does not earn a phone's width.
+  await expect(page.locator("header .title")).toHaveCount(0);
+  await expect(page.getByText("Plumbline", { exact: true })).toHaveCount(0);
+
+  // The chapter nav is IN the header, and the pane's own strip is gone.
+  const inHeader = page.locator("header .chapter-nav");
+  await expect(inHeader).toBeVisible();
+  await expect(inHeader.locator(".passage")).toHaveText(/\w+ \d+ ▾/);
+  await expect(page.locator(".pane > .nav")).toBeHidden();
+
+  // Everything above the text is ONE bar: the reader's first line of scripture
+  // starts within a hair of the header's own height, not two strips down.
+  const header = (await page.locator("header").boundingBox())!;
+  const canvas = (await page.locator(".pane canvas").first().boundingBox())!;
+  expect(
+    canvas.y - (header.y + header.height),
+    "there is a second strip of chrome between the header and the text",
+  ).toBeLessThan(12);
+
+  // Share is an icon, as on Android — a labelled glyph, not a bordered word.
+  const share = page.getByRole("button", { name: "Share the app" });
+  await expect(share).toBeVisible();
+  await expect(share.locator("svg")).toHaveCount(1);
+  await expect(share).not.toHaveText(/Share/);
+
+  // It still opens the sheet it always did.
+  await share.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+});
+
+test("phone: Church and Welcome are menu items, the way Android has them", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  // Arrive by a shared link carrying a church, so both conditional controls
+  // exist — the case that used to push the row over.
+  await page.evaluate(() => localStorage.setItem("plumbline:intro", "new"));
+  await boot(page);
+  await page.evaluate(() =>
+    (window as any).__plumbline.setChurch({ name: "Grace Chapel", info: "Sundays 10am", url: "" }),
+  );
+
+  // Not in the bar — that is what keeps it one row.
+  await expect(page.locator("header .church-btn")).toBeHidden();
+
+  await page.getByLabel("Menu").click();
+  await expect(page.locator(".menu").getByRole("button", { name: "Church" })).toBeVisible();
+
+  // And the bar is still one row high with both of them set.
+  const header = (await page.locator("header").boundingBox())!;
+  expect(header.height).toBeLessThan(90);
 });
 
 // Present was the one surface that covered the whole chrome, so the four

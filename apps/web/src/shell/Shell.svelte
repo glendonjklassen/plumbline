@@ -350,7 +350,23 @@
        reader's setting into `--uiScale`. -->
   <div class="rem-probe" aria-hidden="true" use:uiScale={readerScale}></div>
   <header>
-    <span class="title">Plumbline</span>
+    <!-- NO APP TITLE, at any width. Android has never had one, and on a phone it
+         was the widest thing in the bar: it pushed Welcome, Church and Share
+         into a second row of chrome above a reader who already knows which app
+         they opened. The tab title and the install manifest carry the name.
+
+         On a PHONE the chapter nav lives here, as it does on Android — one bar,
+         not a header above a pane strip. A phone is capped at one pane
+         (`maxPanes`), so this is that pane, and the pane's own strip is hidden
+         at this width. -->
+    <div class="chapter-nav">
+      <button onclick={() => s.stepChapter(s.activePane, -1)} aria-label="Previous chapter">‹</button>
+      <button class="passage" onclick={() => (s.bookNavFor = s.activePane)}>{subtitle} ▾</button>
+      <button onclick={() => s.stepChapter(s.activePane, 1)} aria-label="Next chapter">›</button>
+    </div>
+    <!-- Which pane is ACTIVE. Hidden on a phone, where the chapter nav above
+         says it already. Kept in the DOM at every width on purpose: 21 e2e
+         files use it as the "text is on screen" boot signal. -->
     <span class="subtitle">{subtitle}</span>
     <!-- Destinations are first-class in the top bar (Compose bottom-nav
          parity: Read is the base layer, then Explore · Present · Memorize);
@@ -394,7 +410,17 @@
            without going hunting (feedback 2026-07-27). -->
       <button class="church-btn" onclick={visitChurch} title={churchTitle}>Church</button>
     {/if}
-    <button class="share-first" onclick={go(() => (shareApp = true))}>Share</button>
+    <!-- An ICON, as on Android, and for the reason a phone bar teaches: a
+         bordered word cost more width than the glyph plus its whole tap target,
+         and it was the control that tipped the row over. -->
+    <button class="share-first" onclick={go(() => (shareApp = true))} aria-label="Share the app" title="Share the app">
+      <svg viewBox="0 0 24 24" aria-hidden="true"
+        ><path
+          fill="currentColor"
+          d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"
+        /></svg
+      >
+    </button>
     <div class="menu-host">
       <button class="menu-btn" onclick={() => (menuOpen = !menuOpen)} aria-label="Menu">≡</button>
       {#if menuOpen}
@@ -403,7 +429,19 @@
         <div class="menu">
           <!-- UTILITIES ONLY, at every width. The destinations used to fold in
                here on narrow screens; they live in the bottom bar now, in thumb
-               reach, which is where Android has always had them. -->
+               reach, which is where Android has always had them.
+
+               Church and Welcome are the exception, and only on a phone: they
+               are conditional buttons in the bar on a wide screen (there is
+               room, and someone handed this reader a church — they should not
+               hunt for it), and ⋮ items on a phone, which is exactly where
+               Android keeps them. `.phone-only` hides them above 700px. -->
+          {#if hasChurch(s.church)}
+            <button class="phone-only" onclick={go(visitChurch)}>Church</button>
+          {/if}
+          {#if s.intro}
+            <button class="phone-only" onclick={go(() => (s.reopenIntro = s.intro))}>Welcome</button>
+          {/if}
           <button onclick={go(() => (s.showHistory = true))}>History</button>
           <button onclick={go(() => (s.panel = { kind: "guide" }))}>Guide & about</button>
           <button onclick={go(() => (s.showShortcuts = true))}>Keyboard shortcuts</button>
@@ -605,10 +643,29 @@
     position: relative;
     z-index: 46;
   }
-  .title {
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    font-size: calc(18px * var(--uiScale, 1));
+  /* The chapter nav is the PHONE's copy of the pane strip, hoisted into the one
+     bar. Above 700px the panes carry their own (there can be three of them, and
+     one header cannot steer three), so it is not drawn at all. */
+  .chapter-nav {
+    display: none;
+    align-items: center;
+    gap: 2px;
+  }
+  .chapter-nav button {
+    font-size: calc(19px * var(--uiScale, 1));
+    line-height: 1;
+    padding: 8px 12px;
+    border-radius: 6px;
+    color: var(--gold, #9e7d38);
+  }
+  .chapter-nav .passage {
+    font-size: calc(16px * var(--uiScale, 1));
+    padding: 8px 10px;
+    color: var(--ink, #211f1a);
+    white-space: nowrap;
+  }
+  .phone-only {
+    display: none;
   }
   .subtitle {
     color: var(--faded, #8a8276);
@@ -629,12 +686,17 @@
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
   }
   .share-first {
-    font-size: calc(15px * var(--uiScale, 1));
-    padding: 9px 14px;
-    border: 1px solid var(--gold, #9e7d38);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
     border-radius: 6px;
     color: var(--gold, #9e7d38);
-    font-weight: 600;
+  }
+  .share-first svg {
+    width: calc(21px * var(--uiScale, 1));
+    height: calc(21px * var(--uiScale, 1));
+    display: block;
   }
   .share-first:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
@@ -700,6 +762,24 @@
     .subtitle {
       display: none;
     }
+    /* ONE BAR on a phone, as on Android. The chapter nav comes up into the
+       header and the pane's own strip goes away — two stacked strips of chrome
+       over a single pane was the "second row" that made this look janky, and it
+       cost ~40px of a 780px screen to say what one row already said. */
+    .chapter-nav {
+      display: flex;
+    }
+    .reading :global(.pane > .nav) {
+      display: none;
+    }
+    /* Church and Welcome are ⋮ items here, not buttons — Android's arrangement,
+       and what keeps this a single row when a reader has both. */
+    header .church-btn {
+      display: none;
+    }
+    .menu .phone-only {
+      display: block;
+    }
     /* One row where it fits, a second row where it does not.
        The glass stands in for the field until it's wanted, and while searching
        the field owns the row, so at the default text size this is one row.
@@ -735,7 +815,10 @@
     .glass.searching {
       display: none;
     }
-    header:has(.search.open) .title,
+    /* Searching, the field owns the row: everything that is not the field or
+       the way out of it stands down, so the row never has to wrap to hold a
+       query. The chapter nav is the widest of them and goes first. */
+    header:has(.search.open) .chapter-nav,
     header:has(.search.open) .church-btn,
     header:has(.search.open) .share-first {
       display: none;
