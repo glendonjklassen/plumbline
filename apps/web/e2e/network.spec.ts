@@ -349,3 +349,64 @@ test("a data update re-pins without re-downloading what did not change", async (
     await origin.close();
   }
 });
+
+test.setTimeout(240_000);
+test("a deploy does not push the optional bundle onto a device that declined it", async ({ page }) => {
+  // The `optional` stage exists so nobody downloads the 194 suggested weaves
+  // without asking. The update sweep is where that promise is easiest to break:
+  // `reconcilePack` walks the manifest and fetches whatever is missing, and a
+  // file the reader deliberately does not have is missing on every device
+  // forever. It would also have jammed the pin — the completeness gate refuses
+  // to advance while a listed file is absent, so a device that never wanted the
+  // bundle would have stopped re-pinning for good.
+  //
+  // Mutation-tested 2026-08-02: with `thisDevicesFiles` reduced to
+  // `live.files`, this goes red on the download AND on the pin, which is the
+  // pair of failures the fix addresses.
+  const origin = await rewritingOrigin();
+  try {
+    await firstVisit(page, origin.url);
+    const bundle = await page.evaluate(async () => {
+      const hit = await caches.match(new URL("__depot/pack-pin.json", location.href).href, {
+        ignoreVary: true,
+      });
+      const pin = await hit!.json();
+      return (pin.files as { path: string }[]).some((f) => f.path === "weaves/suggested.bundle.json");
+    });
+    expect(bundle, "this pack has no optional bundle to decline").toBe(true);
+
+    // A release that changes the version and nothing else.
+    origin.mutate((m) => ({ ...m, version: "0pt10na1deploy00" }));
+
+    const fetched: string[] = [];
+    page.on("request", (r) => {
+      const u = new URL(r.url());
+      if (u.pathname.includes("/pack/")) fetched.push(u.pathname);
+    });
+    await page.reload();
+    await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+
+    // The pin must still advance: an optional file nobody has is not a hole in
+    // this device's pack, and treating it as one strands the reader on an old
+    // pin release after release.
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(async () => {
+            const hit = await caches.match(new URL("__depot/pack-pin.json", location.href).href, {
+              ignoreVary: true,
+            });
+            return hit ? ((await hit.json()).packVersion as string) : null;
+          }),
+        { timeout: 90_000 },
+      )
+      .toBe("0pt10na1deploy00");
+
+    expect(
+      fetched.filter((p) => p.includes("suggested.bundle.json")),
+      "the update sweep downloaded the optional bundle onto a device that never asked for it",
+    ).toEqual([]);
+  } finally {
+    await origin.close();
+  }
+});

@@ -239,6 +239,12 @@ export async function buildHome(
     idbGet("cache", SUGGESTED_INSTALLED),
   ]);
   const bundledOn = bundledFlag ? dec.decode(bundledFlag) !== "off" : true;
+  // Whether the suggested-weave bundle is in this home. MUTABLE, and read
+  // through a getter below: an install has to change the answer within the
+  // session that made it, or Settings keeps offering a download the reader has
+  // already completed. A plain boolean captured here reads correctly at boot
+  // and then lies until the next reload.
+  let suggestedOn = suggestedFlag !== undefined;
   // The stock set seeds ONCE (Android parity): after that the user's own
   // copies rule, so edits and deletions stick across pack updates.
   const seedStock = bundledOn && !seededFlag;
@@ -371,7 +377,9 @@ export async function buildHome(
       return out;
     },
     bundledOn,
-    suggestedInstalled: suggestedFlag !== undefined,
+    get suggestedInstalled() {
+      return suggestedOn;
+    },
     async installSuggestedWeaves(bundle: Uint8Array) {
       if (frozen) return 0;
       // `{ "<name>.json": "<file text>" }` — the text verbatim, never
@@ -409,6 +417,9 @@ export async function buildHome(
         await idbApply("user", fresh);
         await idbApply("cache", new Map([[SUGGESTED_INSTALLED, enc.encode("1")]]));
         for (const [path, bytes] of fresh) synced.set(path, fingerprint(bytes));
+        // Only now, with the bytes and the marker both down: this session's
+        // answer to "do you have them?" changes when the store's does.
+        suggestedOn = true;
         return fresh.size;
       });
     },
