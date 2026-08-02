@@ -219,6 +219,26 @@ export class StudyEngine {
     return this.#json("plumbline_engine_canon_segments_json");
   }
 
+  // ── the hymnal ───────────────────────────────────────────────────────────────
+
+  /** Every hymn: `{hymns:[{id,number,titles,firstLines,tune,meter}]}`, in book
+   *  order. Empty when this home carries no `data/hymnal.json`. */
+  hymnal(): any {
+    return this.#json("plumbline_engine_hymnal_json");
+  }
+  /** One hymn, chords transposed `semis` semitones and split into paintable
+   *  parts. Null for an unknown id.
+   *
+   *  Hand-marshalled rather than through `#json`, which turns every argument
+   *  into a string pointer — `semis` is an i32 and has to cross as one. */
+  hymn(id: string, semis: number): any {
+    const s = this.#call(
+      (p) => this.#w.takeStr((this.#w.exports.plumbline_engine_hymn_json as Function)(this.#engine, p, semis) as number),
+      [id],
+    );
+    return s === null ? null : JSON.parse(s);
+  }
+
   // ── the plain-English overlay (the AKJV delta) ───────────────────────────────
 
   /** Switch the overlay on/off. Reader only — memorize, Present, copy and share

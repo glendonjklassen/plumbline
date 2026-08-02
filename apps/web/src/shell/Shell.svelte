@@ -8,6 +8,7 @@
   import Shortcuts from "./Shortcuts.svelte";
   import BookNav from "./BookNav.svelte";
   import ExploreScreen from "./ExploreScreen.svelte";
+  import HymnalScreen from "../hymnal/HymnalScreen.svelte";
   import MarkReadDialog from "./MarkReadDialog.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import CanonStrip from "./CanonStrip.svelte";
@@ -167,6 +168,13 @@
         s.screen = "memorize";
         s.memorize = { view: "hub" };
       },
+    },
+    {
+      key: "hymnal",
+      label: "Hymnal",
+      // Material Symbols "music_note".
+      path: "M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z",
+      go: () => (s.screen = "hymnal"),
     },
   ] as const;
 
@@ -357,6 +365,7 @@
             s.memorize = { view: "hub" };
           })}>Memorize</button
         >
+        <button onclick={go(() => (s.screen = "hymnal"))}>Hymnal</button>
       </nav>
     <span class="spacer"></span>
     <button class="glass" class:searching={searchOpen} onclick={openSearch} aria-label="Open search">⌕</button>
@@ -412,6 +421,8 @@
       <ExploreScreen />
     {:else if s.screen === "memorize"}
       <MemorizeHost />
+    {:else if s.screen === "hymnal"}
+      <HymnalScreen />
     {:else}
       <div class="reading">
         <div class="panes">

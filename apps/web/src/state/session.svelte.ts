@@ -207,7 +207,25 @@ export class Session {
    * reading) and Memorize a centred modal. Both are screens now (2026-07-29).
    * `"read"` is the absence of a destination rather than one of its own.
    */
-  screen = $state<"read" | "explore" | "memorize">("read");
+  screen = $state<"read" | "explore" | "memorize" | "hymnal">("read");
+
+  // ── the hymnal ──────────────────────────────────────────────────────────────
+
+  /** The hymn being read, and how far its chords are transposed. `semis` lives
+   *  with the id because it is about THIS hymn: a singer who dropped one hymn a
+   *  tone has said nothing about the next one, and carrying the offset across
+   *  would silently rewrite a chart they never asked to change. */
+  hymn = $state<{ id: string; semis: number } | null>(null);
+  /** Which language the hymnal shows where a hymn has more than one. A
+   *  PREFERENCE, not a promise — a German-only hymn still shows German. */
+  hymnLang = $state("en");
+  /** Whether chords are drawn above the words. Off by default: most people
+   *  singing are not playing, and a chart over every line is noise to them. */
+  hymnChords = $state(false);
+  /** Sing mode: the fullscreen sunlight surface. */
+  hymnSinging = $state(false);
+  /** Auto-scroll speed in sing mode, 0 (hold) to 9. */
+  hymnScroll = $state(0);
 
   /** Back to the text from anywhere — what every screen's ‹ does. */
   goRead(): void {
@@ -296,6 +314,8 @@ export class Session {
     ["panel", null],
     ["mapPopup", null],
     ["memorize", null],
+    ["hymn", null],
+    ["hymnSinging", false],
     ["contextMenu", null],
     ["tagPickFor", null],
     ["threadPickFor", null],
