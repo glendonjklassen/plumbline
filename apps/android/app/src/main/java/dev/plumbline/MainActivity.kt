@@ -91,12 +91,23 @@ class MainActivity : ComponentActivity() {
                     // few KB each, and a fresh 256 KB array for each of those
                     // is the opposite of the point.
                     val buf = ByteArray(COPY_BUFFER_BYTES)
+                    // BUMP THIS WHENEVER THE BUNDLED data/ SET CHANGES. It is the
+                    // only thing that carries a data change to a device that
+                    // already has the app: an install holding the previous marker
+                    // skips the whole extraction, so a new file reaches new
+                    // installs only, and the feature that reads it is simply
+                    // missing for everyone else.
+                    //
                     // v2: the bundled set gained akjv.akjvb (the plain-English
-                    // overlay). An install that already holds .data-v1 would
-                    // never re-extract, so the overlay would reach new installs
-                    // only — the marker is what carries a data change to a
-                    // device that already has the app.
-                    val corpus = File(home, ".data-v2")
+                    // overlay).
+                    // v3: hymnal.json (2026-08-02). Adding it to the gradle
+                    // include list was not enough and shipped broken in v0.39.0
+                    // — every existing install opened the hymn tab to "The
+                    // hymnal has not finished loading yet." The comment above
+                    // described this exact failure and it happened anyway, so
+                    // `bundledDataMarkerIsBumpedForTheCurrentAssetSet` in
+                    // MainActivityTest now fails the build instead.
+                    val corpus = File(home, ".data-v3")
                     if (!corpus.exists()) {
                         copyAsset("data", File(home, "data"), buf = buf)
                         if ((assets.list("bridge")?.size ?: 0) > 0) {

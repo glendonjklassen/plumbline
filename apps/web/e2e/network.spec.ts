@@ -419,3 +419,79 @@ test("a deploy does not push the optional bundle onto a device that declined it"
     await origin.close();
   }
 });
+
+test.setTimeout(240_000);
+test("a release that ADDS a file reaches the session that discovers it", async ({ page }) => {
+  // How v0.39.0 shipped a hymnal nobody could open. On a warm boot the PIN is
+  // this device's manifest, and the pin predates the release — so stage 2
+  // fetches the study files the OLD manifest listed and never hears of the new
+  // one. Every existing reader tapped the hymn tab and got "The hymnal has not
+  // finished loading yet."
+  //
+  // The whole hymnal e2e suite passed throughout, because every one of its
+  // tests boots FRESH, which is the one case that always worked. This test is
+  // the upgrade, and it is the shape that was missing.
+  //
+  // Mutation-tested 2026-08-02: remove the `arrived` block from reconcilePack
+  // and this goes red with the hymnal still empty after the update.
+  const origin = await rewritingOrigin();
+  try {
+    // FIRST VISIT ON THE OLD RELEASE: a pack with no hymnal in it at all.
+    origin.mutate((m) => ({
+      ...m,
+      version: "0ldrelease00000",
+      files: (m.files as { path: string }[]).filter((f) => f.path !== "data/hymnal.json"),
+    }));
+    await firstVisit(page, origin.url);
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async () => {
+            const ix = await (window as any).__plumbline.rpc.call("hymnal");
+            return (ix?.hymns ?? []).length;
+          }),
+        { timeout: 60_000 },
+      )
+      .toBe(0);
+
+    // Age the pin's build id. The refresh is deliberately gated on "my code is
+    // newer than my pin" — a warm boot on an UNCHANGED release must ask the
+    // network for nothing at all — and one Playwright run only ever has a single
+    // build, so the upgrade has to be staged here.
+    await page.evaluate(async () => {
+      const url = new URL("__depot/pack-pin.json", location.href).href;
+      const hit = await caches.match(url, { ignoreVary: true });
+      const pin = await hit!.json();
+      pin.buildId = "an-older-build";
+      const c = await caches.open("plumbline-v1");
+      await c.put(url, new Response(JSON.stringify(pin), { headers: { "content-type": "application/json" } }));
+    });
+
+    // THE UPGRADE: the real manifest, hymnal and all. Identity rather than
+    // clearing the hook — passthrough there works only by throwing into the
+    // catch, which would swallow a genuine mistake in this test too.
+    origin.mutate((m) => m);
+    await page.reload();
+    await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+
+    // Without leaving the page or reloading a second time, the book fills in —
+    // reconcile downloads it, hands it to the engine, and the shell re-asks.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async () => {
+            const ix = await (window as any).__plumbline.rpc.call("hymnal");
+            return (ix?.hymns ?? []).length;
+          }),
+        { timeout: 90_000 },
+      )
+      .toBeGreaterThan(50);
+
+    // And the reader sees it: the empty state is gone from the hymnal screen.
+    await page.evaluate(() => ((window as any).__plumbline.screen = "hymnal"));
+    await expect(page.locator(".row").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("The hymnal has not finished loading yet.")).toHaveCount(0);
+  } finally {
+    await origin.close();
+  }
+});

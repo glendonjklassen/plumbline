@@ -448,6 +448,10 @@ async function reconcilePack(): Promise<void> {
     if (!(await depotHas(packFileUrl(f, live.version)))) return; // incomplete: keep the old pin
   }
   await writePin(live, assetUrl(""), mine);
+
+  // From here the session speaks about the pack it actually has.
+  booted!.manifest = live;
+
   booted!.trace.push([`reconciled to ${live.version} (${fetched} files)`, Math.round(performance.now() - t0)]);
   self.postMessage({ type: "packUpdated", version: live.version });
 }
@@ -455,6 +459,35 @@ async function reconcilePack(): Promise<void> {
 async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<void> {
   await Promise.race([firstLayout, new Promise((r) => setTimeout(r, 2500))]);
   try {
+    // WHICH PACK ARE WE ACTUALLY ON? Ask before stage 2 — but only after an
+    // upgrade.
+    //
+    // A warm boot's manifest IS the pin, and the pin describes the release this
+    // device last completed. Stage 2 then fetches the study files THAT release
+    // listed, so a file added since is never fetched and the feature reading it
+    // is simply missing. v0.39.0 shipped that: every existing reader opened the
+    // hymn tab to "The hymnal has not finished loading yet." A fresh install was
+    // fine, which is why the whole hymnal suite passed.
+    //
+    // Gated on the pin coming from an older BUILD, because a warm boot on an
+    // unchanged release must ask the network for nothing whatsoever — not even
+    // 5 KB (e2e/app.spec.ts counts requests and was right to fail an earlier,
+    // unconditional version of this). So: one extra fetch on the first launch
+    // after an upgrade, none ever again, and `fetchManifest` falls back to the
+    // stored copy so an offline upgrade behaves exactly as before.
+    //
+    // Everything downstream then works through the path that already existed,
+    // which is the point — the alternative was a second mechanism for injecting
+    // late files into a running engine.
+    if (booted!.staleManifest) {
+      try {
+        booted!.manifest = await fetchManifest();
+        booted!.trace.push(["manifest refreshed (newer build than pin)", 0]);
+      } catch {
+        /* offline: the pin's manifest is what we have, and it is enough */
+      }
+    }
+
     const t0 = performance.now();
     const files = await fetchStage2Pack(booted!.manifest);
     booted!.trace.push(["stage2 fetch+gunzip", Math.round(performance.now() - t0)]);

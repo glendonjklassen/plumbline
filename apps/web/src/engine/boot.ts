@@ -32,7 +32,7 @@ import {
   fetchStageLocal,
   type PackManifest,
 } from "./pack";
-import { manifestFromPin, readPin, writePin } from "./pin";
+import { manifestFromPin, pinIsFromAnOlderBuild, readPin, writePin } from "./pin";
 import { StudyEngine } from "./StudyEngine";
 
 /** Where the engine binary lives — content-addressed on the build id, so a new
@@ -91,6 +91,12 @@ export interface BootResult {
   trace: [string, number][];
   /** Whether stage 1 came entirely from the depot, with no network request. */
   fromPin: boolean;
+  /** This boot read its manifest from a pin an OLDER build wrote, so that
+   *  manifest may not list every file this code expects. `backgroundLoad`
+   *  refreshes it before stage 2 when so — and only when so, because a warm
+   *  boot on an unchanged release must ask the network for nothing at all
+   *  (e2e/app.spec.ts pins that). */
+  staleManifest: boolean;
 }
 
 export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult> {
@@ -237,5 +243,14 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
     if (n) trace.push(["legacy IDB idxcache dropped (KB)", Math.round(n / 1024)]);
   });
 
-  return { engine, wasm, home, manifest, packVersion: manifest.version, trace, fromPin };
+  return {
+    engine,
+    wasm,
+    home,
+    manifest,
+    packVersion: manifest.version,
+    trace,
+    fromPin,
+    staleManifest: fromPin && pinIsFromAnOlderBuild(pinned),
+  };
 }

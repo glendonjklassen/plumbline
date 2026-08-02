@@ -29,6 +29,17 @@
 import { depotGet, depotPut } from "./depot";
 import { assetUrl, type PackFile, type PackManifest } from "./pack";
 
+/** This build. Read once so a pin and a staleness check cannot disagree. */
+const BUILD_ID = typeof __BUILD_ID__ === "string" ? __BUILD_ID__ : "dev";
+
+/** Whether this pin was written by an OLDER build than the one running — the
+ *  condition under which the pin's file list may be missing something the code
+ *  now expects, and the only condition under which a warm boot re-asks for the
+ *  manifest. Unknown (a pin from before the field) counts as stale, once. */
+export function pinIsFromAnOlderBuild(pin: Pin | null): boolean {
+  return pin !== null && pin.buildId !== BUILD_ID;
+}
+
 const PIN_URL = "__depot/pack-pin.json";
 const PREV_URL = "__depot/pack-pin.prev.json";
 const FORMAT = "pack-pin-v1";
@@ -43,6 +54,18 @@ export interface Pin {
    *  different origin's storage. */
   base: string;
   packVersion: string;
+  /** The BUILD that wrote this pin (`__BUILD_ID__`, one per `vite build`).
+   *
+   *  What it answers is "is my code newer than my pack description?" — the pin
+   *  IS the manifest on a warm boot, so a pin from an older build can be missing
+   *  a file the running code expects. v0.39.0 shipped that: every upgrading
+   *  reader's hymn tab was empty, because their pin predated hymnal.json.
+   *
+   *  A build id rather than the app version, because a deploy that changes only
+   *  data still rebuilds, and the app version would not move. Absent on a pin
+   *  written before this field existed, which reads as "unknown, assume stale"
+   *  — one manifest fetch on the first boot after upgrading, then never again. */
+  buildId?: string;
   /** Every file the PACK OFFERS, each carrying the explicit URL its bytes are
    *  stored under. Explicit rather than computed, so two pack generations can
    *  coexist in the depot and an unchanged file keeps its URL across a version
@@ -64,6 +87,7 @@ function pinFrom(manifest: PackManifest, base: string, here: PackFile[]): Pin {
     format: FORMAT,
     base,
     packVersion: manifest.version,
+    buildId: BUILD_ID,
     files: manifest.files.map((f) =>
       have.has(f.path) ? { ...f, url: fileUrl(f, manifest.version) } : { ...f, url: undefined },
     ),
