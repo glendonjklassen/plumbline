@@ -181,10 +181,10 @@ sideload block is already fixed and guarded by a test.
   PassagePicker, toasts); Android already does. **DONE 2026-07-30** at the three
   sites that had the bug; PassagePicker and the toasts were already display-name
   clean, so five sites turned out to be three.
-- [ ] **[opus]** Dialog focus management: a `use:modal` action (focus in, trap Tab,
+- [x] **[opus]** Dialog focus management: a `use:modal` action (focus in, trap Tab,
   restore on close, local Escape) across the 9 `aria-modal` dialogs; Escape while
   focus is in an input currently does nothing. Add `role="status"` to the main
-  toast (the update toast already has it).
+  toast (the update toast already has it). **DONE 2026-08-01.** One action across **14** `aria-modal` surfaces (the item said 9). Escape ended up DOCUMENT-level over a modal stack, not on the node: focus often leaves a dialog when the control the reader was on is removed, and a node listener silently stops firing — which for `askConfirm` is a promise that never settles, not a dead key.
 - [x] **[opus]** BookNav: OT/NT toggle + current-book marker (port from
   `ui/BookNav.kt:142-149, 265-268`) + one-line reading-tint legend (title= never
   fires on touch).
@@ -202,8 +202,8 @@ sideload block is already fixed and guarded by a test.
   gets a body; web `{#if blocks}` should treat `[]` as empty (fixing core fixes
   both shells). **DONE 2026-07-30**, with a test that NO list producer can answer
   with an empty vec — which is the invariant the web guard now leans on.
-- [ ] **[opus]** Chrome ignores the text-size setting and browser font prefs: publish
-  `--uiScale` on `:root` and scale the chrome, or convert to rem.
+- [x] **[opus]** Chrome ignores the text-size setting and browser font prefs: publish
+  `--uiScale` on `:root` and scale the chrome, or convert to rem. **DONE 2026-08-01.** `--uiScale` on `:root`, 128 declarations; chosen over rem so it cannot reach the reading canvas. A 1rem probe carries the browser's own font preference. Header now wraps rather than pushing the ≡ off-screen. **Android has the same bug and still does** — `studyScale` reaches only the study surface; recorded as a shell delta.
 - [x] **[FABLE]** "Delete my data" destructive-path spec: DONE 2026-07-29 — exact
   kill/survive scope, flow, ordering rule and test requirements in
   [docs/DELETE-MY-DATA.md](docs/DELETE-MY-DATA.md).
@@ -296,10 +296,10 @@ sideload block is already fixed and guarded by a test.
   `TURN_CACHE_MAX` (`ReaderPane.svelte:261-268`, `engine.worker.ts:139`).
   **DONE 2026-07-30**; `TURN_CACHE_MAX` 8 → 16, sized against three panes each
   prefetching both neighbours (9 live keys) with a measured ~3 MB cost.
-- [ ] **[opus]** Search: 150–200 ms debounce; skip `fuzzy_hits` (full-vocabulary
+- [x] **[opus]** Search: 150–200 ms debounce; skip `fuzzy_hits` (full-vocabulary
   Levenshtein) for short/prefix queries; truncate postings to HIT_CAP before
   materializing; cap or exempt `searchBlocks` from the cache
-  (`Shell.svelte:342`, `search.rs:275-378`).
+  (`Shell.svelte:342`, `search.rs:275-378`). **DONE 2026-08-01, three of four.** 180 ms debounce, truncate-before-materialize, and ~38k allocations out of the fuzzy pass: "god" 1.3 → 0.3 ms, "thes" 1.7 → 0.1 ms. Identical results over 15,936 queries. **Skipping fuzzy for short/prefix queries was measured and NOT done**: short already skips it, what remains costs 0.2–0.5 ms, and the rule breaks real typos (a dropped last letter is a strict prefix). A test pins that.
 - [x] **[opus]** Slice warm phases 3/5/6 (xref 8.5 MB TSV parse, leitwort, bridge) the
   way SearchIxBuilder already is — they're the same shape as the fixed 54 s block
   (`crates/ffi/src/lib.rs:577-631`). **DONE 2026-07-30 for 3 and 5; 6 measured and
@@ -397,12 +397,12 @@ sideload block is already fixed and guarded by a test.
   correctness-critical engine mode) and `warm_step` into the C ABI instead of
   `cfg(target_arch)`; make `PLUMBLINE_WIRE_VERSION` a live handshake (it's
   currently emitted and read by nothing).
-- [ ] **[opus]** Church/share consolidation: `plumbline_share_url_json` + core-owned
+- [x] **[opus]** Church/share consolidation: `plumbline_share_url_json` + core-owned
   clamps — collapses six duplicated shell pairs (shareUrl, cleanChurch,
-  safeChurchUrl, churchTitle, visitChurch, PWA_URL).
-- [ ] **[opus]** Dwell tracker → core (`DwellTracker::tick` + a
+  safeChurchUrl, churchTitle, visitChurch, PWA_URL). **DONE 2026-08-01.** `core::church` owns it; one endpoint replaces six shell pairs. Four live disagreements found; the encoding one mattered (Android left a literal `+` in a church name). Web keeps a TS copy — share links are read synchronously out of `$derived` and the engine is in a worker — pinned by a shared vector table. Title joins with a colon now.
+- [x] **[opus]** Dwell tracker → core (`DwellTracker::tick` + a
   `plumbline_reading_spec_json` endpoint) — ~80 identical lines per shell, both
-  hardcoding thresholds they claim to fetch.
+  hardcoding thresholds they claim to fetch. **DONE 2026-08-01.** `DwellTracker` owns grace, idle, cadence and the tail; both shells send one sample a second. Android's stale `ReadingSpec` defaults said 220 wpm two days after the core moved to 300, and were live before every fetch landed — the model is deleted, so the phone cannot hold a stale threshold.
 - [~] **[DROPPED]** Expose the user-dir/backup-dir lists from core — four hand-kept
   copies guarded only by "must stay in step" comments; also single-source the
   `pure-study/` legacy remap. **NOT DOING — Glendon's call 2026-07-31. The four hand-kept copies stay, guarded only by their comments.**
@@ -458,10 +458,15 @@ sideload block is already fixed and guarded by a test.
 
 ## Future (not this release)
 
+- **Hymnal**: Adding a hymnal of public domain songs. Text size "presentable" so
+  that people can share a phone and sing together. It should have automated
+  scroll and preferably the ability to show and transpose the chords so that we
+  can also play it.
+
 - **Other-language support, starting with German.** Blockers mapped by the
   2026-07-29 architecture audit: `TOKENIZATION_VERSION` is one global const
   conflating translation+tokenizer; `data/kjv.jsonl` is the data-home marker;
   `export::EDITION` compiled in; fixed 66-book canon table; and — biggest — user
   data (tags/notes/cards) carries no translation identifier. The serde-flatten,
   stable-id, wire-codegen, and first-run-into-core items above all directly reduce
-  the cost of this.
+  the cost of this. Multi-language support includes hymnal as much as possible.
