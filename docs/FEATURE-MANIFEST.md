@@ -68,8 +68,9 @@ smaller x-height compounds it) — sizes and line heights up roughly 2 px / 2.5 
 | MAX_COLUMN | 720 | text column cap; centre in wider panes (`ReaderPane.svelte` `MAX_COLUMN`, `ReaderPane.kt` `MAX_COLUMN_DP`) |
 | MARGIN | 28 | text margin, all sides (`MARGIN_DP` on Android — logical units, density-scaled) |
 | MIN/MAX/DEFAULT bodySize | 12 / 40 / 18 | the text-size slider in BOTH shells (`SettingsDialog.svelte`, `StudyScreen.kt` `valueRange = 12f..40f`). The config accepts a wider 6–96 (`config.rs`) so an old or hand-edited file is honoured, not clamped away |
-| MAX_PANES | 3 | reading columns — **web only** (`session.addPane`, and none at all when narrow). Android shows one pane, or two side by side on a fold opened flat (`FoldMode.kt`) |
-| PANEL_WIDTH | 380 | the web's study sidebar, × the text-size setting (the reader zoom scales the whole study surface, width and type; 2026-07-25). Android's study surface is a bottom sheet (phone) or the second fold pane, so it has no width constant |
+| MAX_PANES | 1 / 2 / 3 | reading columns — **web only** (`session.maxPanes`): 1 below 701px, 2 to 1099px, 3 above. Android shows one pane, or two side by side on a fold opened flat (`FoldMode.kt`) |
+| PANEL_WIDTH | 380 | the web's study sidebar, × the text-size setting, capped at 40vw (2026-08-01 — an unscaled 380 is 45% of an unfolded Pixel Fold, and the Bible is the point). Android's study surface is a bottom sheet (phone) or the second fold pane, so it has no width constant |
+| PANEL_SHEET_MAX | 700 | the web width at or below which the study surface is a bottom sheet instead of a sidebar (`StudyPanel.svelte`). Matches `s.narrow` and the destination bar — see the foldable delta under **Word study panel** |
 | OCC_SHOWN | 300 | concordance cap (`PANEL_OCC_CAP`, `crates/ffi/src/lib.rs`) |
 | XREF_SHOWN | 40 | xref/link list caps (`LIST_CAP`, `crates/core/src/panel.rs`) |
 | GLOSS_SAMPLE | 80 | verses sampled for the english gloss (`crates/ffi/src/lib.rs`) |
@@ -149,6 +150,15 @@ shell calls it.
 **Delta:** three panes are a web thing (see MAX_PANES above). Android is one
 fullscreen reader, or two panes on a fold opened flat.
 
+**Delta — what decides a two-pane layout.** Android decides by FOLD POSTURE and
+never by width: `computeUiMode` (`FoldMode.kt`) takes a width class and ignores
+it on purpose, because the target foldable's inner display may not clear the
+840dp "Expanded" breakpoint. The web has no posture to read, so it decides by
+width alone. The two therefore answer differently on the same hardware, and that
+is intended; what is NOT allowed is the web's own breakpoints disagreeing with
+each other, which is what produced the 701–900px band fixed on 2026-08-01
+(`e2e/foldable.spec.ts` pins both ends of it).
+
 ## Ambient weave connectors (M:2821–2934) — WEB ONLY
 
 **Delta, verified 2026-07-29: this is a web feature.** `ConnectorsOverlay.svelte`
@@ -187,8 +197,9 @@ has none — a tap opens the study surface instead. *Data*:
 
 ## Word study panel (click a word — 2026-07-25, was double-click; M:3168–3515)
 
-The web's 380-px sidebar (scaled by the text-size setting); on Android a
-dismissible bottom sheet on a phone, or the second pane on an opened fold.
+The web's 380-px sidebar (scaled by the text-size setting, capped at 40vw) above
+700px, and a bottom sheet at or below it; on Android a dismissible bottom sheet
+on a phone, or the second pane on an opened fold.
 On-demand; Esc / a swipe hides; clearing search hides. Content order — (F) marks
 what the *machine* or *human* gate turns on (see **Per-tier analysis gates**;
 "Full" is the pre-2026-07-25 name for both gates on).

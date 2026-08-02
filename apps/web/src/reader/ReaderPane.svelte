@@ -586,7 +586,7 @@
     </button>
     <button onclick={() => s.stepChapter(paneIdx, 1)} title="Next chapter">›</button>
     <span class="spacer"></span>
-    {#if s.panes.length < 3 && !s.narrow}
+    {#if s.panes.length < s.maxPanes}
       <button onclick={() => s.addPane(paneIdx)} title="Split pane">＋</button>
     {/if}
     {#if s.panes.length > 1}

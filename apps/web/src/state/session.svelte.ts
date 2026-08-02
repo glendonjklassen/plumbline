@@ -253,6 +253,12 @@ export class Session {
    *  pane only there: splits are hidden and links never open "beside"
    *  (feedback 2026-07-26 — two panes on a phone is jank). */
   narrow = $state(matchMedia("(max-width: 700px)").matches);
+  /** Wide enough for a THIRD reading pane. Between this and `narrow` sits the
+   *  foldable/small-laptop band, where the shell is the desktop one but there is
+   *  only room for two: an unfolded Pixel Fold is ~840 px, which three panes cut
+   *  into 280px columns — and that is before the 380px study sidebar, which is
+   *  now allowed to sit beside the text at these widths. */
+  roomy = $state(matchMedia("(min-width: 1100px)").matches);
   /** Active text prompt (rendered by PromptDialog); resolves null on cancel. */
   promptReq = $state<{
     title: string;
@@ -720,11 +726,16 @@ export class Session {
     this.config = loaded;
     this.showFirstRun = !!loaded.firstRun;
 
-    const saved = (loaded.openPanes?.length ? loaded.openPanes : [{ book: "John", chapter: 3 }]).slice(0, 3);
-    // Phones restore ONE pane — the narrow rule guards addPane, but a config
-    // written by a wider window (or an older build) can still carry several.
-    // Keep the pane the reader was last in.
-    const restored = this.narrow ? [saved[Math.min(loaded.activePane ?? 0, saved.length - 1)]] : saved;
+    const saved = loaded.openPanes?.length ? loaded.openPanes : [{ book: "John", chapter: 3 }];
+    // Restore no more panes than fit — `addPane` guards the button, but a config
+    // written by a wider window (or an older build) can still carry more than
+    // this window has room for. When they all fit, restore them untouched; when
+    // they do not, keep the one the reader was last in and fill forward, so a
+    // phone opening a three-pane desktop config lands on what they were reading
+    // rather than on whatever happened to be leftmost.
+    const wasActive = Math.min(loaded.activePane ?? 0, saved.length - 1);
+    const from = saved.length <= this.maxPanes ? 0 : Math.min(wasActive, saved.length - this.maxPanes);
+    const restored = saved.slice(from, from + this.maxPanes);
     this.panes = restored.map((p: any) => ({
       book: p.book,
       chapter: p.chapter,
@@ -736,10 +747,12 @@ export class Session {
       back: [],
       fwd: [],
     }));
-    this.activePane = Math.min(loaded.activePane ?? 0, this.panes.length - 1);
+    this.activePane = Math.min(Math.max(wasActive - from, 0), this.panes.length - 1);
 
     const mq = matchMedia("(max-width: 700px)");
     mq.addEventListener("change", () => (this.narrow = mq.matches));
+    const wide = matchMedia("(min-width: 1100px)");
+    wide.addEventListener("change", () => (this.roomy = wide.matches));
 
     this.applyTheme();
     this.#systemDark.addEventListener("change", () => {
@@ -1179,8 +1192,15 @@ export class Session {
     this.navigate(0, to.book, to.chapter);
   }
 
+  /** How many reading panes fit: one on a phone, two on a foldable or a small
+   *  laptop, three when there is real room. The split control reads the same
+   *  number, so what the button offers and what `addPane` allows cannot drift. */
+  get maxPanes(): number {
+    return this.narrow ? 1 : this.roomy ? 3 : 2;
+  }
+
   addPane(afterIdx: number): void {
-    if (this.panes.length >= 3 || this.narrow) return;
+    if (this.panes.length >= this.maxPanes) return;
     const src = this.panes[afterIdx];
     this.panes.splice(afterIdx + 1, 0, {
       book: src.book,

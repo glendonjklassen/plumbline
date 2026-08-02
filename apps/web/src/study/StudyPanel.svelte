@@ -1,7 +1,8 @@
 <script lang="ts">
   // The study surface: fetches the current PanelView's block list and renders
-  // it. Wide screens show it as the fixed 380px sidebar; narrow screens as a
-  // dismissible bottom sheet (Compose-phone pattern). Re-fetches after any
+  // it. Above 700px it is a sidebar beside the text (380px at the reader's
+  // scale, capped at 40vw); at or below, a dismissible bottom sheet (the
+  // Compose-phone pattern). Re-fetches after any
   // authoring write via studyEpoch (write → reload → re-fetch, never mutate).
   import BlockList from "./BlockList.svelte";
   import { dispatchLink } from "./links";
@@ -195,8 +196,13 @@
     flex-direction: column;
     background: var(--popupPaper, #f2eee6);
     border-left: 1px solid var(--rule, #d8cba8);
-    width: calc(380px * var(--uiScale, 1));
-    min-width: calc(380px * var(--uiScale, 1));
+    /* 380px at the reader's text scale, but never more than 40% of the window.
+       The cap is what makes the sidebar usable on a FOLDABLE: unfolded, a Pixel
+       Fold is ~840 CSS px, where an unscaled 380 already takes 45% and a reader
+       at uiScale 1.4 would get a 532px panel with 300px left for scripture. The
+       Bible is the point; the panel is the annotation. */
+    width: min(calc(380px * var(--uiScale, 1)), 40vw);
+    min-width: min(calc(380px * var(--uiScale, 1)), 40vw);
     font-size: calc(16px * var(--uiScale, 1));
   }
   .bar {
@@ -330,8 +336,17 @@
   .rnd-load:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
   }
-  /* Narrow screens: bottom sheet (Compose-phone pattern). */
-  @media (max-width: 900px) {
+  /* Phones: bottom sheet (Compose-phone pattern).
+
+     THE BREAKPOINT IS 700, matching `s.narrow` and the destination bar, and it
+     used to be 900 — which put every viewport from 701 to 900 in a band where
+     the shell behaved like a desktop (top bar, up to three reading panes) but
+     the study surface still covered the reader as a sheet. An unfolded Pixel
+     Fold browser is ~840 px and landed exactly there, so the one thing the
+     Android app gives you on that hardware — scripture and study side by side —
+     was the one thing the PWA withheld. Android decides by fold posture, the web
+     by width, and 700 is the only width the rest of this shell agrees on. */
+  @media (max-width: 700px) {
     .panel {
       position: fixed;
       left: 0;
