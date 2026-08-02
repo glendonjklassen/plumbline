@@ -63,31 +63,81 @@ export async function precacheShell(): Promise<string[]> {
   try {
     const manifest = await fetchShellManifest();
     const base = new URL("./", location.href).href;
+    const indexUrl = assetUrl("index.html");
     // The bare base as well as index.html: a navigation to "/" is a different
     // cache key from "/index.html", and both have to answer offline.
-    const urls = new Set<string>([base, assetUrl("shell-manifest.json")]);
-    for (const f of manifest?.files ?? []) urls.add(assetUrl(f));
+    const docs = [base, indexUrl];
+    // Everything that is NOT the document. The document is stored last and
+    // separately — see below, this ordering is the whole fix.
+    const assets = new Set<string>([assetUrl("shell-manifest.json")]);
+    for (const f of manifest?.files ?? []) if (assetUrl(f) !== indexUrl) assets.add(assetUrl(f));
 
     const cache = await caches.open(DEPOT);
     await Promise.all(
-      [...urls].map(async (url) => {
+      [...assets].map(async (url) => {
         // Never re-download what is already stored. depotHas carries the
         // ignoreVary this lookup needs: these responses come back `Vary: Origin`,
         // and a copy stored for a request whose Origin header differs from this
         // one's would otherwise look absent — and get shadowed by a new entry.
         if (await depotHas(url)) return;
         await cache.add(url).catch(() => {
-          /* one missing asset must not sink the rest */
+          /* checked below by presence, not by this error */
         });
       }),
     );
+
+    // COMPLETE MEANS PRESENT, not "no fetch threw". `cache.add` is not the only
+    // writer of these entries — the page's own `<script>` and `<link>` loads go
+    // through the service worker's immutable path, which stores them too — so an
+    // `add` can reject while the file is on disk anyway (a duplicate put, a race
+    // with that load). Trusting the error channel made this report "incomplete"
+    // for a shell that was entirely fine, which then skipped the promotion below
+    // and left the stale document in place. Ask the cache instead.
+    const missing: string[] = [];
+    for (const url of assets) if (!(await depotHas(url))) missing.push(url);
+    const complete = missing.length === 0;
+
+    // ── THE DOCUMENT GOES LAST, AND ONLY IF THE SHELL IT NAMES IS HERE ────────
+    //
+    // A cached document is a PROMISE that the bundles it names can be served.
+    // Breaking that promise is a white screen with no error and nothing to tap:
+    // the document is served, `assets/index-<hash>.js` is not, and `#app` is
+    // never mounted (reported 2026-07-31, on a plane).
+    //
+    // Two faults produced it, and both are fixed here. The document used to be a
+    // peer of the assets in one unordered `Promise.all`, so it could land without
+    // them. And it was guarded by `depotHas`, which meant that once stored it was
+    // NEVER REPLACED — so the bare-base key kept the FIRST build's document
+    // forever while `pruneToPin` went on keeping only the CURRENT build's assets
+    // and deleting the ones that document asks for. An installed PWA opens
+    // `start_url: "./"`, which is that exact key, so every reader who updated and
+    // then opened the app offline was served a document whose bundle had been
+    // reclaimed.
+    //
+    // So: re-fetch the document every time (it is a few KB), store it under BOTH
+    // keys from ONE response so the two can never disagree with each other, and
+    // do it only when every other shell file is confirmed present.
+    // AN INCOMPLETE SHELL RECLAIMS NOTHING. The caller prunes with what this
+    // returns, and `pruneToPin` refuses an empty list — so returning nothing is
+    // how "do not reclaim yet" is said. Skipping only the promotion was not
+    // enough, and left a state worse than the bug: the stale document stayed
+    // while the prune went ahead and deleted the very bundle it names. Promotion
+    // and reclamation are one decision, taken here.
+    if (!complete || !manifest) return [];
+
+    // `no-store` so this is the DEPLOYED document and not our own stored copy.
+    // sw.js refuses to cache a no-store request, which is what keeps this the
+    // only writer of these keys.
+    const res = await fetch(indexUrl, { cache: "no-store" });
+    if (!res.ok) return [];
+    for (const key of docs) await cache.put(key, res.clone());
 
     // The shell is safe now, so ask the browser to keep it. The reader has used
     // the app at least once, which is the engagement signal persistence is
     // granted on. Nothing downstream assumes it was granted.
     void requestPersistence();
 
-    return manifest?.files ?? [];
+    return manifest.files;
   } catch {
     /* storage blocked or full: the app still runs, it just isn't offline yet */
     return [];

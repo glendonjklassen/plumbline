@@ -49,7 +49,7 @@ const shellKey = () => new URL("./index.html", location.href).href;
 
 /** Whether a successful network response may be written to the cache.
  *
- *  Two refusals, both of which were white-screen bugs:
+ *  Three refusals, all of which were white-screen bugs:
  *
  *  1. `cache: "no-store"` requests. The update check asks for a small manifest
  *     with no-store precisely because it wants the deployed truth rather than our
@@ -57,16 +57,33 @@ const shellKey = () => new URL("./index.html", location.href).href;
  *     stored a shell whose bundles did not exist yet.
  *  2. index.html fetched as DATA (not a navigation). Same shape: a newer document
  *     written into the cache while `/assets/*` for that build are absent, so the
- *     next offline launch is served a shell that asks for a bundle nobody has. */
+ *     next offline launch is served a shell that asks for a bundle nobody has.
+ *  3. THE DOCUMENT AT ALL, navigation included (2026-07-31). Refusals 1 and 2
+ *     had the right reason and drew the line in the wrong place: a navigation
+ *     writes the same broken pairing as a data fetch, it just takes a reader
+ *     opening the app after a deploy rather than a stray fetch to do it. The
+ *     newly-deployed document landed here immediately, while its bundles arrived
+ *     only as the page happened to request them — so any interruption in that
+ *     window left a document naming a bundle nobody had, and the next offline
+ *     launch was blank.
+ *
+ *     `precache.ts` is now the ONLY writer of these two keys. It stores the
+ *     document last, under both keys from one response, and only once every other
+ *     shell file is confirmed present — which is the atomicity this file cannot
+ *     provide, because it sees one request at a time and knows nothing about the
+ *     rest of the build.
+ *
+ *     The cost is that a reader who closes the tab in the seconds before the
+ *     precache runs has no stored document yet, and an offline launch then gets
+ *     the browser's own offline page. That is a worse first visit and a far better
+ *     failure: it says what happened, and it repairs itself on the next load. */
 function mayCache(req, url) {
   if (req.cache === "no-store" || req.cache === "no-cache") return false;
   // By PATHNAME, not href (2026-07-30): compared as full URLs, any query string
-  // walked straight past refusal 2 — `index.html?x`, `/?x`, a cache-buster on an
-  // update check — and the document was cached by a plain fetch after all. The
-  // refusal existed for exactly that request shape, so it was closed only for the
-  // one spelling nobody uses.
+  // walked straight past this — `index.html?x`, `/?x`, a cache-buster on an
+  // update check — and the document was cached by a plain fetch after all.
   const shellPaths = [new URL("./index.html", location.href).pathname, new URL("./", location.href).pathname];
-  if (shellPaths.includes(url.pathname) && req.mode !== "navigate") return false;
+  if (shellPaths.includes(url.pathname)) return false;
   return true;
 }
 
@@ -137,14 +154,15 @@ self.addEventListener("fetch", (event) => {
             // deferred clone throws "already used" and silently left the
             // manifest uncached, so the offline fallback never had it.
             const copy = res.clone();
-            // Navigations are stored under the CANONICAL shell key, never under
-            // the URL that was requested. Storing `req` meant every distinct deep
-            // link (`/?at=Ps 23:1`, `/?church=…`) accumulated its own copy of
-            // index.html that the sweep never touched — and offline, one of those
+            // Stored under the request, full stop. There used to be a branch here
+            // mapping navigations onto the canonical shell key — because storing
+            // `req` let every distinct deep link (`/?at=Ps 23:1`, `/?church=…`)
+            // accumulate its own copy of index.html, and offline one of those
             // stale copies would be served for that exact link, naming a bundle
-            // that had since been pruned. White screen, shared links only.
-            const key = req.mode === "navigate" ? shellKey() : req;
-            caches.open(CACHE).then((cache) => cache.put(key, copy));
+            // that had since been pruned. That whole class is gone with refusal 3
+            // in `mayCache`: the document never reaches this line, under any key,
+            // so there is nothing left to canonicalise.
+            caches.open(CACHE).then((cache) => cache.put(req, copy));
           }
           return res;
         } catch {
