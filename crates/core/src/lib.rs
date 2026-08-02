@@ -13,6 +13,7 @@
 
 pub mod akjv;
 pub mod canon;
+pub mod church;
 pub mod civil;
 pub mod config;
 pub mod corpus;

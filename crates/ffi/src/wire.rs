@@ -18,6 +18,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use plumbline_core::church;
 use plumbline_core::config::{Config, PaneRef, StudyMode};
 use plumbline_core::corpus::{Corpus, Token, Verse};
 use plumbline_core::crossref::CrossRef;
@@ -1181,6 +1182,57 @@ pub struct WireChurch {
     pub url: String,
 }
 
+impl WireChurch {
+    pub fn to_core(&self) -> plumbline_core::config::Church {
+        plumbline_core::config::Church { name: self.name.clone(), info: self.info.clone(), url: self.url.clone() }
+    }
+
+    pub fn from_core(c: &plumbline_core::config::Church) -> WireChurch {
+        WireChurch { name: c.name.clone(), info: c.info.clone(), url: c.url.clone() }
+    }
+}
+
+// ── the share link (core::church) ────────────────────────────────────────────
+
+/// What a shell asks for when it needs the link it hands over. Every field is
+/// optional: `{}` is "the plain app link".
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireShareRequest {
+    /// The link to build on. Absent → `core::church::PWA_URL`, the hosted PWA.
+    #[serde(default)]
+    pub base: Option<String>,
+    #[serde(default)]
+    pub church: Option<WireChurch>,
+    /// Present only: the recipient's welcome opens on the new-believer path.
+    #[serde(default)]
+    pub start_as_new_believer: bool,
+    /// A refKey the recipient opens at (`"Ps 23:1"`).
+    #[serde(default)]
+    pub at: Option<String>,
+}
+
+/// Everything a share surface needs, from one call: the link for the QR and the
+/// share sheet, the cleaned church to echo back, and the two derived strings a
+/// Church button needs.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireShare {
+    /// The link itself — what the QR encodes and the share sheet sends.
+    pub url: String,
+    /// The base it was built on, so a shell can show the bare host without
+    /// hard-coding it.
+    pub base: String,
+    /// The church as the core normalized it (trimmed, capped).
+    pub church: WireChurch,
+    /// False when no church is set — the link is then the plain app link.
+    pub has_church: bool,
+    /// What to show when there is no site to open: who and when.
+    pub title: String,
+    /// The church's own site, or null when it is not one we will open.
+    pub site_url: Option<String>,
+}
+
 pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
     WireConfigState {
         study_mode: cfg.mode.token().to_string(),
@@ -1258,15 +1310,10 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
             Some("curious") => "curious".to_string(),
             _ => String::new(),
         },
-        church: w
-            .church
-            .as_ref()
-            .map(|c| plumbline_core::config::Church {
-                name: c.name.trim().to_string(),
-                info: c.info.trim().to_string(),
-                url: c.url.trim().to_string(),
-            })
-            .unwrap_or_default(),
+        // Through the core's clamps, not a local trim: this is the one place a
+        // shell's church becomes the core's, so it is where the caps stop being
+        // something each shell has to remember (2026-08-01).
+        church: w.church.as_ref().map(|c| church::clean(&c.to_core())).unwrap_or_default(),
     }
 }
 

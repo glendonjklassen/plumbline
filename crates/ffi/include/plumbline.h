@@ -910,6 +910,40 @@ char *plumbline_panel_guide_blocks_json(void);
 // null.
 char *plumbline_panel_about_blocks_json(void);
 
+// The reading map's tuning as JSON: `{wordsPerMinute, completeAt, freshDays,
+// staleDays, graceSeconds, tickSeconds, idleSeconds}`. Engine-independent and
+// free — the same object rides on `reading_books_json`, but a shell that only
+// wants the dials should not have to load every book's reading file and compute
+// 66 standings to read three floats. Never null.
+char *plumbline_reading_spec_json(void);
+
+// One sample of reading time.
+//
+// `book`/`chapter` are what is on screen; a NULL `book` means nothing is being
+// read right now (a dialog is up, the app is going to the background, the
+// reader left the chapter) and banks the tail. `reached` is the deepest verse
+// of that chapter the reader has scrolled to, `step_seconds` the seconds this
+// sample covers (a shell passes its own sample interval; the core clamps it),
+// and `interacted` whether anything was touched since the last sample.
+//
+// Most calls answer null. When the core decides the banked seconds are worth
+// writing down it records them and answers the same
+// `{book,chapter,pct,completed,lastRead?}` `reading_record_json` does, so a
+// shell reacts to `completed` in exactly one place.
+//
+// Null also when the engine has no home to write to — reading is simply not
+// tracked then.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_reading_tick_json(struct PlumblineEngine *engine,
+                                         const char *book,
+                                         uint32_t chapter,
+                                         uint32_t reached,
+                                         float step_seconds,
+                                         bool interacted,
+                                         const char *now);
+
 // Every book's reading standing at `now` (RFC3339), canon order, as
 // `{books:[…],since,spec}`. Never null on a live engine.
 //
@@ -964,6 +998,21 @@ char *plumbline_engine_reading_mark_read(struct PlumblineEngine *engine,
 char *plumbline_engine_reading_forget(struct PlumblineEngine *engine,
                                       const char *book,
                                       uint32_t chapter);
+
+// Build the link this reader hands over, from `{base?, church?,
+// startAsNewBeliever?, at?}` (all optional — `{}` is the plain app link).
+//
+// Answers `{url, base, church, hasChurch, title, siteUrl}`: the link for the QR
+// and the share sheet, the church as the core normalized it, and the label /
+// site a Church button needs. One call rather than six shell-side helpers —
+// the web and Kotlin copies of those had already drifted on the query encoding
+// and on whether the church was cleaned before it went into a URL.
+//
+// Null only when `request` is null or not JSON.
+//
+// # Safety
+// `request` is null or valid NUL-terminated UTF-8 for the call.
+char *plumbline_share_url_json(const char *request);
 
 #ifdef __cplusplus
 }  // extern "C"

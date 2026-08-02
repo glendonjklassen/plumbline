@@ -69,7 +69,9 @@ use plumbline_core::{canon, export, notes, theme, usernote, VRef};
 use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure, MeasureMemo, Memoized};
 use plumbline_rnd::{bridge, burst, concept, morph};
 
+pub mod dwell;
 pub mod reading_map;
+pub mod share;
 mod wire;
 
 // ── token flag bits (mirror the core's `FLAG_*`; exported to bindings) ───────
@@ -227,6 +229,13 @@ pub struct PlumblineEngine {
     /// Built on first use and cached: the navigator asks for all 1,189 chapters
     /// every time it opens, and re-walking 31,102 verses per open buys nothing.
     reading_words: OnceLock<reading::ChapterWords>,
+    /// How long the chapter on screen has really been read (`core::reading::
+    /// DwellTracker`, driven by `plumbline_engine_reading_tick_json`). It lives
+    /// on the engine because it is per-reader state over a clock the core does
+    /// not have: a shell samples once a second and the core decides what that
+    /// second was worth. A Mutex because Android ticks from a coroutine while
+    /// the UI thread reads.
+    dwell: std::sync::Mutex<reading::DwellTracker>,
     /// Remembered text widths, so a run the shell has already measured is never
     /// measured across the ABI again (see [`font_identity`] and
     /// `plumbline_layout::memo`). Engine-scoped rather than global: it dies with
@@ -283,6 +292,7 @@ impl PlumblineEngine {
             concept: OnceLock::new(),
             leitwort: OnceLock::new(),
             reading_words: OnceLock::new(),
+            dwell: std::sync::Mutex::new(reading::DwellTracker::default()),
             measure_memo: std::sync::Mutex::new(MeasureMemo::new()),
         }
     }

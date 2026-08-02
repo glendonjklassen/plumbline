@@ -170,6 +170,11 @@ internal interface PlumblineNative : Library {
     // ── theme palettes (engine-independent) ─────────────────────────────────
     fun plumbline_theme_palette_json(theme: String?): Pointer?
 
+    // ── the share link + the church it carries (engine-independent) ─────────
+    /** `{base?, church?, startAsNewBeliever?, at?}` in, `{url, base, church,
+     *  hasChurch, title, siteUrl}` out. Null only on malformed JSON. */
+    fun plumbline_share_url_json(request: String?): Pointer?
+
     // ── warm lazy indexes ───────────────────────────────────────────────────
     fun plumbline_engine_warm_indexes(engine: Pointer): Pointer?
 
@@ -211,6 +216,16 @@ internal interface PlumblineNative : Library {
         engine: Pointer, book: String, chapter: Int, date: String,
     ): Pointer?
     fun plumbline_engine_reading_forget(engine: Pointer, book: String, chapter: Int): Pointer?
+
+    /** The reading map's tuning on its own — no store load, no 66 standings. */
+    fun plumbline_reading_spec_json(): Pointer?
+
+    /** One sample of reading time. A null [book] is "nothing is being read".
+     *  Answers null on most calls; a recorded report when the core banks one. */
+    fun plumbline_engine_reading_tick_json(
+        engine: Pointer, book: String?, chapter: Int, reached: Int,
+        stepSeconds: Float, interacted: Boolean, now: String,
+    ): Pointer?
 
     // ── static panel content: guide / about ─────────────────────────────────
     fun plumbline_panel_guide_blocks_json(): Pointer?
