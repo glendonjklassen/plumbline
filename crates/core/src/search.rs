@@ -222,16 +222,16 @@ pub fn run_search(corpus: &Corpus, notes: &Notes, ix: &SearchIx, raw_query: &str
     let (how, rows) =
         if qws.len() == 1 { single_word(corpus, notes, ix, &qws[0]) } else { multi_word(corpus, notes, ix, &qws) };
 
-    let total = rows.len();
+    let total = rows.total;
     let hits = rows
+        .kept
         .into_iter()
-        .take(HIT_CAP)
         .filter_map(|(i, note, why)| {
             // Graceful on an index/corpus disagreement instead of panicking.
-            corpus.verse_at(i).map(|v| SearchHit { vref: v.vref(), note, why })
+            corpus.verse_at(i).map(|v| SearchHit { vref: v.vref(), note, why: why.render() })
         })
         .collect();
-    Some(SearchAnswer::Hits { how, total, hits })
+    Some(SearchAnswer::Hits { how: how.to_string(), total, hits })
 }
 
 /// The verse indices whose margin notes contain the whole normalized query.
@@ -249,116 +249,213 @@ fn note_idxs(corpus: &Corpus, notes: &Notes, ix: &SearchIx, needle: &str) -> Vec
     idxs
 }
 
-type Rows = Vec<(usize, bool, String)>;
+/// Why a verse widened past an exact match, held as a BORROW of the index until
+/// the row is known to be one of the [`HIT_CAP`] that get shown.
+///
+/// The tiers used to hand back a freshly formatted `String` per POSTING — for a
+/// query that stems onto "the" that is 24,127 copies of `"variant"`, and for
+/// "god" 19,100 copies of `"also H…"` — and `run_search` then dropped all but
+/// 200 of them. Only a reason that reaches the reader is ever built.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Why<'a> {
+    /// An exact word, phrase, or note match: the reader needs no reason.
+    Plain,
+    Variant,
+    /// Another rendering of a Strong's lemma the query renders.
+    Also(&'a str),
+    Typo,
+}
 
-fn single_word(corpus: &Corpus, notes: &Notes, ix: &SearchIx, w: &str) -> (String, Rows) {
-    let exact = ix.word_idxs(w).to_vec();
-    let exact_set: HashSet<usize> = exact.iter().copied().collect();
+impl Why<'_> {
+    /// The reason as [`SearchHit::why`] carries it.
+    fn render(self) -> String {
+        match self {
+            Why::Plain => String::new(),
+            Why::Variant => "variant".to_string(),
+            Why::Also(lemma) => format!("also {lemma}"),
+            Why::Typo => "≈ typo".to_string(),
+        }
+    }
+}
 
-    let note_only: Vec<usize> =
-        note_idxs(corpus, notes, ix, w).into_iter().filter(|i| !exact_set.contains(i)).collect();
+/// Which verse indices the answer already holds.
+///
+/// A bitset over the corpus rather than a `HashSet`: the tiers offer tens of
+/// thousands of postings for a common word, the whole Bible is 31,102 verses, so
+/// dedup costs a shift and a mask instead of a hash. An index past the end of
+/// the corpus — an index/corpus disagreement, which `run_search` already handles
+/// gracefully rather than panicking — is passed through and dropped later by
+/// `verse_at`.
+struct Seen(Vec<u64>);
 
-    let mut seen: HashSet<usize> = exact_set;
-    seen.extend(note_only.iter().copied());
+impl Seen {
+    fn new(verses: usize) -> Self {
+        Seen(vec![0u64; verses / 64 + 1])
+    }
+    /// True the FIRST time an index is offered.
+    fn insert(&mut self, i: usize) -> bool {
+        let bit = 1u64 << (i % 64);
+        match self.0.get_mut(i / 64) {
+            Some(slot) => {
+                let fresh = *slot & bit == 0;
+                *slot |= bit;
+                fresh
+            }
+            None => true,
+        }
+    }
+}
 
-    let variants = unique_by(&mut seen, variant_hits(ix, w));
-    let renders = unique_by(&mut seen, lemma_hits(ix, w));
+/// The answer under construction: the shown rows in tier-then-canon order, and
+/// the honest count of every distinct verse any tier reached.
+///
+/// The count and the rows are separated ON PURPOSE. `total` is what the reader
+/// is told ("200 of 24,135") so it has to see every posting, but a row past the
+/// cap can never be shown — so it is counted and thrown away instead of being
+/// built, sorted, and copied twice on the way to being thrown away.
+struct Rows<'a> {
+    seen: Seen,
+    /// Up to [`HIT_CAP`] rows, in the order they were offered.
+    kept: Vec<(usize, bool, Why<'a>)>,
+    /// Distinct verses across every tier — uncapped, and shown as the total.
+    total: usize,
+}
 
-    let mut upper: Rows = Vec::new();
-    upper.extend(exact.iter().map(|&i| (i, false, String::new())));
-    upper.extend(note_only.iter().map(|&i| (i, true, String::new())));
-    upper.extend(variants.iter().cloned().map(|(i, why)| (i, false, why)));
-    upper.extend(renders.iter().cloned().map(|(i, why)| (i, false, why)));
+impl<'a> Rows<'a> {
+    fn new(corpus: &Corpus) -> Self {
+        Rows { seen: Seen::new(corpus.len()), kept: Vec::new(), total: 0 }
+    }
+
+    /// Offer one verse. False when a better tier already claimed it.
+    fn push(&mut self, i: usize, note: bool, why: Why<'a>) -> bool {
+        if !self.seen.insert(i) {
+            return false;
+        }
+        self.total += 1;
+        if self.kept.len() < HIT_CAP {
+            self.kept.push((i, note, why));
+        }
+        true
+    }
+
+    /// Offer a tier's verses, answering how many of them were new — which is
+    /// what the tier labels are chosen from.
+    fn push_all(&mut self, idxs: impl IntoIterator<Item = usize>, note: bool, why: Why<'a>) -> usize {
+        idxs.into_iter().filter(|&i| self.push(i, note, why)).count()
+    }
+}
+
+fn single_word<'a>(corpus: &Corpus, notes: &Notes, ix: &'a SearchIx, w: &str) -> (&'static str, Rows<'a>) {
+    let mut rows = Rows::new(corpus);
+
+    // Tier 1, then the margin notes. The postings are already deduplicated and
+    // ascending, so offering them in order IS the canon order.
+    let exact = rows.push_all(ix.word_idxs(w).iter().copied(), false, Why::Plain);
+    let note_only = rows.push_all(note_idxs(corpus, notes, ix, w), true, Why::Plain);
+
+    let variants = rows.push_all(variant_idxs(ix, w), false, Why::Variant);
+
+    let mut renders = 0;
+    for (i, lemma) in rendering_idxs(ix, w) {
+        if rows.push(i, false, Why::Also(lemma)) {
+            renders += 1;
+        }
+    }
 
     // Skip the full-vocabulary Levenshtein pass once the better tiers already
     // fill the cap — those near-spellings would be dropped anyway.
-    let typos = if upper.len() >= HIT_CAP { Vec::new() } else { unique_by(&mut seen, fuzzy_hits(ix, w)) };
+    let typos = if rows.total >= HIT_CAP { 0 } else { rows.push_all(fuzzy_idxs(ix, w), false, Why::Typo) };
 
-    let label = if !exact.is_empty() || !note_only.is_empty() {
+    let label = if exact > 0 || note_only > 0 {
         "verses with the word"
-    } else if !variants.is_empty() {
+    } else if variants > 0 {
         "no exact match — word variants"
-    } else if !renders.is_empty() {
+    } else if renders > 0 {
         "no exact match — same original word"
-    } else if !typos.is_empty() {
+    } else if typos > 0 {
         "no exact match — near spellings"
     } else {
         "verses with the word"
     };
-
-    let mut rows = upper;
-    rows.extend(typos.into_iter().map(|(i, why)| (i, false, why)));
-    (label.to_string(), rows)
+    (label, rows)
 }
 
-/// Tier 2: words that stem to the same root as the query, and their verses.
-fn variant_hits(ix: &SearchIx, w: &str) -> Vec<(usize, String)> {
-    let mut hits: Vec<(usize, String)> = Vec::new();
+/// Tier 2: the verses of every word that stems to the same root as the query,
+/// in canon order.
+fn variant_idxs(ix: &SearchIx, w: &str) -> Vec<usize> {
+    let mut idxs: Vec<usize> = Vec::new();
     if let Some(words) = ix.stems.get(&stem_word(w)) {
         for v in words {
             if v != w {
-                for &i in ix.word_idxs(v) {
-                    hits.push((i, "variant".to_string()));
-                }
+                idxs.extend_from_slice(ix.word_idxs(v));
             }
         }
     }
-    hits.sort_by_key(|(i, _)| *i);
-    hits
+    idxs.sort_unstable();
+    idxs
 }
 
-/// Tier 3: verses carrying a Strong's lemma the query renders.
-fn lemma_hits(ix: &SearchIx, w: &str) -> Vec<(usize, String)> {
-    let mut hits: Vec<(usize, String)> = Vec::new();
+/// Tier 3: verses carrying a Strong's lemma the query renders, each with the
+/// lemma that put it there, in canon order.
+fn rendering_idxs<'a>(ix: &'a SearchIx, w: &str) -> Vec<(usize, &'a str)> {
+    let mut hits: Vec<(usize, &str)> = Vec::new();
     if let Some(lemmas) = ix.word_lem.get(w) {
         for lemma in lemmas {
-            // Format once per lemma, not once per posting (a common lemma has a
-            // large posting list, all sharing the same "also …" reason).
-            let why = format!("also {lemma}");
             for &i in ix.lemma_idxs(lemma) {
-                hits.push((i, why.clone()));
+                hits.push((i, lemma.as_str()));
             }
         }
     }
+    // STABLE, so a verse tagged with two of the query's lemmas keeps the first
+    // of them — which is the one the reader is shown.
     hits.sort_by_key(|(i, _)| *i);
     hits
 }
 
-/// Tier 4: vocabulary words within a small edit distance, nearest first.
-fn fuzzy_hits(ix: &SearchIx, w: &str) -> Vec<(usize, String)> {
-    let d = fuzzy_max(w.chars().count());
-    if d < 1 {
-        return Vec::new();
-    }
-    let wlen = w.chars().count() as isize;
-    let mut near: Vec<(&String, usize)> = ix
-        .word
-        .keys()
-        .filter(|v| v.as_str() != w)
-        .filter(|v| ((v.chars().count() as isize) - wlen).abs() <= d as isize)
-        .filter_map(|v| {
-            let dist = levenshtein(w, v);
-            if (1..=d).contains(&dist) {
-                Some((v, dist))
-            } else {
-                None
-            }
-        })
-        .collect();
+/// Tier 4: the verses of every vocabulary word within a small edit distance,
+/// nearest word first.
+fn fuzzy_idxs(ix: &SearchIx, w: &str) -> Vec<usize> {
+    let mut near = near_words(ix, w);
     // Deterministic: HashMap iteration order varies per process, so break
     // distance ties by the word itself.
     near.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(b.0)));
 
-    let mut hits = Vec::new();
+    let mut idxs = Vec::new();
     for (v, _) in near {
-        for &i in ix.word_idxs(v) {
-            hits.push((i, "≈ typo".to_string()));
-        }
+        idxs.extend_from_slice(ix.word_idxs(v));
     }
-    hits
+    idxs
 }
 
-fn multi_word(corpus: &Corpus, notes: &Notes, ix: &SearchIx, qws: &[String]) -> (String, Rows) {
+/// The indexed words within [`fuzzy_max`] edits of the query, unordered.
+///
+/// ONE pass over the vocabulary with ONE set of scratch buffers. The buffers are
+/// the reason this is not written as an iterator chain: measured against the
+/// data pack, the three `Vec`s that a per-candidate [`levenshtein`] allocates
+/// were ~38k allocations on a single keystroke, which cost more than the
+/// arithmetic they held.
+fn near_words<'a>(ix: &'a SearchIx, w: &str) -> Vec<(&'a String, usize)> {
+    let q: Vec<char> = w.chars().collect();
+    let d = fuzzy_max(q.len());
+    if d < 1 {
+        return Vec::new();
+    }
+    let mut buf = Lev::default();
+    let mut near = Vec::new();
+    for v in ix.word.keys() {
+        if v.as_str() == w {
+            continue;
+        }
+        if let Some(dist) = levenshtein_within(&q, v, d, &mut buf) {
+            if dist >= 1 {
+                near.push((v, dist));
+            }
+        }
+    }
+    near
+}
+
+fn multi_word<'a>(corpus: &Corpus, notes: &Notes, ix: &SearchIx, qws: &[String]) -> (&'static str, Rows<'a>) {
     let postings: Vec<&[usize]> = qws.iter().map(|w| ix.word_idxs(w)).collect();
 
     // Intersect every word's postings first (a phrase hit needs all of them),
@@ -375,14 +472,11 @@ fn multi_word(corpus: &Corpus, notes: &Notes, ix: &SearchIx, qws: &[String]) -> 
         ("no exact phrase — verses with every word", every_word)
     };
 
-    let text_set: HashSet<usize> = text_idxs.iter().copied().collect();
+    let mut rows = Rows::new(corpus);
+    rows.push_all(text_idxs, false, Why::Plain);
     let needle = qws.join(" ");
-    let note_only: Vec<usize> =
-        note_idxs(corpus, notes, ix, &needle).into_iter().filter(|i| !text_set.contains(i)).collect();
-
-    let mut rows: Rows = text_idxs.into_iter().map(|i| (i, false, String::new())).collect();
-    rows.extend(note_only.into_iter().map(|i| (i, true, String::new())));
-    (label.to_string(), rows)
+    rows.push_all(note_idxs(corpus, notes, ix, &needle), true, Why::Plain);
+    (label, rows)
 }
 
 /// Intersect all postings (every-word-in-any-order), keeping ascending order.
@@ -403,18 +497,6 @@ fn and_idxs(postings: &[&[usize]]) -> Vec<usize> {
         acc = intersect_asc(&acc, p);
     }
     acc
-}
-
-/// Keep the first appearance of each index not already claimed by a better
-/// tier (`seen`), extending `seen`. Ported from `uniqueBy`.
-fn unique_by(seen: &mut HashSet<usize>, list: Vec<(usize, String)>) -> Vec<(usize, String)> {
-    let mut out = Vec::new();
-    for (i, why) in list {
-        if seen.insert(i) {
-            out.push((i, why));
-        }
-    }
-    out
 }
 
 /// The edit-distance ceiling for a query of this length. Ported from
@@ -556,6 +638,66 @@ pub fn levenshtein(a: &str, b: &str) -> usize {
         std::mem::swap(&mut prev, &mut cur);
     }
     prev[bs.len()]
+}
+
+/// The three buffers [`levenshtein_within`] would otherwise allocate per call:
+/// the candidate's chars and the two DP rows. Held by the caller and reused
+/// across a whole vocabulary pass.
+#[derive(Default)]
+struct Lev {
+    b: Vec<char>,
+    prev: Vec<usize>,
+    cur: Vec<usize>,
+}
+
+/// [`levenshtein`] between an already-decoded query and a candidate, answered
+/// only when the distance is at most `max`.
+///
+/// Three prunes, cheapest first, because the fuzzy tier asks this about all
+/// 12,829 indexed words on one keystroke and keeps a handful — so what matters
+/// is how fast a NON-match is rejected:
+///
+/// 1. the candidate's length, decided while its chars are being decoded, so an
+///    over-long word stops being read partway;
+/// 2. a row whose cheapest cell already exceeds `max` — no later row can be
+///    lower, since each row's minimum is non-decreasing;
+/// 3. the final cell.
+///
+/// For distances inside `max` the answer is the same number [`levenshtein`]
+/// gives; the tier only ever asks about those.
+fn levenshtein_within(a: &[char], b: &str, max: usize, buf: &mut Lev) -> Option<usize> {
+    buf.b.clear();
+    for c in b.chars() {
+        buf.b.push(c);
+        if buf.b.len() > a.len() + max {
+            return None;
+        }
+    }
+    let n = buf.b.len();
+    if n + max < a.len() {
+        return None;
+    }
+
+    buf.prev.clear();
+    buf.prev.extend(0..=n);
+    buf.cur.clear();
+    buf.cur.resize(n + 1, 0);
+    for (i, &ca) in a.iter().enumerate() {
+        buf.cur[0] = i + 1;
+        let mut best = buf.cur[0];
+        for j in 0..n {
+            let cost = usize::from(ca != buf.b[j]);
+            let v = (buf.prev[j + 1] + 1).min(buf.cur[j] + 1).min(buf.prev[j] + cost);
+            buf.cur[j + 1] = v;
+            best = best.min(v);
+        }
+        if best > max {
+            return None;
+        }
+        std::mem::swap(&mut buf.prev, &mut buf.cur);
+    }
+    let d = buf.prev[n];
+    (d <= max).then_some(d)
 }
 
 // ── form queries (Strong's code + morphology predicates) ─────────────────────
@@ -900,8 +1042,7 @@ mod review_tests {
         let ix = SearchIx::build(&c);
         // "haste" is distance 1 from both "caste" and "paste" — the tie breaks
         // alphabetically, so caste's verse (index 1) precedes paste's (0, 2).
-        let hits = fuzzy_hits(&ix, "haste");
-        let order: Vec<usize> = hits.iter().map(|(i, _)| *i).collect();
+        let order = fuzzy_idxs(&ix, "haste");
         assert_eq!(order, vec![1, 0, 2]);
     }
 
@@ -924,6 +1065,222 @@ mod review_tests {
         };
         assert!(how.starts_with("no exact phrase"));
         assert_eq!(total, 1); // only v3 has both words
+    }
+
+    // ── F-12: the tiers stopped materializing what they were about to throw
+    // away. `total` still counts every posting; only the rows the reader will
+    // see are built. These pin the OBSERVABLE half of that — the hits, their
+    // order, their reasons, and the total — because the rewrite is only allowed
+    // to be faster.
+
+    /// One verse per tier, so the answer names the whole ladder in one list:
+    /// exact, then the margin note, then the stem variant, then the other
+    /// rendering of the same Strong's lemma, then the near spelling.
+    ///
+    /// "alphas" is BOTH a stem variant of the query and one edit away from it,
+    /// and "alpha" itself carries H1 — so this is also the dedup test: a verse
+    /// a better tier already claimed must not come back under a worse reason.
+    fn tiered() -> Corpus {
+        corpus::from_str(concat!(
+            r#"{"format":"x","tokenization":"kjv1769-tok2","verses":6}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"t":[["","alpha","",["H1"],0]],"v":1}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"t":[["","alpha","",[],0]],"v":2}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"t":[["","alphas","",[],0]],"v":3}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"t":[["","bravo","",["H1"],0]],"v":4}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"t":[["","alpna","",[],0]],"v":5}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"t":[["","delta","",[],0]],"v":6}"#,
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn every_tier_keeps_its_place_and_its_reason() {
+        let c = tiered();
+        let mut ix = SearchIx::build(&c);
+        let mut notes = Notes::new();
+        notes.insert(VRef::new("Gen", 1, 6), vec!["Heb. alpha".to_string()]);
+        ix.attach_notes(&c, &notes);
+
+        let Some(SearchAnswer::Hits { how, total, hits }) = run_search(&c, &notes, &ix, "alpha") else {
+            panic!("expected hits");
+        };
+        assert_eq!(how, "verses with the word");
+        assert_eq!(total, 6, "every tier's verse is counted once");
+        let got: Vec<(String, bool, String)> = hits.iter().map(|h| (h.vref.ref_key(), h.note, h.why.clone())).collect();
+        assert_eq!(
+            got,
+            vec![
+                ("Gen 1:1".to_string(), false, String::new()),
+                ("Gen 1:2".to_string(), false, String::new()),
+                ("Gen 1:6".to_string(), true, String::new()),
+                ("Gen 1:3".to_string(), false, "variant".to_string()),
+                ("Gen 1:4".to_string(), false, "also H1".to_string()),
+                ("Gen 1:5".to_string(), false, "≈ typo".to_string()),
+            ]
+        );
+    }
+
+    /// A query with its last letter missing is BOTH a prefix of a real word and
+    /// a real typo, and the near-spelling tier is the only tier that answers it.
+    ///
+    /// Skipping that tier for prefix-shaped queries was the tempting half of
+    /// F-12 and is deliberately not done, because those two cases are the same
+    /// string: measured against the data pack, "lovingkindnes" is a strict
+    /// prefix of "lovingkindness" and loses all 26 of its hits under such a
+    /// rule. This is that case in miniature, so the rule cannot be added back
+    /// without the test saying what it costs.
+    #[test]
+    fn a_prefix_query_still_gets_its_near_spellings() {
+        let c = tiered();
+        let ix = SearchIx::build(&c);
+        let notes = Notes::new();
+        let Some(SearchAnswer::Hits { how, hits, .. }) = run_search(&c, &notes, &ix, "alph") else {
+            panic!("expected hits");
+        };
+        assert_eq!(how, "no exact match — near spellings");
+        assert!(hits.iter().all(|h| h.why == "≈ typo"));
+        let refs: Vec<String> = hits.iter().map(|h| h.vref.ref_key()).collect();
+        assert_eq!(refs, vec!["Gen 1:1", "Gen 1:2"], "\"alph\" is one edit from the indexed \"alpha\"");
+    }
+
+    /// The cap bounds the ROWS, never the count: 265 verses match, 200 come
+    /// back, and the reader is told 265. They also come back in canon order
+    /// from the top — a cap applied at the wrong end would return the tail.
+    #[test]
+    fn the_cap_truncates_the_rows_and_not_the_total() {
+        let mut lines = vec![r#"{"format":"x","tokenization":"kjv1769-tok2","verses":265}"#.to_string()];
+        for v in 1..=260 {
+            lines.push(format!(r#"{{"b":"Gen","c":1,"t":[["","omega","",[],0]],"v":{v}}}"#));
+        }
+        for v in 261..=265 {
+            lines.push(format!(r#"{{"b":"Gen","c":1,"t":[["","omegas","",[],0]],"v":{v}}}"#));
+        }
+        let c = corpus::from_str(&lines.join("\n")).unwrap();
+        let ix = SearchIx::build(&c);
+        let notes = Notes::new();
+
+        let Some(SearchAnswer::Hits { total, hits, .. }) = run_search(&c, &notes, &ix, "omega") else {
+            panic!("expected hits");
+        };
+        assert_eq!(total, 265, "260 exact plus 5 variants, all counted");
+        assert_eq!(hits.len(), HIT_CAP);
+        assert_eq!(hits[0].vref.ref_key(), "Gen 1:1");
+        assert_eq!(hits[HIT_CAP - 1].vref.ref_key(), format!("Gen 1:{HIT_CAP}"));
+    }
+
+    /// The budgeted edit distance is the plain one, decided early. Every pair of
+    /// strings over a three-letter alphabet up to length four, against every
+    /// budget: it must answer exactly when the plain distance is inside the
+    /// budget, and answer the same number. An early exit that reads one cell
+    /// instead of the row's cheapest rejects real matches, and the fuzzy tier
+    /// would quietly lose them.
+    #[test]
+    fn the_budgeted_edit_distance_agrees_with_the_plain_one() {
+        let mut words: Vec<String> = vec![String::new()];
+        for _ in 0..4 {
+            let grown: Vec<String> = words
+                .iter()
+                .filter(|w| w.chars().count() < 4)
+                .flat_map(|w| "abc".chars().map(move |ch| format!("{w}{ch}")))
+                .collect();
+            words.extend(grown);
+        }
+        words.sort();
+        words.dedup();
+        assert_eq!(words.len(), 121, "the empty string plus 3 + 9 + 27 + 81");
+
+        let mut buf = Lev::default();
+        let mut checked = 0usize;
+        for a in &words {
+            let ac: Vec<char> = a.chars().collect();
+            for b in &words {
+                let plain = levenshtein(a, b);
+                for max in 0..=3 {
+                    let want = (plain <= max).then_some(plain);
+                    assert_eq!(levenshtein_within(&ac, b, max, &mut buf), want, "{a:?} vs {b:?} within {max}");
+                    checked += 1;
+                }
+            }
+        }
+        assert_eq!(checked, 121 * 121 * 4);
+    }
+
+    /// Where a keystroke's search time actually goes on the real corpus, per
+    /// tier and per query shape — the numbers behind F-12. Needs a data pack;
+    /// skips itself without one.
+    /// `cargo test --release -p plumbline-core -- --ignored --nocapture search_query_profile`
+    #[test]
+    #[ignore]
+    fn search_query_profile() {
+        use std::time::Instant;
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let Ok(c) = crate::corpus::load_corpus(repo.join("data/kjv.jsonl")) else {
+            println!("no data pack; skipping");
+            return;
+        };
+        let notes = crate::notes::load_notes(repo.join("data/kjv-notes.jsonl")).unwrap_or_default();
+        let t = Instant::now();
+        let mut ix = SearchIx::build(&c);
+        let built = t.elapsed().as_millis();
+        ix.attach_notes(&c, &notes);
+        println!("index: {} verses, {} words, built {built}ms", c.len(), ix.distinct_words());
+
+        // Each query names the shape it stands for; the fuzzy column is the
+        // full-vocabulary Levenshtein pass measured on its own.
+        let queries: &[(&str, &str)] = &[
+            ("god", "3 chars, common, no fuzzy tier at all"),
+            ("thes", "4 chars, one edit from the commonest words"),
+            ("begi", "4 chars, a prefix mid-typing"),
+            ("shephe", "6 chars, a prefix mid-typing"),
+            ("beginnig", "8 chars, a real misspelling"),
+            ("lovingkindnes", "13 chars, a long misspelling"),
+            ("in the beginning", "4-word phrase"),
+        ];
+        for (q, shape) in queries {
+            // Median of three: one keystroke's cost, not the machine's noise.
+            let mut runs: Vec<u128> = (0..3)
+                .map(|_| {
+                    let t = Instant::now();
+                    let a = run_search(&c, &notes, &ix, q);
+                    let e = t.elapsed().as_micros();
+                    std::hint::black_box(a);
+                    e
+                })
+                .collect();
+            runs.sort_unstable();
+            let total = match run_search(&c, &notes, &ix, q) {
+                Some(SearchAnswer::Hits { total, .. }) => total,
+                _ => 0,
+            };
+            let qw = normalize_word(q);
+            let fz = if q.split_whitespace().count() == 1 {
+                let t = Instant::now();
+                let nv = variant_idxs(&ix, &qw).len();
+                let tv = t.elapsed().as_micros();
+                let t = Instant::now();
+                let nl = rendering_idxs(&ix, &qw).len();
+                let tl = t.elapsed().as_micros();
+                let t = Instant::now();
+                let nf = fuzzy_idxs(&ix, &qw).len();
+                let tf = t.elapsed().as_micros();
+                format!(
+                    "variant {:.1}ms/{nv} lemma {:.1}ms/{nl} fuzzy {:.1}ms/{nf}",
+                    tv as f64 / 1000.0,
+                    tl as f64 / 1000.0,
+                    tf as f64 / 1000.0
+                )
+            } else {
+                "one tier only (phrase)".to_string()
+            };
+            println!("  {q:<17} {:>7.1}ms  total {total:<7} {fz}", runs[1] as f64 / 1000.0);
+            println!("  {:<17}   {shape}", "");
+        }
     }
 
     /// attach_notes serves the same rows as the fallback scan.

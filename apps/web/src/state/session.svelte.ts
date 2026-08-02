@@ -111,7 +111,67 @@ export class Session {
   activePane = $state(0);
   panel = $state<PanelView | null>(null);
   mapPopup = $state<MapPopup | null>(null);
+
+  // ── search: what is typed, and what the engine is asked ─────────────────────
+  //
+  // Two fields, because they are two different things. The web shell searches
+  // LIVE, so every keystroke used to be a full query: the four ranked tiers over
+  // the whole corpus, then a block list of up to 200 hits with their verse text,
+  // then JSON across the worker boundary — and the engine lives in ONE thread,
+  // so the eighth keystroke's answer queued behind seven answers nobody would
+  // ever read, in front of the layout and tap RPCs of the chapter underneath.
+  // Android has never had this: its search runs on the IME Search action, once
+  // (StudyScreen.kt). The debounce is the web coming closer to that, not away
+  // from it.
+
+  /**
+   * How long the field waits after the last keystroke before the engine hears
+   * about it.
+   *
+   * 180 ms. Above the ~120–160 ms a fast typist leaves between characters, so a
+   * word typed straight through is ONE query rather than eight; below the ~200 ms
+   * at which a pause starts to read as the app lagging. Ordinary typing therefore
+   * asks nothing at all until the reader stops.
+   */
+  static readonly SEARCH_DEBOUNCE_MS = 180;
+
+  /** What the reader has typed. The field shows THIS, so it never lags a
+   *  keystroke behind the keyboard. */
+  searchDraft = $state("");
+  /** The query the study panel actually asks the engine for: [[searchDraft]]
+   *  once it has stopped moving. While the wait runs, the panel keeps showing
+   *  the last answer rather than blanking. */
   searchQuery = $state("");
+
+  #searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** A keystroke in the search field. */
+  setSearch(text: string): void {
+    this.searchDraft = text;
+    if (this.#searchTimer) clearTimeout(this.#searchTimer);
+    this.#searchTimer = null;
+    // Emptying the field is a dismissal, not a query — nothing to wait for, and
+    // waiting would leave the old hits up for a fifth of a second after the
+    // reader wiped the field.
+    if (!text.trim()) {
+      this.searchQuery = text;
+      return;
+    }
+    this.#searchTimer = setTimeout(() => {
+      this.#searchTimer = null;
+      this.searchQuery = this.searchDraft;
+    }, Session.SEARCH_DEBOUNCE_MS);
+  }
+
+  /** Close the search field — both halves, at once. A pending wait is dropped:
+   *  its query would otherwise land after the field it came from is gone. */
+  clearSearch(): void {
+    if (this.#searchTimer) clearTimeout(this.#searchTimer);
+    this.#searchTimer = null;
+    this.searchDraft = "";
+    this.searchQuery = "";
+  }
+
   /** Refreshed after any authoring write (worker reload → shell re-fetch). */
   studyEpoch = $state(0);
   /** Bumped whenever an async cache fill lands — deriveds re-read q(). */
@@ -357,9 +417,35 @@ export class Session {
    */
   static readonly CACHE_CAP = 512;
 
+  /**
+   * Reads whose answers are too big to keep more than a few of, method → how
+   * many.
+   *
+   * [[CACHE_CAP]] bounds the COUNT and says so; this is the exemption for the
+   * entries where that is not enough. A `searchBlocks` answer is up to 200 hits
+   * carrying their verse text — the largest single thing this cache holds — and
+   * its key is the query string, so a reader typing a word left one behind per
+   * keystroke. Only the query on screen can be read, so only the query on screen
+   * is kept; the rest were evicting other panels' answers to hold results for
+   * fragments of a word nobody will type again.
+   */
+  static readonly PER_METHOD_CAP: Record<string, number> = { searchBlocks: 1 };
+
   /** Live cache size — what the e2e bound test measures. */
   get cacheSize(): number {
     return this.#cache.size;
+  }
+
+  /** The engine method a cache key belongs to; null for a `qs()` static. */
+  #methodOf(key: string): string | null {
+    const at = key.indexOf(KEY_SEP);
+    return at < 0 ? null : key.slice(0, at);
+  }
+
+  /** Drop this method's oldest answers until only `cap` of them are left. */
+  #trimMethod(method: string, cap: number): void {
+    const mine = [...this.#cache.keys()].filter((k) => this.#methodOf(k) === method);
+    for (const k of mine.slice(0, Math.max(mine.length - cap, 0))) this.#cache.delete(k);
   }
 
   /** Read a hit and move it to the young end of the LRU order. A Map iterates
@@ -376,6 +462,9 @@ export class Session {
    *  navigation exactly the way dropping it in `invalidate()` did. */
   #store(key: string, value: any): void {
     this.#cache.set(key, value);
+    const method = this.#methodOf(key);
+    const own = method === null ? undefined : Session.PER_METHOD_CAP[method];
+    if (method !== null && own !== undefined) this.#trimMethod(method, own);
     if (this.#cache.size <= Session.CACHE_CAP) return;
     for (const k of this.#cache.keys()) {
       if (this.#cache.size <= Session.CACHE_CAP) break;

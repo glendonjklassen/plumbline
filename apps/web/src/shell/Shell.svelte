@@ -63,8 +63,14 @@
   }
 
   // ── live search: per keystroke; empty query closes (manifest §Search) ──
-  function onSearchInput(): void {
-    if (s.searchQuery.trim()) s.panel = { kind: "search" };
+  // The field shows `searchDraft` and never lags a keystroke; `setSearch` starts
+  // the 180 ms trailing timer that moves it into `searchQuery`, which is what the
+  // panel asks the engine for. Opening the panel keys off the DRAFT so the sheet
+  // appears as soon as there is something to search for, not a fifth of a second
+  // later — only the engine call is debounced.
+  function onSearchInput(e: Event): void {
+    s.setSearch((e.currentTarget as HTMLInputElement).value);
+    if (s.searchDraft.trim()) s.panel = { kind: "search" };
     else if (s.panel?.kind === "search") s.panel = null;
   }
 
@@ -81,7 +87,7 @@
   }
   function closeSearch(): void {
     searchOpen = false;
-    s.searchQuery = "";
+    s.clearSearch();
     if (s.panel?.kind === "search") s.panel = null;
   }
   // Share the app: the PWA QR + link (Compose ShareAppDialog parity) — a
@@ -294,7 +300,7 @@
         else if (s.showShortcuts) s.showShortcuts = false;
         else if (s.panel) {
           s.panel = null;
-          s.searchQuery = "";
+          s.clearSearch();
         } else if (s.screen !== "read") s.goRead();
         break;
       case "?":
@@ -336,7 +342,7 @@
       type="search"
       placeholder="Search or reference…"
       bind:this={searchEl}
-      bind:value={s.searchQuery}
+      value={s.searchDraft}
       oninput={onSearchInput}
       onkeydown={(e) => e.key === "Escape" && closeSearch()}
       aria-label="Search"
