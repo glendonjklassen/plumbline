@@ -1,0 +1,29 @@
+{
+  "id": "jesus-paid-it-all",
+  "number": 20,
+  "tune": "ALL TO CHRIST",
+  "meter": "6.6.7.7 with refrain",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Jesus Paid It All",
+      "author": "Elvina M. Hall",
+      "translator": null,
+      "year": 1865,
+      "stanzas": [
+        "[D]I hear the Sav[A7]ior [D]say,\n\"Thy [G]strength in[D]deed is [A7]small,\n[D]Child of weakness, [G]watch and [D]pray,\nFind in [A7]Me thine all in [D]all.\"",
+        "Lord, now indeed I find\nThy pow'r and Thine alone,\nCan change the leper's spots\nAnd melt the heart of stone.",
+        "For nothing good have I\nWhere-by Thy grace to claim;\nI'll wash my garments white\nIn the blood of Calv'ry's Lamb.",
+        "And when, before the throne,\nI stand in Him complete,\n\"Jesus died my soul to save,\"\nMy lips shall still repeat."
+      ],
+      "chorus": "[D]Jesus paid it [A7]all,\nAll to [D]Him I owe;\n[G]Sin had left a [D]crimson stain,\nHe [A7]washed it white as [D]snow.",
+      "sources": [
+        "https://hymnary.org/text/i_hear_the_savior_say_thy_strength_indee",
+        "https://hymnary.org/tune/all_to_christ_grape",
+        "https://hymnary.org/hymn/CYBER/3420"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text is hymnary.org's representative text (Baptist Hymnal, 1991) — the four-stanza congregational form. The Cyber Hymnal (hymnary.org/hymn/CYBER/3420) prints six stanzas in a different order and ends 'I'll lay my trophies down, all down at Jesus' feet' instead of the quoted 'Jesus died my soul to save' line; the four shipped stanzas are what hymnals print. Meter is the tune page's 6.6.7.7 with refrain, which matches the lines as shipped; the text page lists 6.6.6.6 with refrain for the same text. Chords: printed keys are D-flat (tune page) and E-flat (Cyber Hymnal), with D Major itself common in hymnals — D chosen per the guitar rule. Straightforward I-IV-V7 chart."
+}

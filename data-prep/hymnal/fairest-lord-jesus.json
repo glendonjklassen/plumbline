@@ -1,0 +1,31 @@
+{
+  "id": "fairest-lord-jesus",
+  "number": 44,
+  "tune": "CRUSADERS' HYMN",
+  "meter": "5.6.8.5.5.8",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Fairest Lord Jesus",
+      "author": "Anonymous German, Münster Gesangbuch, 1677",
+      "translator": "Richard Storrs Willis (sts. 1-3, 1850); Joseph A. Seiss (st. 4, 1873)",
+      "year": 1850,
+      "stanzas": [
+        "[D]Fairest Lord Jesus, [G]Ruler of all [A]nature,\nO [D]Thou of God and [A7]man the [D]Son,\n[D]Thee will I cherish, [G]Thee will I [A]honor,\n[D]Thou, my soul's [G]glory, [A7]joy and [D]crown.",
+        "Fair are the meadows, fairer still the woodlands,\nRobed in the blooming garb of spring;\nJesus is fairer, Jesus is purer,\nWho makes the woeful heart to sing.",
+        "Fair is the sunshine, fairer still the moonlight,\nAnd all the twinkling starry host;\nJesus shines brighter, Jesus shines purer\nThan all the angels heav'n can boast.",
+        "Beautiful Savior! Lord of all the nations!\nSon of God and Son of Man!\nGlory and honor, praise, adoration,\nNow and forevermore be Thine."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://library.timelesstruths.org/music/Fairest_Lord_Jesus/",
+        "https://hymnary.org/text/fairest_lord_jesus_ruler_of_all_nature",
+        "https://hymnary.org/tune/crusaders_hymn_111271",
+        "https://adventisthymns.com/lyrics/240-fairest-lord-jesus",
+        "https://en.wikipedia.org/wiki/Fairest_Lord_Jesus"
+      ]
+    },
+    "de": null
+  },
+  "notes": "The four commonly-printed stanzas, in the Timeless Truths wording (traditional capitalisation). ONE STANZA DELIBERATELY OMITTED: Timeless Truths prints a fifth, \"All fairest beauty, heavenly and earthly\", and credits it to Lilian Stevenson (1870-1960). That is a 20th-century translation whose public-domain status I could not establish, so it is left out; hymnary's representative text (United Methodist Hymnal 1989) likewise prints only these four. Attribution is genuinely tangled: the worklist names Richard S. Willis as translator, but hymnary says the translator of sts. 1-3 is anonymous and that the text first appeared in Willis's Church Chorals and Choir Studies (1850) — Willis may only have been the editor/arranger. Stanza 4 is Joseph A. Seiss's (1873). Underlying German is \"Schönster Herr Jesu\", Münster Gesangbuch 1677. Tune also known as ST. ELIZABETH / SCHÖNSTER HERR JESU (Silesian folk melody). Key D is hymnary's tune-page key, so the chart is at printed pitch; the Timeless Truths score is in F. (Re-verified 2026-08-01: hymnary's CRUSADERS' HYMN page does give D major and 5.6.8.5.5.8, so both the key and the meter recorded here are at source.) Text independently cross-checked against adventisthymns.com, which prints exactly these four stanzas with this wording; it reads \"Thou art my glory, joy, and crown\" in stanza 1 where this source has \"Thou, my soul's glory, joy and crown\" — \"my soul's glory\" is the far commoner reading and is kept. Wikipedia independently supports the attribution note above: it credits the \"Beautiful Savior\" stanza to Seiss (1873) and says Willis only ARRANGED the hymn for Church Chorals and Choir Studies (1850), which is why the worklist's bare \"translator: Richard S. Willis\" is not reproduced verbatim here. Wikipedia gives the meter as 8.8.4.4.8.8 with refrain; FORMAT.md says to record the meter as hymnary lists it, so 5.6.8.5.5.8 stands."
+}

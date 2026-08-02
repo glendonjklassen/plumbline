@@ -1,0 +1,31 @@
+{
+  "id": "i-surrender-all",
+  "number": 42,
+  "tune": "SURRENDER",
+  "meter": "8.7.8.7 with refrain",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "I Surrender All",
+      "author": "Judson W. Van DeVenter",
+      "translator": null,
+      "year": 1896,
+      "stanzas": [
+        "[D]All to Jesus [G]I sur[D]render,\nAll to [A7]Him I freely [D]give;\n[D]I will ever [G]love and [D]trust Him,\nIn His [A7]presence daily [D]live.",
+        "All to Jesus I surrender,\nHumbly at His feet I bow;\nWorldly pleasures all forsaken,\nTake me, Jesus, take me now.",
+        "All to Jesus I surrender,\nMake me, Savior, wholly Thine;\nLet me feel the Holy Spirit,\nTruly know that Thou art mine.",
+        "All to Jesus I surrender,\nLord, I give myself to Thee;\nFill me with Thy love and power,\nLet Thy blessing fall on me.",
+        "All to Jesus I surrender,\nNow I feel the sacred flame;\nOh, the joy of full salvation!\nGlory, glory, to His Name!"
+      ],
+      "chorus": "[D]I surrender all,\n[A7]I surrender [D]all;\n[D]All to Thee, my [G]blessed [D]Savior,\nI sur[A7]render [D]all.",
+      "sources": [
+        "https://library.timelesstruths.org/music/I_Surrender_All/",
+        "https://hymnary.org/text/all_to_jesus_i_surrender",
+        "https://amazinghymns.com/i-surrender-all/",
+        "https://gccsatx.com/hymns/i-surrender-all/"
+      ]
+    },
+    "de": null
+  },
+  "notes": "All five of Van DeVenter's stanzas, from Timeless Truths. Hymnary's representative text (Baptist Hymnal 1991) prints only stanzas 1, 3 and 4 of these, and hymnary's own note says the hymn \"originally had five stanzas, but the last is usually omitted\" — stanza 5 (\"Now I feel the sacred flame\") is the one most often dropped, and stanza 2 (\"Humbly at His feet I bow\") is frequently dropped too. Variant in stanza 3: this source reads \"Let me feel the Holy Spirit\"; the Baptist Hymnal reads \"Let me feel Thy Holy Spirit\". Key D matches both hymnary's tune SURRENDER (Weeden) and the Timeless Truths score, so the chart is at printed pitch. Hymnary disambiguates the tune as \"SURRENDER (Weeden)\"; the tune name proper is SURRENDER. Independently cross-checked 2026-08-01: amazinghymns.com prints all five stanzas in this order, including \"Now I feel the sacred flame\", and both it and gccsatx.com read \"Let me feel the Holy Spirit\" — so three sources now carry this file's reading and the \"Thy Holy Spirit\" variant is confined to the abridged three-stanza printings (hymnallibrary.org is another). Both cross-check sites lowercase the divine pronouns; this file keeps the traditional capitalisation of its primary source."
+}

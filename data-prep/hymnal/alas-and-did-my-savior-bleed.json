@@ -1,0 +1,30 @@
+{
+  "id": "alas-and-did-my-savior-bleed",
+  "number": 18,
+  "tune": "MARTYRDOM",
+  "meter": "8.6.8.6",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Alas! and Did My Savior Bleed",
+      "author": "Isaac Watts",
+      "translator": null,
+      "year": 1707,
+      "stanzas": [
+        "[G]Alas! and [C]did my [G]Savior [D]bleed\nAnd [Am]did my [D7]Sovereign [G]die?\n[G]Would He de[C]vote that [G]sacred head\nFor [C]sinners [D7]such as [G]I?",
+        "Was it for crimes that I had done\nHe groaned upon the tree?\nAmazing pity! grace unknown!\nAnd love beyond degree!",
+        "Well might the sun in darkness hide\nAnd shut his glories in,\nWhen Christ, the mighty Maker died,\nFor man the creature’s sin.",
+        "Thus might I hide my blushing face\nWhile His dear cross appears,\nDissolve my heart in thankfulness,\nAnd melt my eyes to tears.",
+        "But drops of grief can ne’er repay\nThe debt of love I owe:\nHere, Lord, I give myself away\n’Tis all that I can do."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://hymnary.org/hymn/CYBER/77",
+        "https://hymnary.org/text/alas_and_did_my_savior_bleed",
+        "https://hymnary.org/tune/martyrdom_wilson"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text follows the Cyber Hymnal (hymnary.org/hymn/CYBER/77), which keeps Watts's original wording and capitalization. Its second stanza ('Thy body slain, sweet Jesus, Thine') is omitted here because no modern hymnal prints it; the five shipped stanzas are the standard set. ONE DEVIATION FROM THAT SOURCE: the Cyber Hymnal renders 'Here, Lord, I give my self away' as two words — written here as 'myself', the reading of hymnary.org's representative text (United Methodist Hymnal, 1989). That UMH text also modernizes elsewhere ('drops of tears' for 'drops of grief', 'that I have done' for 'that I had done', 'God, the mighty maker' for 'Christ, the mighty Maker', lowercase pronouns) — not followed. Sung to MARTYRDOM the hymn has no refrain; with Ralph Hudson's tune HUDSON (1885) it takes the 'At the cross' refrain and is titled 'At the Cross' — that refrain is deliberately not shipped, since it does not belong to this tune. Chords: hymnal key is A-flat Major, moved to G per the guitar rule. Plain common-metre harmonization."
+}

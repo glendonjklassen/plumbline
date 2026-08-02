@@ -1,0 +1,29 @@
+{
+  "id": "joy-to-the-world",
+  "number": 53,
+  "tune": "ANTIOCH",
+  "meter": "8.6.8.6",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Joy to the World",
+      "author": "Isaac Watts",
+      "translator": null,
+      "year": 1719,
+      "stanzas": [
+        "[D]Joy to the world; the Lord [A7]is [D]come;\nLet [G]earth re[A]ceive her [D]king:\nLet every [G]heart pre[D]pare Him room,\nAnd Heaven and nature sing,\nAnd [A7]Heaven and nature [D]sing,\nAnd Heaven, and [G]Heaven, and na[A7]ture [D]sing.",
+        "Joy to the earth, the Savior reigns;\nLet men their songs employ;\nWhile fields and floods, rocks, hills and plains\nRepeat the sounding joy,\nRepeat the sounding joy,\nRepeat, repeat, the sounding joy.",
+        "No more let sins and sorrows grow,\nNor thorns infest the ground;\nHe comes to make His blessings flow\nFar as the curse is found,\nFar as the curse is found,\nFar as, far as, the curse is found.",
+        "He rules the world with truth and grace,\nAnd makes the nations prove\nThe glories of His righteousness,\nAnd wonders of His love,\nAnd wonders of His love,\nAnd wonders, wonders, of His love."
+      ],
+      "chorus": null,
+      "sources": [
+        "http://www.hymntime.com/tch/htm/j/o/y/w/joyworld.htm",
+        "https://hymnary.org/text/joy_to_the_world_the_lord_is_come",
+        "https://hymnary.org/tune/antioch_handel"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text: Cyber Hymnal, four stanzas (Watts's 1719 paraphrase of Psalm 98), keeping its lowercase 'king' in stanza 1 and its 'every' rather than the sung elision 'ev’ry'. Meter is hymnary's 8.6.8.6 for the tune; the printed six lines are the common-metre quatrain with ANTIOCH's repeats written out (8.6.8.6.6.9 as printed). Tune ANTIOCH, Handel arr. Lowell Mason, commonly printed in D per hymnary.org/tune/antioch_handel, so no transposition. Chart derived from the Cyber Hymnal MIDI (mid/a/n/t/i/antioch.mid); lines 1, 2 and 6 align syllable-for-syllable with the melody onsets, so those chord placements are exact."
+}

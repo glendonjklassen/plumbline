@@ -1,0 +1,33 @@
+{
+  "id": "o-for-a-thousand-tongues",
+  "number": 6,
+  "tune": "AZMON",
+  "meter": "8.6.8.6",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "O for a Thousand Tongues to Sing",
+      "author": "Charles Wesley",
+      "translator": null,
+      "year": 1739,
+      "stanzas": [
+        "[G]O for a [D]thousand [G]tongues to sing\nMy [Em]great Re[D7]deem[G]er’s praise,\nThe [G]glories of my [C]God and king,\nThe [G]triumphs of [D7]His [G]grace!",
+        "My gracious master and my God,\nAssist me to proclaim,\nTo spread through all the earth abroad\nThe honors of Thy name.",
+        "Jesus! the name that charms our fears,\nThat bids our sorrows cease;\n’Tis music in the sinner’s ears,\n’Tis life, and health, and peace.",
+        "He breaks the power of canceled sin,\nHe sets the prisoner free;\nHis blood can make the foulest clean,\nHis blood availed for me.",
+        "He speaks, and, listening to His voice,\nNew life the dead receive,\nThe mournful, broken hearts rejoice,\nThe humble poor believe.",
+        "Hear Him, ye deaf; His praise, ye dumb,\nYour loosened tongues employ;\nYe blind, behold your Savior come,\nAnd leap, ye lame, for joy.",
+        "Glory to God, and praise and love\nBe ever, ever given,\nBy saints below and saints above,\nThe church in earth and Heaven."
+      ],
+      "chorus": null,
+      "sources": [
+        "http://hymntime.com/tch/htm/o/f/o/r/ofor1000.htm",
+        "https://hymnary.org/text/o_for_a_thousand_tongues_to_sing_my",
+        "https://hymnary.org/tune/azmon_glaser",
+        "https://www.hymnchords.net/files/O%20For%20a%20Thousand%20Tongues%20to%20Sing.pdf"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Wesley's poem runs to eighteen stanzas in the Cyber Hymnal (the familiar opening is verse 7 of the original); shipped here are the six that Trinity Hymnal p.164 prints, in its order, plus the doxological \"Glory to God, and praise and love\" that most hymnals print last (Cyber Hymnal stanza 8; hymnary's representative text carries it too). Wording is the Cyber Hymnal's throughout -- note Trinity prints \"the pow'r of reigning sin\" in stanza 4 where the Cyber Hymnal and hymnary have \"the power of canceled sin\", which is Wesley's. Key G confirmed by the hymnchords.net Trinity chart; hymnary lists AZMON in A-flat, A and G. Chords follow that chart, except that its half cadence at the end of line 2 was resolved to the tonic to keep the strum simple. LYNGHAM and RICHMOND are the other tunes in common use for this text and will not fit this chart. SCANSION: several words are printed full and sung elided -- \"power\" as \"pow'r\" (stanza 4), \"given\" as \"giv'n\" and \"Heaven\" as \"heav'n\" (stanza 7). The Cyber Hymnal prints them full; many hymnals print the elisions. Kept full, as the source has them."
+}

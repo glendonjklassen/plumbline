@@ -1,0 +1,30 @@
+{
+  "id": "and-can-it-be",
+  "number": 21,
+  "tune": "SAGINA",
+  "meter": "8.8.8.8.8.8 with refrain",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "And Can It Be That I Should Gain",
+      "author": "Charles Wesley",
+      "translator": null,
+      "year": 1738,
+      "stanzas": [
+        "[G]And can it be that [D]I should [G]gain\nAn [C]interest in the [G]Savior’s [D]blood?\n[G]Died He for me, who [D]caused His [G]pain—\nFor [C]me, who [G]Him to [D]death pur[G]sued?\nA[G]mazing [C]love! How [G]can it [D]be,\nThat [G]Thou, my [C]God, shouldst [D]die for [G]me?\nA[G]mazing [C]love! How [G]can it [D]be,\nThat [G]Thou, my [C]God, shouldst [D]die for [G]me?",
+        "’Tis mystery all: th’Immortal dies:\nWho can explore His strange design?\nIn vain the firstborn seraph tries\nTo sound the depths of love divine.\n’Tis mercy all! Let earth adore,\nLet angel minds inquire no more.\n’Tis mercy all! Let earth adore;\nLet angel minds inquire no more.",
+        "He left His Father’s throne above\nSo free, so infinite His grace—\nEmptied Himself of all but love,\nAnd bled for Adam’s helpless race:\n’Tis mercy all, immense and free,\nFor O my God, it found out me!\n’Tis mercy all, immense and free,\nFor O my God, it found out me!",
+        "Long my imprisoned spirit lay,\nFast bound in sin and nature’s night;\nThine eye diffused a quickening ray—\nI woke, the dungeon flamed with light;\nMy chains fell off, my heart was free,\nI rose, went forth, and followed Thee.\nMy chains fell off, my heart was free,\nI rose, went forth, and followed Thee.",
+        "No condemnation now I dread;\nJesus, and all in Him, is mine;\nAlive in Him, my living Head,\nAnd clothed in righteousness divine,\nBold I approach th’eternal throne,\nAnd claim the crown, through Christ my own.\nBold I approach th’eternal throne,\nAnd claim the crown, through Christ my own."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://hymnary.org/hymn/CYBER/22",
+        "https://hymnary.org/text/and_can_it_be_that_i_should_gain",
+        "https://hymnary.org/tune/sagina_campbell"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text is the Cyber Hymnal (hymnary.org/hymn/CYBER/22); its fifth stanza, 'Still the small inward voice I hear', is omitted, as in nearly every hymnal, leaving the standard five. IMPORTANT STRUCTURAL CHOICE: SAGINA repeats each stanza's own last couplet, so those repeats are printed inside every stanza (lines 7-8) and 'chorus' is null. Hymnals that print a fixed refrain reuse stanza 1's couplet ('Amazing love! how can it be, that Thou, my God, should die for me!') after every stanza — hymnary's representative text (Sing Joyfully, 1989) does that, and also reads 'should' for 'shouldst'. If the shells would rather repeat one refrain, that variant is the one to use. Chords: SAGINA's tune page key is G Major, already a guitar key. The chart is a best-effort reduction of the tune's harmony — the climbing 'Amazing love' phrase is harmonized more richly in most published settings."
+}

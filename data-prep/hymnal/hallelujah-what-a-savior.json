@@ -1,0 +1,31 @@
+{
+  "id": "hallelujah-what-a-savior",
+  "number": 22,
+  "tune": "HALLELUJAH! WHAT A SAVIOR",
+  "meter": "7.7.7.8",
+  "key": "A",
+  "texts": {
+    "en": {
+      "title": "Hallelujah! What a Savior",
+      "author": "Philip P. Bliss",
+      "translator": null,
+      "year": 1875,
+      "stanzas": [
+        "[A]Man of Sorrows! [E7]what a [A]name\nFor the [D]Son of [A]God, who [E7]came\n[A]Ruined [D]sinners to re[A]claim.\n[D]Halle[A]lujah! [E7]What a [A]Savior!",
+        "Bearing shame and scoffing rude,\nIn my place condemned He stood;\nSealed my pardon with His blood.\nHallelujah! What a Savior!",
+        "Guilty, vile, and helpless we;\nSpotless Lamb of God was He;\nFull atonement! can it be?\nHallelujah! What a Savior!",
+        "Lifted up was He to die;\nIt is finished! was His cry;\nNow in Heav’n exalted high.\nHallelujah! What a Savior!",
+        "When He comes, our glorious king,\nAll His ransomed home to bring,\nThen anew His song we’ll sing:\nHallelujah! What a Savior!"
+      ],
+      "chorus": null,
+      "sources": [
+        "https://hymnary.org/hymn/CYBER/2123",
+        "https://hymnary.org/text/man_of_sorrows_what_a_name",
+        "https://hymnary.org/tune/man_of_sorrows_what_a_name_bliss",
+        "https://www.hymnologyarchive.com/man-of-sorrows-what-a-name"
+      ]
+    },
+    "de": null
+  },
+  "notes": "First line and usual hymnal title are '\"Man of Sorrows!\" What a Name'; shipped under the worklist's title. Text is the Cyber Hymnal (hymnary.org/hymn/CYBER/2123). Hymnary lists the tune unnamed as '[Man of Sorrows, what a name]'; the Hymnology Archive records that it is most often called HALLELUJAH! WHAT A SAVIOR, also MAN OF SORROWS, and GETHSEMANE in England — the first is used here. Wording variants in other hymnals (hymnary's representative text, Psalter Hymnal Gray 1987): 'Guilty, helpless, lost were we; blameless Lamb of God was he', 'He was lifted up to die', and 'then anew this song we'll sing' where the Cyber Hymnal has 'His song'. Chords: printed key is B-flat Major, moved down a semitone to A per the guitar rule."
+}

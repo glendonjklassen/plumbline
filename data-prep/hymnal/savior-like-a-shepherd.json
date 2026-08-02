@@ -1,0 +1,30 @@
+{
+  "id": "savior-like-a-shepherd",
+  "number": 45,
+  "tune": "BRADBURY",
+  "meter": "8.7.8.7 D",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Savior, Like a Shepherd Lead Us",
+      "author": "attr. Dorothy A. Thrupp",
+      "translator": null,
+      "year": 1836,
+      "stanzas": [
+        "[D]Savior, like a [G]shepherd [D]lead us,\n[A7]Much we need Thy [D]tender care;\n[D]In Thy pleasant [G]pastures [D]feed us,\n[A7]For our use Thy [D]folds prepare:\n[D]Blessèd [G]Jesus, [D]blessèd [A7]Jesus,\n[D]Thou hast [G]bought us, [A7]Thine we [D]are;\n[D]Blessèd [G]Jesus, [D]blessèd [A7]Jesus,\n[D]Thou hast [G]bought us, [A7]Thine we [D]are.",
+        "We are Thine, do Thou befriend us,\nBe the guardian of our way;\nKeep Thy flock, from sin defend us,\nSeek us when we go astray:\nBlessèd Jesus, blessèd Jesus,\nHear, O hear us when we pray;\nBlessèd Jesus, blessèd Jesus,\nHear, O hear us when we pray.",
+        "Thou hast promised to receive us,\nPoor and sinful though we be;\nThou hast mercy to relieve us,\nGrace to cleanse, and pow'r to free:\nBlessèd Jesus, blessèd Jesus,\nEarly let us turn to Thee;\nBlessèd Jesus, blessèd Jesus,\nEarly let us turn to Thee.",
+        "Early let us seek Thy favor,\nEarly let us do Thy will;\nBlessed Lord and only Savior,\nWith Thy love our bosoms fill:\nBlessèd Jesus, blessèd Jesus,\nThou hast loved us, love us still;\nBlessèd Jesus, blessèd Jesus,\nThou hast loved us, love us still."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://hymnary.org/text/savior_like_a_shepherd_lead_us",
+        "https://library.timelesstruths.org/music/Savior_Like_a_Shepherd_Lead_Us/",
+        "https://hymnary.org/tune/bradbury_bradbury",
+        "https://en.wikipedia.org/wiki/Savior,_Like_a_Shepherd_Lead_us"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text is hymnary's representative text (Hymns for the Living Church), which keeps the grave accent on the sung two-syllable \"Blessèd\" — note stanza 4 line 3 has plain \"Blessed Lord\", which is the source's own distinction, not a typo. Timeless Truths agrees word-for-word except stanza 3's repeated line, which it gives as \"We will early turn to Thee\" against this source's \"Early let us turn to Thee\". Meter: recorded as 8.7.8.7 D, which is what hymnary's BRADBURY tune page lists and what the eight-line stanza above actually scans as. Hymnary's TEXT authority page lists 8.7.8.7.4.7 instead — that fits the six-line printing, where \"Blessèd Jesus!\" is one short line and the closing couplet is not repeated. Key: BRADBURY is E-flat major on hymnary's tune page (Timeless Truths prints D); D is the nearest guitar key and ties with E, broken by the preference order in FORMAT.md. Independently cross-checked 2026-08-01 against Wikipedia, which prints these same four stanzas and settles the two open readings in this file's favour: it has \"Blessed Lord and only Savior\" in stanza 4 and \"early let us turn to Thee\" in stanza 3, so Timeless Truths' \"We will early turn to Thee\" is the minority reading. Two further variants seen while checking, neither adopted: gccsatx.com prints \"Gracious Lord, our only Savior\" for stanza 4 line 3, and the SDA Hymnal's text reads \"much we need thy tenderest care\" in stanza 1 — hymnary, Wikipedia and gccsatx all read \"tender care\"."
+}

@@ -1,0 +1,34 @@
+{
+  "id": "o-god-our-help",
+  "number": 34,
+  "tune": "ST. ANNE",
+  "meter": "8.6.8.6",
+  "key": "C",
+  "texts": {
+    "en": {
+      "title": "O God, Our Help in Ages Past",
+      "author": "Isaac Watts",
+      "translator": null,
+      "year": 1719,
+      "stanzas": [
+        "[C]O God, [F]our [C]help [Am]in ag[G]es [C]past,\n[C]Our [Am]hope for years [D]to [G]come,\n[G]Our [C]shel[F]ter [Dm]from [G]the [C]storm[D]y [G]blast,\n[C]And [F]our [C]e[Dm]ter[G]nal [C]home.",
+        "Under the shadow of Thy throne\nThy saints have dwelt secure;\nSufficient is Thine arm alone,\nAnd our defense is sure.",
+        "Before the hills in order stood,\nOr earth received her frame,\nFrom everlasting Thou art God,\nTo endless years the same.",
+        "Thy Word commands our flesh to dust,\n“Return, ye sons of men”:\nAll nations rose from earth at first,\nAnd turn to earth again.",
+        "A thousand ages in Thy sight\nAre like an evening gone;\nShort as the watch that ends the night\nBefore the rising sun.",
+        "The busy tribes of flesh and blood,\nWith all their lives and cares,\nAre carried downwards by the flood,\nAnd lost in foll’wing years.",
+        "Time, like an ever-rolling stream,\nBears all its sons away;\nThey fly, forgotten, as a dream\nDies at the op’ning day.",
+        "Like flow’ry fields the nations stand\nPleased with the morning light;\nThe flow’rs beneath the mower’s hand\nLie with’ring ere ’tis night.",
+        "O God, our help in ages past,\nOur hope for years to come,\nBe Thou our guard while troubles last,\nAnd our eternal home."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://library.timelesstruths.org/music/O_God_Our_Help_in_Ages_Past/",
+        "https://hymnary.org/text/o_god_our_help_in_ages_past_watts",
+        "https://library.timelesstruths.org/library/music/O/O_God_Our_Help_in_Ages_Past/O_God_Our_Help_in_Ages_Past.xml"
+      ]
+    },
+    "de": null
+  },
+  "notes": "All nine stanzas of Watts’ paraphrase of Psalm 90 as Timeless Truths prints them. Most hymnals print a subset (commonly 1-5 and 9); stanzas 6-8 are kept here because the brief is not to trim. Watts wrote \"Our God, our help\"; John Wesley’s 1738 alteration to \"O God, our help\" is the form printed here and in nearly every modern hymnal. Chords derived from the SATB MusicXML of ST. ANNE at Timeless Truths (score in C, no transposition) and thinned for guitar — this is Croft’s harmonisation, which moves once per syllable, so the chart does too."
+}

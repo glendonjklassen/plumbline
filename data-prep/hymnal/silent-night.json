@@ -1,0 +1,45 @@
+{
+  "id": "silent-night",
+  "number": 56,
+  "tune": "STILLE NACHT",
+  "meter": "6.6.8.8.6.6",
+  "key": "A",
+  "texts": {
+    "en": {
+      "title": "Silent Night, Holy Night",
+      "author": "Joseph Mohr",
+      "translator": "John Freeman Young",
+      "year": 1863,
+      "stanzas": [
+        "[A]Silent night, holy night,\n[E7]All is calm, [A]all is bright\n[D]Round yon virgin mother and [A]Child.\n[D]Holy Infant, so [A]tender and mild,\n[E7]Sleep in heavenly [A]peace,\nSleep in heaven[E7]ly [A]peace.",
+        "Silent night, holy night,\nShepherds quake at the sight;\nGlories stream from heaven afar,\nHeavenly hosts sing Alleluia!\nChrist the Savior is born,\nChrist the Savior is born!",
+        "Silent night, holy night,\nSon of God, love’s pure light;\nRadiant beams from Thy holy face\nWith the dawn of redeeming grace,\nJesus, Lord, at Thy birth,\nJesus, Lord, at Thy birth.",
+        "Silent night, holy night\nWondrous star, lend thy light;\nWith the angels let us sing,\nAlleluia to our king;\nChrist the Savior is born,\nChrist the Savior is born!"
+      ],
+      "chorus": null,
+      "sources": [
+        "http://www.hymntime.com/tch/htm/s/i/l/n/silnight.htm",
+        "https://hymnary.org/text/silent_night_holy_night_all_is_calm_all",
+        "https://hymnary.org/tune/stille_nacht_gruber"
+      ]
+    },
+    "de": {
+      "title": "Stille Nacht, heilige Nacht",
+      "author": "Joseph Mohr",
+      "translator": null,
+      "year": 1816,
+      "stanzas": [
+        "[A]Stille Nacht, heilige Nacht!\n[E7]Alles schläft, [A]einsam wacht\n[D]nur das traute, hochheilige [A]Paar.\n[D]Holder Knabe im [A]lockigen Haar,\n[E7]schlaf in himmlischer [A]Ruh,\nschlaf in himmli[E7]scher [A]Ruh.",
+        "Stille Nacht, heilige Nacht!\nHirten erst kundgemacht,\ndurch der Engel Halleluja\ntönt es laut von fern und nah:\nChrist, der Retter, ist da,\nChrist, der Retter, ist da!",
+        "Stille Nacht, heilige Nacht!\nGottes Sohn, o wie lacht\nLieb aus deinem göttlichen Mund,\nda uns schlägt die rettende Stund,\nChrist, in deiner Geburt,\nChrist, in deiner Geburt."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://de.wikipedia.org/wiki/Stille_Nacht,_heilige_Nacht",
+        "https://de.wikisource.org/wiki/Weyhnachts-Lied",
+        "https://de.wikisource.org/wiki/Stille_Nacht!_Heilige_Nacht!_(Gruber_VII)"
+      ]
+    }
+  },
+  "notes": "German: the 'gebräuchliche Fassung' — the three sung stanzas as cited on de.wikipedia from Evangelisches Gesangbuch (Bayern/Thüringen, 2. Aufl. München 1995, S. 101), in the modern printed order (Mohr's original stanzas 1, 6, 2). Mohr's full six-stanza autograph text of 1816 is on de.wikisource (Weyhnachts-Lied, and Gruber's Autograph VII) and reads 'Jesus' where the EG has 'Christ', 'lockigten' for 'lockigen' and 'Hirten erst kundgemacht ... bei Ferne und Nah'; those older forms are deliberately not used here per the EG-orthography rule. English: the Cyber Hymnal's four stanzas — stanzas 1 and 3 are John Freeman Young's 1863 translation, stanzas 2 and 4 are anonymous, and hymnary confirms that split; stanza 4 is the least commonly printed. Hymnary's representative English text also shows a widely printed variant of stanza 2 beginning 'Darkness flies, all is light'. Meter is hymnary's tune-page value; its text page says only 'Irregular'. Tune STILLE NACHT (Gruber, 1818) is printed in B-flat; A is the nearest preferred guitar key (one semitone down) and the two texts' charts agree bar for bar."
+}

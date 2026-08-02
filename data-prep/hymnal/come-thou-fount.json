@@ -1,0 +1,29 @@
+{
+  "id": "come-thou-fount",
+  "number": 7,
+  "tune": "NETTLETON",
+  "meter": "8.7.8.7 D",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Come, Thou Fount of Every Blessing",
+      "author": "Robert Robinson",
+      "translator": null,
+      "year": 1758,
+      "stanzas": [
+        "[D]Come, thou Fount of every [A]blessing;\n[D]tune my [G]heart to [A7]sing thy [D]grace;\nstreams of [A7]mercy, [D]never [A]ceasing,\n[D]call for [G]songs of [A7]loudest [D]praise.\nTeach me some me[G]lodious [D]sonnet,\nsung by flaming [G]tongues a[D]bove;\npraise the [A7]mount! I’m [D]fixed up[A]on it,\n[D]mount of [G]God’s un[A7]changing [D]love!",
+        "Here I raise my Ebenezer;\nhither by thy help I’m come;\nand I hope, by thy good pleasure,\nsafely to arrive at home.\nJesus sought me when a stranger,\nwandering from the fold of God;\nhe, to rescue me from danger,\ninterposed his precious blood.",
+        "O to grace how great a debtor\ndaily I’m constrained to be!\nLet that grace now, like a fetter,\nbind my wandering heart to thee.\nProne to wander, Lord, I feel it,\nprone to leave the God I love;\nhere’s my heart; O take and seal it;\nseal it for thy courts above."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://hymnary.org/text/come_thou_fount_of_every_blessing",
+        "http://hymntime.com/tch/htm/c/o/m/e/t/comethou.htm",
+        "https://hymnary.org/tune/nettleton",
+        "https://www.hymnchords.net/files/Come%20Thou%20Fount%20of%20Every%20Blessing.pdf"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text is hymnary.org's representative text, the near-universal three-stanza hymnal form. It is not a subset of Robinson's poem: the Cyber Hymnal prints five original stanzas, and stanza 2 here splices the second half of Robinson's stanza 2 (\"Here I raise my Ebenezer... safely to arrive at home\") to the first half of his stanza 3 (\"Jesus sought me when a stranger...\"). His other two stanzas (\"Sorrowing I shall be in spirit\" and \"O that day when freed from sinning\") are almost never printed. Last line: this source reads \"mount of God's unchanging love\"; Trinity Hymnal has \"mount of Thy unchanging love\" and the Cyber Hymnal \"Mount of Thy redeeming love\" -- all three are in circulation, so expect the question. Lower-case line openings and typographic apostrophes are the source's. Key D confirmed by the hymnchords.net Trinity chart and by hymnary, which lists NETTLETON in D and E; chords follow that chart."
+}

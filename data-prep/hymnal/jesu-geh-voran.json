@@ -1,0 +1,44 @@
+{
+  "id": "jesu-geh-voran",
+  "number": 88,
+  "tune": "SEELENBRÄUTIGAM",
+  "meter": "5.5.8.8.5.5",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Jesus, Still Lead On",
+      "author": "Nikolaus Ludwig von Zinzendorf",
+      "translator": "Jane L. Borthwick",
+      "year": 1846,
+      "stanzas": [
+        "[G]Jesus, still lead [D]on,\ntill our [D7]rest be [G]won,\n[C]And, al[G]though the [D]way be [G]cheerless,\n[C]We will [G]follow [D]calm and [G]fearless,\n[G]Guide us [C]by Thy [D]hand\n[G]to our [D]father[G]land.",
+        "If the way be drear,\nif the foe be near,\nLet no faithless fears o’ertake us,\nLet not faith and hope forsake us,\nFor through many a woe\nto our home we go.",
+        "When we seek relief\nfrom a long felt grief;\nWhen temptations come alluring,\nMake us patient and enduring;\nShow us that bright shore\nwhere we weep no more.",
+        "Jesus, still lead on,\ntill our rest be won;\nHeavenly Leader, still direct us,\nStill support, control, protect us,\nTill we safely stand\nin our fatherland."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://hymnary.org/hymn/CYBER/3440",
+        "https://hymnary.org/text/jesus_still_lead_on"
+      ]
+    },
+    "de": {
+      "title": "Jesus, geh voran",
+      "author": "Nikolaus Ludwig von Zinzendorf",
+      "translator": null,
+      "year": 1721,
+      "stanzas": [
+        "[G]Jesus, geh vo[D]ran\nauf der [D7]Lebens[G]bahn!\n[C]Und wir [G]wollen [D]nicht ver[G]weilen,\n[C]dir ge[G]treulich [D]nachzu[G]eilen;\n[G]führ uns [C]an der [D]Hand\n[G]bis ins [D]Vater[G]land.",
+        "Soll’s uns hart ergehn,\nlass uns feste stehn\nund auch in den schwersten Tagen\nniemals über Lasten klagen;\ndenn durch Trübsal hier\ngeht der Weg zu dir.",
+        "Rühret eigner Schmerz\nirgend unser Herz,\nkümmert uns ein fremdes Leiden,\no so gib Geduld zu beiden;\nrichte unsern Sinn\nauf das Ende hin.",
+        "Ordne unsern Gang,\nJesu, lebenslang.\nFührst du uns durch rauhe Wege,\ngib uns auch die nöt’ge Pflege;\ntu uns nach dem Lauf\ndeine Türe auf."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_jesu_geh_voran_auf_der_lebensbahn.html",
+        "https://www.volksliederarchiv.de/jesu-geh-voran/"
+      ]
+    }
+  },
+  "notes": "First-word variant, and it is the reason the German title here is not the worklist's: evangeliums.net (whose page slug is nevertheless 'jesu_geh_voran…') prints 'Jesus, geh voran', while volksliederarchiv and hymnary's German-title field both give 'Jesu, geh voran' — the EG 391 / Brüdergemeine form. I shipped evangeliums.net verbatim rather than splice its punctuation onto the other source's wording; if you prefer the EG incipit, change one word in stanza 1 and the title. Both sources agree on all four stanzas otherwise, and stanza 4 keeps the vocative 'Jesu' in either. The text as sung is Zinzendorf 1721 revised by Christian Gregor 1778, per evangeliums.net. English is Jane Borthwick's 1846 translation, unaltered, from the Cyber Hymnal record — the modern hymnal version on hymnary's text page replaces 'Thy hand' with 'your hand' and 'control' with 'console'; I used the original. Tune SEELENBRÄUTIGAM (Adam Drese, 1698) and meter 55.88.55 confirmed on hymnary; written here in the dotted 5.5.8.8.5.5 form. Chords are a best-effort G-major chart; note that the tune was originally in a lilting triple time, so the harmonic rhythm may want to be one chord per bar rather than the two I wrote in the long lines."
+}

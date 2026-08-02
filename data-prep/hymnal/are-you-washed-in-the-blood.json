@@ -1,0 +1,29 @@
+{
+  "id": "are-you-washed-in-the-blood",
+  "number": 52,
+  "tune": "WASHED IN THE BLOOD",
+  "meter": "11.9.11.9 with refrain",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Are You Washed in the Blood?",
+      "author": "Elisha A. Hoffman",
+      "translator": null,
+      "year": 1878,
+      "stanzas": [
+        "[G]Have you been to Jesus for the [C]cleansing [G]pow’r?\nAre you washed in the blood of the [D7]Lamb?\n[G]Are you fully trusting in His [C]grace this hour?\nAre you [G]washed in the blood [D7]of the [G]Lamb?",
+        "Are you walking daily by the Savior’s side?\nAre you washed in the blood of the Lamb?\nDo you rest each moment in the Crucified?\nAre you washed in the blood of the Lamb?",
+        "When the Bridegroom cometh will your robes be white?\nAre you washed in the blood of the Lamb?\nWill your soul be ready for the mansions bright,\nAnd be washed in the blood of the Lamb?",
+        "Lay aside the garments that are stained with sin,\nAnd be washed in the blood of the Lamb;\nThere’s a fountain flowing for the soul unclean,\nOh, be washed in the blood of the Lamb!"
+      ],
+      "chorus": "Are you [G]washed in the [C]blood,\n[D7]In the [G]soul-cleansing blood of the [D7]Lamb?\n[G]Are your garments spotless? Are they [C]white as snow?\nAre you [G]washed in the blood [D7]of the [G]Lamb?",
+      "sources": [
+        "https://library.timelesstruths.org/music/Are_You_Washed_in_the_Blood/",
+        "http://www.hymntime.com/tch/htm/a/r/u/w/aruwashd.htm",
+        "https://hymnary.org/tune/washed_in_the_blood_hoffman"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text and lineation from Timeless Truths, whose four long lines match the 11.9.11.9 meter; the Cyber Hymnal breaks each 11-syllable line in two and reads 'cleansing power', 'soul cleansing' and 'O be washed'. Tune WASHED IN THE BLOOD (Hoffman, 1878); hymnary lists A-flat as the most frequent printed key with G also common, so G is used with no real transposition of the singing range. Chart derived from the Cyber Hymnal MIDI (mid/a/r/e/y/are_you_washed_in_the_blood.mid) transposed A-flat->G; its 75 melody onsets align with the 77 syllables of stanza plus refrain, so placement is note-accurate apart from two slurs."
+}

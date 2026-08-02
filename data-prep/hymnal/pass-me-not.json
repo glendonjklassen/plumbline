@@ -1,0 +1,29 @@
+{
+  "id": "pass-me-not",
+  "number": 47,
+  "tune": "PASS ME NOT",
+  "meter": "8.5.8.5 with refrain",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Pass Me Not, O Gentle Savior",
+      "author": "Fanny J. Crosby",
+      "translator": null,
+      "year": 1868,
+      "stanzas": [
+        "[G]Pass me not, O gentle [D7]Savior,\nHear my humble [G]cry;\n[G]While on others Thou art [C]calling,\nDo not [D7]pass me [G]by.",
+        "Let me at Thy throne of mercy\nFind a sweet relief;\nKneeling there in deep contrition,\nHelp my unbelief.",
+        "Trusting only in Thy merit,\nWould I seek Thy face;\nHeal my wounded, broken spirit,\nSave me by Thy grace.",
+        "Thou the spring of all my comfort,\nMore than life to me,\nWhom have I on earth beside Thee,\nWhom in Heav'n but Thee."
+      ],
+      "chorus": "[G]Savior, [D7]Savior,\nHear my humble [G]cry;\n[G]While on others Thou art [C]calling,\nDo not [D7]pass me [G]by.",
+      "sources": [
+        "https://library.timelesstruths.org/music/Pass_Me_Not_O_Gentle_Savior/",
+        "https://hymnary.org/text/pass_me_not_o_gentle_savior",
+        "https://gccsatx.com/hymns/pass-me-not-o-gentle-savior/"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths: Crosby's four stanzas and the refrain. The earlier caveat here — that hymnary's bot shield blocked the full page, leaving the wording resting on Timeless Truths alone — is now RESOLVED. Cross-checked 2026-08-01 against gccsatx.com, an independent site, which prints the same four stanzas and the refrain word-for-word with this file. Punctuation and casing differ in stanza 4 between printings: several sources give \"Thou the Spring of all my comfort\" (capital S) and end the last two lines with question marks, \"Whom have I on earth beside Thee? Whom in heav'n but Thee?\". This file follows Timeless Truths exactly — lowercase \"spring\", comma then full stop — which was re-verified against that page rather than assumed. The refrain's last two lines repeat the stanza's melody, so they carry the same chords. Key: the Timeless Truths score is A-flat; G and A are both one semitone away and FORMAT.md's preference order picks G."
+}

@@ -1,0 +1,29 @@
+{
+  "id": "softly-and-tenderly",
+  "number": 46,
+  "tune": "THOMPSON",
+  "meter": "11.7.11.7 with refrain",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Softly and Tenderly Jesus Is Calling",
+      "author": "Will L. Thompson",
+      "translator": null,
+      "year": 1880,
+      "stanzas": [
+        "[G]Softly and tenderly [C]Jesus is [G]calling,\nCalling for [D7]you and for [G]me;\n[G]See, on the portals He's [C]waiting and [G]watching,\nWatching for [D7]you and for [G]me.",
+        "Why should we tarry when Jesus is pleading,\nPleading for you and for me?\nWhy should we linger and heed not His mercies,\nMercies for you and for me?",
+        "Time is now fleeting, the moments are passing,\nPassing from you and from me;\nShadows are gathering, deathbeds are coming,\nComing for you and for me.",
+        "Oh, for the wonderful love He has promised,\nPromised for you and for me!\nThough we have sinned, He has mercy and pardon,\nPardon for you and for me."
+      ],
+      "chorus": "[G]Come home, come [C]home,\n[G]You who are weary, come [D7]home;\n[G]Earnestly, tenderly, [C]Jesus is [G]calling,\nCalling, O [D7]sinner, come [G]home!",
+      "sources": [
+        "https://library.timelesstruths.org/music/Softly_and_Tenderly/",
+        "https://hymnary.org/text/softly_and_tenderly_jesus_is_calling",
+        "https://namethathymn.com/christian-hymns/softly-and-tenderly-jesus-is-calling-lyrics.html"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Four stanzas and refrain, from Timeless Truths (traditional capitalisation). Hymnary's representative text (United Methodist Hymnal 1989) is the same four stanzas word-for-word apart from house-style lowercasing and \"O for the wonderful love\" where this source has \"Oh, for the wonderful love\"; the refrain likewise reads \"you who are weary come home\" against \"You who are weary, come home\". Key: the Timeless Truths score is A-flat major, which is equidistant from G (1 semitone down) and A (1 semitone up); FORMAT.md's preference order picks G, which is also the friendlier key for this tune's reach. MATERIAL VARIANT, for the maintainer to rule on: the refrain's second line. Independently cross-checked 2026-08-01 against namethathymn.com, which reads \"Ye who are weary, come home\" — that is Thompson's 1880 wording and it is what most older gospel hymnals print. This file keeps \"You who are weary\", the reading of both sources it was built from (Timeless Truths, and hymnary's United Methodist Hymnal text), per FORMAT.md's rule to keep the file's reading and record the variant; switch to \"Ye\" if the hymnal should follow the 1880 original. That same cross-check confirms all four stanzas otherwise word-for-word, differing only in the already-noted \"O for the wonderful love\" against this file's \"Oh, for the wonderful love\"."
+}

@@ -1,0 +1,28 @@
+{
+  "id": "wonderful-words-of-life",
+  "number": 50,
+  "tune": "WORDS OF LIFE",
+  "meter": "8.6.8.6.6.6 with refrain",
+  "key": "E",
+  "texts": {
+    "en": {
+      "title": "Wonderful Words of Life",
+      "author": "Philip P. Bliss",
+      "translator": null,
+      "year": 1874,
+      "stanzas": [
+        "[E]Sing them o[A]ver a[E]gain to [B7]me,\nWonderful [G#m]words of [E]life;\nLet me more [A]of their [E]beauty [B7]see,\nWonderful [G#m]words of [E]life.\n[E]Words of life and [A]beau[E]ty\nTeach me faith and [A]du[E]ty;",
+        "Christ, the blessed One, gives to all\nWonderful words of life;\nSinner, list to the loving call,\nWonderful words of life.\nAll so freely given,\nWooing us to heaven;",
+        "Sweetly echo the Gospel call,\nWonderful words of life;\nOffer pardon and peace to all,\nWonderful words of life.\nJesus, only Savior,\nSanctify forever;"
+      ],
+      "chorus": "[E]Beau[B7]tiful words, won[E]derful words,\nWonderful [B7]words of [E]life;\nBeau[B7]tiful words, won[E]derful words,\nWonderful [B7]words of [E]life.",
+      "sources": [
+        "https://library.timelesstruths.org/music/Wonderful_Words_of_Life/",
+        "http://www.hymntime.com/tch/htm/w/o/n/d/w/wondword.htm",
+        "https://hymnary.org/tune/words_of_life_bliss"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text and lineation from Timeless Truths, which prints the six-line stanza the 8.6.8.6.6.6 meter requires; the Cyber Hymnal runs lines 5–6 together and reads 'sanctify us forever' (seven syllables, one too many for the tune) and 'blessèd'. Tune WORDS OF LIFE (Bliss, 1874); hymnary.org/tune/words_of_life_bliss lists it in F, and E is the nearest of the preferred guitar keys (one semitone down; G would be two). Chart derived from the Cyber Hymnal MIDI (mid/w/o/n/d/e/wonderful_words_of_life.mid) transposed F->E."
+}

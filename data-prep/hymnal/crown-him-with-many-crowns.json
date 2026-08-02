@@ -1,0 +1,32 @@
+{
+  "id": "crown-him-with-many-crowns",
+  "number": 4,
+  "tune": "DIADEMATA",
+  "meter": "6.6.8.6 D",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Crown Him with Many Crowns",
+      "author": "Matthew Bridges and Godfrey Thring",
+      "translator": null,
+      "year": 1851,
+      "stanzas": [
+        "[D]Crown Him with [Bm]many [G]crowns,\nThe [D]Lamb up[A7]on His [D]throne.\n[D]Hark! How the [A]heav’nly [Bm]anthem [E7]drowns\n[A]All music [E7]but its [A]own!\nA[D]wake, my [A7]soul, and [D]sing\nOf [G]Him who [B7]died for [E7]thee;\nAnd [D]hail Him [G]as thy [A]matchless [D]king\nThrough [G]all e[D]ter[A7]ni[D]ty!",
+        "Crown Him the Lord of life,\nWho triumphed o’er the grave,\nAnd rose victorious in the strife\nFor those He came to save.\nHis glories now we sing,\nWho died, and rose on high,\nWho died eternal life to bring,\nAnd lives that death may die.",
+        "Crown Him the Lord of love!\nBehold His hands and side,\nThose wounds, yet visible above,\nIn beauty glorified:\nNo angel in the sky\nCan fully bear that sight,\nBut downward bends his burning eye\nAt mysteries so bright!",
+        "Crown Him the Lord of peace!\nWhose power a scepter sways\nFrom pole to pole, that wars may cease,\nAbsorbed in prayer and praise:\nHis reign shall know no end,\nAnd round His piercèd feet\nFair flowers of paradise extend\nTheir fragrance ever sweet.",
+        "Crown Him the Lord of years,\nThe Potentate of time,\nCreator of the rolling spheres,\nIneffably sublime.\nAll hail, Redeemer, hail!\nFor Thou hast died for me;\nThy praise and glory shall not fail\nThroughout eternity."
+      ],
+      "chorus": null,
+      "sources": [
+        "http://hymntime.com/tch/htm/c/r/o/w/crownhim.htm",
+        "https://hymnary.org/text/crown_him_with_many_crowns",
+        "https://hymnary.org/tune/diademata_elvey",
+        "https://library.timelesstruths.org/music/Crown_Him_with_Many_Crowns/",
+        "https://hymnchords.net/files/CROWN%20HIM%20WITH%20MANY%20CROWNS.pdf"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Hymnary warns that \"almost no two hymnals include the exact same arrangement\" of this text. The Cyber Hymnal prints nine stanzas (Bridges 1-6, Thring 7-9); the five shipped here are the commonly-printed set, in the order most modern hymnals use -- many crowns / life / love / peace / years. Wording is the Cyber Hymnal's, with one correction: it reads \"For Thou has died for me\", an obvious slip for \"hast\", which is what Trinity and Timeless Truths print. \"piercèd\" and its grave accent are the source's. Variant readings to be aware of in stanza 3: Trinity and Timeless Truths have \"Rich wounds, yet visible above\" and \"downward bends his wond'ring eye\" where the Cyber Hymnal has \"Those wounds\" / \"burning eye\". Key D confirmed by the hymnchords.net chart and Timeless Truths; hymnary's incipit database lists DIADEMATA in E-flat, one semitone away. CHORDS ARE BEST-EFFORT: the published chart is dense (often a chord per syllable, with a real modulation to the dominant across lines 3-4) and its PDF text layout could not be aligned to syllables with confidence, so this chart keeps its harmonic shape but thins it to roughly two changes a bar."
+}

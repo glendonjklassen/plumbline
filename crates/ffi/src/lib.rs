@@ -212,9 +212,10 @@ pub struct PlumblineEngine {
     /// TSK topical cross-references (parsed lazily from the home — an 8.5 MB
     /// TSV nobody should pay for at every open).
     xref_ix: OnceLock<XRefIx>,
-    /// The hymnal (parsed lazily from the home: nobody pays for it before the
-    /// hymn tab opens, and it is read exactly once — the in-memory home may
-    /// evict `data/hymnal.json` after this read).
+    /// The hymnal, parsed lazily: nobody pays for it before the hymn tab opens.
+    /// Read exactly once per engine, but `data/hymnal.json` is deliberately NOT
+    /// on the web's eviction list — the first read can come at any point in a
+    /// session, so the bytes have to still be there when it does.
     hymnal: OnceLock<hymnal::Hymnal>,
     /// The plain-English overlay (the AKJV delta), when the home carries one.
     /// A READING aid: it re-words the reader's view and nothing else — never a

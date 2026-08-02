@@ -297,7 +297,7 @@ tasks.register<Copy>("syncData") {
         // makes. Without it the engine reports the overlay unavailable and the
         // Android toggle correctly hides itself — the feature was fully wired
         // in Kotlin but invisible on device, because the data never shipped.
-        include("kjv.jsonl", "strongs.json", "kjv-notes.jsonl", "cross-references.tsv", "akjv.akjvb")
+        include("kjv.jsonl", "strongs.json", "kjv-notes.jsonl", "cross-references.tsv", "akjv.akjvb", "hymnal.json")
     }
     into(layout.projectDirectory.dir("src/main/assets/data"))
 }

@@ -1,0 +1,42 @@
+{
+  "id": "so-nimm-denn-meine-haende",
+  "number": 87,
+  "tune": "SO NIMM DENN MEINE HÄNDE",
+  "meter": "7.4.7.4 D",
+  "key": "E",
+  "texts": {
+    "en": {
+      "title": "O Take My Hand, Dear Father",
+      "author": "Julie Hausmann",
+      "translator": "Herman H. Brueckner",
+      "year": 1925,
+      "stanzas": [
+        "[E]O take my hand, dear [B7]Father,\nAnd [A]lead Thou [B7]me,\n[E]Till at my [B7]journey [E]ending\nI [B7]dwell with [E]Thee.\n[A]Alone I [E]cannot [B7]wander\nOne [E]single [B7]day,\n[E]So do Thou [A]guide my [E]footsteps\nOn [B7]life’s rough [E]way.",
+        "O cover with Thy mercy\nMy poor, weak heart,\nLest I in joy or sorrow\nFrom Thee depart.\nPermit Thy child to linger\nHere at Thy feet,\nThy goodness blindly trusting\nWith faith complete.",
+        "Tho’ oft Thy pow’r but faintly\nMay stir my soul,\nWith Thee, my Light in darkness,\nI reach the goal.\nTake, then, my hand, dear Father,\nAnd lead Thou me,\nTill at my journey’s ending\nI dwell with Thee."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://hymnary.org/hymn/ALH1930/548",
+        "https://hymnary.org/text/take_thou_my_hand_o_father"
+      ]
+    },
+    "de": {
+      "title": "So nimm denn meine Hände",
+      "author": "Julie Hausmann",
+      "translator": null,
+      "year": 1862,
+      "stanzas": [
+        "[E]So nimm denn [B7]meine [E]Hände\nund [A]führe [B7]mich\n[E]bis an mein [B7]selig [E]Ende\nund [B7]ewig[E]lich.\n[A]Ich mag al[E]lein nicht [B7]gehen,\nnicht [E]einen [B7]Schritt:\n[E]wo du wirst [A]gehn und [E]stehen,\nda [B7]nimm mich [E]mit.",
+        "In dein Erbarmen hülle\nmein schwaches Herz\nund mach es gänzlich stille\nin Freud und Schmerz.\nLass ruhn zu deinen Füßen\ndein armes Kind:\nes will die Augen schließen\nund glauben blind.",
+        "Wenn ich auch gleich nichts fühle\nvon deiner Macht,\ndu führst mich doch zum Ziele\nauch durch die Nacht:\nso nimm denn meine Hände\nund führe mich\nbis an mein selig Ende\nund ewiglich!"
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_so_nimm_denn_meine_haende.html",
+        "https://de.wikipedia.org/wiki/So_nimm_denn_meine_H%C3%A4nde"
+      ]
+    }
+  },
+  "notes": "German is the three-stanza sung text (EG 376) from evangeliums.net. Hausmann's 1862 original had six short stanzas that were later paired into these three, and the current text differs from her original in three words — 'gänzlich' for 'endlich', 'gleich nichts' for 'gar nichts', 'du führst mich' for 'du bringst mich' (documented in the de.wikipedia article, cited). evangeliums.net additionally prints two 'Zusatzstrophen (Autor unbekannt)' beginning 'Sei meines Fußes Leuchte' and 'Wenn Leidenschaft und Lüste'; they are not part of the standard text and are not shipped. English is Herman Brueckner's 1925 translation as American Lutheran Hymnal 1930 no. 548 prints it, where its first line is 'O take my hand, dear Father' — hymnary's text record for the same translator titles it 'Take Thou My Hand, O Father', which is what the worklist expected, so the title here differs from the worklist on the source's authority. Do not use hymnary's representative text for this hymn: it is the 2020 Voices Together version, still in copyright. Tune SILCHER (Friedrich Silcher, 1842/43, first published with Agnes Franz's 'Wie könnt ich ruhig schlafen'), named SO NIMM DENN MEINE HÄNDE on hymnary's text page; meter 7.4.7.4 D confirmed there. Key E is a semitone below the usual F printing, per the guitar rule; the chart is a best-effort E-major harmonisation, and the fifth line is where the tune modulates upward, so a player may want a richer chord than the A I wrote."
+}

@@ -1,0 +1,53 @@
+{
+  "id": "grosser-gott-wir-loben-dich",
+  "number": 84,
+  "tune": "GROSSER GOTT",
+  "meter": "7.8.7.8.7.7",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Holy God, We Praise Thy Name",
+      "author": "Ignaz Franz",
+      "translator": "Clarence A. Walworth",
+      "year": 1853,
+      "stanzas": [
+        "[G]Holy God, we [D]praise Thy [G]name;\n[G]Lord of [C]all, we [D]bow be[G]fore Thee.\n[G]All on earth Thy [D]scepter [G]claim,\n[G]All in [C]heav’n a[D]bove a[G]dore Thee.\n[D]Infi[G]nite Thy [D]vast do[G]main,\n[C]Ever[G]lasting [D]is Thy [G]reign.",
+        "Hark! the glad celestial hymn\nAngel choirs above are raising;\nCherubim and seraphim,\nIn unceasing chorus praising,\nFill the heav’ns with sweet accord:\nHoly, holy, holy Lord!",
+        "Lo, th’ apostles’ holy train\nJoin Thy sacred name to hallow.\nProphets swell the glad refrain,\nAnd the white-robed martyrs follow,\nAnd from morn till set of sun,\nThrough the Church the song goes on.",
+        "Holy Father, holy Son,\nHoly Spirit, three we name Thee;\nThough in essence only one,\nUndivided God we claim Thee\nAnd, adoring, bend the knee\nWhile we own the mystery.",
+        "Thou art King of Glory, Christ;\nSon of God, yet born of Mary.\nFor us sinners sacrificed,\nAs to death a Tributary,\nFirst to break the bars of death,\nThou hast opened heav’n to faith.",
+        "From Thy high, celestial home,\nJudge of all, again returning,\nWe believe that Thou shalt come,\nOn the dreadful Doom’s-day morning.\nWhen Thy voice shall shake the earth,\nAnd the startled dead come forth.",
+        "Spare Thy people, Lord, we pray,\nBy a thousand snares surrounded:\nKeep us without sin today,\nNever let us be confounded.\nLo! I put my trust in Thee,\nNever, Lord, abandon me."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.lutheranchoralebook.com/texts/holy-god-we-praise-thy-name/"
+      ]
+    },
+    "de": {
+      "title": "Großer Gott, wir loben dich",
+      "author": "Ignaz Franz",
+      "translator": null,
+      "year": 1771,
+      "stanzas": [
+        "[G]Großer Gott, wir [D]loben [G]dich;\n[G]Herr, wir [C]preisen [D]deine [G]Stärke.\n[G]Vor dir neigt die [D]Erde [G]sich\n[G]und be[C]wundert [D]deine [G]Werke.\n[D]Wie du [G]warst vor [D]aller [G]Zeit,\n[C]so bleibst [G]du in [D]Ewig[G]keit.",
+        "Alles, was dich preisen kann,\nCherubim und Seraphinen\nstimmen dir ein Loblied an;\nalle Engel, die dir dienen,\nrufen dir stets ohne Ruh\n„Heilig, heilig, heilig“ zu.",
+        "Heilig, Herr Gott Zebaoth!\nHeilig, Herr der Himmelsheere!\nStarker Helfer in der Not!\nHimmel, Erde, Luft und Meere\nsind erfüllt von deinem Ruhm;\nalles ist dein Eigentum.",
+        "Der Apostel heilger Chor,\nder Propheten hehre Menge\nschickt zu deinem Thron empor\nneue Lob- und Dankgesänge;\nder Blutzeugen lichte Schar\nlobt und preist dich immerdar.",
+        "Dich, Gott Vater auf dem Thron,\nloben Große, loben Kleine.\nDeinem eingebornen Sohn\nsingt die heilige Gemeinde,\nund sie ehrt den Heilgen Geist,\nder uns seinen Trost erweist.",
+        "Du, des Vaters ewger Sohn,\nhast die Menschheit angenommen,\nbist vom hohen Himmelsthron\nzu uns auf die Welt gekommen,\nhast uns Gottes Gnad gebracht,\nvon der Sünd uns frei gemacht.",
+        "Durch dich steht das Himmelstor\nallen, welche glauben, offen;\ndu stellst uns dem Vater vor,\nwenn wir kindlich auf dich hoffen;\ndu wirst kommen zum Gericht,\nwenn der letzte Tag anbricht.",
+        "Herr, steh deinen Dienern bei,\nwelche dich in Demut bitten.\nKauftest durch dein Blut uns frei,\nhast den Tod für uns gelitten;\nnimm uns nach vollbrachtem Lauf\nzu dir in den Himmel auf.",
+        "Sieh dein Volk in Gnaden an.\nHilf uns, segne, Herr, dein Erbe;\nleit es auf der rechten Bahn,\ndass der Feind es nicht verderbe.\nFühre es durch diese Zeit,\nnimm es auf in Ewigkeit.",
+        "Alle Tage wollen wir\ndich und deinen Namen preisen\nund zu allen Zeiten dir\nEhre, Lob und Dank erweisen.\nRett aus Sünden, rett aus Tod,\nsei uns gnädig, Herre Gott!",
+        "Herr, erbarm, erbarme dich.\nLass uns deine Güte schauen;\ndeine Treue zeige sich,\nwie wir fest auf dich vertrauen.\nAuf dich hoffen wir allein:\nLass uns nicht verloren sein."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://de.wikipedia.org/wiki/Gro%C3%9Fer_Gott,_wir_loben_dich",
+        "https://www.evangeliums.net/lieder/lied_grosser_gott_wir_loben_dich.html"
+      ]
+    }
+  },
+  "notes": "German is the ecumenical (Arbeitsgemeinschaft für ökumenisches Liedgut) text — EG 331 / Gotteslob 380 — in all eleven stanzas; de.wikipedia and evangeliums.net agree word for word, which is why both are cited. Two variants the maintainer may want to know about: evangeliums.net offers 'Auf dem ganzen Erdenkreis / loben Große und auch Kleine …' as a variant of stanza 5, and the Swiss books replace the second half of stanza 11; neither is shipped. English is Clarence Walworth's 1853 translation as the Free Lutheran Chorale-Book prints it (stanzas 1–4 from TLH 1941 no. 250, 5 from LSB 940, 6–7 from The Hymnary with Tunes, 1872, marked 'alt.'); it runs 7 stanzas against the German 11, since Walworth condensed. Meter 7.8.7.8.7.7 counted from the text and matching the tune name GROSSER GOTT used by both sources. Key G: the tune is printed in F in Gotteslob and in G in most English books, so G is both common and the first guitar preference. The chart is my harmonisation, straightforward I–IV–V, not copied from notation."
+}

@@ -1,0 +1,32 @@
+{
+  "id": "nearer-my-god-to-thee",
+  "number": 43,
+  "tune": "BETHANY",
+  "meter": "6.4.6.4.6.6.6.4",
+  "key": "E",
+  "texts": {
+    "en": {
+      "title": "Nearer, My God, to Thee",
+      "author": "Sarah Flower Adams",
+      "translator": null,
+      "year": 1841,
+      "stanzas": [
+        "[E]Nearer, my God, to [B7]Thee, nearer to [E]Thee!\nE'en [E]though it be a [A]cross that [B7]raiseth [E]me,\nStill [A]all my song shall [E]be, nearer, my [B7]God, to [E]Thee.",
+        "Though like the wanderer, the sun gone down,\nDarkness be over me, my rest a stone;\nYet in my dreams I'd be nearer, my God, to Thee.",
+        "There let the way appear, steps unto Heav'n;\nAll that Thou sendest me, in mercy giv'n;\nAngels to beckon me nearer, my God, to Thee.",
+        "Then, with my waking thoughts bright with Thy praise,\nOut of my stony griefs Bethel I'll raise;\nSo by my woes to be nearer, my God, to Thee.",
+        "Or, if on joyful wing cleaving the sky,\nSun, moon, and stars forgot, upward I'll fly,\nStill all my song shall be, nearer, my God, to Thee.",
+        "There in my Father's home, safe and at rest,\nThere in my Savior's love, perfectly blest;\nAge after age to be nearer, my God, to Thee."
+      ],
+      "chorus": "[E]Nearer, my [A]God, to [E]Thee, [B7]nearer to [E]Thee!",
+      "sources": [
+        "https://library.timelesstruths.org/music/Nearer_My_God_to_Thee/",
+        "https://hymnary.org/text/nearer_my_god_to_thee_nearer_to_thee_een",
+        "https://hymnary.org/tune/bethany_mason",
+        "https://en.wikipedia.org/wiki/Nearer,_My_God,_to_Thee"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths, which credits stanza 6 (\"There in my Father's home\") to Edward H. Bickersteth, Jr. — it is not Adams's and many hymnals print only her five. It is common enough in gospel hymnals to keep, but drop it if the maintainer wants Adams's text alone. The 'chorus' here is not a true refrain: it is the tune's closing phrase, which every stanza repeats. Timeless Truths prints it separately for that reason; hymnary's United Methodist Hymnal text instead sets it as the last line inside each stanza. Either way it is sung once per stanza, which is what the shells do with a chorus. Hymnary's line division for the same text is eight short lines (hence the 6.4.6.4.6.6.6.4 meter recorded here); this source's three long lines are the same words. Year: 1841 per Timeless Truths and the worklist; hymnary's authority page says 1840. Key: BETHANY is F major on hymnary's tune page and in the Timeless Truths score; E is the nearest guitar key (1 semitone down). Independently cross-checked 2026-08-01 against Wikipedia, which corroborates Adams's five stanzas, Lowell Mason's 1856 BETHANY, and that the sixth stanza was added later by Edward Henry Bickersteth Jr. — so the stanza-6 caveat above is confirmed, not merely asserted by one source. Variant in stanza 5: several hymnals (the United Methodist Hymnal among them) read \"upward I fly\" where this source has \"upward I'll fly\"; the same printings give \"steps unto heaven\" and \"in mercy given\" unelided, but the elided \"Heav'n\"/\"giv'n\" kept here are what BETHANY's 6.4 lines actually scan to."
+}

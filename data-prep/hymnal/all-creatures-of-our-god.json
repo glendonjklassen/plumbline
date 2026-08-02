@@ -1,0 +1,34 @@
+{
+  "id": "all-creatures-of-our-god",
+  "number": 8,
+  "tune": "LASST UNS ERFREUEN",
+  "meter": "8.8.4.4.8.8 with refrain",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "All Creatures of Our God and King",
+      "author": "Francis of Assisi",
+      "translator": "William H. Draper",
+      "year": 1919,
+      "stanzas": [
+        "[D]All creatures of our [Bm]God and [A]king\n[D]Lift up your voice and [Bm]with us [A]sing,\n[D]Alle[G]lu[D]ia! [Bm]Alle[A]lu[D]ia!\n[D]Thou burning sun with [A7]golden [D]beam,\n[D]Thou silver moon with [G]softer [D]gleam!",
+        "Thou rushing wind that art so strong\nYe clouds that sail in Heaven along,\nO praise Him! Alleluia!\nThou rising moon, in praise rejoice,\nYe lights of evening, find a voice!",
+        "Thou flowing water, pure and clear,\nMake music for thy Lord to hear,\nO praise Him! Alleluia!\nThou fire so masterful and bright,\nThat givest man both warmth and light.",
+        "Dear mother earth, who day by day\nUnfoldest blessings on our way,\nO praise Him! Alleluia!\nThe flowers and fruits that in thee grow,\nLet them His glory also show.",
+        "And all ye men of tender heart,\nForgiving others, take your part,\nO sing ye! Alleluia!\nYe who long pain and sorrow bear,\nPraise God and on Him cast your care!",
+        "And thou most kind and gentle death,\nWaiting to hush our latest breath,\nO praise Him! Alleluia!\nThou leadest home the child of God,\nAnd Christ our Lord the way hath trod.",
+        "Let all things their creator bless,\nAnd worship Him in humbleness,\nO praise Him! Alleluia!\nPraise, praise the Father, praise the Son,\nAnd praise the Spirit, Three in One!"
+      ],
+      "chorus": "O [G]praise Him! O [D]praise Him!\n[Bm]Alle[A]luia! [G]Alle[D]luia! [G]Alle[A7]lu[D]ia!",
+      "sources": [
+        "http://hymntime.com/tch/htm/a/c/o/o/acoogak.htm",
+        "https://hymnary.org/text/all_creatures_of_our_god_and_king",
+        "https://library.timelesstruths.org/music/All_Creatures_of_Our_God_and_King/",
+        "https://hymnary.org/tune/lasst_uns_erfreuen",
+        "https://hymnchords.net/files/ALL%20CREATURES%20OF%20OUR%20GOD%20AND%20KING.pdf"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text: the Cyber Hymnal's seven stanzas of Draper's 1919 translation, with its refrain lifted into the chorus field -- the Cyber Hymnal prints \"Refrain\" after every stanza, so the shells' repeat-after-each-stanza behaviour is exactly right. Stanza 1's third line is \"Alleluia! Alleluia!\" where later stanzas have \"O praise Him! Alleluia!\" (stanza 5: \"O sing ye! Alleluia!\"); that variation is in the source and is standard. Hymnary's representative text and Timeless Truths both drop to five stanzas (no \"Dear mother earth\", no \"And thou most kind and gentle death\") and read \"Thou rising morn\" for the Cyber Hymnal's \"Thou rising moon\"; \"moon\" is Draper's and is kept. Key D confirmed three ways: the hymnchords.net chart (Trinity Hymnal p.115, transposed there from E-flat), hymnary's incipit database, and Timeless Truths. CHORDS: lines 1-2 share a melody and so share a chart. THE REFRAIN CHART IS MY OWN and is the weakest part of this file -- the published chart moves on nearly every syllable and its PDF text layout could not be aligned to syllables with confidence, so the refrain is best-effort. STRUCTURE: the meter 8.8.4.4.8.8 counts the two Alleluias as separate 4-syllable lines, but every source consulted prints them on one line (\"Alleluia! Alleluia!\"), so each stanza here is 5 lines, not 6. The chorus adds the 6+12 refrain."
+}

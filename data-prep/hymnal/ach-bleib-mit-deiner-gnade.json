@@ -1,0 +1,48 @@
+{
+  "id": "ach-bleib-mit-deiner-gnade",
+  "number": 89,
+  "tune": "CHRISTUS, DER IST MEIN LEBEN",
+  "meter": "7.6.7.6",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Abide, O Dearest Jesus",
+      "author": "Josua Stegmann",
+      "translator": "August Crull",
+      "year": null,
+      "stanzas": [
+        "[D]Abide, [A/C#]O [D]dear[G]est [A]Je[D]sus,\n[G]A[A]mong [Em]us [D]with [A]Thy [D]grace\n[D]That [G]Sa[A7]tan [D]may [A]not harm us\n[D]Nor [Em]we [D/F#]to [G]sin [A]give [D]place.",
+        "Abide, O dear Redeemer,\nAmong us with Thy Word\nAnd thus now and hereafter\nTrue peace and joy afford.",
+        "Abide with heavenly brightness\nAmong us, precious Light;\nThy truth direct and keep us\nFrom error’s gloomy night.",
+        "Abide with richest blessings\nAmong us, bounteous Lord;\nLet us in grace and wisdom\nGrow daily through Thy Word.",
+        "Abide with Thy protection\nAmong us, Lord, our Strength,\nLest world and Satan fell us\nAnd overcome at length.",
+        "Abide, O faithful Savior,\nAmong us with Thy love;\nGrant steadfastness and help us\nTo reach our home above."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://ccel.org/a/anonymous/luth_hymnal/tlh053.htm",
+        "https://hymnary.org/text/abide_o_dearest_jesus"
+      ]
+    },
+    "de": {
+      "title": "Ach bleib mit deiner Gnade",
+      "author": "Josua Stegmann",
+      "translator": null,
+      "year": 1627,
+      "stanzas": [
+        "[D]Ach bleib [A/C#]mit [D]dei[G]ner [A]Gna[D]de\n[G]bei [A]uns, [Em]Herr [D]Je[A]su [D]Christ,\n[D]dass [G]uns [A7]hin[D]fort [A]nicht schade\n[D]des [Em]bö[D/F#]sen [G]Fein[A]des [D]List.",
+        "Ach bleib mit deinem Worte\nbei uns, Erlöser wert,\ndass uns sei hier und dorte\ndein Güt und Heil beschert.",
+        "Ach bleib mit deinem Glanze\nbei uns, du wertes Licht;\ndein Wahrheit uns umschanze,\ndamit wir irren nicht.",
+        "Ach bleib mit deinem Segen\nbei uns, du reicher Herr;\ndein Gnad und all’s Vermögen\nin uns reichlich vermehr.",
+        "Ach bleib mit deinem Schutze\nbei uns, du starker Held,\ndass uns der Feind nicht trutze\nnoch fäll die böse Welt.",
+        "Ach bleib mit deiner Treue\nbei uns, mein Herr und Gott;\nBeständigkeit verleihe,\nhilf uns aus aller Not."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_ach_bleib_mit_deiner_gnade.html",
+        "https://hymnary.org/text/ach_bleib_mit_deiner_gnade"
+      ]
+    }
+  },
+  "notes": "German is the six-stanza EG 347 text; I took it from evangeliums.net and checked it word for word against hymnary’s representative text (Evangelisches Gesangbuch Bayern/Mitteldeutschland/Thüringen #347). The two differ only in orthography: hymnary’s printing has 'daß' in stanzas 1 and 5, evangeliums.net has the post-reform 'dass', which is what I shipped. Apostrophes are the typographic ’ throughout (sources print the straight '), matching the other files in this directory. English is August Crull’s translation exactly as printed in The Lutheran Hymnal 1941 #53 (Project Wittenberg text via CCEL) — I deliberately did NOT use hymnary’s representative text for the English, because that one is the modernised 'among us with your grace' revision from Christian Worship: Hymnal #924, whose public-domain status is not clear. Crull died 1923, so the TLH wording is safely public domain. Crull’s translation year is not given by either source, so year is null. Dating of the German varies by source: worklist and evangeliums.net say 1627, hymnary and CCEL say 1628 (Suspira Temporum, Rinteln); I kept 1627. Chords: derived from the Cyber Hymnal’s four-part setting of CHRISTUS, DER IST MEIN LEBEN (Melchior Vulpius, 1609), which is in E flat; transposed to D per the guitar rule (E flat is one semitone from both D and E, and D wins the preference order) and thinned to about four changes per line. Both language charts are the same chart bar for bar."
+}

@@ -1,0 +1,65 @@
+{
+  "id": "es-ist-das-heil",
+  "number": 81,
+  "tune": "ES IST DAS HEIL",
+  "meter": "8.7.8.7.8.8.7",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Salvation unto Us Has Come",
+      "author": "Paul Speratus",
+      "translator": "composite",
+      "year": 1523,
+      "stanzas": [
+        "Sal[G]vation unto [D]us has [C]come\nBy [Em]God’s free [C]grace and [D]fa[G]vor;\nGood [G]works cannot a[D]vert our [C]doom,\nThey [Em]help and [C]save us [D]ne[G]ver.\n[G]Faith looks to [C]Jesus [D]Christ a[G]lone,\nWho [C]did for [G]all the [Am]world a[D]tone;\nHe [G]is our [C]one Re[D]dee[G]mer.",
+        "What God did in His Law demand\nAnd none to Him could render\nCaused wrath and woe on ev’ry hand\nFor man, the vile offender.\nOur flesh has not those pure desires\nThe spirit of the Law requires,\nAnd lost is our condition.",
+        "It was a false, misleading dream\nThat God His Law had given\nThat sinners might themselves redeem\nAnd by their works gain heaven.\nThe Law is but a mirror bright\nTo bring the inbred sin to light\nThat lurks within our nature.",
+        "From sin our flesh could not abstain,\nSin held its sway unceasing;\nThe task was useless and in vain,\nOur guilt was e’er increasing.\nNone can remove sin’s poisoned dart\nOr purify our guileful heart—\nSo deep is our corruption.",
+        "Yet as the Law must be fulfilled\nOr we must die despairing,\nChrist came and hath God’s anger stilled,\nOur human nature sharing.\nHe hath for us the Law obeyed\nAnd thus the Father’s vengeance stayed\nWhich over us impended.",
+        "Since Christ hath full atonement made\nAnd brought to us salvation,\nEach Christian therefore may be glad\nAnd build on this foundation.\nThy grace alone, dear Lord, I plead,\nThy death is now my life indeed,\nFor Thou hast paid my ransom.",
+        "Let me not doubt, but trust in Thee,\nThy Word cannot be broken;\nThy call rings out, “Come unto Me!”\nNo falsehood hast Thou spoken.\nBaptized into Thy precious name,\nMy faith cannot be put to shame,\nAnd I shall never perish.",
+        "The only righteous in God’s sight\nAre they this faith possessing;\nBut faith shines forth with heav’nly light,\nItself by works professing.\nThough faith is all that God requires,\nThy love the neighbor’s good desires\nIf God hath truly borne Thee.",
+        "The Law reveals the guilt of sin\nAnd makes men conscience-stricken;\nThe Gospel then doth enter in\nThe sinful soul to quicken.\nCome to the cross, trust Christ, and live;\nThe Law no peace can ever give,\nNo comfort and no blessing.",
+        "Faith clings to Jesus’ cross alone\nAnd rests in Him unceasing;\nAnd by its fruits true faith is known,\nWith love and hope increasing.\nYet faith alone doth justify,\nWorks serve the neighbor and supply\nThe proof that faith is living.",
+        "Hope waits in patience for that time\nWhen God will show His power.\nWhen to expect this joy sublime,\nGod sets for us no hour.\nHe knows full well when best to aid;\nThough help may often be delayed,\nIn this we all must trust Him.",
+        "If His goodwill be hid in night,\nDismiss this fear unbidden.\nTo those in whom is His delight,\nHis love is often hidden.\nHis Word shall take away thy doubt,\nAnd if thy flesh its “No” should shout,\nStill cast from thee all terror.",
+        "May glory, laud, with highest praise,\nFor this, our God’s salvation,\nTo Father, Spirit, Son be raised,\nWho’ll bring unto completion\nThe work He hath in us begun,\nThat glory may for Him be won.\nFor this His name be hallowed.",
+        "His kingdom come, His will on earth\nBe done as ’tis in heaven.\nOf daily bread be there no dearth,\nAnd be our sins forgiven\nAs we do them who owe us aught.\nInto temptation lead us not,\nFrom evil free us. Amen."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.lutheranchoralebook.com/texts/salvation-unto-us-has-come/",
+        "https://hymnary.org/text/salvation_unto_us_has_come"
+      ]
+    },
+    "de": {
+      "title": "Es ist das Heil uns kommen her",
+      "author": "Paul Speratus",
+      "translator": null,
+      "year": 1523,
+      "stanzas": [
+        "[G]Es ist das [D]Heil uns [C]kommen [G]her\nvon [Em]Gnad und [C]lauter [D]Gü[G]te;\ndie [G]Werk, die [D]helfen [C]nimmer[G]mehr,\nsie [Em]können [C]nicht be[D]hü[G]ten.\nDer [G]Glaub sieht [C]Jesus [D]Christus [G]an,\nder [C]hat für [G]uns ge[Am]nug ge[D]tan,\ner [G]ist der [C]Mittler [D]wor[G]den.",
+        "Was Gott im G’setz geboten hat,\nda man es nicht konnt halten,\nerhob sich Zorn und große Not\nvor Gott so mannigfalten;\nvom Fleisch wollt nicht heraus der Geist,\nvom G’setz erfordert allermeist;\nes war mit uns verloren.",
+        "Es war ein falscher Wahn dabei,\nGott hätt sein G’setz drum geben,\nals ob wir möchten selber frei\nnach seinem Willen leben;\nso ist es nur ein Spiegel zart,\nder uns zeigt an die sünd’ge Art,\nin unserm Fleisch verborgen.",
+        "Nicht möglich war es, diese Art\naus eignen Kräften laßen.\nWiewohl es oft versuchet ward,\ndoch mehrt sich Sünd ohn Maßen;\ndenn Gleisnerswerk Gott hoch verdammt,\nund je dem Fleisch der Sünde Schand\nallzeit war angeboren.",
+        "Doch mußt’ das G’setz erfüllet sein,\nsonst wärn wir all verdorben.\nDrum schickt’ Gott seinen Sohn herein,\nder selber Mensch ist worden;\ndas ganz Gesetz hat er erfüllt,\ndamit seins Vaters Zorn gestillt,\nder über uns ging alle.",
+        "Und wenn es nun erfüllet ist\ndurch den, der es konnt halten,\nso lerne jetzt ein frommer Christ\ndes Glaubens recht Gestalte.\nNicht mehr denn: „Lieber Herre mein,\ndein Tod wird mir das Leben sein,\ndu hast für mich bezahlet!“",
+        "Daran ich keinen Zweifel trag,\ndein Wort kann nicht betrügen.\nNun sagst du, daß kein Mensch verzag,\ndas wirst du nimmer lügen –:\n„Wer glaubt an mich und wird getauft,\ndemselben ist der Himmel erkauft,\ndaß er nicht werd verloren.“",
+        "Es ist gerecht vor Gott allein,\nder diesen Glauben fasset;\nder Glaub gibt einen hellen Schein,\nwenn er die Werk nicht lasset;\nmit Gott der Glaub ist wohl daran,\ndem Nächsten wird die Lieb Guts tun,\nbist du aus Gott geboren.",
+        "Es wird die Sünd durchs G’setz erkannt\nund schlägt das G’wissen nieder,\ndas Evangelium kommt zuhand\nund stärkt den Sünder wieder\nund spricht: „Nur kreuch zum Kreuz herzu,\nIm G’setz ist weder Rast noch Ruh\nMit allen seinen Werken!“",
+        "Die Werk, die kommen g’wißlich her\naus einem rechten Glauben;\ndenn das nicht rechter Glaube wär,\nwolltst ihn der Werk berauben.\nDoch macht allein der Glaub gerecht,\ndie Werke sind des Nächsten Knecht,\ndran wir den Glauben merken.",
+        "Die Hoffnung wart’ der rechten Zeit,\nwas Gottes Wort zusage;\nwann das geschehen soll zur Freud,\nsetzt Gott kein gwisse Tage.\nEr weiß wohl, wanns am besten ist,\nund braucht an uns kein arge List;\ndes solln wir ihm vertrauen.",
+        "Ob sichs anließ, als wollt er nicht,\nlaß dich es nicht erschrecken,\ndenn wo er ist am besten mit,\nda will ers nicht entdecken.\nSein Wort laß dir gewisser sein,\nund ob dein Fleisch spräch lauter Nein,\nso laß doch dir nicht grauen.",
+        "Sei Lob und Ehr mit hohem Preis\num dieser Gutheit willen\nGott Vater, Sohn, und Heilgem Geist.\nDer woll mit Gnad erfüllen,\nwas er in uns ang’fangen hat\nzu Ehren seiner Majestät,\ndaß heilig werd sein Name;",
+        "sein Reich zukomm; sein Will auf Erd\ng’scheh wie im Himmelsthrone;\ndas täglich Brot noch heut uns werd;\nwoll unsrer Schuld verschonen,\nwie wir auch unsern Schuldnern tun;\nlaß uns nicht in Versuchung stehn;\nlös uns vom Übel. Amen."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://de.wikipedia.org/wiki/Es_ist_das_Heil_uns_kommen_her",
+        "https://www.evangeliums.net/lieder/lied_es_ist_das_heil_uns_kommen_her.html",
+        "https://hymnary.org/text/es_ist_das_heil_uns_kommen_her"
+      ]
+    }
+  },
+  "notes": "German is the full 14-stanza original as printed in the de.wikipedia article, chosen because it aligns stanza-for-stanza with the 14-stanza English. Its orthography is the pre-1996 sung form the source prints (daß, mußt', laßen, ohn Maßen, g'wißlich) — not normalised, per FORMAT. If you would rather ship the shorter modern-orthography church text, evangeliums.net carries EG 342 in 12 stanzas (dass/lass/Gsetz, originals 3 and 4 dropped, some rewording: 'sie mögen nicht behüten', 'der Glaub gibt von sich aus den Schein'); that URL is in the sources because I compared against it. English is the composite translation printed by the Free Lutheran Chorale-Book (the TLH/ELHB line of descent), NOT Arthur T. Russell's as the worklist suggested — I could not source Russell's text in full, and the composite matches the German 14 for 14. hymnary lists the tune as ES IST DAS HEIL (also LUTHER'S HYMN / NUN FREUT EUCH), meter 8.7.8.7.8.8.7; evangeliums.net names the melody 'Nun freue dich, du Christenheit'. Chords are a best-effort G-major bar-form chart (AAB: lines 1-2, repeated 3-4, then the Abgesang) — I did not verify them against printed notation, so treat the harmony as provisional."
+}

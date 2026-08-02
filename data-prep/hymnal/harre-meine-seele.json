@@ -1,0 +1,28 @@
+{
+  "id": "harre-meine-seele",
+  "number": 91,
+  "tune": "HARRE, MEINE SEELE",
+  "meter": "Irregular",
+  "key": "D",
+  "texts": {
+    "en": null,
+    "de": {
+      "title": "Harre, meine Seele",
+      "author": "Johann Friedrich Räder",
+      "translator": null,
+      "year": 1845,
+      "stanzas": [
+        "[D]Harre, meine See[D/F#]le, [A]harre [A7]des [D]Herrn!\n[D]Alles [G]ihm [D]befeh[D/F#]le, [G]hilft er [A7]doch so [D]gern.\n[A7]Sei un[D]ver[A]zagt, [D]bald der Mor[A7]gen [D]tagt,\n[Em]und ein [E7]neuer [F#m]Früh[D/F#]ling [A]folgt dem Win[E7]ter [A]nach.\n[D]In [G]al[D]len Stür[D/F#]men, [A7]in aller [D]Not\n[D]wird er [D/F#]dich [F#7]beschir[G]men, [Em]der [D]treu[A]e [D]Gott.",
+        "Harre, meine Seele, harre des Herrn!\nAlles ihm befehle, hilft er doch so gern.\nWenn alles bricht, Gott verlässt uns nicht;\ngrößer als der Helfer ist die Not ja nicht.\nEwige Treue, Retter in Not,\nrett auch unsre Seele, du treuer Gott!",
+        "Harre, meine Seele, harre des Herrn!\nAlles ihm befehle, hilft er doch so gern.\nBald höret auf unser Pilgerlauf,\nund die Klagen schweigen; Jesus nimmt uns auf.\nNach allen Leiden, nach aller Not\nfolgen ewge Freuden. Gelobt sei Gott!"
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_harre_meine_seele_harre_des_herrn.html",
+        "https://de.wikipedia.org/wiki/Harre,_meine_Seele",
+        "https://hymnary.org/text/harre_meine_seele_harre_des_herrn"
+      ]
+    }
+  },
+  "notes": "German-only per the worklist; texts.en is null (no English translation was called for and I did not source one). Text is the three-stanza form from evangeliums.net (the hymn as sung in EG 596/623 and the free-church books), cross-checked against the de.wikipedia article. Two real variants, both in stanza 2’s second-to-last line: evangeliums.net has 'rett auch unsre Seele, du treuer Gott!' and Wikipedia has 'Unser Herz erfreue, du treuer Gott!'. I shipped the evangeliums.net reading, which is the one hymnary’s German entries also show. Line division follows the six musical phrases (evangeliums.net); Wikipedia breaks the same words into twelve short lines. Wikipedia’s stanza 3 line break 'Nach allen Leiden, / nach aller Not / folgen ewge Freuden' settled a wrapping artefact in the evangeliums.net copy. Dating: 1845 per the worklist, Wikipedia and Raeder’s own account (evangeliums.net says 1848; hymnary’s '1813' looks like the author’s dates leaking into the year field, and is wrong on both counts — Raeder was born 1815). Stanzas 1 and 2 are Raeder’s; stanza 3 was added later by Carl Brockhaus (1822–1899) and is public domain. Chords: derived note by note from the Cyber Hymnal’s MIDI of César Malan’s 1827 tune, which is already in D — the same key the guitar rule picks from hymnary’s primary E flat. The tune is irregular and its phrase lengths (10, 11, 9, 11, 9, 10 syllables) match this text exactly, which is the check that the MIDI is the right tune. The E7 in line 4 is the tune’s own move to the dominant, not a substitution; F#7 in the last line is likewise the printed harmony under 'beschirmen'."
+}

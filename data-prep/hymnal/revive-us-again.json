@@ -1,0 +1,30 @@
+{
+  "id": "revive-us-again",
+  "number": 51,
+  "tune": "REVIVE US AGAIN",
+  "meter": "11.11 with refrain",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Revive Us Again",
+      "author": "William P. Mackay",
+      "translator": null,
+      "year": 1863,
+      "stanzas": [
+        "[G]We praise Thee, O God!\nFor the Son of Thy love,\nFor Jesus who died,\n[C]And is now gone a[D]bove.",
+        "We praise Thee, O God!\nFor Thy Spirit of light,\nWho hath shown us our Savior,\nAnd scattered our night.",
+        "All glory and praise\nTo the Lamb that was slain,\nWho hath borne all our sins,\nAnd hath cleansed every stain.",
+        "All glory and praise\nTo the God of all grace,\nWho hast bought us, and sought us,\nAnd guided our ways.",
+        "Revive us again;\nFill each heart with Thy love;\nMay each soul be rekindled\nWith fire from above."
+      ],
+      "chorus": "[G]Halle[C]lu[G]jah! Thine the glory.\nHalle[C]lu[G]jah! A[D]men.\nHalle[C]lu[G]jah! Thine the glory.\nRe[C]vive [G]us [D7]a[G]gain.",
+      "sources": [
+        "http://www.hymntime.com/tch/htm/r/e/v/i/reviveus.htm",
+        "https://library.timelesstruths.org/music/Revive_Us_Again/",
+        "https://hymnary.org/tune/revive_us_again_husband"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text: Cyber Hymnal, five stanzas; Timeless Truths agrees except 'Who hast brought us, and sought us' in st. 4, where the common hymnal reading is 'bought'. Meter is disputed on hymnary: the text page lists both '11.11 with refrain' and '6.6.6.6.8.6.8.6', and the tune page lists the latter; '11.11 with refrain' is the one that matches the actual syllable counts, and the four short printed lines are those two long lines broken. Tune usually credited to John J. Husband (1815) but hymnary notes the resemblance to his ST. STEPHEN'S is only two bars. Common printed key is G, so no transposition; chart derived note-by-note from the Cyber Hymnal MIDI (mid/r/e/v/i/revive_us_again.mid), whose 50 melody onsets align exactly with the 49 syllables of stanza and refrain."
+}

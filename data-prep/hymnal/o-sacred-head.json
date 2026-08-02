@@ -1,0 +1,51 @@
+{
+  "id": "o-sacred-head",
+  "number": 23,
+  "tune": "PASSION CHORALE",
+  "meter": "7.6.7.6 D",
+  "key": "Am",
+  "texts": {
+    "en": {
+      "title": "O Sacred Head, Now Wounded",
+      "author": "Paul Gerhardt",
+      "translator": "James W. Alexander",
+      "year": 1830,
+      "stanzas": [
+        "[Am]O sacred [E]Head, now [Am]wounded,\n[Dm]with grief and [E]shame weighed [Am]down,\n[Am]now scornful[E]ly sur[Am]rounded\n[Dm]with thorns, Thine [E]only [Am]crown.\n[C]O sacred [G]Head, what [C]glory,\n[F]what bliss till [C]now was [G]Thine!\n[Am]Yet, though de[E]spised and [Am]gory,\n[Dm]I joy to [E]call Thee [Am]mine.",
+        "What Thou, my Lord, hast suffered\nwas all for sinners' gain;\nmine, mine was the transgression,\nbut Thine the deadly pain.\nLo, here I fall, my Savior!\n'Tis I deserve Thy place;\nlook on me with Thy favor,\nvouchsafe to me Thy grace.",
+        "What language shall I borrow\nto thank Thee, dearest Friend,\nfor this, Thy dying sorrow,\nThy pity without end?\nO make me Thine forever!\nAnd should I fainting be,\nLord, let me never, never\noutlive my love for Thee.",
+        "Be near when I am dying,\nO show Thy cross to me!\nAnd, for my succor flying,\ncome, Lord, to set me free:\nthese eyes, new faith receiving,\nfrom Thee shall never move;\nfor he who dies believing\ndies safely in Thy love."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://hymnary.org/text/o_sacred_head_now_wounded",
+        "https://hymnary.org/hymn/CYBER/5298",
+        "https://hymnary.org/tune/passion_chorale_hassler"
+      ]
+    },
+    "de": {
+      "title": "O Haupt voll Blut und Wunden",
+      "author": "Paul Gerhardt",
+      "translator": null,
+      "year": 1656,
+      "stanzas": [
+        "[Am]O Haupt voll [E]Blut und [Am]Wunden,\n[Dm]voll Schmerz und [E]voller [Am]Hohn,\n[Am]o Haupt, zum [E]Spott ge[Am]bunden\n[Dm]mit einer [E]Dornen[Am]kron,\n[C]o Haupt, sonst [G]schön ge[C]zieret\n[F]mit höchster [C]Ehr und [G]Zier,\n[Am]jetzt aber [E]höchst schim[Am]pfieret:\n[Dm]gegrüßet [E]sei'st du [Am]mir!",
+        "Du edles Angesichte,\ndavor sonst schrickt und scheut\ndas große Weltgewichte:\nwie bist du so bespeit,\nwie bist du so erbleichet!\nWer hat dein Augenlicht,\ndem sonst kein Licht nicht gleichet,\nso schändlich zugericht’?",
+        "Die Farbe deiner Wangen,\nder roten Lippen Pracht\nist hin und ganz vergangen;\ndes blassen Todes Macht\nhat alles hingenommen,\nhat alles hingerafft,\nund daher bist du kommen\nvon deines Leibes Kraft.",
+        "Nun, was du, Herr, erduldet,\nist alles meine Last;\nich hab es selbst verschuldet,\nwas du getragen hast.\nSchau her, hier steh ich Armer,\nder Zorn verdienet hat.\nGib mir, o mein Erbarmer,\nden Anblick deiner Gnad.",
+        "Erkenne mich, mein Hüter,\nmein Hirte, nimm mich an.\nVon dir, Quell aller Güter,\nist mir viel Guts getan;\ndein Mund hat mich gelabet\nmit Milch und süßer Kost,\ndein Geist hat mich begabet\nmit mancher Himmelslust.",
+        "Ich will hier bei dir stehen,\nverachte mich doch nicht;\nvon dir will ich nicht gehen,\nwenn dir dein Herze bricht;\nwenn dein Haupt wird erblassen\nim letzten Todesstoß,\nalsdann will ich dich fassen\nin meinen Arm und Schoß.",
+        "Es dient zu meinen Freuden\nund tut mir herzlich wohl,\nwenn ich in deinem Leiden,\nmein Heil, mich finden soll.\nAch möcht ich, o mein Leben,\nan deinem Kreuze hier\nmein Leben von mir geben,\nwie wohl geschähe mir!",
+        "Ich danke dir von Herzen,\no Jesu, liebster Freund,\nfür deines Todes Schmerzen,\nda du’s so gut gemeint.\nAch gib, daß ich mich halte\nzu dir und deiner Treu\nund, wenn ich nun erkalte,\nin dir mein Ende sei.",
+        "Wenn ich einmal soll scheiden,\nso scheide nicht von mir,\nwenn ich den Tod soll leiden,\nso tritt du dann herfür;\nwenn mir am allerbängsten\nwird um das Herze sein,\nso reiß mich aus den Ängsten\nkraft deiner Angst und Pein.",
+        "Erscheine mir zum Schilde,\nzum Trost in meinem Tod,\nund laß mich sehn dein Bilde\nin deiner Kreuzesnot.\nDa will ich nach dir blicken,\nda will ich glaubensvoll\ndich fest an mein Herz drücken.\nWer so stirbt, der stirbt wohl."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://hymnary.org/text/o_haupt_voll_blut_und_wunden",
+        "https://hymnary.org/tune/passion_chorale_hassler"
+      ]
+    }
+  },
+  "notes": "German is hymnary.org's representative text, the ten-stanza Evangelisches Gesangbuch form (EG 85). Its orthography is kept exactly as printed there, including 'Ach gib, daß ich mich halte' (st. 8) with the old spelling and the mixed apostrophes — straight in \"sei'st\" (st. 1), typographic in 'zugericht’' (st. 2) and 'da du’s' (st. 8). English is hymnary's representative text (Psalms and Hymns to the Living God #261), the four stanzas of J. W. Alexander's 1830 translation that hymnals actually print; hymnary dates the translation 1829, the Cyber Hymnal 1830. The Cyber Hymnal (hymnary.org/hymn/CYBER/5298) carries an eleven-stanza English composite covering more of Gerhardt — available if a fuller English text is wanted. Gerhardt's German is itself a free translation of the Latin 'Salve caput cruentatum' attributed to Bernard of Clairvaux or Arnulf of Villers-la-Ville, so 'translator' is null on the German as the shipped source text. Chords: hymnary gives the tune in A minor, the relative minor of C, so no transposition — key is written as Am. Both charts place identical chords on identical syllable positions (1/4/6 of each line), so they agree bar for bar; the chart is a simplified guitar reading of a chorale whose published harmonizations are far more chromatic."
+}
