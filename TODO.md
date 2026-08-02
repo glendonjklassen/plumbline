@@ -207,12 +207,12 @@ sideload block is already fixed and guarded by a test.
 - [x] **[FABLE]** "Delete my data" destructive-path spec: DONE 2026-07-29 — exact
   kill/survive scope, flow, ordering rule and test requirements in
   [docs/DELETE-MY-DATA.md](docs/DELETE-MY-DATA.md).
-- [ ] **[opus]** Implement erase-my-data per
+- [~] **[DROPPED]** Implement erase-my-data per
   [docs/DELETE-MY-DATA.md](docs/DELETE-MY-DATA.md) on BOTH shells, with the
   offline e2e + Android scope unit test it requires. Do not improvise beyond the
-  spec's scope table.
-- [ ] **[opus]** Wire the dead `packUpdated` signal to the existing update-toast
-  wording; capture `beforeinstallprompt` → "Install" in the ≡ menu.
+  spec's scope table. **NOT DOING — Glendon's call 2026-07-31. The spec in docs/DELETE-MY-DATA.md stands if it is ever wanted.**
+- [~] **[DROPPED]** Wire the dead `packUpdated` signal to the existing update-toast
+  wording; capture `beforeinstallprompt` → "Install" in the ≡ menu. **NOT DOING — Glendon's call 2026-07-31.**
 - [x] **[opus]** Decouple the pasteable bug-report header from `PERF`
   (`SettingsDialog.svelte:176-216`), then flip `PERF` off for release (its own
   docstring says it shouldn't ship on). **DONE 2026-07-30.** Flipping it off turned
@@ -254,15 +254,27 @@ sideload block is already fixed and guarded by a test.
   `continue-on-error` lines in ci.yml. **DONE 2026-07-30.** 36 distinct sites across four configurations (workspace/all-targets/all-features, rnd featureless, rnd full, wasm32) — the old step linted libs only. No crate-root blanket; five narrow `#[allow(dead_code)]` on the cfg(wasm32)-only warm entry points. New `rustfmt.toml` records the tree's real 120-col style, cutting the reformat from 859 hunks/42 files to 437/37. Both `continue-on-error` lines gone.
 - [x] **[opus]** Android lint: replace the blanket `abortOnError = false` with a
   targeted `disable += "NonNullableMutableLiveData"`.
-- [ ] **[opus]** Split `crates/ffi/src/lib.rs` (3,861 lines; repo rule is 3k) —
-  authoring + study-blocks sections are contiguous; no ABI change, bindgen guards.
-- [ ] **[opus]** **Version-prose sweep — LAST item before the tag.** The manifests
+- [~] **[DROPPED]** Split `crates/ffi/src/lib.rs` (3,861 lines; repo rule is 3k) —
+  authoring + study-blocks sections are contiguous; no ABI change, bindgen guards. **NOT DOING — Glendon's call 2026-07-31. Down to ~3.2k lines after the concept removals; still over the 3k rule, which the rule now tolerates.**
+- [~] **[DROPPED]** **Version-prose sweep — LAST item before the tag.** The manifests
   say 0.36.0 and a test now pins README to it, but prose written when this was a
   1.0.0 audit still says otherwise: this file's own title and §E's header, and
   `docs/STABLE-IDS.md`'s "v1.0 / first 1.0.x" sequencing (B-02's agent updates
   that one). Keep 1.0.0 only where it means Glendon's future milestone; anywhere it
   could be read as *this* release, say 0.36.0 or "the next tag". Run it last so it
-  catches whatever the intervening batches write.
+  catches whatever the intervening batches write. **NOT DOING — Glendon's call 2026-07-31. Cosmetic; the manifests and the release gate are already consistent.**
+## D2. The offline promise (2026-07-31)
+
+- [x] **[opus]** **The PWA showed a white screen in airplane mode.** Two writers
+  of one shell: `precache.ts` wrote the document under both navigation keys but
+  guarded them with `depotHas`, so they were never replaced, while `sw.js` cached
+  navigations and updated only `./index.html`. After a deploy the two keys could
+  hold different builds, and `pruneToPin` deleted the older build's bundle. An
+  installed PWA opens `start_url: "./"` — the key frozen at the first build ever
+  seen — so the document was served and its bundle was gone. **DONE 2026-07-31**:
+  the service worker refuses the document outright, the precache writes it last
+  from one response into both keys, and an incomplete shell reclaims nothing.
+  Three tests over a simulated deploy; five mutations.
 
 ## F. Performance — web
 
@@ -315,14 +327,13 @@ sideload block is already fixed and guarded by a test.
   one book, and it kills the ~150 MB transient boot peak. Engine-side per-chapter
   lazy decode already exists; touches data-prep, hydrate, manifest, `load_cache`,
   pin. Cross-cutting enough to design first.
-- [ ] **[opus]** Code-split Present/Memorize/maps/dialogs behind `await import()` —
+- [~] **[DROPPED]** Code-split Present/Memorize/maps/dialogs behind `await import()` —
   zero splitting today; the shell-manifest plugin already handles lazy chunks
-  offline.
-- [ ] **[opus]** Memory: drop `Corpus::raw` (37 MB) once the warm has materialized
+  offline. **NOT DOING — Glendon's call 2026-07-31. Note it would have added lazy chunks to the shell, which is more surface for the 2026-07-31 offline bug — worth re-reading that fix first if it ever comes back.**
+- [~] **[DROPPED]** Memory: drop `Corpus::raw` (37 MB) once the warm has materialized
   every chapter; add `memory.buffer.byteLength` to the diagnostics op; y-bucket
   index for `hitAt` mousemove scans; parallelize the 30 serial warm-boot depot
-  reads (cold path already does 4-way).
-
+  reads (cold path already does 4-way). **NOT DOING — Glendon's call 2026-07-31. **Worth remembering**: this is ~37 MB of resident memory on a phone, and the y-bucket index for `hitAt` is a per-mousemove scan. If the app is ever reported as sluggish or killed in the background, start here.**
 ## G. Performance — Android
 
 - [x] **[opus]** Scroll path (one file): move `scrollY` out of composition to a
@@ -392,17 +403,17 @@ sideload block is already fixed and guarded by a test.
 - [ ] **[opus]** Dwell tracker → core (`DwellTracker::tick` + a
   `plumbline_reading_spec_json` endpoint) — ~80 identical lines per shell, both
   hardcoding thresholds they claim to fetch.
-- [ ] **[opus]** Expose the user-dir/backup-dir lists from core — four hand-kept
+- [~] **[DROPPED]** Expose the user-dir/backup-dir lists from core — four hand-kept
   copies guarded only by "must stay in step" comments; also single-source the
-  `pure-study/` legacy remap.
-- [ ] **[opus]** Android verb dispatch: implement the 4 missing verbs (`untag`,
+  `pure-study/` legacy remap. **NOT DOING — Glendon's call 2026-07-31. The four hand-kept copies stay, guarded only by their comments.**
+- [~] **[DROPPED]** Android verb dispatch: implement the 4 missing verbs (`untag`,
   `editThreadNotes`, `editWeaveNotes`, `editEntryNote`), make unhandled verbs loud
-  on both shells (Android is a silent no-op; web is console.warn).
-- [ ] **[opus]** Expose refKey parse/format helpers over the ABI and kill the 8+
-  hand-parse sites (source of the numbered-book bug).
-- [ ] **[opus]** Move domain logic out of `crates/ffi` into core with its tests:
+  on both shells (Android is a silent no-op; web is console.warn). **NOT DOING — Glendon's call 2026-07-31. **Worth remembering**: this is not only cleanup. Four verbs (`untag`, `editThreadNotes`, `editWeaveNotes`, `editEntryNote`) are a SILENT NO-OP on Android today, so those taps do nothing and say nothing.**
+- [~] **[DROPPED]** Expose refKey parse/format helpers over the ABI and kill the 8+
+  hand-parse sites (source of the numbered-book bug). **NOT DOING — Glendon's call 2026-07-31. The 8+ hand-parse sites stay; they were the source of the numbered-book bug.**
+- [~] **[DROPPED]** Move domain logic out of `crates/ffi` into core with its tests:
   `english_gloss`, `distil_gloss`, `name_noise`/`CONCEPT_KEEP_NAMES`,
-  `concept_label`, `memory_span`, tuning constants.
+  `concept_label`, `memory_span`, tuning constants. **NOT DOING — Glendon's call 2026-07-31.**
 - [x] **[opus]** Export `FLAG_RERENDERED` to the header with the compile-time assert
   (both shells hardcode `16`; it bypassed the mechanism built for exactly this).
 - [x] **[opus]** Dead code sweep: `pruneStale`, `pinHasStage`, `EMPTY_CHURCH`,
