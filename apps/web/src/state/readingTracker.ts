@@ -1,33 +1,27 @@
 // The reading map's shell half on the web: how long a chapter was really read.
 //
-// The Android twin is ui/ReadingTracker.kt — same three refusals, same
-// thresholds (both read them from the core's spec over the ABI, so neither shell
-// can drift on what counts as reading):
+// THE STATE MACHINE MOVED TO THE CORE (H-11, 2026-07-31). Grace, idle, the
+// interaction reset, the tail-banking and the report cadence all live in
+// `core::reading::DwellTracker` now, reached through one endpoint. What used to
+// be ~80 lines here and ~80 identical lines in `ui/ReadingTracker.kt` — both
+// hardcoding the thresholds they claimed to fetch — is one `readingTick` call
+// per second from each shell.
+//
+// The three refusals are unchanged, they are just no longer written twice:
 //
 //   * a GRACE period before anything accrues, so paging through to find
 //     something never credits what it flew past;
 //   * an IDLE cutoff, so a tab left open does not read Leviticus overnight;
 //   * HIDDEN stops the clock — a backgrounded tab is not being read.
 //
-// The core owns what "read" MEANS. This owns only what the core cannot know,
-// having no clock and no window: seconds a chapter was actually in front of
-// somebody.
-//
-// Reports are rare on purpose (`spec.tickSeconds`, 30 s). Each one is an engine
-// call on the single worker thread that also answers layout and taps, and a
-// write into the depot behind it — so the cadence is set by the core, not here.
-
-/** The dial positions the core hands over; these stand in until it answers. */
-interface Spec {
-  graceSeconds: number;
-  idleSeconds: number;
-  tickSeconds: number;
-}
-
-const FALLBACK: Spec = { graceSeconds: 3, idleSeconds: 120, tickSeconds: 30 };
+// This file now owns only what the core cannot know, having no clock and no
+// window: that a second passed, that a person touched something, and which
+// chapter was in front of them. A `book` of null is how it says "nothing is
+// being read", which covers a dialog, Present, a hidden tab and teardown alike.
 
 /** One sample per second: fine enough for grace and idle to land accurately,
- *  and nowhere near often enough to matter. */
+ *  and nowhere near often enough to matter. The core clamps a step it does not
+ *  believe, so a throttled background timer cannot bank an hour in one tick. */
 const SAMPLE_MS = 1000;
 
 export interface ReadingTargetSource {
@@ -38,53 +32,34 @@ export interface ReadingTargetSource {
    *  pairs with dwell. Scrolling without time credits nothing, and time without
    *  scrolling credits only what was on screen. */
   reached(): number;
-  /** Report `seconds` of dwell. Resolves to the core's verdict, or null. */
-  record(
-    book: string,
+  /** One sample into the core's tracker. It answers only when it decided to
+   *  bank a report, in which case the answer is the same verdict
+   *  `readingRecord` gives; otherwise null. */
+  tick(
+    book: string | null,
     chapter: number,
     reached: number,
-    seconds: number,
-  ): Promise<{ completed: boolean; pct: number } | null>;
-  /** Fetch the core's tuning once. */
-  spec(): Promise<Partial<Spec> | null>;
+    stepSeconds: number,
+    interacted: boolean,
+  ): Promise<{ completed: boolean; pct: number; book?: string; chapter?: number } | null>;
   /** Called when a pass completes, so the shell can say so once. */
   onCompleted?(book: string, chapter: number): void;
 }
 
 /**
- * Start tracking. Returns a stop function that banks whatever is pending — the
- * tail of a reading session is real reading and must not be lost because it fell
- * between two ticks.
+ * Start tracking. Returns a stop function that tells the core the reading has
+ * ended, so it can bank the tail — the last stretch of a session is real reading
+ * and must not be lost because it fell between two reports.
  */
 export function startReadingTracker(src: ReadingTargetSource): () => void {
-  let spec = { ...FALLBACK };
-  void src.spec().then((s) => {
-    if (s) spec = { ...spec, ...s };
-  });
-
-  let key = "";
-  let onScreen = 0; // seconds this chapter has been up (for grace)
-  let sinceInput = 0; // seconds since the reader last did anything (for idle)
-  let pending = 0; // banked seconds not yet reported
   let stopped = false;
-
-  /** Hand the banked seconds over for the chapter they were earned in. */
-  function flush(book: string, chapter: number): void {
-    const secs = pending;
-    if (secs <= 0) return;
-    pending = 0;
-    void src.record(book, chapter, src.reached(), secs).then((out) => {
-      if (out?.completed) src.onCompleted?.(book, chapter);
-    });
-  }
-
-  // Remember which chapter the banked seconds belong to: the reader may have
-  // moved on by the time they are flushed, and crediting them to the new
-  // chapter would be simply wrong.
-  let owner: { book: string; chapter: number } | null = null;
+  // Set by any sign of a person and cleared by the sample that reports it, so
+  // the core sees "was there interaction during this second?" rather than a
+  // count this side would have to interpret.
+  let interacted = false;
 
   const bump = (): void => {
-    sinceInput = 0;
+    interacted = true;
   };
   // Anything that means "a person is here". Passive so none of this can
   // interfere with scrolling.
@@ -92,14 +67,20 @@ export function startReadingTracker(src: ReadingTargetSource): () => void {
   for (const ev of ["scroll", "pointerdown", "keydown", "wheel", "touchmove"])
     addEventListener(ev, bump, opts);
 
+  /** Hand one sample to the core and surface a completion if it banked one. */
+  function sample(book: string | null, chapter: number, step: number): void {
+    const was = interacted;
+    interacted = false;
+    void src.tick(book, chapter, src.reached(), step, was).then((out) => {
+      if (out?.completed && out.book) src.onCompleted?.(out.book, out.chapter ?? chapter);
+    });
+  }
+
   const onHidden = (): void => {
-    if (document.visibilityState === "hidden") {
-      // Last chance to run: bank now. Coming back re-serves the grace period,
-      // so a glance at another tab and back does not bank time.
-      if (owner) flush(owner.book, owner.chapter);
-      onScreen = 0;
-      sinceInput = 0;
-    }
+    if (document.visibilityState !== "hidden") return;
+    // Last chance to run. A null book banks the tail and re-arms the grace
+    // period, so a glance at another tab and back does not bank the time away.
+    sample(null, 0, 0);
   };
   addEventListener("visibilitychange", onHidden);
   // pagehide is the only one that reliably fires on mobile teardown.
@@ -108,27 +89,7 @@ export function startReadingTracker(src: ReadingTargetSource): () => void {
   const timer = setInterval(() => {
     if (stopped || document.visibilityState === "hidden") return;
     const t = src.target();
-    const nextKey = t ? `${t.book} ${t.chapter}` : "";
-    if (nextKey !== key) {
-      // Leaving a chapter: bank its tail before the counters reset.
-      if (owner) flush(owner.book, owner.chapter);
-      key = nextKey;
-      owner = t ? { ...t } : null;
-      onScreen = 0;
-      sinceInput = 0;
-      pending = 0;
-      return;
-    }
-    if (!t) return;
-    const step = SAMPLE_MS / 1000;
-    onScreen += step;
-    sinceInput += step;
-    // Grace, then presence. Neither is a punishment: both exist so that time
-    // nobody spent reading never becomes progress.
-    if (onScreen < spec.graceSeconds) return;
-    if (sinceInput > spec.idleSeconds) return;
-    pending += step;
-    if (pending >= spec.tickSeconds) flush(t.book, t.chapter);
+    sample(t?.book ?? null, t?.chapter ?? 0, SAMPLE_MS / 1000);
   }, SAMPLE_MS);
 
   return () => {
@@ -138,6 +99,6 @@ export function startReadingTracker(src: ReadingTargetSource): () => void {
       removeEventListener(ev, bump, opts);
     removeEventListener("visibilitychange", onHidden);
     removeEventListener("pagehide", onHidden);
-    if (owner) flush(owner.book, owner.chapter);
+    sample(null, 0, 0);
   };
 }

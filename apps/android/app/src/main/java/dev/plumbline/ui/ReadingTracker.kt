@@ -1,12 +1,21 @@
 // The reading map's shell half: how long the reader actually spent in a chapter.
 //
 // The core (crates/core/src/reading.rs) owns what "read" MEANS — the word counts,
-// the reading rate, the 90% bar, the glow curve. This file owns only the one
-// thing the core cannot know, having no clock and no window: how many seconds a
-// chapter was genuinely in front of somebody. It hands those seconds over on a
-// slow tick and forgets them.
+// the reading rate, the 90% bar, the glow curve — and, since 2026-08-01, the
+// COUNTING as well: `reading::DwellTracker` holds the grace period, the idle
+// cutoff, the tail-banking and the report cadence. This file owns only the one
+// thing the core cannot know, having no clock and no window: that another second
+// passed with a chapter genuinely in front of somebody.
 //
-// Three refusals, and they are the whole design:
+// It used to run its own ~80 lines of that arithmetic, as did the web
+// (state/readingTracker.ts), and both carried their own copies of the thresholds
+// they were in the middle of fetching, so that the seconds before the fetch
+// landed were measured against a local constant. Android's stand-in reading rate
+// was still 220 words a minute two days after the core moved to 300. There is now
+// no threshold in this file to be stale.
+//
+// Three refusals still shape it, and they are the whole design; they just live in
+// the core:
 //
 //   * A GRACE period before anything accrues, so paging through a book to find
 //     something never credits the chapters it flies past.
@@ -15,9 +24,6 @@
 //   * PAUSE stops the clock, because a backgrounded app is not being read — and
 //     banks what it had on the way out, since locking a phone is how a reading
 //     session usually ends.
-//
-// All three thresholds come from the core's spec over the ABI rather than being
-// written down here, so the phone and the browser cannot drift on them.
 //
 // Author D (Compose UI).
 
@@ -43,9 +49,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** How often the tracker wakes to add up time. Short enough that the grace and
- *  idle thresholds land accurately; the REPORT to the engine is far rarer. */
+/** How often the tracker wakes and tells the core another second went by. The
+ *  core clamps what one sample may credit, and decides on its own cadence when
+ *  a report is worth writing down. */
 private const val SAMPLE_MS = 1_000L
+
+/** [SAMPLE_MS] in the seconds the ABI takes. */
+private const val STEP_SECONDS = SAMPLE_MS / 1000f
 
 /**
  * Track reading time in [book] [chapter] and report it to the engine.
@@ -69,49 +79,25 @@ fun ReadingTracker(
     enabled: Boolean = true,
     onCompleted: (ReadingRecorded) -> Unit = {},
 ) {
-    // The core's tuning. Fetched once; the defaults in ReadingSpec stand in for
-    // the moment before it lands, so the very first seconds of a session are
-    // still measured against something sane.
-    var grace by remember { mutableStateOf(3f) }
-    var idle by remember { mutableStateOf(120f) }
-    var tick by remember { mutableStateOf(30f) }
-    LaunchedEffect(Unit) {
-        val spec = withContext(Dispatchers.Default) {
-            runCatching { synchronized(engine) { engine.ReadingBooksJson(nowUtc()) } }.getOrNull()
-                ?.let { runCatching { parseWire<dev.plumbline.ReadingBooks>(it).spec }.getOrNull() }
-        }
-        if (spec != null) {
-            grace = spec.graceSeconds; idle = spec.idleSeconds; tick = spec.tickSeconds
-        }
-    }
-
     val reached = rememberUpdatedState(reachedVerse)
     val onDone = rememberUpdatedState(onCompleted)
     val scope = rememberCoroutineScope()
 
-    // Seconds banked but not yet handed over, and the seconds-since-interaction
-    // that decides whether the reader is still here. Both live across
-    // recomposition but reset per chapter — a new chapter is a new pass.
-    var pending by remember(book, chapter) { mutableStateOf(0f) }
-    var onScreen by remember(book, chapter) { mutableStateOf(0f) }
-    var sinceInput by remember(book, chapter) { mutableStateOf(0f) }
+    // Set by any interaction, cleared by the sample that carries it over. The
+    // core wants "did anything happen since the last sample", not a timestamp.
+    var touched by remember { mutableStateOf(false) }
+    LaunchedEffect(interactionEpoch) { touched = true }
     var paused by remember { mutableStateOf(false) }
 
-    // Any interaction wakes accrual back up.
-    LaunchedEffect(interactionEpoch) { sinceInput = 0f }
-
-    /** Hand the banked seconds to the engine. Called on the tick, and on the way
-     *  out of a chapter or the app — the tail of a session is real reading and
-     *  should not be thrown away because it fell between ticks. */
-    suspend fun flush() {
-        val secs = pending
-        val verse = reached.value
-        if (secs <= 0f) return
-        pending = 0f
+    /** One sample. A null [target] means nothing is being read, which is how the
+     *  core is told to bank the tail and serve the grace period again. */
+    suspend fun sample(target: String?, step: Float) {
+        val wasTouched = touched
+        touched = false
         val out = withContext(Dispatchers.Default) {
             runCatching {
                 synchronized(engine) {
-                    engine.ReadingRecordJson(book, chapter, verse, secs, nowUtc())
+                    engine.ReadingTickJson(target, chapter, reached.value, step, wasTouched, nowUtc())
                 }
             }.getOrNull()?.let { runCatching { parseWire<ReadingRecorded>(it) }.getOrNull() }
         }
@@ -119,28 +105,22 @@ fun ReadingTracker(
     }
 
     // Stop the clock while backgrounded, and bank what we have on the way out:
-    // ON_PAUSE is the last moment anything is guaranteed to run.
+    // ON_PAUSE is the last moment anything is guaranteed to run. Backgrounding is
+    // how a phone reading session usually ends, and without this up to a whole
+    // report's worth of real reading is thrown away every time someone locks
+    // their phone. (Web twin: the visibilitychange/pagehide flush.)
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner) {
         val obs = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> {
                     paused = true
-                    // Bank the tail. Backgrounding is how a phone reading session
-                    // usually ends, and ON_PAUSE is the last moment anything is
-                    // guaranteed to run — without this, up to a whole tick of real
-                    // reading is thrown away every time someone locks their phone.
-                    // (Web twin: the visibilitychange/pagehide flush.)
-                    scope.launch { flush() }
+                    scope.launch { sample(null, 0f) }
                 }
-                Lifecycle.Event.ON_RESUME -> {
-                    paused = false
-                    // Coming back is not continuing: re-serve the grace period so
-                    // a glance at a notification and back doesn't bank time, and
-                    // treat it as interaction so we aren't instantly idle.
-                    onScreen = 0f
-                    sinceInput = 0f
-                }
+                // Coming back is not continuing, but the core knows that: the
+                // null sample above cleared the counters, so the next sample with
+                // a chapter in it serves the grace period again.
+                Lifecycle.Event.ON_RESUME -> paused = false
                 else -> Unit
             }
         }
@@ -154,19 +134,11 @@ fun ReadingTracker(
             while (true) {
                 delay(SAMPLE_MS)
                 if (paused) continue
-                val step = SAMPLE_MS / 1000f
-                onScreen += step
-                sinceInput += step
-                // Grace first, then presence. Neither is a punishment: both exist
-                // so that time nobody spent reading never becomes progress.
-                if (onScreen < grace) continue
-                if (sinceInput > idle) continue
-                pending += step
-                if (pending >= tick) flush()
+                sample(book, STEP_SECONDS)
             }
         } finally {
-            // Leaving the chapter (or the composition) — bank the tail.
-            withContext(kotlinx.coroutines.NonCancellable) { flush() }
+            // Leaving the chapter, or the composition — bank the tail.
+            withContext(kotlinx.coroutines.NonCancellable) { sample(null, 0f) }
         }
     }
 }

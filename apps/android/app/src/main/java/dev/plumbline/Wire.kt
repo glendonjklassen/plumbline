@@ -42,18 +42,14 @@ data class TocBook(val id: String, val name: String, val chapters: Int)
 
 // ── the reading map ─────────────────────────────────────────────────────────
 
-/** The tuning behind the reading map, handed over by the core so the phone and
- *  the browser cannot drift on what "read" means. */
-@Serializable
-data class ReadingSpec(
-    val wordsPerMinute: Float = 220f,
-    val completeAt: Float = 0.9f,
-    val freshDays: Int = 30,
-    val staleDays: Int = 365,
-    val graceSeconds: Float = 3f,
-    val tickSeconds: Float = 30f,
-    val idleSeconds: Float = 120f,
-)
+// There is deliberately NO `ReadingSpec` model here, and no `spec` field on the
+// two payloads below that carry one (the decoder ignores unknown keys, so the
+// wire is unchanged). It existed to hand the tracker its thresholds, and the
+// defaults it carried for the moment before the fetch landed were a second copy
+// of numbers the core owns — `wordsPerMinute` was still 220f two days after the
+// core moved to 300. The counting itself now lives in the core
+// (`reading::DwellTracker`, driven by `StudyEngine.ReadingTickJson`), so this
+// shell has no threshold to hold and no way to hold a stale one. 2026-08-01.
 
 /** One chapter's standing. `standing` (`unread` | `partial` | `read`) drives the
  *  hue, `glow` (0–1) the bloom, `pct` the fill. The core flattens its `Heat`
@@ -87,7 +83,6 @@ data class ReadingBook(
 data class ReadingBooks(
     val books: List<ReadingBook> = emptyList(),
     val since: String = "",
-    val spec: ReadingSpec = ReadingSpec(),
 )
 
 @Serializable
@@ -95,7 +90,6 @@ data class ReadingChapters(
     val book: String = "",
     val chapters: List<ReadingChapter> = emptyList(),
     val since: String = "",
-    val spec: ReadingSpec = ReadingSpec(),
 )
 
 /** The outcome of a dwell report. `completed` means this call carried the pass
@@ -454,6 +448,30 @@ data class ChurchState(
     val name: String = "",
     val info: String = "",
     val url: String = "",
+)
+
+/** What a share surface asks the core for (`plumbline_share_url_json`). A null
+ *  [base] lets the core supply the hosted PWA, which is what every caller but
+ *  `linkAtVerse` wants. */
+@Serializable
+data class ShareRequest(
+    val base: String? = null,
+    val church: ChurchState? = null,
+    val startAsNewBeliever: Boolean = false,
+    val at: String? = null,
+)
+
+/** …and what it gets back: the link, the church as the core cleaned it, and the
+ *  two strings a Church button needs. `siteUrl` is null when the church's own
+ *  URL is not one we are willing to open. */
+@Serializable
+data class Share(
+    val url: String = "",
+    val base: String = "",
+    val church: ChurchState = ChurchState(),
+    val hasChurch: Boolean = false,
+    val title: String = "Your church",
+    val siteUrl: String? = null,
 )
 
 @Serializable

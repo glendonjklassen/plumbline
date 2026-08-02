@@ -41,12 +41,13 @@
         return p ? { book: p.book, chapter: p.chapter } : null;
       },
       reached: () => s.panes[0]?.reached ?? 0,
-      record: (book, chapter, reached, seconds) =>
-        s.rpc.call("readingRecord", book, chapter, reached, seconds, new Date().toISOString()),
-      spec: () =>
+      // One sample per second into the core's tracker, which owns grace, idle,
+      // the cadence and the tail (H-11). The old pair of calls is gone: there is
+      // no `spec` fetch, because the thresholds never leave the core, and no
+      // `readingRecord` from here, because the core banks its own reports.
+      tick: (book, chapter, reached, step, interacted) =>
         s.rpc
-          .call("readingBooks", new Date().toISOString())
-          .then((r: any) => r?.spec ?? null)
+          .call("readingTick", book, chapter, reached, step, interacted, new Date().toISOString())
           .catch(() => null),
       onCompleted: (book, chapter) => s.showToast(`Read through — ${s.bookName(book)} ${chapter}`),
     }),

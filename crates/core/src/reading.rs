@@ -651,6 +651,125 @@ pub fn books(corpus: &Corpus, words: &ChapterWords, store: &Store, now: &str) ->
         .collect()
 }
 
+// ── the dwell tracker ────────────────────────────────────────────────────────
+
+/// The most a single sample may credit. A tick that arrives very late means the
+/// shell was not running, not that somebody read for that long; without this the
+/// first sample after a stall could bank an hour of "reading".
+pub const MAX_STEP_SECONDS: f32 = 5.0;
+
+/// A tick's verdict: hand these seconds to [`record`] for this chapter.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DwellReport {
+    pub book: String,
+    pub chapter: u16,
+    /// The high-water verse of the chapter the seconds were earned in — NOT
+    /// whatever is on screen now. See [`DwellTracker::tick`].
+    pub reached: u16,
+    pub seconds: f32,
+}
+
+/// How long a chapter was really read.
+///
+/// This was written twice, once per shell (`state/readingTracker.ts` and
+/// `ui/ReadingTracker.kt`), and both copies carried their own copies of
+/// [`GRACE_SECONDS`], [`IDLE_SECONDS`] and [`TICK_SECONDS`] as fallbacks for the
+/// moment before they had fetched them — which is to say both hard-coded the
+/// thresholds they were fetching precisely so they would not have to. Android's
+/// fallback for the reading rate was still 220 words a minute, two days after
+/// the core moved to 300. So the counting lives here now and a shell owns only
+/// what the core cannot know, having no clock and no window: that another second
+/// passed with a chapter in front of somebody.
+///
+/// Three refusals, and they are the whole design:
+///
+/// * a GRACE period before anything accrues, so paging through a book to find
+///   something never credits the chapters it flew past;
+/// * an IDLE cutoff, so a phone left face-up on a table does not read Leviticus
+///   overnight;
+/// * nothing on screen stops the clock and banks the tail, because a
+///   backgrounded app is not being read and locking a phone is how a reading
+///   session usually ends.
+#[derive(Clone, Debug, Default)]
+pub struct DwellTracker {
+    /// The chapter the banked seconds belong to. The reader may have moved on
+    /// by the time they are handed over, and crediting them to the new chapter
+    /// would simply be wrong.
+    owner: Option<(String, u16)>,
+    reached: u16,
+    on_screen: f32,
+    since_input: f32,
+    pending: f32,
+}
+
+impl DwellTracker {
+    /// One sample.
+    ///
+    /// `target` is what is being read right now, `None` when nothing is (a
+    /// dialog is up, the app is backgrounded, the reader is in Present). `reached`
+    /// is the deepest verse of `target` the reader has scrolled to, `interacted`
+    /// whether anything happened since the last sample, and `step` the seconds
+    /// that sample covers (clamped to [`MAX_STEP_SECONDS`]).
+    ///
+    /// Returns seconds to credit, on the [`TICK_SECONDS`] cadence and whenever
+    /// the target changes — the tail of a reading session is real reading and
+    /// must not be lost because it fell between two ticks.
+    pub fn tick(
+        &mut self,
+        target: Option<(&str, u16)>,
+        reached: u16,
+        interacted: bool,
+        step: f32,
+    ) -> Option<DwellReport> {
+        let step = if step.is_finite() { step.clamp(0.0, MAX_STEP_SECONDS) } else { 0.0 };
+        let same = match (self.owner.as_ref(), target) {
+            (Some((b, c)), Some((nb, nc))) => b == nb && *c == nc,
+            (None, None) => true,
+            _ => false,
+        };
+        if !same {
+            // Leaving a chapter, or arriving in one. Bank the tail against the
+            // chapter that earned it, then start the new pass clean — coming
+            // back is not continuing, so the grace period is served again.
+            let out = self.bank();
+            self.owner = target.map(|(b, c)| (b.to_string(), c));
+            self.reached = reached;
+            self.on_screen = 0.0;
+            self.since_input = 0.0;
+            return out;
+        }
+        self.owner.as_ref()?;
+        if interacted {
+            self.since_input = 0.0;
+        }
+        // Monotonic within the pass: scrolling back up never surrenders ground.
+        self.reached = self.reached.max(reached);
+        self.on_screen += step;
+        self.since_input += step;
+        // Grace first, then presence. Neither is a punishment: both exist so
+        // that time nobody spent reading never becomes progress.
+        if self.on_screen < GRACE_SECONDS || self.since_input > IDLE_SECONDS {
+            return None;
+        }
+        self.pending += step;
+        (self.pending >= TICK_SECONDS).then(|| self.bank()).flatten()
+    }
+
+    /// Nothing is on screen any more (the app is going to the background, the
+    /// tracker is being torn down). Banks the tail and re-serves the grace
+    /// period for whatever comes next.
+    pub fn stop(&mut self) -> Option<DwellReport> {
+        self.tick(None, 0, false, 0.0)
+    }
+
+    /// Take the banked seconds, attributed to the chapter that earned them.
+    fn bank(&mut self) -> Option<DwellReport> {
+        let seconds = std::mem::take(&mut self.pending);
+        let (book, chapter) = self.owner.clone()?;
+        (seconds > 0.0).then_some(DwellReport { book, chapter, reached: self.reached, seconds })
+    }
+}
+
 // ── recording ────────────────────────────────────────────────────────────────
 
 /// What a [`record`] call did, so a shell can react to a chapter completing
@@ -1326,6 +1445,153 @@ mod tests {
         assert_eq!(back["timezone"], "Africa/Johannesburg");
 
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    // ── the dwell tracker ────────────────────────────────────────────────────
+
+    /// Drive the tracker at one sample a second, the cadence both shells use.
+    fn seconds(t: &mut DwellTracker, book: &str, chapter: u16, reached: u16, n: usize) -> Vec<DwellReport> {
+        (0..n).filter_map(|_| t.tick(Some((book, chapter)), reached, false, 1.0)).collect()
+    }
+
+    #[test]
+    fn flipping_through_a_book_credits_nothing() {
+        let mut t = DwellTracker::default();
+        // Two seconds each in ten chapters: inside the grace period every time.
+        for c in 1..=10u16 {
+            assert!(seconds(&mut t, "Ps", c, 1, 2).is_empty());
+        }
+        assert_eq!(t.stop(), None, "a flip-through must bank no tail either");
+    }
+
+    #[test]
+    fn dwell_is_reported_on_the_cores_cadence() {
+        let mut t = DwellTracker::default();
+        // One sample to arrive in the chapter (it establishes the target and
+        // credits nothing, as the web tracker's target-change branch did),
+        // GRACE_SECONDS-1 more inside grace, then TICK_SECONDS of accrual.
+        let (grace, tick) = (GRACE_SECONDS as usize, TICK_SECONDS as usize);
+        let out = seconds(&mut t, "Gen", 1, 12, grace + tick);
+        assert_eq!(out.len(), 1, "exactly one report per {TICK_SECONDS}s of credited reading");
+        assert_eq!(out[0], DwellReport { book: "Gen".into(), chapter: 1, reached: 12, seconds: TICK_SECONDS });
+        // And it starts over, rather than reporting every second from here on.
+        assert!(seconds(&mut t, "Gen", 1, 12, tick - 1).is_empty());
+    }
+
+    #[test]
+    fn a_phone_left_on_a_table_stops_reading() {
+        let mut t = DwellTracker::default();
+        // Ten tick-lengths past the idle cutoff, with nothing touched.
+        let n = IDLE_SECONDS as usize + 10 * TICK_SECONDS as usize;
+        let mut credited: f32 = seconds(&mut t, "Lev", 11, 4, n).iter().map(|r| r.seconds).sum();
+        credited += t.stop().map_or(0.0, |r| r.seconds);
+        assert!(credited <= IDLE_SECONDS, "{n}s of staring credited {credited}s");
+        assert!(credited > IDLE_SECONDS - GRACE_SECONDS - 2.0, "the reader really was there at first");
+    }
+
+    #[test]
+    fn a_touch_starts_the_clock_again_without_leaving_the_chapter() {
+        let mut t = DwellTracker::default();
+        let tick = TICK_SECONDS as usize;
+        let banked: f32 =
+            seconds(&mut t, "Lev", 11, 4, IDLE_SECONDS as usize + 4 * tick).iter().map(|r| r.seconds).sum();
+        assert!(banked > 0.0, "the reader really was there at first");
+        // More of the same silence adds nothing at all.
+        assert!(seconds(&mut t, "Lev", 11, 4, 2 * tick).is_empty());
+        // One touch, and the chapter counts again. The grace period is NOT
+        // served again — the reader never left it.
+        t.tick(Some(("Lev", 11)), 4, true, 1.0);
+        assert_eq!(seconds(&mut t, "Lev", 11, 4, tick).len(), 1, "a touch must start the clock again");
+    }
+
+    /// The bug both shells shipped: the tail of a chapter was handed over with
+    /// whatever verse the reader had reached in the chapter they had just moved
+    /// TO, because the shell read `reached` at flush time off the live pane.
+    #[test]
+    fn seconds_are_credited_to_the_chapter_that_earned_them() {
+        let mut t = DwellTracker::default();
+        seconds(&mut t, "Gen", 1, 5, 13); // 3s grace + 10s credited
+        let out = t.tick(Some(("Gen", 2)), 40, false, 1.0).expect("the tail of Gen 1");
+        assert_eq!(out.book, "Gen");
+        assert_eq!(out.chapter, 1);
+        assert_eq!(out.reached, 5, "Gen 1 must not be credited with how far Gen 2 got");
+        assert_eq!(out.seconds, 10.0);
+
+        // And within a pass it is the HIGH-WATER mark, not wherever the reader
+        // happens to be sitting when the seconds are handed over.
+        let mut t = DwellTracker::default();
+        seconds(&mut t, "Gen", 1, 12, 8);
+        seconds(&mut t, "Gen", 1, 3, 4);
+        let back = t.stop().expect("the tail");
+        assert_eq!(back.reached, 12, "scrolling back up surrendered ground already covered");
+    }
+
+    /// Coming back is not continuing. Android re-served the grace period when the
+    /// app resumed but NOT when the tracker was disabled and re-enabled in the
+    /// same chapter (a dialog opening and closing), so a reader who dismissed a
+    /// dialog resumed accruing immediately; the web reset on both.
+    #[test]
+    fn coming_back_serves_the_grace_period_again() {
+        let mut t = DwellTracker::default();
+        seconds(&mut t, "Gen", 1, 5, 13);
+        assert!(t.stop().is_some(), "the tail is banked on the way out");
+        // Exactly enough samples for ONE full report if the grace period is
+        // served again: one to arrive, GRACE_SECONDS-1 inside grace, then
+        // TICK_SECONDS of accrual. Nothing may be left over — a leftover tail is
+        // the grace seconds having been credited after all.
+        let out = seconds(&mut t, "Gen", 1, 5, GRACE_SECONDS as usize + TICK_SECONDS as usize);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].seconds, TICK_SECONDS);
+        assert_eq!(t.stop(), None, "the seconds spent re-arriving were credited anyway");
+    }
+
+    #[test]
+    fn the_tail_of_a_session_is_banked_not_lost() {
+        let mut t = DwellTracker::default();
+        seconds(&mut t, "John", 3, 16, 8);
+        let out = t.stop().expect("five credited seconds must survive being stopped");
+        assert_eq!((out.book.as_str(), out.chapter, out.seconds), ("John", 3, 5.0));
+        assert_eq!(t.stop(), None, "and only once");
+    }
+
+    #[test]
+    fn a_late_sample_cannot_credit_an_hour() {
+        let mut t = DwellTracker::default();
+        // Arrive, then get past grace. `interacted` throughout, so it is the
+        // clamp being tested here and not the idle cutoff.
+        t.tick(Some(("Gen", 1)), 1, true, MAX_STEP_SECONDS);
+        t.tick(Some(("Gen", 1)), 1, true, MAX_STEP_SECONDS);
+        // A whole minute in one sample: long enough to bank a report on its own,
+        // short enough that IDLE_SECONDS is not what refuses it.
+        assert_eq!(
+            t.tick(Some(("Gen", 1)), 1, true, TICK_SECONDS * 2.0),
+            None,
+            "one sample can never carry a whole tick's worth",
+        );
+        // An hour between samples means the shell was not running at all.
+        assert_eq!(t.tick(Some(("Gen", 1)), 1, true, 3600.0), None);
+        let tail = t.stop().expect("what it did carry").seconds;
+        assert!(tail <= 4.0 * MAX_STEP_SECONDS, "two absurd samples banked {tail}s");
+    }
+
+    /// NaN out of a shell's own clock arithmetic must credit nothing AND leave
+    /// the counters usable — a NaN that reaches `on_screen` compares false
+    /// against every threshold, so the tracker would never report again.
+    #[test]
+    fn a_nan_sample_neither_credits_nor_poisons() {
+        let mut t = DwellTracker::default();
+        t.tick(Some(("Gen", 1)), 1, true, 1.0);
+        assert_eq!(t.tick(Some(("Gen", 1)), 1, true, f32::NAN), None);
+        let out = seconds(&mut t, "Gen", 1, 1, GRACE_SECONDS as usize + TICK_SECONDS as usize);
+        assert_eq!(out.len(), 1, "reading after a bad sample still counts");
+    }
+
+    #[test]
+    fn nothing_on_screen_accrues_nothing() {
+        let mut t = DwellTracker::default();
+        for _ in 0..600 {
+            assert_eq!(t.tick(None, 0, true, 1.0), None);
+        }
     }
 
     /// A book file with nothing unknown in it is written byte for byte as it was
