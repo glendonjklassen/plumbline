@@ -469,6 +469,23 @@ reject deletes the file and **asks first in both shells** — it is deleted, not
 hidden, and does not come back for review. Ordinals shift after every write — always re-fetch.
 *Data*: `suggested_weaves_json`, `weave_approve/reject(index)`.
 
+**Delta — how the 194 suggestions reach each shell (2026-08-02).** Android
+bundles them in the APK and seeds them like the rest of the stock set (its asset
+copy recurses, so `weaves/suggested/` has always been there). The web *never had
+them at all* until now: the pack builder's directory walk was non-recursive, so
+they were silently absent and the two shells disagreed about what the stock set
+contains. They are a **download** here — 422 KB raw of machine-proposed links is
+not something to put on the boot path of a phone that may never open the weave
+library — offered by a Settings row and fetched only when asked. Mechanically:
+one bundled JSON object (110 KB gz; individually gzipped the 194 files are 784 KB,
+since small files compress badly) on a fourth pack stage, `optional`, found by
+`role: "suggestedWeaves"` so a rename cannot unhook it. `optional` is the first
+stage nothing fetches on its own, which makes two things load-bearing and both
+are pinned by e2e: the update sweep must reconcile only the files *this* device's
+pack consists of (else a deploy pushes the bundle onto everyone and then jams
+the pin, `network.spec.ts`), and an install must not overwrite a file the reader
+already has at one of those paths (`suggested-download.spec.ts`).
+
 ## Weave authoring (M:2137–2236)
 
 **The desktop-era pin/＋link flow was removed 2026-07-25** (single left-click
@@ -650,8 +667,8 @@ shortcuts · Settings).
 **Phone parity 2026-07-28 (web): the bottom nav bar.** Narrow screens used to
 fold the three destinations into the ≡ menu above a divider, which put the whole
 information architecture two taps away behind a glyph. The web now draws the
-same **bottom nav bar Android has** — Read · Explore · Present · Memorize, in
-thumb reach — using the very same Material paths the Compose shell does
+same **bottom nav bar Android has** — Read · Explore · Present · Memorize ·
+Hymnal (five since 2026-08-02), in thumb reach — using the very same Material paths the Compose shell does
 (`ui/NavIcons.kt` → the `NAV` table in `Shell.svelte`), with gold on the current
 tab and Compose's α0.14 gold pill behind its icon. The ≡ menu is utilities only
 at every width now. Read is not a destination so much as the absence of one: the
@@ -688,6 +705,61 @@ cryptic): Notes · Threads · Tags · Weaves · Constellation · Weave map. *Del
 the web lists **Suggested** as its own seventh card (`ExploreScreen.svelte`);
 Android folds it into one Weaves screen with an All/Suggested filter
 (`WeavesScreen`).
+
+## Hymnal (2026-08-02, both shells)
+
+The fifth destination. A book of public-domain hymns with chords, meant to be
+sung from: the maintainer's brief was "text size presentable so people can share
+a phone and sing together, automated scroll, and show and transpose the chords
+so we can play it".
+
+**The engine owns the music theory.** `core::hymnal` loads `data/hymnal.json`
+(format tag `hymnal-v1`, frozen like every other on-disk format), parses the
+ChordPro-style inline brackets — `A[G]mazing [C]grace` — into (chord?, text)
+segments, and transposes. Two endpoints: `hymnal_json` (the index) and
+`hymn_json(id, transpose)`, which hands back stanzas **already split and already
+transposed**, so neither shell parses a bracket or knows that G+3 is Bb. Chords
+are spelled for the key they LAND in (G+3 is Bb, never A#), and `transposedKey`
+comes back so a transpose control can display it. An unparseable bracket stays in
+the lyric as literal text rather than vanishing — the files are maintainer-
+authored data and a swallowed typo is invisible to the one person who can fix it,
+so `scripts/build-hymnal.mjs` validates every bracket against the same grammar at
+build time, which is the only place that can catch one.
+
+**One hymn, one entry, per-language texts.** A translation is a second text on
+the same hymn (`texts: {"en": …, "de": …}`), not a second hymn, because the
+language toggle is the seed of the multi-language release that follows this one
+and a hymn split across entries would need stitching back together the day that
+lands. Both texts share the tune, so they share one chart. The reader's language
+is a *preference, not a promise*: a German-only hymn shows German to an English
+reader rather than showing nothing.
+
+**Sing mode** reuses Present's sunlight palette (fixed light, near-black on
+white, big type) for exactly Present's reason — a phone held up between people in
+a lit room — but is its own surface, not wired into the Present thread flow. Its
+auto-scroll is a continuous creep rather than a jump per line, since singing is
+continuous and a page that steps makes everyone find their place again; speeds
+1–9 with 0 meaning hold. Scaled by each frame's own elapsed time so a 120Hz
+screen does not run at double speed, with fractional pixels carried between
+frames (at the slowest speed a frame is a tenth of a pixel, and flooring that
+every frame holds the page still forever). Chords are **off by default**: most
+people singing are not playing.
+
+**Transposition is per hymn**, stored with the id and reset on open — a singer
+who dropped one hymn a tone has said nothing about the next.
+
+*Deltas:* none of substance. Both shells draw the same five-item bar from the
+same Material paths (`NavIconHymnal` ↔ the `NAV` table), both use the engine's
+split, and sing mode is a fullscreen overlay hosted above the nav in both
+(`HymnalSingOverlay` ↔ the `sing-host` block). The web additionally lists Hymnal
+in the desktop top-bar nav, as it does for every destination.
+
+*Data*: bundled in both shells — `data/hymnal.json` ships in the APK assets and
+on the web's **study** pack stage. It is deliberately NOT on the web's eviction
+list: the first read happens whenever the reader opens the hymn tab, which can be
+an hour into a session. For the same reason the engine's cache of it is never
+set from an empty parse (the `strongs` stance) — the file lands *after* open, and
+a tab opened in that window would otherwise pin an empty book for the session.
 
 ## The two map popups — a shared note
 
@@ -756,8 +828,8 @@ left the data pack. See item 7 of §Word study panel.
 
 ## C ABI surface (crates/ffi) — endpoint ↔ feature map
 
-**95 native fns as of 2026-07-30** (97 until `similar_verses_json` and
-`concept_map_json` were removed that day), plus 6 wasm-only shims in
+**99 native fns as of 2026-08-02** (97 at v0.38.0; the hymnal's two are the
+only additions since), plus 6 wasm-only shims in
 `crates/ffi/src/wasm.rs` that cbindgen excludes by name. Don't trust a count in
 prose — the guarantee is mechanical: `plumbline-bindgen`'s `verify_surface`
 requires every `plumbline_*` symbol in `include/plumbline.h` to appear in
@@ -825,6 +897,17 @@ map popups' derivation moved into the core; positions cross the wire as
 |---|---|---|
 | `plumbline_engine_chord_map_json()` | `{pairs:[{a, b, count}] (canon book indices, a≤b), max, otNtDivide, bookCount}` | chord/arc "Weave map" (retires the shell fold + max) |
 | `plumbline_engine_constellation_json(page, pins_json)` | `{lanes:[{weaveIndex, name, pinned, nodes:[{x, laneFrac, size, refKey, book, chapter, verse, display}], edges:[{aX, aLaneFrac, bX, bLaneFrac}]}], nPins, freeTotal, page, maxPage, caption, laneCapacity}` (pins = JSON array of weave indices) | constellation (retires the usable/degree/jitter/paging/pin derivation) |
+
+Added for the hymnal (2026-08-02) — the shells paint, the engine does the music:
+
+| endpoint | returns | for |
+|---|---|---|
+| `plumbline_engine_hymnal_json()` | `{hymns:[{id, number, titles:{lang→title}, firstLines:{lang→line}, tune, meter}]}` (number order) | the hymnal index + its number/title/first-line finder |
+| `plumbline_engine_hymn_json(id, transpose)` | `{id, number, tune, meter, key, transpose, transposedKey, texts:{lang→{title, author, translator, year, stanzas:[{lines:[{parts:[{chord, text}]}]}], chorus}}}` | one hymn, chords split and transposed (retires all ChordPro parsing and every shell-side key calculation) |
+
+Producer: both wrap `plumbline_core::hymnal`. `firstLines` are chord-stripped so
+the finder searches what a singer would actually type. An empty `hymns` means the
+pack has no `data/hymnal.json` yet, never an error; an unknown id is null.
 
 Producers: `chord_map` wraps `plumbline_core::weave::chord_pairs`; `constellation`
 wraps `plumbline_core::weave::constellation`. Both shells consume the
