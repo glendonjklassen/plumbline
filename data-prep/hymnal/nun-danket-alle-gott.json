@@ -1,0 +1,46 @@
+{
+  "id": "nun-danket-alle-gott",
+  "number": 66,
+  "tune": "NUN DANKET",
+  "meter": "6.7.6.7.6.6.6.6",
+  "key": "E",
+  "texts": {
+    "en": {
+      "title": "Now Thank We All Our God",
+      "author": "Martin Rinckart",
+      "translator": "Catherine Winkworth",
+      "year": 1858,
+      "stanzas": [
+        "[E]Now [B]thank we [A]all our [E]God,\nWith [F#m]heart and [B]hands and voi[E]ces,\nWho [C#m]won[E7]drous [A]things has [E]done,\nIn [A]whom this [E]world re[B]joic[E]es;\n[B]Who [F#7]from our [E]mothers' [B]arms\nHas [E]blessed us on our [G#m]way\nWith [C#7]countless [F#m]gifts of love,\n[E]And [F#m]still is [E]ours [B7]to[E]day.",
+        "O may this bounteous God\nThrough all our life be near us,\nWith ever joyful hearts\nAnd blessèd peace to cheer us;\nAnd keep us in His grace,\nAnd guide us when perplexed;\nAnd free us from all ills,\nIn this world and the next!",
+        "All praise and thanks to God\nThe Father now be given;\nThe Son and Him who reigns\nWith Them in highest Heaven;\nThe one eternal God,\nWhom earth and Heaven adore;\nFor thus it was, is now,\nAnd shall be evermore."
+      ],
+      "chorus": null,
+      "sources": [
+        "http://www.hymntime.com/tch/htm/n/o/w/t/nowthank.htm",
+        "https://hymnary.org/text/now_thank_we_all_our_god",
+        "https://library.timelesstruths.org/music/Now_Thank_We_All_Our_God/",
+        "https://hymnary.org/tune/nun_danket_cruger_555665",
+        "https://en.wikipedia.org/wiki/Nun_danket_alle_Gott"
+      ]
+    },
+    "de": {
+      "title": "Nun danket alle Gott",
+      "author": "Martin Rinckart",
+      "translator": null,
+      "year": 1636,
+      "stanzas": [
+        "[E]Nun [B]danket [A]alle [E]Gott\nmit [F#m]Herzen, [B]Mund und Hän[E]den,\nder [C#m]gro[E7]ße [A]Dinge [E]tut\nan [A]uns und [E]allen [B]En[E]den,\n[B]der [F#7]uns von [E]Mutter[B]leib\nund [E]Kindesbeinen [G#m]an\nun[C#7]zählig [F#m]viel zugut\n[E]bis [F#m]hierher [E]hat [B7]ge[E]tan.",
+        "Der ewigreiche Gott\nwoll uns bei unserm Leben\nein immer fröhlich Herz\nund edlen Frieden geben\nund uns in seiner Gnad\nerhalten fort und fort\nund uns aus aller Not\nerlösen hier und dort.",
+        "Lob, Ehr und Preis sei Gott\ndem Vater und dem Sohne\nund Gott dem Heilgen Geist\nim höchsten Himmelsthrone,\nihm, dem dreiein'gen Gott,\nwie es im Anfang war\nund ist und bleiben wird\nso jetzt und immerdar."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://de.wikipedia.org/wiki/Nun_danket_alle_Gott",
+        "https://www.evangeliums.net/lieder/lied_nun_danket_alle_gott.html",
+        "https://www.paulusdom.de/glaube-sakramente/gebete/liedtexte/nun-danket-alle-gott"
+      ]
+    }
+  },
+  "notes": "German is the modern sung text (EG 321 / Gotteslob 405), which de.wikipedia and evangeliums.net print identically; both are cited because they are independent. It differs from Rinckart's 1636 original, which de.wikipedia also reproduces and which the maintainer may prefer: the original has 'Vnd noch jetzund gethan' (st. 1), 'woll vns auff vnser Leben' (st. 2) and 'Dem dreymal einen Gott' with 'dem der beyden gleich' (st. 3). Only two orthographic choices were mine: evangeliums.net writes 'woll'' with an apostrophe where de.wikipedia and EG write plain 'woll', and both sites write the elision in 'dreiein'gen' -- shipped here with the typographic apostrophe. English is Catherine Winkworth's translation in the eight-line form the meter calls for, from the Cyber Hymnal. Hymnary's representative text is the modernised Psalter Hymnal (Gray) 1987 recension ('who wondrous things has done, in whom his world rejoices', 'and free us from all ills of this world in the next') and was not used. Timeless Truths cites the Cyber Hymnal but prints an older revision of it, differing at three points -- 'Oh, may', 'And guard us through all ills in this world, till the next!', and 'The Son, and Him Who reigns'; the current Cyber Hymnal readings ship. UNCERTAINTY on the translation date: hymnary dates Winkworth's translation 1858 (Lyra Germanica 2nd series), the Cyber Hymnal cites Lyra Germanica 1855 pp. 318-19, and the Timeless Truths score credits 1856. 1858 is used as hymnary's is the authority page; the discrepancy is not resolved. Tune name is hymnary's 'NUN DANKET'; many German books call the same tune NUN DANKET ALLE GOTT. KEY: F is unambiguously the common hymnal key -- I counted the keys hymnary lists across its instances of this tune and got 60 F major to one each of D, G and A -- so the guitar rule puts it a semitone down at E, the same call files 37, 40, 41, 43 and 58 make for their F-major tunes. Worth flagging: G (a tone up) would be materially kinder on this particular tune, because the chart's two chromatic mediants come out as F# and Bm in G but as D#/G#m in E; that is why the applied dominant before the mediant was dropped rather than written as D#, leaving 'Has blessed us on our way' as plain E to G#m. The chart is Mendelssohn's 1840 harmonisation (the one in the Timeless Truths MusicXML score, https://library.timelesstruths.org/library/music/N/Now_Thank_We_All_Our_God/Now_Thank_We_All_Our_God.xml) read beat by beat and transposed F->E, then thinned to at most two changes a bar. Its chromatic third phrase is real and kept: the C#m-E7-A tonicisation of IV under 'wondrous things' / 'große Dinge', and the C#7-F#m under 'countless gifts' / 'unzählig viel'. Dropped as passing: the vi7 under 'world', the V under 'us', the V under 'of', and the iii under 'is'. Both language charts were laid out from the same bar map, so they agree note for note. INDEPENDENT RE-CHECK 2026-08-02, one new site per language, both added to sources. German: paulusdom.de (Gotteslob 405) agrees word for word, including the two readings most at risk -- 'im hoechsten Himmelsthrone' (spelt hoechsten here only to keep this note plain-ASCII; the text itself has the umlaut) and 'ihm, dem dreiein'gen Gott'. A search-engine summary circulating the readings 'im hohen Himmelsthrone' and 'ihm den dreiein'gen Gott' is not borne out by any source consulted, including the two already cited. English: en.wikipedia's Winkworth text agrees word for word, including 'in whom this world rejoices' (NOT the 'his world' of hymnary's recension), 'has blessed us on our way', 'The Son and Him who reigns', 'with Them in highest Heaven' and 'And free us from all ills, in this world and the next!'. It prints plain 'blessed' in st. 2 where the Cyber Hymnal has the scansion accent; the accented form ships, which is also what savior-like-a-shepherd, holy-holy-holy, vom-himmel-hoch and wonderful-words-of-life do. The two charts were diffed mechanically and are identical chord for chord across all eight lines, so the bar-for-bar requirement holds. Small correction to this note's own wording: the apostrophes actually shipped in 'dreiein'gen' (and everywhere else in this set) are ASCII U+0027, not the typographic U+2019 the sentence above claims."
+}

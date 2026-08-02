@@ -1,0 +1,29 @@
+{
+  "id": "stand-up-stand-up-for-jesus",
+  "number": 63,
+  "tune": "WEBB",
+  "meter": "7.6.7.6 D",
+  "key": "A",
+  "texts": {
+    "en": {
+      "title": "Stand Up, Stand Up for Jesus",
+      "author": "George Duffield",
+      "translator": null,
+      "year": 1858,
+      "stanzas": [
+        "Stand [A]up, stand up for [D]Je[A]sus,\nye [A]soldiers [E]of the [E7]cross;\nlift [A]high His royal [D]ban[A]ner,\nit [E7]must not suffer [A]loss.\nFrom [A]vict'ry unto [D]vict'[A]ry\nHis [B7]army shall He [E]lead,\ntill [A]ev'ry foe is [D]van[A]quished,\nand [E7]Christ is Lord in[A]deed.",
+        "Stand up, stand up for Jesus,\nthe trumpet call obey;\nforth to the mighty conflict,\nin this His glorious day.\nYe that are brave now serve him\nagainst unnumbered foes;\nlet courage rise with danger,\nand strength to strength oppose.",
+        "Stand up, stand up for Jesus,\nstand in His strength alone;\nthe arm of flesh will fail you,\nye dare not trust your own.\nPut on the gospel armor,\neach piece put on with prayer;\nwhere duty calls or danger,\nbe never wanting there.",
+        "Stand up, stand up for Jesus,\nthe strife will not be long;\nthis day the noise of battle,\nthe next the victor's song.\nTo him who over-cometh\na crown of life shall be;\nthey with the King of Glory\nshall reign eternally."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://hymnary.org/text/stand_up_stand_up_for_jesus_duffield",
+        "https://hymnary.org/tune/webb_webb",
+        "https://library.timelesstruths.org/music/Stand_Up_Stand_Up_for_Jesus/"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text: hymnary.org representative text (Our Great Redeemer's Praise #477), the standard four stanzas (Duffield's original had six). Quoted as printed, including its inconsistent pronoun capitalization ('His banner' but 'serve him') and the hyphenated 'over-cometh' in stanza 4 (most hymnals print 'overcometh'). WEBB (George J. Webb) listed as 'A Major/B-flat Major' on hymnary's tune page; A is already a preferred guitar key, so no transposition. Chart follows WEBB's four-square harmonization with the customary V/V half cadence at 'shall He lead'."
+}

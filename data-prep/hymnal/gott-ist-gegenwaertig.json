@@ -1,6 +1,6 @@
 {
   "id": "gott-ist-gegenwaertig",
-  "number": 85,
+  "number": 84,
   "tune": "ARNSBERG",
   "meter": "6.6.8.6.6.8.3.3.6.6",
   "key": "D",
@@ -11,14 +11,15 @@
       "translator": "Frederick W. Foster",
       "year": 1826,
       "stanzas": [
-        "[D]God Himself is [A]present:\n[D]Let us now a[A]dore Him\n[G]And with [D]awe ap[A]pear be[D]fore Him.\n[D]God is in His [A]temple--\n[D]All with[A]in keep silence,\n[G]Prostrate [D]lie with [A]deepest [D]reverence.\n[G]Him a[D]lone [G]God we [A]own,\n[D]Him, our [G]God and [A]Savior;\n[D]Praise His [G]name for[A]e[D]ver.",
+        "[D]God Himself is [A]present:\n[D]Let us now a[A]dore Him\n[G]And with [D]awe ap[A]pear be[D]fore Him.\n[D]God is in His [A]temple--\n[D]All within keep [A]silence,\n[G]Prostrate [D]lie with [A]deepest [D]reverence.\n[G]Him a[D]lone [G]God we [A]own,\n[D]Him, our [G]God and [A]Savior;\n[D]Praise His [G]name for[A]e[D]ver.",
         "God Himself is present:\nHear the harps resounding;\nSee the hosts the throne surrounding!\n\"Holy, holy, holy\"--\nHear the hymn ascending,\nSongs of saints and angels blending.\nBow Thine ear To us here:\nHear, O Christ, the praises\nThat Thy Church now raises.",
         "O Thou Fount of blessing,\nPurify my spirit,\nTrusting only in Thy merit.\nLike the holy angels,\nWho behold Thy glory,\nMay I ceaselessly adore Thee.\nLet Thy will Ever still\nRule Thy Church terrestrial\nAs the hosts celestial."
       ],
       "chorus": null,
       "sources": [
         "https://www.ccel.org/a/anonymous/luth_hymnal/tlh004.htm",
-        "https://hymnary.org/text/god_himself_is_with_us"
+        "https://hymnary.org/text/god_himself_is_with_us",
+        "https://clcgracelutheranchurch.org/fridley/hymns/tlh/tlh004.htm"
       ]
     },
     "de": {
@@ -33,15 +34,17 @@
         "Majestätisch Wesen,\nmöcht ich recht dich preisen\nund im Geist dir Dienst erweisen.\nMöcht ich wie die Engel\nimmer vor dir stehen\nund dich gegenwärtig sehen.\nLass mich dir\nfür und für\ntrachten zu gefallen,\nliebster Gott, in allem.",
         "Luft, die alles füllet,\ndrin wir immer schweben,\naller Dinge Grund und Leben,\nMeer ohn Grund und Ende,\nWunder aller Wunder:\nIch senk mich in dich hinunter.\nIch in dir,\ndu in mir,\nlass mich ganz verschwinden,\ndich nur sehn und finden.",
         "Du durchdringest alles;\nlass dein schönstes Lichte,\nHerr, berühren mein Gesichte.\nWie die zarten Blumen\nwillig sich entfalten\nund der Sonne stille halten,\nlass mich so\nstill und froh\ndeine Strahlen fassen\nund dich wirken lassen.",
-        "Mache mich einfältig,\ninnig, abgeschieden,\nsanft und still in deinem Frieden;\nmach mich reinen Herzens,\ndass ich deine Klarheit\nschauen mag in Geist und Wahrheit;\nlass mein Herz\nüberwärts\nwie ein’ Adler schweben\nund in dir nur leben.",
-        "Herr, komm in mir wohnen,\nlass mein’ Geist auf Erden\ndir ein Heiligtum noch werden;\nkomm, du nahes Wesen,\ndich in mir verkläre,\ndass ich dich stets lieb und ehre.\nWo ich geh,\nsitz und steh,\nlass mich dich erblicken\nund vor dir mich bücken."
+        "Mache mich einfältig,\ninnig, abgeschieden,\nsanft und still in deinem Frieden;\nmach mich reinen Herzens,\ndass ich deine Klarheit\nschauen mag in Geist und Wahrheit;\nlass mein Herz\nüberwärts\nwie ein' Adler schweben\nund in dir nur leben.",
+        "Herr, komm in mir wohnen,\nlass mein' Geist auf Erden\ndir ein Heiligtum noch werden;\nkomm, du nahes Wesen,\ndich in mir verkläre,\ndass ich dich stets lieb und ehre.\nWo ich geh,\nsitz und steh,\nlass mich dich erblicken\nund vor dir mich bücken."
       ],
       "chorus": null,
       "sources": [
         "https://de.wikipedia.org/wiki/Gott_ist_gegenw%C3%A4rtig",
-        "https://www.evangeliums.net/lieder/lied_gott_ist_gegenwaertig.html"
+        "https://www.evangeliums.net/lieder/lied_gott_ist_gegenwaertig.html",
+        "https://hymnary.org/text/gott_ist_gegenwartig",
+        "https://www.liederindex.de/songs/1470"
       ]
     }
   },
-  "notes": "German wording is the EG 165 / Gotteslob 387 text as the de.wikipedia article prints it, all eight stanzas. One editorial act to flag: the article sets each stanza in eight printed lines, running two metrical lines together at the caesura; I broke them into the ten lines the meter actually has (6.6.8.6.6.8.3.3.6.6) so the chart can sit on them. No word was changed. evangeliums.net prints the same ten-line layout but a different recension — 'Gott ist in der Mitten', 'Cherubinen', stanza 3 'allen Erdenfreuden, die dem Worte widerstreiten', stanza 7 'reines Herzens' and 'himmelwärts' — so it is cited as the layout witness, not the wording witness. Wikipedia also records the 1729 originals behind two lines: 'schlagt' for 'schlag' in stanza 1 and a wholly different stanza 2 couplet. English is The Lutheran Hymnal 1941 no. 4 from CCEL/Project Wittenberg, explicitly released public domain there: Foster c.1826, alt., and it is a three-stanza cento against the German eight, so the languages do not run parallel. Its printed lines merge metrical lines 7 and 8 ('Him alone God we own,'); I kept the source's line breaks, which is why the English stanzas have nine lines and the German ten. Tune: hymnary's headword is ARNSBERG; the German sources call it WUNDERBARER KÖNIG (Joachim Neander, 1680), and it is also catalogued GRÖNINGEN. Key D and the chart are best-effort, not from notation."
+  "notes": "German wording is the EG 165 / Gotteslob 387 text as the de.wikipedia article prints it, all eight stanzas. One editorial act to flag: the article sets each stanza in eight printed lines, running two metrical lines together at the caesura; I broke them into the ten lines the meter actually has (6.6.8.6.6.8.3.3.6.6) so the chart can sit on them. No word was changed. evangeliums.net prints the same ten-line layout but a different recension — 'Gott ist in der Mitten', 'Cherubinen', stanza 3 'allen Erdenfreuden, die dem Worte widerstreiten', stanza 7 'reines Herzens' and 'himmelwärts' — so it is cited as the layout witness, not the wording witness. Wikipedia also records the 1729 originals behind two lines: 'schlagt' for 'schlag' in stanza 1 and a wholly different stanza 2 couplet. English is The Lutheran Hymnal 1941 no. 4 from CCEL/Project Wittenberg, explicitly released public domain there: Foster c.1826, alt., and it is a three-stanza cento against the German eight, so the languages do not run parallel. Its printed lines merge metrical lines 7 and 8 ('Him alone God we own,'); I kept the source's line breaks, which is why the English stanzas have nine lines and the German ten. Tune: hymnary's headword is ARNSBERG; the German sources call it WUNDERBARER KÖNIG (Joachim Neander, 1680), and it is also catalogued GRÖNINGEN. Key D and the chart are best-effort, not from notation. Verification 2026-08-02: fixed one chord placement — English stanza 1 line 5 had the A on 'within' where line 2 of the same melody (and the German chart) put it on the fifth syllable; now '[D]All within keep [A]silence'. English cross-checked against the TLH 4 page at clcgracelutheranchurch.org (independent of CCEL/hymnary): word-for-word match, all three stanzas. German stanza 1 confirmed verbatim by hymnary's text record; liederindex.de prints the other recension (5 stanzas, 'Mitten', 'Cherubinen', a different stanza-2 couplet) — recension variant, file follows EG/GL per the sources above. One small variant to know: hymnary's record reads 'lass mein Herz auf Erden' in the last stanza where EG/Wikipedia and this file read 'lass mein' Geist auf Erden'."
 }

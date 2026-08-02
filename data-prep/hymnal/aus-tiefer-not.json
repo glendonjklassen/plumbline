@@ -1,0 +1,46 @@
+{
+  "id": "aus-tiefer-not",
+  "number": 72,
+  "tune": "AUS TIEFER NOT",
+  "meter": "8.7.8.7.8.8.7",
+  "key": "Em",
+  "texts": {
+    "en": {
+      "title": "From Depths of Woe I Cry to Thee",
+      "author": "Martin Luther",
+      "translator": "Catherine Winkworth",
+      "year": 1863,
+      "stanzas": [
+        "[Em]From depths of [Am]woe I [C]cry to [E]Thee,\n[Am]Lord God, hear [Dm]Thou my [E]crying;\n[Em]Thy gracious [Am]ears turn [C]unto [E]me\n[Am]And ope them [Dm]to my [E]sighing.\n[Am]For if Thou, [Em]Lord, wilt [Am]look up[G]on\n[C]The sins and [G]ills which [Am]have been [Em]done,\n[Am]Who then can [F]stand be[E]fore Thee?",
+        "Thy love and grace alone avail,\n'Tis grace that sin forgiveth;\nThe sinner's deeds must surely fail,\nThough e'er so well he liveth.\nBefore Thee none can boasting stand,\nFor all must fear Thee, ev'ry man,\nAnd live alone by mercy.",
+        "Therefore I hope in God, my Lord,\nNor build on my uprightness;\nMy heart in Him is well restored,\nAnd trusts His lovingkindness,\nWhich His dear Word hath promised us;\nThis is my comfort and my trust.\nOn this I wait with patience.",
+        "And though it tarry through the night\nAnd till the morning waken,\nMy heart shall never doubt His might\nNor count itself forsaken.\nThus God's true Israel shall do,\nOf His own Spirit born anew,\nAnd wait on God, their Savior.",
+        "Though great our sins, yet greater still\nIs God's abundant favor;\nHis hand of mercy never will\nAbandon us, nor waver.\nOur Shepherd good and true is He,\nWho will at last His Israel free\nFrom all their sin and sorrow."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.lutheranchoralebook.com/texts/from-depths-of-woe-i-cry-to-thee/",
+        "https://hymnary.org/text/from_depths_of_woe_i_cry_to_thee",
+        "https://hymnary.org/tune/aus_tiefer_not_luther"
+      ]
+    },
+    "de": {
+      "title": "Aus tiefer Not schrei ich zu dir",
+      "author": "Martin Luther",
+      "translator": null,
+      "year": 1524,
+      "stanzas": [
+        "[Em]Aus tiefer [Am]Not schrei [C]ich zu [E]dir,\n[Am]Herr Gott, er[Dm]hör mein [E]Rufen.\n[Em]Dein gnädig [Am]Ohr neig [C]her zu [E]mir\n[Am]und meiner [Dm]Bitt es [E]öffne;\n[Am]denn so du [Em]willst das [Am]sehen [G]an,\n[C]was Sünd und [G]Unrecht [Am]ist ge[Em]tan,\n[Am]wer kann, Herr, [F]vor dir [E]bleiben?",
+        "Bei dir gilt nichts denn Gnad und Gunst,\ndie Sünde zu vergeben;\nes ist doch unser Tun umsonst\nauch in dem besten Leben.\nVor dir niemand sich rühmen kann;\ndes muss dich fürchten jedermann\nund deiner Gnade leben.",
+        "Darum auf Gott will hoffen ich,\nauf mein Verdienst nicht bauen.\nAuf ihn mein Herz soll lassen sich\nund seiner Güte trauen,\ndie mir zusagt sein wertes Wort.\nDas ist mein Trost und treuer Hort;\ndes will ich allzeit harren.",
+        "Und ob es währt bis in die Nacht\nund wieder an den Morgen,\ndoch soll mein Herz an Gottes Macht\nverzweifeln nicht noch sorgen.\nSo tu Israel rechter Art,\nder aus dem Geist geboren ward,\nund seines Gottes harre.",
+        "Ob bei uns ist der Sünden viel,\nbei Gott ist viel mehr Gnade.\nSein Hand zu helfen hat kein Ziel,\nwie groß auch sei der Schade.\nEr ist allein der gute Hirt,\nder Israel erlösen wird\naus seinen Sünden allen."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_aus_tiefer_not_schrei_ich_zu_dir.html"
+      ]
+    }
+  },
+  "notes": "German is the EG 299 text (5 stanzas, modern orthography) as evangeliums.net prints it. English is Winkworth's 1863 'From depths of woe I cry to Thee' in the altered form the Free Lutheran Chorale-Book prints (the TLH 329 line of descent; the page credits 'Tr. Catherine Winkworth, 1863, alt.'); it maps stanza-for-stanza onto the German. Tune AUS TIEFER NOT (Luther 1524), meter 8.7.8.7.8.8.7 per hymnary — the melody is PHRYGIAN (hymnary calls it e minor/modal), so no plain major/minor guitar key fits; the chart is written around Am/Em with an F->E phrygian final cadence and the key labelled Em as the transposition base. Chords are a best-effort modal harmonisation, not a transcription of printed notation."
+}

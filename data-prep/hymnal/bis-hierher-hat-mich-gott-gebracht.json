@@ -1,6 +1,6 @@
 {
   "id": "bis-hierher-hat-mich-gott-gebracht",
-  "number": 92,
+  "number": 91,
   "tune": "ELBING",
   "meter": "8.7.8.7.8.8.7",
   "key": "G",
@@ -12,17 +12,18 @@
       "translator": null,
       "year": 1699,
       "stanzas": [
-        "[G]Bis hier[D7]her [G]hat [C]mich [Am]Gott ge[D]bracht\n[G]durch [C]sei[D7]ne [G]große [Am]Gü[G]te,\n[G]bis hier[D7]her [G]hat [C]er [Am]Tag und [D]Nacht\n[G]be[C]wahrt [D7]Herz [G]und Ge[Am]mü[G]te,\n[G]bis [D]hier[Em]her hat er [Am]mich [D]ge[G]leit’,\n[G]bis [C]hier[D7]her [G]hat er mich [A]er[D]freut,\n[G]bis [Em]hier[D]her [Am]mir [Em]ge[D]hol[G]fen.",
-        "Hab Lob und Ehr, hab Preis und Dank\nfür die bisher’ge Treue,\ndie du, o Gott, mir lebenslang\nbewiesen täglich neue.\nIn mein Gedächtnis schreib ich an:\nDer Herr hat Großes mir getan,\nbis hierher mir geholfen.",
+        "[G]Bis hier[D7]her [G]hat [C]mich [Am]Gott ge[D]bracht\n[G]durch [C]sei[D7]ne [G]große [Am]Gü[G]te,\n[G]bis hier[D7]her [G]hat [C]er [Am]Tag und [D]Nacht\n[G]be[C]wahrt [D7]Herz [G]und Ge[Am]mü[G]te,\n[G]bis [D]hier[Em]her hat er [Am]mich [D]ge[G]leit',\n[G]bis [C]hier[D7]her [G]hat er mich [A]er[D]freut,\n[G]bis [Em]hier[D]her [Am]mir [Em]ge[D]hol[G]fen.",
+        "Hab Lob und Ehr, hab Preis und Dank\nfür die bisher'ge Treue,\ndie du, o Gott, mir lebenslang\nbewiesen täglich neue.\nIn mein Gedächtnis schreib ich an:\nDer Herr hat Großes mir getan,\nbis hierher mir geholfen.",
         "Hilf fernerhin, mein treuster Hort,\nhilf mir zu allen Stunden.\nHilf mir an all und jedem Ort,\nhilf mir durch Jesu Wunden.\nDamit sag ich bis in den Tod:\nDurch Christi Blut hilft mir mein Gott;\ner hilft, wie er geholfen."
       ],
       "chorus": null,
       "sources": [
         "https://de.wikipedia.org/wiki/Bis_hierher_hat_mich_Gott_gebracht",
         "https://www.evangeliums.net/lieder/lied_bis_hierher_hat_mich_gott_gebracht.html",
-        "https://hymnary.org/tune/elbing_sohr"
+        "https://hymnary.org/tune/elbing_sohr",
+        "https://www.liederindex.de/songs/231"
       ]
     }
   },
-  "notes": "German-only per the worklist; texts.en is null. Text is the three-stanza EG 329 form, identical word for word in the de.wikipedia article and on evangeliums.net; the only difference between them is the apostrophe glyph ('geleit’ / bisher’ge') and a comma-vs-semicolon in stanza 3 line 6, where I followed Wikipedia’s semicolon. Author’s name is spelled 'Aemilie Juliane' by both sources; I kept the worklist’s 'Ämilie Juliane'. Tune: EG 329 sings Peter Sohren’s 1668 melody, written first for Johann Rist’s 'Du Lebensbrot, Herr Jesu Christ' — hymnary catalogues it as ELBING (Peter Sohr, 1668), meter 8.7.8.7.8.8.7, and lists this text under it. Chords: derived note by note from the Cyber Hymnal’s four-part MIDI of that tune (filed there under its Swedish text name DU LIFVETS BRÖD, in B flat); I confirmed it is the same melody by matching it against hymnary’s ELBING incipit 51236 21756 71321, which it reproduces exactly. Transposed to G per the guitar rule (hymnary’s key is A flat; G wins the tie with A on preference order) and thinned to five or six changes a line. The tune is in bar form, so lines 3–4 carry the same chords as lines 1–2. One judgement call: the original cadence closing line 1 is the chord on the third scale degree (B major in G) — I wrote D there instead, which fits the same melody note, is easier to play, and agrees with the printed EG-329 guitar chart at michaelsmusik (consulted only as a sanity check on the harmony, not copied)."
+  "notes": "German-only per the worklist; texts.en is null. Text is the three-stanza EG 329 form, identical word for word in the de.wikipedia article and on evangeliums.net; the only difference between them is the apostrophe glyph ('geleit' / bisher'ge') and a comma-vs-semicolon in stanza 3 line 6, where I followed Wikipedia's semicolon. Author's name is spelled 'Aemilie Juliane' by both sources; I kept the worklist's 'Ämilie Juliane'. Tune: EG 329 sings Peter Sohren's 1668 melody, written first for Johann Rist's 'Du Lebensbrot, Herr Jesu Christ' — hymnary catalogues it as ELBING (Peter Sohr, 1668), meter 8.7.8.7.8.8.7, and lists this text under it. Chords: derived note by note from the Cyber Hymnal's four-part MIDI of that tune (filed there under its Swedish text name DU LIFVETS BRÖD, in B flat); I confirmed it is the same melody by matching it against hymnary's ELBING incipit 51236 21756 71321, which it reproduces exactly. Transposed to G per the guitar rule (hymnary's key is A flat; G wins the tie with A on preference order) and thinned to five or six changes a line. The tune is in bar form, so lines 3–4 carry the same chords as lines 1–2. One judgement call: the original cadence closing line 1 is the chord on the third scale degree (B major in G) — I wrote D there instead, which fits the same melody note, is easier to play, and agrees with the printed EG-329 guitar chart at michaelsmusik (consulted only as a sanity check on the harmony, not copied). Independent re-check 2026-08-02 against liederindex.de: identical apart from that site's line-initial capitalization and one word-order variant in stanza 3 line 5 — liederindex prints ‘damit ich sag bis in den Tod' where EG 329 (Wikipedia, evangeliums.net) has ‘Damit sag ich bis in den Tod'; kept the EG reading. Volksliederarchiv confirms the tune credit ‘Peter Sohr, 1668'."
 }

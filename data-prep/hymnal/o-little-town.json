@@ -1,0 +1,29 @@
+{
+  "id": "o-little-town",
+  "number": 57,
+  "tune": "ST. LOUIS",
+  "meter": "8.6.8.6 D",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "O Little Town of Bethlehem",
+      "author": "Phillips Brooks",
+      "translator": null,
+      "year": 1868,
+      "stanzas": [
+        "[G]O little town of [E7]Bethlehem,\nhow [Am]still we [D7]see thee [G]lie!\nA[G]bove thy deep and [E7]dreamless sleep\nthe [Am]silent [D7]stars go [G]by.\nYet [Em]in thy [B7]dark streets [Em]shineth\nthe [Am]ever[B7]lasting [Em]light;\nthe [G]hopes and fears of [E7]all the years\nare [Am]met in [D7]thee to[G]night.",
+        "For Christ is born of Mary;\nand, gathered all above,\nwhile mortals sleep, the angels keep\ntheir watch of wond'ring love.\nO morning stars, together\nproclaim the holy birth,\nand praises sing to God the King,\nand peace to men on earth.",
+        "How silently, how silently,\nthe wondrous gift is giv'n!\nSo God imparts to human hearts\nthe blessings of His heav'n.\nNo ear may hear His coming,\nbut in this world of sin,\nwhere meek souls will receive Him still,\nthe dear Christ enters in.",
+        "O holy Child of Bethlehem,\ndescend to us, we pray;\ncast out our sin and enter in;\nbe born in us today.\nWe hear the Christmas angels,\nthe great glad tidings tell;\nO come to us, abide with us,\nour Lord Emmanuel!"
+      ],
+      "chorus": null,
+      "sources": [
+        "https://hymnary.org/text/o_little_town_of_bethlehem",
+        "https://hymnary.org/tune/st_louis_redner",
+        "https://library.timelesstruths.org/music/O_Little_Town_of_Bethlehem/"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text: hymnary.org representative text (from Psalms and Hymns to the Living God #232), the standard four-stanza selection; Brooks's original fifth stanza ('Where children pure and happy') is rarely printed and omitted. Tune ST. LOUIS (Redner); meter 8.6.8.6 D as the hymnary text page lists it (lines 5-6 are actually 7.6). Hymnary gives the tune's key as 'F Major/G Major or modal'; G is itself a listed common key, so no transposition. Chart is the common simplified guitar harmonization (the E7-Am move standing in for Redner's chromatic passing harmony); middle couplet charted in the relative minor per the tune."
+}

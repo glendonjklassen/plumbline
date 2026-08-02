@@ -21,10 +21,11 @@
       "sources": [
         "https://hymnary.org/text/there_is_a_fountain_filled_with_blood_dr",
         "https://hymnary.org/tune/cleansing_fountain_13565",
-        "https://hymnary.org/hymn/CYBER/6556"
+        "https://hymnary.org/hymn/CYBER/6556",
+        "https://library.timelesstruths.org/music/There_Is_a_Fountain/"
       ]
     },
     "de": null
   },
-  "notes": "Text is hymnary.org's representative text (Sing Joyfully, 1989), the five-stanza form sung to CLEANSING FOUNTAIN, whose repeated third/fourth lines are printed here as lines 5-8 of each stanza. The Cyber Hymnal (hymnary.org/hymn/CYBER/6556) prints Cowper's fuller original: it reads 'And there have I, though vile as he, washed all my sins away' in st. 2, reverses the couplets of st. 5 ('Then in a nobler, sweeter song' first), and adds a sixth stanza, 'Lord, I believe Thou hast prepared' — rarely printed today, so it is not shipped. Meter is as hymnary lists it for this text; the tune page gives the same tune as 8.6.8.6 D. Chords: hymnal key is B-flat Major, moved down a semitone to A per the guitar rule. Chart is a plain I-IV-V7 harmonization of the tune, not a transcription of a published arrangement."
+  "notes": "Text is hymnary.org's representative text (Sing Joyfully, 1989), the five-stanza form sung to CLEANSING FOUNTAIN, whose repeated third/fourth lines are printed here as lines 5-8 of each stanza. The Cyber Hymnal (hymnary.org/hymn/CYBER/6556) prints Cowper's fuller original: it reads 'And there have I, though vile as he, washed all my sins away' in st. 2, reverses the couplets of st. 5 ('Then in a nobler, sweeter song' first), and adds a sixth stanza, 'Lord, I believe Thou hast prepared' — rarely printed today, so it is not shipped. Meter is as hymnary lists it for this text; the tune page gives the same tune as 8.6.8.6 D. Chords: hymnal key is B-flat Major, moved down a semitone to A per the guitar rule. Chart is a plain I-IV-V7 harmonization of the tune, not a transcription of a published arrangement. Independently checked against Timeless Truths (URL appended; tune, meter and B-flat key confirmed), which follows Cowper's original in st. 2 ('there have I ... Washed') and prints 'Are safe, to sin no more' where st. 3 here reads 'Be saved, to sin no more' — the shipped readings are the representative text's, kept."
 }

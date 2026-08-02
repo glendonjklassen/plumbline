@@ -1,0 +1,55 @@
+{
+  "id": "nun-freut-euch",
+  "number": 73,
+  "tune": "NUN FREUT EUCH",
+  "meter": "8.7.8.7.8.8.7",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Dear Christians, One and All, Rejoice",
+      "author": "Martin Luther",
+      "translator": "Richard Massie",
+      "year": 1854,
+      "stanzas": [
+        "[G]Dear Christians, [Em]one and [C]all, re[G]joice,\n[C]With [G]exul[D]tation [G]springing,\n[G]And, with u[Em]nited [C]heart and [G]voice\n[C]And [G]holy [D]rapture [G]singing,\n[D]Proclaim the [G]wonders [A7]God hath [D]done,\n[G]How His right [C]arm the [G]vict'ry [D]won;\n[G]Right [C]dearly [G]it hath [D]cost [G]Him.",
+        "Fast bound in Satan's chains I lay,\nDeath brooded darkly o'er me,\nSin was my torment night and day,\nIn sin my mother bore me;\nYea, deep and deeper still I fell,\nLife had become a living hell,\nSo firmly sin possessed me.",
+        "My own good works availed me naught,\nNo merit they attaining;\nFree will against God's judgment fought,\nDead to all good remaining.\nMy fears increased till sheer despair\nLeft naught but death to be my share;\nThe pangs of hell I suffered.",
+        "But God beheld my wretched state\nBefore the world's foundation,\nAnd, mindful of His mercies great,\nHe planned my soul's salvation.\nHe turned to me a father's heart;\nHe did not choose the easy part,\nBut gave His dearest Treasure.",
+        "He spoke to His beloved Son:\n'Tis time to have compassion.\nThen go, bright Jewel of My crown,\nAnd bring to man salvation;\nFrom sin and sorrow set him free,\nSlay bitter death for him that he\nMay live with Thee forever.",
+        "The Son obeyed His Father's will,\nWas born of virgin mother,\nAnd God's good pleasure to fulfill,\nHe came to be my Brother.\nNo garb of pomp or pow'r He wore,\nA servant's form, like mine, He bore,\nTo lead the devil captive.",
+        "To me He spake: Hold fast to Me,\nI am thy Rock and Castle;\nThy Ransom I Myself will be,\nFor thee I strive and wrestle;\nFor I am with thee, I am thine,\nAnd evermore shalt thou be Mine:\nThe Foe shall not divide us.",
+        "The Foe shall shed My precious blood,\nMe of My life bereaving.\nAll this I suffer for thy good;\nBe steadfast and believing.\nLife shall from death the vict'ry win,\nMy innocence shall bear thy sin;\nSo art thou blest forever.",
+        "Now to My Father I depart,\nThe Holy Spirit sending\nAnd, heav'nly wisdom to impart,\nMy help to thee extending.\nHe shall in trouble comfort thee,\nTeach thee to know and follow Me,\nAnd in all truth shall guide thee.",
+        "What I have done and taught, teach thou,\nMy ways forsake thou never;\nSo shall My kingdom flourish now\nAnd God be praised forever.\nTake heed lest men with base alloy\nThe heav'nly treasure should destroy;\nThis counsel I bequeath thee."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.lutheranchoralebook.com/texts/dear-christians-one-and-all-rejoice/",
+        "https://hymnary.org/text/dear_christians_one_and_all_rejoice"
+      ]
+    },
+    "de": {
+      "title": "Nun freut euch, lieben Christen g'mein",
+      "author": "Martin Luther",
+      "translator": null,
+      "year": 1523,
+      "stanzas": [
+        "[G]Nun freut euch, [Em]lieben [C]Christen [G]g'mein,\n[C]und [G]lasst uns [D]fröhlich [G]springen,\n[G]dass wir ge[Em]trost und [C]all in [G]ein\n[C]mit [G]Lust und [D]Liebe [G]singen,\n[D]was Gott an [G]uns ge[A7]wendet [D]hat\n[G]und seine [C]süße [G]Wunder[D]tat;\n[G]gar [C]teu'r hat [G]er's er[D]wor[G]ben.",
+        "Dem Teufel ich gefangen lag,\nim Tod war ich verloren,\nmein Sünd mich quälte Nacht und Tag,\ndarin ich war geboren.\nIch fiel auch immer tiefer drein,\nes war kein Guts am Leben mein,\ndie Sünd hatt' mich besessen.",
+        "Mein guten Werk, die galten nicht,\nes war mit ihn' verdorben;\nder frei Will hasste Gotts Gericht,\ner war zum Gutn erstorben;\ndie Angst mich zu verzweifeln trieb,\ndass nichts denn Sterben bei mir blieb,\nzur Hölle musst ich sinken.",
+        "Da jammert Gott in Ewigkeit\nmein Elend Übermaßen;\ner dacht an sein Barmherzigkeit,\ner wollt mir helfen lassen;\ner wandt zu mir das Vaterherz,\nes war bei ihm fürwahr kein Scherz,\ner ließ's sein Bestes kosten.",
+        "Er sprach zu seinem lieben Sohn:\n\"Die Zeit ist hier zu erbarmen;\nfahr hin, meins Herzens werte Kron,\nund sei das Heil dem Armen\nund hilf ihm aus der Sünden Not,\nerwürg für ihn den bittern Tod\nund lass ihn mit dir leben.\"",
+        "Der Sohn dem Vater g'horsam ward,\ner kam zu mir auf Erden\nvon einer Jungfrau rein und zart;\ner sollt mein Bruder werden.\nGar heimlich führt er sein Gewalt,\ner ging in meiner armen G'stalt,\nden Teufel wollt er fangen.",
+        "Er sprach zu mir: \"Halt dich an mich,\nes soll dir jetzt gelingen;\nich geb mich selber ganz für dich,\nda will ich für dich ringen;\ndenn ich bin dein und du bist mein,\nund wo ich bleib, da sollst du sein,\nuns soll der Feind nicht scheiden.",
+        "Vergießen wird er mir mein Blut,\ndazu mein Leben rauben;\ndas leid ich alles dir zugut,\ndas halt mit festem Glauben.\nDen Tod verschlingt das Leben mein,\nmein Unschuld trägt die Sünde dein,\nda bist du selig worden.",
+        "Gen Himmel zu dem Vater mein\nfahr ich von diesem Leben;\nda will ich sein der Meister dein,\nden Geist will ich dir geben,\nder dich in Trübnis trösten soll\nund lehren mich erkennen wohl\nund in der Wahrheit leiten.",
+        "Was ich getan hab und gelehrt,\ndas sollst du tun und lehren,\ndamit das Reich Gotts werd gemehrt\nzu Lob und seinen Ehren;\nund hüt dich vor der Menschen Satz,\ndavon verdirbt der edle Schatz:\nDas lass ich dir zur Letze.\""
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_nun_freut_euch_lieben_christen_gmein.html"
+      ]
+    }
+  },
+  "notes": "German is the 10-stanza EG 341-style text as evangeliums.net prints it (modern orthography; the site's quotation marks — Christ's speech opens in stanza 7 and closes at the end of stanza 10 — are kept as printed, as is 'Übermaßen' in stanza 4, which other sources print lowercase). English is Richard Massie 1854 as altered for The Lutheran Hymnal 387, from the Free Lutheran Chorale-Book — stanza-parallel with the German, 10 for 10. Tune NUN FREUT EUCH ('Nürnberg 1523' per evangeliums.net; hymnary also cross-references LUTHER'S HYMN), meter 8.7.8.7.8.8.7 confirmed on hymnary's text page. Chart written in G, a common congregational key for this tune; chords are a best-effort chart, not verified against printed notation."
+}

@@ -1,0 +1,28 @@
+{
+  "id": "christ-arose",
+  "number": 60,
+  "tune": "CHRIST AROSE",
+  "meter": "11.10 with refrain",
+  "key": "A",
+  "texts": {
+    "en": {
+      "title": "Low in the Grave He Lay",
+      "author": "Robert Lowry",
+      "translator": null,
+      "year": 1874,
+      "stanzas": [
+        "[A]Low in the grave he lay, [E7]Jesus my [A]Savior,\n[A]waiting the coming [B7]day, [E7]Jesus my [A]Lord!",
+        "Vainly they watch his bed, Jesus my Savior,\nvainly they seal the dead, Jesus my Lord!",
+        "Death cannot keep its prey, Jesus my Savior;\nhe tore the bars away, Jesus my Lord!"
+      ],
+      "chorus": "[A]Up from the grave he a[E7]rose;\n[A]with a mighty [D]triumph o'er his [A]foes;\n[A]he arose a victor from the [D]dark do[A]main,\nand he [A]lives for[B7]ever, with his [E7]saints to reign.\nHe a[A]rose! He a[D]rose! Halle[A]lujah! [E7]Christ a[A]rose!",
+      "sources": [
+        "https://hymnary.org/text/low_in_the_grave_he_lay_jesus_my_savior",
+        "https://hymnary.org/tune/christ_arose_lowry",
+        "https://library.timelesstruths.org/music/Christ_Arose/"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text: hymnary.org representative text (United Methodist Hymnal, 1989): three two-line stanzas plus refrain, meter 11.10 with refrain as hymnary lists it. This printing has no echo repetitions ('he arose') in the refrain. Words and music both Robert Lowry, 1874. Hymnary's tune page gives B-flat Major; moved to A per the guitar rule. Chart is the standard simplified changes: quiet I-V7-I verse, refrain cadencing V/V-V before the final phrase."
+}

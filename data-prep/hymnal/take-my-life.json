@@ -1,0 +1,31 @@
+{
+  "id": "take-my-life",
+  "number": 37,
+  "tune": "HENDON",
+  "meter": "7.7.7.7.7",
+  "key": "E",
+  "texts": {
+    "en": {
+      "title": "Take My Life, and Let It Be",
+      "author": "Frances R. Havergal",
+      "translator": null,
+      "year": 1874,
+      "stanzas": [
+        "[E]Take my life and [B7]let it [E]be\n[A]conse[E]crated, Lord, to [B7]thee.\n[E]Take my [A]moments [E]and my [B7]days;\n[E]let them [A]flow in [E]endless [B7]praise,\n[E]let them [A]flow in [B7]endless [E]praise.",
+        "Take my hands and let them move\nat the impulse of thy love.\nTake my feet and let them be\nswift and beautiful for thee,\nswift and beautiful for thee.",
+        "Take my voice and let me sing\nalways, only, for my King.\nTake my lips and let them be\nfilled with messages from thee,\nfilled with messages from thee.",
+        "Take my silver and my gold;\nnot a mite would I withhold.\nTake my intellect and use\nevery power as thou shalt choose,\nevery power as thou shalt choose.",
+        "Take my will and make it thine;\nit shall be no longer mine.\nTake my heart it is thine own;\nit shall be thy royal throne,\nit shall be thy royal throne.",
+        "Take my love; my Lord, I pour\nat thy feet its treasure store.\nTake myself, and I will be\never, only, all for thee,\never, only, all for thee."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://hymnary.org/text/take_my_life_and_let_it_be",
+        "https://hymnary.org/tune/hendon_malan",
+        "https://www.hymnsite.com/lyrics/umh399.sht"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text is hymnary.org's representative text (Psalter Hymnal, Gray), which prints the HENDON final-line repeat as a fifth line of each stanza; its lowercase thee/thou and the unpunctuated 'Take my heart it is thine own' are as printed there (many hymnals have 'Take my heart, it is Thine own'). Havergal's original was 11 couplets; the six 4-line stanzas here are the standard hymnal arrangement. hymnary lists HENDON (Malan) in F Major; nearest guitar key per the rule is E. Chords are a best-effort I/IV/V chart from the tune's incipit and standard harmonization, not verified bar-for-bar against a score. Cross-checked against the United Methodist Hymnal printing (hymnsite.com): wording agrees except stanza 1's \"let them flow in endless praise\" — that is the Psalter Hymnal reading and is kept; Havergal's original and most hymnals (UMH included) print \"ceaseless praise\"."
+}

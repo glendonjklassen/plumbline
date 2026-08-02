@@ -1,0 +1,32 @@
+{
+  "id": "amazing-grace",
+  "number": 14,
+  "tune": "NEW BRITAIN",
+  "meter": "8.6.8.6",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Amazing Grace",
+      "author": "John Newton",
+      "translator": null,
+      "year": 1779,
+      "stanzas": [
+        "A[G]mazing grace! [D7]How [Em]sweet [C]the [G]sound\nThat [G]saved a wretch [D7]like [G]me!\nI [G]once was lost, but [C]now am [G]found;\nWas [Em]blind, but [G/D]now [D7]I [G]see.",
+        "'Twas grace that taught my heart to fear,\nAnd grace my fears relieved;\nHow precious did that grace appear\nThe hour I first believed.",
+        "Through many dangers, toils, and snares,\nI have already come;\n'Tis grace hath brought me safe thus far,\nAnd grace will lead me home.",
+        "The Lord has promised good to me,\nHis Word my hope secures;\nHe will my Shield and Portion be,\nAs long as life endures.",
+        "Yea, when this flesh and heart shall fail,\nAnd mortal life shall cease,\nI shall possess, within the veil,\nA life of joy and peace.",
+        "The earth shall soon dissolve like snow,\nThe sun forbear to shine;\nBut God, who called me here below,\nWill be forever mine.",
+        "When we've been there ten thousand years,\nBright shining as the sun,\nWe've no less days to sing God's praise\nThan when we'd first begun."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://library.timelesstruths.org/music/Amazing_Grace/",
+        "https://hymnary.org/text/amazing_grace_how_sweet_the_sound",
+        "https://library.timelesstruths.org/library/music/A/Amazing_Grace/Amazing_Grace.xml"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Newton's six 1779 stanzas plus the traditional seventh (“When we've been there ten thousand years”), exactly as Timeless Truths prints them; their page credits stanza 7 to Anonymous, pub. 1829 — it is not Newton's, but nearly every modern hymnal prints it, so it ships. Hymnary's representative text (Ancient & Modern 2013) confirms stanzas 1–6 word for word apart from lowercased pronouns and “(how sweet the sound)” in parentheses. Tune/meter per the hymnary.org text page (NEW BRITAIN, 8.6.8.6). Common key G (Timeless Truths score) — already a guitar key. Chords derived from that score's SATB MusicXML, thinned to the harmonic rhythm; this chart follows the score (D7 on “How”, Em on “sweet”) rather than the looser folk chart many songbooks print."
+}

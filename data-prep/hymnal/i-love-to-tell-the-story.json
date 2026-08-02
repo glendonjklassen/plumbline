@@ -11,19 +11,20 @@
       "translator": null,
       "year": 1866,
       "stanzas": [
-        "[G]I love to tell the story\nOf un[C]seen things a[G]bove,\nOf [D7]Jesus and His [G]glory,\nOf Jesus and His [D7]love.\n[D]I love to [G]tell the [D7]story,\nBe[Em]cause I know ’tis [B7]true;\nIt [C]satisfies my [G]longings\nAs [D7]nothing else can [G]do.",
+        "[G]I love to tell the story\nOf un[C]seen things a[G]bove,\nOf [D7]Jesus and His [G]glory,\nOf Jesus and His [D7]love.\n[D]I love to [G]tell the [D7]story,\nBe[Em]cause I know 'tis [B7]true;\nIt [C]satisfies my [G]longings\nAs [D7]nothing else can [G]do.",
         "I love to tell the story;\nMore wonderful it seems\nThan all the golden fancies\nOf all our golden dreams.\nI love to tell the story,\nIt did so much for me;\nAnd that is just the reason\nI tell it now to thee.",
-        "I love to tell the story;\n’Tis pleasant to repeat\nWhat seems, each time I tell it,\nMore wonderfully sweet.\nI love to tell the story,\nFor some have never heard\nThe message of salvation\nFrom God’s own holy Word.",
-        "I love to tell the story,\nFor those who know it best\nSeem hungering and thirsting\nTo hear it like the rest.\nAnd when, in scenes of glory,\nI sing the new, new song,\n’Twill be the old, old story\nThat I have loved so long."
+        "I love to tell the story;\n'Tis pleasant to repeat\nWhat seems, each time I tell it,\nMore wonderfully sweet.\nI love to tell the story,\nFor some have never heard\nThe message of salvation\nFrom God's own holy Word.",
+        "I love to tell the story,\nFor those who know it best\nSeem hungering and thirsting\nTo hear it like the rest.\nAnd when, in scenes of glory,\nI sing the new, new song,\n'Twill be the old, old story\nThat I have loved so long."
       ],
-      "chorus": "[G]I [D]love to tell the [G]story,\n’Twill [C]be my theme in [G]glory,\nTo tell the old, [D7]old [G]story\n[C]Of Jesus and [D7]His [G]love.",
+      "chorus": "[G]I [D]love to tell the [G]story,\n'Twill [C]be my theme in [G]glory,\nTo tell the old, [D7]old [G]story\n[C]Of Jesus and [D7]His [G]love.",
       "sources": [
         "http://www.hymntime.com/tch/htm/i/l/t/t/ilttts.htm",
         "https://library.timelesstruths.org/music/I_Love_to_Tell_the_Story/",
-        "https://hymnary.org/tune/hankey_fischer"
+        "https://hymnary.org/tune/hankey_fischer",
+        "https://www.hymnal.net/en/hymn/h/1064"
       ]
     },
     "de": null
   },
-  "notes": "Text: Cyber Hymnal (Hankey's 1866 poem 'The Story Told'); four stanzas, the standard printed set. Timeless Truths gives two wording variants — 'as nothing else would do' (st. 1) and 'What seems each time I tell it' unpunctuated (st. 3); the Cyber Hymnal readings used here match the common hymnal text. Tune HANKEY (W. G. Fischer, 1869), meter and composer per hymnary.org/tune/hankey_fischer, which lists A-flat and G as the usual printed keys; G chosen as the nearest guitar key. Chart derived from the Cyber Hymnal's own MIDI of HANKEY (mid/h/a/n/k/hankey.mid) transposed A-flat->G, then reduced to one or two changes per bar; short passing chords (a Ddim and a half-beat A7 in stanza line 1) were dropped as unplayable noise on a strummed instrument."
+  "notes": "Text: Cyber Hymnal (Hankey's 1866 poem 'The Story Told'); four stanzas, the standard printed set. Timeless Truths gives two wording variants — 'as nothing else would do' (st. 1) and 'What seems each time I tell it' unpunctuated (st. 3); the Cyber Hymnal readings used here match the common hymnal text. Tune HANKEY (W. G. Fischer, 1869), meter and composer per hymnary.org/tune/hankey_fischer, which lists A-flat and G as the usual printed keys; G chosen as the nearest guitar key. Chart derived from the Cyber Hymnal's own MIDI of HANKEY (mid/h/a/n/k/hankey.mid) transposed A-flat->G, then reduced to one or two changes per bar; short passing chords (a Ddim and a half-beat A7 in stanza line 1) were dropped as unplayable noise on a strummed instrument. Cross-checked 2026-08-02 against hymnal.net E1064 (independent of the sites above): all four stanzas and the chorus agree, except hymnal.net reads 'Of all my golden dreams' in st. 2 where this file keeps the common hymnal 'our'; its chart also confirms the B-family chord under 'know 'tis true' resolving to C."
 }

@@ -1,0 +1,59 @@
+{
+  "id": "wie-soll-ich-dich-empfangen",
+  "number": 69,
+  "tune": "WIE SOLL ICH DICH EMPFANGEN",
+  "meter": "7.6.7.6 D",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "O Lord, How Shall I Meet Thee",
+      "author": "Paul Gerhardt",
+      "translator": "composite",
+      "year": 1653,
+      "stanzas": [
+        "[D]O Lord, [G]how [A]shall [D]I [Em]meet [D]Thee,\n[G]How [F#m]wel[Bm]come [Em]Thee [A]a[D]right?\n[D]Thy peo[G]ple [A]long [D]to [Em]greet [D]Thee,\n[G]My [F#m]Hope, [Bm]my [Em]heart's [A]De[D]light!\n[D]O [Bm]kin[A]dle, [E]Lord, [F#m]most [D]ho[A]ly,\n[D]Thy [A/C#]lamp [D]with[Em]in [D/F#]my [A]breast\n[F#m]To [Bm]do [D]in [Em]spi[D/F#]rit [Em]low[D]ly\n[D/F#]All [Em]that [D/F#]may [A]please Thee [D]best.",
+        "Thy Zion strews before Thee\nGreen boughs and fairest palms,\nAnd I, too, will adore Thee\nWith joyous songs and psalms.\nMy heart shall bloom forever\nFor Thee with praises new\nAnd from Thy name shall never\nWithhold the honor due.",
+        "I lay in fetters, groaning,\nThou com'st to set me free;\nI stood, my shame bemoaning,\nThou com'st to honor me;\nA glory Thou dost give me,\nA treasure safe on high,\nThat will not fail or leave me\nAs earthly riches fly.",
+        "Love caused Thy incarnation,\nLove brought Thee down to me;\nThy thirst for my salvation\nProcured my liberty.\nO love beyond all telling,\nThat led Thee to embrace,\nIn love all love excelling,\nOur lost and fallen race!",
+        "Rejoice, then, ye sad-hearted,\nWho sit in deepest gloom,\nWho mourn o'er joys departed\nAnd tremble at your doom.\nDespair not, He is near you,\nYea, standing at the door,\nWho best can help and cheer you\nAnd bids you weep no more.",
+        "Ye need not toil nor languish\nNor ponder day and night\nHow in the midst of anguish\nYe draw Him by your might.\nHe comes, He comes all willing,\nMoved by His love alone,\nYour woes and troubles stilling;\nFor all to Him are known.",
+        "Sin's debt, that fearful burden,\nLet not your souls distress;\nYour guilt the Lord will pardon\nAnd cover by His grace.\nHe comes, for men procuring\nThe peace of sin forgiven,\nFor all God's sons securing\nTheir heritage in heaven.",
+        "What though the foes be raging,\nHeed not their craft and spite;\nYour Lord, the battle waging,\nWill scatter all their might.\nHe comes, a King most glorious,\nAnd all His earthly foes\nIn vain His course victorious\nEndeavor to oppose.",
+        "He comes to judge the nations,\nA terror to His foes,\nA Light of consolations\nAnd blessed Hope to those\nWho love the Lord's appearing.\nO glorious Sun, now come,\nSend forth Thy beams so cheering,\nAnd guide us safely home."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.ccel.org/a/anonymous/luth_hymnal/tlh058.htm",
+        "https://hymnary.org/hymn/LH1941/58b",
+        "http://www.hymntime.com/tch/htm/o/l/h/o/olhosimy.htm",
+        "https://clcgracelutheranchurch.org/hymns/tlh/tlh058.htm"
+      ]
+    },
+    "de": {
+      "title": "Wie soll ich dich empfangen",
+      "author": "Paul Gerhardt",
+      "translator": null,
+      "year": 1653,
+      "stanzas": [
+        "[D]Wie soll [G]ich [A]dich [D]emp[Em]fan[D]gen\n[G]und [F#m]wie [Bm]be[Em]gegn [A]ich [D]dir,\n[D]o al[G]ler [A]Welt [D]Ver[Em]lan[D]gen,\n[G]o [F#m]mei[Bm]ner [Em]See[A]len [D]Zier?\n[D]O [Bm]Je[A]su, [E]Je[F#m]su, [D]set[A]ze\n[D]mir [A/C#]selbst [D]die [Em]Fa[D/F#]ckel [A]bei,\n[F#m]da[Bm]mit, [D]was [Em]dich [D/F#]er[Em]göt[D]ze,\n[D/F#]mir [Em]kund [D/F#]und [A]wissend [D]sei.",
+        "Dein Zion streut dir Palmen\nund grüne Zweige hin,\nund ich will dir in Psalmen\nermuntern meinen Sinn.\nMein Herze soll dir grünen\nin stetem Lob und Preis\nund deinem Namen dienen,\nso gut es kann und weiß.",
+        "Was hast du unterlassen\nzu meinem Trost und Freud,\nals Leib und Seele saßen\nin ihrem größten Leid?\nAls mir das Reich genommen,\nda Fried und Freude lacht,\nda bist du, mein Heil, kommen\nund hast mich froh gemacht.",
+        "Ich lag in schweren Banden,\ndu kommst und machst mich los;\nich stand in Spott und Schanden,\ndu kommst und machst mich groß\nund hebst mich hoch zu Ehren\nund schenkst mir großes Gut,\ndas sich nicht lässt verzehren,\nwie irdisch Reichtum tut.",
+        "Nichts, nichts hat dich getrieben\nzu mir vom Himmelszelt\nals das geliebte Lieben,\ndamit du alle Welt\nin ihren tausend Plagen\nund großen Jammerlast,\ndie kein Mund kann aussagen,\nso fest umfangen hast.",
+        "Das schreib dir in dein Herze,\ndu hochbetrübtes Heer,\nbei denen Gram und Schmerze\nsich häuft je mehr und mehr;\nseid unverzagt, ihr habet\ndie Hilfe vor der Tür;\nder eure Herzen labet\nund tröstet, steht allhier.",
+        "Ihr dürft euch nicht bemühen\nnoch sorgen Tag und Nacht,\nwie ihr ihn wollet ziehen\nmit eures Armes Macht.\nEr kommt, er kommt mit Willen,\nist voller Lieb und Lust,\nall Angst und Not zu stillen,\ndie ihm an euch bewusst.",
+        "Auch dürft ihr nicht erschrecken\nvor eurer Sünden Schuld;\nnein, Jesus will sie decken\nmit seiner Lieb und Huld.\nEr kommt, er kommt den Sündern\nzu Trost und wahrem Heil,\nschafft, dass bei Gottes Kindern\nverbleib ihr Erb und Teil.",
+        "Was fragt ihr nach dem Schreien\nder Feind und ihrer Tück?\nDer Herr wird sie zerstreuen\nin einem Augenblick.\nEr kommt, er kommt, ein König,\ndem wahrlich alle Feind\nauf Erden viel zu wenig\nzum Widerstande seind.",
+        "Er kommt zum Weltgerichte:\nzum Fluch dem, der ihm flucht,\nmit Gnad und süßem Lichte\ndem, der ihn liebt und sucht.\nAch komm, ach komm, o Sonne,\nund hol uns allzumal\nzum ewgen Licht und Wonne\nin deinen Freudensaal."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://de.wikipedia.org/wiki/Wie_soll_ich_dich_empfangen",
+        "https://www.evangeliums.net/lieder/lied_wie_soll_ich_dich_empfangen.html",
+        "https://en.wikipedia.org/wiki/Wie_soll_ich_dich_empfangen",
+        "https://lg.concordiabuch.de/lieder/25/wie-soll-ich-dich-empfangen"
+      ]
+    }
+  },
+  "notes": "German: all 10 stanzas, EG 11, from the de.wikipedia article (which prints the modern sung orthography already); cross-checked word for word against evangeliums.net, which agrees except for printing \"begegn' ich\" and \"ewgen\" with an apostrophe in st.1 and st.10 -- the EG form without it is kept. ENGLISH IS NOT WINKWORTH AS THE WORKLIST SUGGESTS. Winkworth's own version (Chorale Book for England, 1863) survives in most books only as a 4-stanza cento -- the Cyber Hymnal page in the sources prints just four stanzas of it, in a modernised \"You\" recension, then two separate Arthur T. Russell translations. What is shipped is the 9-stanza composite of The Lutheran Hymnal 1941 no. 58 (CCEL/Project Wittenberg), which TLH itself credits as \"composite\" and which descends from Winkworth and Russell; it is the standard full-length English singing text. It has NINE stanzas against the German TEN: the German st.3 (\"Was hast du unterlassen\") has no English counterpart, so en 3-9 correspond to de 4-10. TLH's st.9 line 8 read \"An guide us safely home\" here, inherited from a typo in the CCEL transcription; CORRECTED 2026-08-02 to \"And guide us safely home\" after checking the independent CLC Grace Lutheran transcription of TLH 58 (appended to sources), which reads \"And\". No source anywhere reads \"An\". TUNE/METER: hymnary gives WIE SOLL ICH DICH EMPFANGEN (Johann Crüger, 1653), 7.6.7.6 D. Note that TLH sings this text to VALET WILL ICH DIR GEBEN (Teschner) instead, and Bach's Christmas Oratorio uses the PASSION CHORALE for st.1; Crüger's own melody is what EG 11 prints and is what the chart follows. KEY: hymnary lists the tune in E-flat major, one semitone from both D and E, so the preference order picks D; D also keeps the melody inside d'-d''. The four-part setting on en.wikipedia is printed a tone higher, in F. Chords are a simplified reduction of that setting transposed down a minor third: the Stollen (lines 1-2) is repeated for lines 3-4, as the printed repeat mark requires, so those charts are identical by construction. The bracket positions of the two languages agree bar for bar. INDEPENDENT CHECK (2026-08-02): German re-verified against Lutherisches Gesangbuch 25 (lg.concordiabuch.de, appended to sources), independent of the three sites already cited. It prints the same 10 stanzas, names Crüger 1653 as the melody, and matches this file word for word at every spot checked, including st.1 \"und wie begegn ich dir\" with no apostrophe, st.3 \"in ihrem größten Leid\", st.9 \"zum Widerstande seind\" and st.10 \"zum ewgen Licht und Wonne\". English re-verified against the CLC transcription of TLH 58: 9 stanzas, credited \"Paul Gerhardt, 1653, cento\" with translator \"composite\", which corroborates the composite attribution used here; all eight lines spot-checked matched apart from the \"An\"/\"And\" typo now fixed. CHART AUDIT: verified syllable by syllable against the three-voice F-major setting in the en.wikipedia article, transposed down a minor third. The Abgesang (lines 5-8) reproduces that setting exactly -- F Dm C G Am F C / F C/E F Gm F/A C / Am Dm F Gm F/A Gm F / F/A Gm F/A C F. In the Stollen the file simplifies two inversions to root position (G/B for ich, D/F# for emp). One genuine reading choice: on \"wie\" (line 2 syllable 1) the setting has only a, c and a sounding, which is F/A or Am depending on the voice you supply; the chart reads it as the relative minor, F#m in D. Both are defensible in a three-voice texture. OPEN QUESTION for the maintainer, not edited: FORMAT says a translation carries the year OF THE TRANSLATION, but texts.en.year here is 1653, the German original's year (the TLH composite dates from 1941, descending from Winkworth 1863 and Russell). The two other composite translations in the hymnal, es-ist-das-heil (1523) and o-dass-ich-tausend-zungen-haette (1704), do exactly the same, while every single-translator entry uses the translation's year. So this is either a deliberate convention for composites or a defect in all three; it should be settled across the three files at once rather than here alone."
+}

@@ -20,10 +20,11 @@
       "sources": [
         "http://www.hymntime.com/tch/htm/j/o/y/w/joyworld.htm",
         "https://hymnary.org/text/joy_to_the_world_the_lord_is_come",
-        "https://hymnary.org/tune/antioch_handel"
+        "https://hymnary.org/tune/antioch_handel",
+        "https://library.timelesstruths.org/music/Joy_to_the_World/"
       ]
     },
     "de": null
   },
-  "notes": "Text: Cyber Hymnal, four stanzas (Watts's 1719 paraphrase of Psalm 98), keeping its lowercase 'king' in stanza 1 and its 'every' rather than the sung elision 'ev’ry'. Meter is hymnary's 8.6.8.6 for the tune; the printed six lines are the common-metre quatrain with ANTIOCH's repeats written out (8.6.8.6.6.9 as printed). Tune ANTIOCH, Handel arr. Lowell Mason, commonly printed in D per hymnary.org/tune/antioch_handel, so no transposition. Chart derived from the Cyber Hymnal MIDI (mid/a/n/t/i/antioch.mid); lines 1, 2 and 6 align syllable-for-syllable with the melody onsets, so those chord placements are exact."
+  "notes": "Text: Cyber Hymnal, four stanzas (Watts's 1719 paraphrase of Psalm 98), keeping its lowercase 'king' in stanza 1 and its 'every' rather than the sung elision 'ev'ry'. Meter is hymnary's 8.6.8.6 for the tune; the printed six lines are the common-metre quatrain with ANTIOCH's repeats written out (8.6.8.6.6.9 as printed). Tune ANTIOCH, Handel arr. Lowell Mason, commonly printed in D per hymnary.org/tune/antioch_handel, so no transposition. Chart derived from the Cyber Hymnal MIDI (mid/a/n/t/i/antioch.mid); lines 1, 2 and 6 align syllable-for-syllable with the melody onsets, so those chord placements are exact. Cross-checked 2026-08-02 against Timeless Truths (independent of the sites above): all four stanzas agree word for word; variants are punctuation/case only ('the Lord is come!' with exclamation, capital 'King', 'heav'n' elided)."
 }

@@ -1,0 +1,29 @@
+{
+  "id": "how-firm-a-foundation",
+  "number": 32,
+  "tune": "FOUNDATION",
+  "meter": "11.11.11.11",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "How Firm a Foundation",
+      "author": "\"K\" in Rippon's Selection",
+      "translator": null,
+      "year": 1787,
+      "stanzas": [
+        "How [G]firm a foun[C]dation, ye [G]saints of the [D]Lord,\nIs [G]laid for your [C]faith in His [D]excellent [G]word!\nWhat [G]more can He [C]say than to [G]you He hath [D]said—\nTo [G]you who for [C]refuge to [D]Jesus have [G]fled?",
+        "“Fear not, I am with thee, oh, be not dismayed,\nFor I am thy God, and will still give thee aid;\nI'll strengthen thee, help thee, and cause thee to stand,\nUpheld by My gracious, omnipotent hand.",
+        "“When through the deep waters I call thee to go,\nThe rivers of sorrow shall not overflow;\nFor I will be with thee thy trouble to bless,\nAnd sanctify to thee thy deepest distress.",
+        "“When through fiery trials thy pathway shall lie,\nMy grace, all-sufficient, shall be thy supply;\nThe flame shall not harm thee; I only design\nThy dross to consume and thy gold to refine.",
+        "“The soul that on Jesus doth lean for repose,\nI will not, I will not, desert to his foes;\nThat soul, though all hell should endeavor to shake,\nI'll never, no never, no never forsake.”"
+      ],
+      "chorus": null,
+      "sources": [
+        "https://library.timelesstruths.org/music/How_Firm_a_Foundation/",
+        "https://hymnary.org/text/how_firm_a_foundation_ye_saints_of"
+      ]
+    },
+    "de": null
+  },
+  "notes": "The five commonly-printed stanzas; Timeless Truths and hymnary's representative text carry the same five (Rippon's 1787 original signed \"K\" — attributed to Robert Keen(e) or George Keith per hymnary — had seven; \"E'en down to old age\" and one other are rarely printed and not in either consulted source). One variant to know about: stanza 5 line 1 reads \"doth lean\" in Timeless Truths but \"hath leaned\" in hymnary's representative text — the consulted source's reading is kept. The opening quotation marks on stanzas 2-5 with the single closing mark at the hymn's end are the source's punctuation (continuing speech), kept as printed. Tune FOUNDATION (American melody, pub. 1832), 11.11.11.11 as hymnary lists it; Timeless Truths also offers ADESTE FIDELES as an alternate — FOUNDATION is shipped. Key: the hymnal key is A-flat (Timeless Truths score); G and A are each one semitone away and FORMAT's preference order picks G. Chords: a standard simplified guitar chart for this pentatonic shape-note tune (I-IV-I-V phrases, lines 1/3 half-cadencing, lines 2/4 resolving); published harmonizations vary more than for most hymns in this set."
+}

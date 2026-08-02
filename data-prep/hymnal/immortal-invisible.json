@@ -11,7 +11,7 @@
       "translator": null,
       "year": 1867,
       "stanzas": [
-        "[G]Im[C]mortal, in[Am]vis[D]i[Em]ble, [G]God on[D7]ly [G]wise,\nin [C]light in[Am]ac[D]cessi[Em]ble [G]hid from [D7]our [G]eyes,\nmost blessed, [D]most [G]glorious, the [Em]An[G]cient of [D]Days,\n[G]al[C]mighty, [Am]vic[D]torious, [Em]thy [G]great name we [D7]praise.",
+        "[G]Im[C]mortal, in[Am]vis[D]i[Em]ble, [G]God on[D7]ly [G]wise,\nin [C]light in[Am]ac[D]cessi[Em]ble [G]hid from [D7]our [G]eyes,\nmost blessed, [D]most [G]glorious, the [Em]An[G]cient of [D]Days,\n[G]al[C]mighty, [Am]vic[D]torious, [Em]thy [G]great name [D7]we [G]praise.",
         "Unresting, unhasting, and silent as light,\nnor wanting, nor wasting, thou rulest in might;\nthy justice like mountains high soaring above\nthy clouds, which are fountains of goodness and love.",
         "To all life thou givest, to both great and small;\nin all life thou livest, the true life of all;\nwe blossom and flourish as leaves on the tree,\nand wither and perish but naught changeth thee.",
         "Great Father of glory, pure Father of light,\nthine angels adore thee, all veiling their sight;\nall praise we would render, O help us to see\n'tis only the splendor of light hideth thee."
@@ -21,10 +21,11 @@
         "https://hymnary.org/text/immortal_invisible_god_only_wise",
         "http://hymntime.com/tch/htm/i/i/g/o/iigowise.htm",
         "https://hymnary.org/tune/st_denio",
-        "https://www.hymnchords.net/files/Immortal%20Invisible%20God%20Only%20Wise.pdf"
+        "https://www.hymnchords.net/files/Immortal%20Invisible%20God%20Only%20Wise.pdf",
+        "https://www.hymnal.net/en/hymn/h/14"
       ]
     },
     "de": null
   },
-  "notes": "Text is hymnary.org's representative text (Worship and Rejoice, 2003) -- the near-universal four-stanza hymnal form, matching Trinity Hymnal p.38 line for line. It is not simply a subset of Smith's poem: Smith wrote six stanzas, and stanza 4 here splices his stanza 5 (\"Great Father of glory... thine angels adore thee\") to his stanza 6 (\"All laud we would render; O help us to see, 'tis only the splendour of light hideth Thee\"). The Cyber Hymnal prints both Smith's 1867 original and an altered six-stanza singing version; neither is what hymnals print, which is why the hymnary text was used. Lower-case line openings and the straight apostrophe in \"'tis\" are the source's. Key G confirmed by the hymnchords.net Trinity chart (hymnary's incipit database lists ST. DENIO in A-flat, one semitone away); the chart here follows the published one closely."
+  "notes": "Text is hymnary.org's representative text (Worship and Rejoice, 2003) -- the near-universal four-stanza hymnal form, matching Trinity Hymnal p.38 line for line. It is not simply a subset of Smith's poem: Smith wrote six stanzas, and stanza 4 here splices his stanza 5 (\"Great Father of glory... thine angels adore thee\") to his stanza 6 (\"All laud we would render; O help us to see, 'tis only the splendour of light hideth Thee\"). The Cyber Hymnal prints both Smith's 1867 original and an altered six-stanza singing version; neither is what hymnals print, which is why the hymnary text was used. Lower-case line openings and the straight apostrophe in \"'tis\" are the source's. Key G confirmed by the hymnchords.net Trinity chart (hymnary's incipit database lists ST. DENIO in A-flat, one semitone away); the chart here follows the published one closely. VERIFIED 2026-08-02: text cross-checked against hymnal.net #14, which agrees throughout (it capitalizes line-initially and prints Smith's \"All laud we would render\" in stanza 4, the variant noted above). One chart fix: stanza 1's last line had ended on [D7]praise with no resolution -- ST. DENIO's lines 1, 2 and 4 share a melody and cadence on the tonic -- so it now ends \"[D7]we [G]praise\", matching line 1's \"[D7]ly [G]wise\" and both consulted charts."
 }

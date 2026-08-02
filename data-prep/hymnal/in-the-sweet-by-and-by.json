@@ -1,0 +1,33 @@
+{
+  "id": "in-the-sweet-by-and-by",
+  "number": 65,
+  "tune": "SWEET BY AND BY",
+  "meter": "9.9.9.9 with refrain",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "In the Sweet By and By",
+      "author": "Sanford F. Bennett",
+      "translator": null,
+      "year": 1868,
+      "stanzas": [
+        "[G]There's a land that is [Am]fair[C]er than [G]day,\n[G]And by faith we can see it a[D]far;\n[G]For the Father waits [Am]o[C]ver the [G]way\n[G]To prepare us a [Am]dwelling [D]place [G]there.",
+        "We shall sing on that beautiful shore\nThe melodious songs of the blessed;\nAnd our spirits shall sorrow no more,\nNot a sigh for the blessing of rest.",
+        "To our bountiful Father above,\nWe will offer our tribute of praise\nFor the glorious gift of His love\nAnd the blessings that hallow our days."
+      ],
+      "chorus": "[G]In the sweet by and [D]by,\nWe shall [D7]meet on that beauti[G]ful shore;\n[G]In the sweet by and [C]by,\nWe shall [G]meet on that [D7]beauti[G]ful shore.",
+      "sources": [
+        "https://library.timelesstruths.org/music/In_the_Sweet_By_and_By/",
+        "http://www.hymntime.com/tch/htm/i/n/t/s/intsbab.htm",
+        "https://hymnary.org/text/theres_a_land_that_is_fairer_than_day_an",
+        "https://hymnary.org/tune/sweet_by_and_by_webster",
+        "https://library.timelesstruths.org/library/music/I/In_the_Sweet_By_and_By/In_the_Sweet_By_and_By.xml",
+        "https://dailyprayer.us/Christian_song_lyrics/Christian_song_lyrics.php?s=in-the-sweet-by-and-by",
+        "https://www.godtube.com/popular-hymns/in-the-sweet-by-and-by/",
+        "https://www.classical-music.com/articles/in-the-sweet-by-and-by-lyrics"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths, which is word-for-word identical to the Cyber Hymnal's transcription of the first printing (Bennett's words in Webster's The Signet Ring, Chicago 1868, pp. 90-91); citing both because they are independent and agree. Hymnary's representative text (Our Great Redeemer's Praise #633) differs in three small ways and was NOT followed: it reads 'the blest' for 'the blessed' in stanza 2 (a one-syllable-shorter reading that many books adopt to fit the note), sets a dash after 'sorrow no more', and moves the commas in stanza 3. The two 1868-descended sources agree on 'blessed', so that is what ships. Meter is hymnary's tune-page value, '9.9.9.9 with refrain'; Timeless Truths spells the same thing out as 9.9.9.9.6.9.6.9 (the refrain's 6.9.6.9), which is the more informative form if the maintainer prefers it. Key: hymnary's tune-record Key field says F major, but that field is not the common printed key here -- I counted the keys hymnary lists across its instances of this tune and got 58 G major to 6 F major, and Timeless Truths prints G as well. G is therefore both the common hymnal key and a guitar key, so nothing was transposed. Chords were derived from the Timeless Truths MusicXML score (URL above) by reading the actual four-part chord on every beat, not from a guitar tab: the ii chord under 'fair-' / 'o-' (A-C-E) and the IV under '-er than' / '-ver the' (C-E-G) are in the harmony, not substitutions. Two eighth-note passing chords were dropped as noise for a strummed instrument -- the V under 'ful' in both refrain halves, and the I under '-ing' in stanza line 4. INDEPENDENT RE-CHECK 2026-08-02, against three sites that were not cited before (all three added to sources): dailyprayer.us agrees with the shipped text word for word, including 'the blessed' and the comma after 'sorrow no more'; godtube.com and classical-music.com both print 'the blest' (with a semicolon and a dash respectively after 'sorrow no more'). So the 'blest' reading is widespread rather than peculiar to hymnary, and the split is genuine -- the shipped 1868-descended reading stands, per FORMAT.md's rule to keep the file's reading and record the variant. Both scan: the line is nine syllables either way, 'blest' taking melodious as four syllables and 'blessed' as three. All three sites confirm three stanzas, 'For the Father waits over the way' (not 'o'er'), and the stanza 3 opening. Tune record re-verified at hymnary: SWEET BY AND BY (Webster), meter '9.9.9.9 with refrain', incipit 12321 21651 23335, Key field F Major -- matching what this note already says."
+}

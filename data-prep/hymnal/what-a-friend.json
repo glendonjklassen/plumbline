@@ -1,0 +1,41 @@
+{
+  "id": "what-a-friend",
+  "number": 29,
+  "tune": "CONVERSE",
+  "meter": "8.7.8.7 D",
+  "key": "E",
+  "texts": {
+    "en": {
+      "title": "What a Friend We Have in Jesus",
+      "author": "Joseph M. Scriven",
+      "translator": null,
+      "year": 1855,
+      "stanzas": [
+        "[E]What a friend we have in [A]Jesus,\n[E]All our sins and griefs to [B7]bear!\n[E]What a privilege to [A]carry\n[E]Everything to [B7]God in [E]prayer!\n[B7]Oh, what peace we often [E]forfeit,\nOh, what needless [C#m]pain we [B7]bear,\n[E]All because we do not [A]carry\n[E]Everything to [B7]God in [E]prayer!",
+        "Have we trials and temptations?\nIs there trouble anywhere?\nWe should never be discouraged—\nTake it to the Lord in prayer.\nCan we find a friend so faithful,\nWho will all our sorrows share?\nJesus knows our every weakness;\nTake it to the Lord in prayer.",
+        "Are we weak and heavy-laden,\nCumbered with a load of care?\nPrecious Savior, still our refuge—\nTake it to the Lord in prayer.\nDo thy friends despise, forsake thee?\nTake it to the Lord in prayer!\nIn His arms He'll take and shield thee,\nThou wilt find a solace there."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://library.timelesstruths.org/music/What_a_Friend_We_Have_in_Jesus/",
+        "https://hymnary.org/text/what_a_friend_we_have_in_jesus_all_our_s"
+      ]
+    },
+    "de": {
+      "title": "Welch ein Freund ist unser Jesus",
+      "author": "Joseph M. Scriven",
+      "translator": "Ernst Gebhardt",
+      "year": 1875,
+      "stanzas": [
+        "[E]Welch ein Freund ist unser [A]Jesus,\n[E]o wie hoch ist Er er[B7]höht!\n[E]Er hat uns mit Gott ver[A]söhnet\n[E]und vertritt uns [B7]im Ge[E]bet.\n[B7]Wer mag sagen und er[E]messen,\nwie viel Heil ver[C#m]loren [B7]geht,\n[E]wenn wir nicht zu Ihm uns [A]wenden\n[E]und Ihn suchen [B7]im Ge[E]bet!",
+        "Wenn des Feindes Macht uns drohet\nund manch Sturm rings um uns weht,\nbrauchen wir uns nicht zu fürchten,\nstehn wir gläubig im Gebet.\nDa erweist sich Jesu Treue,\nwie Er uns zur Seite steht\nals ein mächtiger Erretter,\nder erhört ein ernst Gebet.",
+        "Sind mit Sorgen wir beladen,\nsei es frühe oder spät,\nhilft uns sicher unser Jesus,\nfliehn zu Ihm wir im Gebet.\nSind von Freunden wir verlassen\nund wir gehen ins Gebet,\no, so ist uns Jesus alles:\nKönig, Priester und Prophet."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_welch_ein_freund_ist_unser_jesus.html"
+      ]
+    }
+  },
+  "notes": "English is the standard three-stanza text: Timeless Truths stanzas 1-3, word-for-word what hymnary's representative text prints. Timeless Truths carries a fourth stanza (\"Blessed Savior, Thou hast promised\") from gospel songbooks (Evening Light Songs et al.); it is absent from hymnary's representative text and its attribution to Scriven is not established, so it is not shipped. German is Ernst Gebhardt's three-stanza translation from evangeliums.net, which credits \"Ernst Heinrich Gebhardt (1875)\" — the source's reverential capitals (Er/Ihm/Ihn) and contracted forms (stehn, fliehn) are kept as printed. Tune: hymnary lists CONVERSE (Charles C. Converse, 1868; Timeless Truths calls it Erie), 8.7.8.7 D, no refrain. Key: the hymnal key is F (Timeless Truths score); E is the nearest preferred guitar key (one semitone down; G would be two up). Chords are the standard simplified harmonization (form A A' B A'; lines 3-4 and 7-8 share music and chords, line 2 half-cadences, line 6 approaches the half cadence through vi); the two languages' charts agree bar for bar."
+}

@@ -1,0 +1,41 @@
+{
+  "id": "befiehl-du-deine-wege",
+  "number": 67,
+  "tune": "BEFIEHL DU DEINE WEGE",
+  "meter": "7.6.7.6 D",
+  "key": "Dm",
+  "texts": {
+    "en": null,
+    "de": {
+      "title": "Befiehl du deine Wege",
+      "author": "Paul Gerhardt",
+      "translator": null,
+      "year": 1653,
+      "stanzas": [
+        "[Dm]Befiehl du dei[Gm]ne [A]We[Dm]ge\nund [E]was [F]dein Her[E]ze [Am]kränkt\n[Dm]der allertreus[Gm]ten [A]Pfle[Dm]ge\ndes, [E]der [F]den Him[E]mel [Am]lenkt.\n[Dm]Der [E7]Wol[Am]ken, Luft und Win[F]den\n[D7]gibt [Gm]We[F]ge, Lauf [C7]und [F]Bahn,\n[A]der [Bb]wird auch [F]We[A7]ge [Dm]fin[A]den,\nda dein [F]Fuß ge[A7]hen [D]kann.",
+        "Dem Herren musst du trauen,\nwenn dir's soll wohlergehn;\nauf sein Werk musst du schauen,\nwenn dein Werk soll bestehn.\nMit Sorgen und mit Grämen\nund mit selbsteigner Pein\nlässt Gott sich gar nichts nehmen,\nes muss erbeten sein.",
+        "Dein' ewge Treu' und Gnade,\no Vater, weiß und sieht,\nwas gut sei oder schade\ndem sterblichen Geblüt;\nund was du dann erlesen,\ndas treibst du, starker Held,\nund bringst zum Stand und Wesen,\nwas deinem Rat gefällt.",
+        "Weg hast du allerwegen,\nan Mitteln fehlt dir's nicht;\ndein Tun ist lauter Segen,\ndein Gang ist lauter Licht;\ndein Werk kann niemand hindern,\ndein Arbeit darf nicht ruhn,\nwenn du, was deinen Kindern\nersprießlich ist, willst tun.",
+        "Und ob gleich alle Teufel\nhier wollten widerstehn,\nso wird doch ohne Zweifel\nGott nicht zurücke gehn;\nwas er sich vorgenommen\nund was er haben will,\ndas muss doch endlich kommen\nzu seinem Zweck und Ziel.",
+        "Hoff, o du arme Seele,\nhoff und sei unverzagt!\nGott wird dich aus der Höhle,\nda dich der Kummer plagt,\nmit großen Gnaden rücken;\nerwarte nur die Zeit,\nso wirst du schon erblicken\ndie Sonn der schönsten Freud.",
+        "Auf, auf, gib deinem Schmerze\nund Sorgen gute Nacht,\nlass fahren, was das Herze\nbetrübt und traurig macht;\nbist du doch nicht Regente,\nder alles führen soll,\nGott sitzt im Regimente\nund führet alles wohl.",
+        "Ihn, ihn lass tun und walten,\ner ist ein weiser Fürst\nund wird sich so verhalten,\ndass du dich wundern wirst,\nwenn er, wie ihm gebühret,\nmit wunderbarem Rat\ndas Werk hinausgeführet,\ndas dich bekümmert hat.",
+        "Er wird zwar eine Weile\nmit seinem Trost verziehn\nund tun an seinem Teile,\nals hätt in seinem Sinn\ner deiner sich begeben,\nund sollt'st du für und für\nin Angst und Nöten schweben,\nals frag er nichts nach dir.",
+        "Wird's aber sich befinden,\ndass du ihm treu verbleibst,\nso wird er dich entbinden,\nda du's am mindsten glaubst;\ner wird dein Herze lösen\nvon der so schweren Last,\ndie du zu keinem Bösen\nbisher getragen hast.",
+        "Wohl dir, du Kind der Treue,\ndu hast und trägst davon\nmit Ruhm und Dankgeschreie\nden Sieg und Ehrenkron;\nGott gibt dir selbst die Palmen\nin deine rechte Hand,\nund du singst Freudenpsalmen\ndem, der dein Leid gewandt.",
+        "Mach End, o Herr, mach Ende\nmit aller unsrer Not;\nstärk unsre Füß und Hände\nund lass bis in den Tod\nuns allzeit deiner Pflege\nund Treu empfohlen sein,\nso gehen unsre Wege\ngewiss zum Himmel ein."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://de.wikipedia.org/wiki/Befiehl_du_deine_Wege",
+        "https://www.evangeliums.net/lieder/lied_befiehl_du_deine_wege.html",
+        "https://hymnary.org/tune/befiehl_du_deine_wege_gesius",
+        "https://www.hymnologyarchive.com/befiehl-du-deine-wege",
+        "https://upload.wikimedia.org/wikipedia/commons/b/bf/Befiehl_du_deine_Wege.mid",
+        "https://upload.wikimedia.org/wikipedia/commons/3/30/Befiehl_du_deine_wege_1901.jpg",
+        "https://www.velkd.de/schwerpunkte/liturgie/kirchenmusik/paul-gerhardt/lieder-von-paul-gerhardt/befiehl-du-deine-wege/"
+      ]
+    }
+  },
+  "notes": "SHIPPED GERMAN-ONLY, and the worklist's optEn was deliberately not used -- please read. John Wesley's 'Commit thou all thy griefs' (1739) is easy to source, but it is not singable to this hymn's tune: Wesley recast the hymn in Short Metre 6.6.8.6, against Gerhardt's 7.6.7.6 D, and he skipped Gerhardt's stanzas 5, 9, 10 and 11 (hymnologyarchive.com, cited above). Putting it in texts.en would break FORMAT.md's rule that both languages share the tune and that their charts agree bar for bar, so texts.en is null. If the maintainer wants an English text here, the drop-in is John Kelly's 'Commit whatever grieves thee' (1867, public domain, TLH 520), which is in the original metre; Henry Mills' 'Commit thy way, confiding' (1850) and A. T. Russell's 'Thy way and all thy sorrows' (1851) also are. Note that the Free Lutheran Chorale-Book sets Kelly's text to HERZLICH TUT MICH VERLANGEN, not to this tune -- hymn 23 already carries that melody, so a Kelly text added here should keep the Gesius tune. German text: all twelve stanzas, in the Evangelisches Gesangbuch (EG 361) recension, from de.wikipedia, which cites EG Bayern/Thüringen 2nd ed. 1995 pp. 661-663 and states the spelling is modernised. The stanza initials spell Psalm 37:5 ('Befiehl dem Herrn deine Wege und hoffe auf ihn, er wird's wohl machen'), which is the check that no stanza is missing or out of order. evangeliums.net prints the same twelve stanzas and agrees word for word except for punctuation at eight line-ends and two readings -- 'als frag er nicht nach dir' (st. 9) for 'nichts', and 'da du's am mindsten gläubst' (st. 10) for 'glaubst'; the EG readings ship. evangeliums.net also sets each stanza's acrostic word in capitals ('BEFIEHL du deine Wege'); that is its own typographic marking, not the text, and was not reproduced. Tune and meter are hymnary's tune record for BEFIEHL DU DEINE WEGE (Gesius); the melody is Bartholomäus Gesius, 1603, where it carried the text 'Lobet Gott, unsern Herren', and Telemann put it into 4/4 in 1730, which is the form EG 361 prints. Key: hymnary gives 'd minor or modal' -- D is already a guitar key, so nothing was transposed. Chords were read beat by beat off the four-part MIDI of EG 361 on Wikimedia Commons (URL above; its first pass is the plain SATB setting, the second doubles the melody an octave up), and cross-checked for melody against the 1901 Gesangbuch scan, also cited -- that scan's one accidental, the sharp under '-ze / -mel', is the G# in the MIDI, the leading note of the half cadence on A. Chart thinned to at most two or three changes a bar. The last chord is a real Picardy third: D major, not D minor, is what the setting cadences on. INDEPENDENT RE-CHECK 2026-08-02 against velkd.de's Paul-Gerhardt edition, a site not previously cited (added to sources): all twelve stanzas agree word for word and in order, including the two readings most at risk in st. 12, 'mit aller unsrer Not' (not 'an aller') and 'staerk unsre Fuess und Haende' (not 'Fuesse' -- spelt without umlauts here only to keep this note plain-ASCII; the text itself has them). A search-engine summary giving 'Fuesse' is not borne out. VELKD differs at exactly two points, both trivial: it drops the two elision apostrophes in st. 3, printing 'Dein ewge Treu und Gnade', and it has no comma after 'er deiner sich begeben' in st. 9. de.wikipedia's EG text was re-checked on both and does carry the apostrophes, so the file's reading stands. The stanza-initial acrostic was re-verified against the twelve stanzas as shipped and reads Befiehl / dem / Dein- / Weg- / und / hoff- / auf / Ihn / Er / Wird's / Wohl / Mach-, so no stanza is missing or transposed. Tune record re-verified at hymnary: BEFIEHL DU DEINE WEGE (Gesius), Gesius 1603, meter '7.6.7.6 D', Key 'd minor or modal', incipit 13234 55765 56545. JUDGEMENT CALL left for the maintainer, not acted on: D minor is what FORMAT.md's guitar rule yields, since the printed key is already d minor and D is on the preferred list, so nothing was transposed -- but the chart as written needs Gm and Bb, two barre chords, in a set whose other minor-key files sit on Em and Am. Moving this one to E minor would put the whole chart in open position, at the cost of a transposition the rule does not ask for."
+}

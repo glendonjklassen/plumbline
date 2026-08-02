@@ -1,0 +1,31 @@
+{
+  "id": "the-churchs-one-foundation",
+  "number": 61,
+  "tune": "AURELIA",
+  "meter": "7.6.7.6 D",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "The Church's One Foundation",
+      "author": "Samuel J. Stone",
+      "translator": null,
+      "year": 1866,
+      "stanzas": [
+        "The [D]church's one founda[A]tion\nis [D]Jesus [G]Christ her [D]Lord;\nshe [D]is his [Bm]new cre[Em]ation\nby [A]water [E7]and the [A]Word.\nFrom [D]heaven he [F#m]came and [Bm]sought her\nto [E7]be his [A]holy bride;\nwith [D]his own [G]blood he [D]bought her,\nand [G]for her [A7]life he [D]died.",
+        "Elect from every nation,\nyet one o'er all the earth;\nher charter of salvation,\none Lord, one faith, one birth;\none holy name she blesses,\npartakes one holy food,\nand to one hope she presses,\nwith every grace endued.",
+        "Though with a scornful wonder\nwe see her sore oppressed,\nby schisms rent asunder,\nby heresies distressed,\nyet saints their watch are keeping;\ntheir cry goes up, \"How long?\"\nAnd soon the night of weeping\nshall be the morn of song.",
+        "Mid toil and tribulation,\nand tumult of her war,\nshe waits the consummation\nof peace forevermore;\ntill, with the vision glorious,\nher longing eyes are blest,\nand the great church victorious\nshall be the church at rest.",
+        "Yet she on earth hath union\nwith God the Three in One,\nand mystic sweet communion\nwith those whose rest is won.\nO happy ones and holy!\nLord, give us grace that we\nlike them, the meek and lowly,\non high may dwell with thee."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://hymnary.org/hymn/UMH/545",
+        "https://hymnary.org/text/the_churchs_one_foundation",
+        "https://hymnary.org/tune/aurelia_wesley",
+        "https://www.hymnsite.com/lyrics/umh545.sht"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text: the standard five-stanza selection, taken verbatim from the United Methodist Hymnal #545 instance page on hymnary.org (the text authority page's representative text is a nonstandard four-stanza variant). Tune AURELIA (S. S. Wesley), 7.6.7.6 D. Key judgment call: hymnary's tune-authority key field says C Major, but common hymnal printings are E-flat (Baptist, Trinity, LSB) or D (UMH); E-flat maps to D under the guitar rule, so D. Chart is a best-effort simplification of the AURELIA harmonization."
+}

@@ -1,6 +1,6 @@
 {
   "id": "lobt-gott-ihr-christen",
-  "number": 90,
+  "number": 89,
   "tune": "LOBT GOTT IHR CHRISTEN",
   "meter": "8.6.8.6.6",
   "key": "D",
@@ -12,18 +12,19 @@
       "year": null,
       "stanzas": [
         "[D]Praise [A]God the [D]Lord, ye [G]sons [A7]of [D]men,\n[A]Be[Bm]fore [A]His [Bm]high[E7]est [A]throne;\n[A]To[D]day He o[Bm]pens [D/F#]heaven [Em]a[A]gain\n[D]And [G]gives [D]us His [A7]own [D]Son.",
-        "He leaves His heavenly Father’s throne,\nIs born an infant small,\nAnd in a manger, poor and lone,\nLies in a humble stall.",
-        "He veils in flesh His power divine\nA servant’s form to take;\nIn want and lowliness must pine\nWho heaven and earth did make.",
-        "He nestles at His mother’s breast,\nReceives her tender care,\nWhom angels hail with joy most blest,\nKing David’s royal heir.",
-        "’Tis He who in these latter days\nFrom Judah’s tribe should come,\nBy whom the Father would upraise\nThe Church, His Christendom.",
-        "A wondrous change which He doth make!\nHe takes our flesh and blood,\nAnd He conceals for sinners’ sake\nHis majesty of God.",
-        "He serves that I a lord may be;\nA great exchange indeed!\nCould Jesus’ love do more for me\nTo help me in my need?",
+        "He leaves His heavenly Father's throne,\nIs born an infant small,\nAnd in a manger, poor and lone,\nLies in a humble stall.",
+        "He veils in flesh His power divine\nA servant's form to take;\nIn want and lowliness must pine\nWho heaven and earth did make.",
+        "He nestles at His mother's breast,\nReceives her tender care,\nWhom angels hail with joy most blest,\nKing David's royal heir.",
+        "'Tis He who in these latter days\nFrom Judah's tribe should come,\nBy whom the Father would upraise\nThe Church, His Christendom.",
+        "A wondrous change which He doth make!\nHe takes our flesh and blood,\nAnd He conceals for sinners' sake\nHis majesty of God.",
+        "He serves that I a lord may be;\nA great exchange indeed!\nCould Jesus' love do more for me\nTo help me in my need?",
         "He opens us again the door\nOf Paradise today;\nThe angel guards the gate no more,\nTo God our thanks we pay."
       ],
       "chorus": null,
       "sources": [
         "https://www.ccel.org/a/anonymous/luth_hymnal/tlh105.htm",
-        "https://hymnary.org/text/praise_god_the_lord_ye_sons_of_men"
+        "https://hymnary.org/text/praise_god_the_lord_ye_sons_of_men",
+        "https://www.hymnsandcarolsofchristmas.com/Hymns_and_Carols/praise_god_the_lord_ye_sons.htm"
       ]
     },
     "de": {
@@ -34,7 +35,7 @@
       "stanzas": [
         "[D]Lobt [A]Gott, ihr [D]Christen [G]al[A7]le [D]gleich,\n[A]in [Bm]sei[A]nem [Bm]höchs[E7]ten [A]Thron,\n[A]der [D]heut schließt auf [Bm]sein [D/F#]Him[Em]mel[A]reich\n[D/F#]und [G]schenkt [D]uns [A]seinen [Bm]Sohn,\n[D]und [G]schenkt [D]uns sei[A7]nen [D]Sohn.",
         "Er kommt aus seines Vaters Schoß\nund wird ein Kindlein klein,\ner liegt dort elend, nackt und bloß\nin einem Krippelein,\nin einem Krippelein.",
-        "Er entäußert sich all seiner G’walt,\nwird niedrig und gering\nund nimmt an eines Knechts Gestalt,\nder Schöpfer aller Ding,\nder Schöpfer aller Ding.",
+        "Er entäußert sich all seiner G'walt,\nwird niedrig und gering\nund nimmt an eines Knechts Gestalt,\nder Schöpfer aller Ding,\nder Schöpfer aller Ding.",
         "Er wechselt mit uns wunderlich:\nFleisch und Blut nimmt er an\nund gibt uns in seins Vaters Reich\ndie klare Gottheit dran,\ndie klare Gottheit dran.",
         "Er wird ein Knecht und ich ein Herr;\ndas mag ein Wechsel sein!\nWie könnt es doch sein freundlicher,\ndas herze Jesulein,\ndas herze Jesulein!",
         "Heut schließt er wieder auf die Tür\nzum schönen Paradeis;\nder Cherub steht nicht mehr dafür.\nGott sei Lob, Ehr und Preis,\nGott sei Lob, Ehr und Preis!"
@@ -43,9 +44,10 @@
       "sources": [
         "https://www.evangeliums.net/lieder/lied_lobt_gott_ihr_christen_alle_gleich_allzugleich.html",
         "https://lg.concordiabuch.de/lieder/46/lobt-gott-ihr-christen-alle-gleich",
-        "https://de.wikipedia.org/wiki/Lobt_Gott,_ihr_Christen_alle_gleich"
+        "https://de.wikipedia.org/wiki/Lobt_Gott,_ihr_Christen_alle_gleich",
+        "https://www.lieder-archiv.de/lobt_gott_ihr_christen_alle_gleich-notenblatt_200086.html"
       ]
     }
   },
-  "notes": "The two languages do not run parallel and cannot be made to. German is the six-stanza Evangelisches Gesangbuch form (EG 27 = Herman’s original stanzas 1, 2, 3, 6, 7, 8) in modern sung orthography, from evangeliums.net; I checked it against Lutherisches Gesangbuch #46 (lg.concordiabuch.de) and against Herman’s 1561 original quoted in the de.wikipedia article. LG 46 has three variants I did not take: 'das liebe Jesulein' for 'das herze Jesulein', and 'auf das Tor zum schönen Paradies / nicht mehr davor' for 'auf die Tür zum schönen Paradeis / nicht mehr dafür'. I kept the EG readings, which are also the ones closest to the 1561 print. One oddity in the source I left alone: stanza 3 line 1, 'Er entäußert sich all seiner G’walt', scans to nine syllables against the line’s eight (LG has 'Entäußert sich all seiner Gewalt', also nine); singers elide it. Apostrophes are the typographic ’ throughout (sources print the straight '), matching the other files in this directory. English is August Crull’s translation of all eight original stanzas as printed in The Lutheran Hymnal 1941 #105 (Project Wittenberg text via CCEL), so English stanzas 4 and 5 have no German counterpart here and German 4, 5, 6 correspond to English 6, 7, 8. Crull’s translation year is not given; year is null. Tune and chart: the melody repeats its last line, which the German text writes out as a fifth line and the English (CM, four printed lines) does not. Hymnary lists the meter both ways — 8.6.8.6.6 for the German/ELH form and 8.6.8.6 (CM) for the English; I used the five-line figure to match the shipped German text. The chart is derived from the four-part setting in the de.wikipedia article (G major, Bach’s harmonisation from Cantata 151), transposed to D per the guitar rule (hymnary’s primary key for this tune is E flat; D wins the tie with E on preference order). The two charts agree bar for bar through the four shared lines, with one deliberate exception: because the English prints no repeat, its last line carries the ENDING cadence (the German fifth line’s chords, D–G–D–A7–D) rather than the first-time bars (D/F#–G–D–A–Bm) that lead back into the repeat."
+  "notes": "The two languages do not run parallel and cannot be made to. German is the six-stanza Evangelisches Gesangbuch form (EG 27 = Herman's original stanzas 1, 2, 3, 6, 7, 8) in modern sung orthography, from evangeliums.net; I checked it against Lutherisches Gesangbuch #46 (lg.concordiabuch.de) and against Herman's 1561 original quoted in the de.wikipedia article. LG 46 has three variants I did not take: 'das liebe Jesulein' for 'das herze Jesulein', and 'auf das Tor zum schönen Paradies / nicht mehr davor' for 'auf die Tür zum schönen Paradeis / nicht mehr dafür'. I kept the EG readings, which are also the ones closest to the 1561 print. One oddity in the source I left alone: stanza 3 line 1, 'Er entäußert sich all seiner G'walt', scans to nine syllables against the line's eight (LG has 'Entäußert sich all seiner Gewalt', also nine); singers elide it. Apostrophes are the typographic ' throughout (sources print the straight '), matching the other files in this directory. English is August Crull's translation of all eight original stanzas as printed in The Lutheran Hymnal 1941 #105 (Project Wittenberg text via CCEL), so English stanzas 4 and 5 have no German counterpart here and German 4, 5, 6 correspond to English 6, 7, 8. Crull's translation year is not given; year is null. Tune and chart: the melody repeats its last line, which the German text writes out as a fifth line and the English (CM, four printed lines) does not. Hymnary lists the meter both ways — 8.6.8.6.6 for the German/ELH form and 8.6.8.6 (CM) for the English; I used the five-line figure to match the shipped German text. The chart is derived from the four-part setting in the de.wikipedia article (G major, Bach's harmonisation from Cantata 151), transposed to D per the guitar rule (hymnary's primary key for this tune is E flat; D wins the tie with E on preference order). The two charts agree bar for bar through the four shared lines, with one deliberate exception: because the English prints no repeat, its last line carries the ENDING cadence (the German fifth line's chords, D–G–D–A7–D) rather than the first-time bars (D/F#–G–D–A–Bm) that lead back into the repeat. Independent re-check 2026-08-02: English matches hymnsandcarolsofchristmas.com word for word in all eight stanzas. German re-checked against lieder-archiv.de (and liederkiste.com), which print an older text form: stanza 3 ‘Er äußert sich all' seiner G'walt' (which scans to the line's eight syllables) where EG 27 has ‘Er entäußert sich all seiner G'walt', plus ‘seines Vater Reich' and ‘schleußt' for ‘schließt'. Kept the EG readings throughout; stanzas 4 and 5 match those sites exactly."
 }

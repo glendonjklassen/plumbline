@@ -19,10 +19,11 @@
       "sources": [
         "https://library.timelesstruths.org/music/Wonderful_Words_of_Life/",
         "http://www.hymntime.com/tch/htm/w/o/n/d/w/wondword.htm",
-        "https://hymnary.org/tune/words_of_life_bliss"
+        "https://hymnary.org/tune/words_of_life_bliss",
+        "https://www.hymnsite.com/lyrics/umh600.sht"
       ]
     },
     "de": null
   },
-  "notes": "Text and lineation from Timeless Truths, which prints the six-line stanza the 8.6.8.6.6.6 meter requires; the Cyber Hymnal runs lines 5–6 together and reads 'sanctify us forever' (seven syllables, one too many for the tune) and 'blessèd'. Tune WORDS OF LIFE (Bliss, 1874); hymnary.org/tune/words_of_life_bliss lists it in F, and E is the nearest of the preferred guitar keys (one semitone down; G would be two). Chart derived from the Cyber Hymnal MIDI (mid/w/o/n/d/e/wonderful_words_of_life.mid) transposed F->E."
+  "notes": "Text and lineation from Timeless Truths, which prints the six-line stanza the 8.6.8.6.6.6 meter requires; the Cyber Hymnal runs lines 5–6 together and reads 'sanctify us forever' (seven syllables, one too many for the tune) and 'blessèd'. Tune WORDS OF LIFE (Bliss, 1874); hymnary.org/tune/words_of_life_bliss lists it in F, and E is the nearest of the preferred guitar keys (one semitone down; G would be two). Chart derived from the Cyber Hymnal MIDI (mid/w/o/n/d/e/wonderful_words_of_life.mid) transposed F->E. Cross-checked 2026-08-02 against hymnsite.com (United Methodist Hymnal #600, independent of the sites above): all three stanzas and the refrain agree word for word, including 'sanctify forever' without 'us', and it confirms tune WORDS OF LIFE, meter 86.86.66 with refrain."
 }

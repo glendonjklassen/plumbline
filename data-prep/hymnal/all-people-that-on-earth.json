@@ -1,0 +1,29 @@
+{
+  "id": "all-people-that-on-earth",
+  "number": 11,
+  "tune": "OLD HUNDREDTH",
+  "meter": "8.8.8.8",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "All People That on Earth Do Dwell",
+      "author": "William Kethe",
+      "translator": null,
+      "year": 1561,
+      "stanzas": [
+        "[G]All peo[D]ple [Em]that [Bm]on [Em]earth [D]do [G]dwell,\n[G]Sing to the [D]Lord [Em]with [Am]cheer[G]ful [D]voice;\n[Em]Him [D]serve [G]with [D]fear, [G/B]his [C]praise [D]forth[G]tell;\n[G]Come ye [Em]be[D]fore [Am]him [G/B]and [D]re[G]joice.",
+        "The Lord, ye know, is God indeed;\nWithout our aid he did us make;\nWe are his folk, he doth us feed,\nAnd for his sheep he doth us take.",
+        "O enter then his gates with praise,\nApproach with joy his courts unto;\nPraise, laud, and bless his name always,\nFor it is seemly so to do.",
+        "For why? The Lord our God is good;\nHis mercy is forever sure;\nHis truth at all times firmly stood,\nAnd shall from age to age endure."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://hymnary.org/text/all_people_that_on_earth_do_dwell",
+        "https://library.timelesstruths.org/library/music/D/Doxology/Doxology.xml",
+        "https://library.timelesstruths.org/music/Doxology/"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Kethe's four stanzas of Psalm 100 exactly as hymnary.org's representative text prints them (Hymns and Devotions for Daily Worship #363b), including its capitalised “on Earth” in line 1, lowercase deity pronouns, and the old “forthtell”. Many hymnals append a later doxological fifth stanza (“To Father, Son, and Holy Ghost…”) that is not Kethe's; no PD source text for it was confirmed in this pass, so it is omitted — this book carries Ken's doxology separately as hymn 10. Tune/meter per the hymnary.org text page (OLD HUNDREDTH, 8.8.8.8). Key G matches the OLD HUNDREDTH score at Timeless Truths (their Doxology entry — same tune), from whose SATB MusicXML the chords were derived; the chart agrees bar for bar with hymn 10."
+}

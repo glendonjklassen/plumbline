@@ -11,19 +11,21 @@
       "translator": "Peter Williams",
       "year": 1771,
       "stanzas": [
-        "[G]Guide [C]me, [G]O [D]Thou [G]great Je[D]hovah,\n[G]Pilgrim [C]through this [G]bar[D7]ren [G]land;\n[G]I [C]am [G]weak, [D]but [G]Thou art might[D]y,\n[G]Hold [C]me [G]with [C]Thy [G]pow’r[D]ful [G]hand.\n[D7]Bread of heaven, [G]Bread of heaven,\n[G]Feed me till I [D]want no more;\n[G]Feed me till [C]I want [D7]no [G]more.",
-        "Open now the crystal fountain,\nWhence the healing stream doth flow;\nLet the fire and cloudy pillar\nLead me all my journey through.\nStrong Deliv’rer, strong Deliv’rer,\nBe Thou still my Strength and Shield;\nBe Thou still my Strength and Shield.",
-        "Lord, I trust Thy mighty power,\nWondrous are Thy works of old;\nThou deliver’st Thine from thralldom,\nWho for naught themselves had sold:\nThou didst conquer, Thou didst conquer\nSin and Satan and the grave,\nSin and Satan and the grave.",
-        "When I tread the verge of Jordan,\nBid my anxious fears subside;\nDeath of death and hell’s Destruction,\nLand me safe on Canaan’s side.\nSongs of praises, songs of praises,\nI will ever give to Thee;\nI will ever give to Thee."
+        "[G]Guide [C]me, [G]O [D]Thou [G]great Je[D]hovah,\n[G]Pilgrim [C]through this [G]bar[D7]ren [G]land;\n[G]I [C]am [G]weak, [D]but [G]Thou art might[D]y,\n[G]Hold [C]me [G]with [C]Thy [G]pow'r[D]ful [G]hand.\n[D7]Bread of heaven, [G]Bread of heaven,\n[G]Feed me till I [D]want no more;\n[G]Feed me till [C]I want [D7]no [G]more.",
+        "Open now the crystal fountain,\nWhence the healing stream doth flow;\nLet the fire and cloudy pillar\nLead me all my journey through.\nStrong Deliv'rer, strong Deliv'rer,\nBe Thou still my Strength and Shield;\nBe Thou still my Strength and Shield.",
+        "Lord, I trust Thy mighty power,\nWondrous are Thy works of old;\nThou deliver'st Thine from thralldom,\nWho for naught themselves had sold:\nThou didst conquer, Thou didst conquer\nSin and Satan and the grave,\nSin and Satan and the grave.",
+        "When I tread the verge of Jordan,\nBid my anxious fears subside;\nDeath of death and hell's Destruction,\nLand me safe on Canaan's side.\nSongs of praises, songs of praises,\nI will ever give to Thee;\nI will ever give to Thee."
       ],
       "chorus": null,
       "sources": [
         "https://library.timelesstruths.org/music/Guide_Me_O_Thou_Great_Jehovah/",
         "https://hymnary.org/text/guide_me_o_thou_great_jehovah",
-        "https://library.timelesstruths.org/library/music/G/Guide_Me_O_Thou_Great_Jehovah/Guide_Me_O_Thou_Great_Jehovah.xml"
+        "https://library.timelesstruths.org/library/music/G/Guide_Me_O_Thou_Great_Jehovah/Guide_Me_O_Thou_Great_Jehovah.xml",
+        "https://www.hymnsite.com/lyrics/umh127.sht",
+        "http://www.hymntime.com/tch/htm/g/u/i/d/guideme.htm"
       ]
     },
     "de": null
   },
-  "notes": "Text: Timeless Truths (traditional Thou-form, sourced there to the Cyber Hymnal and Hymnal of the Church of God 1953). Its first line is printed \"Guide me, O Thou great *Jehovah, [*Redeemer]\"; the editorial asterisk and gloss are dropped here, and many modern hymnals sing \"Guide me, O my great Redeemer\". Stanza 3 (\"Lord, I trust Thy mighty power\") is printed by the Cyber Hymnal but omitted by most English hymnals, which carry only stanzas 1, 2 and 4. Williams wrote the Welsh original in 1745; Peter Williams published the English of stanza 1 in 1771 and the rest derives from William Williams’ own English version. Chords were derived from the SATB MusicXML of CWM RHONDDA at Timeless Truths (score in G, no transposition) and thinned for guitar; the tune is tonic-heavy with quick IV and V decorations, so the chart changes more often than most in this book."
+  "notes": "Text: Timeless Truths (traditional Thou-form, sourced there to the Cyber Hymnal and Hymnal of the Church of God 1953). Its first line is printed \"Guide me, O Thou great *Jehovah, [*Redeemer]\"; the editorial asterisk and gloss are dropped here, and many modern hymnals sing \"Guide me, O my great Redeemer\". Stanza 3 (\"Lord, I trust Thy mighty power\") is printed by the Cyber Hymnal but omitted by most English hymnals, which carry only stanzas 1, 2 and 4. Williams wrote the Welsh original in 1745; Peter Williams published the English of stanza 1 in 1771 and the rest derives from William Williams' own English version. Chords were derived from the SATB MusicXML of CWM RHONDDA at Timeless Truths (score in G, no transposition) and thinned for guitar; the tune is tonic-heavy with quick IV and V decorations, so the chart changes more often than most in this book. Independently cross-checked against the United Methodist Hymnal printing (hymnsite.com, stanzas 1/2/4) and the Cyber Hymnal (which alone carries stanza 3): wording confirmed throughout; the Cyber Hymnal prints \"Death of deaths, and hell's destruction\" where this text (with Timeless Truths and the UMH) reads \"Death of death\"."
 }

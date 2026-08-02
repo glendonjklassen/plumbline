@@ -1,0 +1,31 @@
+{
+  "id": "just-as-i-am",
+  "number": 39,
+  "tune": "WOODWORTH",
+  "meter": "8.8.8.8",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Just As I Am",
+      "author": "Charlotte Elliott",
+      "translator": null,
+      "year": 1835,
+      "stanzas": [
+        "[D]Just as I am—with[G]out one [A7]plea,\nBut [D]that Thy [G]blood was [A7]shed for [D]me,\nAnd [D]that Thou [D7]bidst me [G]come to [A]Thee—\nO [G]Lamb of [D]God, I [A7]come, I [D]come.",
+        "Just as I am—and waiting not\nTo rid my soul of one dark blot,\nTo Thee whose blood can cleanse each spot—\nO Lamb of God, I come, I come.",
+        "Just as I am—though tossed about\nWith many a conflict, many a doubt,\nFightings and fears within, without—\nO Lamb of God, I come, I come.",
+        "Just as I am—poor, wretched, blind;\nSight, riches, healing of the mind,\nYea, all I need in Thee to find—\nO Lamb of God, I come, I come.",
+        "Just as I am—Thou wilt receive,\nWilt welcome, pardon, cleanse, relieve;\nBecause Thy promise I believe—\nO Lamb of God, I come, I come.",
+        "Just as I am—Thy love unknown\nHath broken every barrier down;\nNow, to be Thine, yea, Thine alone—\nO Lamb of God, I come, I come."
+      ],
+      "chorus": null,
+      "sources": [
+        "http://www.hymntime.com/tch/htm/j/u/s/t/justasam.htm",
+        "https://hymnary.org/text/just_as_i_am_without_one_plea",
+        "https://hymnary.org/tune/woodworth_bradbury"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text follows the Cyber Hymnal, including its em dashes and the spelling 'bidst' (many hymnals print 'bidd'st'). The six stanzas shipped are the commonly printed set; Elliott's 1836 seventh stanza ('Just as I am—of that free love') appears in the Cyber Hymnal but is rarely printed in hymnals and is omitted here. hymnary lists WOODWORTH in D Major, already a listed guitar key. Chords are a best-effort chart from the tune's incipit and standard harmonization, not verified bar-for-bar against a score."
+}

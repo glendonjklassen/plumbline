@@ -1,0 +1,43 @@
+{
+  "id": "wachet-auf",
+  "number": 75,
+  "tune": "WACHET AUF",
+  "meter": "8.9.8.8.9.8.6.6.4.8.8",
+  "key": "C",
+  "texts": {
+    "en": {
+      "title": "Wake, Awake, for Night Is Flying",
+      "author": "Philipp Nicolai",
+      "translator": "Catherine Winkworth",
+      "year": 1863,
+      "stanzas": [
+        "[C]Wake, a[F]wake, for [C]night is [G]flying,\n[C]The watchmen [Am]on the [F]heights are [G]crying;\n[C]Awake, Je[F]rusa[G]lem, at [C]last!\n[C]Midnight [F]hears the [C]welcome [G]voices,\n[C]And at the [Am]thrilling [F]cry re[G]joices:\n[C]Come forth, ye [F]virgins, [G]night is [C]past!\n[G]The Bridegroom [C]comes, a[G]wake,\n[C]Your lamps with [F]gladness [C]take;\n[F]Halle[C]lujah!\n[F]And for His [C]marriage-feast pre[G]pare,\n[C]For [F]ye must go to [G]meet Him [C]there.",
+        "Zion hears the watchmen singing,\nAnd all her heart with joy is springing,\nShe wakes, she rises from her gloom;\nFor her Lord comes down all-glorious,\nThe strong in grace, in truth victorious,\nHer Star is risen, her Light is come!\nAh come, Thou blessed Lord,\nO Jesus, Son of God,\nHallelujah!\nWe follow till the halls we see\nWhere Thou hast bid us sup with Thee!",
+        "Now let all the heavens adore Thee,\nAnd men and angels sing before Thee,\nWith harp and cymbal's clearest tone;\nOf one pearl each shining portal,\nWhere we are with the choir immortal\nOf angels round Thy dazzling throne;\nNor eye hath seen, nor ear\nHath yet attain'd to hear\nWhat there is ours,\nBut we rejoice, and sing to Thee\nOur hymn of joy eternally."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.ccel.org/ccel/winkworth/chorales.h200.html",
+        "https://hymnary.org/text/wake_awake_for_night_is_flying_winkworth",
+        "https://hymnary.org/tune/wachet_auf_nicolai"
+      ]
+    },
+    "de": {
+      "title": "Wachet auf, ruft uns die Stimme",
+      "author": "Philipp Nicolai",
+      "translator": null,
+      "year": 1599,
+      "stanzas": [
+        "[C]\"Wachet [F]auf\", ruft [C]uns die [G]Stimme\n[C]der Wächter [Am]sehr hoch [F]auf der [G]Zinne,\n[C]wach auf, du [F]Stadt Je[G]rusa[C]lem!\n[C]Mitter[F]nacht heißt [C]diese [G]Stunde;\n[C]sie rufen [Am]uns mit [F]hellem [G]Munde:\n[C]Wo seid ihr [F]klugen [G]Jungfrau[C]en?\n[G]Wohlauf, der [C]Bräut'gam [G]kommt!\n[C]Steht auf, die [F]Lampen [C]nehmt!\n[F]Halle[C]luja!\n[F]Macht euch be[C]reit\nzu der [G]Hochzeit;\n[C]ihr [F]müsset ihm ent[G]gegen[C]gehn!",
+        "Zion hört die Wächter singen;\ndas Herz tut ihr vor Freude springen;\nsie wachet und steht eilend auf.\nIhr Freund kommt vom Himmel prächtig,\nvon Gnaden stark, von Wahrheit mächtig;\nihr Licht wird hell, ihr Stern geht auf.\nNun komm, du werte Kron,\nHerr Jesu, Gottes Sohn!\nHosianna!\nWir folgen all\nzum Freudensaal\nund halten mit das Abendmahl.",
+        "Gloria sei dir gesungen\nmit Menschen- und mit Engelzungen,\nmit Harfen und mit Zimbeln schön.\nVon zwölf Perlen sind die Tore\nan deiner Stadt, wir stehn im Chore\nder Engel hoch um deinen Thron.\nKein Aug hat je gespürt,\nkein Ohr hat mehr gehört\nsolche Freude.\nDes jauchzen wir\nund singen dir\ndas Halleluja für und für."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_wachet_auf_ruft_uns_die_stimme.html",
+        "https://www.lutheranchoralebook.com/texts/wake-awake-for-night-is-flying/"
+      ]
+    }
+  },
+  "notes": "German is EG 147 (3 stanzas) as evangeliums.net prints it, with one punctuation repair: the site renders the first line '\"Wachet auf\"; ruft uns die Stimme' — the stray semicolon is normalised to a comma (EG prints »Wachet auf«, ruft uns die Stimme); the site's quotation marks are kept. English is Winkworth's own Chorale Book for England text (first published 1858 in Lyra Germanica; CBE printing 1863) from CCEL — NOT the altered TLH/LSB version, whose stanza 3 the Free Lutheran Chorale-Book further rewrites to preserve the W-Z-G acrostic; Winkworth's stanza 3 'Now let all the heavens adore Thee' is the commonly printed form. The German sings 'Macht euch bereit / zu der Hochzeit' as two short lines where the English sings one 8-syllable line — the charts agree bar-for-bar. Tune WACHET AUF (Nicolai 1599); hymnary's tune page gives meter 8.9.8.8.9.8.6.6.4.8.8 (the text page says Irregular) and C major as the tune-page key (other books print B-flat or D) — chart in C. Chords are a best-effort chart, not from printed notation."
+}

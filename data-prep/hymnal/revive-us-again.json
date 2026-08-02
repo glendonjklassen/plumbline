@@ -21,10 +21,11 @@
       "sources": [
         "http://www.hymntime.com/tch/htm/r/e/v/i/reviveus.htm",
         "https://library.timelesstruths.org/music/Revive_Us_Again/",
-        "https://hymnary.org/tune/revive_us_again_husband"
+        "https://hymnary.org/tune/revive_us_again_husband",
+        "https://www.godtube.com/popular-hymns/revive-us-again/"
       ]
     },
     "de": null
   },
-  "notes": "Text: Cyber Hymnal, five stanzas; Timeless Truths agrees except 'Who hast brought us, and sought us' in st. 4, where the common hymnal reading is 'bought'. Meter is disputed on hymnary: the text page lists both '11.11 with refrain' and '6.6.6.6.8.6.8.6', and the tune page lists the latter; '11.11 with refrain' is the one that matches the actual syllable counts, and the four short printed lines are those two long lines broken. Tune usually credited to John J. Husband (1815) but hymnary notes the resemblance to his ST. STEPHEN'S is only two bars. Common printed key is G, so no transposition; chart derived note-by-note from the Cyber Hymnal MIDI (mid/r/e/v/i/revive_us_again.mid), whose 50 melody onsets align exactly with the 49 syllables of stanza and refrain."
+  "notes": "Text: Cyber Hymnal, five stanzas; Timeless Truths agrees except 'Who hast brought us, and sought us' in st. 4, where the common hymnal reading is 'bought'. Meter is disputed on hymnary: the text page lists both '11.11 with refrain' and '6.6.6.6.8.6.8.6', and the tune page lists the latter; '11.11 with refrain' is the one that matches the actual syllable counts, and the four short printed lines are those two long lines broken. Tune usually credited to John J. Husband (1815) but hymnary notes the resemblance to his ST. STEPHEN'S is only two bars. Common printed key is G, so no transposition; chart derived note-by-note from the Cyber Hymnal MIDI (mid/r/e/v/i/revive_us_again.mid), whose 50 melody onsets align exactly with the 49 syllables of stanza and refrain. Cross-checked 2026-08-02 against godtube.com's common four-stanza version (independent of the sites above): wording agrees (it modernizes hath->has and omits the 'God of all grace' stanza kept here, which Cyber Hymnal and Timeless Truths both print). The stanza's half-cadence ending on V, with the refrain resolving it, is corroborated by hymnal.net E40's chart of the same tune."
 }

@@ -1,0 +1,33 @@
+{
+  "id": "for-the-beauty-of-the-earth",
+  "number": 9,
+  "tune": "DIX",
+  "meter": "7.7.7.7.7.7",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "For the Beauty of the Earth",
+      "author": "Folliott S. Pierpoint",
+      "translator": null,
+      "year": 1864,
+      "stanzas": [
+        "[G]For the [D]beau[G]ty [C]of [D7]the [G]earth,\n[C]For [D7]the [G]glo[C]ry [G]of [D]the [G]skies,\n[G]For the [D]love [G]which [C]from [D7]our [G]birth\n[C]O[D7]ver [G]and [C]a[G]round [D]us [G]lies—",
+        "For the wonder of each hour,\nOf the day and of the night,\nHill and vale, and tree and flow'r,\nSun and moon, and stars of light—",
+        "For the joy of ear and eye,\nFor the heart and mind's delight,\nFor the mystic harmony\nLinking sense to sound and sight.",
+        "For the joy of human love,\nBrother, sister, parent, child,\nFriends on earth and friends above,\nFor all gentle thoughts and mild—",
+        "For each perfect gift of Thine,\nTo our race so freely given,\nGraces human and divine,\nFlowers of earth and buds of Heaven.",
+        "For Thy church that evermore\nLifteth holy hands above,\nOff'ring up on every shore\nHer pure sacrifice of love—"
+      ],
+      "chorus": "[G]Lord [D]of [G]all, to [D]Thee we [G]raise,\n[C]This [D7]our [G]hymn [C]of [G]grate[D]ful [G]praise.",
+      "sources": [
+        "https://library.timelesstruths.org/music/For_the_Beauty_of_the_Earth/",
+        "https://www.songsandhymns.org/hymns/lyrics/for-the-beauty-of-the-earth",
+        "https://en.wikipedia.org/wiki/For_the_Beauty_of_the_Earth",
+        "https://hymnary.org/text/for_the_beauty_of_the_earth",
+        "https://library.timelesstruths.org/library/music/F/For_the_Beauty_of_the_Earth/For_the_Beauty_of_the_Earth.xml"
+      ]
+    },
+    "de": null
+  },
+  "notes": "The common six-stanza hymnal form, assembled from two sources because no single fetched source prints all six: stanzas 1, 2, 4, 6 and the refrain verbatim from Timeless Truths (4-stanza printing, em-dash line ends kept); stanzas 3 (“joy of ear and eye”) and 5 (“each perfect gift”) verbatim from songsandhymns.org, which ends them with periods — punctuation left as each source prints it. Stanza order follows Pierpoint's 1864 original (checked against the full 8-stanza text on Wikipedia): ear-and-eye and perfect-gift sit where the original puts them, church last as Timeless Truths prints it. The original's refrain reads “Christ, our God, to Thee we raise / This our Sacrifice of Praise”; the “Lord of all … hymn of grateful praise” refrain shipped here is the standard hymnal alteration. The rarely printed martyrs'/virgins' stanzas are omitted. Some hymnals read “For the beauty of each hour” where stanza 2 here has “wonder” (the common altered form). Tune/meter per the hymnary.org text page (DIX, 7.7.7.7.7.7); common key G (Timeless Truths score and songsandhymns both print G) — already a guitar key. Chords derived from the SATB MusicXML of DIX at Timeless Truths, inversions simplified; the refrain carries its own chart."
+}

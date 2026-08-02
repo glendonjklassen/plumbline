@@ -1,0 +1,49 @@
+{
+  "id": "christ-lag-in-todesbanden",
+  "number": 74,
+  "tune": "CHRIST LAG IN TODESBANDEN",
+  "meter": "8.7.8.7.7.8.7.4",
+  "key": "Em",
+  "texts": {
+    "en": {
+      "title": "Christ Jesus Lay in Death's Strong Bands",
+      "author": "Martin Luther",
+      "translator": "Richard Massie",
+      "year": 1854,
+      "stanzas": [
+        "[Em]Christ Jesus [Am]lay in [B7]death's strong [Em]bands,\n[G]For our of[Am]fenses [Em]given;\n[Em]But now at [Am]God's right [B7]hand He [Em]stands\n[G]And brings us [Am]life from [Em]heaven.\n[G]Therefore [D]let us [G]joyful be\n[C]And [G]sing to God [Am]right thank[B7]fully\n[Em]Loud songs of [Am]alle[B7]lu[Em]ia!\n[Am]Alle[Em]luia!",
+        "No son of man could conquer Death,\nSuch ruin sin had wrought us.\nNo innocence was found on earth,\nAnd therefore Death had brought us\nInto bondage from of old\nAnd ever grew more strong and bold\nAnd held us as his captive.\nAlleluia!",
+        "But Jesus Christ, God's only Son,\nTo our low state descended;\nThe pow'r of sin He hath undone,\nThe might of Death is ended:\nStripped of pow'r, no more he reigns;\nAn empty form alone remains;\nHis sting is lost forever.\nAlleluia!",
+        "It was a strange and dreadful strife\nWhen Life and Death contended;\nThe victory remained with Life,\nThe reign of Death was ended.\nHoly Scripture plainly saith\nThat Death is swallowed up by Death,\nMade henceforth a derision.\nAlleluia!",
+        "Here our true Paschal Lamb we see,\nWhom God so freely gave us;\nHe died on the accursèd tree—\nSo strong His love!—to save us.\nSee, His blood doth mark our door;\nFaith points to it, Death passes o'er,\nThe Murd'rer cannot harm us.\nAlleluia!",
+        "So let us keep the festival\nWhereto the Lord invites us;\nChrist is Himself the Joy of all,\nThe Sun that warms and lights us.\nBy His grace doth He impart\nEternal sunshine to the heart;\nThe night of sin is ended.\nAlleluia!",
+        "Then let us feast this Easter Day\nOn Christ, the Bread of heaven;\nThe Word of Grace hath purged away\nThe old and evil leaven.\nChrist alone our souls will feed,\nHe is our meat and drink indeed;\nFaith lives upon no other.\nAlleluia!"
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.lutheranchoralebook.com/texts/christ-jesus-lay-in-deaths-strong-bands/",
+        "https://hymnary.org/text/christ_jesus_lay_in_deaths_strong_bands"
+      ]
+    },
+    "de": {
+      "title": "Christ lag in Todesbanden",
+      "author": "Martin Luther",
+      "translator": null,
+      "year": 1524,
+      "stanzas": [
+        "[Em]Christ lag in [Am]Todes[B7]ban[Em]den,\n[G]für unsre [Am]Sünd ge[Em]geben,\n[Em]der ist wie[Am]der er[B7]stan[Em]den\n[G]und hat uns [Am]bracht das [Em]Leben.\n[G]Des wir [D]sollen [G]fröhlich sein,\n[C]Gott [G]loben und [Am]dankbar [B7]sein\n[Em]und singen [Am]Halle[B7]lu[Em]ja.\n[Am]Halle[Em]luja.",
+        "Den Tod niemand zwingen konnt\nbei allen Menschenkindern;\ndas macht alles unsre Sünd,\nkein Unschuld war zu finden.\nDavon kam der Tod so bald\nund nahm über uns Gewalt,\nhielt uns in seim Reich gefangen.\nHalleluja.",
+        "Jesus Christus, Gottes Sohn,\nan unser Statt ist kommen\nund hat die Sünd abgetan,\ndamit dem Tod genommen\nall sein Recht und sein Gewalt;\nda bleibt nichts denn Tods Gestalt,\nden Stachel hat er verloren.\nHalleluja.",
+        "Es war ein wunderlich Krieg,\nda Tod und Leben 'rungen;\ndas Leben behielt den Sieg,\nes hat den Tod verschlungen.\nDie Schrift hat verkündet das,\nwie ein Tod den andern fraß,\nein Spott aus dem Tod ist worden.\nHalleluja.",
+        "Hier ist das recht Osterlamm,\ndavon wir sollen leben,\ndas ist an des Kreuzes Stamm\nin heißer Lieb gegeben.\nDes Blut zeichnet unsre Tür,\ndas hält der Glaub dem Tod für,\nder Würger kann uns nicht rühren.\nHalleluja.",
+        "So feiern wir das hoh Fest\nmit Herzensfreud und Wonne,\ndas uns der Herr scheinen lässt.\nEr ist selber die Sonne,\nder durch seiner Gnaden Glanz\nerleucht' unsre Herzen ganz;\nder Sünden Nacht ist vergangen.\nHalleluja.",
+        "Wir essen und leben wohl,\nzum süßen Brot geladen;\nder alte Sau'rteig nicht soll\nsein bei dem Wort der Gnaden.\nChristus will die Kost uns sein\nund speisen die Seel allein;\nder Glaub will keins andern leben.\nHalleluja."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_christ_lag_in_todesbanden.html"
+      ]
+    }
+  },
+  "notes": "German is the 7-stanza modern-orthography text (EG 101 line) as evangeliums.net prints it, with one normalisation: the site prints the first line as 'Christ lag in Todes Banden' (two words) against its own page title and every other source (EG, the Free Lutheran Chorale-Book) — I wrote 'Todesbanden'. English is Massie 1854 as altered for LSB 458, from the Free Lutheran Chorale-Book, stanza-parallel 7 for 7. Tune CHRIST LAG IN TODESBANDEN (Luther/Walter 1524) is DORIAN; hymnary lists the meter as 87.87.78.74, and (as the Chorale-Book documents) the German sings 7-syllable lines where the English sings 8, so a slur shifts between stanzas. Chart labelled Em, a best-effort modal harmonisation with B7 cadences — not a transcription of printed notation."
+}

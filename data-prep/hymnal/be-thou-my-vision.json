@@ -13,18 +13,19 @@
       "stanzas": [
         "[D]Be Thou [A]my Vi[D]sion, O [Bm]Lord of [A]my [D]heart;\n[A]Naught be all else [F#m]to [D]me, save [Bm]that Thou [A]art;\n[G]Thou my best Thought, by [A]day or by [Bm]night,\n[Bm]Waking or sleeping, [D]Thy presence [G]my [D]light.",
         "Be Thou my Wisdom, and Thou my true Word;\nI ever with Thee and Thou with me, Lord;\nThou my great Father, I Thy true son;\nThou in me dwelling, and I with Thee one.",
-        "Be Thou my battle Shield, Sword for the fight;\nBe Thou my Dignity, Thou my Delight;\nThou my soul’s Shelter, Thou my high Tow’r:\nRaise Thou me heav’nward, O Pow’r of my pow’r.",
-        "Riches I heed not, nor man’s empty praise,\nThou mine Inheritance, now and always:\nThou and Thou only, first in my heart,\nHigh King of Heaven, my Treasure Thou art.",
-        "High King of Heaven, my victory won,\nMay I reach Heaven’s joys, O bright Heav’n’s Sun!\nHeart of my own heart, whatever befall,\nStill be my Vision, O Ruler of all."
+        "Be Thou my battle Shield, Sword for the fight;\nBe Thou my Dignity, Thou my Delight;\nThou my soul's Shelter, Thou my high Tow'r:\nRaise Thou me heav'nward, O Pow'r of my pow'r.",
+        "Riches I heed not, nor man's empty praise,\nThou mine Inheritance, now and always:\nThou and Thou only, first in my heart,\nHigh King of Heaven, my Treasure Thou art.",
+        "High King of Heaven, my victory won,\nMay I reach Heaven's joys, O bright Heav'n's Sun!\nHeart of my own heart, whatever befall,\nStill be my Vision, O Ruler of all."
       ],
       "chorus": null,
       "sources": [
         "https://library.timelesstruths.org/music/Be_Thou_My_Vision/",
         "https://hymnary.org/text/be_thou_my_vision_o_lord_of_my_heart",
-        "https://library.timelesstruths.org/library/music/B/Be_Thou_My_Vision/Be_Thou_My_Vision.xml"
+        "https://library.timelesstruths.org/library/music/B/Be_Thou_My_Vision/Be_Thou_My_Vision.xml",
+        "https://songsandhymns.org/hymns/lyrics/be-thou-my-vision"
       ]
     },
     "de": null
   },
-  "notes": "Five stanzas, Timeless Truths’ traditional Thou-form text; hymnary’s representative text (Hymns and Devotions for Daily Worship #268) has the same five stanzas with modernised pronouns and a few word changes (\"my breastplate, my sword\" for \"my battle Shield, Sword\"; \"nor vain, empty praise\" for \"nor man’s empty praise\"). Meter is 10.10.10.10 as hymnary lists it on both the text and the SLANE tune page, though line 3 of this text scans as nine syllables. Byrne made the prose translation (1905) and Hull versified it (1912). Chords derived from the SATB MusicXML of SLANE at Timeless Truths, score in E-flat, transposed down a semitone to D for guitar; the chromatic passing harmonies of line 3 are simplified away."
+  "notes": "Five stanzas, Timeless Truths' traditional Thou-form text; hymnary's representative text (Hymns and Devotions for Daily Worship #268) has the same five stanzas with modernised pronouns and a few word changes (\"my breastplate, my sword\" for \"my battle Shield, Sword\"; \"nor vain, empty praise\" for \"nor man's empty praise\"). Meter is 10.10.10.10 as hymnary lists it on both the text and the SLANE tune page, though line 3 of this text scans as nine syllables. Byrne made the prose translation (1905) and Hull versified it (1912). Chords derived from the SATB MusicXML of SLANE at Timeless Truths, score in E-flat, transposed down a semitone to D for guitar; the chromatic passing harmonies of line 3 are simplified away. All five stanzas independently cross-checked against the Center for Church Music (songsandhymns.org), which prints the same Thou-form text word for word (unelided Tower/Power/heavenward, lower-case \"heaven\")."
 }

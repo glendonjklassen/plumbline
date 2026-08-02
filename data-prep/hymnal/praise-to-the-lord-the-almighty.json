@@ -11,11 +11,11 @@
       "translator": "Catherine Winkworth",
       "year": 1863,
       "stanzas": [
-        "[G]Praise to the [Em]Lord! the [D]Almighty, the [C]King of cre[D7]a[G]tion!\n[G]O my soul, [Em]praise Him, [D]for He is thy [C]health and [D7]salva[G]tion!\n[D]All ye who [G]hear,\n[C]Now to His [G]temple draw [D7]near,\n[G]Join me in [C]glad ado[D7]ra[G]tion!",
-        "Praise to the Lord! who o’er all things so wondrously reigneth,\nShelters thee under His wings, yea, so gently sustaineth:\nHast thou not seen\nHow thy desires have been\nGranted in what He ordaineth?",
+        "[G]Praise to the [Em]Lord! The [D]Almighty, the [C]King of cre[D7]a[G]tion!\n[G]O my soul, [Em]praise Him, [D]for He is thy [C]health and [D7]salva[G]tion!\n[D]All ye who [G]hear,\n[C]Now to His [G]temple draw [D7]near;\n[G]Join me in [C]glad ado[D7]ra[G]tion.",
+        "Praise to the Lord! Who o'er all things so wondrously reigneth,\nShelters thee under His wings, yea, so gently sustaineth;\nHast thou not seen\nHow thy desires have been\nGranted in what He ordaineth?",
         "Praise to the Lord, who hath fearfully, wondrously, made thee;\nHealth hath vouchsafed and, when heedlessly falling, hath stayed thee.\nWhat need or grief\nEver hath failed of relief?\nWings of His mercy did shade thee.",
-        "Praise to the Lord! who doth prosper thy work, and defend thee;\nSurely His goodness and mercy here daily attend thee;\nPonder anew\nWhat the Almighty can do,\nIf with His love He befriend thee!",
-        "Praise to the Lord! Oh let all that is in me adore Him!\nAll that hath life and breath, come now with praises before Him!\nLet the Amen\nSound from His people again,\nGladly for aye we adore Him!"
+        "Praise to the Lord, who doth prosper thy work and defend thee;\nSurely His goodness and mercy here daily attend thee.\nPonder anew\nWhat the Almighty can do,\nIf with His love He befriend thee!",
+        "Praise to the Lord, O let all that is in me adore Him!\nAll that hath life and breath, come now with praises before Him!\nLet the Amen\nSound from His people again,\nGladly for aye we adore Him!"
       ],
       "chorus": null,
       "sources": [
@@ -23,7 +23,8 @@
         "https://de.wikipedia.org/wiki/Lobe_den_Herren,_den_m%C3%A4chtigen_K%C3%B6nig_der_Ehren",
         "https://hymnary.org/text/praise_to_the_lord_the_almighty_the_king",
         "https://library.timelesstruths.org/music/Praise_to_the_Lord_the_Almighty/",
-        "https://hymnchords.net/files/PRAISE%20TO%20THE%20LORD,%20THE%20ALMIGHTY.pdf"
+        "https://hymnchords.net/files/PRAISE%20TO%20THE%20LORD,%20THE%20ALMIGHTY.pdf",
+        "https://www.hymnal.net/en/hymn/h/166"
       ]
     },
     "de": {
@@ -41,9 +42,10 @@
       "chorus": null,
       "sources": [
         "https://de.wikipedia.org/wiki/Lobe_den_Herren,_den_m%C3%A4chtigen_K%C3%B6nig_der_Ehren",
-        "https://www.evangeliums.net/lieder/lied_lobe_den_herren_den_maechtigen_koenig_der_ehren.html"
+        "https://www.evangeliums.net/lieder/lied_lobe_den_herren_den_maechtigen_koenig_der_ehren.html",
+        "https://www.erzbistum-koeln.de/export/sites/ebkportal/seelsorge_und_glaube/lebensphase-alter/.content/.galleries/Altenheimseelsorge_Downloads/LobedenHerrenText.pdf"
       ]
     }
   },
-  "notes": "German is the ökumenische Fassung (EG 316 / GL 392), quoted in the de.wikipedia article alongside Neander's 1680 original. Where it differs from Neander: st.1 line 2 \"lob ihn, o Seele, vereint mit den himmlischen Chören\" (orig. \"meine geliebete Seele, das ist mein Begehren\"); st.4 line 1 \"der sichtbar dein Leben gesegnet\" (orig. \"der deinen Stand sichtbar gesegnet\"); st.5 lines 2 and 5 \"Lob ihn mit allen, die seine Verheißung bekamen\" / \"Lob ihn in Ewigkeit. Amen.\" (orig. \"Alles, was Odem hat, lobe mit Abrahams Samen\" / \"Lobende, schließe mit Amen!\"). evangeliums.net prints a hybrid of the two and sets \"In wie viel Not\" as three words; EG's \"In wieviel Not\" is used. English is Winkworth's traditional-language text as the Cyber Hymnal prints it (7 stanzas, marked \"alt.\"); shipped are the five that parallel the German -- Cyber Hymnal 1, 2, 3, 4 and 7 -- reflowed from its 7-line typography to the 5 metrical lines of 14.14.4.7.8. Trinity Hymnal p.53 renders stanza 3 quite differently (\"Praise to the Lord, who with marvelous wisdom hath made thee\"); the Cyber Hymnal wording was kept so one source covers the whole English text. Key G is Trinity Hymnal's; hymnary's incipit database lists the tune in F. Chords simplified from the hymnchords.net chart in G; the two languages are bar-for-bar identical."
+  "notes": "German is the ökumenische Fassung (EG 316 / GL 392), quoted in the de.wikipedia article alongside Neander's 1680 original. Where it differs from Neander: st.1 line 2 \"lob ihn, o Seele, vereint mit den himmlischen Chören\" (orig. \"meine geliebete Seele, das ist mein Begehren\"); st.4 line 1 \"der sichtbar dein Leben gesegnet\" (orig. \"der deinen Stand sichtbar gesegnet\"); st.5 lines 2 and 5 \"Lob ihn mit allen, die seine Verheißung bekamen\" / \"Lob ihn in Ewigkeit. Amen.\" (orig. \"Alles, was Odem hat, lobe mit Abrahams Samen\" / \"Lobende, schließe mit Amen!\"). evangeliums.net prints a hybrid of the two and sets \"In wie viel Not\" as three words; EG's \"In wieviel Not\" is used. English is Winkworth's traditional-language text as the Cyber Hymnal prints it (7 stanzas, marked \"alt.\"); shipped are the five that parallel the German -- Cyber Hymnal 1, 2, 3, 4 and 7 -- reflowed from its 7-line typography to the 5 metrical lines of 14.14.4.7.8. Trinity Hymnal p.53 renders stanza 3 quite differently (\"Praise to the Lord, who with marvelous wisdom hath made thee\"); the Cyber Hymnal wording was kept so one source covers the whole English text. Key G is Trinity Hymnal's; hymnary's incipit database lists the tune in F. Chords simplified from the hymnchords.net chart in G; the two languages are bar-for-bar identical. VERIFIED 2026-08-02: punctuation/casing slips against the Cyber Hymnal were corrected in stanzas 1, 2, 4 and 5 (\"The Almighty\", \"Who o'er\", \"draw near;\", \"adoration.\", \"sustaineth;\", \"Praise to the Lord, who doth prosper thy work and defend thee;\", \"attend thee.\", \"Praise to the Lord, O let\"). English cross-checked against hymnal.net #166, which prints its own alterations (\"Sing now in glad adoration\", st.2 \"Who, as on wings of an eagle\" and \"How thy desires all have been\", a different st.4 couplet) -- this file keeps the Cyber Hymnal reading throughout; note Trinity prints \"How thy desires e'er have been\" where CH has \"How thy desires have been\". German cross-checked against the Erzbistum Koeln text sheet of GL 392 oe (URL above), which matches word for word; only its terminal punctuation differs (\"hoeren.\", \"Ewigkeit!\")."
 }

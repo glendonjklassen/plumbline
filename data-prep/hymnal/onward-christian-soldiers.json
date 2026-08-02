@@ -1,0 +1,31 @@
+{
+  "id": "onward-christian-soldiers",
+  "number": 62,
+  "tune": "ST. GERTRUDE",
+  "meter": "6.5.6.5 D with refrain",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Onward, Christian Soldiers",
+      "author": "Sabine Baring-Gould",
+      "translator": null,
+      "year": 1865,
+      "stanzas": [
+        "[D]Onward, Christian soldiers,\n[A7]marching as to [D]war,\n[D]With the cross of [G]Jesus\n[D]going [A7]on be[D]fore!\n[D]Christ, the royal [Bm]Master,\n[E7]leads against the [A]foe;\n[A7]Forward into [D]battle,\n[G]see his [A7]banner [D]go!",
+        "At the sign of triumph\nSatan's host doth flee;\nOn, then, Christian soldiers,\non to victory!\nHell's foundations quiver\nat the shout of praise;\nBrothers, lift your voices,\nloud your anthems raise!",
+        "Like a mighty army\nmoves the church of God;\nBrothers, we are treading\nwhere the saints have trod;\nWe are not divided;\nall one body we,\nOne in hope and doctrine,\none in charity.",
+        "Crowns and thrones may perish,\nKingdoms rise and wane,\nBut the Church of Jesus\nConstant will remain.\nGates of hell can never\n'Gainst that church prevail;\nWe have Christ's own promise,\nAnd that cannot fail.",
+        "Onward, then, ye people,\njoin our happy throng,\nBlend with ours your voices\nin the triumph song;\nGlory, laud, and honor,\nunto Christ the King;\nThis thro' countless ages\nmen and angels sing."
+      ],
+      "chorus": "[D]Onward, Christian [G]soldiers,\n[D]marching [A7]as to [D]war,\n[G]With the [D]cross of [A7]Jesus\n[D]going [A7]on be[D]fore!",
+      "sources": [
+        "https://hymnary.org/text/onward_christian_soldiers_marching_as",
+        "http://www.hymntime.com/tch/htm/o/n/w/a/onwardcs.htm",
+        "https://hymnary.org/tune/st_gertrude_sullivan",
+        "https://library.timelesstruths.org/music/Onward_Christian_Soldiers/"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Stanzas 1-3 and 5 are hymnary.org's representative text (Baptist Hymnal 1991); stanza 4 ('Crowns and thrones may perish'), commonly printed but absent from that selection, is quoted from the Cyber Hymnal with curly apostrophes normalized to straight. The original's 'What the saints established' stanza is rarely printed and omitted. Cyber Hymnal dates first publication to The Church Times, October 1864; the conventional 1865 date is kept. ST. GERTRUDE (Sullivan) listed in E-flat on hymnary's tune page; moved to D per the guitar rule (D preferred over E on the tie). Chart is the standard simplified changes; the verse's E7-A move to the dominant follows Sullivan."
+}

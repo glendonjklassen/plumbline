@@ -1,0 +1,46 @@
+{
+  "id": "allein-gott-in-der-hoeh",
+  "number": 79,
+  "tune": "ALLEIN GOTT IN DER HÖH",
+  "meter": "8.7.8.7.8.8.7",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "All Glory Be to God on High",
+      "author": "Nikolaus Decius",
+      "translator": "Catherine Winkworth",
+      "year": 1863,
+      "stanzas": [
+        "[G]All glory [C]be [D]to [Am]God [Em]on [B]high,\n[Em]Who [G]hath [D]our [C]race [Am]be[D]friend[G]ed!\n[G]To us no [C]harm [D]shall [Am]now [Em]come [B]nigh,\n[Em]The [G]strife [D]at [C]last [Am]is [D]end[G]ed;\n[G]God [D]show[Em]eth [C]His [G]good [D]will [Em]to [D]men,\n[G]And peace shall [C]reign [D]on [Am]earth [Em]a[B]gain;\n[G]Oh, [D]thank [Em]Him [C]for [Am]His [D]good[G]ness!",
+        "We praise, we worship Thee, we trust,\nAnd give Thee thanks forever,\nO Father, that Thy rule is just\nAnd wise and changes never.\nThy boundless power o'er all things reigns,\n'Tis done whate'er Thy will ordains:\nWell for us that Thou rulest!",
+        "O Jesus Christ, Thou only Son\nOf God, Thy heavenly Father,\nWho didst for all our sins atone\nAnd Thy lost sheep dost gather:\nThou Lamb of God, to Thee on high,\nFrom out our depths, we sinners cry,\nHave mercy on us, Jesus!",
+        "O Holy Ghost, Thou precious Gift,\nThou Comforter unfailing,\nO'er Satan's snares our souls uplift\nAnd let Thy power availing\nAvert our woes and calm our dread.\nFor us the Savior's blood was shed;\nWe trust in Thee to save us."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.ccel.org/a/anonymous/luth_hymnal/tlh237.htm",
+        "https://hymnary.org/text/all_glory_be_to_god_on_high_who_hath_our"
+      ]
+    },
+    "de": {
+      "title": "Allein Gott in der Höh sei Ehr",
+      "author": "Nikolaus Decius",
+      "translator": null,
+      "year": 1523,
+      "stanzas": [
+        "[G]Allein Gott [C]in [D]der [Am]Höh [Em]sei [B]Ehr\n[Em]und [G]Dank [D]für [C]sei[Am]ne [D]Gna[G]de,\n[G]darum dass [C]nun [D]und [Am]nim[Em]mer[B]mehr\n[Em]uns [G]rüh[D]ren [C]kann [Am]kein [D]Scha[G]de.\n[G]Ein [D]Wohl[Em]ge[C]falln [G]Gott [D]an [Em]uns [D]hat;\n[G]nun ist [C]groß [D]Fried [Am]ohn [Em]Unter[B]lass,\n[G]all [D]Fehd [Em]hat [C]nun [Am]ein [D]En[G]de.",
+        "Wir loben, preisn, anbeten dich;\nfür deine Ehr wir danken,\ndass du, Gott Vater, ewiglich\nregierst ohn alles Wanken.\nGanz ungemessn ist deine Macht,\nallzeit geschieht, was du bedacht.\nWohl uns solch eines Herren!",
+        "O Jesu Christ, Sohn eingeborn\ndes allerhöchsten Vaters,\nVersöhner derer, die verlorn,\ndu Stiller unsres Haders,\nLamm Gottes, heilger Herr und Gott:\nnimm an die Bitt aus unsrer Not,\nerbarm dich unser aller.",
+        "O Heilger Geist, du höchstes Gut,\ndu allerheilsamst' Tröster:\nvor Teufels G'walt fortan behüt,\ndie Jesus Christ erlöset\ndurch große Mart'r und bittern Tod;\nabwend all unsern Jamm'r und Not!\nDarauf wir uns verlassen."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://de.wikipedia.org/wiki/Allein_Gott_in_der_H%C3%B6h_sei_Ehr",
+        "https://www.evangeliums.net/lieder/lied_allein_gott_in_der_hoeh_sei_ehr.html",
+        "https://en.wikipedia.org/wiki/Allein_Gott_in_der_H%C3%B6h_sei_Ehr",
+        "https://hymnary.org/tune/allein_gott_in_der_hoh_decius"
+      ]
+    }
+  },
+  "notes": "German: the four stanzas as EG 179 prints them (de.wikipedia's \"heute gebräuchlicher Liedtext\" column, footnoted to EG 179 and Mennonitisches Gesangbuch 24). Stanzas 1-3 are Decius's 1523 Gloria paraphrase; stanza 4 is Joachim Slüter's addition of 1525 and is missing from the Gotteslob -- kept here, since most Protestant books print it. THE ELISIONS ARE LOAD-BEARING, NOT TYPOS: \"preisn\", \"ungemessn\", \"Wohlgefalln\", \"heilger\", \"Mart'r\", \"Jamm'r\" are what makes the lines scan to 8.7.8.7.8.8.7. evangeliums.net prints the un-elided \"preisen\" and \"ungemessen\", which give nine syllables where the tune has eight, which is why the EG form was preferred; that page is in the sources because I compared against it (it also reads \"unsers Haders\" for \"unsres Haders\" and adds apostrophes to \"Fried'\" and \"Fehd'\"). ENGLISH: Winkworth 1863, as The Lutheran Hymnal 1941 no. 237 prints it (CCEL); cross-checked against hymnary's representative text from the Evangelical Lutheran Hymnary no. 35, which is the same translation with \"pow'r\", \"Done is whate'er\" for \"'Tis done whate'er\", \"O thank Him\" for \"Oh, thank Him\" and \"Saviour\" for \"Savior\". TUNE: ALLEIN GOTT IN DER HÖH, attributed to Decius 1539 after the Gloria of the Easter plainsong mass Lux et origo; hymnary gives the meter 8.7.8.7.8.8.7 and bar form AAB. KEY: printings disagree -- German hymnals (EG 179, GL 170, and the Crüger setting at johann-crueger.de) use F, hymnary's representative instance is in E, and the four-part setting on en.wikipedia is in G. F sits one semitone from both E and G, so the FORMAT preference order picks G in any case, and G is also distance zero from the en.wikipedia setting, which is what the chords are reduced from. That setting is the source of the B major at the end of line 1 (its alto has the D-sharp) -- an authentic Phrygian-flavoured cadence towards E minor, not a slip. The Abgesang harmony (lines 5-7) is a simplified reading of that setting and is the least certain part of the chart; the two languages' bracket positions agree bar for bar."
+}

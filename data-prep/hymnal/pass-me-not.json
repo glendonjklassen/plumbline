@@ -16,14 +16,15 @@
         "Trusting only in Thy merit,\nWould I seek Thy face;\nHeal my wounded, broken spirit,\nSave me by Thy grace.",
         "Thou the spring of all my comfort,\nMore than life to me,\nWhom have I on earth beside Thee,\nWhom in Heav'n but Thee."
       ],
-      "chorus": "[G]Savior, [D7]Savior,\nHear my humble [G]cry;\n[G]While on others Thou art [C]calling,\nDo not [D7]pass me [G]by.",
+      "chorus": "[G]Savior, [C]Savior,\n[G]Hear my humble [D7]cry;\n[G]While on others Thou art [C]calling,\nDo not [D7]pass me [G]by.",
       "sources": [
         "https://library.timelesstruths.org/music/Pass_Me_Not_O_Gentle_Savior/",
         "https://hymnary.org/text/pass_me_not_o_gentle_savior",
-        "https://gccsatx.com/hymns/pass-me-not-o-gentle-savior/"
+        "https://gccsatx.com/hymns/pass-me-not-o-gentle-savior/",
+        "https://www.hymnal.net/en/hymn/h/1054"
       ]
     },
     "de": null
   },
-  "notes": "Text from Timeless Truths: Crosby's four stanzas and the refrain. The earlier caveat here — that hymnary's bot shield blocked the full page, leaving the wording resting on Timeless Truths alone — is now RESOLVED. Cross-checked 2026-08-01 against gccsatx.com, an independent site, which prints the same four stanzas and the refrain word-for-word with this file. Punctuation and casing differ in stanza 4 between printings: several sources give \"Thou the Spring of all my comfort\" (capital S) and end the last two lines with question marks, \"Whom have I on earth beside Thee? Whom in heav'n but Thee?\". This file follows Timeless Truths exactly — lowercase \"spring\", comma then full stop — which was re-verified against that page rather than assumed. The refrain's last two lines repeat the stanza's melody, so they carry the same chords. Key: the Timeless Truths score is A-flat; G and A are both one semitone away and FORMAT.md's preference order picks G."
+  "notes": "Text from Timeless Truths: Crosby's four stanzas and the refrain. The earlier caveat here — that hymnary's bot shield blocked the full page, leaving the wording resting on Timeless Truths alone — is now RESOLVED. Cross-checked 2026-08-01 against gccsatx.com, an independent site, which prints the same four stanzas and the refrain word-for-word with this file. Punctuation and casing differ in stanza 4 between printings: several sources give \"Thou the Spring of all my comfort\" (capital S) and end the last two lines with question marks, \"Whom have I on earth beside Thee? Whom in heav'n but Thee?\". This file follows Timeless Truths exactly — lowercase \"spring\", comma then full stop — which was re-verified against that page rather than assumed. The refrain's last two lines repeat the stanza's melody, so they carry the same chords. Key: the Timeless Truths score is A-flat; G and A are both one semitone away and FORMAT.md's preference order picks G. Re-verified 2026-08-02 against hymnal.net (no. 1054), independent of the sites above: all four stanzas and the refrain word-for-word, including lowercase \"spring\"; its stanza 4 carries the question-mark punctuation variant already noted, plus unelided \"heaven\" where this file keeps Timeless Truths' \"Heav'n\" (which is what the 8.5 line scans to). CHART FIX 2026-08-02: the refrain's first two lines previously duplicated the stanza's opening chords ([G]Savior, [D7]Savior, ... [G]cry). Doane's refrain rises: the echo \"Savior\" is harmonized on IV and the first half-cadences at \"cry\" — hymnal.net's own chart (in G) puts C under the second \"Savior\" and standard guitar charts give \"G C / Savior, Savior, / G D / Hear my humble cry\"; the chorus now reads [G]Savior, [C]Savior, / [G]Hear my humble [D7]cry accordingly."
 }

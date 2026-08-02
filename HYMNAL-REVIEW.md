@@ -1,6 +1,6 @@
 # Hymnal review
 
-86 of 92 hymns, 82 English and 26 German texts, 86 charted.
+91 of 91 hymns, 85 English and 31 German texts, 91 charted.
 
 Everything here is public domain, but that is a copyright fact, not an
 editorial one. Stanza wording and stanza count differ between hymnals, German
@@ -29,26 +29,20 @@ shows up. Sources are the pages actually consulted.
 - [61. The Church's One Foundation](#61-the-churchs-one-foundation) — the sourcing note admits doubt (chart or wording)
 - [66. Nun danket alle Gott](#66-nun-danket-alle-gott) — the sourcing note admits doubt (chart or wording)
 - 67. Befiehl du deine Wege — German only; the hoped-for translation (Commit Thou All Thy Griefs (tr. John Wesley)) was not sourced
-- **68. Geh aus, mein Herz, und suche Freud** — NO FILE. Not in the book.
-- **69. Ich singe dir mit Herz und Mund** — NO FILE. Not in the book.
-- **70. Wie soll ich dich empfangen** — NO FILE. Not in the book.
-- **71. Sollt ich meinem Gott nicht singen** — NO FILE. Not in the book.
-- **72. Vom Himmel hoch, da komm ich her** — NO FILE. Not in the book.
-- [73. Aus tiefer Not schrei ich zu dir](#73-aus-tiefer-not-schrei-ich-zu-dir) — the sourcing note admits doubt (chart or wording)
-- [74. Nun freut euch, lieben Christen g'mein](#74-nun-freut-euch-lieben-christen-gmein) — the sourcing note admits doubt (chart or wording)
-- [75. Christ lag in Todesbanden](#75-christ-lag-in-todesbanden) — the sourcing note admits doubt (chart or wording)
-- [76. Wachet auf, ruft uns die Stimme](#76-wachet-auf-ruft-uns-die-stimme) — the sourcing note admits doubt (chart or wording)
-- [77. Wie schön leuchtet der Morgenstern](#77-wie-schn-leuchtet-der-morgenstern) — the sourcing note admits doubt (chart or wording)
-- [78. Jesu, meine Freude](#78-jesu-meine-freude) — the sourcing note admits doubt (chart or wording)
-- [79. Schmücke dich, o liebe Seele](#79-schmcke-dich-o-liebe-seele) — the sourcing note admits doubt (chart or wording)
-- **80. Allein Gott in der Höh sei Ehr** — NO FILE. Not in the book.
-- [81. Es ist das Heil uns kommen her](#81-es-ist-das-heil-uns-kommen-her) — the sourcing note admits doubt (chart or wording)
-- [82. Herzliebster Jesu, was hast du verbrochen](#82-herzliebster-jesu-was-hast-du-verbrochen) — the sourcing note admits doubt (chart or wording)
-- [83. O dass ich tausend Zungen hätte](#83-o-dass-ich-tausend-zungen-htte) — the sourcing note admits doubt (chart or wording)
-- [85. Gott ist gegenwärtig](#85-gott-ist-gegenwrtig) — the sourcing note admits doubt (chart or wording)
-- [86. Ich bete an die Macht der Liebe](#86-ich-bete-an-die-macht-der-liebe) — the sourcing note admits doubt (chart or wording)
-- [87. So nimm denn meine Hände](#87-so-nimm-denn-meine-hnde) — the sourcing note admits doubt (chart or wording)
-- [88. Jesus, geh voran](#88-jesus-geh-voran) — the sourcing note admits doubt (chart or wording)
+- [72. Aus tiefer Not schrei ich zu dir](#72-aus-tiefer-not-schrei-ich-zu-dir) — the sourcing note admits doubt (chart or wording)
+- [73. Nun freut euch, lieben Christen g'mein](#73-nun-freut-euch-lieben-christen-gmein) — the sourcing note admits doubt (chart or wording)
+- [74. Christ lag in Todesbanden](#74-christ-lag-in-todesbanden) — the sourcing note admits doubt (chart or wording)
+- [75. Wachet auf, ruft uns die Stimme](#75-wachet-auf-ruft-uns-die-stimme) — the sourcing note admits doubt (chart or wording)
+- [76. Wie schön leuchtet der Morgenstern](#76-wie-schn-leuchtet-der-morgenstern) — the sourcing note admits doubt (chart or wording)
+- [77. Jesu, meine Freude](#77-jesu-meine-freude) — the sourcing note admits doubt (chart or wording)
+- [78. Schmücke dich, o liebe Seele](#78-schmcke-dich-o-liebe-seele) — the sourcing note admits doubt (chart or wording)
+- [80. Es ist das Heil uns kommen her](#80-es-ist-das-heil-uns-kommen-her) — the sourcing note admits doubt (chart or wording)
+- [81. Herzliebster Jesu, was hast du verbrochen](#81-herzliebster-jesu-was-hast-du-verbrochen) — the sourcing note admits doubt (chart or wording)
+- [82. O dass ich tausend Zungen hätte](#82-o-dass-ich-tausend-zungen-htte) — the sourcing note admits doubt (chart or wording)
+- [84. Gott ist gegenwärtig](#84-gott-ist-gegenwrtig) — the sourcing note admits doubt (chart or wording)
+- [85. Ich bete an die Macht der Liebe](#85-ich-bete-an-die-macht-der-liebe) — the sourcing note admits doubt (chart or wording)
+- [86. So nimm denn meine Hände](#86-so-nimm-denn-meine-hnde) — the sourcing note admits doubt (chart or wording)
+- [87. Jesus, geh voran](#87-jesus-geh-voran) — the sourcing note admits doubt (chart or wording)
 
 ---
 ## 1. Holy, Holy, Holy! Lord God Almighty!
@@ -114,7 +108,7 @@ G          C       D7 G
 Join me in glad adora tion.
 
 2.
-Praise to the Lord! Who o’er all things so wondrously reigneth,
+Praise to the Lord! Who o'er all things so wondrously reigneth,
 Shelters thee under His wings, yea, so gently sustaineth;
 Hast thou not seen
 How thy desires have been
@@ -196,7 +190,7 @@ Sources: <https://de.wikipedia.org/wiki/Lobe_den_Herren,_den_m%C3%A4chtigen_K%C3
 
 > **Sourcing note:** German is the ökumenische Fassung (EG 316 / GL 392), quoted in the de.wikipedia article alongside Neander's 1680 original. Where it differs from Neander: st.1 line 2 "lob ihn, o Seele, vereint mit den himmlischen Chören" (orig. "meine geliebete Seele, das ist mein Begehren"); st.4 line 1 "der sichtbar dein Leben gesegnet" (orig. "der deinen Stand sichtbar gesegnet"); st.5 lines 2 and 5 "Lob ihn mit allen, die seine Verheißung bekamen" / "Lob ihn in Ewigkeit. Amen." (orig. "Alles, was Odem hat, lobe mit Abrahams Samen" / "Lobende, schließe mit Amen!"). evangeliums.net prints a hybrid of the two and sets "In wie viel Not" as three words; EG's "In wieviel Not" is used. English is Winkworth's traditional-language text as the Cyber Hymnal prints it (7 stanzas, marked "alt."); shipped are the five that parallel the German -- Cyber Hymnal 1, 2, 3, 4 and 7 -- reflowed from its 7-line typography to the 5 metrical lines of 14.14.4.7.8. Trinity Hymnal p.53 renders stanza 3 quite differently ("Praise to the Lord, who with marvelous wisdom hath made thee"); the Cyber Hymnal wording was kept so one source covers the whole English text. Key G is Trinity Hymnal's; hymnary's incipit database lists the tune in F. Chords simplified from the hymnchords.net chart in G; the two languages are bar-for-bar identical. VERIFIED 2026-08-02: punctuation/casing slips against the Cyber Hymnal were corrected in stanzas 1, 2, 4 and 5 ("The Almighty", "Who o'er", "draw near;", "adoration.", "sustaineth;", "Praise to the Lord, who doth prosper thy work and defend thee;", "attend thee.", "Praise to the Lord, O let"). English cross-checked against hymnal.net #166, which prints its own alterations ("Sing now in glad adoration", st.2 "Who, as on wings of an eagle" and "How thy desires all have been", a different st.4 couplet) -- this file keeps the Cyber Hymnal reading throughout; note Trinity prints "How thy desires e'er have been" where CH has "How thy desires have been". German cross-checked against the Erzbistum Koeln text sheet of GL 392 oe (URL above), which matches word for word; only its terminal punctuation differs ("hoeren.", "Ewigkeit!").
 
-## 3. All Hail the Power of Jesus’ Name
+## 3. All Hail the Power of Jesus' Name
 
 Tune **CORONATION** · 8.6.8.6.8.6 · key **G**
 
@@ -205,7 +199,7 @@ Tune **CORONATION** · 8.6.8.6.8.6 · key **G**
 ```
 1.
 G                     D Em   D
-All hail the power of Jesus’ name!
+All hail the power of Jesus' name!
     G D        G
 Let angels prostrate fall;
 D               G        D
@@ -220,13 +214,13 @@ And crown Him Lord of all.
 2.
 Crown Him, ye martyrs of your God,
 Who from His altar call;
-Extol the Stem of Jesse’s rod,
+Extol the Stem of Jesse's rod,
 And crown Him Lord of all.
-Extol the Stem of Jesse’s rod,
+Extol the Stem of Jesse's rod,
 And crown Him Lord of all.
 
 3.
-Ye seed of Israel’s chosen race,
+Ye seed of Israel's chosen race,
 Ye ransomed from the fall,
 Hail Him who saves you by His grace,
 And crown Him Lord of all.
@@ -234,7 +228,7 @@ Hail Him who saves you by His grace,
 And crown Him Lord of all.
 
 4.
-Sinners, whose love can ne’er forget
+Sinners, whose love can ne'er forget
 The wormwood and the gall,
 Go spread your trophies at His feet,
 And crown Him Lord of all.
@@ -276,7 +270,7 @@ Crown Him with many crowns,
     D      A7     D
 The Lamb upon His throne.
 D             A        Bm     E7
-Hark! How the heav’nly anthem drowns
+Hark! How the heav'nly anthem drowns
 A         E7      A
 All music but its own!
  D        A7        D
@@ -290,7 +284,7 @@ Through all eterni ty!
 
 2.
 Crown Him the Lord of life,
-Who triumphed o’er the grave,
+Who triumphed o'er the grave,
 And rose victorious in the strife
 For those He came to save.
 His glories now we sing,
@@ -386,7 +380,7 @@ Tune **AZMON** · 8.6.8.6 · key **G**
 G       D        G
 O for a thousand tongues to sing
    Em      D7  G
-My great Redeemer’s praise,
+My great Redeemer's praise,
     G             C
 The glories of my God and king,
     G           D7  G
@@ -401,8 +395,8 @@ The honors of Thy name.
 3.
 Jesus! the name that charms our fears,
 That bids our sorrows cease;
-’Tis music in the sinner’s ears,
-’Tis life, and health, and peace.
+'Tis music in the sinner's ears,
+'Tis life, and health, and peace.
 
 4.
 He breaks the power of canceled sin,
@@ -455,13 +449,13 @@ Teach me some melodious sonnet,
                 G        D
 sung by flaming tongues above;
            A7         D       A
-praise the mount! I’m fixed upon it,
+praise the mount! I'm fixed upon it,
 D        G       A7       D
-mount of God’s unchanging love!
+mount of God's unchanging love!
 
 2.
 Here I raise my Ebenezer;
-hither by thy help I’m come;
+hither by thy help I'm come;
 and I hope, by thy good pleasure,
 safely to arrive at home.
 Jesus sought me when a stranger,
@@ -471,12 +465,12 @@ interposed his precious blood.
 
 3.
 O to grace how great a debtor
-daily I’m constrained to be!
+daily I'm constrained to be!
 Let that grace now, like a fetter,
 bind my wandering heart to thee.
 Prone to wander, Lord, I feel it,
 prone to leave the God I love;
-here’s my heart; O take and seal it;
+here's my heart; O take and seal it;
 seal it for thy courts above.
 
 ```
@@ -578,12 +572,12 @@ O ver and a round us lies—
 2.
 For the wonder of each hour,
 Of the day and of the night,
-Hill and vale, and tree and flow’r,
+Hill and vale, and tree and flow'r,
 Sun and moon, and stars of light—
 
 3.
 For the joy of ear and eye,
-For the heart and mind’s delight,
+For the heart and mind's delight,
 For the mystic harmony
 Linking sense to sound and sight.
 
@@ -602,7 +596,7 @@ Flowers of earth and buds of Heaven.
 6.
 For Thy church that evermore
 Lifteth holy hands above,
-Off’ring up on every shore
+Off'ring up on every shore
 Her pure sacrifice of love—
 
 Refrain:
@@ -615,7 +609,7 @@ This our hymn of grateful praise.
 
 Sources: <https://library.timelesstruths.org/music/For_the_Beauty_of_the_Earth/> · <https://www.songsandhymns.org/hymns/lyrics/for-the-beauty-of-the-earth> · <https://en.wikipedia.org/wiki/For_the_Beauty_of_the_Earth> · <https://hymnary.org/text/for_the_beauty_of_the_earth> · <https://library.timelesstruths.org/library/music/F/For_the_Beauty_of_the_Earth/For_the_Beauty_of_the_Earth.xml>
 
-> **Sourcing note:** The common six-stanza hymnal form, assembled from two sources because no single fetched source prints all six: stanzas 1, 2, 4, 6 and the refrain verbatim from Timeless Truths (4-stanza printing, em-dash line ends kept); stanzas 3 (“joy of ear and eye”) and 5 (“each perfect gift”) verbatim from songsandhymns.org, which ends them with periods — punctuation left as each source prints it. Stanza order follows Pierpoint’s 1864 original (checked against the full 8-stanza text on Wikipedia): ear-and-eye and perfect-gift sit where the original puts them, church last as Timeless Truths prints it. The original’s refrain reads “Christ, our God, to Thee we raise / This our Sacrifice of Praise”; the “Lord of all … hymn of grateful praise” refrain shipped here is the standard hymnal alteration. The rarely printed martyrs’/virgins’ stanzas are omitted. Some hymnals read “For the beauty of each hour” where stanza 2 here has “wonder” (the common altered form). Tune/meter per the hymnary.org text page (DIX, 7.7.7.7.7.7); common key G (Timeless Truths score and songsandhymns both print G) — already a guitar key. Chords derived from the SATB MusicXML of DIX at Timeless Truths, inversions simplified; the refrain carries its own chart.
+> **Sourcing note:** The common six-stanza hymnal form, assembled from two sources because no single fetched source prints all six: stanzas 1, 2, 4, 6 and the refrain verbatim from Timeless Truths (4-stanza printing, em-dash line ends kept); stanzas 3 (“joy of ear and eye”) and 5 (“each perfect gift”) verbatim from songsandhymns.org, which ends them with periods — punctuation left as each source prints it. Stanza order follows Pierpoint's 1864 original (checked against the full 8-stanza text on Wikipedia): ear-and-eye and perfect-gift sit where the original puts them, church last as Timeless Truths prints it. The original's refrain reads “Christ, our God, to Thee we raise / This our Sacrifice of Praise”; the “Lord of all … hymn of grateful praise” refrain shipped here is the standard hymnal alteration. The rarely printed martyrs'/virgins' stanzas are omitted. Some hymnals read “For the beauty of each hour” where stanza 2 here has “wonder” (the common altered form). Tune/meter per the hymnary.org text page (DIX, 7.7.7.7.7.7); common key G (Timeless Truths score and songsandhymns both print G) — already a guitar key. Chords derived from the SATB MusicXML of DIX at Timeless Truths, inversions simplified; the refrain carries its own chart.
 
 ## 10. Praise God, from Whom All Blessings Flow
 
@@ -630,7 +624,7 @@ Praise God, from Whom all blessings flow;
 G               D   Em    Am   G D
 Praise Him, all creatures here below;
 Em     D   G D     G/B C     D  G
-Praise Him a bove, ye  heav’nly host;
+Praise Him a bove, ye  heav'nly host;
 G        Em    D    Am  G/B D  G
 Praise Father, Son, and Ho  ly Ghost.
 
@@ -638,7 +632,7 @@ Praise Father, Son, and Ho  ly Ghost.
 
 Sources: <https://library.timelesstruths.org/music/Doxology/> · <https://hymnary.org/text/praise_god_from_whom_all_blessings_flow> · <https://library.timelesstruths.org/library/music/D/Doxology/Doxology.xml>
 
-> **Sourcing note:** The single doxology stanza that closes Ken’s 1674 morning and evening hymns, as Timeless Truths prints it; hymnary’s representative text (Baptist Hymnal 1991) is word-identical but appends “Amen.”, omitted here since its printing varies. Tune/meter per the hymnary.org text page (OLD HUNDREDTH, 8.8.8.8). Common key G (Timeless Truths score) — already a guitar key. Chords derived from the SATB MusicXML of OLD HUNDREDTH at Timeless Truths; the harmonisation moves nearly once per syllable, so the chart keeps most of it (one passing chord kept as Bm, inversions simplified). This chart matches hymn 11 (All People That on Earth Do Dwell) bar for bar — same tune.
+> **Sourcing note:** The single doxology stanza that closes Ken's 1674 morning and evening hymns, as Timeless Truths prints it; hymnary's representative text (Baptist Hymnal 1991) is word-identical but appends “Amen.”, omitted here since its printing varies. Tune/meter per the hymnary.org text page (OLD HUNDREDTH, 8.8.8.8). Common key G (Timeless Truths score) — already a guitar key. Chords derived from the SATB MusicXML of OLD HUNDREDTH at Timeless Truths; the harmonisation moves nearly once per syllable, so the chart keeps most of it (one passing chord kept as Bm, inversions simplified). This chart matches hymn 11 (All People That on Earth Do Dwell) bar for bar — same tune.
 
 ## 11. All People That on Earth Do Dwell
 
@@ -679,7 +673,7 @@ And shall from age to age endure.
 
 Sources: <https://hymnary.org/text/all_people_that_on_earth_do_dwell> · <https://library.timelesstruths.org/library/music/D/Doxology/Doxology.xml> · <https://library.timelesstruths.org/music/Doxology/>
 
-> **Sourcing note:** Kethe’s four stanzas of Psalm 100 exactly as hymnary.org’s representative text prints them (Hymns and Devotions for Daily Worship #363b), including its capitalised “on Earth” in line 1, lowercase deity pronouns, and the old “forthtell”. Many hymnals append a later doxological fifth stanza (“To Father, Son, and Holy Ghost…”) that is not Kethe’s; no PD source text for it was confirmed in this pass, so it is omitted — this book carries Ken’s doxology separately as hymn 10. Tune/meter per the hymnary.org text page (OLD HUNDREDTH, 8.8.8.8). Key G matches the OLD HUNDREDTH score at Timeless Truths (their Doxology entry — same tune), from whose SATB MusicXML the chords were derived; the chart agrees bar for bar with hymn 10.
+> **Sourcing note:** Kethe's four stanzas of Psalm 100 exactly as hymnary.org's representative text prints them (Hymns and Devotions for Daily Worship #363b), including its capitalised “on Earth” in line 1, lowercase deity pronouns, and the old “forthtell”. Many hymnals append a later doxological fifth stanza (“To Father, Son, and Holy Ghost…”) that is not Kethe's; no PD source text for it was confirmed in this pass, so it is omitted — this book carries Ken's doxology separately as hymn 10. Tune/meter per the hymnary.org text page (OLD HUNDREDTH, 8.8.8.8). Key G matches the OLD HUNDREDTH score at Timeless Truths (their Doxology entry — same tune), from whose SATB MusicXML the chords were derived; the chart agrees bar for bar with hymn 10.
 
 ## 12. I Sing the Mighty Power of God
 
@@ -690,7 +684,7 @@ Tune **ELLACOMBE** · 8.6.8.6 D · key **A**
 ```
 1.
 E A        E    A/C# F#m   Bm7 E
-I sing the mighty    pow’r of  God,
+I sing the mighty    pow'r of  God,
 A    D    A/C# D   E     A
 that made the  mountains rise,
 E    A          E   A/C# F#m  Bm7 E
@@ -712,12 +706,12 @@ who filled the earth with food,
 Who formed the creatures through the Word,
 and then pronounced them good.
 Lord, how Thy wonders are displayed,
-where’er I turn my eye,
+where'er I turn my eye,
 If I survey the ground I tread,
 or gaze upon the sky.
 
 3.
-There’s not a plant or flow’r below,
+There's not a plant or flow'r below,
 but makes Thy glories known,
 And clouds arise, and tempests blow,
 by order from Thy throne;
@@ -730,7 +724,7 @@ Thou, God, art present there.
 
 Sources: <https://library.timelesstruths.org/music/I_Sing_the_Mighty_Power_of_God/> · <https://hymnary.org/text/i_sing_the_mighty_power_of_god> · <https://library.timelesstruths.org/library/music/I/I_Sing_the_Mighty_Power_of_God/I_Sing_the_Mighty_Power_of_God.xml>
 
-> **Sourcing note:** All three stanzas of the traditional text as Timeless Truths prints them (“I sing”, Thy/Thee — hymnary’s representative text is the modernised Psalter Hymnal “We sing” recension and was not used). Timeless Truths prints each stanza as four fourteener lines; reflowed here to the eight metrical lines of 8.6.8.6 D at the mid-line commas, keeping the source’s lowercase continuations — no words changed. Watts’s 1715 original opened “I sing th’almighty power of God”; “the mighty pow’r” is the standard hymnal form shipped here. Tune per the hymnary.org text page (ELLACOMBE, listed first; meter there “8.6.8.6 D”). Common key B♭ (Timeless Truths score) moved to A for guitar per the key rule. Chords derived from the SATB MusicXML of ELLACOMBE at Timeless Truths, transposed B♭→A and thinned (Cm7→Bm7, Fsus4→Esus4 kept as idiomatic colour).
+> **Sourcing note:** All three stanzas of the traditional text as Timeless Truths prints them (“I sing”, Thy/Thee — hymnary's representative text is the modernised Psalter Hymnal “We sing” recension and was not used). Timeless Truths prints each stanza as four fourteener lines; reflowed here to the eight metrical lines of 8.6.8.6 D at the mid-line commas, keeping the source's lowercase continuations — no words changed. Watts's 1715 original opened “I sing th'almighty power of God”; “the mighty pow'r” is the standard hymnal form shipped here. Tune per the hymnary.org text page (ELLACOMBE, listed first; meter there “8.6.8.6 D”). Common key B♭ (Timeless Truths score) moved to A for guitar per the key rule. Chords derived from the SATB MusicXML of ELLACOMBE at Timeless Truths, transposed B♭→A and thinned (Cm7→Bm7, Fsus4→Esus4 kept as idiomatic colour).
 
 ## 13. O Worship the King
 
@@ -783,7 +777,7 @@ With true adoration shall all sing Thy praise.
 
 Sources: <http://www.hymntime.com/tch/htm/o/w/t/k/owtking.htm> · <https://library.timelesstruths.org/music/Oh_Worship_the_King/> · <https://hymnary.org/text/o_worship_the_king_all_glorious_above> · <https://library.timelesstruths.org/library/music/O/Oh_Worship_the_King/Oh_Worship_the_King.xml>
 
-> **Sourcing note:** All six of Grant’s stanzas as the Cyber Hymnal prints them (most hymnals print a four- or five-stanza subset; the brief is not to trim). The Cyber Hymnal’s punctuation and casing are kept verbatim, including its “Oh worship”/“O gratefully” openings and the lowercase “Our maker, defender, redeemer, and friend!” — Timeless Truths’ four-stanza printing capitalises these and reads “Oh, worship”; wording is otherwise identical. Line 2’s “power” is sung as one syllable (Timeless Truths prints “pow’r”). Tune/meter per the hymnary.org text page (LYONS, listed first; 10.10.11.11). LYONS’ attribution varies (J. Michael Haydn per the Cyber Hymnal; J. M. Kraus per Timeless Truths) — tune name and meter are what this file asserts. Common key G (Timeless Truths score) — already a guitar key. Chords derived from that score’s SATB MusicXML, inversions simplified; the A7 in line 3 is the score’s secondary dominant.
+> **Sourcing note:** All six of Grant's stanzas as the Cyber Hymnal prints them (most hymnals print a four- or five-stanza subset; the brief is not to trim). The Cyber Hymnal's punctuation and casing are kept verbatim, including its “Oh worship”/“O gratefully” openings and the lowercase “Our maker, defender, redeemer, and friend!” — Timeless Truths' four-stanza printing capitalises these and reads “Oh, worship”; wording is otherwise identical. Line 2's “power” is sung as one syllable (Timeless Truths prints “pow'r”). Tune/meter per the hymnary.org text page (LYONS, listed first; 10.10.11.11). LYONS' attribution varies (J. Michael Haydn per the Cyber Hymnal; J. M. Kraus per Timeless Truths) — tune name and meter are what this file asserts. Common key G (Timeless Truths score) — already a guitar key. Chords derived from that score's SATB MusicXML, inversions simplified; the A7 in line 3 is the score's secondary dominant.
 
 ## 14. Amazing Grace
 
@@ -803,7 +797,7 @@ I once was lost, but now am found;
 Was blind, but now I  see.
 
 2.
-’Twas grace that taught my heart to fear,
+'Twas grace that taught my heart to fear,
 And grace my fears relieved;
 How precious did that grace appear
 The hour I first believed.
@@ -811,7 +805,7 @@ The hour I first believed.
 3.
 Through many dangers, toils, and snares,
 I have already come;
-’Tis grace hath brought me safe thus far,
+'Tis grace hath brought me safe thus far,
 And grace will lead me home.
 
 4.
@@ -833,16 +827,16 @@ But God, who called me here below,
 Will be forever mine.
 
 7.
-When we’ve been there ten thousand years,
+When we've been there ten thousand years,
 Bright shining as the sun,
-We’ve no less days to sing God’s praise
-Than when we’d first begun.
+We've no less days to sing God's praise
+Than when we'd first begun.
 
 ```
 
 Sources: <https://library.timelesstruths.org/music/Amazing_Grace/> · <https://hymnary.org/text/amazing_grace_how_sweet_the_sound> · <https://library.timelesstruths.org/library/music/A/Amazing_Grace/Amazing_Grace.xml>
 
-> **Sourcing note:** Newton’s six 1779 stanzas plus the traditional seventh (“When we’ve been there ten thousand years”), exactly as Timeless Truths prints them; their page credits stanza 7 to Anonymous, pub. 1829 — it is not Newton’s, but nearly every modern hymnal prints it, so it ships. Hymnary’s representative text (Ancient & Modern 2013) confirms stanzas 1–6 word for word apart from lowercased pronouns and “(how sweet the sound)” in parentheses. Tune/meter per the hymnary.org text page (NEW BRITAIN, 8.6.8.6). Common key G (Timeless Truths score) — already a guitar key. Chords derived from that score’s SATB MusicXML, thinned to the harmonic rhythm; this chart follows the score (D7 on “How”, Em on “sweet”) rather than the looser folk chart many songbooks print.
+> **Sourcing note:** Newton's six 1779 stanzas plus the traditional seventh (“When we've been there ten thousand years”), exactly as Timeless Truths prints them; their page credits stanza 7 to Anonymous, pub. 1829 — it is not Newton's, but nearly every modern hymnal prints it, so it ships. Hymnary's representative text (Ancient & Modern 2013) confirms stanzas 1–6 word for word apart from lowercased pronouns and “(how sweet the sound)” in parentheses. Tune/meter per the hymnary.org text page (NEW BRITAIN, 8.6.8.6). Common key G (Timeless Truths score) — already a guitar key. Chords derived from that score's SATB MusicXML, thinned to the harmonic rhythm; this chart follows the score (D7 on “How”, Em on “sweet”) rather than the looser folk chart many songbooks print.
 
 ## 15. When I Survey the Wondrous Cross
 
@@ -870,7 +864,7 @@ I sacrifice them to His blood.
 3.
 See from His head, His hands, His feet,
 Sorrow and love flow mingled down!
-Did e’er such love and sorrow meet,
+Did e'er such love and sorrow meet,
 Or thorns compose so rich a crown?
 
 4.
@@ -883,7 +877,7 @@ Demands my soul, my life, my all.
 
 Sources: <https://library.timelesstruths.org/music/When_I_Survey_the_Wondrous_Cross/> · <https://hymnary.org/text/when_i_survey_the_wondrous_cross> · <https://library.timelesstruths.org/library/music/W/When_I_Survey_the_Wondrous_Cross/When_I_Survey_the_Wondrous_Cross.xml>
 
-> **Sourcing note:** The standard four stanzas as Timeless Truths prints them; hymnary’s representative text (Psalter Hymnal 1987) agrees word for word apart from lowercased pronouns and “through his blood” for “to His blood” in stanza 2 (both readings are old; the source’s “to” is kept). Watts’s 1707 original had a fifth stanza (“His dying crimson, like a robe…”, originally fourth) that almost all hymnals omit; neither fetched source prints it, so it is not shipped. Tune per the hymnary.org text page (HAMBURG, listed first; meter 8.8.8.8) — British books usually set ROCKINGHAM instead. Common key F (Timeless Truths score) moved to E for guitar per the key rule. Chords derived from the SATB MusicXML of HAMBURG at Timeless Truths, transposed F→E and thinned; Mason’s harmonisation is largely static, so the chart changes sparsely on purpose.
+> **Sourcing note:** The standard four stanzas as Timeless Truths prints them; hymnary's representative text (Psalter Hymnal 1987) agrees word for word apart from lowercased pronouns and “through his blood” for “to His blood” in stanza 2 (both readings are old; the source's “to” is kept). Watts's 1707 original had a fifth stanza (“His dying crimson, like a robe…”, originally fourth) that almost all hymnals omit; neither fetched source prints it, so it is not shipped. Tune per the hymnary.org text page (HAMBURG, listed first; meter 8.8.8.8) — British books usually set ROCKINGHAM instead. Common key F (Timeless Truths score) moved to E for guitar per the key rule. Chords derived from the SATB MusicXML of HAMBURG at Timeless Truths, transposed F→E and thinned; Mason's harmonisation is largely static, so the chart changes sparsely on purpose.
 
 ## 16. Rock of Ages, Cleft for Me
 
@@ -908,7 +902,7 @@ Save from wrath and make me pure.
 
 2.
 Not the labor of my hands
-Can fulfill Thy law’s demands;
+Can fulfill Thy law's demands;
 Could my zeal no respite know,
 Could my tears forever flow,
 All for sin could not atone;
@@ -934,7 +928,7 @@ Let me hide myself in Thee.
 
 Sources: <https://library.timelesstruths.org/music/Rock_of_Ages/> · <https://hymnary.org/text/rock_of_ages_cleft_for_me_let_me_hide> · <https://library.timelesstruths.org/library/music/R/Rock_of_Ages/Rock_of_Ages.xml>
 
-> **Sourcing note:** The standard four stanzas as Timeless Truths prints them; hymnary’s representative text (United Methodist Hymnal 1989) agrees apart from lowercased pronouns, “labors” for “labor”, “mine eyes” for “my eyes”, and “When I soar … see thee on thy judgment throne” for this text’s “When I rise … And behold Thee on Thy throne” in stanza 4 — both recensions are common; the Timeless Truths form is shipped verbatim. Author appears as Augustus M. Toplady on the source page (worklist hint “Augustus Toplady”). Tune/meter per the hymnary.org text page (TOPLADY, 7.7.7.7.7.7). Common key B♭ (Timeless Truths score) moved to A for guitar per the key rule. Chords derived from that score’s SATB MusicXML transposed B♭→A; Hastings’ harmonisation moves nearly per syllable at the cadences, so lines 1, 2, 5 and 6 carry more changes than lines 3–4, which sit on V–V7.
+> **Sourcing note:** The standard four stanzas as Timeless Truths prints them; hymnary's representative text (United Methodist Hymnal 1989) agrees apart from lowercased pronouns, “labors” for “labor”, “mine eyes” for “my eyes”, and “When I soar … see thee on thy judgment throne” for this text's “When I rise … And behold Thee on Thy throne” in stanza 4 — both recensions are common; the Timeless Truths form is shipped verbatim. Author appears as Augustus M. Toplady on the source page (worklist hint “Augustus Toplady”). Tune/meter per the hymnary.org text page (TOPLADY, 7.7.7.7.7.7). Common key B♭ (Timeless Truths score) moved to A for guitar per the key rule. Chords derived from that score's SATB MusicXML transposed B♭→A; Hastings' harmonisation moves nearly per syllable at the cadences, so lines 1, 2, 5 and 6 carry more changes than lines 3–4, which sit on V–V7.
 
 ## 17. There Is a Fountain Filled with Blood
 
@@ -1034,7 +1028,7 @@ And love beyond degree!
 Well might the sun in darkness hide
 And shut his glories in,
 When Christ, the mighty Maker died,
-For man the creature’s sin.
+For man the creature's sin.
 
 4.
 Thus might I hide my blushing face
@@ -1043,10 +1037,10 @@ Dissolve my heart in thankfulness,
 And melt my eyes to tears.
 
 5.
-But drops of grief can ne’er repay
+But drops of grief can ne'er repay
 The debt of love I owe:
 Here, Lord, I give myself away
-’Tis all that I can do.
+'Tis all that I can do.
 
 ```
 
@@ -1090,9 +1084,9 @@ This is all my righteousness,
 Nothing but the blood of Jesus.
 
 5.
-Now by this I’ll overcome—
+Now by this I'll overcome—
 Nothing but the blood of Jesus,
-Now by this I’ll reach my home—
+Now by this I'll reach my home—
 Nothing but the blood of Jesus.
 
 6.
@@ -1179,7 +1173,7 @@ Tune **SAGINA** · 8.8.8.8.8.8 with refrain · key **G**
 G                  D        G
 And can it be that I should gain
    C               G        D
-An interest in the Savior’s blood?
+An interest in the Savior's blood?
 G                   D          G
 Died He for me, who caused His pain—
     C       G      D        G
@@ -1194,28 +1188,28 @@ Amazing love! How can it be,
 That Thou, my God, shouldst die for me?
 
 2.
-’Tis mystery all: th’Immortal dies:
+'Tis mystery all: th'Immortal dies:
 Who can explore His strange design?
 In vain the firstborn seraph tries
 To sound the depths of love divine.
-’Tis mercy all! Let earth adore,
+'Tis mercy all! Let earth adore,
 Let angel minds inquire no more.
-’Tis mercy all! Let earth adore;
+'Tis mercy all! Let earth adore;
 Let angel minds inquire no more.
 
 3.
-He left His Father’s throne above
+He left His Father's throne above
 So free, so infinite His grace—
 Emptied Himself of all but love,
-And bled for Adam’s helpless race:
-’Tis mercy all, immense and free,
+And bled for Adam's helpless race:
+'Tis mercy all, immense and free,
 For O my God, it found out me!
-’Tis mercy all, immense and free,
+'Tis mercy all, immense and free,
 For O my God, it found out me!
 
 4.
 Long my imprisoned spirit lay,
-Fast bound in sin and nature’s night;
+Fast bound in sin and nature's night;
 Thine eye diffused a quickening ray—
 I woke, the dungeon flamed with light;
 My chains fell off, my heart was free,
@@ -1228,9 +1222,9 @@ No condemnation now I dread;
 Jesus, and all in Him, is mine;
 Alive in Him, my living Head,
 And clothed in righteousness divine,
-Bold I approach th’eternal throne,
+Bold I approach th'eternal throne,
 And claim the crown, through Christ my own.
-Bold I approach th’eternal throne,
+Bold I approach th'eternal throne,
 And claim the crown, through Christ my own.
 
 ```
@@ -1271,13 +1265,13 @@ Hallelujah! What a Savior!
 4.
 Lifted up was He to die;
 It is finished! was His cry;
-Now in Heav’n exalted high.
+Now in Heav'n exalted high.
 Hallelujah! What a Savior!
 
 5.
 When He comes, our glorious king,
 All His ransomed home to bring,
-Then anew His song we’ll sing:
+Then anew His song we'll sing:
 Hallelujah! What a Savior!
 
 ```
@@ -1378,7 +1372,7 @@ wie bist du so bespeit,
 wie bist du so erbleichet!
 Wer hat dein Augenlicht,
 dem sonst kein Licht nicht gleichet,
-so schändlich zugericht’?
+so schändlich zugericht'?
 
 3.
 Die Farbe deiner Wangen,
@@ -1434,7 +1428,7 @@ wie wohl geschähe mir!
 Ich danke dir von Herzen,
 o Jesu, liebster Freund,
 für deines Todes Schmerzen,
-da du’s so gut gemeint.
+da du's so gut gemeint.
 Ach gib, daß ich mich halte
 zu dir und deiner Treu
 und, wenn ich nun erkalte,
@@ -1464,7 +1458,7 @@ Wer so stirbt, der stirbt wohl.
 
 Sources: <https://hymnary.org/text/o_haupt_voll_blut_und_wunden> · <https://hymnary.org/tune/passion_chorale_hassler> · <https://de.wikipedia.org/wiki/O_Haupt_voll_Blut_und_Wunden>
 
-> **Sourcing note:** German is hymnary.org's representative text, the ten-stanza Evangelisches Gesangbuch form (EG 85). Its orthography is kept exactly as printed there, including 'Ach gib, daß ich mich halte' (st. 8) with the old spelling and the mixed apostrophes — straight in "sei'st" (st. 1), typographic in 'zugericht’' (st. 2) and 'da du’s' (st. 8). English is hymnary's representative text (Psalms and Hymns to the Living God #261), the four stanzas of J. W. Alexander's 1830 translation that hymnals actually print; hymnary dates the translation 1829, the Cyber Hymnal 1830. The Cyber Hymnal (hymnary.org/hymn/CYBER/5298) carries an eleven-stanza English composite covering more of Gerhardt — available if a fuller English text is wanted. Gerhardt's German is itself a free translation of the Latin 'Salve caput cruentatum' attributed to Bernard of Clairvaux or Arnulf of Villers-la-Ville, so 'translator' is null on the German as the shipped source text. VERIFICATION 2026-08-02: English checked against Trinity Hymnal 1961 #178 (opc.org, URL appended) — all four stanzas match, except Trinity reads 'From Jesus shall not move' and 'Dies safely, through thy love' in st. 4 where this text has 'from Thee shall never move' / 'dies safely in Thy love'; both are attested printings of Alexander, the shipped reading kept. German checked against the EG 85 text as printed by German Wikipedia (URL appended) — identical throughout EXCEPT st. 1 line 7: EG 85, Bach's Passion text, and Gerhardt's 1656 original all read 'jetzt aber hoch schimpfieret', while hymnary's representative text (followed here) prints 'höchst schimpfieret' (likely an eye-skip from 'höchster' two lines up in whatever hymnal hymnary transcribed; also 'sei'st' where EG prints 'seist'). Kept as sourced per the keep-and-note rule, but MAINTAINER: consider emending to EG's 'hoch' — no other printing of 'höchst' was found. Chords: hymnary gives the tune in A minor, the relative minor of C, so no transposition — key is written as Am. Both charts place identical chords on identical syllable positions (1/4/6 of each line), so they agree bar for bar; the chart is a simplified guitar reading of a chorale whose published harmonizations are far more chromatic.
+> **Sourcing note:** German is hymnary.org's representative text, the ten-stanza Evangelisches Gesangbuch form (EG 85). Its orthography is kept exactly as printed there, including 'Ach gib, daß ich mich halte' (st. 8) with the old spelling and the mixed apostrophes — straight in "sei'st" (st. 1), typographic in 'zugericht'' (st. 2) and 'da du's' (st. 8). English is hymnary's representative text (Psalms and Hymns to the Living God #261), the four stanzas of J. W. Alexander's 1830 translation that hymnals actually print; hymnary dates the translation 1829, the Cyber Hymnal 1830. The Cyber Hymnal (hymnary.org/hymn/CYBER/5298) carries an eleven-stanza English composite covering more of Gerhardt — available if a fuller English text is wanted. Gerhardt's German is itself a free translation of the Latin 'Salve caput cruentatum' attributed to Bernard of Clairvaux or Arnulf of Villers-la-Ville, so 'translator' is null on the German as the shipped source text. VERIFICATION 2026-08-02: English checked against Trinity Hymnal 1961 #178 (opc.org, URL appended) — all four stanzas match, except Trinity reads 'From Jesus shall not move' and 'Dies safely, through thy love' in st. 4 where this text has 'from Thee shall never move' / 'dies safely in Thy love'; both are attested printings of Alexander, the shipped reading kept. German checked against the EG 85 text as printed by German Wikipedia (URL appended) — identical throughout EXCEPT st. 1 line 7: EG 85, Bach's Passion text, and Gerhardt's 1656 original all read 'jetzt aber hoch schimpfieret', while hymnary's representative text (followed here) prints 'höchst schimpfieret' (likely an eye-skip from 'höchster' two lines up in whatever hymnal hymnary transcribed; also 'sei'st' where EG prints 'seist'). Kept as sourced per the keep-and-note rule, but MAINTAINER: consider emending to EG's 'hoch' — no other printing of 'höchst' was found. Chords: hymnary gives the tune in A minor, the relative minor of C, so no transposition — key is written as Am. Both charts place identical chords on identical syllable positions (1/4/6 of each line), so they agree bar for bar; the chart is a simplified guitar reading of a chorale whose published harmonizations are far more chromatic.
 
 ## 24. Grace Greater than Our Sin
 
@@ -1479,7 +1473,7 @@ Marvelous grace of our loving Lord,
 D7                                 G
 Grace that exceeds our sin and our guilt!
 G                   C        G
-Yonder on Calvary’s mount outpoured,
+Yonder on Calvary's mount outpoured,
 D7                                    G
 There where the blood of the Lamb was spilled.
 
@@ -1503,11 +1497,11 @@ Will you this moment His grace receive?
 
 Refrain:
 G             C     G
-Grace, grace, God’s grace,
+Grace, grace, God's grace,
 A7                                     D7
 Grace that will pardon and cleanse within;
 G             C     G
-Grace, grace, God’s grace,
+Grace, grace, God's grace,
 C             G            D7      G
 Grace that is greater than all our sin.
 
@@ -1553,7 +1547,7 @@ No pang shall be mine, for in death as in life
 Thou wilt whisper Thy peace to my soul.
 
 5.
-But, Lord, ’tis for Thee, for Thy coming we wait,
+But, Lord, 'tis for Thee, for Thy coming we wait,
 The sky, not the grave, is our goal;
 Oh, trump of the angel! Oh, voice of the Lord!
 Blessed hope, blessed rest of my soul!
@@ -1639,27 +1633,27 @@ D           G         D    A7        D
 Help of the helpless, oh, abide with me.
 
 2.
-Swift to its close ebbs out life’s little day;
-Earth’s joys grow dim, its glories pass away;
+Swift to its close ebbs out life's little day;
+Earth's joys grow dim, its glories pass away;
 Change and decay in all around I see—
 O Thou who changest not, abide with me.
 
 3.
 I need Thy presence every passing hour;
-What but Thy grace can foil the tempter’s pow’r?
+What but Thy grace can foil the tempter's pow'r?
 Who, like Thyself, my guide and stay can be?
 Through cloud and sunshine, Lord, abide with me.
 
 4.
 I fear no foe, with Thee at hand to bless;
 Ills have no weight, and tears no bitterness;
-Where is death’s sting? Where, grave, thy victory?
+Where is death's sting? Where, grave, thy victory?
 I triumph still, if Thou abide with me.
 
 5.
 Hold Thou Thy cross before my closing eyes;
 Shine through the gloom and point me to the skies;
-Heav’n’s morning breaks, and earth’s vain shadows flee;
+Heav'n's morning breaks, and earth's vain shadows flee;
 In life, in death, O Lord, abide with me.
 
 ```
@@ -1685,7 +1679,7 @@ Leave to thy God to order and provide;
    E                A        B7     E
 In every change, He faithful will remain.
    E                   A         E        B
-Be still, my soul: thy best, thy heav’nly Friend
+Be still, my soul: thy best, thy heav'nly Friend
         E                 A    B7     E
 Through thorny ways leads to a joyful end.
 
@@ -1706,10 +1700,10 @@ Be still, my soul: thy Jesus can repay
 From His own fullness all He takes away.
 
 4.
-Be still, my soul: the hour is hast’ning on
+Be still, my soul: the hour is hast'ning on
 When we shall be forever with the Lord.
 When disappointment, grief, and fear are gone,
-Sorrow forgot, love’s purest joys restored.
+Sorrow forgot, love's purest joys restored.
 Be still, my soul: when change and tears are past
 All safe and blessed we shall meet at last.
 
@@ -1771,7 +1765,7 @@ Precious Savior, still our refuge—
 Take it to the Lord in prayer.
 Do thy friends despise, forsake thee?
 Take it to the Lord in prayer!
-In His arms He’ll take and shield thee,
+In His arms He'll take and shield thee,
 Thou wilt find a solace there.
 
 ```
@@ -1838,11 +1832,11 @@ Tune **SOLID ROCK** · 8.8.8.8.8.8.8 · key **E**
    E                A       E
 My hope is built on nothing less
                       B7
-Than Jesus’ blood and righteousness;
+Than Jesus' blood and righteousness;
   E                  A        E
 I dare not trust the sweetest frame,
            B7      E
-But wholly lean on Jesus’ name.
+But wholly lean on Jesus' name.
 
 2.
 When darkness veils His lovely face,
@@ -1941,7 +1935,7 @@ To you who for refuge to Jesus have fled?
 2.
 “Fear not, I am with thee, oh, be not dismayed,
 For I am thy God, and will still give thee aid;
-I’ll strengthen thee, help thee, and cause thee to stand,
+I'll strengthen thee, help thee, and cause thee to stand,
 Upheld by My gracious, omnipotent hand.
 
 3.
@@ -1960,7 +1954,7 @@ Thy dross to consume and thy gold to refine.
 “The soul that on Jesus doth lean for repose,
 I will not, I will not, desert to his foes;
 That soul, though all hell should endeavor to shake,
-I’ll never, no never, no never forsake.”
+I'll never, no never, no never forsake.”
 
 ```
 
@@ -1983,7 +1977,7 @@ Pilgrim through this barren land;
 G C  G     D   G             D
 I am weak, but Thou art mighty,
 G    C  G    C   G    D   G
-Hold me with Thy pow’rful hand.
+Hold me with Thy pow'rful hand.
 D7               G
 Bread of heaven, Bread of heaven,
 G              D
@@ -1996,14 +1990,14 @@ Open now the crystal fountain,
 Whence the healing stream doth flow;
 Let the fire and cloudy pillar
 Lead me all my journey through.
-Strong Deliv’rer, strong Deliv’rer,
+Strong Deliv'rer, strong Deliv'rer,
 Be Thou still my Strength and Shield;
 Be Thou still my Strength and Shield.
 
 3.
 Lord, I trust Thy mighty power,
 Wondrous are Thy works of old;
-Thou deliver’st Thine from thralldom,
+Thou deliver'st Thine from thralldom,
 Who for naught themselves had sold:
 Thou didst conquer, Thou didst conquer
 Sin and Satan and the grave,
@@ -2012,8 +2006,8 @@ Sin and Satan and the grave.
 4.
 When I tread the verge of Jordan,
 Bid my anxious fears subside;
-Death of death and hell’s Destruction,
-Land me safe on Canaan’s side.
+Death of death and hell's Destruction,
+Land me safe on Canaan's side.
 Songs of praises, songs of praises,
 I will ever give to Thee;
 I will ever give to Thee.
@@ -2022,7 +2016,7 @@ I will ever give to Thee.
 
 Sources: <https://library.timelesstruths.org/music/Guide_Me_O_Thou_Great_Jehovah/> · <https://hymnary.org/text/guide_me_o_thou_great_jehovah> · <https://library.timelesstruths.org/library/music/G/Guide_Me_O_Thou_Great_Jehovah/Guide_Me_O_Thou_Great_Jehovah.xml> · <https://www.hymnsite.com/lyrics/umh127.sht> · <http://www.hymntime.com/tch/htm/g/u/i/d/guideme.htm>
 
-> **Sourcing note:** Text: Timeless Truths (traditional Thou-form, sourced there to the Cyber Hymnal and Hymnal of the Church of God 1953). Its first line is printed "Guide me, O Thou great *Jehovah, [*Redeemer]"; the editorial asterisk and gloss are dropped here, and many modern hymnals sing "Guide me, O my great Redeemer". Stanza 3 ("Lord, I trust Thy mighty power") is printed by the Cyber Hymnal but omitted by most English hymnals, which carry only stanzas 1, 2 and 4. Williams wrote the Welsh original in 1745; Peter Williams published the English of stanza 1 in 1771 and the rest derives from William Williams’ own English version. Chords were derived from the SATB MusicXML of CWM RHONDDA at Timeless Truths (score in G, no transposition) and thinned for guitar; the tune is tonic-heavy with quick IV and V decorations, so the chart changes more often than most in this book. Independently cross-checked against the United Methodist Hymnal printing (hymnsite.com, stanzas 1/2/4) and the Cyber Hymnal (which alone carries stanza 3): wording confirmed throughout; the Cyber Hymnal prints "Death of deaths, and hell’s destruction" where this text (with Timeless Truths and the UMH) reads "Death of death".
+> **Sourcing note:** Text: Timeless Truths (traditional Thou-form, sourced there to the Cyber Hymnal and Hymnal of the Church of God 1953). Its first line is printed "Guide me, O Thou great *Jehovah, [*Redeemer]"; the editorial asterisk and gloss are dropped here, and many modern hymnals sing "Guide me, O my great Redeemer". Stanza 3 ("Lord, I trust Thy mighty power") is printed by the Cyber Hymnal but omitted by most English hymnals, which carry only stanzas 1, 2 and 4. Williams wrote the Welsh original in 1745; Peter Williams published the English of stanza 1 in 1771 and the rest derives from William Williams' own English version. Chords were derived from the SATB MusicXML of CWM RHONDDA at Timeless Truths (score in G, no transposition) and thinned for guitar; the tune is tonic-heavy with quick IV and V decorations, so the chart changes more often than most in this book. Independently cross-checked against the United Methodist Hymnal printing (hymnsite.com, stanzas 1/2/4) and the Cyber Hymnal (which alone carries stanza 3): wording confirmed throughout; the Cyber Hymnal prints "Death of deaths, and hell's destruction" where this text (with Timeless Truths and the UMH) reads "Death of death".
 
 ## 34. O God, Our Help in Ages Past
 
@@ -2069,19 +2063,19 @@ Before the rising sun.
 The busy tribes of flesh and blood,
 With all their lives and cares,
 Are carried downwards by the flood,
-And lost in foll’wing years.
+And lost in foll'wing years.
 
 7.
 Time, like an ever-rolling stream,
 Bears all its sons away;
 They fly, forgotten, as a dream
-Dies at the op’ning day.
+Dies at the op'ning day.
 
 8.
-Like flow’ry fields the nations stand
+Like flow'ry fields the nations stand
 Pleased with the morning light;
-The flow’rs beneath the mower’s hand
-Lie with’ring ere ’tis night.
+The flow'rs beneath the mower's hand
+Lie with'ring ere 'tis night.
 
 9.
 O God, our help in ages past,
@@ -2093,7 +2087,7 @@ And our eternal home.
 
 Sources: <https://library.timelesstruths.org/music/O_God_Our_Help_in_Ages_Past/> · <https://hymnary.org/text/o_god_our_help_in_ages_past_watts> · <https://library.timelesstruths.org/library/music/O/O_God_Our_Help_in_Ages_Past/O_God_Our_Help_in_Ages_Past.xml> · <https://ccel.org/ccel/watts/psalmshymns/psalmshymns.Ps.191.html>
 
-> **Sourcing note:** All nine stanzas of Watts’ paraphrase of Psalm 90 as Timeless Truths prints them. Most hymnals print a subset (commonly 1-5 and 9); stanzas 6-8 are kept here because the brief is not to trim. Watts wrote "Our God, our help"; John Wesley’s 1738 alteration to "O God, our help" is the form printed here and in nearly every modern hymnal. Chords derived from the SATB MusicXML of ST. ANNE at Timeless Truths (score in C, no transposition) and thinned for guitar — this is Croft’s harmonisation, which moves once per syllable, so the chart does too. All nine stanzas and their order independently verified against Watts’ original (Psalm 90 Part 1) at CCEL, which confirms the rare stanzas 6–8 word for word.
+> **Sourcing note:** All nine stanzas of Watts' paraphrase of Psalm 90 as Timeless Truths prints them. Most hymnals print a subset (commonly 1-5 and 9); stanzas 6-8 are kept here because the brief is not to trim. Watts wrote "Our God, our help"; John Wesley's 1738 alteration to "O God, our help" is the form printed here and in nearly every modern hymnal. Chords derived from the SATB MusicXML of ST. ANNE at Timeless Truths (score in C, no transposition) and thinned for guitar — this is Croft's harmonisation, which moves once per syllable, so the chart does too. All nine stanzas and their order independently verified against Watts' original (Psalm 90 Part 1) at CCEL, which confirms the rare stanzas 6–8 word for word.
 
 ## 35. A Mighty Fortress Is Our God
 
@@ -2118,7 +2112,7 @@ For still our ancient foe
 C            F       Am
 doth seek to work us woe;
 E   Am              D7  G
-His craft and pow’r are great,
+His craft and pow'r are great,
 F          C    Dm    E
 and, armed with cruel hate,
 Am       F  C   Dm   C
@@ -2128,7 +2122,7 @@ On earth is not his equal.
 Did we in our own strength confide,
 our striving would be losing,
 Were not the right Man on our side,
-the Man of God’s own choosing:
+the Man of God's own choosing:
 Dost ask who that may be?
 Christ Jesus, it is He;
 Lord Sabaoth, His Name,
@@ -2147,14 +2141,14 @@ for lo, his doom is sure,
 One little word shall fell him.
 
 4.
-That word above all earthly pow’rs,
+That word above all earthly pow'rs,
 no thanks to them, abideth;
 The Spirit and the gifts are ours
 through Him Who with us sideth;
 Let goods and kindred go,
 this mortal life also;
 The body they may kill:
-God’s truth abideth still,
+God's truth abideth still,
 His kingdom is forever.
 
 ```
@@ -2178,7 +2172,7 @@ die uns jetzt hat betroffen.
 C       Am D7 G
 Der alt bö se Feind
 C              F     Am
-mit Ernst er’s jetzt meint,
+mit Ernst er's jetzt meint,
 E    Am        D7   G
 groß Macht und viel List
 F        C   Dm      E
@@ -2189,7 +2183,7 @@ auf Erd ist nicht seinsgleichen.
 2.
 Mit unsrer Macht ist nichts getan,
 wir sind gar bald verloren;
-es streit’ für uns der rechte Mann,
+es streit' für uns der rechte Mann,
 den Gott hat selbst erkoren.
 Fragst du, wer der ist?
 Er heißt Jesus Christ,
@@ -2203,27 +2197,27 @@ und wollt uns gar verschlingen,
 so fürchten wir uns nicht so sehr,
 es soll uns doch gelingen.
 Der Fürst dieser Welt,
-wie sau’r er sich stellt,
+wie sau'r er sich stellt,
 tut er uns doch nicht;
-das macht, er ist gericht’:
+das macht, er ist gericht':
 ein Wörtlein kann ihn fällen.
 
 4.
 Das Wort sie sollen lassen stahn
-und kein’ Dank dazu haben;
+und kein' Dank dazu haben;
 er ist bei uns wohl auf dem Plan
 mit seinem Geist und Gaben.
 Nehmen sie den Leib,
 Gut, Ehr, Kind und Weib:
 lass fahren dahin,
-sie haben’s kein’ Gewinn,
+sie haben's kein' Gewinn,
 das Reich muss uns doch bleiben.
 
 ```
 
 Sources: <https://de.wikipedia.org/wiki/Ein_feste_Burg_ist_unser_Gott> · <https://de.wikisource.org/wiki/Ein_feste_Burg_ist_unser_Gott> · <https://www.evangeliums.net/lieder/lied_ein_feste_burg_ist_unser_gott.html>
 
-> **Sourcing note:** German: the Evangelisches Gesangbuch 362 form as printed in the German Wikipedia article (modern sung orthography — "muss", "lass", lower-case line starts). The proofread Wikisource text was also consulted; it follows an older Textgestalt ("muß", "Laß", "tut er uns doch nicht" against EG’s same reading), and differs from Wikipedia at "es streit’t/es streit’ für uns" and "kein ander/kein andrer Gott". Wikipedia’s reading was taken throughout. English: Hedge’s 1853 translation as Timeless Truths prints it, in five long lines per stanza; re-lineated here into the nine metrical lines of the tune, with the source’s wording, punctuation and mid-line lower case kept exactly (the rejoin is checked against the source line). Note the two texts are not syllable-identical: German lines 5-7 are anisometric (5-5-5 syllables against the English 6-6-6), so some brackets there strike different syllables of the melody, but both charts carry the same chords in the same order (40 apiece in stanza 1). English wording independently cross-checked against the United Methodist Hymnal printing (hymnsite.com); German against evangeliums.net, which differs only orthographically (kein/kein’ Dank, habens/haben’s, saur/sau’r). Chords derived from the SATB MusicXML of EIN FESTE BURG at Timeless Truths (score in C, no transposition), isometric form.
+> **Sourcing note:** German: the Evangelisches Gesangbuch 362 form as printed in the German Wikipedia article (modern sung orthography — "muss", "lass", lower-case line starts). The proofread Wikisource text was also consulted; it follows an older Textgestalt ("muß", "Laß", "tut er uns doch nicht" against EG's same reading), and differs from Wikipedia at "es streit't/es streit' für uns" and "kein ander/kein andrer Gott". Wikipedia's reading was taken throughout. English: Hedge's 1853 translation as Timeless Truths prints it, in five long lines per stanza; re-lineated here into the nine metrical lines of the tune, with the source's wording, punctuation and mid-line lower case kept exactly (the rejoin is checked against the source line). Note the two texts are not syllable-identical: German lines 5-7 are anisometric (5-5-5 syllables against the English 6-6-6), so some brackets there strike different syllables of the melody, but both charts carry the same chords in the same order (40 apiece in stanza 1). English wording independently cross-checked against the United Methodist Hymnal printing (hymnsite.com); German against evangeliums.net, which differs only orthographically (kein/kein' Dank, habens/haben's, saur/sau'r). Chords derived from the SATB MusicXML of EIN FESTE BURG at Timeless Truths (score in C, no transposition), isometric form.
 
 ## 36. Be Thou My Vision
 
@@ -2251,18 +2245,18 @@ Thou in me dwelling, and I with Thee one.
 3.
 Be Thou my battle Shield, Sword for the fight;
 Be Thou my Dignity, Thou my Delight;
-Thou my soul’s Shelter, Thou my high Tow’r:
-Raise Thou me heav’nward, O Pow’r of my pow’r.
+Thou my soul's Shelter, Thou my high Tow'r:
+Raise Thou me heav'nward, O Pow'r of my pow'r.
 
 4.
-Riches I heed not, nor man’s empty praise,
+Riches I heed not, nor man's empty praise,
 Thou mine Inheritance, now and always:
 Thou and Thou only, first in my heart,
 High King of Heaven, my Treasure Thou art.
 
 5.
 High King of Heaven, my victory won,
-May I reach Heaven’s joys, O bright Heav’n’s Sun!
+May I reach Heaven's joys, O bright Heav'n's Sun!
 Heart of my own heart, whatever befall,
 Still be my Vision, O Ruler of all.
 
@@ -2270,7 +2264,7 @@ Still be my Vision, O Ruler of all.
 
 Sources: <https://library.timelesstruths.org/music/Be_Thou_My_Vision/> · <https://hymnary.org/text/be_thou_my_vision_o_lord_of_my_heart> · <https://library.timelesstruths.org/library/music/B/Be_Thou_My_Vision/Be_Thou_My_Vision.xml> · <https://songsandhymns.org/hymns/lyrics/be-thou-my-vision>
 
-> **Sourcing note:** Five stanzas, Timeless Truths’ traditional Thou-form text; hymnary’s representative text (Hymns and Devotions for Daily Worship #268) has the same five stanzas with modernised pronouns and a few word changes ("my breastplate, my sword" for "my battle Shield, Sword"; "nor vain, empty praise" for "nor man’s empty praise"). Meter is 10.10.10.10 as hymnary lists it on both the text and the SLANE tune page, though line 3 of this text scans as nine syllables. Byrne made the prose translation (1905) and Hull versified it (1912). Chords derived from the SATB MusicXML of SLANE at Timeless Truths, score in E-flat, transposed down a semitone to D for guitar; the chromatic passing harmonies of line 3 are simplified away. All five stanzas independently cross-checked against the Center for Church Music (songsandhymns.org), which prints the same Thou-form text word for word (unelided Tower/Power/heavenward, lower-case "heaven").
+> **Sourcing note:** Five stanzas, Timeless Truths' traditional Thou-form text; hymnary's representative text (Hymns and Devotions for Daily Worship #268) has the same five stanzas with modernised pronouns and a few word changes ("my breastplate, my sword" for "my battle Shield, Sword"; "nor vain, empty praise" for "nor man's empty praise"). Meter is 10.10.10.10 as hymnary lists it on both the text and the SLANE tune page, though line 3 of this text scans as nine syllables. Byrne made the prose translation (1905) and Hull versified it (1912). Chords derived from the SATB MusicXML of SLANE at Timeless Truths, score in E-flat, transposed down a semitone to D for guitar; the chromatic passing harmonies of line 3 are simplified away. All five stanzas independently cross-checked against the Center for Church Music (songsandhymns.org), which prints the same Thou-form text word for word (unelided Tower/Power/heavenward, lower-case "heaven").
 
 ## 37. Take My Life, and Let It Be
 
@@ -2931,7 +2925,7 @@ Of Jesus and His love.
 D         G        D7
 I love to tell the story,
   Em                B7
-Because I know ’tis true;
+Because I know 'tis true;
    C            G
 It satisfies my longings
    D7               G
@@ -2949,13 +2943,13 @@ I tell it now to thee.
 
 3.
 I love to tell the story;
-’Tis pleasant to repeat
+'Tis pleasant to repeat
 What seems, each time I tell it,
 More wonderfully sweet.
 I love to tell the story,
 For some have never heard
 The message of salvation
-From God’s own holy Word.
+From God's own holy Word.
 
 4.
 I love to tell the story,
@@ -2964,14 +2958,14 @@ Seem hungering and thirsting
 To hear it like the rest.
 And when, in scenes of glory,
 I sing the new, new song,
-’Twill be the old, old story
+'Twill be the old, old story
 That I have loved so long.
 
 Refrain:
 G D                G
 I love to tell the story,
        C              G
-’Twill be my theme in glory,
+'Twill be my theme in glory,
                  D7  G
 To tell the old, old story
 C            D7  G
@@ -3100,7 +3094,7 @@ Tune **WASHED IN THE BLOOD** · 11.9.11.9 with refrain · key **G**
 ```
 1.
 G                              C         G
-Have you been to Jesus for the cleansing pow’r?
+Have you been to Jesus for the cleansing pow'r?
                                    D7
 Are you washed in the blood of the Lamb?
 G                             C
@@ -3109,7 +3103,7 @@ Are you fully trusting in His grace this hour?
 Are you washed in the blood of the Lamb?
 
 2.
-Are you walking daily by the Savior’s side?
+Are you walking daily by the Savior's side?
 Are you washed in the blood of the Lamb?
 Do you rest each moment in the Crucified?
 Are you washed in the blood of the Lamb?
@@ -3123,7 +3117,7 @@ And be washed in the blood of the Lamb?
 4.
 Lay aside the garments that are stained with sin,
 And be washed in the blood of the Lamb;
-There’s a fountain flowing for the soul unclean,
+There's a fountain flowing for the soul unclean,
 Oh, be washed in the blood of the Lamb!
 
 Refrain:
@@ -3190,7 +3184,7 @@ And wonders, wonders, of His love.
 
 Sources: <http://www.hymntime.com/tch/htm/j/o/y/w/joyworld.htm> · <https://hymnary.org/text/joy_to_the_world_the_lord_is_come> · <https://hymnary.org/tune/antioch_handel> · <https://library.timelesstruths.org/music/Joy_to_the_World/>
 
-> **Sourcing note:** Text: Cyber Hymnal, four stanzas (Watts's 1719 paraphrase of Psalm 98), keeping its lowercase 'king' in stanza 1 and its 'every' rather than the sung elision 'ev’ry'. Meter is hymnary's 8.6.8.6 for the tune; the printed six lines are the common-metre quatrain with ANTIOCH's repeats written out (8.6.8.6.6.9 as printed). Tune ANTIOCH, Handel arr. Lowell Mason, commonly printed in D per hymnary.org/tune/antioch_handel, so no transposition. Chart derived from the Cyber Hymnal MIDI (mid/a/n/t/i/antioch.mid); lines 1, 2 and 6 align syllable-for-syllable with the melody onsets, so those chord placements are exact. Cross-checked 2026-08-02 against Timeless Truths (independent of the sites above): all four stanzas agree word for word; variants are punctuation/case only ('the Lord is come!' with exclamation, capital 'King', 'heav'n' elided).
+> **Sourcing note:** Text: Cyber Hymnal, four stanzas (Watts's 1719 paraphrase of Psalm 98), keeping its lowercase 'king' in stanza 1 and its 'every' rather than the sung elision 'ev'ry'. Meter is hymnary's 8.6.8.6 for the tune; the printed six lines are the common-metre quatrain with ANTIOCH's repeats written out (8.6.8.6.6.9 as printed). Tune ANTIOCH, Handel arr. Lowell Mason, commonly printed in D per hymnary.org/tune/antioch_handel, so no transposition. Chart derived from the Cyber Hymnal MIDI (mid/a/n/t/i/antioch.mid); lines 1, 2 and 6 align syllable-for-syllable with the melody onsets, so those chord placements are exact. Cross-checked 2026-08-02 against Timeless Truths (independent of the sites above): all four stanzas agree word for word; variants are punctuation/case only ('the Lord is come!' with exclamation, capital 'King', 'heav'n' elided).
 
 ## 54. Hark! The Herald Angels Sing
 
@@ -3213,25 +3207,25 @@ Joyful, all ye nations rise,
 G                C      D
 Join the triumph of the skies;
 C            E7 Am
-With th’angelic host proclaim,
+With th'angelic host proclaim,
 D7        G           D7 G
 Christ is born in Bethle hem!
 
 2.
-Christ, by highest Heav’n adored;
+Christ, by highest Heav'n adored;
 Christ the everlasting Lord;
 Late in time, behold Him come,
-Offspring of a virgin’s womb.
+Offspring of a virgin's womb.
 Veiled in flesh the Godhead see;
-Hail th’incarnate Deity,
+Hail th'incarnate Deity,
 Pleased with us in flesh to dwell,
 Jesus our Emmanuel.
 
 3.
-Hail the heav’nly Prince of Peace!
+Hail the heav'nly Prince of Peace!
 Hail the Sun of Righteousness!
 Light and life to all He brings,
-Ris’n with healing in His wings.
+Ris'n with healing in His wings.
 Mild He lays His glory by,
 Born that man no more may die.
 Born to raise the sons of earth,
@@ -3240,15 +3234,15 @@ Born to give them second birth.
 4.
 Come, desire of nations, come,
 Fix in us Thy humble home;
-Rise, the woman’s conquering Seed,
-Bruise in us the serpent’s head.
+Rise, the woman's conquering Seed,
+Bruise in us the serpent's head.
 Now display Thy saving power,
 Ruined nature now restore;
 Now in mystic union join
 Thine to ours, and ours to Thine.
 
 5.
-Adam’s likeness, Lord, efface,
+Adam's likeness, Lord, efface,
 Stamp Thine image in its place:
 Second Adam from above,
 Reinstate us in Thy love.
@@ -3294,7 +3288,7 @@ Born the King of an gels;
 True God of true God
 Light from Light Eternal,
 Lo, He shuns not
-The virgin’s womb;
+The virgin's womb;
 Son of the Father,
 Begotten, not created;
 
@@ -3320,7 +3314,7 @@ Magi, Christ adoring,
 Offer Him incense,
 Gold, and myrrh;
 We to the Christ Child
-Bring our hearts’ oblations.
+Bring our hearts' oblations.
 
 6.
 Child, for us sinners
@@ -3386,7 +3380,7 @@ Christ the Savior is born!
 
 3.
 Silent night, holy night,
-Son of God, love’s pure light;
+Son of God, love's pure light;
 Radiant beams from Thy holy face
 With the dawn of redeeming grace,
 Jesus, Lord, at Thy birth,
@@ -3912,7 +3906,7 @@ Tune **SWEET BY AND BY** · 9.9.9.9 with refrain · key **G**
 ```
 1.
 G                      Am  C       G
-There’s a land that is fairer than day,
+There's a land that is fairer than day,
 G                           D
 And by faith we can see it afar;
 G                    Am C       G
@@ -3944,13 +3938,13 @@ We shall meet on that beautiful shore.
 
 ```
 
-Sources: <https://library.timelesstruths.org/music/In_the_Sweet_By_and_By/> · <http://www.hymntime.com/tch/htm/i/n/t/s/intsbab.htm> · <https://hymnary.org/text/theres_a_land_that_is_fairer_than_day_an> · <https://hymnary.org/tune/sweet_by_and_by_webster> · <https://library.timelesstruths.org/library/music/I/In_the_Sweet_By_and_By/In_the_Sweet_By_and_By.xml>
+Sources: <https://library.timelesstruths.org/music/In_the_Sweet_By_and_By/> · <http://www.hymntime.com/tch/htm/i/n/t/s/intsbab.htm> · <https://hymnary.org/text/theres_a_land_that_is_fairer_than_day_an> · <https://hymnary.org/tune/sweet_by_and_by_webster> · <https://library.timelesstruths.org/library/music/I/In_the_Sweet_By_and_By/In_the_Sweet_By_and_By.xml> · <https://dailyprayer.us/Christian_song_lyrics/Christian_song_lyrics.php?s=in-the-sweet-by-and-by> · <https://www.godtube.com/popular-hymns/in-the-sweet-by-and-by/> · <https://www.classical-music.com/articles/in-the-sweet-by-and-by-lyrics>
 
-> **Sourcing note:** Text from Timeless Truths, which is word-for-word identical to the Cyber Hymnal's transcription of the first printing (Bennett's words in Webster's The Signet Ring, Chicago 1868, pp. 90-91); citing both because they are independent and agree. Hymnary's representative text (Our Great Redeemer's Praise #633) differs in three small ways and was NOT followed: it reads 'the blest' for 'the blessed' in stanza 2 (a one-syllable-shorter reading that many books adopt to fit the note), sets a dash after 'sorrow no more', and moves the commas in stanza 3. The two 1868-descended sources agree on 'blessed', so that is what ships. Meter is hymnary's tune-page value, '9.9.9.9 with refrain'; Timeless Truths spells the same thing out as 9.9.9.9.6.9.6.9 (the refrain's 6.9.6.9), which is the more informative form if the maintainer prefers it. Key: hymnary's tune record gives F major as the commonest printed key, and the guitar rule moves that to G -- which is also the key Timeless Truths and most gospel books print, so nothing was really transposed. Chords were derived from the Timeless Truths MusicXML score (URL above) by reading the actual four-part chord on every beat, not from a guitar tab: the ii chord under 'fair-' / 'o-' (A-C-E) and the IV under '-er than' / '-ver the' (C-E-G) are in the harmony, not substitutions. Two eighth-note passing chords were dropped as noise for a strummed instrument -- the V under 'ful' in both refrain halves, and the I under '-ing' in stanza line 4.
+> **Sourcing note:** Text from Timeless Truths, which is word-for-word identical to the Cyber Hymnal's transcription of the first printing (Bennett's words in Webster's The Signet Ring, Chicago 1868, pp. 90-91); citing both because they are independent and agree. Hymnary's representative text (Our Great Redeemer's Praise #633) differs in three small ways and was NOT followed: it reads 'the blest' for 'the blessed' in stanza 2 (a one-syllable-shorter reading that many books adopt to fit the note), sets a dash after 'sorrow no more', and moves the commas in stanza 3. The two 1868-descended sources agree on 'blessed', so that is what ships. Meter is hymnary's tune-page value, '9.9.9.9 with refrain'; Timeless Truths spells the same thing out as 9.9.9.9.6.9.6.9 (the refrain's 6.9.6.9), which is the more informative form if the maintainer prefers it. Key: hymnary's tune-record Key field says F major, but that field is not the common printed key here -- I counted the keys hymnary lists across its instances of this tune and got 58 G major to 6 F major, and Timeless Truths prints G as well. G is therefore both the common hymnal key and a guitar key, so nothing was transposed. Chords were derived from the Timeless Truths MusicXML score (URL above) by reading the actual four-part chord on every beat, not from a guitar tab: the ii chord under 'fair-' / 'o-' (A-C-E) and the IV under '-er than' / '-ver the' (C-E-G) are in the harmony, not substitutions. Two eighth-note passing chords were dropped as noise for a strummed instrument -- the V under 'ful' in both refrain halves, and the I under '-ing' in stanza line 4. INDEPENDENT RE-CHECK 2026-08-02, against three sites that were not cited before (all three added to sources): dailyprayer.us agrees with the shipped text word for word, including 'the blessed' and the comma after 'sorrow no more'; godtube.com and classical-music.com both print 'the blest' (with a semicolon and a dash respectively after 'sorrow no more'). So the 'blest' reading is widespread rather than peculiar to hymnary, and the split is genuine -- the shipped 1868-descended reading stands, per FORMAT.md's rule to keep the file's reading and record the variant. Both scan: the line is nine syllables either way, 'blest' taking melodious as four syllables and 'blessed' as three. All three sites confirm three stanzas, 'For the Father waits over the way' (not 'o'er'), and the stanza 3 opening. Tune record re-verified at hymnary: SWEET BY AND BY (Webster), meter '9.9.9.9 with refrain', incipit 12321 21651 23335, Key field F Major -- matching what this note already says.
 
 ## 66. Nun danket alle Gott
 
-Tune **NUN DANKET** · 6.7.6.7.6.6.6.6 · key **G**
+Tune **NUN DANKET** · 6.7.6.7.6.6.6.6 · key **E**
 
 ### German — Nun danket alle Gott
 
@@ -3958,21 +3952,21 @@ Tune **NUN DANKET** · 6.7.6.7.6.6.6.6 · key **G**
 
 ```
 1.
-G   D      C    G
+E   B      A    E
 Nun danket alle Gott
-    Am      D           G
+    F#m     B           E
 mit Herzen, Mund und Händen,
-    Dm G7 C     G
-der große Dinge tut
-   C       G     D G
+    C#m E7 A     E
+der gro ße Dinge tut
+   A       E     B E
 an uns und allen Enden,
-D   A7      G     D
+B   F#7     E     B
 der uns von Mutterleib
-    G        F#  Bm
+    E            G#m
 und Kindesbeinen an
-  E7     Am
+  C#7    F#m
 unzählig viel zugut
-G   Am      G   D7 G
+E   F#m     E   B7 E
 bis hierher hat ge tan.
 
 2.
@@ -3990,14 +3984,14 @@ Lob, Ehr und Preis sei Gott
 dem Vater und dem Sohne
 und Gott dem Heilgen Geist
 im höchsten Himmelsthrone,
-ihm, dem dreiein’gen Gott,
+ihm, dem dreiein'gen Gott,
 wie es im Anfang war
 und ist und bleiben wird
 so jetzt und immerdar.
 
 ```
 
-Sources: <https://de.wikipedia.org/wiki/Nun_danket_alle_Gott> · <https://www.evangeliums.net/lieder/lied_nun_danket_alle_gott.html>
+Sources: <https://de.wikipedia.org/wiki/Nun_danket_alle_Gott> · <https://www.evangeliums.net/lieder/lied_nun_danket_alle_gott.html> · <https://www.paulusdom.de/glaube-sakramente/gebete/liedtexte/nun-danket-alle-gott>
 
 ### English — Now Thank We All Our God
 
@@ -4005,21 +3999,21 @@ Sources: <https://de.wikipedia.org/wiki/Nun_danket_alle_Gott> · <https://www.ev
 
 ```
 1.
-G   D        C       G
+E   B        A       E
 Now thank we all our God,
-     Am        D            G
+     F#m       B            E
 With heart and hands and voices,
-    Dm G7    C          G
-Who wondrous things has done,
-   C         G       D   G
+    C#m E7    A          E
+Who won drous things has done,
+   A         E       B   E
 In whom this world rejoices;
-D   A7       G        D
-Who from our mothers’ arms
-    G             F#  Bm
+B   F#7      E        B
+Who from our mothers' arms
+    E                 G#m
 Has blessed us on our way
-     E7        Am
+     C#7       F#m
 With countless gifts of love,
-G   Am       G    D7 G
+E   F#m      E    B7 E
 And still is ours to day.
 
 2.
@@ -4044,9 +4038,9 @@ And shall be evermore.
 
 ```
 
-Sources: <http://www.hymntime.com/tch/htm/n/o/w/t/nowthank.htm> · <https://hymnary.org/text/now_thank_we_all_our_god> · <https://library.timelesstruths.org/music/Now_Thank_We_All_Our_God/>
+Sources: <http://www.hymntime.com/tch/htm/n/o/w/t/nowthank.htm> · <https://hymnary.org/text/now_thank_we_all_our_god> · <https://library.timelesstruths.org/music/Now_Thank_We_All_Our_God/> · <https://hymnary.org/tune/nun_danket_cruger_555665> · <https://en.wikipedia.org/wiki/Nun_danket_alle_Gott>
 
-> **Sourcing note:** German is the modern sung text (EG 321 / Gotteslob 405), which de.wikipedia and evangeliums.net print identically; both are cited because they are independent. It differs from Rinckart's 1636 original, which de.wikipedia also reproduces and which the maintainer may prefer: the original has 'Vnd noch jetzund gethan' (st. 1), 'woll vns auff vnser Leben' (st. 2) and 'Dem dreymal einen Gott' with 'dem der beyden gleich' (st. 3). Only two orthographic choices were mine: evangeliums.net writes 'woll'' with an apostrophe where de.wikipedia and EG write plain 'woll', and both sites write the elision in 'dreiein'gen' -- shipped here with the typographic apostrophe. English is Catherine Winkworth's translation in the eight-line form the meter calls for, from the Cyber Hymnal. Hymnary's representative text is the modernised Psalter Hymnal (Gray) 1987 recension ('who wondrous things has done, in whom his world rejoices', 'and free us from all ills of this world in the next') and was not used. Timeless Truths cites the Cyber Hymnal but prints an older revision of it, differing at three points -- 'Oh, may', 'And guard us through all ills in this world, till the next!', and 'The Son, and Him Who reigns'; the current Cyber Hymnal readings ship. UNCERTAINTY on the translation date: hymnary dates Winkworth's translation 1858 (Lyra Germanica 2nd series), the Cyber Hymnal cites Lyra Germanica 1855 pp. 318-19, and the Timeless Truths score credits 1856. 1858 is used as hymnary's is the authority page; the discrepancy is not resolved. Tune name is hymnary's 'NUN DANKET'; many German books call the same tune NUN DANKET ALLE GOTT. Key: hymnary's tune record gives F major, and the guitar rule moves that up a tone to G. The chart is Mendelssohn's 1840 harmonisation (the one in the Timeless Truths MusicXML score, https://library.timelesstruths.org/library/music/N/Now_Thank_We_All_Our_God/Now_Thank_We_All_Our_God.xml) read beat by beat and transposed F->G, then thinned to at most two changes a bar. Its chromatic third phrase is real and kept: the Dm-G7-C tonicisation of IV under 'wondrous things' / 'große Dinge', the F# major under 'our way' / '-nen an' that turns the line to iii, and the E7-Am under 'countless gifts' / 'unzählig viel'. Dropped as passing: the vi7 under 'world', the V under 'us', the E under 'of', and the iii under 'is'. Both language charts were laid out from the same bar map, so they agree note for note.
+> **Sourcing note:** German is the modern sung text (EG 321 / Gotteslob 405), which de.wikipedia and evangeliums.net print identically; both are cited because they are independent. It differs from Rinckart's 1636 original, which de.wikipedia also reproduces and which the maintainer may prefer: the original has 'Vnd noch jetzund gethan' (st. 1), 'woll vns auff vnser Leben' (st. 2) and 'Dem dreymal einen Gott' with 'dem der beyden gleich' (st. 3). Only two orthographic choices were mine: evangeliums.net writes 'woll'' with an apostrophe where de.wikipedia and EG write plain 'woll', and both sites write the elision in 'dreiein'gen' -- shipped here with the typographic apostrophe. English is Catherine Winkworth's translation in the eight-line form the meter calls for, from the Cyber Hymnal. Hymnary's representative text is the modernised Psalter Hymnal (Gray) 1987 recension ('who wondrous things has done, in whom his world rejoices', 'and free us from all ills of this world in the next') and was not used. Timeless Truths cites the Cyber Hymnal but prints an older revision of it, differing at three points -- 'Oh, may', 'And guard us through all ills in this world, till the next!', and 'The Son, and Him Who reigns'; the current Cyber Hymnal readings ship. UNCERTAINTY on the translation date: hymnary dates Winkworth's translation 1858 (Lyra Germanica 2nd series), the Cyber Hymnal cites Lyra Germanica 1855 pp. 318-19, and the Timeless Truths score credits 1856. 1858 is used as hymnary's is the authority page; the discrepancy is not resolved. Tune name is hymnary's 'NUN DANKET'; many German books call the same tune NUN DANKET ALLE GOTT. KEY: F is unambiguously the common hymnal key -- I counted the keys hymnary lists across its instances of this tune and got 60 F major to one each of D, G and A -- so the guitar rule puts it a semitone down at E, the same call files 37, 40, 41, 43 and 58 make for their F-major tunes. Worth flagging: G (a tone up) would be materially kinder on this particular tune, because the chart's two chromatic mediants come out as F# and Bm in G but as D#/G#m in E; that is why the applied dominant before the mediant was dropped rather than written as D#, leaving 'Has blessed us on our way' as plain E to G#m. The chart is Mendelssohn's 1840 harmonisation (the one in the Timeless Truths MusicXML score, https://library.timelesstruths.org/library/music/N/Now_Thank_We_All_Our_God/Now_Thank_We_All_Our_God.xml) read beat by beat and transposed F->E, then thinned to at most two changes a bar. Its chromatic third phrase is real and kept: the C#m-E7-A tonicisation of IV under 'wondrous things' / 'große Dinge', and the C#7-F#m under 'countless gifts' / 'unzählig viel'. Dropped as passing: the vi7 under 'world', the V under 'us', the V under 'of', and the iii under 'is'. Both language charts were laid out from the same bar map, so they agree note for note. INDEPENDENT RE-CHECK 2026-08-02, one new site per language, both added to sources. German: paulusdom.de (Gotteslob 405) agrees word for word, including the two readings most at risk -- 'im hoechsten Himmelsthrone' (spelt hoechsten here only to keep this note plain-ASCII; the text itself has the umlaut) and 'ihm, dem dreiein'gen Gott'. A search-engine summary circulating the readings 'im hohen Himmelsthrone' and 'ihm den dreiein'gen Gott' is not borne out by any source consulted, including the two already cited. English: en.wikipedia's Winkworth text agrees word for word, including 'in whom this world rejoices' (NOT the 'his world' of hymnary's recension), 'has blessed us on our way', 'The Son and Him who reigns', 'with Them in highest Heaven' and 'And free us from all ills, in this world and the next!'. It prints plain 'blessed' in st. 2 where the Cyber Hymnal has the scansion accent; the accented form ships, which is also what savior-like-a-shepherd, holy-holy-holy, vom-himmel-hoch and wonderful-words-of-life do. The two charts were diffed mechanically and are identical chord for chord across all eight lines, so the bar-for-bar requirement holds. Small correction to this note's own wording: the apostrophes actually shipped in 'dreiein'gen' (and everywhere else in this set) are ASCII U+0027, not the typographic U+2019 the sentence above claims.
 
 ## 67. Befiehl du deine Wege
 
@@ -4075,7 +4069,7 @@ da dein Fuß gehen kann.
 
 2.
 Dem Herren musst du trauen,
-wenn dir’s soll wohlergehn;
+wenn dir's soll wohlergehn;
 auf sein Werk musst du schauen,
 wenn dein Werk soll bestehn.
 Mit Sorgen und mit Grämen
@@ -4084,7 +4078,7 @@ lässt Gott sich gar nichts nehmen,
 es muss erbeten sein.
 
 3.
-Dein’ ewge Treu’ und Gnade,
+Dein' ewge Treu' und Gnade,
 o Vater, weiß und sieht,
 was gut sei oder schade
 dem sterblichen Geblüt;
@@ -4095,7 +4089,7 @@ was deinem Rat gefällt.
 
 4.
 Weg hast du allerwegen,
-an Mitteln fehlt dir’s nicht;
+an Mitteln fehlt dir's nicht;
 dein Tun ist lauter Segen,
 dein Gang ist lauter Licht;
 dein Werk kann niemand hindern,
@@ -4149,15 +4143,15 @@ mit seinem Trost verziehn
 und tun an seinem Teile,
 als hätt in seinem Sinn
 er deiner sich begeben,
-und sollt’st du für und für
+und sollt'st du für und für
 in Angst und Nöten schweben,
 als frag er nichts nach dir.
 
 10.
-Wird’s aber sich befinden,
+Wird's aber sich befinden,
 dass du ihm treu verbleibst,
 so wird er dich entbinden,
-da du’s am mindsten glaubst;
+da du's am mindsten glaubst;
 er wird dein Herze lösen
 von der so schweren Last,
 die du zu keinem Bösen
@@ -4185,11 +4179,745 @@ gewiss zum Himmel ein.
 
 ```
 
-Sources: <https://de.wikipedia.org/wiki/Befiehl_du_deine_Wege> · <https://www.evangeliums.net/lieder/lied_befiehl_du_deine_wege.html> · <https://hymnary.org/tune/befiehl_du_deine_wege_gesius> · <https://www.hymnologyarchive.com/befiehl-du-deine-wege> · <https://upload.wikimedia.org/wikipedia/commons/b/bf/Befiehl_du_deine_Wege.mid> · <https://upload.wikimedia.org/wikipedia/commons/3/30/Befiehl_du_deine_wege_1901.jpg>
+Sources: <https://de.wikipedia.org/wiki/Befiehl_du_deine_Wege> · <https://www.evangeliums.net/lieder/lied_befiehl_du_deine_wege.html> · <https://hymnary.org/tune/befiehl_du_deine_wege_gesius> · <https://www.hymnologyarchive.com/befiehl-du-deine-wege> · <https://upload.wikimedia.org/wikipedia/commons/b/bf/Befiehl_du_deine_Wege.mid> · <https://upload.wikimedia.org/wikipedia/commons/3/30/Befiehl_du_deine_wege_1901.jpg> · <https://www.velkd.de/schwerpunkte/liturgie/kirchenmusik/paul-gerhardt/lieder-von-paul-gerhardt/befiehl-du-deine-wege/>
 
-> **Sourcing note:** SHIPPED GERMAN-ONLY, and the worklist's optEn was deliberately not used -- please read. John Wesley's 'Commit thou all thy griefs' (1739) is easy to source, but it is not singable to this hymn's tune: Wesley recast the hymn in Short Metre 6.6.8.6, against Gerhardt's 7.6.7.6 D, and he skipped Gerhardt's stanzas 5, 9, 10 and 11 (hymnologyarchive.com, cited above). Putting it in texts.en would break FORMAT.md's rule that both languages share the tune and that their charts agree bar for bar, so texts.en is null. If the maintainer wants an English text here, the drop-in is John Kelly's 'Commit whatever grieves thee' (1867, public domain, TLH 520), which is in the original metre; Henry Mills' 'Commit thy way, confiding' (1850) and A. T. Russell's 'Thy way and all thy sorrows' (1851) also are. Note that the Free Lutheran Chorale-Book sets Kelly's text to HERZLICH TUT MICH VERLANGEN, not to this tune -- hymn 23 already carries that melody, so a Kelly text added here should keep the Gesius tune. German text: all twelve stanzas, in the Evangelisches Gesangbuch (EG 361) recension, from de.wikipedia, which cites EG Bayern/Thüringen 2nd ed. 1995 pp. 661-663 and states the spelling is modernised. The stanza initials spell Psalm 37:5 ('Befiehl dem Herrn deine Wege und hoffe auf ihn, er wird's wohl machen'), which is the check that no stanza is missing or out of order. evangeliums.net prints the same twelve stanzas and agrees word for word except for punctuation at eight line-ends and two readings -- 'als frag er nicht nach dir' (st. 9) for 'nichts', and 'da du's am mindsten gläubst' (st. 10) for 'glaubst'; the EG readings ship. evangeliums.net also sets each stanza's acrostic word in capitals ('BEFIEHL du deine Wege'); that is its own typographic marking, not the text, and was not reproduced. Tune and meter are hymnary's tune record for BEFIEHL DU DEINE WEGE (Gesius); the melody is Bartholomäus Gesius, 1603, where it carried the text 'Lobet Gott, unsern Herren', and Telemann put it into 4/4 in 1730, which is the form EG 361 prints. Key: hymnary gives 'd minor or modal' -- D is already a guitar key, so nothing was transposed. Chords were read beat by beat off the four-part MIDI of EG 361 on Wikimedia Commons (URL above; its first pass is the plain SATB setting, the second doubles the melody an octave up), and cross-checked for melody against the 1901 Gesangbuch scan, also cited -- that scan's one accidental, the sharp under '-ze / -mel', is the G# in the MIDI, the leading note of the half cadence on A. Chart thinned to at most two or three changes a bar. The last chord is a real Picardy third: D major, not D minor, is what the setting cadences on.
+> **Sourcing note:** SHIPPED GERMAN-ONLY, and the worklist's optEn was deliberately not used -- please read. John Wesley's 'Commit thou all thy griefs' (1739) is easy to source, but it is not singable to this hymn's tune: Wesley recast the hymn in Short Metre 6.6.8.6, against Gerhardt's 7.6.7.6 D, and he skipped Gerhardt's stanzas 5, 9, 10 and 11 (hymnologyarchive.com, cited above). Putting it in texts.en would break FORMAT.md's rule that both languages share the tune and that their charts agree bar for bar, so texts.en is null. If the maintainer wants an English text here, the drop-in is John Kelly's 'Commit whatever grieves thee' (1867, public domain, TLH 520), which is in the original metre; Henry Mills' 'Commit thy way, confiding' (1850) and A. T. Russell's 'Thy way and all thy sorrows' (1851) also are. Note that the Free Lutheran Chorale-Book sets Kelly's text to HERZLICH TUT MICH VERLANGEN, not to this tune -- hymn 23 already carries that melody, so a Kelly text added here should keep the Gesius tune. German text: all twelve stanzas, in the Evangelisches Gesangbuch (EG 361) recension, from de.wikipedia, which cites EG Bayern/Thüringen 2nd ed. 1995 pp. 661-663 and states the spelling is modernised. The stanza initials spell Psalm 37:5 ('Befiehl dem Herrn deine Wege und hoffe auf ihn, er wird's wohl machen'), which is the check that no stanza is missing or out of order. evangeliums.net prints the same twelve stanzas and agrees word for word except for punctuation at eight line-ends and two readings -- 'als frag er nicht nach dir' (st. 9) for 'nichts', and 'da du's am mindsten gläubst' (st. 10) for 'glaubst'; the EG readings ship. evangeliums.net also sets each stanza's acrostic word in capitals ('BEFIEHL du deine Wege'); that is its own typographic marking, not the text, and was not reproduced. Tune and meter are hymnary's tune record for BEFIEHL DU DEINE WEGE (Gesius); the melody is Bartholomäus Gesius, 1603, where it carried the text 'Lobet Gott, unsern Herren', and Telemann put it into 4/4 in 1730, which is the form EG 361 prints. Key: hymnary gives 'd minor or modal' -- D is already a guitar key, so nothing was transposed. Chords were read beat by beat off the four-part MIDI of EG 361 on Wikimedia Commons (URL above; its first pass is the plain SATB setting, the second doubles the melody an octave up), and cross-checked for melody against the 1901 Gesangbuch scan, also cited -- that scan's one accidental, the sharp under '-ze / -mel', is the G# in the MIDI, the leading note of the half cadence on A. Chart thinned to at most two or three changes a bar. The last chord is a real Picardy third: D major, not D minor, is what the setting cadences on. INDEPENDENT RE-CHECK 2026-08-02 against velkd.de's Paul-Gerhardt edition, a site not previously cited (added to sources): all twelve stanzas agree word for word and in order, including the two readings most at risk in st. 12, 'mit aller unsrer Not' (not 'an aller') and 'staerk unsre Fuess und Haende' (not 'Fuesse' -- spelt without umlauts here only to keep this note plain-ASCII; the text itself has them). A search-engine summary giving 'Fuesse' is not borne out. VELKD differs at exactly two points, both trivial: it drops the two elision apostrophes in st. 3, printing 'Dein ewge Treu und Gnade', and it has no comma after 'er deiner sich begeben' in st. 9. de.wikipedia's EG text was re-checked on both and does carry the apostrophes, so the file's reading stands. The stanza-initial acrostic was re-verified against the twelve stanzas as shipped and reads Befiehl / dem / Dein- / Weg- / und / hoff- / auf / Ihn / Er / Wird's / Wohl / Mach-, so no stanza is missing or transposed. Tune record re-verified at hymnary: BEFIEHL DU DEINE WEGE (Gesius), Gesius 1603, meter '7.6.7.6 D', Key 'd minor or modal', incipit 13234 55765 56545. JUDGEMENT CALL left for the maintainer, not acted on: D minor is what FORMAT.md's guitar rule yields, since the printed key is already d minor and D is on the preferred list, so nothing was transposed -- but the chart as written needs Gm and Bb, two barre chords, in a set whose other minor-key files sit on Em and Am. Moving this one to E minor would put the whole chart in open position, at the cost of a transposition the rule does not ask for.
 
-## 73. Aus tiefer Not schrei ich zu dir
+## 68. Ich singe dir mit Herz und Mund
+
+Tune **NUN DANKET ALL** · 8.6.8.6 · key **E**
+
+*Paul Gerhardt, 1653*
+
+```
+1.
+E   A     C#m B   E        B
+Ich singe dir mit Herz und Mund,
+E        A   E/B B    E
+Herr, meines Her zens Lust;
+E            A    E   F#m E   B
+ich sing und mach auf Er  den kund,
+B   C#m A   E/B B E
+was mir von dir bewusst.
+
+2.
+Ich weiß, dass du der Brunn der Gnad
+und ewge Quelle bist,
+daraus uns allen früh und spat
+viel Heil und Gutes fließt.
+
+3.
+Was sind wir doch? Was haben wir
+auf dieser ganzen Erd,
+das uns, o Vater, nicht von dir
+allein gegeben werd?
+
+4.
+Wer hat das schöne Himmelszelt
+hoch über uns gesetzt?
+Wer ist es, der uns unser Feld
+mit Tau und Regen netzt?
+
+5.
+Wer wärmet uns in Kält und Frost?
+Wer schützt uns vor dem Wind?
+Wer macht es, dass man Öl und Most
+zu seinen Zeiten find't?
+
+6.
+Wer gibt uns Leben und Geblüt?
+Wer hält mit seiner Hand
+den güldnen, werten, edlen Fried
+in unserm Vaterland?
+
+7.
+Ach Herr, mein Gott, das kommt von dir,
+du, du musst alles tun,
+du hältst die Wach an unsrer Tür
+und lässt uns sicher ruhn.
+
+8.
+Du nährest uns von Jahr zu Jahr,
+bleibst immer fromm und treu
+und stehst uns, wenn wir in Gefahr
+geraten, treulich bei.
+
+9.
+Du strafst uns Sünder mit Geduld
+und schlägst nicht allzusehr,
+ja endlich nimmst du unsre Schuld
+und wirfst sie in das Meer.
+
+10.
+Wenn unser Herze seufzt und schreit,
+wirst du gar leicht erweicht
+und gibst uns, was uns hoch erfreut
+und dir zur Ehr gereicht.
+
+11.
+Du zählst, wie oft ein Christe wein
+und was sein Kummer sei;
+kein Zähr- und Tränlein ist so klein,
+du hebst und legst es bei.
+
+12.
+Du füllst des Lebens Mangel aus
+mit dem, was ewig steht,
+und führst uns in des Himmels Haus,
+wenn uns die Erd entgeht.
+
+13.
+Wohlauf, mein Herze, sing und spring
+und habe guten Mut!
+Dein Gott, der Ursprung aller Ding,
+ist selbst und bleibt dein Gut.
+
+14.
+Er ist dein Schatz, dein Erb und Teil,
+dein Glanz und Freudenlicht,
+dein Schirm und Schild, dein Hilf und Heil,
+schafft Rat und lässt dich nicht.
+
+15.
+Was kränkst du dich in deinem Sinn
+und grämst dich Tag und Nacht?
+Nimm deine Sorg und wirf sie hin
+auf den, der dich gemacht.
+
+16.
+Hat er dich nicht von Jugend auf
+versorget und ernährt?
+Wie manches schweren Unglücks Lauf
+hat er zurückgekehrt!
+
+17.
+Er hat noch niemals was versehn
+in seinem Regiment,
+nein, was er tut und lässt geschehn,
+das nimmt ein gutes End.
+
+18.
+Ei nun, so lass ihn ferner tun
+und red ihm nicht darein,
+so wirst du hier im Frieden ruhn
+und ewig fröhlich sein.
+
+```
+
+Sources: <https://www.evangeliums.net/lieder/lied_ich_singe_dir_mit_herz_und_mund.html> · <https://de.wikipedia.org/wiki/Ich_singe_dir_mit_Herz_und_Mund> · <https://hymnary.org/text/ich_singe_dir_mit_herz_und_mund> · <https://hymnary.org/tune/grafenberg_cruger_16512> · <https://www.velkd.de/schwerpunkte/liturgie/kirchenmusik/paul-gerhardt/lieder-von-paul-gerhardt/ich-singe-dir-mit-herz-und-mund/> · <https://www.jesus.de/liederschaetze/ich-singe-dir-mit-herz-und-mund/> · <https://www.johann-crueger.de/praktische-ausgaben/ich-singe-dir-mit-herz-und-mund_crueger-1657-58_eg-324.pdf>
+
+> **Sourcing note:** German only: the worklist lists no optEn for this hymn and I did not add one. Text: all 18 stanzas, the full EG 324 form, taken from evangeliums.net (Sermon-Online), which prints today's sung orthography consistently (dass, musst, lässt, unsre, lowercase line-initials). The de.wikipedia article carries the same 18 stanzas but its transcription is internally inconsistent -- it mixes pre-1996 and modern spellings in the same stanza (daß/mußt/läßt beside bewusst/lässt) and capitalises some line-initial words at random ("Viel Heil und Gutes fließt", "Hoch über uns gesetzt") -- so evangeliums.net was preferred; it is in the sources because I compared line by line against it. Substantive wording differences between the two (evangeliums.net form kept): st.12 "in des Himmels Haus" (Wikipedia: "in das Himmelshaus"); st.13 "Wohlauf, mein Herze" (Wikipedia: "Wohlauf, meine Herze", which does not scan); st.14 "lässt dich nicht" (Wikipedia: "lässt uns nicht"); st.17 "was er tut und lässt geschehn" (Wikipedia: "was er tut lässt und geschehn"). TUNE: EG 324 sings the text to Johann Crüger's melody for "Nun danket all und bringet Ehr" (1647), which hymnary titles NUN DANKET ALL (Crüger 16512) and which English hymnals name GRÄFENBERG; hymnary gives the meter as 8.6.8.6 and the key as F major. Crüger's first print of 1653 assigned the text to his own now-disused melody for "Lobt Gott, ihr Christen alle gleich"; evangeliums.net still lists that as the alternative tune. KEY: F is not a guitar key. CORRECTED 2026-08-02 -- the earlier note here read 'F ... sits one semitone from both E and G, so the preference order in FORMAT picks G', which is arithmetically wrong: F to E is one semitone, F to G is a whole tone. FORMAT's rule is the NEAREST of G/D/A/E/C (the listed order only breaks ties), so it picks E, and the chart has been transposed down a semitone from the F-major source accordingly. F really is the common key for this tune, so no other reading rescues G: hymnary's tune record says F Major and every instance in its list with a visible key is F (Christian Worship, Evangelical Lutheran Hymnary, Evangelical Lutheran Worship, Glory to God, Lutheran Service Book, Psalter Hymnal, The Cyber Hymnal), and the EG 324 score at johann-crueger.de is engraved with one flat. This is also what the rest of the set does with an F-major tune -- files 37, 40, 41, 43, 58 and 66 all move F to E, come-thou-long-expected in as many words ('F moved to E per the guitar rule (E is the nearest allowed key)'). The three files that keep G (nothing-but-the-blood, o-little-town, in-the-sweet-by-and-by) do so because G is itself a common printed key for those tunes, which is not the case here. Cost of the correction, for the record: in G the chart was all open shapes, and in E it needs C#m and F#m. Chords are a simplified guitar reduction of the four-part setting printed in the de.wikipedia article (which is in F): the voice leading there gives F B-flat F Dm C / F F/A C / F/A B-flat F/C C / F -- transposed DOWN A SEMITONE (F to E) and thinned to one or two changes per 3/2 bar. INDEPENDENT CHECK (2026-08-02): text re-verified against the VELKD Paul-Gerhardt collection (velkd.de, appended to sources), a site not previously cited here. It prints the same 18 stanzas and confirms every reading where evangeliums.net and de.wikipedia diverged -- st.12 "in des Himmels Haus", st.13 "Wohlauf, mein Herze", st.14 "lässt dich nicht", st.17 "was er tut und lässt geschehn" -- so the evangeliums.net form shipped here is the majority reading, not a single-source one. Lutherisches Gesangbuch 377 (lg.concordiabuch.de) likewise prints 18 and agrees at st.12 and st.13. Tune confirmed: hymnary's NUN DANKET ALL / GRÄFENBERG, Crüger 1647, 8.6.8.6, F major, incipit 16512 33235 43215; de.wikipedia confirms EG 324 sets the text to it and that Crüger's 1653 first print used the "Lobt Gott, ihr Christen alle gleich" melody instead. CHART AUDIT: the chart was checked syllable by syllable against the four-part F-major setting in the de.wikipedia article and is an exact reduction of it -- line 1 F Bb F Dm C F F/A C, line 2 F F/A Bb F/C C F, line 3 F F F Bb F Gm F C, line 4 C Dm Bb F/C C F, all transposed down a semitone to E. Every bracket in the file lands on the derived chord. Three of the twenty-eight source chords are not re-marked, which is the thinning FORMAT asks for: the two passing first-inversion tonics (F/A in the source, E/G# here) at line 1 syllable 7 and line 2 syllable 2, and -- the earlier note missed this one, which claimed the inversions were the ONLY drops -- the one-syllable return to the tonic at line 1 syllable 3, where the subdominant is simply held through instead. The repeated tonics at line 3 syllables 2 and 3 are not drops; they are the same harmony continuing. Both cadences keep the cadential 6/4, now E/B - B - E. INDEPENDENT RE-CHECK 2026-08-02 by a second pass, against two sites not previously cited (both appended to sources). TEXT: jesus.de prints the same 18 stanzas, and a mechanical diff of stanzas 1, 12, 13, 14, 17 and 18 -- which is every stanza where evangeliums.net and de.wikipedia disagreed, plus the first and last -- came back with no differences at all, so the evangeliums.net form shipped here is confirmed by a third and fourth witness. The EG 324 choral score at johann-crueger.de (Burkard Rosenberger's engraving of Cruger 1657/58, CC BY-SA 3.0) prints stanzas 2-11 beneath the music and agrees word for word with this file at every one of them, with a single orthographic exception: it sets st. 9 as 'und schlaegst nicht allzu sehr' in two words where this file has 'allzusehr' in one (umlauts dropped in this note only, to keep it plain-ASCII). Both forms are in print; two words is the post-1996 standard and one word is the older sung form, and FORMAT says to follow the source where the sung form keeps the older word, so evangeliums.net's 'allzusehr' was left alone. JUDGEMENT CALL for the maintainer, flagged not acted on. STRUCTURE: id, number, shape, and all 23 brackets re-validated against FORMAT's chord grammar after the transposition; 18 stanzas, stanza 1 carries the full chart, no chorus, German-only with a non-empty source list.
+
+## 69. Wie soll ich dich empfangen
+
+Tune **WIE SOLL ICH DICH EMPFANGEN** · 7.6.7.6 D · key **D**
+
+### German — Wie soll ich dich empfangen
+
+*Paul Gerhardt, 1653*
+
+```
+1.
+D        G   A    D  Em D
+Wie soll ich dich empfangen
+G   F#m Bm Em   A   D
+und wie be gegn ich dir,
+D   G   A    D  Em D
+o aller Welt Verlangen,
+G F#m Bm  Em A   D
+o mei ner Seelen Zier?
+D Bm A   E F#m D  A
+O Je su, Jesu, setze
+D   A/C#   D   Em D/F# A
+mir selbst die Fa ckel bei,
+F#m Bm   D   Em   D/F# Em D
+da  mit, was dich er   götze,
+D/F# Em   D/F# A       D
+mir  kund und  wissend sei.
+
+2.
+Dein Zion streut dir Palmen
+und grüne Zweige hin,
+und ich will dir in Psalmen
+ermuntern meinen Sinn.
+Mein Herze soll dir grünen
+in stetem Lob und Preis
+und deinem Namen dienen,
+so gut es kann und weiß.
+
+3.
+Was hast du unterlassen
+zu meinem Trost und Freud,
+als Leib und Seele saßen
+in ihrem größten Leid?
+Als mir das Reich genommen,
+da Fried und Freude lacht,
+da bist du, mein Heil, kommen
+und hast mich froh gemacht.
+
+4.
+Ich lag in schweren Banden,
+du kommst und machst mich los;
+ich stand in Spott und Schanden,
+du kommst und machst mich groß
+und hebst mich hoch zu Ehren
+und schenkst mir großes Gut,
+das sich nicht lässt verzehren,
+wie irdisch Reichtum tut.
+
+5.
+Nichts, nichts hat dich getrieben
+zu mir vom Himmelszelt
+als das geliebte Lieben,
+damit du alle Welt
+in ihren tausend Plagen
+und großen Jammerlast,
+die kein Mund kann aussagen,
+so fest umfangen hast.
+
+6.
+Das schreib dir in dein Herze,
+du hochbetrübtes Heer,
+bei denen Gram und Schmerze
+sich häuft je mehr und mehr;
+seid unverzagt, ihr habet
+die Hilfe vor der Tür;
+der eure Herzen labet
+und tröstet, steht allhier.
+
+7.
+Ihr dürft euch nicht bemühen
+noch sorgen Tag und Nacht,
+wie ihr ihn wollet ziehen
+mit eures Armes Macht.
+Er kommt, er kommt mit Willen,
+ist voller Lieb und Lust,
+all Angst und Not zu stillen,
+die ihm an euch bewusst.
+
+8.
+Auch dürft ihr nicht erschrecken
+vor eurer Sünden Schuld;
+nein, Jesus will sie decken
+mit seiner Lieb und Huld.
+Er kommt, er kommt den Sündern
+zu Trost und wahrem Heil,
+schafft, dass bei Gottes Kindern
+verbleib ihr Erb und Teil.
+
+9.
+Was fragt ihr nach dem Schreien
+der Feind und ihrer Tück?
+Der Herr wird sie zerstreuen
+in einem Augenblick.
+Er kommt, er kommt, ein König,
+dem wahrlich alle Feind
+auf Erden viel zu wenig
+zum Widerstande seind.
+
+10.
+Er kommt zum Weltgerichte:
+zum Fluch dem, der ihm flucht,
+mit Gnad und süßem Lichte
+dem, der ihn liebt und sucht.
+Ach komm, ach komm, o Sonne,
+und hol uns allzumal
+zum ewgen Licht und Wonne
+in deinen Freudensaal.
+
+```
+
+Sources: <https://de.wikipedia.org/wiki/Wie_soll_ich_dich_empfangen> · <https://www.evangeliums.net/lieder/lied_wie_soll_ich_dich_empfangen.html> · <https://en.wikipedia.org/wiki/Wie_soll_ich_dich_empfangen> · <https://lg.concordiabuch.de/lieder/25/wie-soll-ich-dich-empfangen>
+
+### English — O Lord, How Shall I Meet Thee
+
+*Paul Gerhardt, tr. composite, 1653*
+
+```
+1.
+D       G   A     D Em   D
+O Lord, how shall I meet Thee,
+G   F#m Bm   Em   A D
+How wel come Thee a right?
+D      G   A    D  Em    D
+Thy people long to greet Thee,
+G  F#m   Bm Em      A D
+My Hope, my heart's Delight!
+D Bm A    E     F#m  D A
+O kindle, Lord, most holy,
+D   A/C# D   Em D/F# A
+Thy lamp within my   breast
+F#m Bm D  Em D/F# Em D
+To  do in spirit  lowly
+D/F# Em   D/F# A           D
+All  that may  please Thee best.
+
+2.
+Thy Zion strews before Thee
+Green boughs and fairest palms,
+And I, too, will adore Thee
+With joyous songs and psalms.
+My heart shall bloom forever
+For Thee with praises new
+And from Thy name shall never
+Withhold the honor due.
+
+3.
+I lay in fetters, groaning,
+Thou com'st to set me free;
+I stood, my shame bemoaning,
+Thou com'st to honor me;
+A glory Thou dost give me,
+A treasure safe on high,
+That will not fail or leave me
+As earthly riches fly.
+
+4.
+Love caused Thy incarnation,
+Love brought Thee down to me;
+Thy thirst for my salvation
+Procured my liberty.
+O love beyond all telling,
+That led Thee to embrace,
+In love all love excelling,
+Our lost and fallen race!
+
+5.
+Rejoice, then, ye sad-hearted,
+Who sit in deepest gloom,
+Who mourn o'er joys departed
+And tremble at your doom.
+Despair not, He is near you,
+Yea, standing at the door,
+Who best can help and cheer you
+And bids you weep no more.
+
+6.
+Ye need not toil nor languish
+Nor ponder day and night
+How in the midst of anguish
+Ye draw Him by your might.
+He comes, He comes all willing,
+Moved by His love alone,
+Your woes and troubles stilling;
+For all to Him are known.
+
+7.
+Sin's debt, that fearful burden,
+Let not your souls distress;
+Your guilt the Lord will pardon
+And cover by His grace.
+He comes, for men procuring
+The peace of sin forgiven,
+For all God's sons securing
+Their heritage in heaven.
+
+8.
+What though the foes be raging,
+Heed not their craft and spite;
+Your Lord, the battle waging,
+Will scatter all their might.
+He comes, a King most glorious,
+And all His earthly foes
+In vain His course victorious
+Endeavor to oppose.
+
+9.
+He comes to judge the nations,
+A terror to His foes,
+A Light of consolations
+And blessed Hope to those
+Who love the Lord's appearing.
+O glorious Sun, now come,
+Send forth Thy beams so cheering,
+And guide us safely home.
+
+```
+
+Sources: <https://www.ccel.org/a/anonymous/luth_hymnal/tlh058.htm> · <https://hymnary.org/hymn/LH1941/58b> · <http://www.hymntime.com/tch/htm/o/l/h/o/olhosimy.htm> · <https://clcgracelutheranchurch.org/hymns/tlh/tlh058.htm>
+
+> **Sourcing note:** German: all 10 stanzas, EG 11, from the de.wikipedia article (which prints the modern sung orthography already); cross-checked word for word against evangeliums.net, which agrees except for printing "begegn' ich" and "ewgen" with an apostrophe in st.1 and st.10 -- the EG form without it is kept. ENGLISH IS NOT WINKWORTH AS THE WORKLIST SUGGESTS. Winkworth's own version (Chorale Book for England, 1863) survives in most books only as a 4-stanza cento -- the Cyber Hymnal page in the sources prints just four stanzas of it, in a modernised "You" recension, then two separate Arthur T. Russell translations. What is shipped is the 9-stanza composite of The Lutheran Hymnal 1941 no. 58 (CCEL/Project Wittenberg), which TLH itself credits as "composite" and which descends from Winkworth and Russell; it is the standard full-length English singing text. It has NINE stanzas against the German TEN: the German st.3 ("Was hast du unterlassen") has no English counterpart, so en 3-9 correspond to de 4-10. TLH's st.9 line 8 read "An guide us safely home" here, inherited from a typo in the CCEL transcription; CORRECTED 2026-08-02 to "And guide us safely home" after checking the independent CLC Grace Lutheran transcription of TLH 58 (appended to sources), which reads "And". No source anywhere reads "An". TUNE/METER: hymnary gives WIE SOLL ICH DICH EMPFANGEN (Johann Crüger, 1653), 7.6.7.6 D. Note that TLH sings this text to VALET WILL ICH DIR GEBEN (Teschner) instead, and Bach's Christmas Oratorio uses the PASSION CHORALE for st.1; Crüger's own melody is what EG 11 prints and is what the chart follows. KEY: hymnary lists the tune in E-flat major, one semitone from both D and E, so the preference order picks D; D also keeps the melody inside d'-d''. The four-part setting on en.wikipedia is printed a tone higher, in F. Chords are a simplified reduction of that setting transposed down a minor third: the Stollen (lines 1-2) is repeated for lines 3-4, as the printed repeat mark requires, so those charts are identical by construction. The bracket positions of the two languages agree bar for bar. INDEPENDENT CHECK (2026-08-02): German re-verified against Lutherisches Gesangbuch 25 (lg.concordiabuch.de, appended to sources), independent of the three sites already cited. It prints the same 10 stanzas, names Crüger 1653 as the melody, and matches this file word for word at every spot checked, including st.1 "und wie begegn ich dir" with no apostrophe, st.3 "in ihrem größten Leid", st.9 "zum Widerstande seind" and st.10 "zum ewgen Licht und Wonne". English re-verified against the CLC transcription of TLH 58: 9 stanzas, credited "Paul Gerhardt, 1653, cento" with translator "composite", which corroborates the composite attribution used here; all eight lines spot-checked matched apart from the "An"/"And" typo now fixed. CHART AUDIT: verified syllable by syllable against the three-voice F-major setting in the en.wikipedia article, transposed down a minor third. The Abgesang (lines 5-8) reproduces that setting exactly -- F Dm C G Am F C / F C/E F Gm F/A C / Am Dm F Gm F/A Gm F / F/A Gm F/A C F. In the Stollen the file simplifies two inversions to root position (G/B for ich, D/F# for emp). One genuine reading choice: on "wie" (line 2 syllable 1) the setting has only a, c and a sounding, which is F/A or Am depending on the voice you supply; the chart reads it as the relative minor, F#m in D. Both are defensible in a three-voice texture. OPEN QUESTION for the maintainer, not edited: FORMAT says a translation carries the year OF THE TRANSLATION, but texts.en.year here is 1653, the German original's year (the TLH composite dates from 1941, descending from Winkworth 1863 and Russell). The two other composite translations in the hymnal, es-ist-das-heil (1523) and o-dass-ich-tausend-zungen-haette (1704), do exactly the same, while every single-translator entry uses the translation's year. So this is either a deliberate convention for composites or a defect in all three; it should be settled across the three files at once rather than here alone.
+
+## 70. Sollt ich meinem Gott nicht singen
+
+Tune **SOLLT ICH MEINEM GOTT** · 8.7.8.7.8.7.7.8.7.7 · key **Am**
+
+*Paul Gerhardt, 1653*
+
+```
+1.
+Am               E          Am
+Sollt ich meinem Gott nicht singen,
+Am                  B       E
+sollt ich ihm nicht dankbar sein?
+Am              E     Am
+Denn ich seh in allen Dingen,
+Am              B       E
+wie so gut er's mit mir mein'.
+C                   G      D
+Ist doch nichts als lauter Lieben,
+Gm       Dm     A     Dm
+das sein treues Herze regt,
+C            F        G
+das ohn Ende hebt und trägt,
+Am     F      Dm          C
+die in seinem Dienst sich üben.
+F     C          Am    E
+Alles Ding währt seine Zeit,
+Am     Dm7     E   A
+Gottes Lieb in Ewigkeit.
+
+2.
+Wie ein Adler sein Gefieder
+über seine Jungen streckt,
+also hat auch hin und wieder
+mich des Höchsten Arm bedeckt,
+alsobald im Mutterleibe,
+da er mir mein Wesen gab
+und das Leben, das ich hab
+und noch diese Stunde treibe.
+Alles Ding währt seine Zeit,
+Gottes Lieb in Ewigkeit.
+
+3.
+Sein Sohn ist ihm nicht zu teuer,
+nein, er gibt ihn für mich hin,
+dass er mich vom ewgen Feuer
+durch sein teures Blut gewinn.
+O du unergründter Brunnen,
+wie will doch mein schwacher Geist,
+ob er sich gleich hoch befleißt,
+deine Tief ergründen können?
+Alles Ding währt seine Zeit,
+Gottes Lieb in Ewigkeit.
+
+4.
+Seinen Geist, den edlen Führer,
+gibt er mir in seinem Wort,
+dass er werde mein Regierer
+durch die Welt zur Himmelspfort,
+dass er mir mein Herz erfülle
+mit dem hellen Glaubenslicht,
+das des Todes Macht zerbricht
+und die Hölle selbst macht stille.
+Alles Ding währt seine Zeit,
+Gottes Lieb in Ewigkeit.
+
+5.
+Meiner Seele Wohlergehen
+hat er ja recht wohl bedacht.
+Will dem Leibe Not zustehen,
+nimmt ers gleichfalls wohl in Acht.
+Wann mein Können, mein Vermögen
+nichts vermag, nichts helfen kann,
+kommt mein Gott und hebt mir an,
+sein Vermögen beizulegen.
+Alles Ding währt seine Zeit,
+Gottes Lieb in Ewigkeit.
+
+6.
+Himmel, Erd und ihre Heere
+hat er mir zum Dienst bestellt.
+Wo ich nur mein Aug hinkehre,
+find ich, was mich nährt und hält:
+Tier und Kräuter und Getreide
+in den Gründen, in der Höh,
+in den Büschen, in der See,
+überall ist meine Weide.
+Alles Ding währt seine Zeit,
+Gottes Lieb in Ewigkeit.
+
+7.
+Wenn ich schlafe, wacht sein Sorgen
+und ermuntert mein Gemüt,
+dass ich alle lieben Morgen
+schaue neue Lieb und Güt.
+Wäre mein Gott nicht gewesen,
+hätte mich sein Angesicht
+nicht geleitet, wär ich nicht
+aus so mancher Angst genesen.
+Alles Ding währt seine Zeit,
+Gottes Lieb in Ewigkeit.
+
+8.
+Wie so manche schwere Plage
+wird vom Satan hergeführt,
+die mich doch mein Lebetage
+niemals noch bisher berührt.
+Gottes Engel, den er sendet,
+hat das Böse, was der Feind
+anzurichten war gemeint,
+in die Ferne weggewendet.
+Alles Ding währt seine Zeit,
+Gottes Lieb in Ewigkeit.
+
+9.
+Wie ein Vater seinem Kinde
+sein Herz niemals ganz entzeucht,
+ob es gleich bisweilen Sünde
+tut und aus dem Wege weicht:
+also hält auch mein Verbrechen
+mir mein frommer Gott zu gut,
+will mein Fehlen mit der Rut'
+und nicht mit dem Schwerte rächen.
+Alles Ding währt seine Zeit,
+Gottes Lieb in Ewigkeit.
+
+10.
+Seine Strafen, seine Schläge,
+ob sie mir gleich bitter seind,
+dennoch, wenn ich's recht erwäge,
+sind es Zeichen, dass mein Freund,
+der mich liebet, mein gedenke
+und mich von der schnöden Welt,
+die uns hart gefangen hält,
+durch das Kreuze zu ihm lenke.
+Alles Ding währt seine Zeit,
+Gottes Lieb in Ewigkeit.
+
+11.
+Das weiß ich fürwahr und lasse
+mir's nicht aus dem Sinne gehn:
+Christenkreuz hat seine Maße
+und muss endlich stille stehn.
+Wenn der Winter ausgeschneiet,
+tritt der schöne Sommer ein:
+also wird auch nach der Pein,
+wer's erwarten kann, erfreuet.
+Alles Ding währt seine Zeit,
+Gottes Lieb in Ewigkeit.
+
+12.
+Weil dann weder Ziel noch Ende
+sich in Gottes Liebe findt,
+ei, so heb ich meine Hände
+zu dir, Vater, als dein Kind.
+Bitte, wollst mir Gnade geben,
+dich aus aller meiner Macht
+zu umfangen Tag und Nacht
+hier in meinem ganzen Leben,
+bis ich dich nach dieser Zeit
+lob und lieb in Ewigkeit.
+
+```
+
+Sources: <https://www.evangeliums.net/lieder/lied_sollt_ich_meinem_gott_nicht_singen.html> · <https://lg.concordiabuch.de/lieder/391/sollt-ich-meinem-gott-nicht-singen> · <https://de.wikipedia.org/wiki/Sollt_ich_meinem_Gott_nicht_singen%3F> · <https://hymnary.org/tune/sollt_ich_meinem_gott_schop> · <https://hymnary.org/text/sollt_ich_meinem_gott_nicht_singen>
+
+> **Sourcing note:** German only: the worklist lists no optEn. Catherine Winkworth's twelve-stanza "Shall I not sing praise to Thee" exists (Lyra Germanica) and could be added later if wanted; I did not source it in full and so did not ship it. TEXT: all 12 original stanzas, from evangeliums.net (Sermon-Online). NOTE THAT EG 325 PRINTS ONLY TEN -- the de.wikipedia article states that stanzas 8 (Satan's plagues) and 9 (God as father) are dropped there; they are kept here because FORMAT asks for every commonly-printed stanza and other books carry all twelve. The de.wikipedia article itself carries no text, only the melodies and the commentary; it is in the sources for the melody, the stanza count and the EG omissions. Cross-checked stanza for stanza against Lutherisches Gesangbuch 391 (lg.concordiabuch.de), which prints the same twelve in a modernised recension -- "immer wieder" for "hin und wieder", "ja, auch schon im Mutterleibe" for "alsobald im Mutterleibe", "entzieht" for "entzeucht", "bitter scheint" for "bitter seind", "mit aller meiner Macht" for "aus aller meiner Macht", and a differently worded st.5 -- recension variants, not transcription errors; the older evangeliums.net form is what is shipped. TUNE: hymnary gives SOLLT ICH MEINEM GOTT (Johann Schop, 1641, originally for Rist's "Lasset uns den Herren preisen"), meter 8.7.8.7.8.7.7.8.7.7, key c minor -- EG 325 and RG 725. A second, major-key melody by Albrecht Peter Bertsch (before 1800) is the Swiss form, RG 724; the chart follows Schop. KEY: Schop's tune is c minor/dorian. The nearest guitar key by the FORMAT rule would be b minor (relative of D), but the sibling files put minor-mode chorales in Am or Em (herzliebster-jesu, a g-minor tune, is charted in Am), and a minor third down puts the melody in a comfortable a-c'' with open chords instead of C-sharp and F-sharp barres, so Am was chosen. If you would rather have the literal one-semitone move, transpose the chart up a semitone to Bm. Chords are the chord symbols printed above the melody in the de.wikipedia score, transposed down a minor third -- so the harmony is sourced, not invented, including the D major (here B) before the dominant and the Picardy third (here A major) on the last syllable. INDEPENDENT CHECK (2026-08-02): the 12-stanza claim holds. de.wikipedia states the text is "ursprünglich aus zwölf Strophen" and that stanzas 8 and 9 are the two dropped in many books including the EG; hymnary's text page (appended to sources) lists exactly the remaining ten first lines, in this file's order, which independently confirms both the stanza sequence here and which two the EG omits. Stanzas 8 and 9, the least-attested because most books drop them, are separately attested online in this wording. hymnary also reads st.1 line 5 "Ist doch nichts ALS lauter Lieben", agreeing with this file; abi-pur.de prints an 11-stanza recension reading "nichts, DENN lauter Lieben" and "aus den Bahnen weicht" for st.9 -- recension variants, and note that this file's "ob ES gleich bisweilen Sünde tut" is the better reading, since the pronoun refers to das Kind. Meter confirmed: hymnary gives 87.87.87.78.77, which is this file's 8.7.8.7.8.7.7.8.7.7, and stanza 1 scans to it exactly. CHART AUDIT: the sourcing claim below is correct and was re-derived from the LilyPond \chordmode block in the de.wikipedia article's score. Transposed down a minor third the article's symbols give precisely this chart, including the two that look wrong on paper -- the Bbm on "das sein" (here Gm) and the Picardy C major on the last syllable (here A). The only simplification is the article's Gsus4-G on "Ewig-", which the chart collapses to plain E. Every bracket position matches the harmonic rhythm of the score. No defects found; nothing edited.
+
+## 71. Vom Himmel hoch, da komm ich her
+
+Tune **VOM HIMMEL HOCH** · 8.8.8.8 · key **D**
+
+### German — Vom Himmel hoch, da komm ich her
+
+*Martin Luther, 1535*
+
+```
+1.
+D   A  E   A     D/F# G    A7  D
+Vom Himmel hoch, da   komm ich her,
+D   Bm    D    A Bm D/F# Em F#
+ich bring euch gute neu  e  Mär;
+Bm  G G/B D   F#7   Bm  E  A
+der guten Mär bring ich so viel,
+D F#m G   D      B   Em A   D
+davon ich singen und sa gen will.
+
+2.
+Euch ist ein Kindlein heut geborn
+von einer Jungfrau auserkorn,
+ein Kindelein so zart und fein,
+das soll eu'r Freud und Wonne sein.
+
+3.
+Es ist der Herr Christ, unser Gott,
+der will euch führn aus aller Not,
+er will euer Heiland selber sein,
+von allen Sünden machen rein.
+
+4.
+Er bringt euch alle Seligkeit,
+die Gott der Vater hat bereit',
+dass ihr mit uns im Himmelreich
+sollt leben nun und ewiglich.
+
+5.
+So merket nun das Zeichen recht:
+die Krippe, Windelein so schlecht,
+da findet ihr das Kind gelegt,
+das alle Welt erhält und trägt.
+
+6.
+Des lasst uns alle fröhlich sein
+und mit den Hirten gehn hinein,
+zu sehn, was Gott uns hat beschert,
+mit seinem lieben Sohn verehrt.
+
+7.
+Merk auf, mein Herz, und sieh dorthin;
+was liegt doch in dem Krippelein?
+Wes ist das schöne Kindelein?
+Es ist das liebe Jesulein.
+
+8.
+Sei mir willkommen, edler Gast!
+Den Sünder nicht verschmähet hast
+und kommst ins Elend her zu mir:
+wie soll ich immer danken dir?
+
+9.
+Ach Herr, du Schöpfer aller Ding,
+wie bist du worden so gering,
+dass du da liegst auf dürrem Gras,
+davon ein Rind und Esel aß!
+
+10.
+Und wär die Welt vielmal so weit,
+von Edelstein und Gold bereit',
+so wär sie doch dir viel zu klein,
+zu sein ein enges Wiegelein.
+
+11.
+Der Sammet und die Seiden dein,
+das ist grob Heu und Windelein,
+darauf du König groß und reich
+herprangst, als wär's dein Himmelreich.
+
+12.
+Das hat also gefallen dir,
+die Wahrheit anzuzeigen mir,
+wie aller Welt Macht, Ehr und Gut
+vor dir nichts gilt, nichts hilft noch tut.
+
+13.
+Ach mein herzliebes Jesulein,
+mach dir ein rein sanft Bettelein,
+zu ruhen in meins Herzens Schrein,
+dass ich nimmer vergesse dein.
+
+14.
+Davon ich allzeit fröhlich sei,
+zu springen, singen immer frei
+das rechte Susaninne schön,
+mit Herzenslust den süßen Ton.
+
+15.
+Lob, Ehr sei Gott im höchsten Thron,
+der uns schenkt seinen ein'gen Sohn.
+Des freuet sich der Engel Schar
+und singet uns solch neues Jahr.
+
+```
+
+Sources: <https://www.evangeliums.net/lieder/lied_vom_himmel_hoch_da_komm_ich_her.html> · <https://de.wikipedia.org/wiki/Vom_Himmel_hoch,_da_komm_ich_her> · <https://en.wikipedia.org/wiki/Vom_Himmel_hoch,_da_komm_ich_her> · <https://www.franzdorfer.com/vom-himmel-hoch> · <https://www.ekd.de/eg-24-vom-himmel-hoch-da-komm-ich-her-89269.htm>
+
+### English — From Heaven Above to Earth I Come
+
+*Martin Luther, tr. Catherine Winkworth, 1855*
+
+```
+1.
+D    A      E A    D/F# G     A7 D
+From Heaven a bove to   earth I  come,
+D  Bm   D    A    Bm D/F# Em  F#
+To bear good news to ev   ery home;
+Bm   G G/B   D  F#7   Bm  E A
+Glad tidings of great joy I bring,
+D    F#m G D   B    Em  A   D
+Whereof  I now will say and sing:
+
+2.
+To you this night is born a child
+Of Mary, chosen mother mild;
+This little Child, of lowly birth,
+Shall be the joy of all your earth.
+
+3.
+'Tis Christ our God, who far on high
+Had heard your sad and bitter cry;
+Himself will your salvation be,
+Himself from sin will make you free.
+
+4.
+He brings those blessings, long ago
+Prepared by God for all below;
+Henceforth His kingdom open stands
+To you, as to the angel bands.
+
+5.
+These are the tokens ye shall mark,
+The swaddling clothes and manger dark;
+There shall ye find the young Child laid,
+By whom the heavens and earth were made.
+
+6.
+Now let us all with gladsome cheer
+Follow the shepherds, and draw near
+To see this wondrous gift of God,
+Who hath His only Son bestowed.
+
+7.
+Give heed, my heart, lift up thine eyes!
+Who is it in yon manger lies?
+Who is this Child so young and fair?
+The blessèd Christ-child lieth there.
+
+8.
+Welcome to earth, Thou noble guest,
+Through whom e'en wicked men are blest!
+Thou com'st to share our misery,
+What can we render, Lord, to Thee!
+
+9.
+Ah, Lord, who hast created all,
+How hast Thou made Thee weak and small,
+That Thou must choose Thy infant bed
+Where ass and ox but lately fed!
+
+10.
+Were earth a thousand times as fair,
+Beset with gold and jewels rare,
+She yet were far too poor to be
+A narrow cradle, Lord, for Thee.
+
+11.
+For velvets soft and silken stuff
+Thou hast but hay and straw so rough,
+Whereon Thou King, so rich and great,
+As 'twere Thy heaven, art throned in state.
+
+12.
+Thus hath it pleased Thee to make plain
+The truth to us poor fools and vain,
+That this world's honor, wealth and might
+Are naught and worthless in Thy sight.
+
+13.
+Ah, dearest Jesus, holy Child,
+Make Thee a bed, soft, undefiled,
+Within my heart, that it may be
+A quiet chamber kept for Thee.
+
+14.
+My heart for very joy doth leap,
+My lips no more can silence keep,
+I too must sing with joyful tongue
+That sweetest ancient cradle-song—
+
+15.
+Glory to God in highest Heaven,
+Who unto man His Son hath given!
+While angels sing with pious mirth
+A glad New Year to all the earth.
+
+```
+
+Sources: <http://www.hymntime.com/tch/htm/f/r/o/m/h/fromheav.htm> · <https://www.ccel.org/a/anonymous/luth_hymnal/tlh085.htm> · <https://hymnary.org/tune/vom_himmel_hoch_luther> · <https://www.hymnsandcarolsofchristmas.com/Hymns_and_Carols/from_heaven_above_winkworth.htm>
+
+> **Sourcing note:** German: Luther's full 15 stanzas, EG 24 / GL 237, from evangeliums.net, which prints today's orthography (dass, lasst, lowercase line-initials). The de.wikipedia article carries the same 15 in the older printed form (Daß, capitalised line-initials, bring'/heut'/eu'r) and was used as the cross-check; the only substantive differences are st.7 line 2 "was liegt doch" (Wikipedia: "Was liegt dort"), st.11 "die Seiden dein" (Wikipedia: "die Seide dein"), st.14 "Susaninne schön" (Wikipedia: "schon") and st.15 "Des freuet sich ... und singet uns" (Wikipedia: "Des freuen sich ... und singen uns"). NOT INCLUDED: the prefatory stanza "Es kam ein Engel hell und klar" that Valentin Triller added in 1555 -- it is not Luther's and hymnals do not number it. SCANSION: the tune is 8.8.8.8 and st.1 line 4 as evangeliums.net prints it, "davon ich singen und sagen will", counts nine; the sung form elides to "sing'n" (so franzdorfer and de.wikipedia print it), so the chart puts a chord on "sing" and none on the following syllable. English st.1 line 1 has the same shape: "heaven" is sung "heav'n", so its chord sits on the whole word and the next bracket falls on "a-bove". ENGLISH: Winkworth's Lyra Germanica text (1855), altered, as the Cyber Hymnal prints it -- 15 stanzas matching the German one for one. Cross-checked against The Lutheran Hymnal 1941 no. 85 (CCEL), which is the same translation revised harder; TLH differs in most stanzas (e.g. st.3 "This is the Christ, our God and Lord" for "'Tis Christ our God, who far on high"), and the Cyber Hymnal form was preferred because the worklist names Winkworth. "blessèd" in st.7 keeps the source's grave accent. TUNE/KEY: hymnary gives VOM HIMMEL HOCH (Luther, from Schumann's Geistliche Lieder, Leipzig 1539), 8.8.8.8, and lists its representative instance in C major; the four-part setting printed on en.wikipedia is in D and German guitar sheets circulate it in G. C, D and G are all guitar keys, so no transposition rule decides it; D was taken because it is the key of the setting the chords are reduced from and it puts the octave-wide melody at d'-d'', the most singable of the three. Chords follow that setting's voice leading, thinned to one chord per syllable, including the F-sharp major half cadence at the end of line 2. INDEPENDENT CHECK (2026-08-02). ENGLISH, ONE CORRECTION: st.6 line 2 read "Pursue the shepherds, and draw near"; no source anywhere prints "Pursue". Winkworth's line is "Follow the shepherds, and draw near" (hymnsandcarolsofchristmas.com, appended to sources, which prints all 15 stanzas and matched this file at nine of the ten other lines spot-checked); the only rival reading is "Go with the shepherds and draw near" in the Free Lutheran Chorale-Book, but that recension also reads "the precious Gift of God" and "His own dear Son" in lines 3-4, where this file has Winkworth's "this wondrous gift of God" and "His only Son". So the file follows the Winkworth recension throughout and "Pursue" was an isolated paraphrase; CORRECTED to "Follow". GERMAN: re-verified against the EKD's own page for EG 24 (ekd.de, appended to sources). It prints 15 stanzas and confirms this file at st.2, st.4, st.7 "was liegt doch in dem Krippelein", st.9, st.11 "die Seiden dein" and st.14 "Susaninne schön" -- i.e. it backs evangeliums.net against de.wikipedia at three of the four variants listed above. It differs at the fourth: EG 24 reads st.15 "Des FREUEN sich der Engel Schar / und SINGEN uns solch neues Jahr", agreeing with de.wikipedia against evangeliums.net's "freuet/singet". That is now two reputable sources against this file's base, so the maintainer may well want to switch; it is left as evangeliums.net has it because that source is this text's declared base and switching one stanza to another recension mid-text is worse than the variant. Flagging rather than editing. CHART AUDIT: verified syllable by syllable against the D-major four-part setting in the en.wikipedia article. Lines 1-3 reproduce it exactly, all 24 chords, including the D/F# and A7 in line 1 and the F#7 in line 3. One deviation: line 4 syllable 1 ("da-" / "Where-") is charted D where the setting sounds b-d-f#, i.e. Bm; playing D over that bass gives Bm7, so it is a harmless thinning and it makes lines 2 and 4 start alike, but it is the one chord here that is not literally in the source. The remaining seven chords of line 4 match exactly.
+
+## 72. Aus tiefer Not schrei ich zu dir
 
 Tune **AUS TIEFER NOT** · 8.7.8.7.8.8.7 · key **Em**
 
@@ -4277,11 +5005,11 @@ Who then can stand before Thee?
 
 2.
 Thy love and grace alone avail,
-’Tis grace that sin forgiveth;
-The sinner’s deeds must surely fail,
-Though e’er so well he liveth.
+'Tis grace that sin forgiveth;
+The sinner's deeds must surely fail,
+Though e'er so well he liveth.
 Before Thee none can boasting stand,
-For all must fear Thee, ev’ry man,
+For all must fear Thee, ev'ry man,
 And live alone by mercy.
 
 3.
@@ -4298,13 +5026,13 @@ And though it tarry through the night
 And till the morning waken,
 My heart shall never doubt His might
 Nor count itself forsaken.
-Thus God’s true Israel shall do,
+Thus God's true Israel shall do,
 Of His own Spirit born anew,
 And wait on God, their Savior.
 
 5.
 Though great our sins, yet greater still
-Is God’s abundant favor;
+Is God's abundant favor;
 His hand of mercy never will
 Abandon us, nor waver.
 Our Shepherd good and true is He,
@@ -4317,7 +5045,7 @@ Sources: <https://www.lutheranchoralebook.com/texts/from-depths-of-woe-i-cry-to-
 
 > **Sourcing note:** German is the EG 299 text (5 stanzas, modern orthography) as evangeliums.net prints it. English is Winkworth's 1863 'From depths of woe I cry to Thee' in the altered form the Free Lutheran Chorale-Book prints (the TLH 329 line of descent; the page credits 'Tr. Catherine Winkworth, 1863, alt.'); it maps stanza-for-stanza onto the German. Tune AUS TIEFER NOT (Luther 1524), meter 8.7.8.7.8.8.7 per hymnary — the melody is PHRYGIAN (hymnary calls it e minor/modal), so no plain major/minor guitar key fits; the chart is written around Am/Em with an F->E phrygian final cadence and the key labelled Em as the transposition base. Chords are a best-effort modal harmonisation, not a transcription of printed notation.
 
-## 74. Nun freut euch, lieben Christen g'mein
+## 73. Nun freut euch, lieben Christen g'mein
 
 Tune **NUN FREUT EUCH** · 8.7.8.7.8.8.7 · key **G**
 
@@ -4444,13 +5172,13 @@ And holy rapture singing,
 D            G       A7       D
 Proclaim the wonders God hath done,
 G             C       G       D
-How His right arm the vict’ry won;
+How His right arm the vict'ry won;
 G     C      G       D    G
 Right dearly it hath cost Him.
 
 2.
-Fast bound in Satan’s chains I lay,
-Death brooded darkly o’er me,
+Fast bound in Satan's chains I lay,
+Death brooded darkly o'er me,
 Sin was my torment night and day,
 In sin my mother bore me;
 Yea, deep and deeper still I fell,
@@ -4460,7 +5188,7 @@ So firmly sin possessed me.
 3.
 My own good works availed me naught,
 No merit they attaining;
-Free will against God’s judgment fought,
+Free will against God's judgment fought,
 Dead to all good remaining.
 My fears increased till sheer despair
 Left naught but death to be my share;
@@ -4468,16 +5196,16 @@ The pangs of hell I suffered.
 
 4.
 But God beheld my wretched state
-Before the world’s foundation,
+Before the world's foundation,
 And, mindful of His mercies great,
-He planned my soul’s salvation.
-He turned to me a father’s heart;
+He planned my soul's salvation.
+He turned to me a father's heart;
 He did not choose the easy part,
 But gave His dearest Treasure.
 
 5.
 He spoke to His beloved Son:
-’Tis time to have compassion.
+'Tis time to have compassion.
 Then go, bright Jewel of My crown,
 And bring to man salvation;
 From sin and sorrow set him free,
@@ -4485,12 +5213,12 @@ Slay bitter death for him that he
 May live with Thee forever.
 
 6.
-The Son obeyed His Father’s will,
+The Son obeyed His Father's will,
 Was born of virgin mother,
-And God’s good pleasure to fulfill,
+And God's good pleasure to fulfill,
 He came to be my Brother.
-No garb of pomp or pow’r He wore,
-A servant’s form, like mine, He bore,
+No garb of pomp or pow'r He wore,
+A servant's form, like mine, He bore,
 To lead the devil captive.
 
 7.
@@ -4507,14 +5235,14 @@ The Foe shall shed My precious blood,
 Me of My life bereaving.
 All this I suffer for thy good;
 Be steadfast and believing.
-Life shall from death the vict’ry win,
+Life shall from death the vict'ry win,
 My innocence shall bear thy sin;
 So art thou blest forever.
 
 9.
 Now to My Father I depart,
 The Holy Spirit sending
-And, heav’nly wisdom to impart,
+And, heav'nly wisdom to impart,
 My help to thee extending.
 He shall in trouble comfort thee,
 Teach thee to know and follow Me,
@@ -4526,7 +5254,7 @@ My ways forsake thou never;
 So shall My kingdom flourish now
 And God be praised forever.
 Take heed lest men with base alloy
-The heav’nly treasure should destroy;
+The heav'nly treasure should destroy;
 This counsel I bequeath thee.
 
 ```
@@ -4535,7 +5263,7 @@ Sources: <https://www.lutheranchoralebook.com/texts/dear-christians-one-and-all-
 
 > **Sourcing note:** German is the 10-stanza EG 341-style text as evangeliums.net prints it (modern orthography; the site's quotation marks — Christ's speech opens in stanza 7 and closes at the end of stanza 10 — are kept as printed, as is 'Übermaßen' in stanza 4, which other sources print lowercase). English is Richard Massie 1854 as altered for The Lutheran Hymnal 387, from the Free Lutheran Chorale-Book — stanza-parallel with the German, 10 for 10. Tune NUN FREUT EUCH ('Nürnberg 1523' per evangeliums.net; hymnary also cross-references LUTHER'S HYMN), meter 8.7.8.7.8.8.7 confirmed on hymnary's text page. Chart written in G, a common congregational key for this tune; chords are a best-effort chart, not verified against printed notation.
 
-## 75. Christ lag in Todesbanden
+## 74. Christ lag in Todesbanden
 
 Tune **CHRIST LAG IN TODESBANDEN** · 8.7.8.7.7.8.7.4 · key **Em**
 
@@ -4633,11 +5361,11 @@ Sources: <https://www.evangeliums.net/lieder/lied_christ_lag_in_todesbanden.html
 ```
 1.
 Em           Am     B7             Em
-Christ Jesus lay in death’s strong bands,
+Christ Jesus lay in death's strong bands,
 G         Am     Em
 For our offenses given;
 Em         Am          B7      Em
-But now at God’s right hand He stands
+But now at God's right hand He stands
 G             Am        Em
 And brings us life from heaven.
 G         D      G
@@ -4660,11 +5388,11 @@ And held us as his captive.
 Alleluia!
 
 3.
-But Jesus Christ, God’s only Son,
+But Jesus Christ, God's only Son,
 To our low state descended;
-The pow’r of sin He hath undone,
+The pow'r of sin He hath undone,
 The might of Death is ended:
-Stripped of pow’r, no more he reigns;
+Stripped of pow'r, no more he reigns;
 An empty form alone remains;
 His sting is lost forever.
 Alleluia!
@@ -4685,8 +5413,8 @@ Whom God so freely gave us;
 He died on the accursèd tree—
 So strong His love!—to save us.
 See, His blood doth mark our door;
-Faith points to it, Death passes o’er,
-The Murd’rer cannot harm us.
+Faith points to it, Death passes o'er,
+The Murd'rer cannot harm us.
 Alleluia!
 
 6.
@@ -4715,7 +5443,7 @@ Sources: <https://www.lutheranchoralebook.com/texts/christ-jesus-lay-in-deaths-s
 
 > **Sourcing note:** German is the 7-stanza modern-orthography text (EG 101 line) as evangeliums.net prints it, with one normalisation: the site prints the first line as 'Christ lag in Todes Banden' (two words) against its own page title and every other source (EG, the Free Lutheran Chorale-Book) — I wrote 'Todesbanden'. English is Massie 1854 as altered for LSB 458, from the Free Lutheran Chorale-Book, stanza-parallel 7 for 7. Tune CHRIST LAG IN TODESBANDEN (Luther/Walter 1524) is DORIAN; hymnary lists the meter as 87.87.78.74, and (as the Chorale-Book documents) the German sings 7-syllable lines where the English sings 8, so a slur shifts between stanzas. Chart labelled Em, a best-effort modal harmonisation with B7 cadences — not a transcription of printed notation.
 
-## 76. Wachet auf, ruft uns die Stimme
+## 75. Wachet auf, ruft uns die Stimme
 
 Tune **WACHET AUF** · 8.9.8.8.9.8.6.6.4.8.8 · key **C**
 
@@ -4843,7 +5571,7 @@ Sources: <https://www.ccel.org/ccel/winkworth/chorales.h200.html> · <https://hy
 
 > **Sourcing note:** German is EG 147 (3 stanzas) as evangeliums.net prints it, with one punctuation repair: the site renders the first line '"Wachet auf"; ruft uns die Stimme' — the stray semicolon is normalised to a comma (EG prints »Wachet auf«, ruft uns die Stimme); the site's quotation marks are kept. English is Winkworth's own Chorale Book for England text (first published 1858 in Lyra Germanica; CBE printing 1863) from CCEL — NOT the altered TLH/LSB version, whose stanza 3 the Free Lutheran Chorale-Book further rewrites to preserve the W-Z-G acrostic; Winkworth's stanza 3 'Now let all the heavens adore Thee' is the commonly printed form. The German sings 'Macht euch bereit / zu der Hochzeit' as two short lines where the English sings one 8-syllable line — the charts agree bar-for-bar. Tune WACHET AUF (Nicolai 1599); hymnary's tune page gives meter 8.9.8.8.9.8.6.6.4.8.8 (the text page says Irregular) and C major as the tune-page key (other books print B-flat or D) — chart in C. Chords are a best-effort chart, not from printed notation.
 
-## 77. Wie schön leuchtet der Morgenstern
+## 76. Wie schön leuchtet der Morgenstern
 
 Tune **WIE SCHÖN LEUCHTET** · 8.8.7.8.8.7.4.8.4.8 · key **D**
 
@@ -5030,7 +5758,7 @@ Sources: <https://www.ccel.org/ccel/winkworth/chorales.h149.html> · <https://hy
 
 > **Sourcing note:** German is the 7-stanza revised text (the Schlegel/Knapp line, credited 'Philipp Nicolai 1597 / Johann Adolf Schlegel 1813 / Albert Knapp 1832' by the source) that evangeliums.net prints as its main text — the version common in free-church hymnals. EG 70 instead keeps Nicolai's original wording (stanza 1: 'die süße Wurzel Jesse ... hast mir mein Herz besessen'), which the site shows only as a parenthetical variant after line 3; I dropped the parenthesis and kept the site's main line 'uns herrlich aufgegangen'. The de.wikipedia URL was consulted for the 1599 original as a cross-check. English is Winkworth's Chorale Book for England #149 'O Morning Star! how fair and bright' (4 stanzas, corresponding to German stanzas 1, 3, 4, 7) — deliberately NOT stanza-parallel; the fuller modern hymnal versions of 'O Morning Star' are composites. Its 8-syllable line 'Holy art Thou, Fair and Glorious,' spans two of the German short lines; charts agree bar-for-bar. Tune WIE SCHÖN LEUCHTET (Nicolai 1599), meter 8.8.7.8.8.7.4.8.4.8, D major the primary printed key per hymnary's tune page — chart in D, best-effort, not from printed notation.
 
-## 78. Jesu, meine Freude
+## 77. Jesu, meine Freude
 
 Tune **JESU, MEINE FREUDE** · 6.6.5.6.6.5.7.8.6 · key **Em**
 
@@ -5200,7 +5928,7 @@ Sources: <https://www.ccel.org/ccel/winkworth/chorales.h151.html> · <https://hy
 
 > **Sourcing note:** Beware the URL: evangeliums.net's page named for this first line carries a different modern song (Gerhard Schöne 1990); the Franck chorale lives at the 'Jesu, meine Freude, meines Herzens Weide' URL used here. German is that page's 6-stanza EG 396-style text, with one correction: the site prints 'Sund und Hölle' in stanza 2 where the standard text is 'Sünd und Hölle' (cross-checked against the Free Lutheran Chorale-Book's Walther text) — I wrote Sünd. English is Winkworth's own Chorale Book for England #151 'Jesu, priceless treasure' — 5 stanzas; she omits German stanza 3 ('Trotz dem alten Drachen'), so the languages are not fully stanza-parallel. Most hymnals instead print the altered composite 6-stanza 'Jesus, priceless treasure' (TLH 347 line, with 'Satan, I defy thee'); the title field uses the conventional 'Jesus' spelling while the text keeps Winkworth's 'Jesu'. Tune JESU, MEINE FREUDE (Crüger 1653), meter 6.6.5.6.6.5.7.8.6 per hymnary. Printed keys vary widely (hymnary's tune page lists c/g/d minor instances; Bach's settings circulate in E minor) — chart in Em per the guitar rule. Chords are a best-effort chart, not from printed notation.
 
-## 79. Schmücke dich, o liebe Seele
+## 78. Schmücke dich, o liebe Seele
 
 Tune **SCHMÜCKE DICH** · 8.8.8.8 D · key **D**
 
@@ -5245,7 +5973,7 @@ und die unerforschte Weise
 machet, dass ich früh vermerke,
 Herr, die Größe deiner Stärke.
 Ist auch wohl ein Mensch zu finden,
-der dein Allmacht sollt’ ergründen?
+der dein Allmacht sollt' ergründen?
 
 4.
 Nein, Vernunft, die muss hier weichen,
@@ -5285,7 +6013,7 @@ sei zu deinem Tisch geladen.
 Lass mich durch dies Seelenessen
 deine Liebe recht ermessen,
 dass ich auch, wie jetzt auf Erden,
-mög’ dein Gast im Himmel werden.
+mög' dein Gast im Himmel werden.
 
 ```
 
@@ -5370,7 +6098,117 @@ Sources: <https://www.ccel.org/ccel/winkworth/chorales.h093.html> · <https://hy
 
 > **Sourcing note:** German is the 7-stanza text evangeliums.net prints (the full Franck original has 9 stanzas; EG 218 carries 6). The site credits the text 'Johann Franck 1653' (stanza 1 first appeared with Crüger's melody in 1649 — the worklist's year). English is Winkworth's Chorale Book for England #93 (6 stanzas) — NOT stanza-parallel with the shipped German: her stanza 2 'Hasten as a Bride to meet Him' renders an original stanza ('Eile, wie Verlobte pflegen') that the German source omits, and she skips others; correspondence is roughly en 1,3,4,5,6 to de 1,2,3,5,7. 'Secrets that with Thee art hidden' in stanza 4 is as CCEL prints it (sic). Tune SCHMÜCKE DICH (Crüger 1649), meter LMD / 8.8.8.8 D, D major the original and most common printed key per hymnary's tune page — chart in D, best-effort, not from printed notation.
 
-## 81. Es ist das Heil uns kommen her
+## 79. Allein Gott in der Höh sei Ehr
+
+Tune **ALLEIN GOTT IN DER HÖH** · 8.7.8.7.8.8.7 · key **G**
+
+### German — Allein Gott in der Höh sei Ehr
+
+*Nikolaus Decius, 1523*
+
+```
+1.
+G           C  D   Am  Em  B
+Allein Gott in der Höh sei Ehr
+Em  G    D   C  Am D  G
+und Dank für seine Gnade,
+G          C   D   Am Em B
+darum dass nun und nimmermehr
+Em  G  D   C    Am   D   G
+uns rühren kann kein Schade.
+G   D   Em C     G    D  Em  D
+Ein Wohlge falln Gott an uns hat;
+G       C    D     Am  Em   B
+nun ist groß Fried ohn Unterlass,
+G   D    Em  C   Am  D G
+all Fehd hat nun ein Ende.
+
+2.
+Wir loben, preisn, anbeten dich;
+für deine Ehr wir danken,
+dass du, Gott Vater, ewiglich
+regierst ohn alles Wanken.
+Ganz ungemessn ist deine Macht,
+allzeit geschieht, was du bedacht.
+Wohl uns solch eines Herren!
+
+3.
+O Jesu Christ, Sohn eingeborn
+des allerhöchsten Vaters,
+Versöhner derer, die verlorn,
+du Stiller unsres Haders,
+Lamm Gottes, heilger Herr und Gott:
+nimm an die Bitt aus unsrer Not,
+erbarm dich unser aller.
+
+4.
+O Heilger Geist, du höchstes Gut,
+du allerheilsamst' Tröster:
+vor Teufels G'walt fortan behüt,
+die Jesus Christ erlöset
+durch große Mart'r und bittern Tod;
+abwend all unsern Jamm'r und Not!
+Darauf wir uns verlassen.
+
+```
+
+Sources: <https://de.wikipedia.org/wiki/Allein_Gott_in_der_H%C3%B6h_sei_Ehr> · <https://www.evangeliums.net/lieder/lied_allein_gott_in_der_hoeh_sei_ehr.html> · <https://en.wikipedia.org/wiki/Allein_Gott_in_der_H%C3%B6h_sei_Ehr> · <https://hymnary.org/tune/allein_gott_in_der_hoh_decius>
+
+### English — All Glory Be to God on High
+
+*Nikolaus Decius, tr. Catherine Winkworth, 1863*
+
+```
+1.
+G         C  D  Am  Em B
+All glory be to God on high,
+Em  G    D   C    Am D     G
+Who hath our race be friended!
+G        C    D     Am  Em   B
+To us no harm shall now come nigh,
+Em  G      D  C    Am D  G
+The strife at last is ended;
+G   D   Em  C   G    D    Em D
+God showeth His good will to men,
+G               C     D  Am    Em B
+And peace shall reign on earth a  gain;
+G   D     Em  C   Am  D   G
+Oh, thank Him for His goodness!
+
+2.
+We praise, we worship Thee, we trust,
+And give Thee thanks forever,
+O Father, that Thy rule is just
+And wise and changes never.
+Thy boundless power o'er all things reigns,
+'Tis done whate'er Thy will ordains:
+Well for us that Thou rulest!
+
+3.
+O Jesus Christ, Thou only Son
+Of God, Thy heavenly Father,
+Who didst for all our sins atone
+And Thy lost sheep dost gather:
+Thou Lamb of God, to Thee on high,
+From out our depths, we sinners cry,
+Have mercy on us, Jesus!
+
+4.
+O Holy Ghost, Thou precious Gift,
+Thou Comforter unfailing,
+O'er Satan's snares our souls uplift
+And let Thy power availing
+Avert our woes and calm our dread.
+For us the Savior's blood was shed;
+We trust in Thee to save us.
+
+```
+
+Sources: <https://www.ccel.org/a/anonymous/luth_hymnal/tlh237.htm> · <https://hymnary.org/text/all_glory_be_to_god_on_high_who_hath_our>
+
+> **Sourcing note:** German: the four stanzas as EG 179 prints them (de.wikipedia's "heute gebräuchlicher Liedtext" column, footnoted to EG 179 and Mennonitisches Gesangbuch 24). Stanzas 1-3 are Decius's 1523 Gloria paraphrase; stanza 4 is Joachim Slüter's addition of 1525 and is missing from the Gotteslob -- kept here, since most Protestant books print it. THE ELISIONS ARE LOAD-BEARING, NOT TYPOS: "preisn", "ungemessn", "Wohlgefalln", "heilger", "Mart'r", "Jamm'r" are what makes the lines scan to 8.7.8.7.8.8.7. evangeliums.net prints the un-elided "preisen" and "ungemessen", which give nine syllables where the tune has eight, which is why the EG form was preferred; that page is in the sources because I compared against it (it also reads "unsers Haders" for "unsres Haders" and adds apostrophes to "Fried'" and "Fehd'"). ENGLISH: Winkworth 1863, as The Lutheran Hymnal 1941 no. 237 prints it (CCEL); cross-checked against hymnary's representative text from the Evangelical Lutheran Hymnary no. 35, which is the same translation with "pow'r", "Done is whate'er" for "'Tis done whate'er", "O thank Him" for "Oh, thank Him" and "Saviour" for "Savior". TUNE: ALLEIN GOTT IN DER HÖH, attributed to Decius 1539 after the Gloria of the Easter plainsong mass Lux et origo; hymnary gives the meter 8.7.8.7.8.8.7 and bar form AAB. KEY: printings disagree -- German hymnals (EG 179, GL 170, and the Crüger setting at johann-crueger.de) use F, hymnary's representative instance is in E, and the four-part setting on en.wikipedia is in G. F sits one semitone from both E and G, so the FORMAT preference order picks G in any case, and G is also distance zero from the en.wikipedia setting, which is what the chords are reduced from. That setting is the source of the B major at the end of line 1 (its alto has the D-sharp) -- an authentic Phrygian-flavoured cadence towards E minor, not a slip. The Abgesang harmony (lines 5-7) is a simplified reading of that setting and is the least certain part of the chart; the two languages' bracket positions agree bar for bar.
+
+## 80. Es ist das Heil uns kommen her
 
 Tune **ES IST DAS HEIL** · 8.7.8.7.8.8.7 · key **G**
 
@@ -5396,21 +6234,21 @@ der hat für uns genug getan,
 er ist der Mittler worden.
 
 2.
-Was Gott im G’setz geboten hat,
+Was Gott im G'setz geboten hat,
 da man es nicht konnt halten,
 erhob sich Zorn und große Not
 vor Gott so mannigfalten;
 vom Fleisch wollt nicht heraus der Geist,
-vom G’setz erfordert allermeist;
+vom G'setz erfordert allermeist;
 es war mit uns verloren.
 
 3.
 Es war ein falscher Wahn dabei,
-Gott hätt sein G’setz drum geben,
+Gott hätt sein G'setz drum geben,
 als ob wir möchten selber frei
 nach seinem Willen leben;
 so ist es nur ein Spiegel zart,
-der uns zeigt an die sünd’ge Art,
+der uns zeigt an die sünd'ge Art,
 in unserm Fleisch verborgen.
 
 4.
@@ -5423,9 +6261,9 @@ und je dem Fleisch der Sünde Schand
 allzeit war angeboren.
 
 5.
-Doch mußt’ das G’setz erfüllet sein,
+Doch mußt' das G'setz erfüllet sein,
 sonst wärn wir all verdorben.
-Drum schickt’ Gott seinen Sohn herein,
+Drum schickt' Gott seinen Sohn herein,
 der selber Mensch ist worden;
 das ganz Gesetz hat er erfüllt,
 damit seins Vaters Zorn gestillt,
@@ -5459,16 +6297,16 @@ dem Nächsten wird die Lieb Guts tun,
 bist du aus Gott geboren.
 
 9.
-Es wird die Sünd durchs G’setz erkannt
-und schlägt das G’wissen nieder,
+Es wird die Sünd durchs G'setz erkannt
+und schlägt das G'wissen nieder,
 das Evangelium kommt zuhand
 und stärkt den Sünder wieder
 und spricht: „Nur kreuch zum Kreuz herzu,
-Im G’setz ist weder Rast noch Ruh
+Im G'setz ist weder Rast noch Ruh
 Mit allen seinen Werken!“
 
 10.
-Die Werk, die kommen g’wißlich her
+Die Werk, die kommen g'wißlich her
 aus einem rechten Glauben;
 denn das nicht rechter Glaube wär,
 wolltst ihn der Werk berauben.
@@ -5477,7 +6315,7 @@ die Werke sind des Nächsten Knecht,
 dran wir den Glauben merken.
 
 11.
-Die Hoffnung wart’ der rechten Zeit,
+Die Hoffnung wart' der rechten Zeit,
 was Gottes Wort zusage;
 wann das geschehen soll zur Freud,
 setzt Gott kein gwisse Tage.
@@ -5499,13 +6337,13 @@ Sei Lob und Ehr mit hohem Preis
 um dieser Gutheit willen
 Gott Vater, Sohn, und Heilgem Geist.
 Der woll mit Gnad erfüllen,
-was er in uns ang’fangen hat
+was er in uns ang'fangen hat
 zu Ehren seiner Majestät,
 daß heilig werd sein Name;
 
 14.
 sein Reich zukomm; sein Will auf Erd
-g’scheh wie im Himmelsthrone;
+g'scheh wie im Himmelsthrone;
 das täglich Brot noch heut uns werd;
 woll unsrer Schuld verschonen,
 wie wir auch unsern Schuldnern tun;
@@ -5525,7 +6363,7 @@ Sources: <https://de.wikipedia.org/wiki/Es_ist_das_Heil_uns_kommen_her> · <http
    G      D    C      G
 Salvation unto us has come
    Em         C         D G
-By God’s free grace and favor;
+By God's free grace and favor;
      G        D    C        G
 Good works cannot avert our doom,
      Em       C       D G
@@ -5540,7 +6378,7 @@ He is our one Redeemer.
 2.
 What God did in His Law demand
 And none to Him could render
-Caused wrath and woe on ev’ry hand
+Caused wrath and woe on ev'ry hand
 For man, the vile offender.
 Our flesh has not those pure desires
 The spirit of the Law requires,
@@ -5559,18 +6397,18 @@ That lurks within our nature.
 From sin our flesh could not abstain,
 Sin held its sway unceasing;
 The task was useless and in vain,
-Our guilt was e’er increasing.
-None can remove sin’s poisoned dart
+Our guilt was e'er increasing.
+None can remove sin's poisoned dart
 Or purify our guileful heart—
 So deep is our corruption.
 
 5.
 Yet as the Law must be fulfilled
 Or we must die despairing,
-Christ came and hath God’s anger stilled,
+Christ came and hath God's anger stilled,
 Our human nature sharing.
 He hath for us the Law obeyed
-And thus the Father’s vengeance stayed
+And thus the Father's vengeance stayed
 Which over us impended.
 
 6.
@@ -5592,12 +6430,12 @@ My faith cannot be put to shame,
 And I shall never perish.
 
 8.
-The only righteous in God’s sight
+The only righteous in God's sight
 Are they this faith possessing;
-But faith shines forth with heav’nly light,
+But faith shines forth with heav'nly light,
 Itself by works professing.
 Though faith is all that God requires,
-Thy love the neighbor’s good desires
+Thy love the neighbor's good desires
 If God hath truly borne Thee.
 
 9.
@@ -5610,7 +6448,7 @@ The Law no peace can ever give,
 No comfort and no blessing.
 
 10.
-Faith clings to Jesus’ cross alone
+Faith clings to Jesus' cross alone
 And rests in Him unceasing;
 And by its fruits true faith is known,
 With love and hope increasing.
@@ -5638,16 +6476,16 @@ Still cast from thee all terror.
 
 13.
 May glory, laud, with highest praise,
-For this, our God’s salvation,
+For this, our God's salvation,
 To Father, Spirit, Son be raised,
-Who’ll bring unto completion
+Who'll bring unto completion
 The work He hath in us begun,
 That glory may for Him be won.
 For this His name be hallowed.
 
 14.
 His kingdom come, His will on earth
-Be done as ’tis in heaven.
+Be done as 'tis in heaven.
 Of daily bread be there no dearth,
 And be our sins forgiven
 As we do them who owe us aught.
@@ -5660,7 +6498,7 @@ Sources: <https://www.lutheranchoralebook.com/texts/salvation-unto-us-has-come/>
 
 > **Sourcing note:** German is the full 14-stanza original as printed in the de.wikipedia article, chosen because it aligns stanza-for-stanza with the 14-stanza English. Its orthography is the pre-1996 sung form the source prints (daß, mußt', laßen, ohn Maßen, g'wißlich) — not normalised, per FORMAT. If you would rather ship the shorter modern-orthography church text, evangeliums.net carries EG 342 in 12 stanzas (dass/lass/Gsetz, originals 3 and 4 dropped, some rewording: 'sie mögen nicht behüten', 'der Glaub gibt von sich aus den Schein'); that URL is in the sources because I compared against it. English is the composite translation printed by the Free Lutheran Chorale-Book (the TLH/ELHB line of descent), NOT Arthur T. Russell's as the worklist suggested — I could not source Russell's text in full, and the composite matches the German 14 for 14. hymnary lists the tune as ES IST DAS HEIL (also LUTHER'S HYMN / NUN FREUT EUCH), meter 8.7.8.7.8.8.7; evangeliums.net names the melody 'Nun freue dich, du Christenheit'. Chords are a best-effort G-major bar-form chart (AAB: lines 1-2, repeated 3-4, then the Abgesang) — I did not verify them against printed notation, so treat the harmony as provisional. Verification 2026-08-02: English lines 1 and 3 of stanza 1 originally ended on C with the D/C a bar late against the German chart; realigned to the German (G D C G, cadence on I) so the two charts agree bar-for-bar. English cross-checked against TLH 377 on CCEL (independent of the sites above): the overlapping ten stanzas match apart from TLH reading 'should' for 'might' in stanza 3 line 3 and a different doxology stanza — the Chorale-Book's own printing confirms 'might' and 'borne Thee', so the file's readings stand. German cross-checked against Lutherisches Gesangbuch 287 (lg.concordiabuch.de), which prints the same 14 stanzas in a modernised recension (e.g. 'der für uns all genug getan', 'Heuchlers Werk', 'um dieser Wohltat willen') — recension variants, not transcription errors; the shipped Wikipedia recension left unchanged.
 
-## 82. Herzliebster Jesu, was hast du verbrochen
+## 81. Herzliebster Jesu, was hast du verbrochen
 
 Tune **HERZLIEBSTER JESU** · 11.11.11.5 · key **Am**
 
@@ -5722,7 +6560,7 @@ Keins Menschen Herz vermag es auszudenken,
 was dir zu schenken.
 
 9.
-Ich kann’s mit meinen Sinnen nicht erreichen,
+Ich kann's mit meinen Sinnen nicht erreichen,
 womit doch dein Erbarmung zu vergleichen.
 Wie kann ich dir denn deine Liebestaten
 im Werk erstatten?
@@ -5734,7 +6572,7 @@ dass sie aufs neu mein Herze nicht entzünden
 mit alten Sünden.
 
 11.
-Weil’s aber nicht besteht in eignen Kräften,
+Weil's aber nicht besteht in eignen Kräften,
 fest die Begierden an das Kreuz zu heften,
 so gib mir deinen Geist, der mich regiere,
 zum Guten führe.
@@ -5752,7 +6590,7 @@ nichts von Verfolgung, nichts von Todesschmerzen
 nehmen zu Herzen.
 
 14.
-Dies alles, ob’s für schlecht zwar ist zu schätzen,
+Dies alles, ob's für schlecht zwar ist zu schätzen,
 wirst du es doch nicht gar beiseite setzen;
 in Gnaden wirst du dies von mir annehmen,
 mich nicht beschämen.
@@ -5785,18 +6623,18 @@ O most afflicted.
 2.
 Who was the guilty? Who brought this upon Thee?
 Alas, my treason, Jesus, hath undone Thee.
-’Twas I, Lord, Jesus, I it was denied Thee!
+'Twas I, Lord, Jesus, I it was denied Thee!
 I crucified Thee.
 
 3.
 Lo, the Good Shepherd for the sheep is offered;
 The slave hath sinned, and the Son hath suffered;
-For man’s atonement, while he nothing heedeth,
+For man's atonement, while he nothing heedeth,
 God intercedeth.
 
 4.
 For me, kind Jesus, was Thy incarnation,
-Thy mortal sorrow, and Thy life’s oblation;
+Thy mortal sorrow, and Thy life's oblation;
 Thy death of anguish and Thy bitter passion,
 For my salvation.
 
@@ -5812,7 +6650,7 @@ Sources: <https://hymnary.org/hymn/CYBER/67> · <https://hymnary.org/text/ah_hol
 
 > **Sourcing note:** German is the full 15-stanza text as evangeliums.net prints it (EG 81 carries eleven of these, dropping originals 6, 10, 12, 14 and moving 11 after 13; Gotteslob 290 prints only the first four — noted in the de.wikipedia article). One orthography oddity kept from the source: stanza 5 reads 'mißhandelt' where the rest of the text is post-1996; I did not normalise it. English is Bridges' 1899 Yattendon text in its unaltered form from the Cyber Hymnal record — the widely sung UMH/Common-Praise version alters line 2 to 'that we to judge thee have in hate pretended' and lowercases the pronouns; I used the original. Note the two languages are not stanza-parallel: Bridges condensed 15 German stanzas into 5. If parity matters more than fame, the Free Lutheran Chorale-Book carries Catherine Winkworth's 15-stanza 'O dearest Jesus, what law hast Thou broken' (TLH 1941 no. 143), which maps one-to-one. Tune and meter confirmed on hymnary (HERZLIEBSTER JESU, Johann Crüger 1640, 11.11.11.5). Key: the tune is minor and is usually printed in G minor or A minor; I wrote it in A minor as the guitar-friendly choice, so the chart is a best-effort harmonisation rather than a transcription of printed notation. Verification 2026-08-02, MAINTAINER'S EYE WANTED on one word: stanza 1 line 2 here reads 'ein solch hart Urteil' — that is what evangeliums.net (the wording source) prints and the file transcribes it faithfully, but EG 81, Gotteslob 290, the 1630 original and the Bach passions all read 'ein solch scharf Urteil'; evangeliums.net looks like the outlier, so consider changing 'hart' to 'scharf'. Other differences against the 1630 original on bach-cantatas.com (Chorale159) are recension-level (st. 3 'Ich, ich ... habe', st. 5 'gehandelt'/'verdient'/'Gott wird gefangen', st. 12 'Alsdann so werd ich') and the shipped modern recension stands. English re-checked against godsongs.net, which carries the altered modern text ('that we ... have', 'while we nothing heeded, God interceded') — confirms the file ships the original as intended; the CYBER record matches the file exactly, including its odd comma in "'Twas I, Lord, Jesus".
 
-## 83. O dass ich tausend Zungen hätte
+## 82. O dass ich tausend Zungen hätte
 
 Tune **O DASS ICH TAUSEND ZUNGEN HÄTTE** · 9.8.9.8.8.8 · key **G**
 
@@ -5959,11 +6797,11 @@ O that my voice might high be sounding,
 Far as the widely distant poles;
 My blood run quick with rapture bounding,
 Long as its vital current rolls,
-And ev’ry pulse thanksgiving raise,
-And ev’ry breath a hymn of praise!
+And ev'ry pulse thanksgiving raise,
+And ev'ry breath a hymn of praise!
 
 3.
-O all ye pow’rs that God implanted,
+O all ye pow'rs that God implanted,
 Arise, keep silence thus no more,
 Put forth the strength that He hath granted,
 Your noblest work is to adore;
@@ -5974,16 +6812,16 @@ With heartfelt praise your Lord to greet!
 Ye forest leaves so green and tender,
 That dance for joy in summer air;
 Ye meadow grasses bright and slender,
-Ye flow’rs so wondrous sweet and fair;
+Ye flow'rs so wondrous sweet and fair;
 Ye live to show His praise alone,
 Help me to make His glory known!
 
 5.
 Oh, all things that have breath and motion,
 That throng with life, earth, sea, and sky,
-Now join me in my heart’s devotion,
+Now join me in my heart's devotion,
 Help me to raise His praises high;
-My utmost pow’rs can ne’er aright
+My utmost pow'rs can ne'er aright
 Declare the wonders of His might.
 
 6.
@@ -5991,7 +6829,7 @@ Dear Father, endless praise I render
 For soul and body strangely joined;
 I praise Thee, Guardian kind and tender,
 For all the noble joys I find
-So richly spread on ev’ry side,
+So richly spread on ev'ry side,
 And freely for my use supplied.
 
 7.
@@ -6005,22 +6843,22 @@ From Satan, to be blest with Thee.
 8.
 Glory and praise, still onward reaching,
 Thine be it, Spirit of all grace,
-Whose holy pow’r and faithful teaching
+Whose holy pow'r and faithful teaching
 Give me among Thy saints a place:
-Whate’er of good in me may shine
+Whate'er of good in me may shine
 Comes only from Thy light divine.
 
 9.
 Who grants abundant gifts to bless me?
 Who, but Thyself, O God of love?
 Who guards my ways lest fears oppress me?
-’Tis Thou, Lord God of hosts, above!
+'Tis Thou, Lord God of hosts, above!
 And when my sins Thy wrath provoke,
 Thy patience, Lord, forbears the stroke.
 
 10.
 I kiss the rod, too, unrepining,
-When God His chast’ning makes me feel,
+When God His chast'ning makes me feel,
 My graces call for His refining,
 The trial works no lasting ill:
 It purifies and makes it known
@@ -6029,10 +6867,10 @@ That He regards me as a son.
 11.
 In life I often have discovered,
 With gratitude and glad surprise,
-When clouds of sorrows o’er me hovered,
+When clouds of sorrows o'er me hovered,
 God sent from them my best supplies:
 In troubles He is ever near,
-And shows me all a Father’s care.
+And shows me all a Father's care.
 
 12.
 Why not, then, with a faith unbounded,
@@ -6047,12 +6885,12 @@ No more low vanities regarding,
 To Thee, in whom I find my rest,
 I cry—my inmost soul according,—
 “My God, Thou art the highest, best;
-Strength, honor, praise, and thanks, and pow’r
+Strength, honor, praise, and thanks, and pow'r
 Be Thine, both now and evermore!”
 
 14.
 Lord, I will tell, while I am living,
-Thy goodness forth with ev’ry breath,
+Thy goodness forth with ev'ry breath,
 And greet each morning with thanksgiving,
 Until my heart is still in death,
 Yea, when at last my lips grow cold,
@@ -6061,7 +6899,7 @@ Thy praise shall in my sighs be told.
 15.
 O Father, deign Thou, I beseech Thee,
 To listen to my earthly lays;
-A nobler strain in heav’n shall reach Thee,
+A nobler strain in heav'n shall reach Thee,
 When I with angels hymn Thy praise,
 And learn amid their choirs to sing
 Loud Alleluias to my King.
@@ -6072,7 +6910,7 @@ Sources: <https://www.lutheranchoralebook.com/texts/oh-that-i-had-a-thousand-voi
 
 > **Sourcing note:** German is the 13-stanza modern-orthography text from evangeliums.net. EG 330 prints a 7-stanza selection (1, 2, 4, 5, 9, 12, 13 of this numbering, with 'um die Wette / vom allertiefsten Herzensgrund' in stanza 1 and 'Auch in der größesten Gefahr / ward deines Trostes ich gewahr' in the stanza corresponding to 10) — that shorter form is in the de.wikipedia article, which is in the sources because I compared the two. Stanza 5 line 2 reads 'und einem Odem in sich hat' in the source; EG has 'einen'. I left the source's reading. English is the composite translation printed by the Free Lutheran Chorale-Book from the Evangelical Lutheran Hymn-Book, 1930, no. 62 — it descends from Henry Mills but is credited 'Tr. composite', not to Mills alone as the worklist assumed, so I did not attribute it to him. The two languages do not run parallel: 13 German stanzas against 15 English. Tune: the melody is Johann Balthasar König's, Harmonischer Liederschatz 1738, conventionally named for its text; meter 9.8.9.8.8.8. Chords are a best-effort G-major chart, not taken from printed notation. Verification 2026-08-02: English cross-checked against hymnary's 15-stanza text record (independent of the Chorale-Book) — matches apart from recension variants there: stanza 8 opens 'Honor and praise ... Be Thine too, Spirit' for this file's 'Glory and praise ... Thine be it, Spirit', and stanza 15 ends 'hallelujahs' for 'Alleluias'; file readings kept. German cross-checked against hymnary's German record, whose 7-stanza representative text is exactly the EG 330 selection described above and which prints 'und einem Odem in sich hat' — independent support for the 'einem' reading kept here.
 
-## 84. Großer Gott, wir loben dich
+## 83. Großer Gott, wir loben dich
 
 Tune **GROSSER GOTT** · 7.8.7.8.7.7 · key **G**
 
@@ -6192,7 +7030,7 @@ Lord of all, we bow before Thee.
 G                D       G
 All on earth Thy scepter claim,
 G      C       D     G
-All in heav’n above adore Thee.
+All in heav'n above adore Thee.
 D   G        D      G
 Infinite Thy vast domain,
 C   G       D      G
@@ -6203,11 +7041,11 @@ Hark! the glad celestial hymn
 Angel choirs above are raising;
 Cherubim and seraphim,
 In unceasing chorus praising,
-Fill the heav’ns with sweet accord:
+Fill the heav'ns with sweet accord:
 Holy, holy, holy Lord!
 
 3.
-Lo, th’ apostles’ holy train
+Lo, th' apostles' holy train
 Join Thy sacred name to hallow.
 Prophets swell the glad refrain,
 And the white-robed martyrs follow,
@@ -6228,13 +7066,13 @@ Son of God, yet born of Mary.
 For us sinners sacrificed,
 As to death a Tributary,
 First to break the bars of death,
-Thou hast opened heav’n to faith.
+Thou hast opened heav'n to faith.
 
 6.
 From Thy high, celestial home,
 Judge of all, again returning,
 We believe that Thou shalt come,
-On the dreadful Doom’s-day morning.
+On the dreadful Doom's-day morning.
 When Thy voice shall shake the earth,
 And the startled dead come forth.
 
@@ -6252,7 +7090,7 @@ Sources: <https://www.lutheranchoralebook.com/texts/holy-god-we-praise-thy-name/
 
 > **Sourcing note:** German is the ecumenical (Arbeitsgemeinschaft für ökumenisches Liedgut) text — EG 331 / Gotteslob 380 — in all eleven stanzas; de.wikipedia and evangeliums.net agree word for word, which is why both are cited. Two variants the maintainer may want to know about: evangeliums.net offers 'Auf dem ganzen Erdenkreis / loben Große und auch Kleine …' as a variant of stanza 5, and the Swiss books replace the second half of stanza 11; neither is shipped. English is Clarence Walworth's 1853 translation as the Free Lutheran Chorale-Book prints it (stanzas 1–4 from TLH 1941 no. 250, 5 from LSB 940, 6–7 from The Hymnary with Tunes, 1872, marked 'alt.'); it runs 7 stanzas against the German 11, since Walworth condensed. Meter 7.8.7.8.7.7 counted from the text and matching the tune name GROSSER GOTT used by both sources. Key G: the tune is printed in F in Gotteslob and in G in most English books, so G is both common and the first guitar preference. The chart is my harmonisation, straightforward I–IV–V, not copied from notation. Verification 2026-08-02: German cross-checked against hymnary's text record (independent of the two sites above) — all 11 stanzas match word for word. English cross-checked against hymnary's record, whose representative text is the common Catholic recension ('loud celestial hymn', 'Lo! the apostolic train', 'loud refrain', 'morn to set of sun', 'And to death a tributary'); the file keeps the Lutheran (TLH/LSB) recension readings on its source's authority.
 
-## 85. Gott ist gegenwärtig
+## 84. Gott ist gegenwärtig
 
 Tune **ARNSBERG** · 6.6.8.6.6.8.3.3.6.6 · key **D**
 
@@ -6352,12 +7190,12 @@ dass ich deine Klarheit
 schauen mag in Geist und Wahrheit;
 lass mein Herz
 überwärts
-wie ein’ Adler schweben
+wie ein' Adler schweben
 und in dir nur leben.
 
 8.
 Herr, komm in mir wohnen,
-lass mein’ Geist auf Erden
+lass mein' Geist auf Erden
 dir ein Heiligtum noch werden;
 komm, du nahes Wesen,
 dich in mir verkläre,
@@ -6424,7 +7262,7 @@ Sources: <https://www.ccel.org/a/anonymous/luth_hymnal/tlh004.htm> · <https://h
 
 > **Sourcing note:** German wording is the EG 165 / Gotteslob 387 text as the de.wikipedia article prints it, all eight stanzas. One editorial act to flag: the article sets each stanza in eight printed lines, running two metrical lines together at the caesura; I broke them into the ten lines the meter actually has (6.6.8.6.6.8.3.3.6.6) so the chart can sit on them. No word was changed. evangeliums.net prints the same ten-line layout but a different recension — 'Gott ist in der Mitten', 'Cherubinen', stanza 3 'allen Erdenfreuden, die dem Worte widerstreiten', stanza 7 'reines Herzens' and 'himmelwärts' — so it is cited as the layout witness, not the wording witness. Wikipedia also records the 1729 originals behind two lines: 'schlagt' for 'schlag' in stanza 1 and a wholly different stanza 2 couplet. English is The Lutheran Hymnal 1941 no. 4 from CCEL/Project Wittenberg, explicitly released public domain there: Foster c.1826, alt., and it is a three-stanza cento against the German eight, so the languages do not run parallel. Its printed lines merge metrical lines 7 and 8 ('Him alone God we own,'); I kept the source's line breaks, which is why the English stanzas have nine lines and the German ten. Tune: hymnary's headword is ARNSBERG; the German sources call it WUNDERBARER KÖNIG (Joachim Neander, 1680), and it is also catalogued GRÖNINGEN. Key D and the chart are best-effort, not from notation. Verification 2026-08-02: fixed one chord placement — English stanza 1 line 5 had the A on 'within' where line 2 of the same melody (and the German chart) put it on the fifth syllable; now '[D]All within keep [A]silence'. English cross-checked against the TLH 4 page at clcgracelutheranchurch.org (independent of CCEL/hymnary): word-for-word match, all three stanzas. German stanza 1 confirmed verbatim by hymnary's text record; liederindex.de prints the other recension (5 stanzas, 'Mitten', 'Cherubinen', a different stanza-2 couplet) — recension variant, file follows EG/GL per the sources above. One small variant to know: hymnary's record reads 'lass mein Herz auf Erden' in the last stanza where EG/Wikipedia and this file read 'lass mein' Geist auf Erden'.
 
-## 86. Ich bete an die Macht der Liebe
+## 85. Ich bete an die Macht der Liebe
 
 Tune **ST. PETERSBURG** · 9.8.9.8.9.9 · key **D**
 
@@ -6437,7 +7275,7 @@ Ich bete an die Macht der Liebe,
 D           A    G    D
 Die sich in Jesu offenbart;
 D             G       A      D
-Ich geb’ mich hin dem freien Triebe,
+Ich geb' mich hin dem freien Triebe,
 G           D      A      D
 Wodurch ich Wurm geliebet ward;
 D           G        A       D
@@ -6448,7 +7286,7 @@ Ins Meer der Liebe mich versenken.
 2.
 Für Dich sei ganz mein Herz und Leben,
 Mein süßer Gott, und all mein Gut!
-Für Dich hast Du mir’s nur gegeben;
+Für Dich hast Du mir's nur gegeben;
 In Dir es nur und selig ruht.
 Hersteller meines schweren Falles,
 Für Dich sei ewig Herz und alles!
@@ -6466,7 +7304,7 @@ Des Vaterherzens tiefste Triebe
 In diesem Namen öffnen sich;
 Ein Brunn der Freude, Fried und Liebe
 Quillt nun so nah, so mildiglich.
-Mein Gott, wenn’s doch der Sünder wüßte!
+Mein Gott, wenn's doch der Sünder wüßte!
 Sein Herz alsbald Dich lieben müßte.
 
 5.
@@ -6478,18 +7316,18 @@ Du traute Liebe, gutes Wesen,
 Du hast mich und ich Dich erlesen.
 
 6.
-Ich fühl’s, Du bist’s, Dich muss ich haben,
-Ich fühl’s, ich muss für Dich nur sein;
+Ich fühl's, Du bist's, Dich muss ich haben,
+Ich fühl's, ich muss für Dich nur sein;
 Nicht im Geschöpf, nicht in den Gaben,
 Mein Ruhplatz ist in Dir allein.
 Hier ist die Ruh, hier ist Vergnügen;
-Drum folg ich Deinen sel’gen Zügen.
+Drum folg ich Deinen sel'gen Zügen.
 
 7.
 Ehr sei dem hohen Jesusnamen,
 In dem der Liebe Quell entspringt,
 Von dem hier alle Bächlein kamen,
-Aus dem der Sel’gen Schar dort trinkt.
+Aus dem der Sel'gen Schar dort trinkt.
 Wie beugen sie sich ohne Ende!
 Wie falten sie die frohen Hände!
 
@@ -6507,7 +7345,7 @@ Sources: <https://www.jesus.de/liederschaetze/ich-bete-an-die-macht-der-liebe/> 
 
 > **Sourcing note:** Stanza order is the thing to know here. Tersteegen published eight stanzas headed 'Für dich sei ganz mein Herz und Leben'; the hymn is universally known by what was originally the fourth stanza, and the customary sung order — the one shipped, all eight stanzas, from the jesus.de Liederschätze article — puts 'Ich bete an die Macht der Liebe' first. evangeliums.net prints a six-stanza arrangement that opens with 'Für dich sei ganz mein Herz und Leben' and modernises the pronouns to lowercase; EG 661 (Rheinland-Westfalen-Lippe regional part) prints only four, restoring the original opening. Both those URLs are in the sources because I compared all three. The shipped text keeps the source's devotional capitals (Du, Dich, Dein) and its 'wüßte' — deliberately not normalised. Also unnormalised: stanza 5 line 2 reads 'Wie verlangt Dein Herz nach mir!' with eight syllables where the meter wants nine ('Und wie verlangt …' in the evangeliums.net and Wikipedia readings); the source omits 'Und', and I left it, but a singer will want the 'Und'. Tune: Dmitri Bortnjanski, usually catalogued ST. PETERSBURG (also WELLS / the melody of the Großer Zapfenstreich); de.wikipedia dates the composition to about 1794 and its coupling with this text to the 1820s, and CCLI's SongSelect lists the tune as 'St Petersburg', so the headword looks right though I still had no hymnary tune page. Meter counted off the text: 9.8.9.8.9.9. Key D, transposed down a semitone from the common E-flat printing; the chart is a best-effort harmonisation. Verification 2026-08-02: text cross-checked against volksliederarchiv.de (independent of the three sites above) — all 8 stanzas, same order, word-for-word match modulo apostrophe styling; it also keeps the 8-syllable 'Wie verlangt Dein Herz nach mir!'. hymnary's record carries a 4-stanza variant recension ('Im diesem theuren Jesusnamen', 'Lob sei dem hohen Jesusnamen') — variants only, nothing adopted. Year 1757 is the first printing (title 'Die in Jesu eröffnete Liebe Gottes'); Tersteegen wrote the text about 1750, which is why the worklist hint says 1750. Chart remark, not a fix: guitar charts in the wild harmonise line 2 to a half cadence (in D: G D A at 'offenbart') where this chart returns D A G D; if the V-IV rub bothers a player, '[G]Die sich in [D]Jesu offen[A]bart' with the next line opening on D is the common alternative.
 
-## 87. So nimm denn meine Hände
+## 86. So nimm denn meine Hände
 
 Tune **SO NIMM DENN MEINE HÄNDE** · 7.4.7.4 D · key **E**
 
@@ -6579,7 +7417,7 @@ One single day,
 E          A        E
 So do Thou guide my footsteps
    B7           E
-On life’s rough way.
+On life's rough way.
 
 2.
 O cover with Thy mercy
@@ -6592,13 +7430,13 @@ Thy goodness blindly trusting
 With faith complete.
 
 3.
-Tho’ oft Thy pow’r but faintly
+Tho' oft Thy pow'r but faintly
 May stir my soul,
 With Thee, my Light in darkness,
 I reach the goal.
 Take, then, my hand, dear Father,
 And lead Thou me,
-Till at my journey’s ending
+Till at my journey's ending
 I dwell with Thee.
 
 ```
@@ -6607,7 +7445,7 @@ Sources: <https://hymnary.org/hymn/ALH1930/548> · <https://hymnary.org/text/tak
 
 > **Sourcing note:** German is the three-stanza sung text (EG 376) from evangeliums.net. Hausmann's 1862 original had six short stanzas that were later paired into these three, and the current text differs from her original in three words — 'gänzlich' for 'endlich', 'gleich nichts' for 'gar nichts', 'du führst mich' for 'du bringst mich' (documented in the de.wikipedia article, cited). evangeliums.net additionally prints two 'Zusatzstrophen (Autor unbekannt)' beginning 'Sei meines Fußes Leuchte' and 'Wenn Leidenschaft und Lüste'; they are not part of the standard text and are not shipped. English is Herman Brueckner's 1925 translation as American Lutheran Hymnal 1930 no. 548 prints it, where its first line is 'O take my hand, dear Father' — hymnary's text record for the same translator titles it 'Take Thou My Hand, O Father', which is what the worklist expected, so the title here differs from the worklist on the source's authority. Do not use hymnary's representative text for this hymn: it is the 2020 Voices Together version, still in copyright. Tune SILCHER (Friedrich Silcher, 1842/43, first published with Agnes Franz's 'Wie könnt ich ruhig schlafen'), named SO NIMM DENN MEINE HÄNDE on hymnary's text page; meter 7.4.7.4 D confirmed there. Key E is a semitone below the usual F printing, per the guitar rule; the chart is a best-effort E-major harmonisation, and the fifth line is where the tune modulates upward, so a player may want a richer chord than the A I wrote. Verification 2026-08-02: the two languages' line-1 charts disagreed (German had an extra tonic on 'Hände'); hymnary's tune incipit (56543 32345...) shows line 1 ends on scale degree 2, dominant harmony, so the German was realigned to the English reading '[E]So nimm denn meine [B7]Hände'. German text cross-checked against jesus.de Liederschätze (independent of the sites above): word-for-word match, all three stanzas. English cross-checked against blueletterbible.org: matches modulo elision styling (Tho'/Though, pow'r/power); both witnesses also carry the file's asymmetry of 'journey ending' in stanza 1 against 'journey's ending' in stanza 3, so it is not a typo here.
 
-## 88. Jesus, geh voran
+## 87. Jesus, geh voran
 
 Tune **SEELENBRÄUTIGAM** · 5.5.8.8.5.5 · key **G**
 
@@ -6631,7 +7469,7 @@ G       D    G
 bis ins Vaterland.
 
 2.
-Soll’s uns hart ergehn,
+Soll's uns hart ergehn,
 lass uns feste stehn
 und auch in den schwersten Tagen
 niemals über Lasten klagen;
@@ -6650,7 +7488,7 @@ auf das Ende hin.
 Ordne unsern Gang,
 Jesu, lebenslang.
 Führst du uns durch rauhe Wege,
-gib uns auch die nöt’ge Pflege;
+gib uns auch die nöt'ge Pflege;
 tu uns nach dem Lauf
 deine Türe auf.
 
@@ -6680,7 +7518,7 @@ to our fatherland.
 2.
 If the way be drear,
 if the foe be near,
-Let no faithless fears o’ertake us,
+Let no faithless fears o'ertake us,
 Let not faith and hope forsake us,
 For through many a woe
 to our home we go.
@@ -6707,7 +7545,7 @@ Sources: <https://hymnary.org/hymn/CYBER/3440> · <https://hymnary.org/text/jesu
 
 > **Sourcing note:** First-word variant, and it is the reason the German title here is not the worklist's: evangeliums.net (whose page slug is nevertheless 'jesu_geh_voran…') prints 'Jesus, geh voran', while volksliederarchiv and hymnary's German-title field both give 'Jesu, geh voran' — the EG 391 / Brüdergemeine form. I shipped evangeliums.net verbatim rather than splice its punctuation onto the other source's wording; if you prefer the EG incipit, change one word in stanza 1 and the title. Both sources agree on all four stanzas otherwise, and stanza 4 keeps the vocative 'Jesu' in either. The text as sung is Zinzendorf 1721 revised by Christian Gregor 1778, per evangeliums.net. English is the Cyber Hymnal's text of Jane Borthwick's 1846 translation, which is the widely sung hymnal form but NOT her unaltered original (an earlier version of this note claimed otherwise): checked against Hymns from the Land of Luther on biblehub.com 2026-08-02, Borthwick herself wrote 'For, through many a foe' (st. 2), 'When oppressed by new temptations, / Lord, increase and perfect patience' (st. 3) and 'Still support, console, protect us' (st. 4), where this file — matching its CYBER source exactly — carries the common altered 'woe', 'When temptations come alluring, / Make us patient and enduring' and 'control'. Swap those readings in if you want the 1846 original; the hymnary text-page version additionally modernises 'Thy hand' to 'your hand'. Tune SEELENBRÄUTIGAM (Adam Drese, 1698) and meter 55.88.55 confirmed on hymnary; written here in the dotted 5.5.8.8.5.5 form. Chords are a best-effort G-major chart; note that the tune was originally in a lilting triple time, so the harmonic rhythm may want to be one chord per bar rather than the two I wrote in the long lines. Verification 2026-08-02: German cross-checked against the EG 391 text at jesus.de Liederschätze (independent of the two sites above) — all four stanzas match word for word; that witness also uses the EG incipit 'Jesu, geh voran', confirming the first-word variant described above.
 
-## 89. Ach bleib mit deiner Gnade
+## 88. Ach bleib mit deiner Gnade
 
 Tune **CHRISTUS, DER IST MEIN LEBEN** · 7.6.7.6 · key **D**
 
@@ -6741,7 +7579,7 @@ damit wir irren nicht.
 4.
 Ach bleib mit deinem Segen
 bei uns, du reicher Herr;
-dein Gnad und all’s Vermögen
+dein Gnad und all's Vermögen
 in uns reichlich vermehr.
 
 5.
@@ -6785,7 +7623,7 @@ True peace and joy afford.
 Abide with heavenly brightness
 Among us, precious Light;
 Thy truth direct and keep us
-From error’s gloomy night.
+From error's gloomy night.
 
 4.
 Abide with richest blessings
@@ -6809,9 +7647,9 @@ To reach our home above.
 
 Sources: <https://ccel.org/a/anonymous/luth_hymnal/tlh053.htm> · <https://hymnary.org/text/abide_o_dearest_jesus> · <https://www.lutheranchoralebook.com/texts/abide-o-dearest-jesus/>
 
-> **Sourcing note:** German is the six-stanza EG 347 text; I took it from evangeliums.net and checked it word for word against hymnary’s representative text (Evangelisches Gesangbuch Bayern/Mitteldeutschland/Thüringen #347). The two differ only in orthography: hymnary’s printing has 'daß' in stanzas 1 and 5, evangeliums.net has the post-reform 'dass', which is what I shipped. Apostrophes are the typographic ’ throughout (sources print the straight '), matching the other files in this directory. English is August Crull’s translation exactly as printed in The Lutheran Hymnal 1941 #53 (Project Wittenberg text via CCEL) — I deliberately did NOT use hymnary’s representative text for the English, because that one is the modernised 'among us with your grace' revision from Christian Worship: Hymnal #924, whose public-domain status is not clear. Crull died 1923, so the TLH wording is safely public domain. Crull’s translation year is not given by either source, so year is null. Dating of the German varies by source: worklist and evangeliums.net say 1627, hymnary and CCEL say 1628 (Suspira Temporum, Rinteln); I kept 1627. Chords: derived from the Cyber Hymnal’s four-part setting of CHRISTUS, DER IST MEIN LEBEN (Melchior Vulpius, 1609), which is in E flat; transposed to D per the guitar rule (E flat is one semitone from both D and E, and D wins the preference order) and thinned to about four changes per line. Both language charts are the same chart bar for bar. Independent re-check 2026-08-02: English matches the Free Lutheran Chorale-Book word for word (all six stanzas); German matches Volksliederarchiv except stanza 2 line 3, where that site prints the older ‘daß uns beid’ hier und dorte’ against the EG 347 ‘dass uns sei hier und dorte’ — kept the EG reading, which hymnary and the Wikipedia articles also carry.
+> **Sourcing note:** German is the six-stanza EG 347 text; I took it from evangeliums.net and checked it word for word against hymnary's representative text (Evangelisches Gesangbuch Bayern/Mitteldeutschland/Thüringen #347). The two differ only in orthography: hymnary's printing has 'daß' in stanzas 1 and 5, evangeliums.net has the post-reform 'dass', which is what I shipped. Apostrophes are the typographic ' throughout (sources print the straight '), matching the other files in this directory. English is August Crull's translation exactly as printed in The Lutheran Hymnal 1941 #53 (Project Wittenberg text via CCEL) — I deliberately did NOT use hymnary's representative text for the English, because that one is the modernised 'among us with your grace' revision from Christian Worship: Hymnal #924, whose public-domain status is not clear. Crull died 1923, so the TLH wording is safely public domain. Crull's translation year is not given by either source, so year is null. Dating of the German varies by source: worklist and evangeliums.net say 1627, hymnary and CCEL say 1628 (Suspira Temporum, Rinteln); I kept 1627. Chords: derived from the Cyber Hymnal's four-part setting of CHRISTUS, DER IST MEIN LEBEN (Melchior Vulpius, 1609), which is in E flat; transposed to D per the guitar rule (E flat is one semitone from both D and E, and D wins the preference order) and thinned to about four changes per line. Both language charts are the same chart bar for bar. Independent re-check 2026-08-02: English matches the Free Lutheran Chorale-Book word for word (all six stanzas); German matches Volksliederarchiv except stanza 2 line 3, where that site prints the older ‘daß uns beid' hier und dorte' against the EG 347 ‘dass uns sei hier und dorte' — kept the EG reading, which hymnary and the Wikipedia articles also carry.
 
-## 90. Lobt Gott, ihr Christen alle gleich
+## 89. Lobt Gott, ihr Christen alle gleich
 
 Tune **LOBT GOTT IHR CHRISTEN** · 8.6.8.6.6 · key **D**
 
@@ -6840,7 +7678,7 @@ in einem Krippelein,
 in einem Krippelein.
 
 3.
-Er entäußert sich all seiner G’walt,
+Er entäußert sich all seiner G'walt,
 wird niedrig und gering
 und nimmt an eines Knechts Gestalt,
 der Schöpfer aller Ding,
@@ -6887,39 +7725,39 @@ D   G     D      A7  D
 And gives us His own Son.
 
 2.
-He leaves His heavenly Father’s throne,
+He leaves His heavenly Father's throne,
 Is born an infant small,
 And in a manger, poor and lone,
 Lies in a humble stall.
 
 3.
 He veils in flesh His power divine
-A servant’s form to take;
+A servant's form to take;
 In want and lowliness must pine
 Who heaven and earth did make.
 
 4.
-He nestles at His mother’s breast,
+He nestles at His mother's breast,
 Receives her tender care,
 Whom angels hail with joy most blest,
-King David’s royal heir.
+King David's royal heir.
 
 5.
-’Tis He who in these latter days
-From Judah’s tribe should come,
+'Tis He who in these latter days
+From Judah's tribe should come,
 By whom the Father would upraise
 The Church, His Christendom.
 
 6.
 A wondrous change which He doth make!
 He takes our flesh and blood,
-And He conceals for sinners’ sake
+And He conceals for sinners' sake
 His majesty of God.
 
 7.
 He serves that I a lord may be;
 A great exchange indeed!
-Could Jesus’ love do more for me
+Could Jesus' love do more for me
 To help me in my need?
 
 8.
@@ -6932,9 +7770,9 @@ To God our thanks we pay.
 
 Sources: <https://www.ccel.org/a/anonymous/luth_hymnal/tlh105.htm> · <https://hymnary.org/text/praise_god_the_lord_ye_sons_of_men> · <https://www.hymnsandcarolsofchristmas.com/Hymns_and_Carols/praise_god_the_lord_ye_sons.htm>
 
-> **Sourcing note:** The two languages do not run parallel and cannot be made to. German is the six-stanza Evangelisches Gesangbuch form (EG 27 = Herman’s original stanzas 1, 2, 3, 6, 7, 8) in modern sung orthography, from evangeliums.net; I checked it against Lutherisches Gesangbuch #46 (lg.concordiabuch.de) and against Herman’s 1561 original quoted in the de.wikipedia article. LG 46 has three variants I did not take: 'das liebe Jesulein' for 'das herze Jesulein', and 'auf das Tor zum schönen Paradies / nicht mehr davor' for 'auf die Tür zum schönen Paradeis / nicht mehr dafür'. I kept the EG readings, which are also the ones closest to the 1561 print. One oddity in the source I left alone: stanza 3 line 1, 'Er entäußert sich all seiner G’walt', scans to nine syllables against the line’s eight (LG has 'Entäußert sich all seiner Gewalt', also nine); singers elide it. Apostrophes are the typographic ’ throughout (sources print the straight '), matching the other files in this directory. English is August Crull’s translation of all eight original stanzas as printed in The Lutheran Hymnal 1941 #105 (Project Wittenberg text via CCEL), so English stanzas 4 and 5 have no German counterpart here and German 4, 5, 6 correspond to English 6, 7, 8. Crull’s translation year is not given; year is null. Tune and chart: the melody repeats its last line, which the German text writes out as a fifth line and the English (CM, four printed lines) does not. Hymnary lists the meter both ways — 8.6.8.6.6 for the German/ELH form and 8.6.8.6 (CM) for the English; I used the five-line figure to match the shipped German text. The chart is derived from the four-part setting in the de.wikipedia article (G major, Bach’s harmonisation from Cantata 151), transposed to D per the guitar rule (hymnary’s primary key for this tune is E flat; D wins the tie with E on preference order). The two charts agree bar for bar through the four shared lines, with one deliberate exception: because the English prints no repeat, its last line carries the ENDING cadence (the German fifth line’s chords, D–G–D–A7–D) rather than the first-time bars (D/F#–G–D–A–Bm) that lead back into the repeat. Independent re-check 2026-08-02: English matches hymnsandcarolsofchristmas.com word for word in all eight stanzas. German re-checked against lieder-archiv.de (and liederkiste.com), which print an older text form: stanza 3 ‘Er äußert sich all’ seiner G’walt’ (which scans to the line’s eight syllables) where EG 27 has ‘Er entäußert sich all seiner G’walt’, plus ‘seines Vater Reich’ and ‘schleußt’ for ‘schließt’. Kept the EG readings throughout; stanzas 4 and 5 match those sites exactly.
+> **Sourcing note:** The two languages do not run parallel and cannot be made to. German is the six-stanza Evangelisches Gesangbuch form (EG 27 = Herman's original stanzas 1, 2, 3, 6, 7, 8) in modern sung orthography, from evangeliums.net; I checked it against Lutherisches Gesangbuch #46 (lg.concordiabuch.de) and against Herman's 1561 original quoted in the de.wikipedia article. LG 46 has three variants I did not take: 'das liebe Jesulein' for 'das herze Jesulein', and 'auf das Tor zum schönen Paradies / nicht mehr davor' for 'auf die Tür zum schönen Paradeis / nicht mehr dafür'. I kept the EG readings, which are also the ones closest to the 1561 print. One oddity in the source I left alone: stanza 3 line 1, 'Er entäußert sich all seiner G'walt', scans to nine syllables against the line's eight (LG has 'Entäußert sich all seiner Gewalt', also nine); singers elide it. Apostrophes are the typographic ' throughout (sources print the straight '), matching the other files in this directory. English is August Crull's translation of all eight original stanzas as printed in The Lutheran Hymnal 1941 #105 (Project Wittenberg text via CCEL), so English stanzas 4 and 5 have no German counterpart here and German 4, 5, 6 correspond to English 6, 7, 8. Crull's translation year is not given; year is null. Tune and chart: the melody repeats its last line, which the German text writes out as a fifth line and the English (CM, four printed lines) does not. Hymnary lists the meter both ways — 8.6.8.6.6 for the German/ELH form and 8.6.8.6 (CM) for the English; I used the five-line figure to match the shipped German text. The chart is derived from the four-part setting in the de.wikipedia article (G major, Bach's harmonisation from Cantata 151), transposed to D per the guitar rule (hymnary's primary key for this tune is E flat; D wins the tie with E on preference order). The two charts agree bar for bar through the four shared lines, with one deliberate exception: because the English prints no repeat, its last line carries the ENDING cadence (the German fifth line's chords, D–G–D–A7–D) rather than the first-time bars (D/F#–G–D–A–Bm) that lead back into the repeat. Independent re-check 2026-08-02: English matches hymnsandcarolsofchristmas.com word for word in all eight stanzas. German re-checked against lieder-archiv.de (and liederkiste.com), which print an older text form: stanza 3 ‘Er äußert sich all' seiner G'walt' (which scans to the line's eight syllables) where EG 27 has ‘Er entäußert sich all seiner G'walt', plus ‘seines Vater Reich' and ‘schleußt' for ‘schließt'. Kept the EG readings throughout; stanzas 4 and 5 match those sites exactly.
 
-## 91. Harre, meine Seele
+## 90. Harre, meine Seele
 
 Tune **HARRE, MEINE SEELE** · Irregular · key **D**
 
@@ -6975,9 +7813,9 @@ folgen ewge Freuden. Gelobt sei Gott!
 
 Sources: <https://www.evangeliums.net/lieder/lied_harre_meine_seele_harre_des_herrn.html> · <https://de.wikipedia.org/wiki/Harre,_meine_Seele> · <https://hymnary.org/text/harre_meine_seele_harre_des_herrn> · <https://www.volksliederarchiv.de/harre-meine-seele-harre-des-herrn/>
 
-> **Sourcing note:** German-only per the worklist; texts.en is null (no English translation was called for and I did not source one). Text is the three-stanza form from evangeliums.net (the hymn as sung in EG 596/623 and the free-church books), cross-checked against the de.wikipedia article. Two real variants, both in stanza 2’s second-to-last line: evangeliums.net has 'rett auch unsre Seele, du treuer Gott!' and Wikipedia has 'Unser Herz erfreue, du treuer Gott!'. I shipped the evangeliums.net reading, which is the one hymnary’s German entries also show. Line division follows the six musical phrases (evangeliums.net); Wikipedia breaks the same words into twelve short lines. Wikipedia’s stanza 3 line break 'Nach allen Leiden, / nach aller Not / folgen ewge Freuden' settled a wrapping artefact in the evangeliums.net copy. Dating: 1845 per the worklist, Wikipedia and Raeder’s own account (evangeliums.net says 1848; hymnary’s '1813' looks like the author’s dates leaking into the year field, and is wrong on both counts — Raeder was born 1815). Stanzas 1 and 2 are Raeder’s; stanza 3 was added later by Carl Brockhaus (1822–1899) and is public domain. Chords: derived note by note from the Cyber Hymnal’s MIDI of César Malan’s 1827 tune, which is already in D — the same key the guitar rule picks from hymnary’s primary E flat. The tune is irregular and its phrase lengths (10, 11, 9, 11, 9, 10 syllables) match this text exactly, which is the check that the MIDI is the right tune. The E7 in line 4 is the tune’s own move to the dominant, not a substitution; F#7 in the last line is likewise the printed harmony under 'beschirmen'. Independent re-check 2026-08-02: all three stanzas match Volksliederarchiv word for word (that site credits the text to ‘Friedrich Räder (1815–1872)’ and the tune to Malan 1827, consistent with the above).
+> **Sourcing note:** German-only per the worklist; texts.en is null (no English translation was called for and I did not source one). Text is the three-stanza form from evangeliums.net (the hymn as sung in EG 596/623 and the free-church books), cross-checked against the de.wikipedia article. Two real variants, both in stanza 2's second-to-last line: evangeliums.net has 'rett auch unsre Seele, du treuer Gott!' and Wikipedia has 'Unser Herz erfreue, du treuer Gott!'. I shipped the evangeliums.net reading, which is the one hymnary's German entries also show. Line division follows the six musical phrases (evangeliums.net); Wikipedia breaks the same words into twelve short lines. Wikipedia's stanza 3 line break 'Nach allen Leiden, / nach aller Not / folgen ewge Freuden' settled a wrapping artefact in the evangeliums.net copy. Dating: 1845 per the worklist, Wikipedia and Raeder's own account (evangeliums.net says 1848; hymnary's '1813' looks like the author's dates leaking into the year field, and is wrong on both counts — Raeder was born 1815). Stanzas 1 and 2 are Raeder's; stanza 3 was added later by Carl Brockhaus (1822–1899) and is public domain. Chords: derived note by note from the Cyber Hymnal's MIDI of César Malan's 1827 tune, which is already in D — the same key the guitar rule picks from hymnary's primary E flat. The tune is irregular and its phrase lengths (10, 11, 9, 11, 9, 10 syllables) match this text exactly, which is the check that the MIDI is the right tune. The E7 in line 4 is the tune's own move to the dominant, not a substitution; F#7 in the last line is likewise the printed harmony under 'beschirmen'. Independent re-check 2026-08-02: all three stanzas match Volksliederarchiv word for word (that site credits the text to ‘Friedrich Räder (1815–1872)' and the tune to Malan 1827, consistent with the above).
 
-## 92. Bis hierher hat mich Gott gebracht
+## 91. Bis hierher hat mich Gott gebracht
 
 Tune **ELBING** · 8.7.8.7.8.8.7 · key **G**
 
@@ -6994,7 +7832,7 @@ bis hierher hat er Tag und Nacht
 G C     D7   G     Am G
 bewahrt Herz und Gemü te,
 G   D   Em         Am   D G
-bis hierher hat er mich geleit’,
+bis hierher hat er mich geleit',
 G   C   D7  G           A D
 bis hierher hat er mich erfreut,
 G   Em  D   Am  Em D  G
@@ -7002,7 +7840,7 @@ bis hierher mir ge holfen.
 
 2.
 Hab Lob und Ehr, hab Preis und Dank
-für die bisher’ge Treue,
+für die bisher'ge Treue,
 die du, o Gott, mir lebenslang
 bewiesen täglich neue.
 In mein Gedächtnis schreib ich an:
@@ -7022,5 +7860,5 @@ er hilft, wie er geholfen.
 
 Sources: <https://de.wikipedia.org/wiki/Bis_hierher_hat_mich_Gott_gebracht> · <https://www.evangeliums.net/lieder/lied_bis_hierher_hat_mich_gott_gebracht.html> · <https://hymnary.org/tune/elbing_sohr> · <https://www.liederindex.de/songs/231>
 
-> **Sourcing note:** German-only per the worklist; texts.en is null. Text is the three-stanza EG 329 form, identical word for word in the de.wikipedia article and on evangeliums.net; the only difference between them is the apostrophe glyph ('geleit’ / bisher’ge') and a comma-vs-semicolon in stanza 3 line 6, where I followed Wikipedia’s semicolon. Author’s name is spelled 'Aemilie Juliane' by both sources; I kept the worklist’s 'Ämilie Juliane'. Tune: EG 329 sings Peter Sohren’s 1668 melody, written first for Johann Rist’s 'Du Lebensbrot, Herr Jesu Christ' — hymnary catalogues it as ELBING (Peter Sohr, 1668), meter 8.7.8.7.8.8.7, and lists this text under it. Chords: derived note by note from the Cyber Hymnal’s four-part MIDI of that tune (filed there under its Swedish text name DU LIFVETS BRÖD, in B flat); I confirmed it is the same melody by matching it against hymnary’s ELBING incipit 51236 21756 71321, which it reproduces exactly. Transposed to G per the guitar rule (hymnary’s key is A flat; G wins the tie with A on preference order) and thinned to five or six changes a line. The tune is in bar form, so lines 3–4 carry the same chords as lines 1–2. One judgement call: the original cadence closing line 1 is the chord on the third scale degree (B major in G) — I wrote D there instead, which fits the same melody note, is easier to play, and agrees with the printed EG-329 guitar chart at michaelsmusik (consulted only as a sanity check on the harmony, not copied). Independent re-check 2026-08-02 against liederindex.de: identical apart from that site’s line-initial capitalization and one word-order variant in stanza 3 line 5 — liederindex prints ‘damit ich sag bis in den Tod’ where EG 329 (Wikipedia, evangeliums.net) has ‘Damit sag ich bis in den Tod’; kept the EG reading. Volksliederarchiv confirms the tune credit ‘Peter Sohr, 1668’.
+> **Sourcing note:** German-only per the worklist; texts.en is null. Text is the three-stanza EG 329 form, identical word for word in the de.wikipedia article and on evangeliums.net; the only difference between them is the apostrophe glyph ('geleit' / bisher'ge') and a comma-vs-semicolon in stanza 3 line 6, where I followed Wikipedia's semicolon. Author's name is spelled 'Aemilie Juliane' by both sources; I kept the worklist's 'Ämilie Juliane'. Tune: EG 329 sings Peter Sohren's 1668 melody, written first for Johann Rist's 'Du Lebensbrot, Herr Jesu Christ' — hymnary catalogues it as ELBING (Peter Sohr, 1668), meter 8.7.8.7.8.8.7, and lists this text under it. Chords: derived note by note from the Cyber Hymnal's four-part MIDI of that tune (filed there under its Swedish text name DU LIFVETS BRÖD, in B flat); I confirmed it is the same melody by matching it against hymnary's ELBING incipit 51236 21756 71321, which it reproduces exactly. Transposed to G per the guitar rule (hymnary's key is A flat; G wins the tie with A on preference order) and thinned to five or six changes a line. The tune is in bar form, so lines 3–4 carry the same chords as lines 1–2. One judgement call: the original cadence closing line 1 is the chord on the third scale degree (B major in G) — I wrote D there instead, which fits the same melody note, is easier to play, and agrees with the printed EG-329 guitar chart at michaelsmusik (consulted only as a sanity check on the harmony, not copied). Independent re-check 2026-08-02 against liederindex.de: identical apart from that site's line-initial capitalization and one word-order variant in stanza 3 line 5 — liederindex prints ‘damit ich sag bis in den Tod' where EG 329 (Wikipedia, evangeliums.net) has ‘Damit sag ich bis in den Tod'; kept the EG reading. Volksliederarchiv confirms the tune credit ‘Peter Sohr, 1668'.
 

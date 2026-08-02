@@ -1,0 +1,29 @@
+{
+  "id": "jesus-lover-of-my-soul",
+  "number": 40,
+  "tune": "MARTYN",
+  "meter": "7.7.7.7 D",
+  "key": "E",
+  "texts": {
+    "en": {
+      "title": "Jesus, Lover of My Soul",
+      "author": "Charles Wesley",
+      "translator": null,
+      "year": 1740,
+      "stanzas": [
+        "[E]Jesus, lover [B7]of my soul,\n[E]Let me to [A]Thy [E]bo[B7]som [E]fly,\n[E]While the nearer [B7]waters roll,\n[E]While the tem[A]pest [E]still [B7]is [E]high.\n[B7]Hide me, [E]O my [B7]Savior, hide,\n[E]Till the [F#7]storm of life is [B7]past;\n[E]Safe into the [B7]haven guide;\n[E]O receive [A]my [E]soul [B7]at [E]last.",
+        "Other refuge have I none,\nHangs my helpless soul on Thee;\nLeave, ah! leave me not alone,\nStill support and comfort me.\nAll my trust on Thee is stayed,\nAll my help from Thee I bring;\nCover my defenseless head\nWith the shadow of Thy wing.",
+        "Thou, O Christ, art all I want,\nMore than all in Thee I find;\nRaise the fallen, cheer the faint,\nHeal the sick, and lead the blind.\nJust and holy is Thy name,\nI am all unrighteousness;\nFalse and full of sin I am;\nThou art full of truth and grace.",
+        "Plenteous grace with Thee is found,\nGrace to cover all my sin;\nLet the healing streams abound;\nMake and keep me pure within.\nThou of life the fountain art,\nFreely let me take of Thee;\nSpring Thou up within my heart;\nRise to all eternity."
+      ],
+      "chorus": null,
+      "sources": [
+        "http://hymntime.com/tch/htm/j/l/m/y/jlmysoul.htm",
+        "https://hymnary.org/text/jesus_lover_of_my_soul_let_me_to_thy_bos",
+        "https://hymnary.org/tune/martyn_marsh"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text follows the Cyber Hymnal. The four stanzas shipped are the commonly printed set; Wesley's original third stanza ('Wilt Thou not regard my call?') is rarely printed in hymnals and is omitted here. Tune: MARTYN is hymnary's primary pairing (ABERYSTWYTH and HOLLINGSIDE are common alternates, and the Cyber Hymnal leads with ABERYSTWYTH). hymnary lists MARTYN in F Major; nearest guitar key per the rule is E. Chords are a best-effort chart from the tune's incipit and standard harmonization, not verified bar-for-bar against a score."
+}

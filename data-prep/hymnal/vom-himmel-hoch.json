@@ -1,0 +1,71 @@
+{
+  "id": "vom-himmel-hoch",
+  "number": 71,
+  "tune": "VOM HIMMEL HOCH",
+  "meter": "8.8.8.8",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "From Heaven Above to Earth I Come",
+      "author": "Martin Luther",
+      "translator": "Catherine Winkworth",
+      "year": 1855,
+      "stanzas": [
+        "[D]From [A]Heaven [E]a[A]bove [D/F#]to [G]earth [A7]I [D]come,\n[D]To [Bm]bear [D]good [A]news [Bm]to [D/F#]ev[Em]ery [F#]home;\n[Bm]Glad [G]ti[G/B]dings [D]of [F#7]great [Bm]joy [E]I [A]bring,\n[D]Where[F#m]of [G]I [D]now [B]will [Em]say [A]and [D]sing:",
+        "To you this night is born a child\nOf Mary, chosen mother mild;\nThis little Child, of lowly birth,\nShall be the joy of all your earth.",
+        "'Tis Christ our God, who far on high\nHad heard your sad and bitter cry;\nHimself will your salvation be,\nHimself from sin will make you free.",
+        "He brings those blessings, long ago\nPrepared by God for all below;\nHenceforth His kingdom open stands\nTo you, as to the angel bands.",
+        "These are the tokens ye shall mark,\nThe swaddling clothes and manger dark;\nThere shall ye find the young Child laid,\nBy whom the heavens and earth were made.",
+        "Now let us all with gladsome cheer\nFollow the shepherds, and draw near\nTo see this wondrous gift of God,\nWho hath His only Son bestowed.",
+        "Give heed, my heart, lift up thine eyes!\nWho is it in yon manger lies?\nWho is this Child so young and fair?\nThe blessèd Christ-child lieth there.",
+        "Welcome to earth, Thou noble guest,\nThrough whom e'en wicked men are blest!\nThou com'st to share our misery,\nWhat can we render, Lord, to Thee!",
+        "Ah, Lord, who hast created all,\nHow hast Thou made Thee weak and small,\nThat Thou must choose Thy infant bed\nWhere ass and ox but lately fed!",
+        "Were earth a thousand times as fair,\nBeset with gold and jewels rare,\nShe yet were far too poor to be\nA narrow cradle, Lord, for Thee.",
+        "For velvets soft and silken stuff\nThou hast but hay and straw so rough,\nWhereon Thou King, so rich and great,\nAs 'twere Thy heaven, art throned in state.",
+        "Thus hath it pleased Thee to make plain\nThe truth to us poor fools and vain,\nThat this world's honor, wealth and might\nAre naught and worthless in Thy sight.",
+        "Ah, dearest Jesus, holy Child,\nMake Thee a bed, soft, undefiled,\nWithin my heart, that it may be\nA quiet chamber kept for Thee.",
+        "My heart for very joy doth leap,\nMy lips no more can silence keep,\nI too must sing with joyful tongue\nThat sweetest ancient cradle-song—",
+        "Glory to God in highest Heaven,\nWho unto man His Son hath given!\nWhile angels sing with pious mirth\nA glad New Year to all the earth."
+      ],
+      "chorus": null,
+      "sources": [
+        "http://www.hymntime.com/tch/htm/f/r/o/m/h/fromheav.htm",
+        "https://www.ccel.org/a/anonymous/luth_hymnal/tlh085.htm",
+        "https://hymnary.org/tune/vom_himmel_hoch_luther",
+        "https://www.hymnsandcarolsofchristmas.com/Hymns_and_Carols/from_heaven_above_winkworth.htm"
+      ]
+    },
+    "de": {
+      "title": "Vom Himmel hoch, da komm ich her",
+      "author": "Martin Luther",
+      "translator": null,
+      "year": 1535,
+      "stanzas": [
+        "[D]Vom [A]Him[E]mel [A]hoch, [D/F#]da [G]komm [A7]ich [D]her,\n[D]ich [Bm]bring [D]euch [A]gu[Bm]te [D/F#]neu[Em]e [F#]Mär;\n[Bm]der [G]gu[G/B]ten [D]Mär [F#7]bring [Bm]ich [E]so [A]viel,\n[D]da[F#m]von [G]ich [D]singen [B]und [Em]sa[A]gen [D]will.",
+        "Euch ist ein Kindlein heut geborn\nvon einer Jungfrau auserkorn,\nein Kindelein so zart und fein,\ndas soll eu'r Freud und Wonne sein.",
+        "Es ist der Herr Christ, unser Gott,\nder will euch führn aus aller Not,\ner will euer Heiland selber sein,\nvon allen Sünden machen rein.",
+        "Er bringt euch alle Seligkeit,\ndie Gott der Vater hat bereit',\ndass ihr mit uns im Himmelreich\nsollt leben nun und ewiglich.",
+        "So merket nun das Zeichen recht:\ndie Krippe, Windelein so schlecht,\nda findet ihr das Kind gelegt,\ndas alle Welt erhält und trägt.",
+        "Des lasst uns alle fröhlich sein\nund mit den Hirten gehn hinein,\nzu sehn, was Gott uns hat beschert,\nmit seinem lieben Sohn verehrt.",
+        "Merk auf, mein Herz, und sieh dorthin;\nwas liegt doch in dem Krippelein?\nWes ist das schöne Kindelein?\nEs ist das liebe Jesulein.",
+        "Sei mir willkommen, edler Gast!\nDen Sünder nicht verschmähet hast\nund kommst ins Elend her zu mir:\nwie soll ich immer danken dir?",
+        "Ach Herr, du Schöpfer aller Ding,\nwie bist du worden so gering,\ndass du da liegst auf dürrem Gras,\ndavon ein Rind und Esel aß!",
+        "Und wär die Welt vielmal so weit,\nvon Edelstein und Gold bereit',\nso wär sie doch dir viel zu klein,\nzu sein ein enges Wiegelein.",
+        "Der Sammet und die Seiden dein,\ndas ist grob Heu und Windelein,\ndarauf du König groß und reich\nherprangst, als wär's dein Himmelreich.",
+        "Das hat also gefallen dir,\ndie Wahrheit anzuzeigen mir,\nwie aller Welt Macht, Ehr und Gut\nvor dir nichts gilt, nichts hilft noch tut.",
+        "Ach mein herzliebes Jesulein,\nmach dir ein rein sanft Bettelein,\nzu ruhen in meins Herzens Schrein,\ndass ich nimmer vergesse dein.",
+        "Davon ich allzeit fröhlich sei,\nzu springen, singen immer frei\ndas rechte Susaninne schön,\nmit Herzenslust den süßen Ton.",
+        "Lob, Ehr sei Gott im höchsten Thron,\nder uns schenkt seinen ein'gen Sohn.\nDes freuet sich der Engel Schar\nund singet uns solch neues Jahr."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_vom_himmel_hoch_da_komm_ich_her.html",
+        "https://de.wikipedia.org/wiki/Vom_Himmel_hoch,_da_komm_ich_her",
+        "https://en.wikipedia.org/wiki/Vom_Himmel_hoch,_da_komm_ich_her",
+        "https://www.franzdorfer.com/vom-himmel-hoch",
+        "https://www.ekd.de/eg-24-vom-himmel-hoch-da-komm-ich-her-89269.htm"
+      ]
+    }
+  },
+  "notes": "German: Luther's full 15 stanzas, EG 24 / GL 237, from evangeliums.net, which prints today's orthography (dass, lasst, lowercase line-initials). The de.wikipedia article carries the same 15 in the older printed form (Daß, capitalised line-initials, bring'/heut'/eu'r) and was used as the cross-check; the only substantive differences are st.7 line 2 \"was liegt doch\" (Wikipedia: \"Was liegt dort\"), st.11 \"die Seiden dein\" (Wikipedia: \"die Seide dein\"), st.14 \"Susaninne schön\" (Wikipedia: \"schon\") and st.15 \"Des freuet sich ... und singet uns\" (Wikipedia: \"Des freuen sich ... und singen uns\"). NOT INCLUDED: the prefatory stanza \"Es kam ein Engel hell und klar\" that Valentin Triller added in 1555 -- it is not Luther's and hymnals do not number it. SCANSION: the tune is 8.8.8.8 and st.1 line 4 as evangeliums.net prints it, \"davon ich singen und sagen will\", counts nine; the sung form elides to \"sing'n\" (so franzdorfer and de.wikipedia print it), so the chart puts a chord on \"sing\" and none on the following syllable. English st.1 line 1 has the same shape: \"heaven\" is sung \"heav'n\", so its chord sits on the whole word and the next bracket falls on \"a-bove\". ENGLISH: Winkworth's Lyra Germanica text (1855), altered, as the Cyber Hymnal prints it -- 15 stanzas matching the German one for one. Cross-checked against The Lutheran Hymnal 1941 no. 85 (CCEL), which is the same translation revised harder; TLH differs in most stanzas (e.g. st.3 \"This is the Christ, our God and Lord\" for \"'Tis Christ our God, who far on high\"), and the Cyber Hymnal form was preferred because the worklist names Winkworth. \"blessèd\" in st.7 keeps the source's grave accent. TUNE/KEY: hymnary gives VOM HIMMEL HOCH (Luther, from Schumann's Geistliche Lieder, Leipzig 1539), 8.8.8.8, and lists its representative instance in C major; the four-part setting printed on en.wikipedia is in D and German guitar sheets circulate it in G. C, D and G are all guitar keys, so no transposition rule decides it; D was taken because it is the key of the setting the chords are reduced from and it puts the octave-wide melody at d'-d'', the most singable of the three. Chords follow that setting's voice leading, thinned to one chord per syllable, including the F-sharp major half cadence at the end of line 2. INDEPENDENT CHECK (2026-08-02). ENGLISH, ONE CORRECTION: st.6 line 2 read \"Pursue the shepherds, and draw near\"; no source anywhere prints \"Pursue\". Winkworth's line is \"Follow the shepherds, and draw near\" (hymnsandcarolsofchristmas.com, appended to sources, which prints all 15 stanzas and matched this file at nine of the ten other lines spot-checked); the only rival reading is \"Go with the shepherds and draw near\" in the Free Lutheran Chorale-Book, but that recension also reads \"the precious Gift of God\" and \"His own dear Son\" in lines 3-4, where this file has Winkworth's \"this wondrous gift of God\" and \"His only Son\". So the file follows the Winkworth recension throughout and \"Pursue\" was an isolated paraphrase; CORRECTED to \"Follow\". GERMAN: re-verified against the EKD's own page for EG 24 (ekd.de, appended to sources). It prints 15 stanzas and confirms this file at st.2, st.4, st.7 \"was liegt doch in dem Krippelein\", st.9, st.11 \"die Seiden dein\" and st.14 \"Susaninne schön\" -- i.e. it backs evangeliums.net against de.wikipedia at three of the four variants listed above. It differs at the fourth: EG 24 reads st.15 \"Des FREUEN sich der Engel Schar / und SINGEN uns solch neues Jahr\", agreeing with de.wikipedia against evangeliums.net's \"freuet/singet\". That is now two reputable sources against this file's base, so the maintainer may well want to switch; it is left as evangeliums.net has it because that source is this text's declared base and switching one stanza to another recension mid-text is worse than the variant. Flagging rather than editing. CHART AUDIT: verified syllable by syllable against the D-major four-part setting in the en.wikipedia article. Lines 1-3 reproduce it exactly, all 24 chords, including the D/F# and A7 in line 1 and the F#7 in line 3. One deviation: line 4 syllable 1 (\"da-\" / \"Where-\") is charted D where the setting sounds b-d-f#, i.e. Bm; playing D over that bass gives Bm7, so it is a harmless thinning and it makes lines 2 and 4 start alike, but it is the one chord here that is not literally in the source. The remaining seven chords of line 4 match exactly."
+}

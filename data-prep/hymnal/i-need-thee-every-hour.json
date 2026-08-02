@@ -1,0 +1,29 @@
+{
+  "id": "i-need-thee-every-hour",
+  "number": 38,
+  "tune": "NEED",
+  "meter": "6.4.6.4 with refrain",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "I Need Thee Every Hour",
+      "author": "Annie S. Hawks",
+      "translator": null,
+      "year": 1872,
+      "stanzas": [
+        "[G]I need Thee [D7]ev'ry [G]hour,\nmost [C]gracious [G]Lord;\nno [C]tender [G]voice like [A7]Thine\ncan [D7]peace af[G]ford.",
+        "I need Thee ev'ry hour,\nstay Thou nearby;\ntemptations lose their pow'r\nwhen Thou art nigh.",
+        "I need Thee ev'ry hour,\nin joy or pain;\ncome quickly and abide,\nor life is vain.",
+        "I need Thee ev'ry hour,\nteach me Thy will;\nand Thy rich promises\nin me fulfill.",
+        "I need Thee ev'ry hour,\nmost Holy One;\nO make me Thine indeed,\nThou blessed Son."
+      ],
+      "chorus": "[G]I need Thee, [C]O I [G]need Thee;\n[G]ev'ry [A7]hour I [D]need Thee;\nO [G]bless me [G7]now, my [C]Savior,\nI [Am]come [D7]to [G]Thee.",
+      "sources": [
+        "https://hymnary.org/text/i_need_thee_every_hour_most_gracious_lor",
+        "https://hymnary.org/tune/need_lowry"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text is hymnary.org's representative text (Our Great Redeemer's Praise #340); it prints the elisions ev'ry/pow'r. The refrain (words and music) was added by Robert Lowry, 1872. hymnary lists NEED (Lowry) in A-flat Major; G and A are equidistant, so G wins by the rule's preference order. Chords are a best-effort chart from the tune's incipit and standard harmonization, not verified bar-for-bar against a score."
+}

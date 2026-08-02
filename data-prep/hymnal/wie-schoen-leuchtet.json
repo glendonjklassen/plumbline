@@ -1,0 +1,48 @@
+{
+  "id": "wie-schoen-leuchtet",
+  "number": 76,
+  "tune": "WIE SCHÖN LEUCHTET",
+  "meter": "8.8.7.8.8.7.4.8.4.8",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "O Morning Star, How Fair and Bright",
+      "author": "Philipp Nicolai",
+      "translator": "Catherine Winkworth",
+      "year": 1863,
+      "stanzas": [
+        "[D]O Mor[G]ning Star! how [D]fair and [A]bright\n[D]Thou beamest [G]forth in [D]truth and [A]light!\n[D]O [G]Sov'reign [A]meek and [D]lowly!\n[D]Thou Root [G]of Jesse, [D]David's [A]Son,\n[D]My Lord and [G]Bridegroom, [D]Thou hast [A]won\n[D]My [G]heart to [A]serve Thee [D]solely!\n[D]Holy [G]art Thou, [D]Fair and [A]Glorious,\n[D]All vic[G]torious,\n[D]Rich in [A]blessing,\n[D]Rule and [G]might o'er [A]all pos[D]sessing.",
+        "Thou Heavenly Brightness! Light Divine!\nO deep within my heart now shine,\nAnd make Thee there an altar!\nFill me with joy and strength to be\nThy member, ever join'd to Thee\nIn love that cannot falter;\nToward Thee longing\nDoth possess me,\nTurn and bless me,\nFor Thy gladness\nEye and heart here pine in sadness.",
+        "But if Thou look on me in love,\nThere straightways falls from God above\nA ray of purest pleasure;\nThy word and Spirit, flesh and blood,\nRefresh my soul with heavenly food,\nThou art my hidden treasure;\nLet Thy grace, Lord,\nWarm and cheer me.\nO draw near me;\nThou hast taught us\nThee to seek since Thou hast sought us!",
+        "Here will I rest, and hold it fast,\nThe Lord I love is First and Last,\nThe End as the Beginning!\nHere I can calmly die, for Thou\nWilt raise me where Thou dwellest now,\nAbove all tears, all sinning:\nAmen! Amen!\nCome, Lord Jesus,\nSoon release us,\nWith deep yearning,\nLord, we look for Thy returning!"
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.ccel.org/ccel/winkworth/chorales.h149.html",
+        "https://hymnary.org/text/o_morning_star_how_fair_and_bright",
+        "https://hymnary.org/tune/wie_schon_leuchtet_nicolai"
+      ]
+    },
+    "de": {
+      "title": "Wie schön leuchtet der Morgenstern",
+      "author": "Philipp Nicolai",
+      "translator": null,
+      "year": 1599,
+      "stanzas": [
+        "[D]Wie schön [G]leuchtet der [D]Morgen[A]stern,\n[D]voll Gnad und [G]Wahrheit [D]von dem [A]Herrn\n[D]uns [G]herrlich [A]aufge[D]gangen.\n[D]Du Sohn [G]Davids aus [D]Jakobs [A]Stamm,\n[D]mein König [G]und mein [D]Bräuti[A]gam,\n[D]du [G]hältst mein [A]Herz ge[D]fangen.\n[D]Lieblich, [G]freundlich\n[D]schön und [A]prächtig,\n[D]groß und [G]mächtig,\n[D]reich an [A]Gaben,\n[D]hoch und [G]wunder[A]bar er[D]haben.",
+        "Du meine Perl, du werte Kron,\nwahr' Gottes und Marien Sohn,\nein König hochgeboren!\nMein Kleinod du, mein Preis und Ruhm,\ndein ewig Evangelium,\ndas hab ich mir erkoren.\nHerr, dich such ich.\nHosianna.\nHimmlisch Manna,\ndas wir essen,\ndeiner kann ich nicht vergessen.",
+        "Gieß sehr tief in mein Herz hinein,\ndu leuchtend Kleinod, edler Stein,\ndie Flamme deiner Liebe\nund gib, dass ich an deinem Leib,\ndem auserwählten Weinstock, bleib\nein Zweig in frischem Triebe.\nNach dir steht mir\nmein Gemüte,\newge Güte,\nbis es findet\ndich, des Liebe mich entzündet.",
+        "Von Gott kommt mir ein Freudenschein,\nwenn du mich mit den Augen dein\ngar freundlich tust anblicken.\nHerr Jesu, du mein trautes Gut,\ndein Wort, dein Geist, dein Leib und Blut\nmich innerlich erquicken.\nNimm mich freundlich\nin die Arme\nund erbarme\ndich in Gnaden.\nAuf dein Wort komm ich geladen.",
+        "Herr Gott Vater, mein starker Held,\ndu hast mich ewig vor der Welt\nin deinem Sohn geliebet.\nEr hat mich ganz sich angetraut,\ner ist nun mein, ich seine Braut;\ndrum mich auch nichts betrübet.\nEinst wird mein Hirt\nmir auch geben\nhimmlisch Leben\nbei ihm droben;\newig soll mein Herz ihn loben.",
+        "Stimmt die Saiten der Cythara\nund lasst die süße Musika\nganz freudenreich erschallen,\ndass ich möge mit Jesus Christ,\nder meines Herzens Bräutgam ist,\nin steter Liebe wallen.\nSinget, springet,\njubilieret,\ntriumphieret,\ndankt dem Herren!\nGroß ist der König der Ehren.",
+        "Wie bin ich doch so herzlich froh,\ndass mein Schatz ist das A und O,\nder Anfang und das Ende.\nEr wird mich doch zu seinem Preis\naufnehmen in das Paradeis;\ndes klopf ich in die Hände.\nAmen, Amen,\nkomm, du schöne\nFreudenkrone,\nsäum nicht lange;\ndeiner wart ich mit Verlangen."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_wie_schoen_leuchtet_der_morgenstern.html",
+        "https://de.wikipedia.org/wiki/Wie_sch%C3%B6n_leuchtet_der_Morgenstern"
+      ]
+    }
+  },
+  "notes": "German is the 7-stanza revised text (the Schlegel/Knapp line, credited 'Philipp Nicolai 1597 / Johann Adolf Schlegel 1813 / Albert Knapp 1832' by the source) that evangeliums.net prints as its main text — the version common in free-church hymnals. EG 70 instead keeps Nicolai's original wording (stanza 1: 'die süße Wurzel Jesse ... hast mir mein Herz besessen'), which the site shows only as a parenthetical variant after line 3; I dropped the parenthesis and kept the site's main line 'uns herrlich aufgegangen'. The de.wikipedia URL was consulted for the 1599 original as a cross-check. English is Winkworth's Chorale Book for England #149 'O Morning Star! how fair and bright' (4 stanzas, corresponding to German stanzas 1, 3, 4, 7) — deliberately NOT stanza-parallel; the fuller modern hymnal versions of 'O Morning Star' are composites. Its 8-syllable line 'Holy art Thou, Fair and Glorious,' spans two of the German short lines; charts agree bar-for-bar. Tune WIE SCHÖN LEUCHTET (Nicolai 1599), meter 8.8.7.8.8.7.4.8.4.8, D major the primary printed key per hymnary's tune page — chart in D, best-effort, not from printed notation."
+}

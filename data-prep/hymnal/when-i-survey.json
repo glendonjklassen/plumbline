@@ -1,0 +1,29 @@
+{
+  "id": "when-i-survey",
+  "number": 15,
+  "tune": "HAMBURG",
+  "meter": "8.8.8.8",
+  "key": "E",
+  "texts": {
+    "en": {
+      "title": "When I Survey the Wondrous Cross",
+      "author": "Isaac Watts",
+      "translator": null,
+      "year": 1707,
+      "stanzas": [
+        "[E]When I [B]sur[E]vey the [F#m]wondrous [E]cross\nOn which the [A/E]Prince of [E]glo[B7]ry [B]died,\n[E]My rich[B]est [E]gain I [F#m]count but [E]loss,\nAnd [E]pour con[B]tempt [C#m]on [A]all [G#m]my [E]pride.",
+        "Forbid it, Lord, that I should boast,\nSave in the death of Christ my God!\nAll the vain things that charm me most,\nI sacrifice them to His blood.",
+        "See from His head, His hands, His feet,\nSorrow and love flow mingled down!\nDid e'er such love and sorrow meet,\nOr thorns compose so rich a crown?",
+        "Were the whole realm of nature mine,\nThat were a present far too small;\nLove so amazing, so divine,\nDemands my soul, my life, my all."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://library.timelesstruths.org/music/When_I_Survey_the_Wondrous_Cross/",
+        "https://hymnary.org/text/when_i_survey_the_wondrous_cross",
+        "https://library.timelesstruths.org/library/music/W/When_I_Survey_the_Wondrous_Cross/When_I_Survey_the_Wondrous_Cross.xml"
+      ]
+    },
+    "de": null
+  },
+  "notes": "The standard four stanzas as Timeless Truths prints them; hymnary's representative text (Psalter Hymnal 1987) agrees word for word apart from lowercased pronouns and “through his blood” for “to His blood” in stanza 2 (both readings are old; the source's “to” is kept). Watts's 1707 original had a fifth stanza (“His dying crimson, like a robe…”, originally fourth) that almost all hymnals omit; neither fetched source prints it, so it is not shipped. Tune per the hymnary.org text page (HAMBURG, listed first; meter 8.8.8.8) — British books usually set ROCKINGHAM instead. Common key F (Timeless Truths score) moved to E for guitar per the key rule. Chords derived from the SATB MusicXML of HAMBURG at Timeless Truths, transposed F→E and thinned; Mason's harmonisation is largely static, so the chart changes sparsely on purpose."
+}

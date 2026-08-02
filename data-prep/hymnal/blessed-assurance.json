@@ -1,0 +1,27 @@
+{
+  "id": "blessed-assurance",
+  "number": 26,
+  "tune": "ASSURANCE",
+  "meter": "9.10.9.9 with refrain",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Blessed Assurance",
+      "author": "Fanny J. Crosby",
+      "translator": null,
+      "year": 1873,
+      "stanzas": [
+        "[D]Blessed as[G]surance, [D]Jesus is mine!\nOh, what a [G]foretaste of [D]glory di[A]vine!\n[D]Heir of sal[G]vation, [D]purchase of God,\nBorn of His [Em]Spirit, [A7]washed in His [D]blood.",
+        "Perfect submission, perfect delight,\nVisions of rapture now burst on my sight;\nAngels, descending, bring from above\nEchoes of mercy, whispers of love.",
+        "Perfect submission, all is at rest,\nI in my Savior am happy and blest,\nWatching and waiting, looking above,\nFilled with His goodness, lost in His love."
+      ],
+      "chorus": "[D]This is my [G]story, [D]this is my song,\nPraising my Savior [E7]all the day [A]long;\n[D]This is my [G]story, [D]this is my song,\n[G]Praising my [D]Savior [A7]all the day [D]long.",
+      "sources": [
+        "https://library.timelesstruths.org/music/Blessed_Assurance/",
+        "https://hymnary.org/text/blessed_assurance_jesus_is_mine"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Three stanzas and refrain — the whole Crosby text; Timeless Truths and hymnary's representative text agree. Timeless Truths credits her formally as \"Frances J. Crosby\"; \"Fanny J. Crosby\" is used for consistency with her other entries in this set. Tune ASSURANCE (Phoebe P. Knapp, 1873); meter as hymnary lists it (Timeless Truths writes 9.10.9.9.9.9.9.9, counting the refrain's lines). Key: the common hymnal key is already D, one of the preferred guitar keys, so no transposition. Chords are Knapp's harmonization simplified; the refrain's first half-cadence keeps its V-of-V (E7) approach, and the second ends full on D as sung."
+}

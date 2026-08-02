@@ -6,15 +6,15 @@
   "key": "G",
   "texts": {
     "en": {
-      "title": "All Hail the Power of Jesus’ Name",
+      "title": "All Hail the Power of Jesus' Name",
       "author": "Edward Perronet",
       "translator": null,
       "year": 1780,
       "stanzas": [
-        "[G]All hail the power of [D]Je[Em]sus’ [D]name!\nLet [G]an[D]gels pros[G]trate fall;\n[D]Bring forth the [G]royal dia[D]dem,\nAnd [G]crown Him [D]Lord of [G]all.\n[G]Bring forth the royal [D]diadem,\n[Em]And crown Him [C]Lord [D7]of [G]all.",
-        "Crown Him, ye martyrs of your God,\nWho from His altar call;\nExtol the Stem of Jesse’s rod,\nAnd crown Him Lord of all.\nExtol the Stem of Jesse’s rod,\nAnd crown Him Lord of all.",
-        "Ye seed of Israel’s chosen race,\nYe ransomed from the fall,\nHail Him who saves you by His grace,\nAnd crown Him Lord of all.\nHail Him who saves you by His grace,\nAnd crown Him Lord of all.",
-        "Sinners, whose love can ne’er forget\nThe wormwood and the gall,\nGo spread your trophies at His feet,\nAnd crown Him Lord of all.\nGo spread your trophies at His feet,\nAnd crown Him Lord of all.",
+        "[G]All hail the power of [D]Je[Em]sus' [D]name!\nLet [G]an[D]gels pros[G]trate fall;\n[D]Bring forth the [G]royal dia[D]dem,\nAnd [G]crown Him [D]Lord of [G]all.\n[G]Bring forth the royal [D]diadem,\n[Em]And crown Him [C]Lord [D7]of [G]all.",
+        "Crown Him, ye martyrs of your God,\nWho from His altar call;\nExtol the Stem of Jesse's rod,\nAnd crown Him Lord of all.\nExtol the Stem of Jesse's rod,\nAnd crown Him Lord of all.",
+        "Ye seed of Israel's chosen race,\nYe ransomed from the fall,\nHail Him who saves you by His grace,\nAnd crown Him Lord of all.\nHail Him who saves you by His grace,\nAnd crown Him Lord of all.",
+        "Sinners, whose love can ne'er forget\nThe wormwood and the gall,\nGo spread your trophies at His feet,\nAnd crown Him Lord of all.\nGo spread your trophies at His feet,\nAnd crown Him Lord of all.",
         "Let every kindred, every tribe,\nOn this terrestrial ball,\nTo Him all majesty ascribe,\nAnd crown Him Lord of all.\nTo Him all majesty ascribe,\nAnd crown Him Lord of all.",
         "O that, with yonder sacred throng,\nWe at His feet may fall,\nJoin in the everlasting song,\nAnd crown Him Lord of all,\nJoin in the everlasting song,\nAnd crown Him Lord of all!"
       ],
@@ -23,10 +23,11 @@
         "http://hymntime.com/tch/htm/a/h/a/p/ahapower.htm",
         "https://hymnary.org/text/all_hail_the_power_of_jesus_name_let",
         "https://library.timelesstruths.org/music/All_Hail_the_Power_of_Jesus_Name/",
-        "https://www.hymnchords.net/files/All%20Hail%20the%20Power%20of%20Jesus'%20Name.pdf"
+        "https://www.hymnchords.net/files/All%20Hail%20the%20Power%20of%20Jesus'%20Name.pdf",
+        "http://www.hymnsite.com/lyrics/umh154.sht"
       ]
     },
     "de": null
   },
-  "notes": "Perronet's poem runs to nine stanzas in the Cyber Hymnal; the six shipped here are the commonly-printed set, in Trinity Hymnal's order (p.296). Wording is the Cyber Hymnal's throughout EXCEPT stanza 5: the Cyber Hymnal has \"Let every tribe and every tongue / Before Him prostrate fall / And shout in universal song / The crownèd Lord of all\", while nearly every hymnal prints John Rippon's \"Let every kindred, every tribe, / On this terrestrial ball, / To Him all majesty ascribe\" -- Rippon's is used, taken from Timeless Truths and confirmed against the Trinity chart. Line 1 is sung as eight syllables: \"power\" elides to \"pow'r\", which is how Trinity and Timeless Truths print it; the Cyber Hymnal's fuller spelling was kept. The 8.6.8.6.8.6 meter is CORONATION's repeat of lines 3-4 written out, so stanza 1 carries chords for the repeat as well. Key G confirmed by the hymnchords.net Trinity chart. Note DIADEM and MILES LANE are the other common tunes for this text (25 and 16 hymnal instances against CORONATION's 31) and this chart will NOT fit them. SCANSION: two words are printed full and sung elided -- \"power\" as \"pow'r\" in every stanza's first line, and \"every\" as \"ev'ry\" twice in stanza 5. Both spellings are in circulation; the fuller ones are kept because that is how the source texts print them."
+  "notes": "Perronet's poem runs to nine stanzas in the Cyber Hymnal; the six shipped here are the commonly-printed set, in Trinity Hymnal's order (p.296). Wording is the Cyber Hymnal's throughout EXCEPT stanza 5: the Cyber Hymnal has \"Let every tribe and every tongue / Before Him prostrate fall / And shout in universal song / The crownèd Lord of all\", while nearly every hymnal prints John Rippon's \"Let every kindred, every tribe, / On this terrestrial ball, / To Him all majesty ascribe\" -- Rippon's is used, taken from Timeless Truths and confirmed against the Trinity chart. Line 1 is sung as eight syllables: \"power\" elides to \"pow'r\", which is how Trinity and Timeless Truths print it; the Cyber Hymnal's fuller spelling was kept. The 8.6.8.6.8.6 meter is CORONATION's repeat of lines 3-4 written out, so stanza 1 carries chords for the repeat as well. Key G confirmed by the hymnchords.net Trinity chart. Note DIADEM and MILES LANE are the other common tunes for this text (25 and 16 hymnal instances against CORONATION's 31) and this chart will NOT fit them. SCANSION: two words are printed full and sung elided -- \"power\" as \"pow'r\" in every stanza's first line, and \"every\" as \"ev'ry\" twice in stanza 5. Both spellings are in circulation; the fuller ones are kept because that is how the source texts print them. VERIFIED 2026-08-02: cross-checked against the United Methodist Hymnal #154 (hymnsite.com, URL above), which confirms Rippon's stanza 5 verbatim; its other variants (\"Ye chosen seed of Israel's race\", \"We'll join the everlasting song\") are not adopted here. Year 1780 is when the complete text appeared in the Gospel Magazine; the first stanza alone ran November 1779, which is the worklist's hint."
 }

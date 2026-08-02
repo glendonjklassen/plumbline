@@ -1,0 +1,26 @@
+{
+  "id": "doxology",
+  "number": 10,
+  "tune": "OLD HUNDREDTH",
+  "meter": "8.8.8.8",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Praise God, from Whom All Blessings Flow",
+      "author": "Thomas Ken",
+      "translator": null,
+      "year": 1674,
+      "stanzas": [
+        "[G]Praise God, [D]from [Em]Whom [Bm]all [Em]bless[D]ings [G]flow;\n[G]Praise Him, all [D]crea[Em]tures [Am]here [G]be[D]low;\n[Em]Praise [D]Him [G]a[D]bove, [G/B]ye [C]heav'n[D]ly [G]host;\n[G]Praise Fa[Em]ther, [D]Son, [Am]and [G/B]Ho[D]ly [G]Ghost."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://library.timelesstruths.org/music/Doxology/",
+        "https://hymnary.org/text/praise_god_from_whom_all_blessings_flow",
+        "https://library.timelesstruths.org/library/music/D/Doxology/Doxology.xml"
+      ]
+    },
+    "de": null
+  },
+  "notes": "The single doxology stanza that closes Ken's 1674 morning and evening hymns, as Timeless Truths prints it; hymnary's representative text (Baptist Hymnal 1991) is word-identical but appends “Amen.”, omitted here since its printing varies. Tune/meter per the hymnary.org text page (OLD HUNDREDTH, 8.8.8.8). Common key G (Timeless Truths score) — already a guitar key. Chords derived from the SATB MusicXML of OLD HUNDREDTH at Timeless Truths; the harmonisation moves nearly once per syllable, so the chart keeps most of it (one passing chord kept as Bm, inversions simplified). This chart matches hymn 11 (All People That on Earth Do Dwell) bar for bar — same tune."
+}

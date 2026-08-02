@@ -1,0 +1,28 @@
+{
+  "id": "i-sing-the-mighty-power",
+  "number": 12,
+  "tune": "ELLACOMBE",
+  "meter": "8.6.8.6 D",
+  "key": "A",
+  "texts": {
+    "en": {
+      "title": "I Sing the Mighty Power of God",
+      "author": "Isaac Watts",
+      "translator": null,
+      "year": 1715,
+      "stanzas": [
+        "[E]I [A]sing the [E]might[A/C#]y [F#m]pow'r [Bm7]of [E]God,\n[A]that [D]made [A/C#]the [D]moun[E]tains [A]rise,\n[E]That [A]spread the [E]flow[A/C#]ing [F#m]seas [Bm7]a[E]broad,\n[A]and [D]built [F#m]the [Esus4]loft[E]y [A]skies.\n[A]I sing [E/G#]the [A]wis[D]dom [E]that ordained\n[F#m]the [A]sun [E/G#]to [A]rule [D]the [E]day;\n[E]The [A]moon shines [E]full [A/C#]at [F#m]His [Bm7]com[E]mand,\n[A]and [D]all [F#m]the [Esus4]stars [E]o[A]bey.",
+        "I sing the goodness of the Lord,\nwho filled the earth with food,\nWho formed the creatures through the Word,\nand then pronounced them good.\nLord, how Thy wonders are displayed,\nwhere'er I turn my eye,\nIf I survey the ground I tread,\nor gaze upon the sky.",
+        "There's not a plant or flow'r below,\nbut makes Thy glories known,\nAnd clouds arise, and tempests blow,\nby order from Thy throne;\nWhile all that borrows life from Thee\nis ever in Thy care;\nAnd everywhere that we can be,\nThou, God, art present there."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://library.timelesstruths.org/music/I_Sing_the_Mighty_Power_of_God/",
+        "https://hymnary.org/text/i_sing_the_mighty_power_of_god",
+        "https://library.timelesstruths.org/library/music/I/I_Sing_the_Mighty_Power_of_God/I_Sing_the_Mighty_Power_of_God.xml"
+      ]
+    },
+    "de": null
+  },
+  "notes": "All three stanzas of the traditional text as Timeless Truths prints them (“I sing”, Thy/Thee — hymnary's representative text is the modernised Psalter Hymnal “We sing” recension and was not used). Timeless Truths prints each stanza as four fourteener lines; reflowed here to the eight metrical lines of 8.6.8.6 D at the mid-line commas, keeping the source's lowercase continuations — no words changed. Watts's 1715 original opened “I sing th'almighty power of God”; “the mighty pow'r” is the standard hymnal form shipped here. Tune per the hymnary.org text page (ELLACOMBE, listed first; meter there “8.6.8.6 D”). Common key B♭ (Timeless Truths score) moved to A for guitar per the key rule. Chords derived from the SATB MusicXML of ELLACOMBE at Timeless Truths, transposed B♭→A and thinned (Cm7→Bm7, Fsus4→Esus4 kept as idiomatic colour)."
+}

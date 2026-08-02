@@ -1,0 +1,29 @@
+{
+  "id": "rock-of-ages",
+  "number": 16,
+  "tune": "TOPLADY",
+  "meter": "7.7.7.7.7.7",
+  "key": "A",
+  "texts": {
+    "en": {
+      "title": "Rock of Ages, Cleft for Me",
+      "author": "Augustus M. Toplady",
+      "translator": null,
+      "year": 1776,
+      "stanzas": [
+        "[A]Rock [D/A]of [A]Ages, [A/C#]cleft [D]for [A]me,\n[A/C#]Let [E]me [A]hide [Bm]my[A/E]self [E7]in [A]Thee;\n[E]Let the [E7]water and the [A]blood,\n[E]From Thy [E7]wounded side which [A]flowed,\n[A]Be [D/A]of [A]sin the [A/C#]dou[D]ble [A]cure,\n[F#m]Save [E7]from [A]wrath [Bm]and [A/E]make [E7]me [A]pure.",
+        "Not the labor of my hands\nCan fulfill Thy law's demands;\nCould my zeal no respite know,\nCould my tears forever flow,\nAll for sin could not atone;\nThou must save, and Thou alone.",
+        "Nothing in my hand I bring,\nSimply to Thy cross I cling;\nNaked, come to Thee for dress;\nHelpless, look to Thee for grace;\nFoul, I to the fountain fly;\nWash me, Savior, or I die.",
+        "While I draw this fleeting breath,\nWhen my eyes shall close in death,\nWhen I rise to worlds unknown,\nAnd behold Thee on Thy throne,\nRock of Ages, cleft for me,\nLet me hide myself in Thee."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://library.timelesstruths.org/music/Rock_of_Ages/",
+        "https://hymnary.org/text/rock_of_ages_cleft_for_me_let_me_hide",
+        "https://library.timelesstruths.org/library/music/R/Rock_of_Ages/Rock_of_Ages.xml"
+      ]
+    },
+    "de": null
+  },
+  "notes": "The standard four stanzas as Timeless Truths prints them; hymnary's representative text (United Methodist Hymnal 1989) agrees apart from lowercased pronouns, “labors” for “labor”, “mine eyes” for “my eyes”, and “When I soar … see thee on thy judgment throne” for this text's “When I rise … And behold Thee on Thy throne” in stanza 4 — both recensions are common; the Timeless Truths form is shipped verbatim. Author appears as Augustus M. Toplady on the source page (worklist hint “Augustus Toplady”). Tune/meter per the hymnary.org text page (TOPLADY, 7.7.7.7.7.7). Common key B♭ (Timeless Truths score) moved to A for guitar per the key rule. Chords derived from that score's SATB MusicXML transposed B♭→A; Hastings' harmonisation moves nearly per syllable at the cadences, so lines 1, 2, 5 and 6 carry more changes than lines 3–4, which sit on V–V7."
+}

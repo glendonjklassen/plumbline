@@ -1,0 +1,32 @@
+{
+  "id": "o-worship-the-king",
+  "number": 13,
+  "tune": "LYONS",
+  "meter": "10.10.11.11",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "O Worship the King",
+      "author": "Robert Grant",
+      "translator": null,
+      "year": 1833,
+      "stanzas": [
+        "[G]Oh worship [D]the [G]King, all [C]glo[D7]rious [G]a[D]bove!\n[D]O [G]grateful[D]ly [G]sing [C]His [G]power and [D7]His [G]love—\n[D]Our shield and de[A7]fend[D7]er, the [D]Ancient of [D7]Days,\n[D]Pa[G]vilioned [D]in [G]splendor, [C]and [G]girded [D7]with [G]praise.",
+        "Oh tell of His might! O sing of His grace!\nWhose robe is the light, whose canopy space;\nHis chariots of wrath the deep thunderclouds form,\nAnd dark is His path on the wings of the storm.",
+        "The earth, with its store of wonders untold,\nAlmighty! Thy power hath founded of old;\nEstablished it fast by a changeless decree,\nAnd round it hath cast, like a mantle, the sea.",
+        "Thy bountiful care, what tongue can recite?\nIt breathes in the air, it shines in the light;\nIt streams from the hills, it descends to the plain,\nAnd sweetly distills in the dew and the rain.",
+        "Frail children of dust, and feeble as frail,\nIn Thee do we trust, nor find Thee to fail;\nThy mercies how tender! How firm to the end!\nOur maker, defender, redeemer, and friend!",
+        "O measureless might! Ineffable love!\nWhile angels delight to worship Thee above,\nThe humbler creation, though feeble their lays,\nWith true adoration shall all sing Thy praise."
+      ],
+      "chorus": null,
+      "sources": [
+        "http://www.hymntime.com/tch/htm/o/w/t/k/owtking.htm",
+        "https://library.timelesstruths.org/music/Oh_Worship_the_King/",
+        "https://hymnary.org/text/o_worship_the_king_all_glorious_above",
+        "https://library.timelesstruths.org/library/music/O/Oh_Worship_the_King/Oh_Worship_the_King.xml"
+      ]
+    },
+    "de": null
+  },
+  "notes": "All six of Grant's stanzas as the Cyber Hymnal prints them (most hymnals print a four- or five-stanza subset; the brief is not to trim). The Cyber Hymnal's punctuation and casing are kept verbatim, including its “Oh worship”/“O gratefully” openings and the lowercase “Our maker, defender, redeemer, and friend!” — Timeless Truths' four-stanza printing capitalises these and reads “Oh, worship”; wording is otherwise identical. Line 2's “power” is sung as one syllable (Timeless Truths prints “pow'r”). Tune/meter per the hymnary.org text page (LYONS, listed first; 10.10.11.11). LYONS' attribution varies (J. Michael Haydn per the Cyber Hymnal; J. M. Kraus per Timeless Truths) — tune name and meter are what this file asserts. Common key G (Timeless Truths score) — already a guitar key. Chords derived from that score's SATB MusicXML, inversions simplified; the A7 in line 3 is the score's secondary dominant."
+}

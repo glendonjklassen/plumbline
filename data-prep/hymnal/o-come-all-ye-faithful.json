@@ -11,22 +11,23 @@
       "translator": "Frederick Oakeley",
       "year": 1841,
       "stanzas": [
-        "[G]O come, all ye [D]faithful,\n[G]Joyful and [C]tri[G]umphant,\n[Em]O come ye, [D]O come [G]ye,\n[D]To [G]Beth[D]lehem.\n[Bm]Come and be[Am]hold [G]Him,\n[D]Born the [G]King of [Am]an[D]gels;",
-        "True God of true God\nLight from Light Eternal,\nLo, He shuns not\nThe virgin’s womb;\nSon of the Father,\nBegotten, not created;",
+        "[G]O come, all ye [D]faithful,\n[G]Joyful and [C]tri[G]umph[D]ant,\n[Em]O come ye, [D]O come [G]ye,\n[D]To [G]Beth[D]lehem.\n[Bm]Come and be[Am]hold [G]Him,\n[D]Born the [G]King of [Am]an[D]gels;",
+        "True God of true God\nLight from Light Eternal,\nLo, He shuns not\nThe virgin's womb;\nSon of the Father,\nBegotten, not created;",
         "Sing, choirs of angels,\nSing in exultation;\nO sing, all ye citizens\nOf Heaven above!\nGlory to God, all\nGlory in the highest;",
         "See how the shepherds,\nSummoned to His cradle,\nLeaving their flocks,\nDraw nigh to gaze;\nWe too will thither\nBend our joyful footsteps;",
-        "Lo! star led chieftains,\nMagi, Christ adoring,\nOffer Him incense,\nGold, and myrrh;\nWe to the Christ Child\nBring our hearts’ oblations.",
+        "Lo! star led chieftains,\nMagi, Christ adoring,\nOffer Him incense,\nGold, and myrrh;\nWe to the Christ Child\nBring our hearts' oblations.",
         "Child, for us sinners\nPoor and in the manger,\nWe would embrace Thee,\nWith love and awe;\nWho would not love Thee,\nLoving us so dearly?",
         "Yea, Lord, we greet Thee,\nBorn this happy morning;\nJesus, to Thee be all glory given;\nWord of the Father,\nNow in flesh appearing."
       ],
-      "chorus": "[Em]O come, let us a[D]dore [Em]Him,\n[G]O come, let us a[D7]dore [G]Him,\nO [Am]come, let us a[A7]dore [G]Him,\n[C]Christ the [D]Lord.",
+      "chorus": "[G]O come, let us a[D]dore [G]Him,\n[G]O come, let [C]us a[G]dore [D]Him,\nO [C]come, let [A7]us a[D]dore [C]Him,\n[D7]Christ the [G]Lord.",
       "sources": [
         "http://www.hymntime.com/tch/htm/o/c/o/m/ocomeayf.htm",
+        "https://www.hymnsandcarolsofchristmas.com/Hymns_and_Carols/o_come_all_ye_faithful.htm",
         "https://hymnary.org/text/o_come_all_ye_faithful_joyful_and_triump",
         "https://hymnary.org/tune/adeste_fideles_wade"
       ]
     },
     "de": null
   },
-  "notes": "Text: the Cyber Hymnal's full seven-stanza Oakeley translation (Wade's four Latin stanzas plus the three usually credited to Étienne Borderies). Most hymnals print only stanzas 1, 2, 3 and 7, and hymnary's representative text is those four; stanza 2 is also very widely printed in the variant 'God of God, Light of Light, / Lo, He abhors not the Virgin's womb; / Very God, begotten, not created'. Stanzas 4–7 do not share stanza 1's syllable counts, so a shell reusing stanza 1's chart will not line up on them. Tune ADESTE FIDELES; hymnary's tune page gives A, but the Cyber Hymnal's own setting (and MIDI, mid/a/d/e/s/adeste_fideles.mid) is in G, which is also the first-preference guitar key, so G is used untransposed and the chart is read straight off that MIDI — all six stanza lines and all four refrain lines align exactly with the melody onsets."
+  "notes": "Text: the Cyber Hymnal's full seven-stanza Oakeley translation (Wade's four Latin stanzas plus the three usually credited to Étienne Borderies). Most hymnals print only stanzas 1, 2, 3 and 7, and hymnary's representative text is those four; stanza 2 is also very widely printed in the variant 'God of God, Light of Light, / Lo, He abhors not the Virgin's womb; / Very God, begotten, not created'. Stanzas 4–7 do not share stanza 1's syllable counts, so a shell reusing stanza 1's chart will not line up on them. Tune ADESTE FIDELES; hymnary's tune page gives A, but the Cyber Hymnal's own setting (and MIDI, mid/a/d/e/s/adeste_fideles.mid) is in G, which is also the first-preference guitar key, so G is used untransposed and the chart is read straight off that MIDI — all six stanza lines and all four refrain lines align exactly with the melody onsets. Chart corrected 2026-08-02: the refrain as first transcribed ended phrases on Em and ended the hymn on D (V) at 'Christ the Lord'; two independent published charts in G (hymnal.net/en/hymn/h/85 and traditionalsongs.org/o-come-all-ye-faithful.html) agree the refrain runs G/D, then C-G-D, then C-A7-D-C, then D7-G, and that 'triumphant' cadences on D — the refrain and that cadence now follow them. Text cross-checked 2026-08-02 against hymnsandcarolsofchristmas.com (a Brooke-based edition: 'Jesu, to Thee be glory given', 'Sing, all ye citizens', 'Lo! Star-led chieftains') — structural agreement, wording variants as expected between editions; this file keeps the Cyber Hymnal's Oakeley text."
 }

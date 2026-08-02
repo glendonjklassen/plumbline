@@ -126,6 +126,14 @@ for (const name of names) {
       for (const m of body.matchAll(/\[([^\]]*)\]/g)) {
         if (!isChord(m[1])) problems.push(`${where}: ${lang} has "[${m[1]}]", which is not a chord`);
       }
+      // STRAIGHT APOSTROPHES ONLY (FORMAT.md). Hymn texts are full of them —
+      // "'Tis", "pow'r", "e'er" — and the pages they are copied from disagree
+      // about which character to print, so sourcing them faithfully produces a
+      // book that is inconsistent line to line. Corrected across every file by
+      // the maintainer on 2026-08-02; this is what keeps it corrected.
+      if (body.includes("’")) {
+        problems.push(`${where}: ${lang} uses a curly apostrophe (’) — FORMAT.md requires '`);
+      }
     }
     // Stanza 1 carries the chart (FORMAT.md). A hymn with chords SOMEWHERE but
     // none on its first stanza paints an unchorded opening verse and a chorded

@@ -1,0 +1,48 @@
+{
+  "id": "schmuecke-dich",
+  "number": 78,
+  "tune": "SCHMÜCKE DICH",
+  "meter": "8.8.8.8 D",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Deck Thyself, My Soul, with Gladness",
+      "author": "Johann Franck",
+      "translator": "Catherine Winkworth",
+      "year": 1863,
+      "stanzas": [
+        "[D]Deck thyself, my [Em]soul, with [A]gladness,\n[D]Leave the [G]gloomy [A]haunts of [D]sadness,\n[D]Come in[A]to the [Bm]daylight's [F#m]splendour,\n[G]There with [D]joy thy [A]praises [D]render\n[D]Unto [A]Him whose [D]grace un[G]bounded\n[D]Hath this [G]wondrous [A]banquet [D]founded,\n[Bm]High o'er [F#m]all the [G]heav'ns he [D]reigneth,\n[G]Yet to [D]dwell with [A]thee He [D]deigneth.",
+        "Hasten as a Bride to meet Him,\nAnd with loving reverence greet Him,\nFor with words of life immortal\nNow He knocketh at thy portal;\nHaste to ope the gates before Him,\nSaying, while thou dost adore Him,\n\"Suffer, Lord, that I receive Thee,\nAnd I never more will leave Thee.\"",
+        "Ah how hungers all my spirit\nFor the love I do not merit!\nOft have I, with sighs fast thronging,\nThought upon this food with longing,\nIn the battle well-nigh worsted,\nFor this cup of life have thirsted,\nFor the Friend, who here invites us,\nAnd to God Himself unites us.",
+        "Now I sink before Thee lowly,\nFill'd with joy most deep and holy,\nAs with trembling awe and wonder\nOn Thy mighty works I ponder,\nNow, by mystery surrounded,\nDepths no man hath ever sounded,\nNone may dare to pierce unbidden\nSecrets that with Thee art hidden.",
+        "Sun, who all my life dost brighten,\nLight, who dost my soul enlighten,\nJoy, the sweetest man e'er knoweth,\nFount, whence all my being floweth,\nAt Thy feet I cry, my Maker,\nLet me be a fit partaker\nOf this blessed food from heaven,\nFor our good, Thy glory, given.",
+        "Jesus, Bread of Life, I pray Thee,\nLet me gladly here obey Thee,\nNever to my hurt invited,\nBe Thy love with love requited;\nFrom this banquet let me measure,\nLord, how vast and deep its treasure;\nThrough the gifts Thou here dost give me\nAs Thy guest in heaven receive me."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.ccel.org/ccel/winkworth/chorales.h093.html",
+        "https://hymnary.org/tune/schmucke_dich_cruger"
+      ]
+    },
+    "de": {
+      "title": "Schmücke dich, o liebe Seele",
+      "author": "Johann Franck",
+      "translator": null,
+      "year": 1653,
+      "stanzas": [
+        "[D]Schmücke dich, o [Em]liebe [A]Seele,\n[D]lass die [G]dunkle [A]Sünden[D]höhle,\n[D]komm ans [A]helle [Bm]Licht ge[F#m]gangen,\n[G]fange [D]herrlich [A]an zu [D]prangen;\n[D]denn der [A]Herr voll [D]Heil und [G]Gnaden\n[D]will dich [G]jetzt zu [A]Gaste [D]laden;\n[Bm]der den [F#m]Himmel [G]kann ver[D]walten,\n[G]will jetzt [D]Herberg [A]in dir [D]halten.",
+        "Ach wie hungert mein Gemüte,\nMenschenfreund, nach deiner Güte!\nAch wie pfleg ich oft mit Tränen\nmich nach dieser Kost zu sehnen!\nAch wie pfleget mich zu dürsten\nnach dem Trank des Lebensfürsten,\ndass in diesem Brot und Weine\nChristus sich mit mir vereine!",
+        "Heilge Lust und tiefes Bangen\nnimmt mein Herze jetzt gefangen.\nDas Geheimnis dieser Speise\nund die unerforschte Weise\nmachet, dass ich früh vermerke,\nHerr, die Größe deiner Stärke.\nIst auch wohl ein Mensch zu finden,\nder dein Allmacht sollt' ergründen?",
+        "Nein, Vernunft, die muss hier weichen,\nkann dies Wunder nicht erreichen,\ndass dies Brot nie wird verzehret,\nob es gleich viel Tausend nähret,\nund dass mit dem Saft der Reben\nuns wird Christi Blut gegeben.\nO der großen Heimlichkeiten,\ndie nur Gottes Geist kann deuten!",
+        "Jesu, meine Lebenssonne,\nJesu, meine Freud und Wonne,\nJesu, du mein ganz Beginnen,\nLebensquell und Licht der Sinnen:\nhier fall ich zu deinen Füßen;\nlass mich würdiglich genießen\ndieser deiner Himmelsspeise\nmir zum Heil und dir zum Preise!",
+        "Herr, es hat dein treues Lieben\ndich vom Himmel hergetrieben,\ndass du willig hast dein Leben\nin den Tod für mich gegeben\nund dazu ganz unverdrossen,\nHerr, dein Blut für mich vergossen,\ndas uns jetzt kann kräftig tränken,\ndeiner Liebe zu gedenken.",
+        "Jesu, wahres Brot des Lebens,\nhilf, dass ich doch nicht vergebens\noder mir vielleicht zum Schaden\nsei zu deinem Tisch geladen.\nLass mich durch dies Seelenessen\ndeine Liebe recht ermessen,\ndass ich auch, wie jetzt auf Erden,\nmög' dein Gast im Himmel werden."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_schmuecke_dich_o_liebe_seele.html"
+      ]
+    }
+  },
+  "notes": "German is the 7-stanza text evangeliums.net prints (the full Franck original has 9 stanzas; EG 218 carries 6). The site credits the text 'Johann Franck 1653' (stanza 1 first appeared with Crüger's melody in 1649 — the worklist's year). English is Winkworth's Chorale Book for England #93 (6 stanzas) — NOT stanza-parallel with the shipped German: her stanza 2 'Hasten as a Bride to meet Him' renders an original stanza ('Eile, wie Verlobte pflegen') that the German source omits, and she skips others; correspondence is roughly en 1,3,4,5,6 to de 1,2,3,5,7. 'Secrets that with Thee art hidden' in stanza 4 is as CCEL prints it (sic). Tune SCHMÜCKE DICH (Crüger 1649), meter LMD / 8.8.8.8 D, D major the original and most common printed key per hymnary's tune page — chart in D, best-effort, not from printed notation."
+}

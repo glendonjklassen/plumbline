@@ -1,6 +1,6 @@
 {
   "id": "herzliebster-jesu",
-  "number": 82,
+  "number": 81,
   "tune": "HERZLIEBSTER JESU",
   "meter": "11.11.11.5",
   "key": "Am",
@@ -12,15 +12,16 @@
       "year": 1899,
       "stanzas": [
         "[Am]Ah, holy [Dm]Jesus, how [E]hast Thou of[Am]fended,\n[C]That man to [G]judge Thee hath in [Dm]hate pre[E]tended?\n[Am]By foes de[Dm]rided, by [G]Thine own [C]re[Am]jected,\n[Dm]O most af[E]flic[Am]ted.",
-        "Who was the guilty? Who brought this upon Thee?\nAlas, my treason, Jesus, hath undone Thee.\n’Twas I, Lord, Jesus, I it was denied Thee!\nI crucified Thee.",
-        "Lo, the Good Shepherd for the sheep is offered;\nThe slave hath sinned, and the Son hath suffered;\nFor man’s atonement, while he nothing heedeth,\nGod intercedeth.",
-        "For me, kind Jesus, was Thy incarnation,\nThy mortal sorrow, and Thy life’s oblation;\nThy death of anguish and Thy bitter passion,\nFor my salvation.",
+        "Who was the guilty? Who brought this upon Thee?\nAlas, my treason, Jesus, hath undone Thee.\n'Twas I, Lord, Jesus, I it was denied Thee!\nI crucified Thee.",
+        "Lo, the Good Shepherd for the sheep is offered;\nThe slave hath sinned, and the Son hath suffered;\nFor man's atonement, while he nothing heedeth,\nGod intercedeth.",
+        "For me, kind Jesus, was Thy incarnation,\nThy mortal sorrow, and Thy life's oblation;\nThy death of anguish and Thy bitter passion,\nFor my salvation.",
         "Therefore, kind Jesus, since I cannot pay Thee,\nI do adore Thee, and will ever pray Thee,\nThink on Thy pity and Thy love unswerving,\nNot my deserving."
       ],
       "chorus": null,
       "sources": [
         "https://hymnary.org/hymn/CYBER/67",
-        "https://hymnary.org/text/ah_holy_jesus_how_hast_thou_offended"
+        "https://hymnary.org/text/ah_holy_jesus_how_hast_thou_offended",
+        "https://www.godsongs.net/2023/04/ah-holy-jesu-how-hast-thou-offended.html"
       ]
     },
     "de": {
@@ -37,20 +38,21 @@
         "Ich war von Fuß auf voller Schand und Sünden,\nbis zu dem Scheitel war nichts Guts zu finden;\ndafür hätt ich dort in der Hölle müssen\newiglich büßen.",
         "O große Lieb, o Lieb ohn alle Maße,\ndie dich gebracht auf diese Marterstraße!\nIch lebte mit der Welt in Lust und Freuden,\nund du musst leiden.",
         "Ach großer König, groß zu allen Zeiten,\nwie kann ich gnugsam solche Treu ausbreiten?\nKeins Menschen Herz vermag es auszudenken,\nwas dir zu schenken.",
-        "Ich kann’s mit meinen Sinnen nicht erreichen,\nwomit doch dein Erbarmung zu vergleichen.\nWie kann ich dir denn deine Liebestaten\nim Werk erstatten?",
+        "Ich kann's mit meinen Sinnen nicht erreichen,\nwomit doch dein Erbarmung zu vergleichen.\nWie kann ich dir denn deine Liebestaten\nim Werk erstatten?",
         "Doch ist noch etwas, das dir angenehme:\nwenn ich des Fleisches Lüste dämpf und zähme,\ndass sie aufs neu mein Herze nicht entzünden\nmit alten Sünden.",
-        "Weil’s aber nicht besteht in eignen Kräften,\nfest die Begierden an das Kreuz zu heften,\nso gib mir deinen Geist, der mich regiere,\nzum Guten führe.",
+        "Weil's aber nicht besteht in eignen Kräften,\nfest die Begierden an das Kreuz zu heften,\nso gib mir deinen Geist, der mich regiere,\nzum Guten führe.",
         "Ach lass mich täglich deine Huld betrachten,\naus Lieb zu dir die Welt für gar nichts achten\nund gerne mich bemühen, deinen Willen\nstets zu erfüllen.",
         "Ich werde dir zu Ehren alles wagen,\nkein Kreuz nicht achten, keine Schmach und Plagen,\nnichts von Verfolgung, nichts von Todesschmerzen\nnehmen zu Herzen.",
-        "Dies alles, ob’s für schlecht zwar ist zu schätzen,\nwirst du es doch nicht gar beiseite setzen;\nin Gnaden wirst du dies von mir annehmen,\nmich nicht beschämen.",
+        "Dies alles, ob's für schlecht zwar ist zu schätzen,\nwirst du es doch nicht gar beiseite setzen;\nin Gnaden wirst du dies von mir annehmen,\nmich nicht beschämen.",
         "Wann, o Herr Jesu, dort vor deinem Throne\nwird stehn auf meinem Haupt die Ehrenkrone,\nda will ich dir, wenn alles wird wohl klingen,\nLob und Dank singen."
       ],
       "chorus": null,
       "sources": [
         "https://www.evangeliums.net/lieder/lied_herzliebster_jesu_was_hast_du_verbrochen.html",
-        "https://de.wikipedia.org/wiki/Herzliebster_Jesu,_was_hast_du_verbrochen"
+        "https://de.wikipedia.org/wiki/Herzliebster_Jesu,_was_hast_du_verbrochen",
+        "https://www.bach-cantatas.com/Texts/Chorale159-Eng3.htm"
       ]
     }
   },
-  "notes": "German is the full 15-stanza text as evangeliums.net prints it (EG 81 carries eleven of these, dropping originals 6, 10, 12, 14 and moving 11 after 13; Gotteslob 290 prints only the first four — noted in the de.wikipedia article). One orthography oddity kept from the source: stanza 5 reads 'mißhandelt' where the rest of the text is post-1996; I did not normalise it. English is Bridges' 1899 Yattendon text in its unaltered form from the Cyber Hymnal record — the widely sung UMH/Common-Praise version alters line 2 to 'that we to judge thee have in hate pretended' and lowercases the pronouns; I used the original. Note the two languages are not stanza-parallel: Bridges condensed 15 German stanzas into 5. If parity matters more than fame, the Free Lutheran Chorale-Book carries Catherine Winkworth's 15-stanza 'O dearest Jesus, what law hast Thou broken' (TLH 1941 no. 143), which maps one-to-one. Tune and meter confirmed on hymnary (HERZLIEBSTER JESU, Johann Crüger 1640, 11.11.11.5). Key: the tune is minor and is usually printed in G minor or A minor; I wrote it in A minor as the guitar-friendly choice, so the chart is a best-effort harmonisation rather than a transcription of printed notation."
+  "notes": "German is the full 15-stanza text as evangeliums.net prints it (EG 81 carries eleven of these, dropping originals 6, 10, 12, 14 and moving 11 after 13; Gotteslob 290 prints only the first four — noted in the de.wikipedia article). One orthography oddity kept from the source: stanza 5 reads 'mißhandelt' where the rest of the text is post-1996; I did not normalise it. English is Bridges' 1899 Yattendon text in its unaltered form from the Cyber Hymnal record — the widely sung UMH/Common-Praise version alters line 2 to 'that we to judge thee have in hate pretended' and lowercases the pronouns; I used the original. Note the two languages are not stanza-parallel: Bridges condensed 15 German stanzas into 5. If parity matters more than fame, the Free Lutheran Chorale-Book carries Catherine Winkworth's 15-stanza 'O dearest Jesus, what law hast Thou broken' (TLH 1941 no. 143), which maps one-to-one. Tune and meter confirmed on hymnary (HERZLIEBSTER JESU, Johann Crüger 1640, 11.11.11.5). Key: the tune is minor and is usually printed in G minor or A minor; I wrote it in A minor as the guitar-friendly choice, so the chart is a best-effort harmonisation rather than a transcription of printed notation. Verification 2026-08-02, MAINTAINER'S EYE WANTED on one word: stanza 1 line 2 here reads 'ein solch hart Urteil' — that is what evangeliums.net (the wording source) prints and the file transcribes it faithfully, but EG 81, Gotteslob 290, the 1630 original and the Bach passions all read 'ein solch scharf Urteil'; evangeliums.net looks like the outlier, so consider changing 'hart' to 'scharf'. Other differences against the 1630 original on bach-cantatas.com (Chorale159) are recension-level (st. 3 'Ich, ich ... habe', st. 5 'gehandelt'/'verdient'/'Gott wird gefangen', st. 12 'Alsdann so werd ich') and the shipped modern recension stands. English re-checked against godsongs.net, which carries the altered modern text ('that we ... have', 'while we nothing heeded, God interceded') — confirms the file ships the original as intended; the CYBER record matches the file exactly, including its odd comma in \"'Twas I, Lord, Jesus\"."
 }

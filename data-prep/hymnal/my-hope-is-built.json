@@ -1,0 +1,28 @@
+{
+  "id": "my-hope-is-built",
+  "number": 30,
+  "tune": "SOLID ROCK",
+  "meter": "8.8.8.8.8.8.8",
+  "key": "E",
+  "texts": {
+    "en": {
+      "title": "My Hope Is Built on Nothing Less",
+      "author": "Edward Mote",
+      "translator": null,
+      "year": 1834,
+      "stanzas": [
+        "My [E]hope is built on [A]nothing [E]less\nThan Jesus' blood and [B7]righteousness;\nI [E]dare not trust the [A]sweetest [E]frame,\nBut wholly [B7]lean on [E]Jesus' name.",
+        "When darkness veils His lovely face,\nI rest on His unchanging grace;\nIn every high and stormy gale,\nMy anchor holds within the veil.",
+        "His oath, His covenant, His blood\nSupport me in the whelming flood;\nWhen all around my soul gives way,\nHe then is all my hope and stay.",
+        "When He shall come with trumpet sound,\nOh, may I then in Him be found;\nDressed in His righteousness alone,\nFaultless to stand before the throne."
+      ],
+      "chorus": "On [E]Christ, the solid [A]Rock, I [E]stand;\nAll other ground is [B7]sinking sand,\n[E]All other [B7]ground is [E]sinking sand.",
+      "sources": [
+        "https://library.timelesstruths.org/music/The_Solid_Rock/",
+        "https://hymnary.org/text/my_hope_is_built_on_nothing_less"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Four stanzas and refrain — Timeless Truths and hymnary's representative text agree on the set and the wording. Mote's original ran longer (hymnals note six stanzas); the extra stanzas dropped out of hymnal use, are not in either consulted source, and are not shipped. Tune SOLID ROCK (William B. Bradbury, 1863); meter as hymnary lists it (8.8.8.8.8.8.8 — four stanza lines plus the refrain's three; Timeless Truths prints the same). Key: the hymnal key is F (Timeless Truths score); E is the nearest preferred guitar key (one semitone down; G would be two up). Chords are Bradbury's harmonization simplified: lines 1/3 alike over I-IV-I, lines 2/refrain-line-2 half-cadence on B7, full cadences close line 4 and the refrain."
+}

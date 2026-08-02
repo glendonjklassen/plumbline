@@ -52,6 +52,13 @@ wording question can be settled later.
   sung orthography (Evangelisches Gesangbuch style: ß where standard, modern
   spellings of daß→dass NOT applied when the sung form keeps the older word —
   follow the source).
+
+  **APOSTROPHES ARE STRAIGHT (`'`), always.** Not `’`, whatever the source
+  page uses. Hymn texts are full of them — "'Tis", "pow'r", "e'er" — and web
+  pages disagree about which character to print, so copying the source
+  faithfully gives a book that is inconsistent line to line. `scripts/build-hymnal.mjs`
+  refuses a curly one. (Corrected across all 93 files by the maintainer,
+  2026-08-02; this rule is why it stays corrected.)
 - `chorus` — a stanza-shaped string for hymns with a refrain, else null. The
   shells repeat it after every stanza.
 - `sources` — at least one URL per language actually consulted for the text.

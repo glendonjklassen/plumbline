@@ -1,0 +1,29 @@
+{
+  "id": "abide-with-me",
+  "number": 27,
+  "tune": "EVENTIDE",
+  "meter": "10.10.10.10",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Abide with Me",
+      "author": "Henry F. Lyte",
+      "translator": null,
+      "year": 1847,
+      "stanzas": [
+        "A[D]bide with me; fast [A]falls the [Bm]even[A]tide;\nThe [G]darkness [D]deepens; [Em]Lord, with [A]me a[D]bide;\nWhen [F#7]other [Bm]helpers [E7]fail and comforts [A]flee,\n[D]Help of the [G]helpless, [D]oh, a[A7]bide with [D]me.",
+        "Swift to its close ebbs out life's little day;\nEarth's joys grow dim, its glories pass away;\nChange and decay in all around I see—\nO Thou who changest not, abide with me.",
+        "I need Thy presence every passing hour;\nWhat but Thy grace can foil the tempter's pow'r?\nWho, like Thyself, my guide and stay can be?\nThrough cloud and sunshine, Lord, abide with me.",
+        "I fear no foe, with Thee at hand to bless;\nIlls have no weight, and tears no bitterness;\nWhere is death's sting? Where, grave, thy victory?\nI triumph still, if Thou abide with me.",
+        "Hold Thou Thy cross before my closing eyes;\nShine through the gloom and point me to the skies;\nHeav'n's morning breaks, and earth's vain shadows flee;\nIn life, in death, O Lord, abide with me."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://library.timelesstruths.org/music/Abide_with_Me/",
+        "https://hymnary.org/text/abide_with_me_fast_falls_the_eventide"
+      ]
+    },
+    "de": null
+  },
+  "notes": "The five-stanza hymnal form — Timeless Truths and hymnary's representative text both print five. Lyte's 1847 poem has eight stanzas; the three beginning \"Not a brief glance\", \"Thou on my head\", and \"Come not in terrors\" are rarely sung and are not shipped. Tune EVENTIDE (William H. Monk, 1861); meter as hymnary lists it. Key: the hymnal key is E-flat (Timeless Truths score); D and E are each one semitone away and FORMAT's preference order picks D. Chords follow Monk's harmonization simplified for guitar, keeping his line-3 sequence (V7-of-vi into Bm, then V7-of-V into the half cadence)."
+}

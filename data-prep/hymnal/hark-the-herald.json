@@ -11,20 +11,21 @@
       "translator": null,
       "year": 1739,
       "stanzas": [
-        "[G]Hark! The her[D]ald an[G]gels sing,\n[D]Glory to [C]the [Am]newborn [G]King;\nPeace on earth, [D]and [Em]mercy mild,\n[A7]God and sinners re[G]con[D]ciled!\n[D]Joyful, all ye [G]nations rise,\n[D]Join the triumph [G]of the skies;\n[C]With th’angel[E7]ic [Am]host proclaim,\n[D7]Christ is [G]born in Beth[D7]lehem!",
-        "Christ, by highest Heav’n adored;\nChrist the everlasting Lord;\nLate in time, behold Him come,\nOffspring of a virgin’s womb.\nVeiled in flesh the Godhead see;\nHail th’incarnate Deity,\nPleased with us in flesh to dwell,\nJesus our Emmanuel.",
-        "Hail the heav’nly Prince of Peace!\nHail the Sun of Righteousness!\nLight and life to all He brings,\nRis’n with healing in His wings.\nMild He lays His glory by,\nBorn that man no more may die.\nBorn to raise the sons of earth,\nBorn to give them second birth.",
-        "Come, desire of nations, come,\nFix in us Thy humble home;\nRise, the woman’s conquering Seed,\nBruise in us the serpent’s head.\nNow display Thy saving power,\nRuined nature now restore;\nNow in mystic union join\nThine to ours, and ours to Thine.",
-        "Adam’s likeness, Lord, efface,\nStamp Thine image in its place:\nSecond Adam from above,\nReinstate us in Thy love.\nLet us Thee, though lost, regain,\nThee, the Life, the inner man:\nO, to all Thyself impart,\nFormed in each believing heart."
+        "[G]Hark! The her[D]ald an[G]gels sing,\n[D]Glory to [C]the [Am]newborn [G]King;\nPeace on earth, [D]and [Em]mercy mild,\n[A7]God and sinners re[G]con[D]ciled!\n[G]Joyful, all ye [C]nations [D]rise,\n[G]Join the triumph [C]of the [D]skies;\n[C]With th'angel[E7]ic [Am]host proclaim,\n[D7]Christ is [G]born in Beth[D7]le[G]hem!",
+        "Christ, by highest Heav'n adored;\nChrist the everlasting Lord;\nLate in time, behold Him come,\nOffspring of a virgin's womb.\nVeiled in flesh the Godhead see;\nHail th'incarnate Deity,\nPleased with us in flesh to dwell,\nJesus our Emmanuel.",
+        "Hail the heav'nly Prince of Peace!\nHail the Sun of Righteousness!\nLight and life to all He brings,\nRis'n with healing in His wings.\nMild He lays His glory by,\nBorn that man no more may die.\nBorn to raise the sons of earth,\nBorn to give them second birth.",
+        "Come, desire of nations, come,\nFix in us Thy humble home;\nRise, the woman's conquering Seed,\nBruise in us the serpent's head.\nNow display Thy saving power,\nRuined nature now restore;\nNow in mystic union join\nThine to ours, and ours to Thine.",
+        "Adam's likeness, Lord, efface,\nStamp Thine image in its place:\nSecond Adam from above,\nReinstate us in Thy love.\nLet us Thee, though lost, regain,\nThee, the Life, the inner man:\nO, to all Thyself impart,\nFormed in each believing heart."
       ],
-      "chorus": "[C]Hark! the her[E7]ald [Am]angels sing,\n[D]Glory to the [G]newborn [D7]King!",
+      "chorus": "[C]Hark! the her[E7]ald [Am]angels sing,\n[D]Glory [G]to the new[D7]born [G]King!",
       "sources": [
         "http://www.hymntime.com/tch/htm/h/h/a/n/hhangels.htm",
+        "https://library.timelesstruths.org/music/Hark_the_Herald_Angels_Sing/",
         "https://hymnary.org/text/hark_the_herald_angels_sing_glory_to",
         "https://hymnary.org/tune/mendelssohn_mendelssohn"
       ]
     },
     "de": null
   },
-  "notes": "Text: Cyber Hymnal's standard (Whitefield-altered, 1753) version in five stanzas; most hymnals print only the first three, and hymnary's representative text is those three. Wesley's 1739 original ('Hark, how all the welkin rings') is a different text and is not used here. Tune MENDELSSOHN (Felix Mendelssohn 1840, adapted by W. H. Cummings 1856); hymnary lists F and G as the common printed keys, so G is used and the chart is the Cyber Hymnal MIDI (mid/m/e/n/d/mendelssohn.mid) transposed F->G. All eight stanza lines and both refrain lines align seven-syllables-to-seven-onsets with the melody, so placements are note-accurate; the E7-Am turn in line 7 is the tune's own secondary dominant, not an embellishment."
+  "notes": "Text: Cyber Hymnal's standard (Whitefield-altered, 1753) version in five stanzas; most hymnals print only the first three, and hymnary's representative text is those three. Wesley's 1739 original ('Hark, how all the welkin rings') is a different text and is not used here. Tune MENDELSSOHN (Felix Mendelssohn 1840, adapted by W. H. Cummings 1856); hymnary lists F and G as the common printed keys, so G is used and the chart is the Cyber Hymnal MIDI (mid/m/e/n/d/mendelssohn.mid) transposed F->G. All eight stanza lines and both refrain lines align seven-syllables-to-seven-onsets with the melody, so placements are note-accurate; the E7-Am turn in line 7 is the tune's own secondary dominant, not an embellishment. Chart corrected 2026-08-02: the MIDI-derived chart ended stanza line 8 and the refrain on D7 (V7) and put I under 'nations rise'/'of the skies' where the harmony is IV-V; fixed against two independent published charts that agree (traditionalsongs.org/hark-the-herald-angels-sing.html and hymnal.net/en/hymn/h/84), so both final cadences now land on G. Text cross-checked 2026-08-02 against Timeless Truths, which prints a four-stanza version (st. 4 merges the Cyber Hymnal's st. 4-5) with identical wording in st. 2-3."
 }

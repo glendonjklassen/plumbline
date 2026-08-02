@@ -1,0 +1,27 @@
+{
+  "id": "leaning-on-the-everlasting-arms",
+  "number": 31,
+  "tune": "SHOWALTER",
+  "meter": "10.9.10.9 with refrain",
+  "key": "G",
+  "texts": {
+    "en": {
+      "title": "Leaning on the Everlasting Arms",
+      "author": "Elisha A. Hoffman",
+      "translator": null,
+      "year": 1887,
+      "stanzas": [
+        "What a [G]fellowship, what a [C]joy di[G]vine,\nLeaning on the ever[A7]lasting [D]arms;\nWhat a [G]blessedness, what a [C]peace is [G]mine,\nLeaning on the ever[D7]lasting [G]arms.",
+        "Oh, how sweet to walk in this pilgrim way,\nLeaning on the everlasting arms;\nOh, how bright the path grows from day to day,\nLeaning on the everlasting arms.",
+        "What have I to dread, what have I to fear,\nLeaning on the everlasting arms?\nI have blessed peace with my Lord so near,\nLeaning on the everlasting arms."
+      ],
+      "chorus": "[G]Leaning, [C]leaning,\n[G]Safe and secure from [A7]all a[D7]larms;\n[G]Leaning, [C]leaning,\nLeaning on the ever[D7]lasting [G]arms.",
+      "sources": [
+        "https://library.timelesstruths.org/music/Leaning_on_the_Everlasting_Arms/",
+        "https://hymnary.org/text/what_a_fellowship_what_a_joy_divine"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Three stanzas and refrain — the whole hymn; Timeless Truths and hymnary's representative text agree. Words Elisha A. Hoffman, music (and hymnary's tune name SHOWALTER) Anthony J. Showalter, both published 1887; Timeless Truths credits Showalter with the refrain's words as well. Meter as hymnary lists it (Timeless Truths writes 10.9.10.9.12.13, counting the refrain). Key: the hymnal key is A-flat (Timeless Truths score); G and A are each one semitone away and FORMAT's preference order picks G. Chords are Showalter's harmonization simplified, keeping the II7 (A7) approach into the mid-point half cadence in both stanza and refrain."
+}

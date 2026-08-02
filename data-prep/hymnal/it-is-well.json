@@ -1,0 +1,30 @@
+{
+  "id": "it-is-well",
+  "number": 25,
+  "tune": "VILLE DU HAVRE",
+  "meter": "11.8.11.9 with refrain",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "It Is Well with My Soul",
+      "author": "Horatio G. Spafford",
+      "translator": null,
+      "year": 1873,
+      "stanzas": [
+        "When [D]peace, like a river, at[G]tendeth my [D]way,\nWhen [D]sorrows like sea [E7]billows [A]roll;\nWhat[D]ever my [D7]lot, Thou hast [G]taught me to [A]say,\nIt is [D]well, it is [A7]well with my [D]soul.",
+        "Though Satan should buffet, though trials should come,\nLet this blest assurance control,\nThat Christ hath regarded my helpless estate,\nAnd hath shed His own blood for my soul.",
+        "My sin—oh, the bliss of this glorious thought!—\nMy sin, not in part but the whole,\nIs nailed to the cross, and I bear it no more,\nPraise the Lord, praise the Lord, O my soul!",
+        "For me, be it Christ, be it Christ hence to live:\nIf Jordan above me shall roll,\nNo pang shall be mine, for in death as in life\nThou wilt whisper Thy peace to my soul.",
+        "But, Lord, 'tis for Thee, for Thy coming we wait,\nThe sky, not the grave, is our goal;\nOh, trump of the angel! Oh, voice of the Lord!\nBlessed hope, blessed rest of my soul!",
+        "And Lord, haste the day when the faith shall be sight,\nThe clouds be rolled back as a scroll;\nThe trump shall resound, and the Lord shall descend,\nEven so, it is well with my soul."
+      ],
+      "chorus": "It is [D]well [D7]with my [G]soul,\nIt is [D]well, it is [A7]well with my [D]soul.",
+      "sources": [
+        "https://library.timelesstruths.org/music/It_Is_Well_with_My_Soul/",
+        "https://hymnary.org/text/when_peace_like_a_river_attendeth_my_way"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text from Timeless Truths, which prints the full six-stanza text (its own cited sources are hymnary.org and the Cyber Hymnal) and whose stanza 1 agrees word-for-word with hymnary's representative text apart from hymnary's lowercased pronouns. Most hymnals print four stanzas (1, 2, 3, 6 here) — hymnary's representative text has four — but stanzas 4–5 are Spafford's and the Cyber Hymnal/Timeless Truths text carries them, so per FORMAT's no-trimming rule all six ship. Refrain is the source's two lines, without the echo parentheses some hymnals add. Tune VILLE DU HAVRE (Philip P. Bliss, 1876); meter as hymnary lists it. Key: the hymnal key is D-flat (Timeless Truths score); D and C are each one semitone away and FORMAT's preference order picks D. Chords are Bliss's harmonization simplified for guitar, keeping the characteristic V-of-V (E7) under \"billows roll\"."
+}

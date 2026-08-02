@@ -1,0 +1,29 @@
+{
+  "id": "shall-we-gather-at-the-river",
+  "number": 64,
+  "tune": "HANSON PLACE",
+  "meter": "8.7.8.7 with refrain",
+  "key": "D",
+  "texts": {
+    "en": {
+      "title": "Shall We Gather at the River",
+      "author": "Robert Lowry",
+      "translator": null,
+      "year": 1864,
+      "stanzas": [
+        "[D]Shall we gather at the river,\nWhere bright [G]angel [D]feet have [A7]trod;\n[D]With its crystal tide forever\n[D]Flowing [A7]by the throne of [D]God?",
+        "On the margin of the river,\nWashing up its silver spray,\nWe will walk and worship ever,\nAll the happy golden day.",
+        "Ere we reach the shining river,\nLay we ev'ry burden down;\nGrace our spirits will deliver,\nAnd provide a robe and crown.",
+        "Soon we'll reach the shining river,\nSoon our pilgrimage will cease;\nSoon our happy hearts will quiver\nWith the melody of peace."
+      ],
+      "chorus": "[D]Yes, we'll gather at the river,\nThe [D]beautiful, the [E7]beautiful [A7]river;\n[D]Gather with the [D7]saints at the [G]river\nThat [D]flows [A7]by the throne of [D]God.",
+      "sources": [
+        "https://hymnary.org/text/shall_we_gather_at_the_river",
+        "https://hymnary.org/tune/hanson_place_lowry",
+        "https://library.timelesstruths.org/music/Shall_We_Gather_at_the_River/"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text: hymnary.org representative text, four stanzas plus refrain; Lowry's original fifth stanza ('At the smiling of the river') is rarely printed and omitted. Words and music Robert Lowry, 1864. HANSON PLACE listed in D Major on hymnary's tune page, so no transposition. Chart is the standard gospel changes, including the refrain's V/V ('the beautiful river') and D7-G colour at 'saints at the river'."
+}

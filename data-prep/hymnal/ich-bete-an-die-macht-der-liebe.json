@@ -1,6 +1,6 @@
 {
   "id": "ich-bete-an-die-macht-der-liebe",
-  "number": 86,
+  "number": 85,
   "tune": "ST. PETERSBURG",
   "meter": "9.8.9.8.9.9",
   "key": "D",
@@ -12,22 +12,24 @@
       "translator": null,
       "year": 1757,
       "stanzas": [
-        "[D]Ich bete [G]an die [A]Macht der [D]Liebe,\n[D]Die sich in [A]Jesu [G]offen[D]bart;\n[D]Ich geb’ mich [G]hin dem [A]freien [D]Triebe,\n[G]Wodurch ich [D]Wurm ge[A]liebet [D]ward;\n[D]Ich will, an[G]statt an [A]mich zu [D]denken,\n[G]Ins Meer der [D]Liebe [A]mich ver[D]senken.",
-        "Für Dich sei ganz mein Herz und Leben,\nMein süßer Gott, und all mein Gut!\nFür Dich hast Du mir’s nur gegeben;\nIn Dir es nur und selig ruht.\nHersteller meines schweren Falles,\nFür Dich sei ewig Herz und alles!",
+        "[D]Ich bete [G]an die [A]Macht der [D]Liebe,\n[D]Die sich in [A]Jesu [G]offen[D]bart;\n[D]Ich geb' mich [G]hin dem [A]freien [D]Triebe,\n[G]Wodurch ich [D]Wurm ge[A]liebet [D]ward;\n[D]Ich will, an[G]statt an [A]mich zu [D]denken,\n[G]Ins Meer der [D]Liebe [A]mich ver[D]senken.",
+        "Für Dich sei ganz mein Herz und Leben,\nMein süßer Gott, und all mein Gut!\nFür Dich hast Du mir's nur gegeben;\nIn Dir es nur und selig ruht.\nHersteller meines schweren Falles,\nFür Dich sei ewig Herz und alles!",
         "Ich liebt und lebte recht im Zwange,\nWie ich mir lebte ohne Dich;\nIch wollte Dich nicht, ach so lange,\nDoch liebest Du und suchtest mich,\nMich böses Kind aus bösem Samen,\nIm hohen, holden Jesusnamen.",
-        "Des Vaterherzens tiefste Triebe\nIn diesem Namen öffnen sich;\nEin Brunn der Freude, Fried und Liebe\nQuillt nun so nah, so mildiglich.\nMein Gott, wenn’s doch der Sünder wüßte!\nSein Herz alsbald Dich lieben müßte.",
+        "Des Vaterherzens tiefste Triebe\nIn diesem Namen öffnen sich;\nEin Brunn der Freude, Fried und Liebe\nQuillt nun so nah, so mildiglich.\nMein Gott, wenn's doch der Sünder wüßte!\nSein Herz alsbald Dich lieben müßte.",
         "Wie bist Du mir so zart gewogen,\nWie verlangt Dein Herz nach mir!\nDurch Liebe sanft und tief gezogen,\nNeigt sich mein Alles auch zu Dir.\nDu traute Liebe, gutes Wesen,\nDu hast mich und ich Dich erlesen.",
-        "Ich fühl’s, Du bist’s, Dich muss ich haben,\nIch fühl’s, ich muss für Dich nur sein;\nNicht im Geschöpf, nicht in den Gaben,\nMein Ruhplatz ist in Dir allein.\nHier ist die Ruh, hier ist Vergnügen;\nDrum folg ich Deinen sel’gen Zügen.",
-        "Ehr sei dem hohen Jesusnamen,\nIn dem der Liebe Quell entspringt,\nVon dem hier alle Bächlein kamen,\nAus dem der Sel’gen Schar dort trinkt.\nWie beugen sie sich ohne Ende!\nWie falten sie die frohen Hände!",
+        "Ich fühl's, Du bist's, Dich muss ich haben,\nIch fühl's, ich muss für Dich nur sein;\nNicht im Geschöpf, nicht in den Gaben,\nMein Ruhplatz ist in Dir allein.\nHier ist die Ruh, hier ist Vergnügen;\nDrum folg ich Deinen sel'gen Zügen.",
+        "Ehr sei dem hohen Jesusnamen,\nIn dem der Liebe Quell entspringt,\nVon dem hier alle Bächlein kamen,\nAus dem der Sel'gen Schar dort trinkt.\nWie beugen sie sich ohne Ende!\nWie falten sie die frohen Hände!",
         "O Jesu, dass Dein Name bliebe,\nIm Grunde tief gedrücket ein!\nMöcht Deine süße Jesusliebe\nIn Herz und Sinn gepräget sein!\nIm Wort, im Werk, in allem Wesen\nSei Jesus und sonst nichts zu lesen."
       ],
       "chorus": null,
       "sources": [
         "https://www.jesus.de/liederschaetze/ich-bete-an-die-macht-der-liebe/",
         "https://www.evangeliums.net/lieder/lied_ich_bete_an_die_macht_der_liebe_fuer_dich_sei_ganz_mein_herz_und_leben.html",
-        "https://de.wikipedia.org/wiki/Ich_bete_an_die_Macht_der_Liebe"
+        "https://de.wikipedia.org/wiki/Ich_bete_an_die_Macht_der_Liebe",
+        "https://www.volksliederarchiv.de/ich-bete-an-die-macht-der-liebe/",
+        "https://hymnary.org/text/ich_bete_an_die_macht_der_liebe"
       ]
     }
   },
-  "notes": "Stanza order is the thing to know here. Tersteegen published eight stanzas headed 'Für dich sei ganz mein Herz und Leben'; the hymn is universally known by what was originally the fourth stanza, and the customary sung order — the one shipped, all eight stanzas, from the jesus.de Liederschätze article — puts 'Ich bete an die Macht der Liebe' first. evangeliums.net prints a six-stanza arrangement that opens with 'Für dich sei ganz mein Herz und Leben' and modernises the pronouns to lowercase; EG 661 (Rheinland-Westfalen-Lippe regional part) prints only four, restoring the original opening. Both those URLs are in the sources because I compared all three. The shipped text keeps the source's devotional capitals (Du, Dich, Dein) and its 'wüßte' — deliberately not normalised. Also unnormalised: stanza 5 line 2 reads 'Wie verlangt Dein Herz nach mir!' with eight syllables where the meter wants nine ('Und wie verlangt …' in the evangeliums.net and Wikipedia readings); the source omits 'Und', and I left it, but a singer will want the 'Und'. Tune: Dmitri Bortnjanski, 1822, usually catalogued ST. PETERSBURG (also WELLS / the melody of the Großer Zapfenstreich); I could not reach a hymnary tune page to confirm the headword spelling, so treat the tune name as unverified. Meter counted off the text: 9.8.9.8.9.9. Key D, transposed down a semitone from the common E-flat printing; the chart is a best-effort harmonisation."
+  "notes": "Stanza order is the thing to know here. Tersteegen published eight stanzas headed 'Für dich sei ganz mein Herz und Leben'; the hymn is universally known by what was originally the fourth stanza, and the customary sung order — the one shipped, all eight stanzas, from the jesus.de Liederschätze article — puts 'Ich bete an die Macht der Liebe' first. evangeliums.net prints a six-stanza arrangement that opens with 'Für dich sei ganz mein Herz und Leben' and modernises the pronouns to lowercase; EG 661 (Rheinland-Westfalen-Lippe regional part) prints only four, restoring the original opening. Both those URLs are in the sources because I compared all three. The shipped text keeps the source's devotional capitals (Du, Dich, Dein) and its 'wüßte' — deliberately not normalised. Also unnormalised: stanza 5 line 2 reads 'Wie verlangt Dein Herz nach mir!' with eight syllables where the meter wants nine ('Und wie verlangt …' in the evangeliums.net and Wikipedia readings); the source omits 'Und', and I left it, but a singer will want the 'Und'. Tune: Dmitri Bortnjanski, usually catalogued ST. PETERSBURG (also WELLS / the melody of the Großer Zapfenstreich); de.wikipedia dates the composition to about 1794 and its coupling with this text to the 1820s, and CCLI's SongSelect lists the tune as 'St Petersburg', so the headword looks right though I still had no hymnary tune page. Meter counted off the text: 9.8.9.8.9.9. Key D, transposed down a semitone from the common E-flat printing; the chart is a best-effort harmonisation. Verification 2026-08-02: text cross-checked against volksliederarchiv.de (independent of the three sites above) — all 8 stanzas, same order, word-for-word match modulo apostrophe styling; it also keeps the 8-syllable 'Wie verlangt Dein Herz nach mir!'. hymnary's record carries a 4-stanza variant recension ('Im diesem theuren Jesusnamen', 'Lob sei dem hohen Jesusnamen') — variants only, nothing adopted. Year 1757 is the first printing (title 'Die in Jesu eröffnete Liebe Gottes'); Tersteegen wrote the text about 1750, which is why the worklist hint says 1750. Chart remark, not a fix: guitar charts in the wild harmonise line 2 to a half cadence (in D: G D A at 'offenbart') where this chart returns D A G D; if the V-IV rub bothers a player, '[G]Die sich in [D]Jesu offen[A]bart' with the next line opening on D is the common alternative."
 }

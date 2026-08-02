@@ -1,0 +1,48 @@
+{
+  "id": "jesu-meine-freude",
+  "number": 77,
+  "tune": "JESU, MEINE FREUDE",
+  "meter": "6.6.5.6.6.5.7.8.6",
+  "key": "Em",
+  "texts": {
+    "en": {
+      "title": "Jesus, Priceless Treasure",
+      "author": "Johann Franck",
+      "translator": "Catherine Winkworth",
+      "year": 1863,
+      "stanzas": [
+        "[Em]Jesu, [Am]priceless [Em]treasure,\n[C]Source of [Am]purest [B7]pleasure,\n[Em]Truest [B7]Friend to [Em]me;\n[Em]Ah! how [Am]long I've [Em]panted,\n[C]And my [Am]heart hath [B7]fainted,\n[Em]Thirsting, [B7]Lord, for [Em]Thee!\n[G]Thine I [D]am, [G]O [C]spotless [D]Lamb,\n[C]I will [G]suffer [Am]nought to [B7]hide Thee,\n[Em]Nought I [B7]ask be[Em]side Thee.",
+        "In Thine arm I rest me,\nFoes who would molest me\nCannot reach me here;\nThough the earth be shaking,\nEvery heart be quaking,\nJesus calms my fear;\nSin and hell in conflict fell\nWith their bitter storms assail me,\nJesus will not fail me.",
+        "Wealth, I will not heed thee,\nFor I do not need thee,\nJesus is my choice;\nHonours, ye may glisten,\nBut I will not listen\nTo your tempting voice;\nPain or loss, nor shame nor cross,\nE'er to leave my Lord shall move me,\nSince He deigns to love me.",
+        "Farewell, thou who choosest\nEarth, and heaven refusest,\nThou wilt tempt in vain;\nFarewell, sins, nor blind me,\nGet ye all behind me,\nCome not forth again:\nPast your hour, O Pride and Power;\nWorldly life, thy bonds I sever,\nFarewell now for ever!",
+        "Hence, all fears and sadness,\nFor the Lord of gladness,\nJesus, enters in;\nThey who love the Father,\nThough the storms may gather,\nStill have peace within;\nYea, whate'er I here must bear,\nStill in Thee lies purest pleasure,\nJesu, priceless treasure!"
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.ccel.org/ccel/winkworth/chorales.h151.html",
+        "https://hymnary.org/text/jesus_priceless_treasure",
+        "https://hymnary.org/tune/jesu_meine_freude_cruger"
+      ]
+    },
+    "de": {
+      "title": "Jesu, meine Freude",
+      "author": "Johann Franck",
+      "translator": null,
+      "year": 1653,
+      "stanzas": [
+        "[Em]Jesu, [Am]meine [Em]Freude,\n[C]meines [Am]Herzens [B7]Weide,\n[Em]Jesu, [B7]meine [Em]Zier,\n[Em]ach wie [Am]lang, ach [Em]lange\n[C]ist dem [Am]Herzen [B7]bange\n[Em]und ver[B7]langt nach [Em]dir!\n[G]Gottes [D]Lamm,\n[G]mein [C]Bräuti[D]gam,\n[C]außer [G]dir soll [Am]mir auf [B7]Erden\n[Em]nichts sonst [B7]lieber [Em]werden.",
+        "Unter deinem Schirmen\nbin ich vor den Stürmen\naller Feinde frei.\nLass den Satan wettern,\nlass die Welt erzittern,\nmir steht Jesus bei.\nOb es jetzt\ngleich kracht und blitzt,\nob gleich Sünd und Hölle schrecken,\nJesus will mich decken.",
+        "Trotz dem alten Drachen,\ntrotz dem Todesrachen,\ntrotz der Furcht dazu!\nTobe, Welt, und springe;\nich steh hier und singe\nin gar sichrer Ruh.\nGottes Macht\nhält mich in acht;\nErd und Abgrund muss verstummen,\nob sie noch so brummen.",
+        "Weg mit allen Schätzen!\nDu bist mein Ergötzen,\nJesu, meine Lust.\nWeg, ihr eitlen Ehren,\nich mag euch nicht hören,\nbleibt mir unbewusst!\nElend, Not,\nKreuz, Schmach und Tod\nsoll mich, ob ich viel muss leiden,\nnicht von Jesu scheiden.",
+        "Gute Nacht, o Wesen,\ndas die Welt erlesen,\nmir gefällst du nicht!\nGute Nacht, ihr Sünden,\nbleibet weit dahinten,\nkommt nicht mehr ans Licht!\nGute Nacht,\ndu Stolz und Pracht;\ndir sei ganz, du Lasterleben,\ngute Nacht gegeben!",
+        "Weicht, ihr Trauergeister!\ndenn mein Freudenmeister,\nJesus, tritt herein.\nDenen, die Gott lieben,\nmuss auch ihr Betrüben\nlauter Freude sein.\nDuld ich schon\nhier Spott und Hohn,\ndennoch bleibst du auch im Leide,\nJesus, meine Freude."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://www.evangeliums.net/lieder/lied_jesu_meine_freude_meines_herzens_weide.html",
+        "https://www.lutheranchoralebook.com/texts/jesus-priceless-treasure/"
+      ]
+    }
+  },
+  "notes": "Beware the URL: evangeliums.net's page named for this first line carries a different modern song (Gerhard Schöne 1990); the Franck chorale lives at the 'Jesu, meine Freude, meines Herzens Weide' URL used here. German is that page's 6-stanza EG 396-style text, with one correction: the site prints 'Sund und Hölle' in stanza 2 where the standard text is 'Sünd und Hölle' (cross-checked against the Free Lutheran Chorale-Book's Walther text) — I wrote Sünd. English is Winkworth's own Chorale Book for England #151 'Jesu, priceless treasure' — 5 stanzas; she omits German stanza 3 ('Trotz dem alten Drachen'), so the languages are not fully stanza-parallel. Most hymnals instead print the altered composite 6-stanza 'Jesus, priceless treasure' (TLH 347 line, with 'Satan, I defy thee'); the title field uses the conventional 'Jesus' spelling while the text keeps Winkworth's 'Jesu'. Tune JESU, MEINE FREUDE (Crüger 1653), meter 6.6.5.6.6.5.7.8.6 per hymnary. Printed keys vary widely (hymnary's tune page lists c/g/d minor instances; Bach's settings circulate in E minor) — chart in Em per the guitar rule. Chords are a best-effort chart, not from printed notation."
+}

@@ -1,0 +1,29 @@
+{
+  "id": "come-thou-long-expected",
+  "number": 58,
+  "tune": "STUTTGART",
+  "meter": "8.7.8.7",
+  "key": "E",
+  "texts": {
+    "en": {
+      "title": "Come, Thou Long-Expected Jesus",
+      "author": "Charles Wesley",
+      "translator": null,
+      "year": 1744,
+      "stanzas": [
+        "[E]Come, thou long ex[B7]pected [E]Jesus,\n[E]born to [A]set thy [B7]people [E]free;\n[C#m]from our [A]fears and [E]sins re[B7]lease us,\n[E]let us [A]find our [B7]rest in [E]thee.",
+        "Israel's strength and consolation,\nhope of all the earth thou art;\ndear desire of every nation,\njoy of every longing heart.",
+        "Born thy people to deliver,\nborn a child and yet a King,\nborn to reign in us forever,\nnow thy gracious kingdom bring.",
+        "By thine own eternal spirit\nrule in all our hearts alone;\nby thine all sufficient merit,\nraise us to thy glorious throne."
+      ],
+      "chorus": null,
+      "sources": [
+        "https://hymnary.org/text/come_thou_long_expected_jesus_born_to",
+        "https://hymnary.org/tune/stuttgart_witt",
+        "https://library.timelesstruths.org/music/Come_Thou_Long_Expected_Jesus/"
+      ]
+    },
+    "de": null
+  },
+  "notes": "Text: hymnary.org representative text (United Methodist Hymnal, 1989), unchanged wording; UMH prints it as two 8-line stanzas, split here into four 4-line stanzas to match the 8.7.8.7 tune. STUTTGART is the tune hymnary's text authority lists; HYFRYDOL (8.7.8.7 D) is the other common pairing. Hymnary's tune page gives STUTTGART in F Major; F moved to E per the guitar rule (E is the nearest allowed key). Chart is a best-effort functional harmonization of STUTTGART, not note-checked against a score."
+}
