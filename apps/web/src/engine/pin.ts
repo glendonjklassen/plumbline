@@ -43,18 +43,30 @@ export interface Pin {
    *  different origin's storage. */
   base: string;
   packVersion: string;
-  /** Every file, each carrying the explicit URL its bytes are stored under.
-   *  Explicit rather than computed, so two pack generations can coexist in the
-   *  depot and an unchanged file keeps its URL across a version bump. */
+  /** Every file the PACK OFFERS, each carrying the explicit URL its bytes are
+   *  stored under. Explicit rather than computed, so two pack generations can
+   *  coexist in the depot and an unchanged file keeps its URL across a version
+   *  bump.
+   *
+   *  A file this device does not have is listed WITHOUT a url. Only `optional`
+   *  files are ever in that state, and the distinction carries the pin's two
+   *  jobs at once: the entry has to stay, because a warm boot rebuilds the
+   *  manifest from this list and Settings could not offer a download it cannot
+   *  see; and the url has to go, because the pin's promise is that every file
+   *  it names is PRESENT, and prune keeps exactly the urls it names. Both
+   *  readers already skip an entry with no url. */
   files: PackFile[];
 }
 
-function pinFrom(manifest: PackManifest, base: string): Pin {
+function pinFrom(manifest: PackManifest, base: string, here: PackFile[]): Pin {
+  const have = new Set(here.map((f) => f.path));
   return {
     format: FORMAT,
     base,
     packVersion: manifest.version,
-    files: manifest.files.map((f) => ({ ...f, url: fileUrl(f, manifest.version) })),
+    files: manifest.files.map((f) =>
+      have.has(f.path) ? { ...f, url: fileUrl(f, manifest.version) } : { ...f, url: undefined },
+    ),
   };
 }
 
@@ -103,8 +115,8 @@ export async function readPin(base: string): Promise<Pin | null> {
  *  because prune keeps two generations and runs at the START of a session rather
  *  than the end. That is the whole atomicity story, and it needs no lock: a
  *  `Cache.put` either lands whole or does not land. */
-export async function writePin(manifest: PackManifest, base: string): Promise<void> {
-  const next = pinFrom(manifest, base);
+export async function writePin(manifest: PackManifest, base: string, here: PackFile[]): Promise<void> {
+  const next = pinFrom(manifest, base, here);
   const current = await depotGet(assetUrl(PIN_URL));
   if (current) {
     const bytes = new Uint8Array(await current.arrayBuffer());

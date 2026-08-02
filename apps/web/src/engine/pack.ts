@@ -326,6 +326,26 @@ export function fetchRndPack(
  *  could otherwise unhook silently. Null when this pack has none (an older
  *  pack, or a build with no `stock/weaves/suggested/`), which the Settings row
  *  reads as "nothing to offer" rather than an error. */
+/**
+ * The files THIS device's pack consists of.
+ *
+ * Every stage but `optional` always counts. An `optional` entry counts only
+ * where the reader has actually asked for it, and the authority on that is the
+ * home's install marker — NOT whether the bytes happen to be in the depot,
+ * which prune is free to reclaim.
+ *
+ * Two things read this and they must not disagree. The update sweep fetches
+ * exactly this set, so a deploy never pushes an optional file onto a device
+ * that declined it. And the PIN names exactly this set, because the pin's
+ * promise is that every file it names is present — a pin listing a file the
+ * device deliberately does not have is a false claim, and prune, which keeps
+ * what the pin names, would be asked to preserve something that was never
+ * there.
+ */
+export function devicePackFiles(manifest: PackManifest, hasOptional: boolean): PackFile[] {
+  return manifest.files.filter((f) => f.stage !== "optional" || hasOptional);
+}
+
 export function suggestedWeavesEntry(manifest: PackManifest): PackFile | null {
   return manifest.files.find((f) => f.role === "suggestedWeaves") ?? null;
 }

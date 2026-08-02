@@ -366,14 +366,23 @@ test("a deploy does not push the optional bundle onto a device that declined it"
   const origin = await rewritingOrigin();
   try {
     await firstVisit(page, origin.url);
-    const bundle = await page.evaluate(async () => {
+    // The pin LISTS the bundle (a warm boot rebuilds the manifest from it, and
+    // Settings has to be able to offer a download) but gives it no url, which
+    // is how it records "offered, not here". Both halves matter: without the
+    // entry the row vanishes after the first visit, and with a url prune would
+    // be told to keep bytes that were never fetched.
+    const offered = await page.evaluate(async () => {
       const hit = await caches.match(new URL("__depot/pack-pin.json", location.href).href, {
         ignoreVary: true,
       });
       const pin = await hit!.json();
-      return (pin.files as { path: string }[]).some((f) => f.path === "weaves/suggested.bundle.json");
+      const f = (pin.files as { path: string; url?: string }[]).find(
+        (x) => x.path === "weaves/suggested.bundle.json",
+      );
+      return { listed: !!f, url: f?.url ?? null };
     });
-    expect(bundle, "this pack has no optional bundle to decline").toBe(true);
+    expect(offered.listed, "this pack has no optional bundle to decline").toBe(true);
+    expect(offered.url, "the pin claims a bundle this device never downloaded").toBe(null);
 
     // A release that changes the version and nothing else.
     origin.mutate((m) => ({ ...m, version: "0pt10na1deploy00" }));

@@ -1191,7 +1191,7 @@ test("the share QR encodes the church, not just the app", async ({ page }) => {
   const modulesFor = async () =>
     page.locator(".share-dialog svg").getAttribute("viewBox").then((v) => Number(v!.split(" ")[2]));
 
-  await page.getByRole("button", { name: "Share", exact: true }).click();
+  await page.getByRole("button", { name: "Share the app" }).click();
   await expect(page.locator(".share-dialog")).toBeVisible();
   const plain = await modulesFor();
   // The dialog shows the HOST, never the full link: with a church attached
@@ -1206,7 +1206,7 @@ test("the share QR encodes the church, not just the app", async ({ page }) => {
       url: "https://example.org",
     }),
   );
-  await page.getByRole("button", { name: "Share", exact: true }).click();
+  await page.getByRole("button", { name: "Share the app" }).click();
   const withChurch = await modulesFor();
   expect(withChurch).toBeGreaterThan(plain); // more to encode, bigger symbol
   await expect(page.locator(".share-with")).toHaveText("with Grace Bible Church");
@@ -1332,7 +1332,12 @@ test("updating sweeps the versions this build no longer uses", async ({ page }) 
       ignoreVary: true,
     });
     const pin = hit ? await hit.json() : null;
-    return (pin?.files ?? []).map((f: { url: string }) => "/" + f.url);
+    // Only the files the pin NAMES. An `optional` file the reader never asked
+    // for is listed without a url — that is the pin saying "the pack offers
+    // this, this device does not have it" — and prune is right not to keep it.
+    return (pin?.files ?? [])
+      .filter((f: { url?: string }) => f.url)
+      .map((f: { url: string }) => "/" + f.url);
   });
   // A floor, not a count: what is asserted is that a pin exists and names the
   // whole pack, and the loop below is the real check. Kept well under the true

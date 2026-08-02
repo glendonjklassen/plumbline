@@ -39,9 +39,9 @@
 
 import { boot, engineUrl, type BootResult } from "./boot";
 import { pinnedUrls, writePin } from "./pin";
-import type { PackFile, PackManifest } from "./pack";
 import {
   assetUrl,
+  devicePackFiles,
   fetchManifest,
   fetchRndPack,
   fetchStage2Pack,
@@ -424,34 +424,15 @@ async function willAutoLoadRnd(machineOn: boolean, deferRnd: boolean): Promise<b
  *  The new pack applies at the NEXT launch, deliberately. This session's engine
  *  has its text in wasm memory and the reader is mid-verse; swapping the corpus
  *  under them would be worse than waiting. */
-/** The files THIS device's pack actually consists of.
- *
- *  Every stage but `optional` always counts. An `optional` entry counts only
- *  when this device already holds the previous generation of it — that is what
- *  "the reader asked for this" looks like a release later, and without the
- *  distinction the update sweep would download the suggested-weave bundle onto
- *  every device on the next deploy, which is the whole thing it exists to
- *  avoid. It also must not gate the pin: a device that never wanted the bundle
- *  would otherwise fail the completeness check forever and never re-pin again. */
-async function thisDevicesFiles(live: PackManifest): Promise<PackFile[]> {
-  const out: PackFile[] = [];
-  for (const f of live.files) {
-    if (f.stage !== "optional") {
-      out.push(f);
-      continue;
-    }
-    const prev = booted!.manifest.files.find((p) => p.path === f.path);
-    if (prev && (await depotHas(packFileUrl(prev, booted!.manifest.version)))) out.push(f);
-  }
-  return out;
-}
-
 async function reconcilePack(): Promise<void> {
   const live = await fetchManifest();
   if (live.version === booted!.packVersion) return; // nothing deployed since
   const t0 = performance.now();
   let fetched = 0;
-  const mine = await thisDevicesFiles(live);
+  // What this device's pack IS — the optional bundle only where the reader
+  // installed it. The same call decides what gets pinned below, so the sweep
+  // and the pin can never disagree about which files should be here.
+  const mine = devicePackFiles(live, booted!.home.suggestedInstalled);
   for (const f of mine) {
     const url = packFileUrl(f, live.version);
     if (await depotHas(url)) continue; // unchanged: same hash, same URL, already here
@@ -466,7 +447,7 @@ async function reconcilePack(): Promise<void> {
   for (const f of mine) {
     if (!(await depotHas(packFileUrl(f, live.version)))) return; // incomplete: keep the old pin
   }
-  await writePin(live, assetUrl(""));
+  await writePin(live, assetUrl(""), mine);
   booted!.trace.push([`reconciled to ${live.version} (${fetched} files)`, Math.round(performance.now() - t0)]);
   self.postMessage({ type: "packUpdated", version: live.version });
 }
@@ -928,6 +909,10 @@ self.onmessage = async (ev: MessageEvent) => {
           break;
         }
         const written = await booted!.home.installSuggestedWeaves(bundle);
+        // RE-PIN. The bundle is part of this device's pack now, and prune keeps
+        // only what the pin names — without this the next sweep reclaims the
+        // download, and the device then looks like one that declined it.
+        await writePin(booted!.manifest, assetUrl(""), devicePackFiles(booted!.manifest, true));
         // The engine holds the weave library it read at open, so the files are
         // on disk and invisible until it re-reads them. Same call stage 2 uses
         // for exactly this reason.

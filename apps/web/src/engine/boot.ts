@@ -24,7 +24,14 @@
 import { instantiate, type WasmEngine } from "./engine";
 import { depotAvailable, depotHas, depotResponse } from "./depot";
 import { buildHome, dropLegacyIdxcache, type VirtualHome } from "./home";
-import { assetUrl, fetchManifest, fetchPack, fetchStageLocal, type PackManifest } from "./pack";
+import {
+  assetUrl,
+  devicePackFiles,
+  fetchManifest,
+  fetchPack,
+  fetchStageLocal,
+  type PackManifest,
+} from "./pack";
 import { manifestFromPin, readPin, writePin } from "./pin";
 import { StudyEngine } from "./StudyEngine";
 
@@ -215,7 +222,7 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   // act on it without asking the network, so it must never name a pack that could
   // not actually boot this one. Cold path only — on the fast path it already
   // describes exactly this pack.
-  if (!fromPin) await writePin(manifest, base);
+  if (!fromPin) await writePin(manifest, base, devicePackFiles(manifest, home.suggestedInstalled));
 
   // The corpus cache is the big one: `load_cache` does a single whole-file read
   // and MOVES the bytes into the engine's own buffer, which every unvisited
