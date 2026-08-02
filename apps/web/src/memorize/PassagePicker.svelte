@@ -8,6 +8,7 @@
   // only ever offers verses that exist, which makes the same-chapter limit
   // self-evident rather than an error message.
   import { getSession } from "../state/session.svelte";
+  import { modal } from "../lib/modal";
   import { nowStamp } from "../engine/StudyEngine";
 
   const s = getSession();
@@ -70,7 +71,14 @@
 {#if start}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={close}></div>
-  <div class="sheet" role="dialog" aria-modal="true" aria-label="Memorize a passage" data-surface="passage picker">
+  <div
+    class="sheet"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Memorize a passage"
+    data-surface="passage picker"
+    use:modal={{ close }}
+  >
     <div class="bar">
       <span class="title">Memorize {label}</span>
       <span class="spacer"></span>

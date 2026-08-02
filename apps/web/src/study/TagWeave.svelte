@@ -3,6 +3,7 @@
   // passages over time; this chains the checked members through the canon.
   // Re-running after the tag grows just adds the new edges.
   import { getSession } from "../state/session.svelte";
+  import { modal } from "../lib/modal";
   import { nowStamp } from "../engine/StudyEngine";
 
   const s = getSession();
@@ -47,7 +48,14 @@
 {#if tag}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={close}></div>
-  <div class="sheet" role="dialog" aria-modal="true">
+  <div
+    class="sheet"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Make a weave from this tag"
+    data-surface="tag weave"
+    use:modal={{ close }}
+  >
     <h2>Make a weave — {tag.name}</h2>
     <p class="hint">
       Links the verses you have ticked into a weave. Run it again later to add verses you have

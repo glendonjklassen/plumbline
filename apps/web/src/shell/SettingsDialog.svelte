@@ -2,6 +2,7 @@
   // One Settings dialog (Android IA): analysis switches, theme, text size /
   // margin / line-spacing sliders, copy format, bundled stock set.
   import { getSession } from "../state/session.svelte";
+  import { modal } from "../lib/modal";
   import { completeOffline, surveyOffline, type OfflineSurvey } from "../engine/offline";
   import { cleanChurch } from "./church";
   import { PERF } from "../engine/perf";
@@ -399,7 +400,14 @@
 {#if s.showSettings}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={() => (s.showSettings = false)}></div>
-  <div class="dialog" role="dialog" aria-modal="true" data-surface="settings">
+  <div
+    class="dialog"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Settings"
+    data-surface="settings"
+    use:modal={{ close: () => (s.showSettings = false) }}
+  >
     <h2>Settings</h2>
     <div class="content">
       {#if s.akjvAvailable}
@@ -715,16 +723,23 @@
        left believing their backup went in. No backdrop dismiss either — a stray
        tap must not take the message away before it has been read. -->
   <div class="err-backdrop"></div>
+  <!-- `use:modal` with NO close: focus comes here and Tab is held here, but
+       Escape does not dismiss it. Same reasoning as the missing backdrop
+       dismiss above — a stray key must not take the message away before it has
+       been read — and the Escape is still swallowed, so it cannot reach past
+       this and close something behind it instead.
+       Focus goes to Close, which is the acknowledgement. -->
   <div
     class="err-dialog"
     role="alertdialog"
     aria-modal="true"
     aria-label="Restore didn't finish"
     data-surface="restore-failed"
+    use:modal
   >
     <h2>Restore didn't finish</h2>
     <p class="err-body">{restoreFailed}</p>
-    <button class="done" onclick={() => (restoreFailed = null)}>Close</button>
+    <button class="done" data-modal-focus onclick={() => (restoreFailed = null)}>Close</button>
   </div>
 {/if}
 

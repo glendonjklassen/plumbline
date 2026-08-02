@@ -10,6 +10,7 @@
   // Deleting lives here for the same reason: a thread started by typo had no way
   // out at all before.
   import { getSession } from "../state/session.svelte";
+  import { modal } from "../lib/modal";
   import { nowStamp } from "../engine/StudyEngine";
   import { refDisplay } from "../reader/refname";
 
@@ -62,7 +63,14 @@
 {#if s.threadPickFor}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={close}></div>
-  <div class="sheet" role="dialog" aria-modal="true" data-surface="thread picker">
+  <div
+    class="sheet"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Add this verse to a thread"
+    data-surface="thread picker"
+    use:modal={{ close }}
+  >
     <h2>Add {shown} to a thread</h2>
     <div class="list">
       {#each threads as t (t.name)}

@@ -8,6 +8,7 @@
   //  - Established believer → the analysis-tier picker (with examples).
   //    The text is always on; tiers can be changed any time in Settings.
   import { getSession } from "../state/session.svelte";
+  import { modal } from "../lib/modal";
   import { cleanChurch, hasChurch, safeChurchUrl } from "./church";
 
   const s = getSession();
@@ -270,7 +271,10 @@
 {#if s.showFirstRun || s.reopenIntro}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={dismiss}></div>
-  <div class="dialog" role="dialog" aria-modal="true">
+  <!-- Escape goes through `dismiss()`, the same path as a tap on the backdrop,
+       so it inherits the D-08 rule for free: while this screen is ASKING
+       something, a stray key answers nothing and the card stays. -->
+  <div class="dialog" role="dialog" aria-modal="true" aria-label="Welcome to Plumbline" use:modal={{ close: dismiss }}>
     {#if stage === "choose"}
       <h2>Welcome to Plumbline</h2>
       {@render sharedBy()}

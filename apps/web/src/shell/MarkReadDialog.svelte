@@ -11,6 +11,7 @@
   // Clearing lives here too, because this dialog is the only way back out of a
   // date set by mistake.
   import { getSession } from "../state/session.svelte";
+  import { modal } from "../lib/modal";
 
   const s = getSession();
 
@@ -60,7 +61,14 @@
 {#if target}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={close}></div>
-  <div class="dialog" role="dialog" aria-modal="true" aria-label="Mark chapter read" data-surface="mark read">
+  <div
+    class="dialog"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Mark chapter read"
+    data-surface="mark read"
+    use:modal={{ close }}
+  >
     <h2>When did you last read {label}?</h2>
     <p class="sub">
       For reading you did somewhere else — a paper Bible, or another app. It counts as a full read

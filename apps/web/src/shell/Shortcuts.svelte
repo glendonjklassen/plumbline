@@ -2,6 +2,7 @@
   // Keyboard shortcuts overlay (?/F1) — shell-native, mirroring the web
   // bindings (manifest §Keyboard + wheel).
   import { getSession } from "../state/session.svelte";
+  import { modal } from "../lib/modal";
 
   const s = getSession();
 
@@ -24,7 +25,13 @@
 {#if s.showShortcuts}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={() => (s.showShortcuts = false)}></div>
-  <div class="dialog" role="dialog" aria-modal="true">
+  <div
+    class="dialog"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Keyboard shortcuts"
+    use:modal={{ close: () => (s.showShortcuts = false) }}
+  >
     <h2>Keyboard shortcuts</h2>
     <table>
       <tbody>

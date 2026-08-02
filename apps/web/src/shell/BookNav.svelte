@@ -12,6 +12,7 @@
   // grids are synchronous, and Joel's chapter count is on screen instantly.
   import { untrack } from "svelte";
   import { getSession } from "../state/session.svelte";
+  import { modal } from "../lib/modal";
   import { readingTint, tintStyle, tintTitle, type ReadingHeat } from "./readingTint";
 
   const s = getSession();
@@ -91,7 +92,7 @@
 {#if open}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={close}></div>
-  <div class="dialog" role="dialog" aria-modal="true">
+  <div class="dialog" role="dialog" aria-modal="true" aria-label="Go to a passage" use:modal={{ close }}>
     <div class="bar">
       {#if book}
         <button class="crumb" onclick={() => (book = null)}>‹ {s.bookName(book)}</button>

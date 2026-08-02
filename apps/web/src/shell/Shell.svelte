@@ -24,6 +24,7 @@
   import TagWeave from "../study/TagWeave.svelte";
   import QrCode from "./QrCode.svelte";
   import { churchTitle as churchLabel, hasChurch, visitChurch as openChurchSite } from "./church";
+  import { modal } from "../lib/modal";
   import { getSession } from "../state/session.svelte";
   import { startReadingTracker } from "../state/readingTracker";
 

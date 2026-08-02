@@ -1,6 +1,7 @@
 <script lang="ts">
   // Reading history (the shared config's recents, most-recent-first).
   import { getSession } from "../state/session.svelte";
+  import { modal } from "../lib/modal";
 
   const s = getSession();
   const history = $derived((s.config.history ?? []) as { book: string; chapter: number }[]);
@@ -14,7 +15,14 @@
 {#if s.showHistory}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={() => (s.showHistory = false)}></div>
-  <div class="dialog" role="dialog" aria-modal="true" data-surface="history">
+  <div
+    class="dialog"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Recently read"
+    data-surface="history"
+    use:modal={{ close: () => (s.showHistory = false) }}
+  >
     <h2>Recently read</h2>
     {#if history.length === 0}
       <p class="empty">Nothing yet.</p>

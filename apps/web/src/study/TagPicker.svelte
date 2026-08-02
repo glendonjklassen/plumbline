@@ -3,6 +3,7 @@
   // freetext "New tag…" secondary. Every tag is a topic now that highlight tones
   // are gone, so plain alphabetical is the whole ordering.
   import { getSession } from "../state/session.svelte";
+  import { modal } from "../lib/modal";
   import { nowStamp } from "../engine/StudyEngine";
   import { refDisplay } from "../reader/refname";
 
@@ -41,7 +42,14 @@
 {#if s.tagPickFor}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={close}></div>
-  <div class="sheet" role="dialog" aria-modal="true" data-surface="tag picker">
+  <div
+    class="sheet"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Tag this verse"
+    data-surface="tag picker"
+    use:modal={{ close }}
+  >
     <h2>Tag {shown}</h2>
     <div class="list">
       {#each tags as t (t.name)}

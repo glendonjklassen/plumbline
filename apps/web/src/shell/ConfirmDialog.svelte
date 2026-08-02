@@ -11,6 +11,7 @@
   // It sits above the destination bar like every other surface, and Escape is a
   // "no" — a confirmation the reader cannot back out of is not a confirmation.
   import { getSession } from "../state/session.svelte";
+  import { modal } from "../lib/modal";
 
   const s = getSession();
   const req = $derived(s.confirmReq);
@@ -25,12 +26,23 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => req && e.key === "Escape" && no()} />
-
 {#if req}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={no}></div>
-  <div class="dialog" role="dialog" aria-modal="true" aria-label={req.title} data-surface="confirm">
+  <!-- Escape comes from `use:modal` rather than a `svelte:window` listener, so
+       it answers from inside a field too, and — since a confirmation is asked
+       FROM another surface — it closes this and not the surface underneath.
+       No `data-modal-focus`: focus lands on the dialog, which reads the question
+       out, and the first Tab reaches Cancel. Handing a keyboard the destructive
+       button is not a default worth having. -->
+  <div
+    class="dialog"
+    role="dialog"
+    aria-modal="true"
+    aria-label={req.title}
+    data-surface="confirm"
+    use:modal={{ close: no }}
+  >
     <h2>{req.title}</h2>
     <p>{req.body}</p>
     <div class="row">
