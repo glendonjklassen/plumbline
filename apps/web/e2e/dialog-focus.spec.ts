@@ -254,10 +254,12 @@ test("closing a dialog gives focus back to the control that opened it", async ({
 
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0, { timeout: 5_000 });
+  // By LABEL, not text: Share is an icon since 2026-08-02 and has no text node
+  // to compare, but it is still the control that must get focus back.
   expect(
-    await page.evaluate(() => (document.activeElement?.textContent ?? "").trim()),
+    await page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? ""),
     "closing the dialog dropped focus onto body instead of returning it to the control that opened it",
-  ).toBe("Share");
+  ).toBe("Share the app");
 });
 
 // NESTED SURFACES. A confirmation is asked FROM another sheet, so both are on

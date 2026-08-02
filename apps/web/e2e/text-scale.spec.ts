@@ -71,9 +71,12 @@ test("the reader's text size is published on :root", async ({ page }) => {
  * ones already scaled and say nothing about the ones that were missed.
  */
 const CHROME: { name: string; open?: string; sel: string; drawnAt: number }[] = [
-  { name: "the app's name in the header", sel: "header .title", drawnAt: 18 },
   { name: "the passage in the header", sel: "header .subtitle", drawnAt: 16 },
-  { name: "the header's Share button", sel: "header .share-first", drawnAt: 15 },
+  // The Share ICON (2026-08-02). It draws no text, but it is sized in
+  // font-size with the glyph in `em` precisely so this sweep still governs it —
+  // an icon has to follow the reader's text setting like everything else.
+  { name: "the header's Share icon", sel: "header .share-first", drawnAt: 20 },
+  { name: "the header's menu button", sel: "header .menu-btn", drawnAt: 20 },
   { name: "a destination in the top bar", sel: "header .browse button", drawnAt: 16 },
   { name: "the settings dialog's heading", open: `s.showSettings = true`, sel: '[data-surface="settings"] h2', drawnAt: 17 },
   { name: "a settings label", open: `s.showSettings = true`, sel: '[data-surface="settings"] .label', drawnAt: 12 },
@@ -82,9 +85,9 @@ const CHROME: { name: string; open?: string; sel: string; drawnAt: number }[] = 
   { name: "the study panel", open: `s.panel = { kind: "guide" }`, sel: '[data-surface="study panel"]', drawnAt: 16 },
 ];
 
-// Mutation: revert ONE of them — e.g. `.title { font-size: 18px }` in
+// Mutation: revert ONE of them — e.g. `.menu-btn { font-size: 20px }` in
 //   Shell.svelte → 'Error: these parts of the chrome ignore the reader's text
-//   size:  the app's name in the header — drawn at 18px, still 18px at a scale
+//   size:  the header's menu button — drawn at 20px, still 20px at a scale
 //   of 2'. The failure names the offender, so it is also the punch list.
 test("the whole chrome follows the reader's text size", async ({ page }) => {
   await boot(page);
@@ -142,7 +145,7 @@ test("the chrome's text scale does not touch the reader", async ({ page }) => {
 
   await page.evaluate(() => document.documentElement.style.setProperty("--uiScale", "3"));
   // The chrome really did react, or the rest of this proves nothing.
-  await expect.poll(() => fontPx(page, "header .title"), { timeout: 5_000 }).toBeCloseTo(54, 0);
+  await expect.poll(() => fontPx(page, "header .menu-btn"), { timeout: 5_000 }).toBeCloseTo(60, 0);
 
   expect(await measure(), "the chrome's text scale reached the reading pane").toEqual(before);
   // And the chapter is still the same chapter, laid out the same way.
@@ -164,8 +167,8 @@ test("the chrome's text scale does not touch the reader", async ({ page }) => {
 test("the chrome follows the browser's own text size", async ({ page }) => {
   await boot(page);
   expect(await scale(page)).toBeCloseTo(1, 3);
-  const drawnAt = await fontPx(page, "header .title");
-  expect(drawnAt).toBeCloseTo(18, 0);
+  const drawnAt = await fontPx(page, "header .menu-btn");
+  expect(drawnAt).toBeCloseTo(20, 0);
 
   // A browser font preference IS the root element's font-size. 24px is the
   // "Large" setting in Chrome's own font-size menu.
@@ -174,9 +177,9 @@ test("the chrome follows the browser's own text size", async ({ page }) => {
     .poll(() => scale(page), { timeout: 5_000 })
     .toBeCloseTo(1.5, 3);
   expect(
-    await fontPx(page, "header .title"),
+    await fontPx(page, "header .menu-btn"),
     "the chrome ignores the browser's own text size",
-  ).toBeCloseTo(27, 0);
+  ).toBeCloseTo(30, 0);
 
   // And the two inputs multiply: a reader who has set both wants both.
   await page.evaluate(() => (window as any).__plumbline.setZoom(27));
