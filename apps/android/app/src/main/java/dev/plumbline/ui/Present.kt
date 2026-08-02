@@ -109,7 +109,7 @@ private fun refParts(ref: String): Triple<String, Int, Int>? {
 
 /** The plain-text take-home for a presented thread (the end-card Share). The
  *  full verse text is inlined, so it reads without any online Bible; the
- *  closing line carries the hosted PWA ([PWA_URL], QrShare.kt). */
+ *  closing line carries the hosted PWA ([PWA_URL], Church.kt). */
 private fun shareText(name: String, entries: List<PresentEntry>, link: String): String =
     buildString {
         appendLine(name)

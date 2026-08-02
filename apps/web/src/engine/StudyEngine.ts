@@ -495,6 +495,35 @@ export class StudyEngine {
   readingChapters(book: string, now: string): any {
     return this.#json("plumbline_engine_reading_chapters_json", book, now);
   }
+  /** One sample of reading time: `stepSeconds` passed with `book` `chapter` in
+   *  front of somebody, who has scrolled as far as `reached` and touched
+   *  something (`interacted`) or not. A null `book` means nothing is being read
+   *  — a dialog is up, the tab went hidden, the reader left — and banks the tail.
+   *
+   *  The counters and the thresholds live in the core (`reading::DwellTracker`),
+   *  so a shell holds only its clock. Answers null on almost every call, and the
+   *  same `{book,chapter,pct,completed,lastRead?}` `readingRecord` gives when it
+   *  banked a report. */
+  readingTick(
+    book: string | null,
+    chapter: number,
+    reached: number,
+    stepSeconds: number,
+    interacted: boolean,
+    now: string,
+  ): any {
+    const str = this.#call(
+      (b, n) =>
+        this.#w.takeStr(
+          (this.#w.exports.plumbline_engine_reading_tick_json as Function)(
+            this.#engine, b, chapter, reached, stepSeconds, interacted ? 1 : 0, n,
+          ) as number,
+        ),
+      [book, now],
+    );
+    if (str !== null) this.onReadingWrite();
+    return str === null ? null : JSON.parse(str);
+  }
   /** Credit `seconds` of dwell, having reached verse `reached`. Returns
    *  `{book,chapter,pct,completed,lastRead?}` (null with no writable home). */
   readingRecord(book: string, chapter: number, reached: number, seconds: number, now: string): any {
@@ -543,6 +572,31 @@ export function configSave(w: WasmEngine, config: unknown): string | null {
   const err = w.takeStr((w.exports.plumbline_config_save_json as Function)(p) as number);
   w.freeStr(p);
   return err;
+}
+
+/** The share link this reader hands over, plus the church it carries and the
+ *  two strings a Church button needs (`core::church`). Engine-independent.
+ *
+ *  The web shell's own `shell/church.ts` still builds share links, because they
+ *  are read synchronously out of derived state and this crosses a worker. This
+ *  binding exists so the ABI's TS sibling stays method-for-method with the
+ *  Kotlin one, and so a test can ask the engine what the answer should be. */
+export function shareLink(
+  w: WasmEngine,
+  request: { base?: string; church?: { name: string; info: string; url: string }; startAsNewBeliever?: boolean; at?: string },
+): any {
+  const p = w.inStr(JSON.stringify(request));
+  const s = w.takeStr((w.exports.plumbline_share_url_json as Function)(p) as number);
+  w.freeStr(p);
+  return s === null ? null : JSON.parse(s);
+}
+
+/** The reading map's tuning (`{wordsPerMinute, completeAt, freshDays,
+ *  staleDays, graceSeconds, tickSeconds, idleSeconds}`) without loading the
+ *  reader's reading store. Engine-independent. */
+export function readingSpec(w: WasmEngine): any {
+  const s = w.takeStr((w.exports.plumbline_reading_spec_json as Function)() as number);
+  return s === null ? null : JSON.parse(s);
 }
 
 export function themePalette(w: WasmEngine, theme: string): any {

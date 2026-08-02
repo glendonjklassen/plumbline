@@ -1504,7 +1504,7 @@ test("the welcome points a new believer at the church that shared it", async ({ 
   await expect(findChurch).toContainText("Sundays 10AM");
   await expect(findChurch.getByRole("link", { name: /Visit Grace Bible Church/ })).toHaveAttribute(
     "href",
-    "https://example.org/",
+    "https://example.org",
   );
 });
 

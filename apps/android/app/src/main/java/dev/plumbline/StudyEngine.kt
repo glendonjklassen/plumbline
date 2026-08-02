@@ -106,6 +106,15 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
         /** The in-app guide / About cards as panel blocks. Static content. */
         fun GuideBlocksJson(): String = take(ffi.plumbline_panel_guide_blocks_json())!!
         fun AboutBlocksJson(): String = take(ffi.plumbline_panel_about_blocks_json())!!
+
+        /** The link this reader hands over, from `{church?, startAsNewBeliever?,
+         *  at?}` — plus the cleaned church, the Church button's label and the
+         *  site to open. Null only on malformed JSON. See ui/Church.kt. */
+        fun ShareJson(request: String): String? = take(ffi.plumbline_share_url_json(request))
+
+        /** The reading map's tuning (`{wordsPerMinute, completeAt, freshDays,
+         *  staleDays, …}`) without loading the reader's reading store. */
+        fun ReadingSpecJson(): String = take(ffi.plumbline_reading_spec_json())!!
     }
 
     // ── corpus / lookups ────────────────────────────────────────────────────
@@ -362,6 +371,24 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
         seconds: Float,
         nowUtc: String,
     ): String? = take(ffi.plumbline_engine_reading_record_json(h, book, chapter, reached, seconds, nowUtc))
+
+    /** One sample of reading time: `stepSeconds` passed with [book] [chapter] in
+     *  front of somebody, who has scrolled as far as verse [reached] and touched
+     *  something ([interacted]) or not. A null [book] means nothing is being read
+     *  — a dialog is up, the app is going to the background — and banks the tail.
+     *
+     *  The core keeps the counters and the thresholds; this shell keeps only the
+     *  clock. Answers null on almost every call, and
+     *  `{book,chapter,pct,completed,lastRead?}` when it banked a report. */
+    fun ReadingTickJson(
+        book: String?,
+        chapter: Int,
+        reached: Int,
+        stepSeconds: Float,
+        interacted: Boolean,
+        nowUtc: String,
+    ): String? =
+        take(ffi.plumbline_engine_reading_tick_json(h, book, chapter, reached, stepSeconds, interacted, nowUtc))
 
     /** Log a chapter as read on `date` (`YYYY-MM-DD`) by hand. Null = success. */
     fun ReadingMarkRead(book: String, chapter: Int, date: String): String? =

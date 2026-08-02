@@ -762,7 +762,7 @@ fun StudyScreen(
                     thread = null,
                     onThread = { presentThread = it },
                     onClose = { showPresent = false },
-                    shareLink = shareUrl(PWA_URL, church, presentSharesAsNew),
+                    shareLink = shareUrl(church, presentSharesAsNew),
                 )
             }
         }
@@ -918,7 +918,7 @@ fun StudyScreen(
                 // Present is the screen you show someone face to face, so its
                 // link opens on the new-believer welcome by default (Settings
                 // can turn that off). The ordinary Share never carries it.
-                shareLink = shareUrl(PWA_URL, church, presentSharesAsNew),
+                shareLink = shareUrl(church, presentSharesAsNew),
             )
         }
 
@@ -1682,7 +1682,7 @@ private fun SettingsDialog(
                         "your church. Leave it blank to share the Bible on its own.",
                     color = palette.faded, fontSize = 12.sp,
                 )
-                val cc = cleanChurch(church)
+                val cc = remember(church) { cleanChurch(church) }
                 var cName by remember { mutableStateOf(cc.name) }
                 var cInfo by remember { mutableStateOf(cc.info) }
                 var cUrl by remember { mutableStateOf(cc.url) }

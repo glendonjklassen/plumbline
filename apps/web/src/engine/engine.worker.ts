@@ -58,6 +58,8 @@ import {
   guideBlocks,
   routeLink,
   themePalette,
+  shareLink,
+  readingSpec,
   type LayoutCfg,
 } from "./StudyEngine";
 
@@ -645,6 +647,13 @@ function statics(): Record<string, (...a: any[]) => any> {
     guideBlocks: () => guideBlocks(w),
     aboutBlocks: () => aboutBlocks(w),
     engineVersion: () => engineVersion(w),
+    // Engine-independent, both of them: a share link is pure string work over
+    // the church clamps, and the reading spec is the core's own tuning table.
+    // They are on the STATIC path so the shell can ask for them before (or
+    // without) an engine, which is what the church button and the dwell timer
+    // both need (H-10, H-11).
+    shareLink: (request: unknown) => shareLink(w, request as Parameters<typeof shareLink>[1]),
+    readingSpec: () => readingSpec(w),
   };
 }
 
