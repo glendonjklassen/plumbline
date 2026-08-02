@@ -65,7 +65,7 @@ use plumbline_core::strongs::{self, OccurrenceIx, StrongsDict};
 use plumbline_core::tag::{self, LoadedTag, TagTarget};
 use plumbline_core::thread::{self, LoadedThread, ThreadEntry};
 use plumbline_core::weave::{self, Link, LoadedWeave, WeaveKind};
-use plumbline_core::{canon, export, notes, theme, usernote, VRef};
+use plumbline_core::{canon, export, hymnal, notes, theme, usernote, VRef};
 use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure, MeasureMemo, Memoized};
 use plumbline_rnd::{bridge, burst, concept, morph};
 
@@ -212,6 +212,10 @@ pub struct PlumblineEngine {
     /// TSK topical cross-references (parsed lazily from the home — an 8.5 MB
     /// TSV nobody should pay for at every open).
     xref_ix: OnceLock<XRefIx>,
+    /// The hymnal (parsed lazily from the home: nobody pays for it before the
+    /// hymn tab opens, and it is read exactly once — the in-memory home may
+    /// evict `data/hymnal.json` after this read).
+    hymnal: OnceLock<hymnal::Hymnal>,
     /// The plain-English overlay (the AKJV delta), when the home carries one.
     /// A READING aid: it re-words the reader's view and nothing else — never a
     /// memory card, a Present hand-off, or copied text.
@@ -289,6 +293,7 @@ impl PlumblineEngine {
             xref_ix: OnceLock::new(),
             akjv: OnceLock::new(),
             akjv_on: std::sync::atomic::AtomicBool::new(false),
+            hymnal: OnceLock::new(),
             concept: OnceLock::new(),
             leitwort: OnceLock::new(),
             reading_words: OnceLock::new(),
@@ -667,6 +672,16 @@ impl PlumblineEngine {
         self.xref_ix.get_or_init(|| match &self.home {
             Some(h) => crossref::load_cross_refs(crossref::cross_refs_path(h)),
             None => XRefIx::new(),
+        })
+    }
+
+    /// The hymnal, parsed from the home on first use. Unreadable data answers
+    /// as an empty book — same stance as the other optional home files
+    /// (`load_study`): the ABI degrades, the pack checks catch bad data.
+    fn hymnal(&self) -> &hymnal::Hymnal {
+        self.hymnal.get_or_init(|| match &self.home {
+            Some(h) => hymnal::load(h.join("data").join("hymnal.json")).unwrap_or_default(),
+            None => hymnal::Hymnal::default(),
         })
     }
 
@@ -2206,6 +2221,45 @@ pub unsafe extern "C" fn plumbline_engine_canon_segments_json(engine: *const Plu
     guard(ptr::null_mut(), || match engine.as_ref() {
         Some(_) => out_json(&wire::canon_segments_to_wire()),
         None => ptr::null_mut(),
+    })
+}
+
+/// The hymnal's table of contents, in book-number order:
+/// `{"hymns":[{id,number,titles,firstLines,tune,meter}]}` — `titles` and
+/// `firstLines` map language code → string for every language the hymn ships
+/// in. Empty `hymns` when the home carries no `data/hymnal.json` (an old pack);
+/// null only on a null engine. Caller-freed.
+///
+/// # Safety
+/// `engine` is a live engine (or null → null).
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_hymnal_json(engine: *const PlumblineEngine) -> *mut c_char {
+    guard(ptr::null_mut(), || match engine.as_ref() {
+        Some(e) => out_json(&wire::hymnal_to_wire(e.hymnal())),
+        None => ptr::null_mut(),
+    })
+}
+
+/// One hymn by id, its chords transposed by `transpose` semitones and split
+/// into painted `parts` (chord? + text) per line. `transposedKey` is what a
+/// transpose control displays; chords are spelled for the key they LAND in.
+/// `transpose` is folded into one octave (-11..=11 effective). Null for an
+/// unknown id. Caller-freed.
+///
+/// # Safety
+/// `engine` is a live engine; `id` is a valid NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_hymn_json(
+    engine: *const PlumblineEngine,
+    id: *const c_char,
+    transpose: i32,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || match (engine.as_ref(), opt_str(id)) {
+        (Some(e), Some(id)) => match e.hymnal().get(id) {
+            Some(h) => out_json(&wire::hymn_to_wire(h, transpose % 12)),
+            None => ptr::null_mut(),
+        },
+        _ => ptr::null_mut(),
     })
 }
 

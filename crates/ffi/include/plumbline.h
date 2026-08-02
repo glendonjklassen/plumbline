@@ -535,6 +535,28 @@ char *plumbline_engine_link_pairs_json(const struct PlumblineEngine *engine);
 // engine state, but the arg keeps the call shape uniform.
 char *plumbline_engine_canon_segments_json(const struct PlumblineEngine *engine);
 
+// The hymnal's table of contents, in book-number order:
+// `{"hymns":[{id,number,titles,firstLines,tune,meter}]}` — `titles` and
+// `firstLines` map language code → string for every language the hymn ships
+// in. Empty `hymns` when the home carries no `data/hymnal.json` (an old pack);
+// null only on a null engine. Caller-freed.
+//
+// # Safety
+// `engine` is a live engine (or null → null).
+char *plumbline_engine_hymnal_json(const struct PlumblineEngine *engine);
+
+// One hymn by id, its chords transposed by `transpose` semitones and split
+// into painted `parts` (chord? + text) per line. `transposedKey` is what a
+// transpose control displays; chords are spelled for the key they LAND in.
+// `transpose` is folded into one octave (-11..=11 effective). Null for an
+// unknown id. Caller-freed.
+//
+// # Safety
+// `engine` is a live engine; `id` is a valid NUL-terminated UTF-8 string.
+char *plumbline_engine_hymn_json(const struct PlumblineEngine *engine,
+                                 const char *id,
+                                 int32_t transpose);
+
 // The book-to-book weave chord map: canon-ordered book-pair counts over the
 // deduped link pairs (`{pairs:[{a,b,count}], max, otNtDivide, bookCount}`),
 // where `a`/`b` are book indices (`a <= b`). The one fold behind the "Weave

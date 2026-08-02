@@ -2373,3 +2373,108 @@ fn flag_bits_are_mirrored_by_both_shells() {
         );
     }
 }
+
+#[test]
+fn hymnal_round_trip_via_abi() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-hymnal-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+        std::fs::write(
+            home.join("data").join("hymnal.json"),
+            r##"{"format":"hymnal-v1","hymns":[
+              {"id":"amazing-grace","number":14,"tune":"NEW BRITAIN","meter":"8.6.8.6","key":"G",
+               "texts":{"en":{"title":"Amazing Grace","author":"John Newton","year":1779,
+                 "stanzas":["A[G]mazing grace! how [C]sweet the [G]sound,\nThat [G]saved a [Em]wretch like [D]me!"],
+                 "chorus":null}}},
+              {"id":"ein-feste-burg","number":3,"tune":"EIN FESTE BURG","meter":"8.7.8.7.6.6.6.6.7","key":"C",
+               "texts":{"de":{"title":"Ein feste Burg ist unser Gott","author":"Martin Luther",
+                 "stanzas":["[C]Ein feste [G]Burg ist [C]unser Gott"],"chorus":"[F]Refrain [C]here"},
+                "en":{"title":"A Mighty Fortress Is Our God","author":"Martin Luther",
+                 "translator":"Frederick H. Hedge",
+                 "stanzas":["[C]A mighty [G]fortress [C]is our God"],"chorus":null}}}
+            ]}"##,
+        )
+        .unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(err.is_null());
+        assert!(!e.is_null());
+
+        // The index: number order (3 before 14), per-language titles and
+        // chord-stripped first lines. The key set is the golden wire shape —
+        // a decoder that ignores unknown keys reads nothing when one renames.
+        let ix: Value = serde_json::from_str(&take(plumbline_engine_hymnal_json(e)).unwrap()).unwrap();
+        let hymns = ix["hymns"].as_array().unwrap();
+        assert_eq!(hymns.len(), 2);
+        assert_eq!(hymns[0]["id"], "ein-feste-burg");
+        assert_eq!(hymns[1]["number"], 14);
+        assert_eq!(
+            hymns[0].as_object().unwrap().keys().collect::<Vec<_>>(),
+            ["firstLines", "id", "meter", "number", "titles", "tune"]
+        );
+        assert_eq!(hymns[0]["titles"]["de"], "Ein feste Burg ist unser Gott");
+        assert_eq!(hymns[0]["titles"]["en"], "A Mighty Fortress Is Our God");
+        assert_eq!(hymns[1]["firstLines"]["en"], "Amazing grace! how sweet the sound,");
+
+        // One hymn, untransposed: chords split into parts as authored.
+        let g: Value =
+            serde_json::from_str(&take(plumbline_engine_hymn_json(e, c"amazing-grace".as_ptr(), 0)).unwrap())
+                .unwrap();
+        assert_eq!(
+            g.as_object().unwrap().keys().collect::<Vec<_>>(),
+            ["id", "key", "meter", "number", "texts", "transpose", "transposedKey", "tune"]
+        );
+        assert_eq!((g["key"].as_str(), g["transposedKey"].as_str()), (Some("G"), Some("G")));
+        let line0 = &g["texts"]["en"]["stanzas"][0]["lines"][0]["parts"];
+        assert_eq!(line0[0]["chord"], Value::Null);
+        assert_eq!(line0[0]["text"], "A");
+        assert_eq!(line0[1]["chord"], "G");
+        assert_eq!(line0[1]["text"], "mazing grace! how ");
+
+        // Transposed +3 from G: the target key is Bb, so chords spell FLAT.
+        let up: Value =
+            serde_json::from_str(&take(plumbline_engine_hymn_json(e, c"amazing-grace".as_ptr(), 3)).unwrap())
+                .unwrap();
+        assert_eq!((up["transpose"].as_i64(), up["transposedKey"].as_str()), (Some(3), Some("Bb")));
+        let uline = &up["texts"]["en"]["stanzas"][0]["lines"][0]["parts"];
+        assert_eq!(uline[1]["chord"], "Bb");
+        assert_eq!(uline[2]["chord"], "Eb");
+        let uline2 = &up["texts"]["en"]["stanzas"][0]["lines"][1]["parts"];
+        assert_eq!(uline2[2]["chord"], "Gm");
+
+        // Both languages ship on one hymn; the chorus carries its own chart.
+        let burg: Value =
+            serde_json::from_str(&take(plumbline_engine_hymn_json(e, c"ein-feste-burg".as_ptr(), 0)).unwrap())
+                .unwrap();
+        assert_eq!(burg["texts"]["en"]["translator"], "Frederick H. Hedge");
+        assert_eq!(burg["texts"]["de"]["translator"], Value::Null);
+        assert_eq!(burg["texts"]["de"]["chorus"]["lines"][0]["parts"][0]["chord"], "F");
+
+        // Unknown id is null; a wild transpose folds into one octave.
+        assert!(plumbline_engine_hymn_json(e, c"no-such-hymn".as_ptr(), 0).is_null());
+        let far: Value =
+            serde_json::from_str(&take(plumbline_engine_hymn_json(e, c"amazing-grace".as_ptr(), 15)).unwrap())
+                .unwrap();
+        assert_eq!(far["transposedKey"], "Bb", "15 semitones is 3");
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
+#[test]
+fn hymnal_absent_is_empty_book() {
+    unsafe {
+        // Opened from bytes: no home, so no hymnal — the tab is just empty.
+        let e = open();
+        let ix: Value = serde_json::from_str(&take(plumbline_engine_hymnal_json(e)).unwrap()).unwrap();
+        assert_eq!(ix["hymns"].as_array().unwrap().len(), 0);
+        plumbline_engine_free(e);
+    }
+}

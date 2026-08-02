@@ -20,6 +20,7 @@ pub mod corpus;
 pub mod crossref;
 pub mod export;
 pub mod home;
+pub mod hymnal;
 pub mod memory;
 pub mod notes;
 pub mod panel;

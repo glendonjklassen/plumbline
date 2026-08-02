@@ -158,6 +158,14 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
     /** The book-to-book weave chord map: canon-ordered book-pair counts + max. */
     fun ChordMapJson(): String? = take(ffi.plumbline_engine_chord_map_json(h))
 
+    /** The hymnal's table of contents, in book-number order. Empty when the
+     *  home carries no `data/hymnal.json`. */
+    fun HymnalJson(): String? = take(ffi.plumbline_engine_hymnal_json(h))
+
+    /** One hymn, chords transposed by `transpose` semitones and split into
+     *  paintable parts. Null for an unknown id. */
+    fun HymnJson(id: String, transpose: Int): String? = take(ffi.plumbline_engine_hymn_json(h, id, transpose))
+
     /** One laid-out page of the constellation. `pins` are weave indices (the
      *  lanes' handles); the shell holds the transient page + pin set. */
     fun ConstellationJson(page: Int, pins: Collection<Int>): String? {

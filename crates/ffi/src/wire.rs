@@ -22,6 +22,7 @@ use plumbline_core::church;
 use plumbline_core::config::{Config, PaneRef, StudyMode};
 use plumbline_core::corpus::{Corpus, Token, Verse};
 use plumbline_core::crossref::CrossRef;
+use plumbline_core::hymnal;
 use plumbline_core::memory;
 use plumbline_core::panel::{Block, Color, PanelLink, Run};
 use plumbline_core::reading;
@@ -1471,4 +1472,141 @@ pub struct AkjvTokenWire {
     pub akjv: String,
     /// The KJV words it replaced — what the reader tapped to see.
     pub kjv: String,
+}
+
+// ── hymnal ──────────────────────────────────────────────────────────────────
+
+/// The hymnal's table of contents (`plumbline_engine_hymnal_json`).
+#[derive(Serialize)]
+pub struct WireHymnal {
+    pub hymns: Vec<WireHymnalEntry>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireHymnalEntry {
+    pub id: String,
+    /// The hymn's stable book number.
+    pub number: u32,
+    /// Language code → title, every language the hymn ships in. A shell shows
+    /// its preferred language and falls back to whatever the hymn has.
+    pub titles: std::collections::BTreeMap<String, String>,
+    /// Language code → first line of stanza 1, chords stripped (index search).
+    pub first_lines: std::collections::BTreeMap<String, String>,
+    pub tune: String,
+    pub meter: String,
+}
+
+/// One hymn, chords transposed and split for painting
+/// (`plumbline_engine_hymn_json`).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireHymn {
+    pub id: String,
+    pub number: u32,
+    pub tune: String,
+    pub meter: String,
+    /// The written key of the charts.
+    pub key: String,
+    /// The transposition applied, in semitones (echo of the request).
+    pub transpose: i32,
+    /// The key the chords are NOW in — what a transpose control displays.
+    pub transposed_key: String,
+    pub texts: std::collections::BTreeMap<String, WireHymnText>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireHymnText {
+    pub title: String,
+    pub author: String,
+    pub translator: Option<String>,
+    pub year: Option<u32>,
+    pub stanzas: Vec<WireHymnStanza>,
+    /// Sung after every stanza; charts live on stanza 1 and here.
+    pub chorus: Option<WireHymnStanza>,
+}
+
+#[derive(Serialize)]
+pub struct WireHymnStanza {
+    pub lines: Vec<WireHymnLine>,
+}
+
+#[derive(Serialize)]
+pub struct WireHymnLine {
+    pub parts: Vec<WireHymnPart>,
+}
+
+/// A run of lyric text with the chord (if any) struck at its first syllable.
+#[derive(Serialize)]
+pub struct WireHymnPart {
+    pub chord: Option<String>,
+    pub text: String,
+}
+
+/// First line of a stanza string, chords stripped — the index's search text.
+fn first_line_plain(stanza: &str) -> String {
+    let line = stanza.split('\n').next().unwrap_or("");
+    hymnal::parse_line(line).into_iter().map(|s| s.text).collect()
+}
+
+pub fn hymnal_to_wire(book: &hymnal::Hymnal) -> WireHymnal {
+    WireHymnal {
+        hymns: book
+            .hymns
+            .iter()
+            .map(|h| WireHymnalEntry {
+                id: h.id.clone(),
+                number: h.number,
+                titles: h.texts.iter().map(|(lang, t)| (lang.clone(), t.title.clone())).collect(),
+                first_lines: h
+                    .texts
+                    .iter()
+                    .filter_map(|(lang, t)| Some((lang.clone(), first_line_plain(t.stanzas.first()?))))
+                    .collect(),
+                tune: h.tune.clone(),
+                meter: h.meter.clone(),
+            })
+            .collect(),
+    }
+}
+
+fn stanza_to_wire(stanza: &str, semis: i32, flats: bool) -> WireHymnStanza {
+    WireHymnStanza {
+        lines: hymnal::stanza_lines(stanza, semis, flats)
+            .into_iter()
+            .map(|segs| WireHymnLine {
+                parts: segs.into_iter().map(|s| WireHymnPart { chord: s.chord, text: s.text }).collect(),
+            })
+            .collect(),
+    }
+}
+
+pub fn hymn_to_wire(h: &hymnal::Hymn, semis: i32) -> WireHymn {
+    let transposed_key = hymnal::transpose_key(&h.key, semis);
+    // Spell every transposed chord for the key it lands in, not the one it left.
+    let flats = hymnal::key_uses_flats(&transposed_key);
+    WireHymn {
+        id: h.id.clone(),
+        number: h.number,
+        tune: h.tune.clone(),
+        meter: h.meter.clone(),
+        key: h.key.clone(),
+        transpose: semis,
+        transposed_key,
+        texts: h
+            .texts
+            .iter()
+            .map(|(lang, t)| {
+                (lang.clone(), WireHymnText {
+                    title: t.title.clone(),
+                    author: t.author.clone(),
+                    translator: t.translator.clone(),
+                    year: t.year,
+                    stanzas: t.stanzas.iter().map(|s| stanza_to_wire(s, semis, flats)).collect(),
+                    chorus: t.chorus.as_ref().map(|c| stanza_to_wire(c, semis, flats)),
+                })
+            })
+            .collect(),
+    }
 }

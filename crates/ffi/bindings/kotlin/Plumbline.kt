@@ -112,6 +112,10 @@ internal interface PlumblineNative : Library {
     fun plumbline_engine_link_pairs_json(engine: Pointer): Pointer?
     fun plumbline_engine_canon_segments_json(engine: Pointer): Pointer?
 
+    // ── hymnal ──────────────────────────────────────────────────────────────
+    fun plumbline_engine_hymnal_json(engine: Pointer): Pointer?
+    fun plumbline_engine_hymn_json(engine: Pointer, id: String, transpose: Int): Pointer?
+
     // ── chord map / constellation ───────────────────────────────────────────
     fun plumbline_engine_chord_map_json(engine: Pointer): Pointer?
     fun plumbline_engine_constellation_json(engine: Pointer, page: Int, pinsJson: String?): Pointer?
