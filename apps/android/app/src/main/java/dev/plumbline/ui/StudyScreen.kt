@@ -123,7 +123,7 @@ private enum class SecondPane { Study, Bible }
 
 /** The bottom-nav destinations (one-handed reach — product call, 2026-07-24).
  *  Present is a launcher on the same bar but renders as a fullscreen overlay. */
-private enum class Dest { Read, Explore, Memorize }
+private enum class Dest { Read, Explore, Memorize, Hymnal }
 
 /** A study "library" the Explore screen loads into the study surface as blocks. */
 enum class Library { Threads, Tags, Weaves, Suggested, Guide, About }
@@ -247,6 +247,7 @@ fun StudyScreen(
     var studySheet by remember { mutableStateOf(false) }            // phone: study as a bottom sheet
     var showSearch by remember { mutableStateOf(false) }            // full-screen search overlay
     var showPresent by remember { mutableStateOf(false) }           // thread presentation mode
+    var hymnSing by remember { mutableStateOf<HymnSing?>(null) }    // hymnal sing mode (fullscreen)
     var showNotes by remember { mutableStateOf(false) }             // personal-notes browser
     var showHistory by remember { mutableStateOf(false) }           // reading-history sheet
     var showSettings by remember { mutableStateOf(false) }          // settings dialog
@@ -716,6 +717,14 @@ fun StudyScreen(
                         else memView = MemorizeView.List
                     },
                 )
+
+                Dest.Hymnal -> HymnalScreen(
+                    engine, palette,
+                    onClose = { dest = Dest.Read },
+                    // The singing itself goes fullscreen over everything, the
+                    // way Present's presentation does — see below the nav bar.
+                    onSing = { hymnSing = it },
+                )
             }
 
             // ── in-content overlays: these cover the destination but keep the
@@ -803,6 +812,13 @@ fun StudyScreen(
                 onClick = { showPresent = false; showChord = false; showConstellation = false; memView = MemorizeView.List; dest = Dest.Memorize },
                 icon = { Icon(NavIconMemorize, contentDescription = null) },
                 label = { Text("Memorize") },
+                colors = navColors,
+            )
+            NavigationBarItem(
+                selected = dest == Dest.Hymnal && !showPresent,
+                onClick = { showPresent = false; showChord = false; showConstellation = false; dest = Dest.Hymnal },
+                icon = { Icon(NavIconHymnal, contentDescription = null) },
+                label = { Text("Hymnal") },
                 colors = navColors,
             )
         }
@@ -920,6 +936,12 @@ fun StudyScreen(
                 // can turn that off). The ordinary Share never carries it.
                 shareLink = shareUrl(church, presentSharesAsNew),
             )
+        }
+
+        // Singing a hymn is the same hand-the-phone-up situation as Present,
+        // so it gets the same layer: fullscreen, over every piece of chrome.
+        hymnSing?.let { s ->
+            HymnalSingOverlay(s) { hymnSing = null }
         }
 
         // First run — over everything: who is opening the Book? (web twin

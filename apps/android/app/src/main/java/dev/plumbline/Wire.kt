@@ -721,3 +721,53 @@ data class WordHit(val word: String = "", val ok: Boolean = false)
 /** What the AKJV overlay does to one token (`plumbline_engine_akjv_token_json`). */
 @Serializable
 data class AkjvToken(val akjv: String = "", val kjv: String = "")
+
+// ── the hymnal ────────────────────────────────────────────────────────────────
+
+@Serializable
+data class HymnalIndex(val hymns: List<HymnalEntry> = emptyList())
+
+@Serializable
+data class HymnalEntry(
+    val id: String,
+    val number: Int,
+    /** Language code → title / first line, every language the hymn ships in. */
+    val titles: Map<String, String> = emptyMap(),
+    val firstLines: Map<String, String> = emptyMap(),
+    val tune: String = "",
+    val meter: String = "",
+)
+
+@Serializable
+data class Hymn1(
+    val id: String,
+    val number: Int,
+    val tune: String = "",
+    val meter: String = "",
+    /** The written key of the charts. */
+    val key: String = "",
+    /** Semitones applied (echo), and the key the chords are NOW in. */
+    val transpose: Int = 0,
+    val transposedKey: String = "",
+    val texts: Map<String, HymnText1> = emptyMap(),
+)
+
+@Serializable
+data class HymnText1(
+    val title: String,
+    val author: String = "",
+    val translator: String? = null,
+    val year: Int? = null,
+    val stanzas: List<HymnStanza> = emptyList(),
+    /** Sung after every stanza; charts live on stanza 1 and here. */
+    val chorus: HymnStanza? = null,
+)
+
+@Serializable
+data class HymnStanza(val lines: List<HymnLine> = emptyList())
+
+@Serializable
+data class HymnLine(val parts: List<HymnPart> = emptyList())
+
+@Serializable
+data class HymnPart(val chord: String? = null, val text: String = "")
