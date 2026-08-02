@@ -25,7 +25,7 @@ const repo = dirname(dirname(fileURLToPath(import.meta.url)));
 const packRoot = join(repo, "apps/web/public/pack");
 const manifestPath = join(packRoot, "manifest.json");
 
-const STAGES = new Set(["text", "study", "analysis"]);
+const STAGES = new Set(["text", "study", "analysis", "optional"]);
 const SEED_DIRS = new Set(["threads", "tags", "weaves"]);
 const problems = [];
 const fail = (msg) => problems.push(msg);
@@ -63,7 +63,9 @@ for (const f of manifest.files) {
   if (f.seedOnce && !SEED_DIRS.has(f.path.split("/")[0])) {
     fail(`${at}: seedOnce outside the stock dirs {${[...SEED_DIRS]}} — it would be treated as user-authored`);
   }
-  if (f.role !== undefined && f.role !== "corpusCache") fail(`${at}: unknown role ${JSON.stringify(f.role)}`);
+  if (f.role !== undefined && !["corpusCache", "suggestedWeaves"].includes(f.role)) {
+    fail(`${at}: unknown role ${JSON.stringify(f.role)}`);
+  }
   // The retired v1 tier flags. Loud, because a half-migrated producer is worse
   // than an old one: the loader would silently mis-tier the file.
   for (const dead of ["stock", "rnd", "cache"]) {
@@ -78,6 +80,21 @@ if (roles.length !== 1) {
   fail(`expected exactly one role:"corpusCache" entry, found ${roles.length} — the fast open keys off it`);
 } else if (roles[0].stage !== "text") {
   fail(`the corpusCache is stage ${roles[0].stage}; it must be "text" or the reader waits for it`);
+}
+
+// The suggested-weave bundle is found by role, like the corpus cache, and it
+// must stay OFF the automatic path: it is the one thing in the pack a reader
+// has to ask for, and a stage slip would silently put 110 KB back on boot.
+const sugg = manifest.files.filter((f) => f.role === "suggestedWeaves");
+if (sugg.length > 1) {
+  fail(`expected at most one role:"suggestedWeaves" entry, found ${sugg.length}`);
+} else if (sugg.length === 1) {
+  if (sugg[0].stage !== "optional") {
+    fail(`the suggested-weave bundle is stage ${sugg[0].stage}; it must be "optional" (the reader asks for it)`);
+  }
+  if (sugg[0].seedOnce) {
+    fail(`the suggested-weave bundle carries seedOnce — it seeds when downloaded, not at open`);
+  }
 }
 
 // The raw JSONL must NOT ship: with a corpus cache present nothing fetches it,

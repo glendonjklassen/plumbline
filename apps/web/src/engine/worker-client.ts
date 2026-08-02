@@ -337,4 +337,14 @@ export class EngineRpc {
   setBundled(on: boolean): Promise<void> {
     return this.#send({ op: "setBundled", on });
   }
+  /** Whether this pack offers the suggested weaves, whether this device already
+   *  has them, and what the download costs. */
+  suggestedState(): Promise<{ available: boolean; installed: boolean; gzBytes: number }> {
+    return this.#send({ op: "suggestedState" });
+  }
+  /** Download and install the suggested-weave set; resolves with how many files
+   *  were written. */
+  installSuggested(): Promise<number> {
+    return this.#send({ op: "installSuggested" });
+  }
 }

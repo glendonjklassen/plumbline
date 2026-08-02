@@ -77,10 +77,23 @@ export interface VirtualHome {
   bundledOn: boolean;
   /** Flip the bundled set (removes/reseeds the stock files); reload after. */
   setBundled(on: boolean): Promise<void>;
+  /** Whether the optional suggested-weave set is already installed here. */
+  suggestedInstalled: boolean;
+  /** Unpack the downloaded suggested-weave bundle into `weaves/suggested/` and
+   *  persist it. Returns how many files were written (0 if the reader already
+   *  has them all). Rejects if the write did not land — the caller owes the
+   *  reader that news, exactly as with `persistUserData`. */
+  installSuggestedWeaves(bundle: Uint8Array): Promise<number>;
 }
 
 const STOCK_SEEDED = "meta:stockSeeded";
 const BUNDLED = "meta:bundled";
+/** Set once the suggested-weave bundle has been unpacked into this home. It is
+ *  a separate marker from STOCK_SEEDED on purpose: the two sets arrive by
+ *  different routes (one at open, one when asked for) and a reader who turns
+ *  the bundled set off and on again must not silently re-acquire 422 KB they
+ *  never asked for a second time. */
+const SUGGESTED_INSTALLED = "meta:suggestedInstalled";
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
@@ -219,10 +232,11 @@ export async function buildHome(
   stockPaths: Set<string> = new Set(),
 ): Promise<VirtualHome> {
   const root = new Map<string, Directory | File>();
-  const [userFiles, seededFlag, bundledFlag] = await Promise.all([
+  const [userFiles, seededFlag, bundledFlag, suggestedFlag] = await Promise.all([
     idbEntries("user"),
     idbGet("cache", STOCK_SEEDED),
     idbGet("cache", BUNDLED),
+    idbGet("cache", SUGGESTED_INSTALLED),
   ]);
   const bundledOn = bundledFlag ? dec.decode(bundledFlag) !== "off" : true;
   // The stock set seeds ONCE (Android parity): after that the user's own
@@ -357,6 +371,47 @@ export async function buildHome(
       return out;
     },
     bundledOn,
+    suggestedInstalled: suggestedFlag !== undefined,
+    async installSuggestedWeaves(bundle: Uint8Array) {
+      if (frozen) return 0;
+      // `{ "<name>.json": "<file text>" }` — the text verbatim, never
+      // re-serialized, so these are the maintainer's bytes (build-web-pack.mjs
+      // stores them the same way and for the same reason).
+      const parsed: unknown = JSON.parse(dec.decode(bundle));
+      if (typeof parsed !== "object" || parsed === null) throw new Error("suggested-weave bundle is not an object");
+
+      const fresh = new Map<string, Uint8Array>();
+      for (const [name, text] of Object.entries(parsed as Record<string, unknown>)) {
+        // A bundle is data off the network, so it may not reach outside the one
+        // directory it is allowed to fill. Nothing here should ever trip, which
+        // is exactly why it is checked rather than assumed.
+        if (typeof text !== "string" || name.includes("/") || name.startsWith(".")) continue;
+        const path = `weaves/suggested/${name}`;
+        // THE READER'S COPY WINS, the same rule the seeded stock follows: if a
+        // file is already here they have either had it before or written it,
+        // and an install must not overwrite either.
+        if (readFile(root, path)) continue;
+        fresh.set(path, enc.encode(text));
+      }
+
+      return serial(async () => {
+        if (frozen) return 0;
+        for (const [path, bytes] of fresh) {
+          insertFile(root, path, bytes);
+          // Registered as pristine so the bundled-set OFF toggle can remove an
+          // untouched suggestion later — without this they would be
+          // indistinguishable from the reader's own work and never removable.
+          pristineStock.set(path, bytes);
+        }
+        // The marker goes in the SAME transaction as the files. Two writes could
+        // leave a home marked installed with nothing in it, and the Settings row
+        // would then offer no way to try again.
+        await idbApply("user", fresh);
+        await idbApply("cache", new Map([[SUGGESTED_INSTALLED, enc.encode("1")]]));
+        for (const [path, bytes] of fresh) synced.set(path, fingerprint(bytes));
+        return fresh.size;
+      });
+    },
     async setBundled(on: boolean) {
       // A restore is pending reload — nothing may write (see `freeze`). The
       // restored user store is about to become the truth, and deleting stock

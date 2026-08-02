@@ -20,6 +20,8 @@
 //   in:  { id, op: "loadRnd" }                      → deferred pack + re-warm
 //   in:  { id, op: "bootTrace" }                    → [label, ms][] so far
 //   in:  { id, op: "export" } / { id, op: "freeze" } / { id, op: "setBundled", on }
+//   in:  { id, op: "suggestedState" }               → {available, installed, gzBytes}
+//   in:  { id, op: "installSuggested" }             → optional weave set, count written
 //   in:  { id, op: "flush" }                        → persist pending writes NOW
 //   out: { id, result } | { id, error }
 //   out: { type: "progress", phase, fraction?, detail? }   (during boot)
@@ -37,13 +39,16 @@
 
 import { boot, engineUrl, type BootResult } from "./boot";
 import { pinnedUrls, writePin } from "./pin";
+import type { PackFile, PackManifest } from "./pack";
 import {
   assetUrl,
   fetchManifest,
   fetchRndPack,
   fetchStage2Pack,
+  fetchSuggestedWeaves,
   packFileUrl,
   setAssetBase,
+  suggestedWeavesEntry,
   takePackTrace,
   verifyStored,
 } from "./pack";
@@ -419,12 +424,35 @@ async function willAutoLoadRnd(machineOn: boolean, deferRnd: boolean): Promise<b
  *  The new pack applies at the NEXT launch, deliberately. This session's engine
  *  has its text in wasm memory and the reader is mid-verse; swapping the corpus
  *  under them would be worse than waiting. */
+/** The files THIS device's pack actually consists of.
+ *
+ *  Every stage but `optional` always counts. An `optional` entry counts only
+ *  when this device already holds the previous generation of it — that is what
+ *  "the reader asked for this" looks like a release later, and without the
+ *  distinction the update sweep would download the suggested-weave bundle onto
+ *  every device on the next deploy, which is the whole thing it exists to
+ *  avoid. It also must not gate the pin: a device that never wanted the bundle
+ *  would otherwise fail the completeness check forever and never re-pin again. */
+async function thisDevicesFiles(live: PackManifest): Promise<PackFile[]> {
+  const out: PackFile[] = [];
+  for (const f of live.files) {
+    if (f.stage !== "optional") {
+      out.push(f);
+      continue;
+    }
+    const prev = booted!.manifest.files.find((p) => p.path === f.path);
+    if (prev && (await depotHas(packFileUrl(prev, booted!.manifest.version)))) out.push(f);
+  }
+  return out;
+}
+
 async function reconcilePack(): Promise<void> {
   const live = await fetchManifest();
   if (live.version === booted!.packVersion) return; // nothing deployed since
   const t0 = performance.now();
   let fetched = 0;
-  for (const f of live.files) {
+  const mine = await thisDevicesFiles(live);
+  for (const f of mine) {
     const url = packFileUrl(f, live.version);
     if (await depotHas(url)) continue; // unchanged: same hash, same URL, already here
     await depotBytes(url);
@@ -435,7 +463,7 @@ async function reconcilePack(): Promise<void> {
     fetched++;
   }
   // Verify before committing. Cheap — a metadata lookup per file, no bodies read.
-  for (const f of live.files) {
+  for (const f of mine) {
     if (!(await depotHas(packFileUrl(f, live.version)))) return; // incomplete: keep the old pin
   }
   await writePin(live, assetUrl(""));
@@ -876,6 +904,36 @@ self.onmessage = async (ev: MessageEvent) => {
       case "setBundled": {
         await booted!.home.setBundled(m.on);
         reply(null);
+        break;
+      }
+      case "suggestedState": {
+        // What the Settings row needs to draw itself: whether this home already
+        // has the set, and what asking for it would cost. Size comes from the
+        // manifest rather than a constant, so the row can never quote a number
+        // the pack has since changed.
+        const entry = suggestedWeavesEntry(booted!.manifest);
+        reply({
+          available: entry !== null,
+          installed: booted!.home.suggestedInstalled,
+          gzBytes: entry?.gzBytes ?? 0,
+        });
+        break;
+      }
+      case "installSuggested": {
+        // One file, so no progress ladder: it is ~110 KB, and a bar that jumps
+        // 0→100 says less than the button simply staying busy.
+        const bundle = await fetchSuggestedWeaves(booted!.manifest);
+        if (!bundle) {
+          fail("this build has no suggested-weave bundle");
+          break;
+        }
+        const written = await booted!.home.installSuggestedWeaves(bundle);
+        // The engine holds the weave library it read at open, so the files are
+        // on disk and invisible until it re-reads them. Same call stage 2 uses
+        // for exactly this reason.
+        booted!.engine.loadCoreData();
+        self.postMessage({ type: "authored" });
+        reply(written);
         break;
       }
       default:

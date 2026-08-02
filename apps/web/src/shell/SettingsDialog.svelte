@@ -160,6 +160,39 @@
     location.reload(); // the engine re-opens with/without the stock set
   }
 
+  // ── the suggested weaves, on request ────────────────────────────────────
+  // 194 machine-proposed links that ship inside the APK but are a download
+  // here: too big for the boot path of a phone that may never open the weave
+  // library, and genuinely optional — they are suggestions to judge, not text.
+  let suggested = $state<{ available: boolean; installed: boolean; gzBytes: number } | null>(null);
+  let installing = $state(false);
+  let suggestedError = $state("");
+  $effect(() => {
+    void s.rpc.suggestedState().then(
+      (st) => (suggested = st),
+      // A pack with no bundle answers `available: false` rather than throwing,
+      // so reaching here means the worker itself is unreachable — in which case
+      // the row simply does not appear.
+      () => (suggested = null),
+    );
+  });
+  async function installSuggested(): Promise<void> {
+    installing = true;
+    suggestedError = "";
+    try {
+      await s.rpc.installSuggested();
+      suggested = await s.rpc.suggestedState();
+      // The weave library is one of the reads `authored` invalidates, and the
+      // worker fires it — but this dialog holds its own copy of nothing, so
+      // there is no reload to do here.
+    } catch (e) {
+      suggestedError =
+        e instanceof Error && e.message ? `Download failed: ${e.message}` : "Download failed.";
+    } finally {
+      installing = false;
+    }
+  }
+
   // ── the reader's home church ────────────────────────────────────────────
   // Set it here, and every link this reader shares carries it, so a QR handed
   // out at a service leads back to that service (2026-07-27).
@@ -543,6 +576,30 @@
         </span>
         <input type="checkbox" checked={s.bundledOn} onchange={toggleBundled} />
       </label>
+      {#if suggested?.available}
+        <div class="toggle">
+          <span class="body">
+            <span class="name">Suggested weaves</span>
+            <span class="desc">
+              {#if suggested.installed}
+                Installed. They sit under Suggested in the weave library, where you can keep or
+                reject each one.
+              {:else}
+                A large set of proposed verse links to review and keep or reject. One-time
+                {Math.round(suggested.gzBytes / 1024)} KB download.
+              {/if}
+            </span>
+          </span>
+          {#if !suggested.installed}
+            <button class="action" disabled={installing} onclick={installSuggested}>
+              {installing ? "Downloading…" : "Download"}
+            </button>
+          {/if}
+        </div>
+        {#if suggestedError}
+          <p class="desc-note err">{suggestedError}</p>
+        {/if}
+      {/if}
       <hr />
       <p class="label">Your church</p>
       <p class="desc-note">
@@ -1001,5 +1058,8 @@
   .desc-note {
     font-size: calc(11.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
+  }
+  .desc-note.err {
+    color: var(--disputed, #9b3b2f);
   }
 </style>

@@ -21,7 +21,9 @@ export type PackStage =
   /** Strong's, margin notes, cross-references, the overlay, bridge witnesses. */
   | "study"
   /** The machine tier — background, and deferred behind an action on phones. */
-  | "analysis";
+  | "analysis"
+  /** Never fetched unless the reader asks: today the suggested-weave bundle. */
+  | "optional";
 
 export interface PackFile {
   path: string;
@@ -36,8 +38,11 @@ export interface PackFile {
    *  their copies rule afterwards. */
   seedOnce?: true;
   /** The parsed-corpus cache — the one file the fast open depends on, fetched
-   *  only when IndexedDB doesn't already hold a usable copy (see boot.ts). */
-  role?: "corpusCache";
+   *  only when IndexedDB doesn't already hold a usable copy (see boot.ts) — or
+   *  the suggested-weave bundle, which the reader downloads from Settings.
+   *  Both are found by role rather than by filename, so a rename cannot quietly
+   *  unhook them. */
+  role?: "corpusCache" | "suggestedWeaves";
   /** Where these bytes live, relative to the app base. Present on files that came
    *  from a PIN, absent on a manifest straight off the network (where it is
    *  derived). Storing it lets two pack generations coexist in the depot: an
@@ -313,4 +318,24 @@ export function fetchRndPack(
   onProgress?: (p: PackProgress) => void,
 ): Promise<Map<string, Uint8Array>> {
   return fetchFiles(manifest.version, manifest.files.filter((f) => f.stage === "analysis"), onProgress);
+}
+
+/** The suggested-weave bundle, and ONLY when the reader asked for it.
+ *
+ *  Found by role, not by filename or stage sweep: it is the one entry a rename
+ *  could otherwise unhook silently. Null when this pack has none (an older
+ *  pack, or a build with no `stock/weaves/suggested/`), which the Settings row
+ *  reads as "nothing to offer" rather than an error. */
+export function suggestedWeavesEntry(manifest: PackManifest): PackFile | null {
+  return manifest.files.find((f) => f.role === "suggestedWeaves") ?? null;
+}
+
+export async function fetchSuggestedWeaves(
+  manifest: PackManifest,
+  onProgress?: (p: PackProgress) => void,
+): Promise<Uint8Array | null> {
+  const entry = suggestedWeavesEntry(manifest);
+  if (!entry) return null;
+  const got = await fetchFiles(manifest.version, [entry], onProgress);
+  return got.get(entry.path) ?? null;
 }

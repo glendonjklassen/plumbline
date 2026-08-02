@@ -50,6 +50,8 @@ const STOCK = join(repo, "apps/android/app/src/main/assets/stock");
 //              bridge witnesses. Fetched right after the reader hands over.
 //   analysis — the machine tier. Background, and deferred behind an explicit
 //              action on phones.
+//   optional — never fetched unless the reader asks for it in Settings. Today
+//              that is the suggested-weave bundle (see the bottom of this file).
 //
 // Anything under data/ or bridge/ not named here defaults to `study`, which is
 // the safe default: it loads, just not on the boot path.
@@ -196,6 +198,37 @@ rmSync(cacheTmp, { force: true });
 // takes the fast open or parses the JSONL that is no longer shipped.
 emit("data", "kjv.jsonl.idxcache", cacheRaw, { stage: "text", role: "corpusCache" });
 
+// ── the suggested weaves: one bundle, downloaded only if asked for ───────────
+//
+// These 194 files ship inside the APK and, until now, did not reach the web at
+// all: the SOURCES walk above is non-recursive, so `weaves/suggested/` was
+// silently skipped and the two shells disagreed about what the stock set even
+// contains. They are here now, as an OPTIONAL download — the reader asks, in
+// Settings — because 422 KB of machine-suggested links is not something to put
+// on the boot path of a phone that may never open the weave library.
+//
+// ONE bundle rather than 194 pack entries, which is not merely tidier: gzipped
+// individually they are 784 KB (small files compress badly and each carries its
+// own dictionary), and as a single object they are 110 KB — seven times smaller,
+// and one request instead of 194. The loader splits it back into
+// `weaves/suggested/<name>` in the home, which is the shape the engine reads and
+// the same shape Android's asset copy produces.
+const suggestedDir = join(STOCK, "weaves", "suggested");
+if (existsSync(suggestedDir)) {
+  const bundle = {};
+  for (const name of readdirSync(suggestedDir).filter((n) => n.endsWith(".json")).sort()) {
+    // Stored as TEXT, not re-serialized JSON: these are the maintainer's files,
+    // and a round-trip through JSON.parse would quietly restyle every one of
+    // them — which shows up as a whole-bundle hash change on a release that
+    // touched nothing.
+    bundle[name] = readFileSync(join(suggestedDir, name), "utf8");
+  }
+  emit("weaves", "suggested.bundle.json", Buffer.from(JSON.stringify(bundle)), {
+    stage: "optional",
+    role: "suggestedWeaves",
+  });
+}
+
 const morphTmp = join(tmpdir(), `plumbline-morphb-${process.pid}`);
 execFileSync(
   "cargo",
@@ -233,7 +266,7 @@ const mb = (n) => (n / 1048576).toFixed(1);
 const total = files.reduce((s, f) => s + f.bytes, 0);
 const totalGz = files.reduce((s, f) => s + f.gzBytes, 0);
 const byStage = (st) => files.filter((f) => f.stage === st);
-const stageLine = ["text", "study", "analysis"]
+const stageLine = ["text", "study", "analysis", "optional"]
   .map((st) => `${st} ${byStage(st).length}/${mb(byStage(st).reduce((s, f) => s + f.gzBytes, 0))}MB`)
   .join(", ");
 console.log(`pack ${manifest.version}: ${files.length} files, ${mb(total)}MB raw -> ${mb(totalGz)}MB gzipped`);
