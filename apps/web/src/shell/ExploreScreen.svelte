@@ -11,6 +11,7 @@
   // The cards themselves are unchanged: each study tool with a sentence saying
   // what it is, because "Suggested" and "Constellation" mean nothing cold.
   import { getSession } from "../state/session.svelte";
+  import ScreenBar from "../lib/ScreenBar.svelte";
 
   const s = getSession();
 
@@ -26,10 +27,7 @@
 </script>
 
 <section class="screen" aria-label="Explore">
-  <div class="bar">
-    <button class="back" onclick={() => s.goRead()} aria-label="Back to reading">‹</button>
-    <h2>Explore</h2>
-  </div>
+  <ScreenBar title="Explore" onBack={() => s.goRead()} />
   <div class="content">
     {#each cards as c (c.label)}
       <button class="ex-card" onclick={c.go}>
@@ -48,30 +46,6 @@
     display: flex;
     flex-direction: column;
     background: var(--paper, #fcf9f4);
-  }
-  .bar {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 8px 10px;
-    background: var(--paneNavBg, #efeae1);
-    border-bottom: 1px solid var(--rule, #d8cba8);
-  }
-  .back {
-    font-size: calc(22px * var(--uiScale, 1));
-    line-height: 1;
-    padding: 8px 14px;
-    border-radius: 6px;
-    color: var(--gold, #9e7d38);
-  }
-  .back:hover {
-    background: color-mix(in srgb, var(--gold, #9e7d38) 14%, transparent);
-  }
-  h2 {
-    margin: 0;
-    font-size: calc(18px * var(--uiScale, 1));
-    font-weight: 600;
-    color: var(--ink, #211f1a);
   }
   .content {
     flex: 1;

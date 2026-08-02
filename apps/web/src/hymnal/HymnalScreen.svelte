@@ -9,6 +9,7 @@
   // showing, and how fast the page should scroll while they sing.
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
+  import ScreenBar from "../lib/ScreenBar.svelte";
 
   const s = getSession();
 
@@ -90,43 +91,42 @@
 </script>
 
 <section class="screen" aria-label="Hymnal">
-  <div class="bar">
-    <button
-      class="back"
-      onclick={() => (open ? (s.hymn = null) : s.goRead())}
-      aria-label={open ? "Back to the hymn list" : "Back to reading"}>‹</button
-    >
-    <h2>{open && text ? text.title : "Hymnal"}</h2>
-    <span class="spacer"></span>
-    {#if open && hymn}
-      {#if langs.length > 1}
-        <!-- One hymn, two texts: the same tune sung in either language. This is
-             the toggle the German release grows out of. -->
-        <div class="langs" role="group" aria-label="Language">
-          {#each langs as l (l)}
-            <button class="chip" class:on={l === lang} onclick={() => (s.hymnLang = l)}>
-              {l.toUpperCase()}
-            </button>
-          {/each}
-        </div>
+  <ScreenBar
+    title={open && text ? text.title : "Hymnal"}
+    onBack={() => (open ? (s.hymn = null) : s.goRead())}
+    backLabel={open ? "Back to the hymn list" : "Back to reading"}
+  >
+    {#snippet actions()}
+      {#if open && hymn}
+        {#if langs.length > 1}
+          <!-- One hymn, two texts: the same tune sung in either language. This is
+               the toggle the German release grows out of. -->
+          <div class="langs" role="group" aria-label="Language">
+            {#each langs as l (l)}
+              <button class="chip" class:on={l === lang} onclick={() => (s.hymnLang = l)}>
+                {l.toUpperCase()}
+              </button>
+            {/each}
+          </div>
+        {/if}
+        <button class="chip" class:on={s.hymnChords} onclick={() => (s.hymnChords = !s.hymnChords)}>
+          Chords
+        </button>
+        {#if s.hymnChords}
+          <div class="transpose" role="group" aria-label="Transpose">
+            <button onclick={() => (s.hymn = { id: open.id, semis: open.semis - 1 })} aria-label="Transpose down"
+              >−</button
+            >
+            <span class="key">{hymn.transposedKey}</span>
+            <button onclick={() => (s.hymn = { id: open.id, semis: open.semis + 1 })} aria-label="Transpose up"
+              >+</button
+            >
+          </div>
+        {/if}
+        <button class="sing" onclick={() => (s.hymnSinging = true)}>Sing</button>
       {/if}
-      <button class="chip" class:on={s.hymnChords} onclick={() => (s.hymnChords = !s.hymnChords)}>
-        Chords
-      </button>
-      {#if s.hymnChords}
-        <div class="transpose" role="group" aria-label="Transpose">
-          <button onclick={() => (s.hymn = { id: open.id, semis: open.semis - 1 })} aria-label="Transpose down"
-            >−</button
-          >
-          <span class="key">{hymn.transposedKey}</span>
-          <button onclick={() => (s.hymn = { id: open.id, semis: open.semis + 1 })} aria-label="Transpose up"
-            >+</button
-          >
-        </div>
-      {/if}
-      <button class="sing" onclick={() => (s.hymnSinging = true)}>Sing</button>
-    {/if}
-  </div>
+    {/snippet}
+  </ScreenBar>
 
   {#if !open}
     <div class="find">
@@ -257,34 +257,6 @@
     display: flex;
     flex-direction: column;
     background: var(--paper, #fcf9f4);
-  }
-  .bar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 10px;
-    background: var(--paneNavBg, #efeae1);
-    border-bottom: 1px solid var(--rule, #d8cba8);
-    flex-wrap: wrap;
-  }
-  .back {
-    font-size: calc(22px * var(--uiScale, 1));
-    line-height: 1;
-    padding: 8px 14px;
-    border-radius: 6px;
-    color: var(--gold, #9e7d38);
-  }
-  .back:hover {
-    background: color-mix(in srgb, var(--gold, #9e7d38) 14%, transparent);
-  }
-  h2 {
-    margin: 0;
-    font-size: calc(18px * var(--uiScale, 1));
-    font-weight: 600;
-    color: var(--ink, #211f1a);
-  }
-  .spacer {
-    flex: 1;
   }
   .langs {
     display: flex;

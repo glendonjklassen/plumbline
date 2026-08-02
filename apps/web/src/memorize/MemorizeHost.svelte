@@ -13,6 +13,7 @@
   import { getSession } from "../state/session.svelte";
   import { nowStamp } from "../engine/StudyEngine";
   import { dispatchLink } from "../study/links";
+  import ScreenBar from "../lib/ScreenBar.svelte";
 
   const MAX_BLANK_LEVEL = 4; // core memory::MAX_BLANK_LEVEL
 
@@ -131,16 +132,17 @@
 
 {#if view}
   <section class="screen" aria-label="Memorize">
-    <div class="bar">
-      <button class="back" onclick={close} aria-label="Back to reading">‹</button>
-      <span class="title">
-        {view.view === "hub" ? "Memorize" : view.view === "review" ? "Review" : "Coverage & activity"}
-      </span>
-      {#if view.view !== "hub"}
-        <button class="navbtn" onclick={() => (s.memorize = { view: "hub" })}>hub</button>
-      {/if}
-      <span class="spacer"></span>
-    </div>
+    <ScreenBar
+      title={view.view === "hub" ? "Memorize" : view.view === "review" ? "Review" : "Coverage & activity"}
+      onBack={close}
+      backLabel={view.view === "hub" ? "Back to reading" : "Back"}
+    >
+      {#snippet actions()}
+        {#if view.view !== "hub"}
+          <button class="navbtn" onclick={() => (s.memorize = { view: "hub" })}>hub</button>
+        {/if}
+      {/snippet}
+    </ScreenBar>
 
     {#if view.view === "hub"}
       <div class="content">
@@ -263,26 +265,6 @@
     flex-direction: column;
     background: var(--paper, #fcf9f4);
     overflow: hidden;
-  }
-  .back {
-    font-size: calc(22px * var(--uiScale, 1));
-    line-height: 1;
-    padding: 8px 14px;
-    border-radius: 6px;
-    color: var(--gold, #9e7d38);
-  }
-  .back:hover {
-    background: color-mix(in srgb, var(--gold, #9e7d38) 14%, transparent);
-  }
-  .bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--rule, #d8cba8);
-  }
-  .title {
-    font-weight: 600;
   }
   .navbtn {
     color: var(--gold, #9e7d38);

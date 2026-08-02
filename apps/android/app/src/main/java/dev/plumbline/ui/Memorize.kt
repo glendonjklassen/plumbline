@@ -262,24 +262,7 @@ private fun MemFrame(
 ) {
     BackHandler(onBack = onClose)
     Column(Modifier.fillMaxSize().background(palette.paper)) {
-        Surface(color = palette.paneNavBg) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                IconButton(onClick = onClose) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = palette.ink)
-                }
-                Text(
-                    title,
-                    color = palette.ink,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
-        HorizontalDivider(color = palette.rule)
+        ScreenBar(title, palette, onClose)
         Box(Modifier.fillMaxWidth().weight(1f)) { content() }
     }
 }

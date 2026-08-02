@@ -1811,18 +1811,7 @@ private fun MapOverlay(
 ) {
     BackHandler(onBack = onClose)
     Column(Modifier.fillMaxSize().background(palette.paper)) {
-        Surface(color = palette.paneNavBg) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onClose) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = palette.ink)
-                }
-                Text(title, color = palette.ink)
-            }
-        }
-        HorizontalDivider(color = palette.rule)
+        ScreenBar(title, palette, onClose)
         Box(Modifier.fillMaxSize()) { content() }
     }
 }

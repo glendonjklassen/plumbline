@@ -128,53 +128,39 @@ fun HymnalScreen(
 
     Column(Modifier.fillMaxSize().background(palette.paper)) {
         // ── the bar: back, title, and (on a hymn) the singer's controls ──────
-        Surface(color = palette.paneNavBg) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = { if (openId != null) { openId = null; semis = 0 } else onClose() }) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = if (openId != null) "Back to the hymn list" else "Back to reading",
-                        tint = palette.ink,
-                    )
-                }
-                Text(
-                    if (openId != null && text != null) text.title else "Hymnal",
-                    color = palette.ink, fontWeight = FontWeight.SemiBold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                if (openId != null && open != null) {
-                    // One hymn, two texts: the same tune sung in either language.
-                    // This is the toggle the German release grows out of.
-                    if (langs.size > 1) {
-                        langs.forEach { l ->
-                            TextButton(onClick = { wantLang = l }) {
-                                Text(
-                                    l.uppercase(),
-                                    color = if (l == lang) palette.gold else palette.faded,
-                                    fontWeight = if (l == lang) FontWeight.SemiBold else FontWeight.Normal,
-                                )
-                            }
+        ScreenBar(
+            title = if (openId != null && text != null) text.title else "Hymnal",
+            palette = palette,
+            onBack = { if (openId != null) { openId = null; semis = 0 } else onClose() },
+            backLabel = if (openId != null) "Back to the hymn list" else "Back to reading",
+        ) {
+            if (openId != null && open != null) {
+                // One hymn, two texts: the same tune sung in either language.
+                // This is the toggle the German release grows out of.
+                if (langs.size > 1) {
+                    langs.forEach { l ->
+                        TextButton(onClick = { wantLang = l }) {
+                            Text(
+                                l.uppercase(),
+                                color = if (l == lang) palette.gold else palette.faded,
+                                fontWeight = if (l == lang) FontWeight.SemiBold else FontWeight.Normal,
+                            )
                         }
                     }
-                    TextButton(onClick = { chords = !chords }) {
-                        Text("Chords", color = if (chords) palette.gold else palette.faded)
-                    }
-                    if (chords) {
-                        TextButton(onClick = { semis-- }) { Text("−", color = palette.gold, fontSize = 18.sp) }
-                        Text(open.transposedKey, color = palette.ink, fontWeight = FontWeight.SemiBold)
-                        TextButton(onClick = { semis++ }) { Text("+", color = palette.gold, fontSize = 18.sp) }
-                    }
-                    TextButton(onClick = { text?.let { onSing(HymnSing(open, lang, chords)) } }) {
-                        Text("Sing", color = palette.gold, fontWeight = FontWeight.SemiBold)
-                    }
+                }
+                TextButton(onClick = { chords = !chords }) {
+                    Text("Chords", color = if (chords) palette.gold else palette.faded)
+                }
+                if (chords) {
+                    TextButton(onClick = { semis-- }) { Text("−", color = palette.gold, fontSize = 18.sp) }
+                    Text(open.transposedKey, color = palette.ink, fontWeight = FontWeight.SemiBold)
+                    TextButton(onClick = { semis++ }) { Text("+", color = palette.gold, fontSize = 18.sp) }
+                }
+                TextButton(onClick = { text?.let { onSing(HymnSing(open, lang, chords)) } }) {
+                    Text("Sing", color = palette.gold, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
-        HorizontalDivider(color = palette.rule)
 
         if (openId == null) {
             HymnIndex(index, filter, { filter = it }, wantLang, palette) { openId = it; semis = 0 }
