@@ -49,8 +49,8 @@
       slow = false;
       return;
     }
-    const t = setTimeout(() => (slow = true), SLOW_MAP_MS);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => (slow = true), SLOW_MAP_MS);
+    return () => clearTimeout(timer);
   });
 </script>
 

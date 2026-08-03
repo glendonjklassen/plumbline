@@ -74,13 +74,17 @@
   >
     <h2>{t("thread.heading", { passage: shown })}</h2>
     <div class="list">
-      {#each threads as t (t.name)}
+      <!-- `th`, not `t`: the catalogue lookup is called `t` and an each-block
+           binding of the same name shadows it. `t` is `any`, so nothing static
+           sees the collision — this rendered as "t is not a function" and the
+           whole picker went blank (e2e/destructive.spec.ts). -->
+      {#each threads as th (th.name)}
         <div class="row">
-          <button class="thread" onclick={() => pick(t.name)}>
-            {t.name}
-            <span class="count">{t.entries?.length ?? 0}</span>
+          <button class="thread" onclick={() => pick(th.name)}>
+            {th.name}
+            <span class="count">{th.entries?.length ?? 0}</span>
           </button>
-          <button class="del" title={t("thread.delete")} onclick={() => void remove(t.name)}>✕</button>
+          <button class="del" title={t("thread.delete")} onclick={() => void remove(th.name)}>✕</button>
         </div>
       {:else}
         <p class="empty">{t("thread.empty")}</p>

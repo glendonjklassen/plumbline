@@ -30,9 +30,9 @@
   // skips the picker; unknown names fall through to it.
   $effect(() => {
     if (!s.showPresent || !s.presentThreadName || threads.length === 0) return;
-    const t = threads.find((x: any) => x.name === s.presentThreadName);
-    if (t) {
-      thread = t;
+    const named = threads.find((x: any) => x.name === s.presentThreadName);
+    if (named) {
+      thread = named;
       focus = null;
     }
     s.presentThreadName = null;

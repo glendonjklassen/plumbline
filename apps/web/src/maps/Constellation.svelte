@@ -165,8 +165,9 @@
   function pointSegDist(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
     const dx = x2 - x1;
     const dy = y2 - y1;
-    const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy || 1)));
-    return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+    // `along`, not `t`: `t` is the catalogue lookup in every component.
+    const along = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy || 1)));
+    return Math.hypot(px - (x1 + along * dx), py - (y1 + along * dy));
   }
 
   function onClick(e: MouseEvent): void {

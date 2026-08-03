@@ -114,9 +114,9 @@
   });
 
   function markRead(): void {
-    const t = markable;
+    const chapter = markable;
     close();
-    if (t) s.markReadFor = t;
+    if (chapter) s.markReadFor = chapter;
   }
 
   function tagPick(): void {

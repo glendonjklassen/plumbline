@@ -53,10 +53,12 @@
   >
     <h2>{t("tag.heading", { passage: shown })}</h2>
     <div class="list">
-      {#each tags as t (t.name)}
-        <button class="tag" onclick={() => pick(t.name)}>
-          {t.name}
-          <span class="count">{t.members?.length ?? 0}</span>
+      <!-- `tg`, not `t` — see ThreadPicker: an each-block `t` shadows the
+           catalogue lookup and `t` is `any`, so it fails only at runtime. -->
+      {#each tags as tg (tg.name)}
+        <button class="tag" onclick={() => pick(tg.name)}>
+          {tg.name}
+          <span class="count">{tg.members?.length ?? 0}</span>
         </button>
       {:else}
         <p class="empty">{t("tag.empty")}</p>

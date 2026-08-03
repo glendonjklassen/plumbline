@@ -16,7 +16,10 @@
 //      alt. `<input placeholder="Church name" />`. These are the ones that get
 //      missed by eye, because they do not look like copy in a diff.
 //
-//   3. A LABEL PROPERTY in a script body — `{ key: "hymnal", label: "Hymnal" }`.
+//   3. A BINDING CALLED `t` in a component that calls `t("id")` — see the rule
+//      below. Not a stray string at all, but the same failure (a screen with no
+//      words on it) and the only one nothing else in the toolchain can see.
+//   4. A LABEL PROPERTY in a script body — `{ key: "hymnal", label: "Hymnal" }`.
 //      This one was added after it bit: the bottom bar's nav table survived the
 //      whole extraction pass with one bare label in it, and neither review nor
 //      the first two rules saw it, because a string in a script does not look
@@ -184,6 +187,41 @@ for (const file of files) {
       const line = script.slice(0, hit.index).split("\n").length - 1;
       if (exempt(line)) continue;
       findings.push({ file, line: line + 1, what: `${prop}: "${value}"` });
+    }
+  }
+
+  // ── `t` shadowed ───────────────────────────────────────────────────────────
+  // A binding called `t` in a component that also calls `t("id")`.
+  //
+  // This is the one failure mode in this whole system that NOTHING else can see.
+  // `{#each threads as t (t.name)}` makes `t` the thread inside the block, so
+  // `t("thread.delete")` calls an object — and because these values are `any`,
+  // svelte-check is silent, the guard's other rules are silent, and the component
+  // renders as a blank surface at runtime. Two pickers shipped like that until
+  // the full Playwright suite caught them (2026-08-03).
+  //
+  // Reported wherever the binding appears, not only where the collision bites:
+  // the fix is to rename the binding, and a component that binds `t` at all is
+  // one edit away from the bug even if it does not call the lookup today.
+  if (/\bt\(\s*"/.test(src)) {
+    const shadows = [
+      /\{#each\s+[^}]*\bas\s+t\b/g,
+      /\bconst\s+t\s*=/g,
+      /\blet\s+t\s*=/g,
+      /\{#snippet\s+\w+\(\s*t\b/g,
+    ];
+    for (const re of shadows) {
+      re.lastIndex = 0;
+      let hit;
+      while ((hit = re.exec(src))) {
+        const line = src.slice(0, hit.index).split("\n").length - 1;
+        if (exempt(line)) continue;
+        findings.push({
+          file,
+          line: line + 1,
+          what: `\`${hit[0].trim()}\` shadows the catalogue lookup t() — rename the binding`,
+        });
+      }
     }
   }
 
