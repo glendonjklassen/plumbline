@@ -395,6 +395,8 @@
   "qr.label": "QR-Code zur Plumbline-Web-App",
   "quote.wrap": "„{text}“",
   "ref.chapter": "{book} {chapter}",
+  "ref.chapterVerse": "{chapter},{verse}",
+  "ref.printedAs": "Luther {ref}",
   "ref.range": "{book} {chapter},{verse}–{end}",
   "ref.verse": "{book} {chapter},{verse}",
   "rnd.downloadFailed": "Das Analysepaket konnte nicht geladen werden — bitte die Verbindung prüfen.",

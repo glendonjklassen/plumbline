@@ -14,7 +14,9 @@
 //! as nothing on the wire), so the core can add kinds without breaking older
 //! shells.
 
+use crate::reference::VRef;
 use crate::renderings::normalize as render_key;
+use crate::{i18n, versification};
 
 // ── the block model ───────────────────────────────────────────────────────────
 
@@ -657,7 +659,17 @@ pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token:
     let display = src.verse_display(verse).unwrap_or_else(|| verse.to_string());
     let word = src.token_word(verse, token).unwrap_or_default();
 
-    out.push(Block::para(vec![Run::new(display, sz::BODY, Color::Ink).bold()]));
+    // The reference, and — where the two traditions disagree — what a printed
+    // German Bible calls the same verse. 357 verses out of 31,102, so on almost
+    // every card this adds nothing; on Maleachi 4,1 it says "Luther 3,19", which
+    // is what lets a reader find a reference somebody handed them.
+    // `crate::versification` explains why this annotates rather than renumbers.
+    let mut head = vec![Run::new(&display, sz::BODY, Color::Ink).bold()];
+    if let Some(printed) = VRef::parse_ref_key(verse).and_then(|v| versification::printed_note(i18n::active(), &v)) {
+        head.push(Run::new("  ", sz::BODY, Color::Ink));
+        head.push(Run::new(printed, sz::FINE, Color::Faded));
+    }
+    out.push(Block::para(head));
     if !word.is_empty() {
         out.push(Block::para(vec![Run::new(&word, sz::WORD, Color::Ink)]));
     }

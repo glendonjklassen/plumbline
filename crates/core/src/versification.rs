@@ -1,0 +1,130 @@
+//! What a printed German Bible calls a verse we address the KJV's way.
+//!
+//! ## Why this is a display concern and nothing more
+//!
+//! The German corpus (`data-prep/README.md`) sits at the KJV's own verse
+//! addresses: all 66 books, every chapter count, every last verse, 31,102
+//! refKeys identical. So `refKey` means one verse in both texts, and a reader's
+//! notes, tags, threads, weaves, memory cards and shared links need no mapping
+//! and no migration. That problem does not exist here.
+//!
+//! What DOES differ is the number a German reader would find printed beside the
+//! verse. German tradition breaks 26 books' chapters in slightly different
+//! places — 357 verses out of 31,102, about 1.1% — and the Unbound editors, when
+//! they moved the text onto KJV addresses, left the German number in the verse as
+//! a `3:19 ` prefix. `build-luther.py` strips those and writes them here.
+//!
+//! ## What this module deliberately does NOT do
+//!
+//! It does not renumber anything. Chapter counts, navigation, search results and
+//! the reading map all stay on KJV numbering, and `VRef::display_in` still says
+//! "Maleachi 4,1". This only ANNOTATES: where the two traditions disagree, a
+//! reader is told what their printed Bible calls the same verse, so a reference
+//! someone handed them can be found.
+//!
+//! Renumbering wholesale is a much larger feature — a two-way versification
+//! layer touching every site that computes a chapter number, with 26 book
+//! boundaries to get off-by-one wrong silently — and it would be fixing 1.1% of
+//! references at that risk. Annotating explains the difference instead of hiding
+//! it, which for somebody comparing against a printed Bible is arguably the more
+//! useful answer. Only one book (Joel) has a different chapter COUNT at all.
+
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
+use crate::i18n::Lang;
+use crate::reference::VRef;
+
+/// `osis \t chapter \t verse \t germanRef`, produced by
+/// `data-prep/luther/build-luther.py` from the source's own inline numbers.
+const LUTHER: &str = include_str!("versification/luther-numbering.tsv");
+
+/// refKey → the `chapter:verse` a German Bible prints. ~357 entries.
+fn luther_map() -> &'static HashMap<String, (u16, u16)> {
+    static MAP: OnceLock<HashMap<String, (u16, u16)>> = OnceLock::new();
+    MAP.get_or_init(|| {
+        let mut m = HashMap::new();
+        for line in LUTHER.lines() {
+            if line.starts_with('#') || line.trim().is_empty() {
+                continue;
+            }
+            let mut f = line.split('\t');
+            let (Some(osis), Some(ch), Some(vs), Some(ger)) = (f.next(), f.next(), f.next(), f.next()) else {
+                continue;
+            };
+            let Some((gc, gv)) = ger.trim().split_once(':') else { continue };
+            let (Ok(ch), Ok(vs), Ok(gc), Ok(gv)) =
+                (ch.parse::<u16>(), vs.parse::<u16>(), gc.parse::<u16>(), gv.parse::<u16>())
+            else {
+                continue;
+            };
+            m.insert(format!("{osis} {ch}:{vs}"), (gc, gv));
+        }
+        m
+    })
+}
+
+/// What a printed Bible in `lang`'s tradition calls this verse — `None` when it
+/// agrees with ours, which is 98.9% of the canon.
+///
+/// Already formatted for the language, so German gets its comma: `"3,19"`.
+pub fn printed_as(lang: Lang, vref: &VRef) -> Option<String> {
+    if lang != Lang::De {
+        return None;
+    }
+    let (c, v) = luther_map().get(&vref.ref_key()).copied()?;
+    // Same separator rule as a full reference — see `ref.chapterVerse`, which is
+    // a comma in German and a colon in English.
+    Some(crate::i18n::t(lang, "ref.chapterVerse", &[("chapter", &c.to_string()), ("verse", &v.to_string())]))
+}
+
+/// The annotation to show beside a reference, e.g. `"Luther 3,19"`. `None` when
+/// the two traditions agree.
+pub fn printed_note(lang: Lang, vref: &VRef) -> Option<String> {
+    let printed = printed_as(lang, vref)?;
+    Some(crate::i18n::t(lang, "ref.printedAs", &[("ref", &printed)]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_table_loads_and_is_the_size_the_corpus_produced() {
+        // 357 is what `build-luther.py` extracted from the source. A table that
+        // silently parsed to a handful of entries would annotate almost nothing
+        // and look like "the traditions agree", which is the failure worth
+        // catching.
+        let m = luther_map();
+        assert!(m.len() > 300, "the Luther numbering table has only {} entries", m.len());
+    }
+
+    #[test]
+    fn the_classic_disagreements_are_named() {
+        // Malachi: the KJV's chapter 4 is the tail of German chapter 3.
+        assert_eq!(printed_as(Lang::De, &VRef::new("Mal", 4, 1)), Some("3,19".to_string()));
+        // Joel: the one book where German counts a different number of chapters.
+        assert_eq!(printed_as(Lang::De, &VRef::new("Joel", 2, 28)), Some("3,1".to_string()));
+        assert_eq!(printed_as(Lang::De, &VRef::new("Joel", 3, 1)), Some("4,1".to_string()));
+        // A verse on the other side of a chapter break.
+        assert_eq!(printed_as(Lang::De, &VRef::new("Gen", 31, 55)), Some("32,1".to_string()));
+    }
+
+    #[test]
+    fn where_the_traditions_agree_nothing_is_said() {
+        // The overwhelming majority, and the reason this is an annotation rather
+        // than a renumbering: John 3:16 is John 3:16 in both.
+        assert_eq!(printed_as(Lang::De, &VRef::new("John", 3, 16)), None);
+        assert_eq!(printed_as(Lang::De, &VRef::new("Rom", 5, 8)), None);
+        // And an English reader is never told about German numbering at all.
+        assert_eq!(printed_as(Lang::En, &VRef::new("Mal", 4, 1)), None);
+        assert_eq!(printed_note(Lang::En, &VRef::new("Mal", 4, 1)), None);
+    }
+
+    #[test]
+    fn the_note_reads_as_a_reference_a_reader_can_look_up() {
+        let note = printed_note(Lang::De, &VRef::new("Mal", 4, 1)).expect("Malachi 4:1 disagrees");
+        assert!(note.contains("3,19"), "the note does not carry the German number: {note}");
+        assert!(note.contains("Luther"), "the note does not say whose numbering it is: {note}");
+    }
+}

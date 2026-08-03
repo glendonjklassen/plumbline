@@ -2662,6 +2662,16 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
             "the German study card has no German tag action: {blocks}"
         );
 
+        // THE PRINTED-BIBLE ANNOTATION. Malachi 4:1 is what German tradition
+        // prints as 3,19 — 357 verses out of 31,102 disagree — and a reader who
+        // was handed "Maleachi 3,19" has to be able to find it. Annotated, never
+        // renumbered: see crates/core/src/versification.rs.
+        let mal = take(plumbline_engine_word_study_blocks2_json(e, c"Mal 4:1".as_ptr(), 0, 3)).unwrap();
+        assert!(mal.contains("3,19"), "Maleachi 4,1 does not say what a printed German Bible calls it: {mal}");
+        assert!(mal.contains("Luther"), "the annotation does not say whose numbering it is: {mal}");
+        // And where they agree — which is almost everywhere — nothing is added.
+        assert!(!blocks.contains("Luther "), "John 3:16 was annotated with a numbering that does not differ: {blocks}");
+
         // THE CROSS-REFERENCES STAY. They key on refKey, not on a token index, so
         // they are as true of this text as of the KJV — and they are a lot of real
         // study value. My first pass returned early and threw them away; only

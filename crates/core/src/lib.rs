@@ -35,6 +35,7 @@ pub mod tag;
 pub mod theme;
 pub mod thread;
 pub mod usernote;
+pub mod versification;
 pub mod weave;
 
 pub use corpus::{Corpus, Token, Verse};
