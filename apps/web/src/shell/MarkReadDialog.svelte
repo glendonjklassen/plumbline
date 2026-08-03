@@ -12,6 +12,7 @@
   // date set by mistake.
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -65,29 +66,29 @@
     class="dialog"
     role="dialog"
     aria-modal="true"
-    aria-label="Mark chapter read"
+    aria-label={t("markRead.title")}
     data-surface="mark read"
     use:modal={{ close }}
   >
-    <h2>When did you last read {label}?</h2>
+    <h2>{t("markRead.question", { chapter: label })}</h2>
     <p class="sub">
       For reading you did somewhere else — a paper Bible, or another app. It counts as a full read
       on the date you give.
     </p>
     <div class="quick">
-      <button onclick={() => set(daysAgo(0))}>Today</button>
-      <button onclick={() => set(daysAgo(1))}>Yesterday</button>
-      <button onclick={() => set(daysAgo(7))}>Last week</button>
+      <button onclick={() => set(daysAgo(0))}>{t("markRead.today")}</button>
+      <button onclick={() => set(daysAgo(1))}>{t("markRead.yesterday")}</button>
+      <button onclick={() => set(daysAgo(7))}>{t("markRead.lastWeek")}</button>
     </div>
     <label class="pick">
-      <span>Or pick a date</span>
+      <span>{t("markRead.orPickDate")}</span>
       <input type="date" bind:value={date} max={today} />
     </label>
     <div class="row">
-      <button class="clear" onclick={clear}>Clear history</button>
+      <button class="clear" onclick={clear}>{t("markRead.clear")}</button>
       <span class="spacer"></span>
-      <button onclick={close}>Cancel</button>
-      <button class="primary" onclick={() => set(date)}>Set</button>
+      <button onclick={close}>{t("common.cancel")}</button>
+      <button class="primary" onclick={() => set(date)}>{t("markRead.set")}</button>
     </div>
   </div>
 {/if}

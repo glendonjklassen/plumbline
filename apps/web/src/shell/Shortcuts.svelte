@@ -3,22 +3,28 @@
   // bindings (manifest §Keyboard + wheel).
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
-  const rows: [string, string][] = [
-    ["↑ / ↓", "Scroll one line"],
-    ["PageUp / PageDown · Space", "Scroll a page (Shift: all panes)"],
-    ["Home / End", "Top / bottom of chapter"],
-    ["→ or ] · ← or [", "Next / previous chapter"],
-    ["Alt+← / Alt+→", "Back / forward in this pane"],
-    ["Ctrl+wheel · Ctrl+± · Ctrl+0", "Zoom text / reset"],
-    ["Shift+wheel", "Scroll all panes together"],
-    ["Click a word", "Word study"],
-    ["Right-click / long-press a verse", "Copy · note · tag · thread"],
-    ["Shift+click a verse link", "Open in the other pane"],
-    ["Esc", "Close panel / popup"],
-    ["? / F1", "This overlay"],
+  /** BOTH COLUMNS come from the catalogue, keys included. It is tempting to
+   *  treat a key combination as language-neutral and leave it a literal, but
+   *  "Space", "wheel", "Click a word" and "long-press" are English words that
+   *  happen to sit next to a symbol — a German reader needs "Leertaste" and
+   *  "Mausrad" as much as they need the row's description. */
+  const rows = [
+    "scrollLine",
+    "scrollPage",
+    "ends",
+    "chapter",
+    "history",
+    "zoom",
+    "together",
+    "word",
+    "verse",
+    "otherPane",
+    "escape",
+    "help",
   ];
 </script>
 
@@ -29,18 +35,18 @@
     class="dialog"
     role="dialog"
     aria-modal="true"
-    aria-label="Keyboard shortcuts"
+    aria-label={t("shell.shortcuts")}
     use:modal={{ close: () => (s.showShortcuts = false) }}
   >
-    <h2>Keyboard shortcuts</h2>
+    <h2>{t("shell.shortcuts")}</h2>
     <table>
       <tbody>
-        {#each rows as [keys, what] (keys)}
-          <tr><td class="keys">{keys}</td><td>{what}</td></tr>
+        {#each rows as id (id)}
+          <tr><td class="keys">{t(`shortcut.${id}.keys`)}</td><td>{t(`shortcut.${id}`)}</td></tr>
         {/each}
       </tbody>
     </table>
-    <button class="close" onclick={() => (s.showShortcuts = false)}>Close</button>
+    <button class="close" onclick={() => (s.showShortcuts = false)}>{t("common.close")}</button>
   </div>
 {/if}
 

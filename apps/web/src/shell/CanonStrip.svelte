@@ -3,6 +3,7 @@
   // canonSegments view-model, odd sections shaded, OT/NT divide line, one pin
   // per pane (active gold), click → that book ch 1 in the active pane.
   import { getSession } from "../state/session.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -147,7 +148,7 @@
     style:height="{HEIGHT}px"
     role="slider"
     tabindex="0"
-    aria-label="Jump to a book"
+    aria-label={t("canon.jumpToBook")}
     aria-valuemin="0"
     aria-valuemax={Math.max(0, bookCount - 1)}
     aria-valuenow={activeOrder}

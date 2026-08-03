@@ -14,6 +14,7 @@
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
   import { readingTint, tintStyle, tintTitle, type ReadingHeat } from "./readingTint";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -92,45 +93,47 @@
 {#if open}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={close}></div>
-  <div class="dialog" role="dialog" aria-modal="true" aria-label="Go to a passage" use:modal={{ close }}>
+  <div class="dialog" role="dialog" aria-modal="true" aria-label={t("booknav.title")} use:modal={{ close }}>
     <div class="bar">
       {#if book}
         <button class="crumb" onclick={() => (book = null)}>‹ {s.bookName(book)}</button>
       {:else}
-        <span class="crumb-title">Go to…</span>
+        <span class="crumb-title">{t("booknav.goTo")}</span>
       {/if}
       <span class="spacer"></span>
       {#if !book}
         <!-- One testament at a time (Android BookNav.kt): 39 tiles is a grid you
              can take in, 66 is a scroll. -->
-        <div class="testaments" role="group" aria-label="Testament">
+        <div class="testaments" role="group" aria-label={t("booknav.testament")}>
           <button
             class="tab"
             class:on={!newTestament}
             data-testament="ot"
             aria-pressed={!newTestament}
-            onclick={() => (newTestament = false)}>Old Testament</button
+            onclick={() => (newTestament = false)}>{t("booknav.old")}</button
           >
           <button
             class="tab"
             class:on={newTestament}
             data-testament="nt"
             aria-pressed={newTestament}
-            onclick={() => (newTestament = true)}>New</button
+            onclick={() => (newTestament = true)}>{t("booknav.new")}</button
           >
         </div>
       {/if}
-      <button class="close" onclick={close} aria-label="Close">✕</button>
+      <button class="close" onclick={close} aria-label={t("common.close")}>✕</button>
     </div>
     <!-- The tint has to explain itself on screen. Every tile carries a `title`
          with its own story, and on a phone — where most reading happens — a
          title never fires, so the colours were simply unexplained. One line,
          above the grid it describes, and it does not scroll away with it. -->
     <p class="legend" data-tint-legend>
-      <span class="hue unread">Gold</span> not read yet,
-      <span class="hue partial">copper</span> partway,
-      <span class="hue read">sage</span> read through — the stronger the glow, the longer since you
-      were there.
+      <span class="hue unread">{t("booknav.tint.gold")}</span>
+      {t("booknav.tint.goldWhat")}
+      <span class="hue partial">{t("booknav.tint.copper")}</span>
+      {t("booknav.tint.copperWhat")}
+      <span class="hue read">{t("booknav.tint.sage")}</span>
+      {t("booknav.tint.sageWhat")}
     </p>
     <div class="content">
       {#if !book}

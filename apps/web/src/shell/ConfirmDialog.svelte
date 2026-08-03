@@ -12,6 +12,7 @@
   // "no" — a confirmation the reader cannot back out of is not a confirmation.
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
   const req = $derived(s.confirmReq);
@@ -46,7 +47,7 @@
     <h2>{req.title}</h2>
     <p>{req.body}</p>
     <div class="row">
-      <button onclick={no}>Cancel</button>
+      <button onclick={no}>{t("common.cancel")}</button>
       <button class="danger" onclick={yes}>{req.verb}</button>
     </div>
   </div>
