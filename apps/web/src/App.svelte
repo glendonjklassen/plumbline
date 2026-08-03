@@ -156,7 +156,7 @@
       // Returning readers never see the welcome, so without this a link's
       // church would be saved with no sign it happened (feedback 2026-07-27).
       if (hasChurch(shared) && !s.showFirstRun) {
-        s.showToast(`Home church set to ${shared.name} — tap Church to visit them`);
+        s.showToast(t("shell.homeChurchSet", { church: shared.name }));
       }
       // "Deferred" has to mean the reader WANTS the machine tier and its download
       // was held back — not merely that no download happened. Since the tiers

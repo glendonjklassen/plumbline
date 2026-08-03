@@ -10,6 +10,7 @@
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
   import { cleanChurch, hasChurch, safeChurchUrl } from "./church";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -230,7 +231,7 @@
 </script>
 
 {#snippet refchip(r: Ref)}
-  <button class="ref" onclick={() => openRef(r)} title="Open {r.label}">{r.label}</button>
+  <button class="ref" onclick={() => openRef(r)} title={t("intro.openRef", { passage: r.label })}>{r.label}</button>
 {/snippet}
 
 {#snippet vquote(refs: Ref[])}
@@ -245,7 +246,7 @@
     <!-- Someone handed this over. Say who, before anything else — a QR on a
          card at a service should lead back to that service. -->
     <div class="from-church">
-      <span class="fc-lead">Shared with you by</span>
+      <span class="fc-lead">{t("intro.sharedBy")}</span>
       <span class="fc-name">{s.sharedByChurch.name}</span>
       {#if s.sharedByChurch.info}<span class="fc-info">{s.sharedByChurch.info}</span>{/if}
       {#if safeChurchUrl(s.sharedByChurch.url)}
@@ -258,14 +259,10 @@
 {/snippet}
 
 {#snippet churchFields()}
-  <p class="ch-why">
-    If you add your church, the links and QR codes you share contain your church information, so
-    whoever you hand the Bible to can also find your church. It stays on your device and your
-    data remains private.
-  </p>
-  <input class="ch-field" placeholder="Church name" bind:value={churchName} />
-  <input class="ch-field" placeholder="When and where — e.g. Sundays 10am, 12 Long Street" bind:value={churchInfo} />
-  <input class="ch-field" placeholder="Website" bind:value={churchUrl} />
+  <p class="ch-why">{t("intro.churchWhy")}</p>
+  <input class="ch-field" placeholder={t("settings.churchName")} bind:value={churchName} />
+  <input class="ch-field" placeholder={t("settings.churchInfo")} bind:value={churchInfo} />
+  <input class="ch-field" placeholder={t("settings.churchUrl")} bind:value={churchUrl} />
 {/snippet}
 
 {#if s.showFirstRun || s.reopenIntro}
@@ -274,190 +271,131 @@
   <!-- Escape goes through `dismiss()`, the same path as a tap on the backdrop,
        so it inherits the D-08 rule for free: while this screen is ASKING
        something, a stray key answers nothing and the card stays. -->
-  <div class="dialog" role="dialog" aria-modal="true" aria-label="Welcome to Plumbline" use:modal={{ close: dismiss }}>
+  <div class="dialog" role="dialog" aria-modal="true" aria-label={t("intro.title")} use:modal={{ close: dismiss }}>
     {#if stage === "choose"}
-      <h2>Welcome to Plumbline</h2>
+      <h2>{t("intro.title")}</h2>
       {@render sharedBy()}
-      <p class="sub">The Holy Bible in a free, offline app. Where would you like to begin?</p>
+      <p class="sub">{t("intro.sub")}</p>
       <!-- Curious leads (2026-07-28): a stranger to the Bible is the likelier
            first-time reader of the two, and the path that asks the least of
            someone should be the one they see first. -->
       <button class="path" onclick={() => (stage = "curious")}>
-        <span class="name">Curious about the Bible</span>
-        <span class="desc">I'm not sure what I believe — where do I start?</span>
+        <span class="name">{t("intro.pathCurious")}</span>
+        <span class="desc">{t("intro.pathCuriousDesc")}</span>
       </button>
       <button class="path" onclick={() => (stage = "welcome")}>
-        <span class="name">New believer</span>
-        <span class="desc">Where to start if you have just put your faith in Jesus.</span>
+        <span class="name">{t("intro.pathNew")}</span>
+        <span class="desc">{t("intro.pathNewDesc")}</span>
       </button>
       <!-- A link shared from Present was handed to someone in person, so it
            offers only the two paths it was meant for: the rest is setup for a
            reader who already has a Bible habit (2026-07-27). -->
       {#if !s.startAsNewBeliever}
       <button class="path" onclick={sharing}>
-        <span class="name">Sharing the gospel</span>
-        <span class="desc">Share the gospel and your church from your phone.</span>
+        <span class="name">{t("intro.pathSharing")}</span>
+        <span class="desc">{t("intro.pathSharingDesc")}</span>
       </button>
       <button class="path" onclick={() => (stage = "tiers")}>
-        <span class="name">Established believer</span>
-        <span class="desc">
-          Set up your Bible for study and memorization and prepare to share the good news with
-          others.
-        </span>
+        <span class="name">{t("intro.pathEstablished")}</span>
+        <span class="desc">{t("intro.pathEstablishedDesc")}</span>
       </button>
       {/if}
     {:else if stage === "welcome"}
-      <h2>I'm so glad you've put your faith in Jesus!</h2>
+      <h2>{t("intro.welcome.title")}</h2>
       {@render sharedBy()}
       <div class="welcome">
-        <p>There are some next steps you can take to grow in faith:</p>
-        <p>
-          <b>Start reading your Bible.</b> The next page will open in the book of John, which is a
-          great place to start reading the inspired, inerrant word of God. You've been linked the
-          King James Version, which is the closest to the original texts and has been used for
-          hundreds of years by millions of believers. If you have trouble with the older English,
-          turn on the <b>Plain-English overlay</b> in Settings: it marks the words the American
-          King James Version puts differently, so a modern wording is a tap away without ever
-          leaving the King James text.
-        </p>
+        <p>{t("intro.welcome.lead")}</p>
+        <p><b>{t("intro.welcome.readLead")}</b> {t("intro.welcome.read")}</p>
         {@render vquote([REF.pure])}
         <p>
-          <b>Find a church.</b> Being part of a local church is a great way to grow in your faith
-          and connect with believers.
+          <b>{t("intro.welcome.churchLead")}</b>
+          {t("intro.welcome.church")}
           {#if hasChurch(fromChurch)}
-            This Bible was shared with you by <b>{fromChurch.name}</b>{fromChurch.info
-              ? ` — ${fromChurch.info}`
-              : ""}. Start there: they would be glad to see you, and whoever gave you this can
-            introduce you.
+            {t("intro.welcome.churchShared", {
+              church: fromChurch.info ? `${fromChurch.name} — ${fromChurch.info}` : fromChurch.name,
+            })}
             {#if safeChurchUrl(fromChurch.url)}
               <a class="ref-link" href={safeChurchUrl(fromChurch.url)} target="_blank" rel="noopener noreferrer">
-                Visit {fromChurch.name}
+                {t("intro.visitChurch", { church: fromChurch.name })}
               </a>
             {/if}
           {:else}
-            If someone shared this app with you, consider reaching out to them or attending a
-            Sunday morning service at their church.
+            {t("intro.welcome.churchNone")}
           {/if}
         </p>
         {@render vquote([REF.church])}
-        <p>
-          <b>Memorize.</b> This app can also help you memorize scripture — hiding the word in your
-          heart is a wise and helpful thing to do.
-        </p>
+        <p><b>{t("intro.welcome.memorizeLead")}</b> {t("intro.welcome.memorize")}</p>
         {@render vquote([REF.heart])}
-        <p>
-          Know that Jesus loves you, and if you trust in him for your salvation, then you have
-          eternal life:
-        </p>
+        <p>{t("intro.welcome.loved")}</p>
         {@render vquote([REF.love, REF.loved])}
-        <p>No one can take it away from you, and you can know that for certain:</p>
+        <p>{t("intro.welcome.kept")}</p>
         {@render vquote([REF.kept, REF.know])}
-        <p>
-          One day you will be perfected, but not yet, and so while you are here, you are imperfect
-          but you are forgiven:
-        </p>
+        <p>{t("intro.welcome.forgiven")}</p>
         {@render vquote([REF.perfected, REF.forgiven])}
-        <p>
-          I highly recommend you read your Bible as it is rich with wisdom on how to navigate this
-          world and how to serve our Lord and Saviour Jesus Christ:
-        </p>
+        <p>{t("intro.welcome.wisdom")}</p>
         {@render vquote([REF.wisdom])}
-        <p>
-          If you are in a difficult place in your life, ask God to help you with your struggles:
-        </p>
+        <p>{t("intro.welcome.struggle")}</p>
         {@render vquote([REF.struggle])}
-        <p>
-          May the peace and joy of Christ be with you, and may you share that peace and joy with
-          others. God bless you!
-        </p>
-        <p class="hint">Tap any verse reference to open it.</p>
+        <p>{t("intro.welcome.blessing")}</p>
+        <p class="hint">{t("intro.tapHint")}</p>
       </div>
       <button class="start" onclick={() => (rereading ? (s.reopenIntro = null) : startInJohn())}>
-        {rereading ? "Close" : "Open the Bible"}
+        {rereading ? t("common.close") : t("intro.open")}
       </button>
     {:else if stage === "curious"}
-      <h2>I'm glad you're curious about the Bible.</h2>
+      <h2>{t("intro.curious.title")}</h2>
       {@render sharedBy()}
       <div class="welcome">
-        <p>
-          For thousands of years this text has been the foundation of civilizations and of the
-          lives of individuals. People have been killed for reading it and for sharing it.
-        </p>
-        <p>
-          It contains the history of our world from its creation to the incarnation of its Creator
-          here on earth with us. He came to save us because he loves us:
-        </p>
+        <p>{t("intro.curious.p1")}</p>
+        <p>{t("intro.curious.p2")}</p>
         {@render vquote([REF.loved])}
-        <p>
-          Whether you are just curious or returning to faith after a long time, there is treasure
-          here for you:
-        </p>
+        <p>{t("intro.curious.p3")}</p>
         {@render vquote([REF.treasure])}
-        <p>
-          If you are having trouble believing, you're not alone — someone said exactly that to
-          Jesus himself:
-        </p>
+        <p>{t("intro.curious.p4")}</p>
         {@render vquote([REF.unbelief])}
-        <p>
-          I encourage you to read this book starting with the book of John, and to pray that if God
-          is real, he would reveal himself to you. I've known many people for whom that prayer has
-          been answered:
-        </p>
+        <p>{t("intro.curious.p5")}</p>
         {@render vquote([REF.ask, REF.seek])}
-        <p>If you are in a difficult place in your life, ask God to help you with your struggles:</p>
+        <p>{t("intro.curious.struggle")}</p>
         {@render vquote([REF.struggle])}
-        <p class="hint">Tap any verse reference to open it.</p>
+        <p class="hint">{t("intro.tapHint")}</p>
       </div>
       <button class="start" onclick={() => (rereading ? (s.reopenIntro = null) : startInJohn())}>
-        {rereading ? "Close" : "Open the Bible"}
+        {rereading ? t("common.close") : t("intro.open")}
       </button>
     {:else if stage === "church"}
-      <h2>Before you share it</h2>
-      <p class="sub">
-        This app will enable you to easily share the gospel with someone. If they keep the app
-        afterwards, this is how they find your church.
-      </p>
+      <h2>{t("intro.beforeShare")}</h2>
+      <p class="sub">{t("intro.beforeShareSub")}</p>
       {@render churchFields()}
-      <button class="start" onclick={toRomansRoad}>Open the presentation screen</button>
-      <button class="ch-skip" onclick={toRomansRoad}>Skip for now</button>
+      <button class="start" onclick={toRomansRoad}>{t("intro.openPresent")}</button>
+      <button class="ch-skip" onclick={toRomansRoad}>{t("intro.skip")}</button>
     {:else}
-      <h2>Welcome to Plumbline</h2>
-      <p class="ch-title">Your church</p>
+      <h2>{t("intro.title")}</h2>
+      <p class="ch-title">{t("intro.yourChurch")}</p>
       {@render churchFields()}
       <hr class="ch-rule" />
-      <p class="sub">
-        Reading, search, memorization, tags, and notes are all available in this application.
-        Choose which additional analysis tools are installed with the Bible.
-      </p>
+      <p class="sub">{t("intro.tiersSub")}</p>
       <label class="card">
         <input type="checkbox" bind:checked={human} />
         <span class="body">
-          <span class="name">Scholars' analysis <span class="mark human">†</span></span>
-          <span class="desc">
-            Curated scholarship: how the text renders each original word (<i>agapaō</i> → “love”
-            ×27 · “beloved” ×13…), word grammar, the same root traced across the testaments, and
-            the Treasury's cross-references.
-          </span>
+          <span class="name">{t("settings.human")} <span class="mark human">†</span></span>
+          <span class="desc">{t("intro.humanDesc")}</span>
         </span>
       </label>
       <label class="card">
         <input type="checkbox" bind:checked={machine} />
         <span class="body">
-          <span class="name">Machine analysis <span class="mark machine">≈</span></span>
-          <span class="desc">
-            Statistical patterns: the words a word keeps company with,
-            and where in the Bible it clusters.
-          </span>
+          <span class="name">{t("settings.machine")} <span class="mark machine">≈</span></span>
+          <span class="desc">{t("intro.machineDesc")}</span>
         </span>
       </label>
-      <p class="note">Every piece of evidence is marked with where it comes from — ✝ the text · † scholarship · ≈ machine.</p>
+      <p class="note">{t("intro.provenance")}</p>
       <button
         class="start"
         onclick={() => {
           saveChurchIfGiven();
           finish(human, machine);
         }}
-      >Start reading</button>
+      >{t("intro.start")}</button>
     {/if}
   </div>
 {/if}

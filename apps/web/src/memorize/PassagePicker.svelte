@@ -64,7 +64,7 @@
     const named = label;
     close();
     void s.author("memoryAddPassage", from, through, nowStamp()).then((err) => {
-      s.showToast(err ?? `Memorizing ${named}`);
+      s.showToast(err ?? t("menu.memorizing", { passage: named }));
     });
   }
 </script>

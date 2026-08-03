@@ -10,7 +10,7 @@ import { precacheShell } from "../engine/precache";
 import { updateAvailable } from "../engine/update";
 import { EngineRpc, type BootInfo } from "../engine/worker-client";
 import { cleanChurch, PWA_URL, shareUrl, type Church } from "../shell/church";
-import { lang } from "../lib/i18n.svelte";
+import { lang, t } from "../lib/i18n.svelte";
 
 export interface PaneState {
   book: string;
@@ -389,9 +389,9 @@ export class Session {
    * "OK" — "Delete thread", "Remove card". A reader who half-read the sentence
    * still knows what the button does.
    */
-  askConfirm(title: string, body: string, verb = "Delete"): Promise<boolean> {
+  askConfirm(title: string, body: string, verb?: string): Promise<boolean> {
     return new Promise((resolve) => {
-      this.confirmReq = { title, body, verb, resolve };
+      this.confirmReq = { title, body, verb: verb ?? t("common.delete"), resolve };
     });
   }
 
@@ -985,7 +985,7 @@ export class Session {
         // Offline / fetch failed — back to the explicit action.
         this.rndState = "off";
         this.rndPreparing = false;
-        this.showToast("Couldn't download the analysis pack — check your connection.");
+        this.showToast(t("rnd.downloadFailed"));
       },
     );
   }

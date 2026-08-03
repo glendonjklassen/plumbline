@@ -89,11 +89,23 @@ pub fn clean(c: &Church) -> Church {
 /// Joined with a COLON, because that is what the two parts are: a name, then
 /// what it tells you about it. It was an em dash until 2026-07-31 in both
 /// shells, which is an aside where this is a label.
+///
+/// English. The parity vectors (`church_vectors.json`) are English by
+/// construction and both shells' twins are checked against them, so this is the
+/// form that contract names; [`title_in`] is what a reader actually sees.
 pub fn title(c: &Church) -> String {
+    title_in(crate::i18n::Lang::En, c)
+}
+
+/// [`title`], in the reader's language.
+///
+/// `lang` is only reached for the EMPTY case: a church that named itself is
+/// already in its own language and nothing here should touch it.
+pub fn title_in(lang: crate::i18n::Lang, c: &Church) -> String {
     let c = clean(c);
     let parts: Vec<String> = [c.name, c.info].into_iter().filter(|s| !s.is_empty()).collect();
     if parts.is_empty() {
-        "Your church".to_string()
+        crate::i18n::t(lang, "shell.churchFallback", &[])
     } else {
         parts.join(": ")
     }

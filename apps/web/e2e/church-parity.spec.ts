@@ -48,6 +48,9 @@ interface Row {
 
 const VECTORS = fileURLToPath(new URL("../../../crates/core/src/church_vectors.json", import.meta.url));
 const rows: Row[] = JSON.parse(readFileSync(VECTORS, "utf8"));
+const EN: Record<string, string> = JSON.parse(
+  readFileSync(new URL("../../../crates/core/src/i18n/en.json", import.meta.url), "utf8"),
+);
 
 test("the web builds the same share link the core does", () => {
   expect(rows.length, "the table is the parity contract; it should not shrink").toBeGreaterThanOrEqual(8);
@@ -61,7 +64,12 @@ test("the web builds the same share link the core does", () => {
       }),
       `url ${where}`,
     ).toBe(row.url);
-    expect(churchTitle(row.church as Church), `title ${where}`).toBe(row.title);
+    // The fallback is the CALLER's to supply now (church.ts must stay importable
+    // outside a browser, and the catalogue is a Svelte module), so this passes
+    // the same English string the core's `title` uses — read from the catalogue
+    // rather than typed here, or the two could drift and this test would not see
+    // it.
+    expect(churchTitle(row.church as Church, EN["shell.churchFallback"]), `title ${where}`).toBe(row.title);
     // Against the CLEANED url: that is the only form a shell ever holds (a
     // church arrives from the config or a query string, both cleaned).
     expect(safeChurchUrl(row.cleaned.url), `safeUrl ${where}`).toBe(row.safeUrl);

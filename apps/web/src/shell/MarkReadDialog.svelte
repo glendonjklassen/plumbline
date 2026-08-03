@@ -37,25 +37,26 @@
   }
 
   async function set(when: string): Promise<void> {
-    const t = target;
+    // `at`, not `t`: the catalogue lookup is called `t` and this shadowed it.
+    const at = target;
     close();
-    if (!t) return;
-    const err = await s.author("readingMarkRead", t.book, t.chapter, when);
-    s.showToast(err ?? `Marked read — ${when}`);
+    if (!at) return;
+    const err = await s.author("readingMarkRead", at.book, at.chapter, when);
+    s.showToast(err ?? t("markRead.marked", { when }));
   }
 
   async function clear(): Promise<void> {
-    const t = target;
-    if (!t) return;
+    const at = target;
+    if (!at) return;
     const ok = await s.askConfirm(
-      `Clear the reading history for ${label}?`,
-      "It goes back to unread — including a date you set here by hand, which nothing else records.",
-      "Clear history",
+      t("markRead.clearAsk", { chapter: label }),
+      t("markRead.clearBody"),
+      t("markRead.clear"),
     );
     if (!ok) return;
     close();
-    const err = await s.author("readingForget", t.book, t.chapter);
-    s.showToast(err ?? "Reading history cleared");
+    const err = await s.author("readingForget", at.book, at.chapter);
+    s.showToast(err ?? t("markRead.cleared"));
   }
 </script>
 

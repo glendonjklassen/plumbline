@@ -53,7 +53,7 @@
         s.rpc
           .call("readingTick", book, chapter, reached, step, interacted, new Date().toISOString())
           .catch(() => null),
-      onCompleted: (book, chapter) => s.showToast(`Read through — ${s.bookName(book)} ${chapter}`),
+      onCompleted: (book, chapter) => s.showToast(t("shell.readThrough", { chapter: `${s.bookName(book)} ${chapter}` })),
     }),
   );
 
@@ -224,8 +224,8 @@
   // Both of these live in church.ts now, which is pinned to `core::church` by a
   // shared vector table (H-10). The local copies here were the seventh and eighth
   // implementations of the same two lines.
-  const churchTitle = $derived(churchLabel(s.church));
-  const visitChurch = (): void => openChurchSite(s.church, s.showToast);
+  const churchTitle = $derived(churchLabel(s.church, t("shell.churchFallback")));
+  const visitChurch = (): void => openChurchSite(s.church, s.showToast, t("shell.churchFallback"));
 
   // ── global keys (manifest §Keyboard + wheel) ──
   function isEditable(t: EventTarget | null): boolean {
