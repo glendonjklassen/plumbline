@@ -5,6 +5,7 @@
   import type { Snippet } from "svelte";
   import { getSession } from "../state/session.svelte";
   import { zoomable, type ZoomState } from "./zoomable";
+  import { t } from "../lib/i18n.svelte";
 
   interface Props {
     title: string;
@@ -60,13 +61,13 @@
     <span class="title">{title}</span>
     {#if pager}
       <span class="pager">
-        <button onclick={() => pager!.onPage(-1)} disabled={pager.page <= 0} aria-label="Previous page">‹</button>
+        <button onclick={() => pager!.onPage(-1)} disabled={pager.page <= 0} aria-label={t("map.previousPage")}>‹</button>
         <span>{pager.page + 1} / {pager.maxPage + 1}</span>
-        <button onclick={() => pager!.onPage(1)} disabled={pager.page >= pager.maxPage} aria-label="Next page">›</button>
+        <button onclick={() => pager!.onPage(1)} disabled={pager.page >= pager.maxPage} aria-label={t("map.nextPage")}>›</button>
       </span>
     {/if}
     <span class="caption">{caption}</span>
-    <button class="close" onclick={() => (s.mapPopup = null)} aria-label="Close">✕</button>
+    <button class="close" onclick={() => (s.mapPopup = null)} aria-label={t("common.close")}>✕</button>
   </div>
   <div
     class="host"

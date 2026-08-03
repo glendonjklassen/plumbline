@@ -8,6 +8,7 @@
   import MapFrame from "./MapFrame.svelte";
   import { getSession } from "../state/session.svelte";
   import type { ZoomState } from "./zoomable";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
   const W = 1200;
@@ -203,7 +204,7 @@
 <svelte:window onkeydown={onKeydown} />
 
 <MapFrame
-  title="Constellation"
+  title={t("map.constellation")}
   caption={hover || model?.caption || ""}
   width={W}
   height={H}

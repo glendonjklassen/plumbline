@@ -56,6 +56,7 @@
   import { untrack } from "svelte";
   import { getSession } from "../state/session.svelte";
   import { hitTest, MARGIN, paintChapter, verseExtents, type LayoutItem, type PaintOverlays } from "./paint";
+  import { t } from "../lib/i18n.svelte";
 
   const MAX_COLUMN = 720;
 
@@ -575,22 +576,22 @@
 
 <div class="pane" class:active={isActive}>
   <div class="nav">
-    <button onclick={() => s.stepChapter(paneIdx, -1)} title="Previous chapter">‹</button>
+    <button onclick={() => s.stepChapter(paneIdx, -1)} title={t("common.previousChapter")}>‹</button>
     <button
       class="passage"
       onclick={() => (s.bookNavFor = paneIdx)}
-      title="Go to… (book · chapter · verse)"
+      title={t("pane.goTo")}
     >
       {bookName}
       {pane.chapter} ▾
     </button>
-    <button onclick={() => s.stepChapter(paneIdx, 1)} title="Next chapter">›</button>
+    <button onclick={() => s.stepChapter(paneIdx, 1)} title={t("common.nextChapter")}>›</button>
     <span class="spacer"></span>
     {#if s.panes.length < s.maxPanes}
-      <button onclick={() => s.addPane(paneIdx)} title="Split pane">＋</button>
+      <button onclick={() => s.addPane(paneIdx)} title={t("pane.split")}>＋</button>
     {/if}
     {#if s.panes.length > 1}
-      <button onclick={() => s.closePane(paneIdx)} title="Close pane">✕</button>
+      <button onclick={() => s.closePane(paneIdx)} title={t("pane.close")}>✕</button>
     {/if}
   </div>
   <!-- Named so a screen reader can list this pane and jump to it by passage;

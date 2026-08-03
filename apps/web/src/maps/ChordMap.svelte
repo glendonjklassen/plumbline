@@ -5,6 +5,7 @@
   import MapFrame from "./MapFrame.svelte";
   import { getSession } from "../state/session.svelte";
   import type { ZoomState } from "./zoomable";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
   const W = 1000;
@@ -124,7 +125,7 @@
   }
 </script>
 
-<MapFrame title="Weave map" width={W} height={H} loading={!model} onZoom={(z) => (zoom = z)}>
+<MapFrame title={t("map.weaveMap")} width={W} height={H} loading={!model} onZoom={(z) => (zoom = z)}>
   <div class="fill" bind:this={host}>
     <canvas bind:this={canvas} onclick={onClick}></canvas>
   </div>

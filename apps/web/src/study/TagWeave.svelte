@@ -5,6 +5,7 @@
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
   import { nowStamp } from "../engine/StudyEngine";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -39,7 +40,7 @@
     const refsJson = checked.size === members.length ? null : JSON.stringify([...checked]);
     const weaveName = name.trim() !== tag.name ? name.trim() : null;
     void s.author("weaveFromTag", tag.name, refsJson, weaveName, nowStamp()).then((err) =>
-      s.showToast(err ?? `Weave “${name.trim()}” — ${checked.size} passages chained`),
+      s.showToast(err ?? t("weave.made", { name: name.trim(), n: checked.size })),
     );
     close();
   }
@@ -52,11 +53,11 @@
     class="sheet"
     role="dialog"
     aria-modal="true"
-    aria-label="Make a weave from this tag"
+    aria-label={t("weave.title")}
     data-surface="tag weave"
     use:modal={{ close }}
   >
-    <h2>Make a weave — {tag.name}</h2>
+    <h2>{t("weave.heading", { tag: tag.name })}</h2>
     <p class="hint">
       Links the verses you have ticked into a weave. Run it again later to add verses you have
       tagged since.
@@ -69,10 +70,10 @@
         </label>
       {/each}
     </div>
-    <input class="name" bind:value={name} placeholder="Weave name" aria-label="Weave name" />
+    <input class="name" bind:value={name} placeholder={t("weave.name")} aria-label={t("weave.name")} />
     <div class="actions">
       <span class="count">{checked.size} of {members.length} passages</span>
-      <button onclick={close}>Cancel</button>
+      <button onclick={close}>{t("common.cancel")}</button>
       <button class="primary" disabled={checked.size < 2 || !name.trim()} onclick={create}>
         Create weave
       </button>
