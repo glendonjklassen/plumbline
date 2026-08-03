@@ -7,6 +7,7 @@
   import BlockList from "./BlockList.svelte";
   import { dispatchLink } from "./links";
   import { getSession } from "../state/session.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -130,13 +131,13 @@
   <aside class="panel" data-surface="study panel">
     <div class="bar">
       <div class="grip" aria-hidden="true"></div>
-      <button class="close" onclick={() => (s.panel = null)} aria-label="Close panel">✕</button>
+      <button class="close" onclick={() => (s.panel = null)} aria-label={t("panel.close")}>✕</button>
     </div>
     <div class="content">
       {#if s.panel.kind === "notesBrowser"}
-        <h2 class="nb-title">Your notes ({notes.length})</h2>
+        <h2 class="nb-title">{t("panel.yourNotes", { n: notes.length })}</h2>
         {#if notes.length === 0}
-          <p class="nb-empty">No notes yet — right-click or long-press a verse and choose Note…</p>
+          <p class="nb-empty">{t("panel.noNotes")}</p>
         {/if}
         {#each notes as n (n.verse)}
           <div class="nb-note">
@@ -144,7 +145,7 @@
               <button class="nb-ref" onclick={(e) => onLink(goUri(n.verse), e)}>
                 {n.display ?? n.verse}
               </button>
-              <button class="nb-edit" onclick={(e) => onLink(`editnote:${n.verse}`, e)}>✎ edit</button>
+              <button class="nb-edit" onclick={(e) => onLink(`editnote:${n.verse}`, e)}>✎ {t("panel.edit")}</button>
             </div>
             <p class="nb-text">{n.text}</p>
           </div>
@@ -152,14 +153,14 @@
       {:else}
         {#if rndOffer}
           <div class="rnd-offer">
-            <span class="rnd-note">The machine-analysis sections are a one-time ~1.5 MB download.</span>
-            <button class="rnd-load" onclick={() => void s.ensureRnd()}>Load analysis</button>
+            <span class="rnd-note">{t("panel.rndOffer")}</span>
+            <button class="rnd-load" onclick={() => void s.ensureRnd()}>{t("panel.rndLoad")}</button>
           </div>
         {/if}
         {#if akjvWord}
           <p class="akjv">
             <span class="akjv-now">{akjvWord.akjv}</span>
-            <span class="akjv-was">KJV: {akjvWord.kjv}</span>
+            <span class="akjv-was">{t("panel.akjvWas", { word: akjvWord.kjv })}</span>
           </p>
         {/if}
         <!-- `blocks?.length`, not `blocks`: an empty array is truthy in JS, so a
@@ -183,7 +184,7 @@
           {/if}
         {:else}
           <!-- Never look frozen: the worker is answering. -->
-          <p class="loading" aria-live="polite">— loading —</p>
+          <p class="loading" aria-live="polite">{t("panel.loading")}</p>
         {/if}
       {/if}
     </div>

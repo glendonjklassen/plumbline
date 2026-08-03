@@ -118,7 +118,7 @@ private fun shareText(name: String, entries: List<PresentEntry>, link: String): 
             appendLine("“${e.body}” — ${e.display}")
         }
         appendLine()
-        appendLine("Shared from Plumbline — $link")
+        appendLine(t("present.shareText", "url" to link))
     }
 
 /**
@@ -245,15 +245,15 @@ private fun PresentShareDialog(
             Text(threadName, color = Color(0xFF101010), fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
             Text(
-                if (opensAt != null) "Scan to open at $opensAt" else "Scan to open in Plumbline",
+                if (opensAt != null) t("present.scanToOpenAt", "passage" to opensAt) else t("present.scanToOpenApp"),
                 color = Color(0xFF5A564E), fontSize = 13.sp, textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(16.dp))
             QrCode(text = link, size = 220.dp)
             Spacer(Modifier.height(16.dp))
-            Button(onClick = onCopy) { Text("Send the passages as text") }
+            Button(onClick = onCopy) { Text(t("present.sendAsText")) }
             Spacer(Modifier.height(4.dp))
-            TextButton(onClick = onDismiss) { Text("Done") }
+            TextButton(onClick = onDismiss) { Text(t("present.done")) }
         }
     }
 }
@@ -263,7 +263,7 @@ private fun sharePlain(context: android.content.Context, text: String) {
         type = "text/plain"
         putExtra(Intent.EXTRA_TEXT, text)
     }
-    runCatching { context.startActivity(Intent.createChooser(send, "Share")) }
+    runCatching { context.startActivity(Intent.createChooser(send, t("present.share"))) }
 }
 
 /** Pick which thread to present. Big targets; no study chrome. */
@@ -281,18 +281,18 @@ private fun PresentPicker(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, contentDescription = "Close", tint = palette.ink)
+                Icon(Icons.Filled.Close, contentDescription = t("common.close"), tint = palette.ink)
             }
-            Text("Present", color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Text(t("present.title"), color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         }
         HorizontalDivider(color = palette.rule)
         when {
             threads == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Loading threads…", color = palette.faded)
+                Text(t("present.loading"), color = palette.faded)
             }
             threads.isEmpty() -> Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                 Text(
-                    "No threads yet.\n\nA thread is a trail of passages — build one from a word study (“＋ thread”), then present it here.",
+                    t("present.emptyTrail"),
                     color = palette.ink, fontSize = 17.sp, fontFamily = serif,
                 )
             }
@@ -309,7 +309,7 @@ private fun PresentPicker(
                         Text(t.name, color = palette.ink, fontSize = 22.sp, fontFamily = serif, fontWeight = FontWeight.Bold)
                         val first = t.entries.firstOrNull()?.display
                         Text(
-                            "${t.entries.size} passage${if (t.entries.size == 1) "" else "s"}" +
+                            Strings.plural("present.passages.one", "present.passages.other", t.entries.size) +
                                 (first?.let { " · begins at $it" } ?: ""),
                             color = palette.faded, fontSize = 13.sp,
                             modifier = Modifier.padding(top = 3.dp),
@@ -339,14 +339,14 @@ private fun PresentOverview(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = SunInk)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("bar.back"), tint = SunInk)
             }
             Text(
                 name, color = SunInk, fontSize = 18.sp, fontFamily = serif,
                 fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
             )
             IconButton(onClick = onShare) {
-                Icon(Icons.Filled.Share, contentDescription = "Share", tint = SunAccent)
+                Icon(Icons.Filled.Share, contentDescription = t("present.share"), tint = SunAccent)
             }
         }
         HorizontalDivider(color = SunRule)
@@ -429,7 +429,7 @@ private fun PresentFocus(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onOverview) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "All passages", tint = SunInk)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("present.allPassages"), tint = SunInk)
             }
             Text(name, color = SunFaded, fontSize = 14.sp, modifier = Modifier.weight(1f))
             Text(
@@ -476,20 +476,20 @@ private fun PresentFocus(
         ) {
             IconButton(onClick = { onStep(index - 1) }, enabled = index > 0) {
                 Icon(
-                    Icons.Filled.KeyboardArrowLeft, contentDescription = "Previous",
+                    Icons.Filled.KeyboardArrowLeft, contentDescription = t("present.previous"),
                     tint = if (index > 0) SunInk else SunRule,
                 )
             }
             Spacer(Modifier.weight(1f))
             if (!atEnd) {
                 TextButton(onClick = { showContext = !showContext }) {
-                    Text(if (showContext) "Hide context" else "In context", color = SunAccent, fontSize = 15.sp)
+                    Text(if (showContext) t("present.hideContext") else t("present.inContext"), color = SunAccent, fontSize = 15.sp)
                 }
             }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = { onStep(index + 1) }, enabled = !atEnd) {
                 Icon(
-                    Icons.Filled.KeyboardArrowRight, contentDescription = "Next",
+                    Icons.Filled.KeyboardArrowRight, contentDescription = t("present.next"),
                     tint = if (!atEnd) SunInk else SunRule,
                 )
             }
@@ -542,7 +542,7 @@ private fun EndCard(
         ) {
             Icon(Icons.Filled.Share, contentDescription = null)
             Spacer(Modifier.padding(horizontal = 4.dp))
-            Text("Share these passages", fontSize = 16.sp)
+            Text(t("present.sharePassages"), fontSize = 16.sp)
         }
         Spacer(Modifier.height(26.dp))
         // The take-home carries the PASSAGE, not just the app: scanning opens
@@ -550,8 +550,8 @@ private fun EndCard(
         QrCode(text = shareLink, size = 148.dp)
         Spacer(Modifier.height(8.dp))
         Text(
-            entries.firstOrNull()?.display?.let { "scan for $it — free, offline, no account" }
-                ?: "scan for the app — free, offline, no account",
+            entries.firstOrNull()?.display?.let { t("present.scanFor", "passage" to it) }
+                ?: t("present.scanForApp"),
             color = SunFaded, fontSize = 13.sp, fontFamily = serif, textAlign = TextAlign.Center,
         )
     }

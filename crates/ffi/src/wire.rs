@@ -23,6 +23,7 @@ use plumbline_core::config::{Config, PaneRef, StudyMode};
 use plumbline_core::corpus::{Corpus, Token, Verse};
 use plumbline_core::crossref::CrossRef;
 use plumbline_core::hymnal;
+use plumbline_core::i18n;
 use plumbline_core::memory;
 use plumbline_core::panel::{Block, Color, PanelLink, Run};
 use plumbline_core::reading;
@@ -46,8 +47,10 @@ pub struct Toc {
 pub struct TocBook {
     /// OSIS id, e.g. `"John"`.
     pub id: &'static str,
-    /// Display name, e.g. `"John"` / `"1 Corinthians"`.
-    pub name: &'static str,
+    /// Display name in the reader's language, e.g. `"John"` / `"1. Johannes"`.
+    /// Owned rather than `&'static str`: it is a translation now, not a slice of
+    /// the compiled-in canon table.
+    pub name: String,
     /// Chapters in the loaded corpus (floored at 1 for a book it lacks).
     pub chapters: u16,
 }
@@ -1155,6 +1158,12 @@ pub struct WireConfigState {
     /// The welcome this reader was given, "new" | "curious" (additive).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub intro: Option<String>,
+    /// The reader's chosen language (additive). ABSENT means "follow the
+    /// device" — the shell then passes its locale to
+    /// `plumbline_i18n_catalog_json` and the core resolves it, so a German
+    /// phone opens in German without anyone visiting Settings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
     /// Load-only: true when no config file existed yet (guided first run).
     #[serde(default)]
     pub first_run: bool,
@@ -1259,6 +1268,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         present_shares_as_new: Some(cfg.present_shares_as_new),
         akjv_overlay: Some(cfg.akjv_overlay),
         intro: (!cfg.intro.is_empty()).then(|| cfg.intro.clone()),
+        language: (!cfg.language.is_empty()).then(|| cfg.language.clone()),
         church: (!cfg.church.is_empty()).then(|| WireChurch {
             name: cfg.church.name.clone(),
             info: cfg.church.info.clone(),
@@ -1311,6 +1321,13 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
             Some("curious") => "curious".to_string(),
             _ => String::new(),
         },
+        // Empty means "follow the device", and a language this build does not
+        // ship means the same — never English by fiat. Validated here rather
+        // than trusted, since this is where a shell's value becomes the core's.
+        language: match w.language.as_deref() {
+            Some(code) if i18n::Lang::ALL.iter().any(|l| l.code() == code) => code.to_string(),
+            _ => String::new(),
+        },
         // Through the core's clamps, not a local trim: this is the one place a
         // shell's church becomes the core's, so it is where the caps stop being
         // something each shell has to remember (2026-08-01).
@@ -1323,7 +1340,8 @@ pub fn search_to_wire(a: &SearchAnswer) -> WireSearch {
         SearchAnswer::GoTo { book, chapter, verse } => {
             let display = match verse {
                 Some(v) => plumbline_core::VRef::new(book.clone(), *chapter, *v).display(),
-                None => format!("{} {}", plumbline_core::canon::display_name(book), chapter),
+                None => plumbline_core::VRef::new(book.clone(), *chapter, 1)
+                    .chapter_display_in(plumbline_core::i18n::active()),
             };
             WireSearch::Goto { book: book.clone(), chapter: *chapter, verse: *verse, display }
         }
@@ -1610,6 +1628,40 @@ pub fn hymn_to_wire(h: &hymnal::Hymn, semis: i32) -> WireHymn {
                     },
                 )
             })
+            .collect(),
+    }
+}
+
+// ── i18n ────────────────────────────────────────────────────────────────────
+
+/// One language's whole catalogue, plus the list a picker needs
+/// (`plumbline_i18n_catalog_json`).
+#[derive(Serialize)]
+pub struct WireCatalog {
+    /// The language actually resolved — not necessarily the code asked for, if
+    /// that carried a region tag or named a language this build does not ship.
+    pub lang: String,
+    /// id → text, English laid under the requested language so every id
+    /// resolves even where the translation has not been written.
+    pub strings: std::collections::BTreeMap<String, String>,
+    /// Every language on offer, each labelled in itself.
+    pub languages: Vec<WireLanguage>,
+}
+
+#[derive(Serialize)]
+pub struct WireLanguage {
+    pub code: String,
+    /// What this language calls itself — "Deutsch", not "German".
+    pub endonym: String,
+}
+
+pub fn catalog_to_wire(lang: i18n::Lang) -> WireCatalog {
+    WireCatalog {
+        lang: lang.code().to_string(),
+        strings: i18n::resolved(lang),
+        languages: i18n::Lang::ALL
+            .iter()
+            .map(|l| WireLanguage { code: l.code().to_string(), endonym: l.endonym().to_string() })
             .collect(),
     }
 }

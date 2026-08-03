@@ -30,7 +30,7 @@ import androidx.compose.runtime.Composable
 data class ConfirmRequest(
     val title: String,
     val body: String,
-    val verb: String = "Delete",
+    val verb: String = t("common.delete"),
     val onConfirm: () -> Unit,
 )
 
@@ -54,7 +54,7 @@ fun ConfirmDialog(request: ConfirmRequest?, palette: ReaderPalette, onDismiss: (
             }) { Text(request.verb, color = palette.disputed) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel", color = palette.faded) }
+            TextButton(onClick = onDismiss) { Text(t("common.cancel"), color = palette.faded) }
         },
     )
 }

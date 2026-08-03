@@ -33,6 +33,13 @@ jobs:
         run: cargo test --locked -p plumbline-core -p plumbline-layout -p plumbline-rnd -p plumbline-ffi -p plumbline-hydrate
       - name: Test the R&D features
         run: cargo test --locked -p plumbline-rnd --features "bridge embeddings morphology concept"
+      # The GERMAN CORPUS against the file that actually ships. `#[ignore]`d in
+      # the default run because it reads 15 MB and needs a hydrated checkout;
+      # here it is the only thing proving `data/luther1912.jsonl` sits at the
+      # KJV's verse addresses, comes back as German, and does not get handed the
+      # KJV's Strong's or plain-English overlay.
+      - name: Test the German corpus
+        run: cargo test --locked -p plumbline-ffi --lib -- --ignored german_corpus
       # The corpus idxcache must be REPRODUCIBLE. It is the biggest file in the
       # web pack and the pack manifest hashes it, so a cache that differs run to
       # run re-mints every `?v=` URL and makes every reader re-download the whole
@@ -154,6 +161,21 @@ jobs:
             git --no-pager diff -- crates/ffi/include
             exit 1
           fi
+
+  # Every user-visible string in BOTH shells comes from crates/core/src/i18n —
+  # see docs/I18N.md. Its own job rather than a step inside the web build,
+  # because it also reads the Kotlin shell, and because a stray literal should
+  # fail fast rather than after a wasm compile and a browser download.
+  i18n:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: No user-visible strings outside the catalogue
+        run: node scripts/check-i18n.mjs
 
   # Build the web shell end to end and run its Playwright suite — boots the
   # real engine (wasm) in a real browser: boot, stock seeding, menu

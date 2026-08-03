@@ -297,7 +297,20 @@ tasks.register<Copy>("syncData") {
         // makes. Without it the engine reports the overlay unavailable and the
         // Android toggle correctly hides itself — the feature was fully wired
         // in Kotlin but invisible on device, because the data never shipped.
-        include("kjv.jsonl", "strongs.json", "kjv-notes.jsonl", "cross-references.tsv", "akjv.akjvb", "hymnal.json")
+        // luther1912.jsonl is the GERMAN corpus (data-prep/README.md). Bundled
+        // rather than downloaded: it compresses to ~1.8 MB inside the APK, which
+        // is small beside cross-references.tsv, and it means a German reader has
+        // scripture the moment the app opens. The web fetches it on demand
+        // instead, because nothing there is ever bundled.
+        include(
+            "kjv.jsonl",
+            "luther1912.jsonl",
+            "strongs.json",
+            "kjv-notes.jsonl",
+            "cross-references.tsv",
+            "akjv.akjvb",
+            "hymnal.json",
+        )
     }
     into(layout.projectDirectory.dir("src/main/assets/data"))
 }

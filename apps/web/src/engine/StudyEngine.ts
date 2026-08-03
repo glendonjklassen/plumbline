@@ -619,6 +619,36 @@ export function readingSpec(w: WasmEngine): any {
   return s === null ? null : JSON.parse(s);
 }
 
+/** Every string the shell paints, in the reader's language, in ONE call.
+ *
+ *  Both arguments, because the core owns the rule that an empty setting means
+ *  "follow the device" — see `i18n::resolve`. The reply's `lang` says which one
+ *  won. Engine-independent: the chrome has to exist before an engine does. */
+export function i18nCatalog(w: WasmEngine, chosen: string, device: string): any {
+  const a = w.inStr(chosen);
+  const b = w.inStr(device);
+  const s = w.takeStr((w.exports.plumbline_i18n_catalog_json as Function)(a, b) as number);
+  w.freeStr(a);
+  w.freeStr(b);
+  return s === null ? null : JSON.parse(s);
+}
+
+/** Tell the ENGINE which language to write in, and get back the code it chose.
+ *
+ *  The catalogue covers what a shell spells; this covers what the core spells —
+ *  book names and references, in the TOC, search hits, weave endpoints, note
+ *  headers, the reading map. Both, or a German reader gets a German interface
+ *  listing a book called Genesis. Engine-independent, and must be called BEFORE
+ *  the boot reply builds the TOC. */
+export function i18nSetLanguage(w: WasmEngine, chosen: string, device: string): string {
+  const a = w.inStr(chosen);
+  const b = w.inStr(device);
+  const s = w.takeStr((w.exports.plumbline_i18n_set_language as Function)(a, b) as number);
+  w.freeStr(a);
+  w.freeStr(b);
+  return s ?? "en";
+}
+
 export function themePalette(w: WasmEngine, theme: string): any {
   const p = w.inStr(theme);
   const s = w.takeStr((w.exports.plumbline_theme_palette_json as Function)(p) as number);

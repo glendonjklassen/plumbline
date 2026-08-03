@@ -508,7 +508,9 @@ pub struct ChapterHeat {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct BookHeat {
     pub book: String,
-    pub name: &'static str,
+    /// The book's name in the reader's language (`i18n::active`). Owned, not a
+    /// slice of the canon table, because it is a translation now.
+    pub name: String,
     pub chapters: u16,
     pub words: u32,
     /// Chapters that have had a full read.
@@ -641,7 +643,7 @@ pub fn books(corpus: &Corpus, words: &ChapterWords, store: &Store, now: &str) ->
             };
             BookHeat {
                 book: book.to_string(),
-                name: canon::display_name(book),
+                name: crate::i18n::book_name(crate::i18n::active(), book),
                 chapters: chapters.len() as u16,
                 words: total,
                 read,

@@ -168,7 +168,10 @@ pub fn set_note(home: impl AsRef<Path>, vref: &VRef, text: &str, stamp: &str) ->
             text: text.to_string(),
             created,
             updated: stamp.to_string(),
-            extra: existing.map(|r| r.extra).unwrap_or_default(),
+            // A NEW note is stamped with the language its ref was written in; an
+            // existing one keeps whatever its file said, including nothing. See
+            // `i18n::stamp` for why re-saving must not invent an answer.
+            extra: existing.map(|r| r.extra).unwrap_or_else(crate::i18n::stamped_extra),
         };
         let json = serde_json::to_string_pretty(&repr).map(|s| s + "\n").map_err(|e| Error::Parse(e.to_string()))?;
         crate::store::write_atomic(&path, &json)?;
@@ -274,7 +277,9 @@ mod tests {
     }
 
     /// A note with nothing unknown in it is written byte for byte as it was
-    /// before any of that landed — these files already ship inside backup zips.
+    /// before any of that landed, plus the language stamp a NEW file gets
+    /// (`i18n::stamp`) — these files already ship inside backup zips, so the
+    /// exact bytes matter and the one addition is deliberate.
     #[test]
     fn a_note_with_no_unknown_keys_is_written_exactly_as_before() {
         let home = scratch("golden");
@@ -288,10 +293,37 @@ mod tests {
   "ref": "John 3:16",
   "text": "the golden text",
   "created": "2026-01-01T00:00:00Z",
-  "updated": "2026-01-01T00:00:00Z"
+  "updated": "2026-01-01T00:00:00Z",
+  "lang": "en"
 }
 "#
         );
+        let _ = std::fs::remove_dir_all(&home);
+    }
+    /// The other half of the stamp's contract, and the one that matters more: a
+    /// file that has NO stamp does not gain one by being re-saved. See
+    /// `i18n::stamp` — inventing a provenance is worse than admitting none.
+
+    /// MUTATION: in `set_note`, change `unwrap_or_else(stamped_extra)` to
+    /// `map(|r| { let mut e = r.extra; crate::i18n::stamp_new(&mut e); e })`-style
+    /// stamping on every save. Red here; the golden test above stays green.
+    #[test]
+    fn a_note_from_an_older_build_does_not_gain_a_language_it_never_had() {
+        let home = scratch("older-note");
+        let _ = std::fs::remove_dir_all(&home);
+        let v = VRef::new("John", 3, 16);
+        let path = note_file(&home, &v);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"format":"pure-note-v1","ref":"John 3:16","text":"older","created":"2025-01-01T00:00:00Z"}"#,
+        )
+        .unwrap();
+
+        set_note(&home, &v, "edited under a German interface", "2026-08-03T00:00:00Z").unwrap();
+        let back = std::fs::read_to_string(&path).unwrap();
+        assert!(back.contains("edited under a German interface"), "the edit did not land: {back}");
+        assert!(!back.contains("\"lang\""), "a re-save invented a provenance the file never had: {back}");
         let _ = std::fs::remove_dir_all(&home);
     }
 

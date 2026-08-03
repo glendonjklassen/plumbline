@@ -65,27 +65,46 @@ import dev.plumbline.parseWire
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** One tappable verse reference in the welcome ("Psalm 12:6–7" → "Ps 12:6");
- *  [keys] are the verses QUOTED inline — the new believer reads scripture
- *  itself, not a row of links (product 2026-07-26). */
-data class WelcomeRef(val label: String, val refKey: String, val keys: List<String> = listOf())
+/** One tappable verse reference in the welcome; [keys] are the verses QUOTED
+ *  inline — the new believer reads scripture itself, not a row of links
+ *  (product 2026-07-26).
+ *
+ *  The LABEL IS DERIVED, not stored: "Psalm 12:6–7" is a book name plus the
+ *  catalogue's own reference template, and both localize (German writes
+ *  "Psalm 12,6–7"). Fifteen stored labels would have been fifteen more English
+ *  strings in a table nobody reads as copy. [end] is the last verse of a range. */
+data class WelcomeRef(val refKey: String, val keys: List<String> = listOf(), val end: Int? = null)
 
-private val LOVE = WelcomeRef("Romans 5:8", "Rom 5:8", listOf("Rom 5:8"))
-private val PURE = WelcomeRef("Psalm 12:6–7", "Ps 12:6", listOf("Ps 12:6", "Ps 12:7"))
-private val CHURCH = WelcomeRef("Hebrews 10:24–25", "Heb 10:24", listOf("Heb 10:24", "Heb 10:25"))
-private val HEART = WelcomeRef("Psalm 119:11", "Ps 119:11", listOf("Ps 119:11"))
-private val LOVED = WelcomeRef("John 3:16", "John 3:16", listOf("John 3:16"))
-private val KNOW = WelcomeRef("1 John 5:13", "1John 5:13", listOf("1John 5:13"))
-private val KEPT = WelcomeRef("John 10:28–29", "John 10:28", listOf("John 10:28"))
-private val PERFECTED = WelcomeRef("Philippians 1:6", "Phil 1:6", listOf("Phil 1:6"))
-private val FORGIVEN = WelcomeRef("1 John 1:9", "1John 1:9", listOf("1John 1:9"))
-private val WISDOM = WelcomeRef("2 Timothy 3:16–17", "2Tim 3:16", listOf("2Tim 3:16", "2Tim 3:17"))
+/** How this reference reads, in the reader's language. The engine already
+ *  localizes a refKey's display form; the range suffix is the catalogue's. */
+fun welcomeLabel(engine: StudyEngine, r: WelcomeRef): String {
+    val one = runCatching {
+        synchronized(engine) { engine.VerseJson(r.refKey) }?.let { parseWire<VerseData>(it).display }
+    }.getOrNull() ?: r.refKey
+    val last = r.end ?: r.keys.lastOrNull()?.substringAfterLast(':')?.toIntOrNull()
+    return if (last == null || "$last" == one.substringAfterLast(':').substringAfterLast(',')) {
+        one
+    } else {
+        "$one–$last"
+    }
+}
+
+private val LOVE = WelcomeRef("Rom 5:8", listOf("Rom 5:8"))
+private val PURE = WelcomeRef("Ps 12:6", listOf("Ps 12:6", "Ps 12:7"))
+private val CHURCH = WelcomeRef("Heb 10:24", listOf("Heb 10:24", "Heb 10:25"))
+private val HEART = WelcomeRef("Ps 119:11", listOf("Ps 119:11"))
+private val LOVED = WelcomeRef("John 3:16", listOf("John 3:16"))
+private val KNOW = WelcomeRef("1John 5:13", listOf("1John 5:13"))
+private val KEPT = WelcomeRef("John 10:28", listOf("John 10:28"), end = 29)
+private val PERFECTED = WelcomeRef("Phil 1:6", listOf("Phil 1:6"))
+private val FORGIVEN = WelcomeRef("1John 1:9", listOf("1John 1:9"))
+private val WISDOM = WelcomeRef("2Tim 3:16", listOf("2Tim 3:16", "2Tim 3:17"))
 // The curious path's verses (web twin: REF.treasure / unbelief / ask / seek / struggle).
-private val TREASURE = WelcomeRef("Proverbs 2:4–5", "Prov 2:4", listOf("Prov 2:4", "Prov 2:5"))
-private val UNBELIEF = WelcomeRef("Mark 9:24", "Mark 9:24", listOf("Mark 9:24"))
-private val ASK = WelcomeRef("Matthew 7:7", "Matt 7:7", listOf("Matt 7:7"))
-private val SEEK = WelcomeRef("Jeremiah 29:13", "Jer 29:13", listOf("Jer 29:13"))
-private val STRUGGLE = WelcomeRef("Psalm 34:18", "Ps 34:18", listOf("Ps 34:18"))
+private val TREASURE = WelcomeRef("Prov 2:4", listOf("Prov 2:4", "Prov 2:5"))
+private val UNBELIEF = WelcomeRef("Mark 9:24", listOf("Mark 9:24"))
+private val ASK = WelcomeRef("Matt 7:7", listOf("Matt 7:7"))
+private val SEEK = WelcomeRef("Jer 29:13", listOf("Jer 29:13"))
+private val STRUGGLE = WelcomeRef("Ps 34:18", listOf("Ps 34:18"))
 private val ALL_QUOTED = listOf(
     LOVE, PURE, CHURCH, HEART, LOVED, KNOW, KEPT, PERFECTED, FORGIVEN, WISDOM,
     TREASURE, UNBELIEF, ASK, SEEK, STRUGGLE,
@@ -111,12 +130,19 @@ fun FirstRunOverlay(
 ) {
     // The quoted verse bodies, fetched off-thread (keyed by refKey).
     var bodies by remember { mutableStateOf(mapOf<String, String>()) }
+    // And every chip's LABEL, in the same pass, because it is the engine that
+    // knows how a reference reads in this language ("Psalm 12,6–7" in German).
+    // Fetched here rather than in the two paths so neither has to hold an engine.
+    var labels by remember { mutableStateOf(mapOf<String, String>()) }
     LaunchedEffect(Unit) {
         bodies = withContext(Dispatchers.Default) {
             ALL_QUOTED.flatMap { it.keys }.distinct().associateWith { k ->
                 runCatching { synchronized(engine) { engine.VerseJson(k) } }.getOrNull()
                     ?.let { runCatching { parseWire<VerseData>(it).body }.getOrNull() } ?: ""
             }
+        }
+        labels = withContext(Dispatchers.Default) {
+            ALL_QUOTED.associate { it.refKey to welcomeLabel(engine, it) }
         }
     }
     // One shared family for the whole app (ui/Typography.kt) — it also drives the
@@ -188,16 +214,16 @@ fun FirstRunOverlay(
                         onSharing = { stage = 4 },
                     )
                     1 -> Welcome(
-                        palette, serif, bodies,
+                        palette, serif, bodies, labels,
                         onRef = { if (reread != null) onNewBeliever(it, "new") else onNewBeliever(it, "new") },
                         onStart = { if (reread != null) onCloseReread() else onNewBeliever(null, "new") },
-                        closeLabel = if (reread != null) "Close" else null,
+                        closeLabel = if (reread != null) t("common.close") else null,
                     )
                     3 -> Curious(
-                        palette, serif, bodies,
+                        palette, serif, bodies, labels,
                         onRef = { onNewBeliever(it, "curious") },
                         onStart = { if (reread != null) onCloseReread() else onNewBeliever(null, "curious") },
-                        closeLabel = if (reread != null) "Close" else null,
+                        closeLabel = if (reread != null) t("common.close") else null,
                     )
                     4 -> ChurchBeforeSharing(
                         palette,
@@ -223,12 +249,12 @@ private fun Choose(palette: ReaderPalette, serif: FontFamily, onPath: (Int) -> U
     Text("✦", color = palette.gold, fontSize = 25.sp)
     Spacer(Modifier.height(8.dp))
     Text(
-        "Welcome to Plumbline", color = palette.ink, fontSize = 29.sp,
+        t("intro.title"), color = palette.ink, fontSize = 29.sp,
         fontFamily = serif, fontWeight = FontWeight.Bold,
     )
     Spacer(Modifier.height(6.dp))
     Text(
-        "The Holy Bible, free and offline.\nWhere would you like to begin?",
+        t("intro.subShort"),
         color = palette.faded, fontSize = 16.5.sp,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
@@ -236,12 +262,11 @@ private fun Choose(palette: ReaderPalette, serif: FontFamily, onPath: (Int) -> U
     // Curious leads (2026-07-28): a stranger to the Bible is the likelier
     // first-time reader of the two, and the path that asks the least of someone
     // should be the one they see first. Web twin: FirstRun.svelte's choose stage.
-    PathCard(palette, "Curious about the Bible", "I'm not sure what I believe — where do I start?") { onPath(3) }
-    PathCard(palette, "New believer", "Where to start if you have just put your faith in Jesus.") { onPath(1) }
-    PathCard(palette, "Sharing the gospel", "Share the gospel and your church from your phone.", onSharing)
+    PathCard(palette, t("intro.pathCurious"), t("intro.pathCuriousDesc")) { onPath(3) }
+    PathCard(palette, t("intro.pathNew"), t("intro.pathNewDesc")) { onPath(1) }
+    PathCard(palette, t("intro.pathSharing"), t("intro.pathSharingDesc"), onSharing)
     PathCard(
-        palette, "Established believer",
-        "Set up your Bible for study and memorization and prepare to share the good news with others.",
+        palette, t("intro.pathEstablished"), t("intro.pathEstablishedDesc"),
     ) { onPath(2) }
 }
 
@@ -268,6 +293,7 @@ private fun Welcome(
     palette: ReaderPalette,
     serif: FontFamily,
     bodies: Map<String, String>,
+    labels: Map<String, String>,
     onRef: (WelcomeRef) -> Unit,
     onStart: () -> Unit,
     /** Non-null when re-reading: the button closes instead of starting. */
@@ -286,7 +312,7 @@ private fun Welcome(
         Column(Modifier.fillMaxWidth().padding(top = 6.dp, start = 14.dp, end = 6.dp)) {
             if (text.isNotEmpty()) {
                 Text(
-                    "“$text”", color = palette.ink, fontSize = 17.5.sp, lineHeight = 27.sp,
+                    t("quote.wrap", "text" to text), color = palette.ink, fontSize = 17.5.sp, lineHeight = 27.sp,
                     fontFamily = serif, fontStyle = FontStyle.Italic,
                 )
             }
@@ -296,7 +322,8 @@ private fun Welcome(
             ) {
                 for (r in refs) {
                     Text(
-                        r.label, color = palette.gold, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                        labels[r.refKey] ?: r.refKey,
+                        color = palette.gold, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.clickable { onRef(r) }.padding(vertical = 3.dp),
                     )
                 }
@@ -305,63 +332,50 @@ private fun Welcome(
     }
 
     Text(
-        "We're so glad you've put your faith in Jesus",
+        t("intro.welcome.title"),
         color = palette.ink, fontSize = 25.sp, fontFamily = serif, fontWeight = FontWeight.Bold,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
-    Para("There are some next steps you can take to grow in faith:")
+    Para(t("intro.welcome.lead"))
     Para(
-        "Start reading your Bible. The next page will open in the book of John, which is a " +
-            "great place to start reading the inspired, inerrant word of God. You've been linked " +
-            "the King James Version, which is the closest to the original texts and has been used " +
-            "for hundreds of years by millions of believers. If you have trouble with the older " +
-            "English, turn on the Plain-English overlay in Settings: it marks the words the " +
-            "American King James Version puts differently, so a modern wording is a tap away " +
-            "without ever leaving the King James text.",
+        t("intro.welcome.readLead") + " " + t("intro.welcome.read"),
     )
     Quote(PURE)
     Para(
-        "Find a church. Being part of a local church is a great way to grow in your faith and " +
-            "connect with believers. If someone shared this app with you, consider reaching out " +
-            "to them or attending a Sunday morning service at their church.",
+        t("intro.welcome.churchLead") + " " + t("intro.welcome.churchMerged"),
     )
     Quote(CHURCH)
     Para(
-        "Memorize. This app can also help you memorize scripture — hiding the word in your " +
-            "heart is a wise and helpful thing to do.",
+        t("intro.welcome.memorizeLead") + " " + t("intro.welcome.memorize"),
     )
     Quote(HEART)
     Para(
-        "Know that Jesus loves you, and if you trust in him for your salvation, then you have " +
-            "eternal life:",
+        t("intro.welcome.loved"),
     )
     Quote(LOVE, LOVED)
-    Para("No one can take it away from you, and you can know that for certain:")
+    Para(t("intro.welcome.kept"))
     Quote(KEPT, KNOW)
     Para(
-        "One day you will be perfected, but not yet, and so while you are here, you are " +
-            "imperfect but you are forgiven:",
+        t("intro.welcome.forgiven"),
     )
     Quote(PERFECTED, FORGIVEN)
     Para(
-        "We highly recommend you read your Bible as it is rich with wisdom on how to navigate " +
-            "this world and how to serve our Lord and Saviour Jesus Christ:",
+        t("intro.welcome.wisdom"),
     )
     Quote(WISDOM)
     Para(
-        "May the peace and joy of Christ be with you, and may you share that peace and joy with " +
-            "others. God bless you!",
+        t("intro.welcome.blessing"),
     )
     Spacer(Modifier.height(10.dp))
     Text(
-        "Tap any verse reference to open it.",
+        t("intro.tapHint"),
         color = palette.faded, fontSize = 14.5.sp, fontStyle = FontStyle.Italic,
     )
     Spacer(Modifier.height(16.dp))
     Button(
         onClick = onStart,
         colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
-    ) { Text(closeLabel ?: "Open the Bible", fontSize = 18.5.sp) }
+    ) { Text(closeLabel ?: t("intro.open"), fontSize = 18.5.sp) }
 }
 
 /**
@@ -375,6 +389,7 @@ private fun Curious(
     palette: ReaderPalette,
     serif: FontFamily,
     bodies: Map<String, String>,
+    labels: Map<String, String>,
     onRef: (WelcomeRef) -> Unit,
     onStart: () -> Unit,
     closeLabel: String? = null,
@@ -391,7 +406,7 @@ private fun Curious(
         Column(Modifier.fillMaxWidth().padding(top = 6.dp, start = 14.dp, end = 6.dp)) {
             if (text.isNotEmpty()) {
                 Text(
-                    "“$text”", color = palette.ink, fontSize = 17.5.sp, lineHeight = 27.sp,
+                    t("quote.wrap", "text" to text), color = palette.ink, fontSize = 17.5.sp, lineHeight = 27.sp,
                     fontFamily = serif, fontStyle = FontStyle.Italic,
                 )
             }
@@ -401,7 +416,8 @@ private fun Curious(
             ) {
                 for (r in refs) {
                     Text(
-                        r.label, color = palette.gold, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                        labels[r.refKey] ?: r.refKey,
+                        color = palette.gold, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.clickable { onRef(r) }.padding(vertical = 3.dp),
                     )
                 }
@@ -410,47 +426,41 @@ private fun Curious(
     }
 
     Text(
-        "I'm glad you're curious about the Bible.",
+        t("intro.curious.title"),
         color = palette.ink, fontSize = 25.sp, fontFamily = serif, fontWeight = FontWeight.Bold,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
     Para(
-        "For thousands of years this text has been the foundation of civilizations and of the " +
-            "lives of individuals. People have been killed for reading it and for sharing it.",
+        t("intro.curious.p1"),
     )
     Para(
-        "It contains the history of our world from its creation to the incarnation of its Creator " +
-            "here on earth with us. He came to save us because he loves us:",
+        t("intro.curious.p2"),
     )
     Quote(LOVED)
     Para(
-        "Whether you are just curious or returning to faith after a long time, there is treasure " +
-            "here for you:",
+        t("intro.curious.p3"),
     )
     Quote(TREASURE)
     Para(
-        "If you are having trouble believing, you're not alone — someone said exactly that to " +
-            "Jesus himself:",
+        t("intro.curious.p4"),
     )
     Quote(UNBELIEF)
     Para(
-        "I encourage you to read this book starting with the book of John, and to pray that if God " +
-            "is real, he would reveal himself to you. I've known many people for whom that prayer " +
-            "has been answered:",
+        t("intro.curious.p5"),
     )
     Quote(ASK, SEEK)
-    Para("If you are in a difficult place in your life, ask God to help you with your struggles:")
+    Para(t("intro.curious.struggle"))
     Quote(STRUGGLE)
     Spacer(Modifier.height(10.dp))
     Text(
-        "Tap any verse reference to open it.",
+        t("intro.tapHint"),
         color = palette.faded, fontSize = 14.5.sp, fontStyle = FontStyle.Italic,
     )
     Spacer(Modifier.height(16.dp))
     Button(
         onClick = onStart,
         colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
-    ) { Text(closeLabel ?: "Open the Bible", fontSize = 18.5.sp) }
+    ) { Text(closeLabel ?: t("intro.open"), fontSize = 18.5.sp) }
 }
 
 /** The three optional church fields, with the reason they are being asked. */
@@ -465,22 +475,20 @@ private fun ChurchFields(
     onUrl: (String) -> Unit,
 ) {
     Text(
-        "If you add your church, the links and QR codes you share contain your church " +
-            "information, so whoever you hand the Bible to can also find your church. It stays " +
-            "on your device and your data remains private.",
+        t("intro.churchWhy"),
         color = palette.faded, fontSize = 14.5.sp,
     )
     OutlinedTextField(
-        value = name, onValueChange = onName, label = { Text("Church name") },
+        value = name, onValueChange = onName, label = { Text(t("settings.churchName")) },
         singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
     )
     OutlinedTextField(
         value = info, onValueChange = onInfo,
-        label = { Text("When and where you meet") },
+        label = { Text(t("settings.churchInfo")) },
         singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
     )
     OutlinedTextField(
-        value = url, onValueChange = onUrl, label = { Text("Website") },
+        value = url, onValueChange = onUrl, label = { Text(t("settings.churchUrl")) },
         singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
     )
 }
@@ -499,12 +507,11 @@ private fun ChurchBeforeSharing(
     onGo: () -> Unit,
 ) {
     Text(
-        "Before you share it", color = palette.ink, fontSize = 27.sp, fontWeight = FontWeight.SemiBold,
+        t("intro.beforeShare"), color = palette.ink, fontSize = 27.sp, fontWeight = FontWeight.SemiBold,
     )
     Spacer(Modifier.height(6.dp))
     Text(
-        "This app will enable you to easily share the gospel with someone. If they keep the " +
-            "app afterwards, this is how they find your church.",
+        t("intro.beforeShareSub"),
         color = palette.faded, fontSize = 16.sp,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
@@ -514,8 +521,8 @@ private fun ChurchBeforeSharing(
     Button(
         onClick = onGo,
         colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
-    ) { Text("Open the presentation screen", fontSize = 18.5.sp) }
-    TextButton(onClick = onGo) { Text("Skip for now", color = palette.faded) }
+    ) { Text(t("intro.openPresent"), fontSize = 18.5.sp) }
+    TextButton(onClick = onGo) { Text(t("intro.skip"), color = palette.faded) }
 }
 
 @Composable
@@ -534,33 +541,28 @@ private fun Tiers(
     onStart: () -> Unit,
 ) {
     Text(
-        "Welcome to Plumbline", color = palette.ink, fontSize = 27.sp, fontWeight = FontWeight.SemiBold,
+        t("intro.title"), color = palette.ink, fontSize = 27.sp, fontWeight = FontWeight.SemiBold,
     )
     Spacer(Modifier.height(10.dp))
-    Text("Your church", color = palette.ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+    Text(t("intro.yourChurch"), color = palette.ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(4.dp))
     ChurchFields(palette, cName, cInfo, cUrl, onName, onInfo, onUrl)
     HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 14.dp))
     Text(
-        "Reading, search, memorization, tags, and notes are all available in this " +
-            "application. Choose which additional analysis tools are installed with the Bible.",
+        t("intro.tiersSub"),
         color = palette.faded, fontSize = 16.sp,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
     Spacer(Modifier.height(16.dp))
     TierCard(
-        palette, human, onHuman, "Scholars' analysis †",
-        "Curated scholarship: how the text renders each original word, word grammar, the same " +
-            "root traced across the testaments, and the Treasury's cross-references.",
+        palette, human, onHuman, t("settings.human") + " †", t("intro.humanShort"),
     )
     TierCard(
-        palette, machine, onMachine, "Machine analysis ≈",
-        "Statistical patterns: the words a word keeps company with, " +
-            "where in the Bible it is most used, and where its repetitions cluster.",
+        palette, machine, onMachine, t("settings.machine") + " ≈", t("intro.machineShort"),
     )
     Spacer(Modifier.height(8.dp))
     Text(
-        "Every piece of evidence is marked with where it comes from — ✝ the text · † scholarship · ≈ machine.",
+        t("intro.provenance"),
         color = palette.faded, fontSize = 14.sp,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
@@ -568,7 +570,7 @@ private fun Tiers(
     Button(
         onClick = onStart,
         colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
-    ) { Text("Start reading", fontSize = 18.5.sp) }
+    ) { Text(t("intro.start"), fontSize = 18.5.sp) }
 }
 
 @Composable

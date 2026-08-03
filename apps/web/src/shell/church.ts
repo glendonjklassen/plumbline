@@ -28,6 +28,7 @@
 
 /** The hosted PWA — what every share hands over. The core's `church::PWA_URL`
  *  is the same string, and the vector table's `url` column pins them together. */
+
 export const PWA_URL = "https://plumblinebible.org/";
 
 export interface Church {
@@ -141,10 +142,16 @@ export function safeChurchUrl(url: string | null | undefined): string | null {
 
 /** What the reader sees on the Church button when there is no site to open:
  *  who and when, which is all we were given. The Kotlin twin is `churchTitle`
- *  in ui/Church.kt; this used to live inline in Shell.svelte. */
-export function churchTitle(church: Church | undefined | null): string {
+ *  in ui/Church.kt; this used to live inline in Shell.svelte.
+ *
+ *  `fallback` is PASSED IN rather than looked up here. This module is the web
+ *  twin of `core::church`, pinned to it by a shared vector table that
+ *  e2e/church-parity.spec.ts drives directly in Node — so it has to stay
+ *  importable outside a browser, and the catalogue is a reactive Svelte module
+ *  that is not. The one string it needed is the caller's to supply. */
+export function churchTitle(church: Church | undefined | null, fallback = ""): string {
   const c = cleanChurch(church);
-  return [c.name, c.info].filter(Boolean).join(": ") || "Your church";
+  return [c.name, c.info].filter(Boolean).join(": ") || fallback;
 }
 
 /** Open the church's website, or hand `onNoSite` the label instead — the same
@@ -153,8 +160,9 @@ export function churchTitle(church: Church | undefined | null): string {
 export function visitChurch(
   church: Church | undefined | null,
   onNoSite: (title: string) => void,
+  fallback = "",
 ): void {
   const url = safeChurchUrl(church?.url);
   if (url) window.open(url, "_blank", "noopener,noreferrer");
-  else onNoSite(churchTitle(church));
+  else onNoSite(churchTitle(church, fallback));
 }

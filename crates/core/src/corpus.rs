@@ -263,8 +263,13 @@ pub fn load_corpus(path: impl AsRef<Path>) -> Result<Corpus, Error> {
 /// which is the shipped-together case.
 pub fn load_cache(path: impl AsRef<Path>, stamp: Option<(u64, i64)>) -> Option<Corpus> {
     let bytes = std::fs::read(path.as_ref()).ok()?;
+    // ANY tokenization this build ships a corpus for, not just the KJV's: the
+    // German corpus has its own stamp and its cache is as valid as the KJV's.
+    // The check is "was this written by a tokenizer we agree with", which is
+    // what it always meant — it only looked like an equality test while there
+    // was one corpus.
     let fresh = |src_len: u64, src_mtime: i64, tok: &str| {
-        tok == crate::canon::TOKENIZATION_VERSION
+        crate::canon::tokenization_is_ours(tok)
             && stamp.is_none_or(|(len, mtime)| src_len == len && src_mtime == mtime)
     };
 
@@ -417,7 +422,7 @@ fn source_stamp(path: &Path) -> Option<(u64, i64)> {
 }
 
 /// `<source>.idxcache`, next to the data file.
-fn cache_path(path: &Path) -> std::path::PathBuf {
+pub fn cache_path(path: &Path) -> std::path::PathBuf {
     let mut s = path.as_os_str().to_os_string();
     s.push(".idxcache");
     std::path::PathBuf::from(s)

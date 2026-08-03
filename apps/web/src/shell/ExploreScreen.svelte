@@ -12,27 +12,28 @@
   // what it is, because "Suggested" and "Constellation" mean nothing cold.
   import { getSession } from "../state/session.svelte";
   import ScreenBar from "../lib/ScreenBar.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
   const cards = [
-    { label: "Notes", desc: "Everything you've written about a verse.", go: () => (s.panel = { kind: "notesBrowser" }) },
-    { label: "Threads", desc: "Passages you have linked together for sermons or study themes.", go: () => (s.panel = { kind: "threads" }) },
-    { label: "Tags", desc: "Labelled verses by topic.", go: () => (s.panel = { kind: "tags" }) },
-    { label: "Weaves", desc: "Parallel passages tied together.", go: () => (s.panel = { kind: "weaves" }) },
-    { label: "Suggested", desc: "Proposed weaves awaiting your review.", go: () => (s.panel = { kind: "suggested" }) },
-    { label: "Constellation", desc: "Every weave drawn as a row of dots across the Bible. Tap a dot to open that verse.", go: () => (s.mapPopup = { kind: "constellation" }) },
-    { label: "Weave map", desc: "A visualization of weaves across the Bible.", go: () => (s.mapPopup = { kind: "chord" }) },
+    { id: "notes", go: () => (s.panel = { kind: "notesBrowser" }) },
+    { id: "threads", go: () => (s.panel = { kind: "threads" }) },
+    { id: "tags", go: () => (s.panel = { kind: "tags" }) },
+    { id: "weaves", go: () => (s.panel = { kind: "weaves" }) },
+    { id: "suggested", go: () => (s.panel = { kind: "suggested" }) },
+    { id: "constellation", go: () => (s.mapPopup = { kind: "constellation" }) },
+    { id: "weaveMap", go: () => (s.mapPopup = { kind: "chord" }) },
   ];
 </script>
 
-<section class="screen" aria-label="Explore">
-  <ScreenBar title="Explore" onBack={() => s.goRead()} />
+<section class="screen" aria-label={t("nav.explore")}>
+  <ScreenBar title={t("nav.explore")} onBack={() => s.goRead()} />
   <div class="content">
-    {#each cards as c (c.label)}
+    {#each cards as c (c.id)}
       <button class="ex-card" onclick={c.go}>
-        <span class="ex-name">{c.label}</span>
-        <span class="ex-desc">{c.desc}</span>
+        <span class="ex-name">{t(`explore.${c.id}`)}</span>
+        <span class="ex-desc">{t(`explore.${c.id}.desc`)}</span>
       </button>
     {/each}
   </div>

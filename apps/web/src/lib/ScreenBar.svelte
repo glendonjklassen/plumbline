@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "./i18n.svelte";
   // ONE bar for every destination that has one.
   //
   // Explore, Memorize and the Hymnal each grew their own, and they had drifted
@@ -17,16 +18,18 @@
     title: string;
     /** Where the back arrow goes. */
     onBack: () => void;
-    /** What the arrow means here — "Back to reading", "Back to the hymn list". */
+    /** What the arrow means here — "Back to the hymn list". Defaults to the
+     *  catalogue's "back to reading", filled in at RENDER rather than as a
+     *  default parameter, so a language change repaints it. */
     backLabel?: string;
     /** Controls on the right of the bar (language, chords, Sing…). */
     actions?: import("svelte").Snippet;
   }
-  const { title, onBack, backLabel = "Back to reading", actions }: Props = $props();
+  const { title, onBack, backLabel, actions }: Props = $props();
 </script>
 
 <div class="bar">
-  <button class="back" onclick={onBack} aria-label={backLabel}>‹</button>
+  <button class="back" onclick={onBack} aria-label={backLabel ?? t("bar.backToReading")}>‹</button>
   <h2>{title}</h2>
   <span class="spacer"></span>
   {#if actions}{@render actions()}{/if}

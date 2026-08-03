@@ -26,6 +26,7 @@
   import QrCode from "./QrCode.svelte";
   import { churchTitle as churchLabel, hasChurch, visitChurch as openChurchSite } from "./church";
   import { modal } from "../lib/modal";
+  import { t } from "../lib/i18n.svelte";
   import { uiScale } from "../lib/uiScale";
   import { getSession } from "../state/session.svelte";
   import { startReadingTracker } from "../state/readingTracker";
@@ -52,7 +53,7 @@
         s.rpc
           .call("readingTick", book, chapter, reached, step, interacted, new Date().toISOString())
           .catch(() => null),
-      onCompleted: (book, chapter) => s.showToast(`Read through — ${s.bookName(book)} ${chapter}`),
+      onCompleted: (book, chapter) => s.showToast(t("shell.readThrough", { chapter: `${s.bookName(book)} ${chapter}` })),
     }),
   );
 
@@ -100,7 +101,7 @@
   // have set one (Settings → Your church). One QR, both things.
   const link = $derived(s.shareLink);
   async function shareLink(): Promise<void> {
-    const title = hasChurch(s.church) ? `Plumbline — from ${s.church.name}` : "Plumbline";
+    const title = hasChurch(s.church) ? t("share.fromChurch", { church: s.church.name }) : "Plumbline";
     if (navigator.share) {
       try {
         await navigator.share({ title, url: link });
@@ -110,7 +111,7 @@
       }
     }
     await navigator.clipboard.writeText(link);
-    s.showToast("Link copied");
+    s.showToast(t("share.copied"));
   }
   // Surfaces are exclusive: picking a destination closes the others
   // (Memorize left open over Explore was disorienting). Shared by the
@@ -131,10 +132,14 @@
   // The bottom bar's four destinations. Icon paths are copied verbatim from the
   // Compose shell's NavIcons.kt (standard Material Symbols: book, explore,
   // present_to_all, school) so both shells draw the same glyphs.
+  // Ids, not labels. This array is built ONCE, so a label in it is a snapshot of
+  // whatever language the app booted in; the `nav.hymnal` entry was still a bare
+  // "Hymnal" after the extraction pass and nothing caught it, because a string
+  // in a script body does not look like copy. Rendered through `t()` below, the
+  // question cannot come up again.
   const NAV = [
     {
       key: "read",
-      label: "Read",
       path:
         "M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" +
         "M6 4h5v8l-2.5-1.5L6 12V4z",
@@ -144,7 +149,6 @@
     },
     {
       key: "explore",
-      label: "Explore",
       path:
         "M12 10.9c-.61 0-1.1.49-1.1 1.1s.49 1.1 1.1 1.1c.61 0 1.1-.49 1.1-1.1s-.49-1.1-1.1-1.1z" +
         "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" +
@@ -153,7 +157,6 @@
     },
     {
       key: "present",
-      label: "Present",
       path:
         "M21 3H3c-1.11 0-2 .89-2 2v14c0 1.11.89 2 2 2h18c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2z" +
         "m0 16.02H3V4.98h18v14.04zM10 12H8l4-4 4 4h-2v4h-4v-4z",
@@ -161,7 +164,6 @@
     },
     {
       key: "memorize",
-      label: "Memorize",
       path: "M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 11-6-11-6z",
       // `dismissTransient` resets the screen first, so these set it after.
       go: () => {
@@ -171,7 +173,6 @@
     },
     {
       key: "hymnal",
-      label: "Hymnal",
       // Material Symbols "music_note".
       path: "M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z",
       go: () => (s.screen = "hymnal"),
@@ -223,8 +224,8 @@
   // Both of these live in church.ts now, which is pinned to `core::church` by a
   // shared vector table (H-10). The local copies here were the seventh and eighth
   // implementations of the same two lines.
-  const churchTitle = $derived(churchLabel(s.church));
-  const visitChurch = (): void => openChurchSite(s.church, s.showToast);
+  const churchTitle = $derived(churchLabel(s.church, t("shell.churchFallback")));
+  const visitChurch = (): void => openChurchSite(s.church, s.showToast, t("shell.churchFallback"));
 
   // ── global keys (manifest §Keyboard + wheel) ──
   function isEditable(t: EventTarget | null): boolean {
@@ -360,9 +361,9 @@
          (`maxPanes`), so this is that pane, and the pane's own strip is hidden
          at this width. -->
     <div class="chapter-nav">
-      <button onclick={() => s.stepChapter(s.activePane, -1)} aria-label="Previous chapter">‹</button>
+      <button onclick={() => s.stepChapter(s.activePane, -1)} aria-label={t("common.previousChapter")}>‹</button>
       <button class="passage" onclick={() => (s.bookNavFor = s.activePane)}>{subtitle} ▾</button>
-      <button onclick={() => s.stepChapter(s.activePane, 1)} aria-label="Next chapter">›</button>
+      <button onclick={() => s.stepChapter(s.activePane, 1)} aria-label={t("common.nextChapter")}>›</button>
     </div>
     <!-- Which pane is ACTIVE. Hidden on a phone, where the chapter nav above
          says it already. Kept in the DOM at every width on purpose: 21 e2e
@@ -373,47 +374,47 @@
          the ≡ menu holds utilities only. Threads/Tags/Weaves live inside
          Explore, as on Android. -->
     <nav class="browse">
-        <button onclick={go(() => (s.screen = "explore"))}>Explore</button>
-        <button onclick={go(() => (s.showPresent = true))}>Present</button>
+        <button onclick={go(() => (s.screen = "explore"))}>{t("nav.explore")}</button>
+        <button onclick={go(() => (s.showPresent = true))}>{t("nav.present")}</button>
         <button
           onclick={go(() => {
             s.screen = "memorize";
             s.memorize = { view: "hub" };
-          })}>Memorize</button
+          })}>{t("nav.memorize")}</button
         >
-        <button onclick={go(() => (s.screen = "hymnal"))}>Hymnal</button>
+        <button onclick={go(() => (s.screen = "hymnal"))}>{t("nav.hymnal")}</button>
       </nav>
     <span class="spacer"></span>
-    <button class="glass" class:searching={searchOpen} onclick={openSearch} aria-label="Open search">⌕</button>
+    <button class="glass" class:searching={searchOpen} onclick={openSearch} aria-label={t("common.openSearch")}>⌕</button>
     <input
       class="search"
       class:open={searchOpen}
       type="search"
-      placeholder="Search or reference…"
+      placeholder={t("shell.searchPlaceholder")}
       bind:this={searchEl}
       value={s.searchDraft}
       oninput={onSearchInput}
       onkeydown={(e) => e.key === "Escape" && closeSearch()}
-      aria-label="Search"
+      aria-label={t("common.search")}
     />
     {#if searchOpen}
-      <button class="glass narrow-close" onclick={closeSearch} aria-label="Close search">✕</button>
+      <button class="glass narrow-close" onclick={closeSearch} aria-label={t("common.closeSearch")}>✕</button>
     {/if}
     {#if s.intro}
       <!-- The welcome a reader was given, on demand: they should not have to
            reinstall to read it twice (feedback 2026-07-27). -->
-      <button class="church-btn" onclick={go(() => (s.reopenIntro = s.intro))}>Welcome</button>
+      <button class="church-btn" onclick={go(() => (s.reopenIntro = s.intro))}>{t("shell.welcome")}</button>
     {/if}
     {#if hasChurch(s.church)}
       <!-- Front and centre, not in Settings: someone handed this to a reader
            along with their church, and the reader should be able to find them
            without going hunting (feedback 2026-07-27). -->
-      <button class="church-btn" onclick={visitChurch} title={churchTitle}>Church</button>
+      <button class="church-btn" onclick={visitChurch} title={churchTitle}>{t("shell.church")}</button>
     {/if}
     <!-- An ICON, as on Android, and for the reason a phone bar teaches: a
          bordered word cost more width than the glyph plus its whole tap target,
          and it was the control that tipped the row over. -->
-    <button class="share-first" onclick={go(() => (shareApp = true))} aria-label="Share the app" title="Share the app">
+    <button class="share-first" onclick={go(() => (shareApp = true))} aria-label={t("common.shareApp")} title={t("common.shareApp")}>
       <svg viewBox="0 0 24 24" aria-hidden="true"
         ><path
           fill="currentColor"
@@ -422,7 +423,7 @@
       >
     </button>
     <div class="menu-host">
-      <button class="menu-btn" onclick={() => (menuOpen = !menuOpen)} aria-label="Menu">≡</button>
+      <button class="menu-btn" onclick={() => (menuOpen = !menuOpen)} aria-label={t("common.menu")}>≡</button>
       {#if menuOpen}
         <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
         <div class="backdrop" onclick={() => (menuOpen = false)}></div>
@@ -437,15 +438,15 @@
                hunt for it), and ⋮ items on a phone, which is exactly where
                Android keeps them. `.phone-only` hides them above 700px. -->
           {#if hasChurch(s.church)}
-            <button class="phone-only" onclick={go(visitChurch)}>Church</button>
+            <button class="phone-only" onclick={go(visitChurch)}>{t("shell.church")}</button>
           {/if}
           {#if s.intro}
-            <button class="phone-only" onclick={go(() => (s.reopenIntro = s.intro))}>Welcome</button>
+            <button class="phone-only" onclick={go(() => (s.reopenIntro = s.intro))}>{t("shell.welcome")}</button>
           {/if}
-          <button onclick={go(() => (s.showHistory = true))}>History</button>
-          <button onclick={go(() => (s.panel = { kind: "guide" }))}>Guide & about</button>
-          <button onclick={go(() => (s.showShortcuts = true))}>Keyboard shortcuts</button>
-          <button onclick={go(() => (s.showSettings = true))}>Settings</button>
+          <button onclick={go(() => (s.showHistory = true))}>{t("shell.history")}</button>
+          <button onclick={go(() => (s.panel = { kind: "guide" }))}>{t("shell.guideAndAbout")}</button>
+          <button onclick={go(() => (s.showShortcuts = true))}>{t("shell.shortcuts")}</button>
+          <button onclick={go(() => (s.showSettings = true))}>{t("shell.settings")}</button>
         </div>
       {/if}
     </div>
@@ -492,7 +493,7 @@
        Read is not a destination so much as the absence of one: the reader is
        always mounted underneath, so its tap just clears whatever is layered
        over it. -->
-  <nav class="bottom-nav" aria-label="Destinations" bind:this={navEl}>
+  <nav class="bottom-nav" aria-label={t("nav.destinations")} bind:this={navEl}>
     {#each NAV as item (item.key)}
       <button
         class:on={dest === item.key}
@@ -500,7 +501,7 @@
         onclick={go(item.go)}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d={item.path} /></svg>
-        <span>{item.label}</span>
+        <span>{t(`nav.${item.key}`)}</span>
       </button>
     {/each}
   </nav>
@@ -513,29 +514,27 @@
     class="share-dialog"
     role="dialog"
     aria-modal="true"
-    aria-label="Share Plumbline"
+    aria-label={t("share.title")}
     data-surface="share app"
     use:modal={{ close: () => (shareApp = false) }}
   >
-    <h2>Share Plumbline</h2>
+    <h2>{t("share.title")}</h2>
     <p class="share-sub">
-      {hasChurch(s.church)
-        ? `Free, private, offline, no account required.`
-        : "Free, offline, no account."}
+      {hasChurch(s.church) ? t("share.subChurch") : t("share.sub")}
     </p>
     <QrCode size={220} text={link} />
     <p class="share-url">plumblinebible.org</p>
     {#if s.intro}
       <!-- The welcome a reader was given, on demand: they should not have to
            reinstall to read it twice (feedback 2026-07-27). -->
-      <button class="church-btn" onclick={go(() => (s.reopenIntro = s.intro))}>Welcome</button>
+      <button class="church-btn" onclick={go(() => (s.reopenIntro = s.intro))}>{t("shell.welcome")}</button>
     {/if}
     {#if hasChurch(s.church)}
-      <p class="share-with">with {s.church.name}</p>
+      <p class="share-with">{t("share.with", { church: s.church.name })}</p>
     {/if}
     <div class="share-actions">
-      <button class="share-primary" onclick={shareLink}>Share the link</button>
-      <button onclick={() => (shareApp = false)}>Close</button>
+      <button class="share-primary" onclick={shareLink}>{t("share.action")}</button>
+      <button onclick={() => (shareApp = false)}>{t("common.close")}</button>
     </div>
   </div>
 {/if}
@@ -554,9 +553,9 @@
      to save them a tap is not a kindness. -->
 {#if s.updateReady}
   <div class="toast update" role="status">
-    <span>A new version is ready.</span>
-    <button class="upd" onclick={() => s.applyUpdate()}>Update</button>
-    <button class="dismiss" aria-label="Not now" onclick={() => (s.updateReady = false)}>✕</button>
+    <span>{t("update.ready")}</span>
+    <button class="upd" onclick={() => s.applyUpdate()}>{t("update.action")}</button>
+    <button class="dismiss" aria-label={t("update.notNow")} onclick={() => (s.updateReady = false)}>✕</button>
   </div>
 {/if}
 
@@ -567,12 +566,10 @@
 {#if s.persistFailed}
   <div class="toast warn" class:stacked={s.updateReady} role="status" title={s.persistFailed.detail}>
     <span>
-      {s.persistFailed.retrying
-        ? "Couldn't save your last change — trying again."
-        : "Couldn't save your last change — storage may be full. Free some space, then try again."}
+      {s.persistFailed.retrying ? t("persist.retrying") : t("persist.failed")}
     </span>
-    <button class="upd" onclick={() => s.retryPersist()}>Try again</button>
-    <button class="dismiss" aria-label="Dismiss" onclick={() => (s.persistFailed = null)}>✕</button>
+    <button class="upd" onclick={() => s.retryPersist()}>{t("persist.tryAgain")}</button>
+    <button class="dismiss" aria-label={t("boot.dismiss")} onclick={() => (s.persistFailed = null)}>✕</button>
   </div>
 {/if}
 <PromptDialog />

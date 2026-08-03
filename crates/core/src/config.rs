@@ -136,6 +136,14 @@ pub struct Config {
     /// none. The shells offer it again from the chrome — a reader shouldn't
     /// have to reinstall to read it twice (2026-07-27).
     pub intro: String,
+    /// The reader's language, as a code ([`crate::i18n::Lang::code`]).
+    ///
+    /// EMPTY MEANS "follow the device", which is not the same as English: a
+    /// German phone should open in German without anyone visiting Settings,
+    /// and storing "en" the first time we resolve it would freeze that reader
+    /// into English forever. The shell passes its locale in and the core
+    /// decides; only an explicit choice is written here.
+    pub language: String,
 }
 
 /// A verse copy-shape token accepted for [`Config::copy_style`].
@@ -164,6 +172,7 @@ impl Default for Config {
             present_shares_as_new: true,
             akjv_overlay: false,
             intro: String::new(),
+            language: String::new(),
         }
     }
 }
@@ -226,6 +235,11 @@ struct ConfigWire {
     /// The welcome this reader was given (2026-07-27); absent when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     intro: Option<String>,
+    /// The reader's chosen language; absent means "follow the device", which
+    /// is why this skips rather than writing null — an existing config must
+    /// not grow a key just because this build knows about languages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    language: Option<String>,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -339,6 +353,14 @@ impl Config {
                 Some("curious") => "curious".to_string(),
                 _ => String::new(), // unknown token → no welcome to re-open
             },
+            // A language this build does not ship reads as "follow the device"
+            // rather than English: the reader chose a language once, and the
+            // honest response to not having it is to fall back to their
+            // system's, not to overrule them with ours.
+            language: match w.language.as_deref() {
+                Some(code) if crate::i18n::Lang::ALL.iter().any(|l| l.code() == code) => code.to_string(),
+                _ => String::new(),
+            },
             church: w
                 .church
                 .map(|c| Church {
@@ -376,6 +398,7 @@ impl Config {
             present_shares_as_new: Some(self.present_shares_as_new),
             akjv_overlay: Some(self.akjv_overlay),
             intro: (!self.intro.is_empty()).then(|| self.intro.clone()),
+            language: (!self.language.is_empty()).then(|| self.language.clone()),
             church: (!self.church.is_empty()).then(|| ChurchWire {
                 name: self.church.name.clone(),
                 info: self.church.info.clone(),
@@ -535,6 +558,7 @@ mod tests {
             present_shares_as_new: false,
             akjv_overlay: true,
             intro: "curious".to_string(),
+            language: "de".to_string(),
             church: Church {
                 name: "Grace Bible Church".into(),
                 info: "Sundays 10am · 12 Long Street".into(),
@@ -753,6 +777,30 @@ mod tests {
         assert_eq!(cfg.mode, StudyMode::Simple);
         assert_eq!(cfg.body_size, Config::default().body_size);
         let _ = std::fs::remove_file(&path);
+    }
+    #[test]
+    fn language_is_a_choice_or_the_device_s_and_never_an_invented_one() {
+        let dir = scratch("language");
+        let path = dir.join("config.json");
+
+        // Absent: follow the device. NOT "en" — writing that the first time we
+        // resolved a locale would freeze a German reader into English. The
+        // golden test above proves the key is not even written.
+        assert_eq!(Config::default().language, "");
+
+        // A language this build ships round-trips through the file.
+        let picked = Config { language: "de".to_string(), ..Config::default() };
+        save_to(&path, &picked).unwrap();
+        assert!(std::fs::read_to_string(&path).unwrap().contains("\"language\": \"de\""));
+        assert_eq!(load_from(&path).0.language, "de");
+
+        // One it does NOT ship reads as "follow the device": the reader chose a
+        // language once, and the honest answer to not having it is their
+        // system's, not ours overruling them.
+        std::fs::write(&path, r#"{"language":"fr"}"#).unwrap();
+        assert_eq!(load_from(&path).0.language, "");
+        std::fs::write(&path, "{}").unwrap();
+        assert_eq!(load_from(&path).0.language, "");
     }
 }
 

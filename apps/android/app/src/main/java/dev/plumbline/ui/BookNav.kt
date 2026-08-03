@@ -135,17 +135,17 @@ fun BookNavScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = ::stepBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = palette.ink)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("bar.back"), tint = palette.ink)
                 }
-                val crumb = pickedBook?.name ?: "Go to…"
+                val crumb = pickedBook?.name ?: t("booknav.goTo")
                 Text(crumb, color = palette.ink, fontSize = 17.sp)
                 Spacer(Modifier.weight(1f))
                 if (pickedBook == null) {
                     TextButton(onClick = { newTestament = false }) {
-                        Text("Old Testament", color = if (!newTestament) palette.gold else palette.faded)
+                        Text(t("booknav.old"), color = if (!newTestament) palette.gold else palette.faded)
                     }
                     TextButton(onClick = { newTestament = true }) {
-                        Text("New", color = if (newTestament) palette.gold else palette.faded)
+                        Text(t("booknav.new"), color = if (newTestament) palette.gold else palette.faded)
                     }
                 }
             }

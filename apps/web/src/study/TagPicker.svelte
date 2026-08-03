@@ -6,6 +6,7 @@
   import { modal } from "../lib/modal";
   import { nowStamp } from "../engine/StudyEngine";
   import { refDisplay } from "../reader/refname";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -33,7 +34,7 @@
     // a stale $derived recomputes on the next read (PassagePicker.commit).
     const said = shown;
     void s.author("tagAdd", name, "verse", ref, null, nowStamp()).then((err) =>
-      s.showToast(err ?? `Tagged ${said} — ${name}`),
+      s.showToast(err ?? t("tag.tagged", { passage: said, tag: name })),
     );
     close();
   }
@@ -46,19 +47,21 @@
     class="sheet"
     role="dialog"
     aria-modal="true"
-    aria-label="Tag this verse"
+    aria-label={t("tag.title")}
     data-surface="tag picker"
     use:modal={{ close }}
   >
-    <h2>Tag {shown}</h2>
+    <h2>{t("tag.heading", { passage: shown })}</h2>
     <div class="list">
-      {#each tags as t (t.name)}
-        <button class="tag" onclick={() => pick(t.name)}>
-          {t.name}
-          <span class="count">{t.members?.length ?? 0}</span>
+      <!-- `tg`, not `t` — see ThreadPicker: an each-block `t` shadows the
+           catalogue lookup and `t` is `any`, so it fails only at runtime. -->
+      {#each tags as tg (tg.name)}
+        <button class="tag" onclick={() => pick(tg.name)}>
+          {tg.name}
+          <span class="count">{tg.members?.length ?? 0}</span>
         </button>
       {:else}
-        <p class="empty">No tags yet.</p>
+        <p class="empty">{t("tag.empty")}</p>
       {/each}
     </div>
     <form
@@ -68,8 +71,8 @@
         if (newName.trim()) pick(newName.trim());
       }}
     >
-      <input placeholder="New tag…" bind:value={newName} />
-      <button type="submit" disabled={!newName.trim()}>Add</button>
+      <input placeholder={t("tag.new")} bind:value={newName} />
+      <button type="submit" disabled={!newName.trim()}>{t("tag.add")}</button>
     </form>
   </div>
 {/if}

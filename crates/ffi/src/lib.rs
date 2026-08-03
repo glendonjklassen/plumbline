@@ -65,7 +65,7 @@ use plumbline_core::strongs::{self, OccurrenceIx, StrongsDict};
 use plumbline_core::tag::{self, LoadedTag, TagTarget};
 use plumbline_core::thread::{self, LoadedThread, ThreadEntry};
 use plumbline_core::weave::{self, Link, LoadedWeave, WeaveKind};
-use plumbline_core::{canon, export, hymnal, notes, theme, usernote, VRef};
+use plumbline_core::{canon, export, hymnal, i18n, notes, theme, usernote, VRef};
 use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure, MeasureMemo, Memoized};
 use plumbline_rnd::{bridge, burst, concept, morph};
 
@@ -269,8 +269,19 @@ impl PlumblineEngine {
         // probed at all (a CWD-relative probe would be nondeterministic and a
         // mild data-injection surface).
 
+        // KJV-ONLY, and this gate is load-bearing rather than an optimisation.
+        // Morphology is keyed by (refKey, TOKEN INDEX) against `kjv1769-tok2`,
+        // and the German corpus tokenizes the same verse into different words at
+        // different indices — so applying it there would attach English grammar
+        // notes to whichever German word happened to sit at that index. Same
+        // argument for Strong's and for the plain-English overlay below, which is
+        // a delta over KJV token runs.
+        //
+        // Not a version check on the sidecar file: the file is fine, it is the
+        // CORPUS that is a different text.
+        let kjv_text = corpus.tokenization_version() == canon::TOKENIZATION_VERSION;
         let morph = OnceLock::new();
-        if let Some(h) = &home {
+        if let (Some(h), true) = (&home, kjv_text) {
             let data = h.join("data");
             if let Some(m) = morph::load_morph(canon::TOKENIZATION_VERSION, data.join("morphology.jsonl")) {
                 let _ = morph.set(m);
@@ -367,16 +378,23 @@ impl PlumblineEngine {
     /// search index built before this call keeps the notes it saw then.
     fn load_core_data(&self) {
         let Some(h) = &self.home else { return };
-        if self.strongs.get().is_none() {
-            if let Ok(sd) = strongs::load_strongs(h.join("data").join("strongs.json")) {
-                let _ = self.strongs.set(sd);
+        // The study data (the 1769 margin notes among it) reloads whatever text
+        // is open; Strong's and the overlay are the KJV's — see the gate in
+        // `new`. On the German corpus both stay unset, which is what makes
+        // `AkjvAvailable()` false and hides the toggle rather than offering a
+        // reader an English overlay for a German verse.
+        if self.corpus.tokenization_version() == canon::TOKENIZATION_VERSION {
+            if self.strongs.get().is_none() {
+                if let Ok(sd) = strongs::load_strongs(h.join("data").join("strongs.json")) {
+                    let _ = self.strongs.set(sd);
+                }
             }
-        }
-        if self.akjv.get().is_none() {
-            // Stage 2, beside Strong's: small, and wanted the moment the reader
-            // flips the toggle rather than after a download they must approve.
-            if let Some(a) = akjv::load_akjv(canon::TOKENIZATION_VERSION, h.join("data").join("akjv.jsonl")) {
-                let _ = self.akjv.set(a);
+            if self.akjv.get().is_none() {
+                // Stage 2, beside Strong's: small, and wanted the moment the reader
+                // flips the toggle rather than after a download they must approve.
+                if let Some(a) = akjv::load_akjv(canon::TOKENIZATION_VERSION, h.join("data").join("akjv.jsonl")) {
+                    let _ = self.akjv.set(a);
+                }
             }
         }
         *self.study_write() = load_study(&self.home);
@@ -981,6 +999,46 @@ pub unsafe extern "C" fn plumbline_string_free(ptr: *mut c_char) {
 
 // ── engine lifecycle ────────────────────────────────────────────────────────────
 
+/// The corpus file for a language, under `home` — the path, not a promise that
+/// it is there.
+///
+/// One place, so the engine, the hydrator and any tool agree. English is
+/// `data/kjv.jsonl`; German is `data/luther1912.jsonl` (`data-prep/README.md`).
+/// Whether it can actually be opened is [`open_corpus`]'s question.
+pub fn corpus_for(home: &str, lang: i18n::Lang) -> PathBuf {
+    let data = PathBuf::from(home).join("data");
+    match lang {
+        i18n::Lang::De => data.join("luther1912.jsonl"),
+        i18n::Lang::En => data.join("kjv.jsonl"),
+    }
+}
+
+/// The corpus for `lang`, falling back to the KJV when it will not open.
+///
+/// BY TRYING, not by testing for the file, and the difference is not academic:
+/// the web's home is a WASI shim over an in-memory tree where `Path::exists` does
+/// not answer usefully, so an existence check silently sent every German reader
+/// to the English text (caught by e2e/language.spec.ts). "Can this be opened" is
+/// also the question actually being asked.
+///
+/// The fallback is the ordinary case rather than an error path: the German text
+/// is an optional download, so a reader who switches language before fetching it
+/// gets a German interface over the English text and a Bible either way.
+fn open_corpus(home: &str, lang: i18n::Lang) -> Result<Corpus, plumbline_core::Error> {
+    let path = corpus_for(home, lang);
+    match corpus::load_corpus(&path) {
+        Ok(c) => Ok(c),
+        Err(e) if lang != i18n::Lang::En => {
+            // The reader is owed a Bible, not a diagnosis — but somebody
+            // debugging a device deserves to know which text they are looking at
+            // and why it is not the one they asked for.
+            eprintln!("plumbline: {} unavailable ({e}); opening the KJV", path.display());
+            corpus::load_corpus(corpus_for(home, i18n::Lang::En))
+        }
+        Err(e) => Err(e),
+    }
+}
+
 /// Open an engine from an overlay-style home directory containing
 /// `data/kjv.jsonl` and `data/strongs.json`.
 ///
@@ -1000,7 +1058,16 @@ pub unsafe extern "C" fn plumbline_engine_open(home: *const c_char, out_err: *mu
             set_err(out_err, "home path is null or not valid UTF-8".into());
             return ptr::null_mut();
         };
-        let corpus = match corpus::load_corpus(format!("{home}/data/kjv.jsonl")) {
+        // WHICH TEXT. The reader's language decides, and the language was set by
+        // `plumbline_i18n_set_language` before this call — both shells do that in
+        // their startup, before anything reads a book name.
+        //
+        // FALLS BACK TO THE KJV when the German corpus is not on the device, and
+        // that is the common case rather than an error: the German text is an
+        // optional download, so a reader who has switched language but not yet
+        // fetched it gets a German interface over the English text instead of a
+        // dead app. The shell offers the download; nothing here fails.
+        let corpus = match open_corpus(home, i18n::active()) {
             Ok(c) => c,
             Err(e) => {
                 set_err(out_err, e.to_string());
@@ -1113,7 +1180,7 @@ pub unsafe extern "C" fn plumbline_engine_toc_json(engine: *const PlumblineEngin
         };
         let books: Vec<wire::TocBook> = canon::BOOKS
             .iter()
-            .map(|b| wire::TocBook { id: b.id, name: b.name, chapters: engine.corpus.chapter_count(b.id) })
+            .map(|b| wire::TocBook { id: b.id, name: i18n::book_name(i18n::active(), b.id), chapters: engine.corpus.chapter_count(b.id) })
             .collect();
         out_json(&wire::Toc { books })
     })
@@ -2350,7 +2417,7 @@ pub unsafe extern "C" fn plumbline_engine_concept_json(
             n: b.n,
             win_count: b.win_count,
             score: b.score,
-            label: burst::span_label(|id| canon::display_name(id).to_string(), &b.win_start, &b.win_end),
+            label: burst::span_label(|id| i18n::book_name(i18n::active(), id), &b.win_start, &b.win_end),
         });
         out_json(&wire::WireConcept {
             code: code.to_string(),
@@ -2361,7 +2428,7 @@ pub unsafe extern "C" fn plumbline_engine_concept_json(
                 .top_books(code, 5)
                 .into_iter()
                 .map(|(book, count)| wire::WireBookCount {
-                    display: canon::display_name(&book).to_string(),
+                    display: i18n::book_name(i18n::active(), &book),
                     book,
                     count,
                 })
@@ -2513,14 +2580,14 @@ impl PanelSource for PlumblineEngine {
             n: b.n,
             win_count: b.win_count,
             score: b.score,
-            label: burst::span_label(|id| canon::display_name(id).to_string(), &b.win_start, &b.win_end),
+            label: burst::span_label(|id| i18n::book_name(i18n::active(), id), &b.win_start, &b.win_end),
         });
         Some(panel::ConceptView {
             community: ce.community(code),
             top_books: ce
                 .top_books(code, 5)
                 .into_iter()
-                .map(|(b, n)| (canon::display_name(&b).to_string(), n))
+                .map(|(b, n)| (i18n::book_name(i18n::active(), &b), n))
                 .collect(),
             ot,
             nt,
@@ -2711,7 +2778,7 @@ impl PanelSource for PlumblineEngine {
             Some(search::SearchAnswer::GoTo { book, chapter, verse }) => {
                 let display = match verse {
                     Some(v) => VRef::new(book.clone(), chapter, v).display(),
-                    None => format!("{} {}", canon::display_name(&book), chapter),
+                    None => VRef::new(book.clone(), chapter, 1).chapter_display_in(i18n::active()),
                 };
                 panel::SearchView::Goto { book, chapter: chapter as u32, verse: verse.map(u32::from), display }
             }
@@ -3296,6 +3363,69 @@ pub unsafe extern "C" fn plumbline_theme_palette_json(theme: *const c_char) -> *
     guard(ptr::null_mut(), || {
         let t = opt_str(theme).and_then(theme::Theme::parse).unwrap_or(theme::Theme::Light);
         out_json(&theme::palette(t))
+    })
+}
+
+/// EVERY user-visible string, for one language, in ONE call:
+/// `{"lang","strings":{id: text, …},"languages":[{"code","endonym"}]}`.
+///
+/// The whole catalogue at once, deliberately. A shell asks at startup and holds
+/// the map; a call per string would be thousands of round trips across the wasm
+/// boundary to render one screen.
+///
+/// Takes BOTH the reader's setting and the device's locale, and resolves them
+/// here rather than in each shell: an empty setting means "follow the device"
+/// (`Config::language`), and that rule implemented twice is a rule that
+/// disagrees with itself once. Either may be null. Both tolerate a region tag —
+/// a browser reporting `de-CH` gets German — and anything unrecognised falls
+/// through to English, so an unsupported locale gets a working app rather than
+/// an error. The reply's `lang` says which one won.
+///
+/// Strings absent from the resolved language fall back to English key by key,
+/// so every id the shell asks for resolves to something printable.
+///
+/// `languages` rides along because a language picker needs the list, each
+/// labelled in ITSELF — someone looking for German is looking for "Deutsch".
+///
+/// Engine-independent: the shells need their chrome before an engine exists.
+/// Never null.
+///
+/// # Safety
+/// `chosen` and `device` are null or valid NUL-terminated UTF-8 for the call.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_i18n_catalog_json(chosen: *const c_char, device: *const c_char) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let l = i18n::resolve(opt_str(chosen).unwrap_or(""), opt_str(device).unwrap_or(""));
+        out_json(&wire::catalog_to_wire(l))
+    })
+}
+
+/// Set the language the ENGINE writes in, and answer with the code it resolved.
+///
+/// A shell calls this ONCE, at startup, alongside
+/// `plumbline_i18n_catalog_json`. The catalogue covers what a shell spells; this
+/// covers what the CORE spells — every book name and every reference it hands
+/// back, in the table of contents, search hits, weave endpoints, note headers,
+/// thread entries, the reading map. Without it a German reader gets a German
+/// interface listing a book called Genesis, which is worse than either language
+/// on its own.
+///
+/// Two calls rather than one on purpose. Resolving a language and choosing one
+/// are different acts, and a getter with a global side effect would mean every
+/// test that asked for a catalogue silently repainted the whole process.
+///
+/// Same arguments and same rule as the catalogue call: an empty or unknown
+/// `chosen` falls through to `device`, and an unknown device is English.
+/// Caller-freed; never null.
+///
+/// # Safety
+/// `chosen` and `device` are null or valid NUL-terminated UTF-8 for the call.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_i18n_set_language(chosen: *const c_char, device: *const c_char) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let l = i18n::resolve(opt_str(chosen).unwrap_or(""), opt_str(device).unwrap_or(""));
+        i18n::set_active(l);
+        out_string(l.code().to_string())
     })
 }
 

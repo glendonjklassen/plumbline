@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { bootErrorCopy } from "../src/engine/bootError";
+import { BOOT_STRINGS } from "../src/lib/i18n.generated";
 
 // THE FIRST SCREEN, and for a long time the least examined one.
 //
@@ -258,19 +259,23 @@ test("a cold boot says what it is downloading and why; a warm boot claims nothin
   ).toEqual([]);
 });
 
-/** Every bucket of the boot-error mapper, and the two rules that hold it
- *  together: an already-human message passes through untouched, and anything
- *  machine-shaped is replaced rather than merely decorated.
+/** Every bucket of the boot-error mapper: a machine-shaped string is REPLACED,
+ *  not decorated, and it is replaced by something the reader can act on.
+ *
+ *  The mapper returns a CATALOGUE ID (i18n, 2026-08-02), so each case is
+ *  resolved through the bundled `boot.*` strings before matching — which makes
+ *  this a test of the id existing as well as of the bucket it landed in.
  *
  *  A PURE test in a Playwright file, with no `page` fixture, so it costs no
  *  browser: `engine/bootError.ts` imports nothing and touches no DOM, and this
  *  shell has no other unit runner. The browser half — that the splash actually
  *  calls this, and keeps the raw — is the test below. */
 const CASES: [raw: string, expect: RegExp][] = [
-  // Passed through: worker-client.ts already writes these for a reader, and
-  // e2e/worker-death.spec.ts asserts the splash still shows them verbatim.
-  ["The study engine stopped unexpectedly — no reason given.", /^The study engine stopped unexpectedly/],
-  ["The study engine went quiet for 60s and never finished starting.", /^The study engine went quiet/],
+  // A dead or silent worker. worker-client.ts builds those strings at the throw
+  // site out of the browser's own error text, so there is nothing translatable
+  // in them; the reader gets one sentence and the raw goes in the <details>.
+  ["The study engine stopped unexpectedly — no reason given.", /engine stopped before Plumbline finished/],
+  ["The study engine went quiet for 60s and never finished starting.", /engine stopped before Plumbline finished/],
   ["data pack format 3 — this build understands 2. Rebuild the pack", /older than the scripture data/],
   ["QuotaExceededError: Failed to execute 'put' on 'Cache'", /no room left on this device/],
   ["SecurityError: The operation is insecure.", /not letting Plumbline store/],
@@ -289,16 +294,57 @@ const CASES: [raw: string, expect: RegExp][] = [
   ["", /could not start\./],
 ];
 
-// MUTATION: in bootError.ts, change the pass-through rule's `say: ""` to any
-// string. Red: the first two cases, naming the raw and what came back. Or break
-// one bucket's regex (`/Failed to fetch/` → `/XFailed to fetch/`) and that
-// bucket's cases fall through to the catch-all sentence.
+// MUTATION: break one bucket's regex (`/Failed to fetch/` → `/XFailed to fetch/`)
+// and that bucket's cases fall through to the catch-all sentence. Or point a
+// rule at an id nobody defined and the resolve below returns the id itself,
+// which matches none of the regexes.
 test("every boot failure maps to something a reader can act on", () => {
+  // Through the catalogue, exactly as the splash does it — an id the shell
+  // cannot resolve would come back as the id and match nothing.
+  const say = (raw: string): string => BOOT_STRINGS.en[bootErrorCopy(raw)] ?? bootErrorCopy(raw);
   for (const [raw, want] of CASES) {
-    expect(bootErrorCopy(raw), `bootErrorCopy(${JSON.stringify(raw)})`).toMatch(want);
+    expect(say(raw), `bootErrorCopy(${JSON.stringify(raw)})`).toMatch(want);
   }
   // The whole point of the mapper: a machine string is REPLACED, not framed.
-  expect(bootErrorCopy("TypeError: Failed to fetch")).not.toContain("TypeError");
+  expect(say("TypeError: Failed to fetch")).not.toContain("TypeError");
+  // And every bucket names a string that actually exists, in every language the
+  // shell bundles — this is the one screen the engine cannot supply words for.
+  for (const [raw] of CASES) {
+    // By key list, not `toHaveProperty` — that reads a dot as a path, and every
+    // id in this catalogue has dots in it.
+    expect(Object.keys(BOOT_STRINGS.en), `no English copy for ${bootErrorCopy(raw)}`).toContain(bootErrorCopy(raw));
+  }
+});
+
+// The one screen the engine cannot supply words for, in a language that is not
+// English. Boot NEVER FINISHES here, which is exactly the point: the catalogue
+// rides on the boot reply, so if the splash could only speak from that reply, a
+// German reader whose first visit failed would read English at the one moment
+// they most need to understand what went wrong. The `boot.*` keys are bundled
+// into the shell (scripts/gen-i18n.mjs) for this case alone.
+//
+// MUTATIONS:
+//   a) i18n.svelte.ts — make `seed()` return `{code:"en", strings:BOOT_STRINGS.en}`
+//      unconditionally. Red: the splash is in English on a German device.
+//   b) gen-i18n.mjs — change PREFIX to something no key starts with. Red: the
+//      splash paints raw ids ("boot.error.network").
+test.describe("a German device", () => {
+  test.use({ locale: "de-DE" });
+
+  test("reads the boot-failure screen in German, with no engine to ask", async ({ page }) => {
+    await stubEngine(page, "TypeError: Failed to fetch");
+    await page.goto("/");
+
+    const line = page.locator(".splash .error");
+    await expect(line).toBeVisible({ timeout: 30_000 });
+    await expect(line, "a German device was told what went wrong in English").toContainText(
+      /konnte nicht vollständig herunterladen/,
+    );
+    await expect(page.getByRole("button", { name: "Erneut versuchen" })).toBeVisible();
+    await expect(page.locator(".splash .sub")).toHaveText("Die Heilige Schrift");
+    // The raw string is the same in every language — it is evidence, not copy.
+    await expect(page.locator(".splash details pre")).toContainText("TypeError: Failed to fetch");
+  });
 });
 
 // MUTATIONS, one per half:

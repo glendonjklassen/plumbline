@@ -10,6 +10,7 @@
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
   import { nowStamp } from "../engine/StudyEngine";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -63,7 +64,7 @@
     const named = label;
     close();
     void s.author("memoryAddPassage", from, through, nowStamp()).then((err) => {
-      s.showToast(err ?? `Memorizing ${named}`);
+      s.showToast(err ?? t("menu.memorizing", { passage: named }));
     });
   }
 </script>
@@ -75,14 +76,14 @@
     class="sheet"
     role="dialog"
     aria-modal="true"
-    aria-label="Memorize a passage"
+    aria-label={t("memorize.passageTitle")}
     data-surface="passage picker"
     use:modal={{ close }}
   >
     <div class="bar">
-      <span class="title">Memorize {label}</span>
+      <span class="title">{t("memorize.passage", { passage: label })}</span>
       <span class="spacer"></span>
-      <button class="close" onclick={close} aria-label="Close">✕</button>
+      <button class="close" onclick={close} aria-label={t("common.close")}>✕</button>
     </div>
     <div class="body">
       {#if !ends.length}
@@ -91,7 +92,7 @@
           same chapter.
         </p>
       {:else}
-        <p class="note">Tap the verse this passage ends on.</p>
+        <p class="note">{t("memorize.passageNote")}</p>
         <div class="grid">
           {#each ends as v (v)}
             <button class:picked={end === v} onclick={() => (end = v)}>{v}</button>
@@ -103,7 +104,7 @@
       {/if}
     </div>
     <div class="foot">
-      <button onclick={close}>Cancel</button>
+      <button onclick={close}>{t("common.cancel")}</button>
       <button class="primary" disabled={end === null} onclick={commit}>
         Memorize {end === null ? "passage" : label}
       </button>

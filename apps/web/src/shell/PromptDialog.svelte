@@ -4,6 +4,7 @@
   // a note), so OK always resolves with the current value; Esc/Cancel → null.
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -43,13 +44,13 @@
          the mount and lost on a slow phone. -->
     {#if s.promptReq.multiline}
       <textarea data-modal-focus bind:value rows="5"></textarea>
-      <p class="hint">Ctrl+Enter to save · empty text clears</p>
+      <p class="hint">{t("prompt.hint")}</p>
     {:else}
       <input data-modal-focus bind:value />
     {/if}
     <div class="actions">
-      <button onclick={() => finish(null)}>Cancel</button>
-      <button class="primary" onclick={() => finish(value)}>OK</button>
+      <button onclick={() => finish(null)}>{t("common.cancel")}</button>
+      <button class="primary" onclick={() => finish(value)}>{t("common.ok")}</button>
     </div>
   </div>
 {/if}

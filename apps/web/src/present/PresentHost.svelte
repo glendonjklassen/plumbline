@@ -8,6 +8,7 @@
   import { getSession } from "../state/session.svelte";
   import QrCode, { PWA_URL } from "../shell/QrCode.svelte";
   import { hasChurch, shareUrl } from "../shell/church";
+  import { plural, t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -29,9 +30,9 @@
   // skips the picker; unknown names fall through to it.
   $effect(() => {
     if (!s.showPresent || !s.presentThreadName || threads.length === 0) return;
-    const t = threads.find((x: any) => x.name === s.presentThreadName);
-    if (t) {
-      thread = t;
+    const named = threads.find((x: any) => x.name === s.presentThreadName);
+    if (named) {
+      thread = named;
       focus = null;
     }
     s.presentThreadName = null;
@@ -88,7 +89,7 @@
       }
     }
     await navigator.clipboard.writeText(url);
-    s.showToast("Link copied");
+    s.showToast(t("share.copied"));
   }
 
   // Sharing a passage is a QR, not the phone's share sheet. Present is the
@@ -109,7 +110,7 @@
 
   async function copyPassages(): Promise<void> {
     await navigator.clipboard.writeText(`${shareText()}\n\n${passageLink}`);
-    s.showToast("Copied to clipboard");
+    s.showToast(t("present.copied"));
   }
 
   function onKeydown(e: KeyboardEvent): void {
@@ -133,43 +134,43 @@
   <div class="present" class:picking={!thread}>
     {#if !thread}
       <div class="bar">
-        <button class="close" onclick={close} aria-label="Close">✕</button>
-        <span class="title">Present</span>
+        <button class="close" onclick={close} aria-label={t("common.close")}>✕</button>
+        <span class="title">{t("present.title")}</span>
       </div>
       {#if threads.length === 0}
-        <p class="empty">
-          No threads yet — build one from a verse's “＋ add to thread”, then present it here.
-        </p>
+        <p class="empty">{t("present.empty")}</p>
       {:else}
         <div class="picker">
-          {#each threads as t (t.name)}
+          <!-- `th`, not `t`: this list used to bind each thread to `t`, which now
+               shadows the catalogue lookup of the same name inside the block. -->
+          {#each threads as th (th.name)}
             <button
               class="pick"
               onclick={() => {
-                thread = t;
+                thread = th;
                 focus = null;
               }}
             >
-              <span class="name">{t.name}</span>
-              <span class="n">{t.entries?.length ?? 0} passages</span>
+              <span class="name">{th.name}</span>
+              <span class="n">{plural("present.passages.one", "present.passages.other", th.entries?.length ?? 0)}</span>
             </button>
           {/each}
         </div>
       {/if}
     {:else if focus === null}
       <div class="bar">
-        <button class="close" onclick={() => (thread = null)} aria-label="Back">‹</button>
+        <button class="close" onclick={() => (thread = null)} aria-label={t("bar.back")}>‹</button>
         <span class="title">{thread.name}</span>
         <span class="spacer"></span>
         <button class="sharebtn" onclick={() => (showQr = !showQr)}>
-          {showQr ? "Hide QR" : "Share"}
+          {showQr ? t("present.hideQr") : t("present.share")}
         </button>
       </div>
       {#if showQr}
         <div class="qr sharesheet">
           <QrCode size={148} text={passageLink} />
-          <span class="qrnote">scan to open {entries[0]?.display ?? thread.name} on their phone</span>
-          <button class="linkbtn" onclick={copyPassages}>Copy the passages</button>
+          <span class="qrnote">{t("present.scanToOpen", { passage: entries[0]?.display ?? thread.name })}</span>
+          <button class="linkbtn" onclick={copyPassages}>{t("present.copyPassages")}</button>
         </div>
       {/if}
       <div class="overview">
@@ -188,7 +189,7 @@
       </div>
       <div class="stepbar">
         <button onclick={(e) => (e.stopPropagation(), (focus = Math.max(focus! - 1, 0)))}>‹</button>
-        <button class="ovbtn" onclick={(e) => (e.stopPropagation(), (focus = null))}>overview</button>
+        <button class="ovbtn" onclick={(e) => (e.stopPropagation(), (focus = null))}>{t("present.overview")}</button>
         <span>{focus + 1} / {entries.length}</span>
         <button onclick={(e) => (e.stopPropagation(), (focus = Math.min(focus! + 1, entries.length)))}>›</button>
       </div>
@@ -196,7 +197,7 @@
       <div class="endcard">
         <p class="mark" aria-hidden="true">✦</p>
         <p class="fref">{thread.name}</p>
-        <p class="endnote">— the whole thread, yours to keep —</p>
+        <p class="endnote">{t("present.endNote")}</p>
         <!-- ONE QR, and it carries the passage: the end card's job is to hand
              this thread over, so the code opens the app AT its first verse
              rather than at whatever the recipient last read (2026-07-27). The
@@ -204,13 +205,11 @@
              and is the only way to grab either link for a test. -->
         <div class="qr">
           <QrCode size={148} text={passageLink} />
-          <span class="qrnote">
-            scan for {entries[0]?.display ?? thread.name} — free, offline, no account
-          </span>
-          <button class="linkbtn" onclick={copyPassages}>Copy the passages</button>
-          <button class="linkbtn" onclick={shareAppLink}>Copy the app link</button>
+          <span class="qrnote">{t("present.scanFor", { passage: entries[0]?.display ?? thread.name })}</span>
+          <button class="linkbtn" onclick={copyPassages}>{t("present.copyPassages")}</button>
+          <button class="linkbtn" onclick={shareAppLink}>{t("present.copyAppLink")}</button>
         </div>
-        <button class="ovbtn" onclick={() => (focus = null)}>back to overview</button>
+        <button class="ovbtn" onclick={() => (focus = null)}>{t("present.backToOverview")}</button>
       </div>
     {/if}
   </div>

@@ -129,7 +129,7 @@ fun StudyPane(
                 if (loading) {
                     SlotItem {
                         Text(
-                            "— loading —",
+                            t("panel.loading"),
                             color = palette.faded,
                             fontStyle = FontStyle.Italic,
                             fontSize = (14 * scale).sp,
@@ -137,7 +137,7 @@ fun StudyPane(
                     }
                 } else {
                     Text(
-                        "Tap a word for study.",
+                        t("pane.tapWord"),
                         color = palette.faded,
                         fontStyle = FontStyle.Italic,
                         fontSize = (14 * scale).sp,
@@ -196,7 +196,7 @@ fun AkjvHeader(palette: ReaderPalette, scale: Float, akjv: String, kjv: String) 
         fontSize = (15 * scale).sp,
         fontWeight = FontWeight.SemiBold,
     )
-    Text("KJV: $kjv", color = palette.faded, fontSize = (13 * scale).sp)
+    Text(t("panel.akjvWas", "word" to kjv), color = palette.faded, fontSize = (13 * scale).sp)
     HorizontalDivider(color = palette.goldFaint, modifier = Modifier.padding(top = 6.dp, bottom = 2.dp))
 }
 
@@ -214,14 +214,14 @@ fun VersionFooter(palette: ReaderPalette, scale: Float) {
     }
     HorizontalDivider(color = palette.rule, modifier = Modifier.padding(top = 10.dp))
     Text(
-        "Plumbline $name",
+        t("about.version", "version" to name),
         color = palette.ink,
         fontSize = (13 * scale).sp,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(top = 8.dp),
     )
     Text(
-        "Sideloaded builds do not update automatically.",
+        t("about.sideload"),
         color = palette.faded,
         fontSize = (11.5f * scale).sp,
     )

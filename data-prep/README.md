@@ -150,3 +150,40 @@ verses; 46,185 spans over 2,944 distinct replacements, dominated by
 `upon`→`on`, `hath`→`has`, `saith`→`says`. 1.35 MB raw, 210 KB gzipped.
 
 [scrollmapper/bible_databases]: https://github.com/scrollmapper/bible_databases
+
+## Luther 1912 (German corpus)
+
+`data-prep/luther/build-luther.py` turns The Unbound Bible's public-domain
+`luther_1912` export into `data/luther1912.jsonl`, in `kjv.jsonl`'s frozen shape
+with the stamp `luther1912-tok1`.
+
+**The reason a German Bible is tractable at all:** that source has already been
+mapped to KJV versification. All 66 books, every chapter count and every
+last-verse number match `data/kjv.jsonl` exactly — 31,102 verses. German
+tradition numbers about 350 verses differently, and rather than renumber, the
+Unbound editors moved the text to the KJV address and left the German number in
+the verse as a `3:19 ` prefix. So **`refKey` means the same verse in both
+corpora**, no versification map is needed, and nothing a reader has written needs
+migrating.
+
+The prefixes are stripped (they are an editorial artifact, not scripture) and
+kept in `german-numbering.tsv`, which is the exact data a future "show German
+verse numbers" feature would want. Nothing reads it today.
+
+`check-luther.py` is the proof, and it takes the source file as an optional
+argument to do its most important check. Six claims, each against evidence:
+the addresses are the KJV's; the tokens reassemble into the verse; no artifact
+survived; words are whole (`pre`/`post` are punctuation, never letters); the
+divine name is marked on caps HERR/HERRN/HERRE and nowhere else; and every
+letter of every verse is the source's.
+
+Run both after any change to either script:
+
+```sh
+python3 data-prep/luther/build-luther.py luther_1912.json
+python3 data-prep/luther/check-luther.py luther_1912.json
+```
+
+The fourth claim is there because mutation-testing the checker found it missing:
+a tokenizer that peels a letter off the end of a word reassembles perfectly, has
+identical letters, and silently breaks every tap target.

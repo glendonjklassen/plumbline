@@ -13,6 +13,7 @@
   import { modal } from "../lib/modal";
   import { nowStamp } from "../engine/StudyEngine";
   import { refDisplay } from "../reader/refname";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -41,7 +42,7 @@
     // and a stale $derived recomputes on the next read (PassagePicker.commit).
     const said = shown;
     void s.author("threadAdd", name, ref, null, nowStamp()).then((err) =>
-      s.showToast(err ?? `Added ${said} to ${name}`),
+      s.showToast(err ?? t("thread.added", { passage: said, thread: name })),
     );
     close();
   }
@@ -50,13 +51,13 @@
     // The shared confirmation (s.askConfirm), not an inline one of its own: every
     // destructive action in the app asks the same way now.
     const ok = await s.askConfirm(
-      `Delete “${name}”?`,
-      "Do you really want to delete this?",
-      "Delete thread",
+      t("thread.deleteAsk", { thread: name }),
+      t("thread.deleteBody"),
+      t("thread.deleteVerb"),
     );
     if (!ok) return;
     const err = await s.author("threadRemove", name);
-    s.showToast(err ?? `Deleted ${name}`);
+    s.showToast(err ?? t("thread.deleted", { thread: name }));
   }
 </script>
 
@@ -67,22 +68,26 @@
     class="sheet"
     role="dialog"
     aria-modal="true"
-    aria-label="Add this verse to a thread"
+    aria-label={t("thread.title")}
     data-surface="thread picker"
     use:modal={{ close }}
   >
-    <h2>Add {shown} to a thread</h2>
+    <h2>{t("thread.heading", { passage: shown })}</h2>
     <div class="list">
-      {#each threads as t (t.name)}
+      <!-- `th`, not `t`: the catalogue lookup is called `t` and an each-block
+           binding of the same name shadows it. `t` is `any`, so nothing static
+           sees the collision — this rendered as "t is not a function" and the
+           whole picker went blank (e2e/destructive.spec.ts). -->
+      {#each threads as th (th.name)}
         <div class="row">
-          <button class="thread" onclick={() => pick(t.name)}>
-            {t.name}
-            <span class="count">{t.entries?.length ?? 0}</span>
+          <button class="thread" onclick={() => pick(th.name)}>
+            {th.name}
+            <span class="count">{th.entries?.length ?? 0}</span>
           </button>
-          <button class="del" title="Delete this thread" onclick={() => void remove(t.name)}>✕</button>
+          <button class="del" title={t("thread.delete")} onclick={() => void remove(th.name)}>✕</button>
         </div>
       {:else}
-        <p class="empty">No threads yet — name your first below.</p>
+        <p class="empty">{t("thread.empty")}</p>
       {/each}
     </div>
     <form
@@ -92,8 +97,8 @@
         if (newName.trim()) pick(newName.trim());
       }}
     >
-      <input placeholder="New thread…" bind:value={newName} />
-      <button type="submit" disabled={!newName.trim()}>Add</button>
+      <input placeholder={t("thread.new")} bind:value={newName} />
+      <button type="submit" disabled={!newName.trim()}>{t("thread.add")}</button>
     </form>
   </div>
 {/if}

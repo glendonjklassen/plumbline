@@ -115,6 +115,17 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
         /** The reading map's tuning (`{wordsPerMinute, completeAt, freshDays,
          *  staleDays, …}`) without loading the reader's reading store. */
         fun ReadingSpecJson(): String = take(ffi.plumbline_reading_spec_json())!!
+
+        /** Every string the shell paints, in the reader's language, in ONE call
+         *  (`{lang, strings, languages}`). See ui/Strings.kt. */
+        fun CatalogJson(chosen: String, device: String): String =
+            take(ffi.plumbline_i18n_catalog_json(chosen, device))!!
+
+        /** Tell the ENGINE which language to write BOOK NAMES and REFERENCES in,
+         *  and get back the code it resolved. The catalogue's other half — call
+         *  both, before anything reads a book name. */
+        fun SetLanguage(chosen: String, device: String): String =
+            take(ffi.plumbline_i18n_set_language(chosen, device)) ?: "en"
     }
 
     // ── corpus / lookups ────────────────────────────────────────────────────

@@ -129,10 +129,10 @@ fun HymnalScreen(
     Column(Modifier.fillMaxSize().background(palette.paper)) {
         // ── the bar: back, title, and (on a hymn) the singer's controls ──────
         ScreenBar(
-            title = if (openId != null && text != null) text.title else "Hymnal",
+            title = if (openId != null && text != null) text.title else t("hymnal.title"),
             palette = palette,
             onBack = { if (openId != null) { openId = null; semis = 0 } else onClose() },
-            backLabel = if (openId != null) "Back to the hymn list" else "Back to reading",
+            backLabel = if (openId != null) t("hymnal.backToList") else t("bar.backToReading"),
         ) {
             if (openId != null && open != null) {
                 // One hymn, two texts: the same tune sung in either language.
@@ -149,7 +149,7 @@ fun HymnalScreen(
                     }
                 }
                 TextButton(onClick = { chords = !chords }) {
-                    Text("Chords", color = if (chords) palette.gold else palette.faded)
+                    Text(t("hymnal.chords"), color = if (chords) palette.gold else palette.faded)
                 }
                 if (chords) {
                     TextButton(onClick = { semis-- }) { Text("−", color = palette.gold, fontSize = 18.sp) }
@@ -157,7 +157,7 @@ fun HymnalScreen(
                     TextButton(onClick = { semis++ }) { Text("+", color = palette.gold, fontSize = 18.sp) }
                 }
                 TextButton(onClick = { text?.let { onSing(HymnSing(open, lang, chords)) } }) {
-                    Text("Sing", color = palette.gold, fontWeight = FontWeight.SemiBold)
+                    Text(t("hymnal.sing"), color = palette.gold, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -166,7 +166,7 @@ fun HymnalScreen(
             HymnIndex(index, filter, { filter = it }, wantLang, palette) { openId = it; semis = 0 }
         } else if (text == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("— loading —", color = palette.faded)
+                Text(t("hymnal.loadingOne"), color = palette.faded)
             }
         } else {
             HymnBody(open, text, chords, palette)
@@ -189,7 +189,7 @@ private fun HymnIndex(
         OutlinedTextField(
             value = filter,
             onValueChange = onFilter,
-            placeholder = { Text("Number, title or first line…", color = palette.faded) },
+            placeholder = { Text(t("hymnal.find"), color = palette.faded) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             singleLine = true,
         )
@@ -202,13 +202,13 @@ private fun HymnIndex(
         }
         when {
             index == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Loading…", color = palette.faded)
+                Text(t("common.loading"), color = palette.faded)
             }
             index.isEmpty() -> Box(Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.Center) {
-                Text("The hymnal has not finished loading yet.", color = palette.ink, fontSize = 16.sp)
+                Text(t("hymnal.loading"), color = palette.ink, fontSize = 16.sp)
             }
             shown.isEmpty() -> Box(Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.Center) {
-                Text("No hymn matches “$filter”.", color = palette.ink, fontSize = 16.sp)
+                Text(t("hymnal.noMatch", "query" to filter), color = palette.ink, fontSize = 16.sp)
             }
             else -> LazyColumn(Modifier.fillMaxSize()) {
                 items(shown, key = { it.id }) { h ->
@@ -274,7 +274,7 @@ private fun HymnBody(hymn: Hymn1, text: HymnText1, chords: Boolean, palette: Rea
                 Row(Modifier.padding(start = 24.dp, bottom = 14.dp)) {
                     Column {
                         Text(
-                            "Refrain", color = palette.faded, fontSize = 12.sp,
+                            t("hymnal.refrain"), color = palette.faded, fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 2.dp),
                         )
                         StanzaLines(chorus, chords, 13, 17, palette.gold, palette.ink)
@@ -282,7 +282,7 @@ private fun HymnBody(hymn: Hymn1, text: HymnText1, chords: Boolean, palette: Rea
                 }
             }
         }
-        Text("Public domain.", color = palette.faded, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+        Text(t("hymnal.publicDomain"), color = palette.faded, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
@@ -414,7 +414,7 @@ fun HymnalSingOverlay(sing: HymnSing, onClose: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, contentDescription = "Stop singing", tint = SingInk)
+                Icon(Icons.Filled.Close, contentDescription = t("hymnal.stopSinging"), tint = SingInk)
             }
             Text(
                 text.title, color = SingInk, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
@@ -444,7 +444,7 @@ fun HymnalSingOverlay(sing: HymnSing, onClose: () -> Unit) {
                 text.chorus?.let { chorus ->
                     Column(Modifier.padding(start = 18.dp, bottom = 26.dp)) {
                         Text(
-                            "Refrain", color = SingFaded, fontSize = 14.sp,
+                            t("hymnal.refrain"), color = SingFaded, fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 3.dp),
                         )
                         StanzaLines(chorus, sing.chords, 16, 26, SingGold, SingInk)

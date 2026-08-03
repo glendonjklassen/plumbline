@@ -10,6 +10,7 @@
   import { zipRead, zipWrite } from "../engine/zip";
   import { idbApply } from "../engine/idb";
   import { nowStamp } from "../engine/StudyEngine";
+  import { languages, plural, t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -71,7 +72,7 @@
       // last thing we can see — there is no completion signal for a download —
       // so this says what we did, not that the file is on the device.
       const n = files.size - 1;
-      s.showToast(`Backed up ${n} file${n === 1 ? "" : "s"} as ${name}`);
+      s.showToast(plural("settings.backedUp.one", "settings.backedUp.other", n, { name }));
     } catch (err) {
       // A toast, and deliberately NOT the blocking notice a failed restore gets.
       // A backup that fails is not a data-loss event: nothing was written, the
@@ -84,7 +85,7 @@
       // the button do nothing at all, which is indistinguishable from a browser
       // that saved the file somewhere the reader hasn't looked.
       const why = err instanceof Error ? err.message : String(err);
-      s.showToast(`Couldn't make the backup — no file was saved: ${why}`);
+      s.showToast(t("settings.backupFailed", { why }));
     }
   }
 
@@ -104,7 +105,7 @@
         if (BACKUP_DIRS.some((d) => path.startsWith(d)) && !path.includes(".."))
           safe.set(currentConfigPath(path), bytes);
       if (safe.size === 0) {
-        s.showToast("No study data found in that zip");
+        s.showToast(t("settings.restoreNothing"));
         return;
       }
       // The restored files are now the truth — nothing (incl. the pagehide
@@ -118,7 +119,7 @@
       const why = err instanceof Error ? err.message : String(err);
       if (!muted) {
         // The zip never got as far as the home; this session is still whole.
-        restoreFailed = `That backup couldn't be read, so nothing changed: ${why}`;
+        restoreFailed = t("settings.restoreUnreadable", { why });
         return;
       }
       // `idbApply` is ONE transaction and IndexedDB rolls an aborted one back
@@ -126,7 +127,7 @@
       try {
         sessionStorage.setItem(
           RESTORE_FAILED,
-          `Restoring that backup didn't finish, so nothing changed — your own study data is as it was, and you can try again: ${why}`,
+          t("settings.restoreIncomplete", { why }),
         );
       } catch {
         /* storage refused the note; the reload still matters more than it does */
@@ -145,6 +146,51 @@
     // idle path already did).
     if (key === "machineAnalysis" && s.config[key] === true) void s.ensureRnd();
   }
+  /** Choose a language, or `""` to go back to following the device.
+   *
+   *  RELOADS, like the bundled-study-set toggle above, and for a sharper reason
+   *  than "it is simpler". The string table itself is reactive and would repaint
+   *  on the spot — but book names do not come from it. They come from the TOC,
+   *  which the engine hands over once on the boot reply and which
+   *  `session.svelte.ts` PINS in its cache precisely because it cannot change
+   *  while a session runs. Swapping the chrome and leaving "Genesis" in the
+   *  passage navigator would be a half-translated app that looks like a bug. */
+  /** Progress of the German corpus download, or null when none is running. */
+  let corpusFraction = $state<number | null>(null);
+
+  async function setLanguage(code: string): Promise<void> {
+    if ((s.config.language ?? "") === code) return;
+    s.config.language = code;
+    // FLUSH, THEN AWAIT, THEN RELOAD. `flushConfig` posts the save and returns;
+    // the worker still has to write it into the home and persist that to
+    // IndexedDB, and a reload fired in the same tick tears the page down first —
+    // so the reader picks German, watches the app reload, and gets English back.
+    // The RPC is ordered, so awaiting the flush is awaiting the save with it.
+    // (Caught by e2e/language.spec.ts, which is the only thing that ever
+    // exercised this: every other setting here takes effect without a reload.)
+    s.flushConfig();
+    await s.rpc.flush();
+    // THE TEXT, not just the interface. A language with its own Bible needs it
+    // on the device, and picking the language IS the ask — a separate "download
+    // German scripture" row would be a second decision about one intention.
+    //
+    // Failure is not fatal and must not block the switch: `corpus_for` in the
+    // core falls back to the KJV, so a reader with no connection gets a German
+    // interface over the English text and can try again by re-picking. Silent
+    // beyond the bar, because the alternative is an error about a download they
+    // did not explicitly start.
+    if (code === "de") {
+      const state = await s.rpc.germanState().catch(() => null);
+      if (state?.available && !state.installed) {
+        corpusFraction = 0;
+        s.rpc.onGermanProgress = (f) => (corpusFraction = f);
+        await s.rpc.installGerman().catch(() => false);
+        corpusFraction = null;
+      }
+    }
+    location.reload();
+  }
+
   function setTheme(theme: string): void {
     s.config.theme = theme;
     s.applyTheme();
@@ -187,7 +233,7 @@
       // there is no reload to do here.
     } catch (e) {
       suggestedError =
-        e instanceof Error && e.message ? `Download failed: ${e.message}` : "Download failed.";
+        e instanceof Error && e.message ? t("settings.downloadFailedWhy", { why: e.message }) : t("settings.downloadFailed");
     } finally {
       installing = false;
     }
@@ -232,16 +278,16 @@
   const offlineSummary = $derived.by(() => {
     const files = offline?.missing.length ?? 0;
     if (files) {
-      return `The Holy Bible is already on this device. Still to download: ${files} data file${
-        files === 1 ? "" : "s"
-      } (${mb(offline!.missingBytes)}).`;
+      return plural("settings.offlineMissing.one", "settings.offlineMissing.other", files, {
+        size: mb(offline!.missingBytes),
+      });
     }
-    return "The Holy Bible is already on this device. Still to download: nothing.";
+    return t("settings.offlineComplete");
   });
   /** Preparing is not downloading; say so separately or not at all. */
   const preparingNote = $derived(
     offlineComplete && s.rndState !== "ready"
-      ? "The analysis is already downloaded and is being prepared."
+      ? t("settings.offlinePreparing")
       : "",
   );
 
@@ -258,7 +304,7 @@
       if (s.rndState !== "ready") await s.ensureRnd();
       offline = await completeOffline((f) => (offlineProgress = f));
     } catch {
-      s.showToast("Couldn't finish downloading. Please check your connection.");
+      s.showToast(t("settings.offlineFailed"));
     } finally {
       offlineBusy = false;
       offlineProgress = 0;
@@ -412,22 +458,18 @@
       try {
         await navigator.share?.({ text });
       } catch {
-        s.showToast("Couldn't copy — select the text and copy it by hand.");
+        s.showToast(t("settings.copyBlocked"));
       }
     }
   }
 
-  const themes = [
-    ["system", "Follow system"],
-    ["light", "Light"],
-    ["dark", "Dark"],
-    ["night", "Night (true black)"],
-  ] as const;
-  const copyOpts = [
-    ["verse", "Verse text only"],
-    ["verseRef", "Verse with reference"],
-    ["verseMarkdown", "Markdown blockquote"],
-  ] as const;
+  // Tokens only: the label is looked up at RENDER, so a language change
+  // repaints the radio list instead of leaving last language's words beside a
+  // live control.
+  const themes = ["system", "light", "dark", "night"] as const;
+  const themeLabel = { system: "themeSystem", light: "themeLight", dark: "themeDark", night: "themeNight" };
+  const copyOpts = ["verse", "verseRef", "verseMarkdown"] as const;
+  const copyLabel = { verse: "copyVerse", verseRef: "copyVerseRef", verseMarkdown: "copyMarkdown" };
 </script>
 
 {#if s.showSettings}
@@ -437,23 +479,54 @@
     class="dialog"
     role="dialog"
     aria-modal="true"
-    aria-label="Settings"
+    aria-label={t("settings.title")}
     data-surface="settings"
     use:modal={{ close: () => (s.showSettings = false) }}
   >
-    <h2>Settings</h2>
+    <h2>{t("settings.title")}</h2>
     <div class="content">
+      <!-- FIRST, above everything: it is the setting that decides what the rest
+           of this dialog is written in, and a reader who cannot read the labels
+           should not have to hunt past twenty of them to find it. -->
+      <p class="label">{t("settings.language")}</p>
+      <p class="desc-note">{t("settings.languageDesc")}</p>
+      <label class="radio">
+        <input
+          type="radio"
+          name="language"
+          checked={!(s.config.language ?? "")}
+          onchange={() => void setLanguage("")}
+        />
+        {t("settings.languageDevice")}
+      </label>
+      {#if corpusFraction !== null}
+        <!-- The one place a language change can take real time. Shown as a bar
+             rather than a spinner because it is ~2.4 MB. -->
+        <p class="desc-note">{t("settings.languageDownloading", { percent: Math.round(corpusFraction * 100) })}</p>
+      {/if}
+      {#each languages() as l (l.code)}
+        <label class="radio">
+          <input
+            type="radio"
+            name="language"
+            checked={(s.config.language ?? "") === l.code}
+            onchange={() => void setLanguage(l.code)}
+          />
+          <!-- The endonym, always: someone looking for German is looking for
+               "Deutsch", and they are looking for it in a dialog they may not be
+               able to read a word of. -->
+          {l.endonym}
+        </label>
+      {/each}
+      <hr />
       {#if s.akjvAvailable}
         <!-- A reading aid over the SAME text, not a version picker: the words
              stay the KJV's everywhere it matters (memorize, Present, copy,
              share), and every marked word tells you what it replaced. -->
         <label class="toggle">
           <span class="body">
-            <span class="name">Plain-English overlay</span>
-            <span class="desc">
-              Show where the American King James Version words a verse differently — marked with a
-              dotted underline; tap one to see the KJV word it replaced.
-            </span>
+            <span class="name">{t("settings.akjv")}</span>
+            <span class="desc">{t("settings.akjvDesc")}</span>
           </span>
           <input
             type="checkbox"
@@ -464,8 +537,8 @@
       {/if}
       <label class="toggle">
         <span class="body">
-          <span class="name">Scholars' analysis</span>
-          <span class="desc">Renderings, morphology, same-root, treasury cross-references.</span>
+          <span class="name">{t("settings.human")}</span>
+          <span class="desc">{t("settings.humanDesc")}</span>
         </span>
         <input
           type="checkbox"
@@ -475,8 +548,8 @@
       </label>
       <label class="toggle">
         <span class="body">
-          <span class="name">Machine analysis</span>
-          <span class="desc">Appears-alongside, where a word concentrates, leitwort.</span>
+          <span class="name">{t("settings.machine")}</span>
+          <span class="desc">{t("settings.machineDesc")}</span>
         </span>
         <input
           type="checkbox"
@@ -489,19 +562,19 @@
           {#if s.rndState === "loading"}
             <span>
               {s.rndPreparing
-                ? "Preparing the analysis…"
-                : `Downloading the analysis pack — ${Math.round(s.rndProgress * 100)}%`}
+                ? t("settings.rndPreparing")
+                : t("settings.rndDownloading", { percent: Math.round(s.rndProgress * 100) })}
             </span>
           {:else}
-            <span>Analysis pack not downloaded (~1.5 MB).</span>
-            <button class="rnd-now" onclick={() => void s.ensureRnd()}>Download now</button>
+            <span>{t("settings.rndAbsent")}</span>
+            <button class="rnd-now" onclick={() => void s.ensureRnd()}>{t("settings.rndNow")}</button>
           {/if}
         </div>
       {/if}
       <label class="toggle">
         <span class="body">
-          <span class="name">Verse per line</span>
-          <span class="desc">Start every verse on a fresh line.</span>
+          <span class="name">{t("settings.versePerLine")}</span>
+          <span class="desc">{t("settings.versePerLineDesc")}</span>
         </span>
         <input
           type="checkbox"
@@ -513,8 +586,8 @@
         />
       </label>
       <hr />
-      <p class="label">Theme</p>
-      {#each themes as [token, label] (token)}
+      <p class="label">{t("settings.theme")}</p>
+      {#each themes as token (token)}
         <label class="radio">
           <input
             type="radio"
@@ -522,11 +595,11 @@
             checked={(s.config.theme ?? "system") === token}
             onchange={() => setTheme(token)}
           />
-          {label}
+          {t(`settings.${themeLabel[token]}`)}
         </label>
       {/each}
       <hr />
-      <p class="label">Text size — reader & study</p>
+      <p class="label">{t("settings.textSize")}</p>
       <p class="aa" style:font-size="{Number(s.config.bodySize ?? 18)}px">Aa</p>
       <input
         type="range"
@@ -535,7 +608,7 @@
         value={Number(s.config.bodySize ?? 18)}
         oninput={(e) => setNum("bodySize", Number((e.target as HTMLInputElement).value))}
       />
-      <p class="label">Margin — space either side of the text</p>
+      <p class="label">{t("settings.margin")}</p>
       <input
         type="range"
         min="8"
@@ -543,7 +616,7 @@
         value={Number(s.config.sideMargin ?? 28)}
         oninput={(e) => setNum("sideMargin", Number((e.target as HTMLInputElement).value))}
       />
-      <p class="label">Line spacing</p>
+      <p class="label">{t("settings.lineSpacing")}</p>
       <input
         type="range"
         min="1"
@@ -553,8 +626,8 @@
         oninput={(e) => setNum("lineSpacing", Number((e.target as HTMLInputElement).value))}
       />
       <hr />
-      <p class="label">Copy format</p>
-      {#each copyOpts as [token, label] (token)}
+      <p class="label">{t("settings.copyFormat")}</p>
+      {#each copyOpts as token (token)}
         <label class="radio">
           <input
             type="radio"
@@ -565,34 +638,34 @@
               s.saveConfig();
             }}
           />
-          {label}
+          {t(`settings.${copyLabel[token]}`)}
         </label>
       {/each}
       <hr />
       <label class="toggle">
         <span class="body">
-          <span class="name">Bundled study set</span>
-          <span class="desc">Threads, tags, and weaves that come with the app. Changing this reloads the app.</span>
+          <span class="name">{t("settings.bundled")}</span>
+          <!-- The reload note is WEB ONLY: Android applies it without one, so it
+               is its own key rather than a second copy of the sentence. -->
+          <span class="desc">{t("settings.bundledDesc")} {t("settings.bundledReloads")}</span>
         </span>
         <input type="checkbox" checked={s.bundledOn} onchange={toggleBundled} />
       </label>
       {#if suggested?.available}
         <div class="toggle">
           <span class="body">
-            <span class="name">Suggested weaves</span>
+            <span class="name">{t("settings.suggested")}</span>
             <span class="desc">
               {#if suggested.installed}
-                Installed. They sit under Suggested in the weave library, where you can keep or
-                reject each one.
+                {t("settings.suggestedInstalled")}
               {:else}
-                A large set of proposed verse links to review and keep or reject. One-time
-                {Math.round(suggested.gzBytes / 1024)} KB download.
+                {t("settings.suggestedOffer", { kb: Math.round(suggested.gzBytes / 1024) })}
               {/if}
             </span>
           </span>
           {#if !suggested.installed}
             <button class="action" disabled={installing} onclick={installSuggested}>
-              {installing ? "Downloading…" : "Download"}
+              {installing ? t("settings.downloading") : t("settings.download")}
             </button>
           {/if}
         </div>
@@ -601,26 +674,20 @@
         {/if}
       {/if}
       <hr />
-      <p class="label">Your church</p>
-      <p class="desc-note">
-        Added to the links and QR codes you share, so whoever you hand this to also gets your
-        church. Leave it blank to share the Bible on its own.
-      </p>
-      <input class="field" placeholder="Church name" bind:value={churchName} onchange={saveChurch} />
+      <p class="label">{t("settings.church")}</p>
+      <p class="desc-note">{t("settings.churchDesc")}</p>
+      <input class="field" placeholder={t("settings.churchName")} bind:value={churchName} onchange={saveChurch} />
       <input
         class="field"
-        placeholder="When and where — e.g. Sundays 10am, 12 Long Street"
+        placeholder={t("settings.churchInfo")}
         bind:value={churchInfo}
         onchange={saveChurch}
       />
-      <input class="field" placeholder="Website" bind:value={churchUrl} onchange={saveChurch} />
+      <input class="field" placeholder={t("settings.churchUrl")} bind:value={churchUrl} onchange={saveChurch} />
       <label class="toggle">
         <span class="body">
-          <span class="name">Present shares open for a new believer</span>
-          <span class="desc">
-            A link shared from the Present screen opens on the new-believer welcome, since that
-            screen is what you show someone face to face. Your ordinary Share stays a plain link.
-          </span>
+          <span class="name">{t("settings.presentAsNew")}</span>
+          <span class="desc">{t("settings.presentAsNewDesc")}</span>
         </span>
         <input
           type="checkbox"
@@ -632,13 +699,15 @@
         />
       </label>
       <hr />
-      <p class="label">Offline</p>
+      <p class="label">{t("settings.offline")}</p>
       <div class="offline">
         {#if offlineBusy}
           <span class="off-note">
             {s.rndPreparing
-              ? "Preparing the analysis…"
-              : `Downloading — ${Math.round((s.rndState === "ready" ? offlineProgress : s.rndProgress) * 100)}%`}
+              ? t("settings.rndPreparing")
+              : t("settings.offlineDownloading", {
+                  percent: Math.round((s.rndState === "ready" ? offlineProgress : s.rndProgress) * 100),
+                })}
           </span>
           <div class="off-bar">
             <div
@@ -647,10 +716,10 @@
             ></div>
           </div>
         {:else if offlineComplete}
-          <span class="off-ok">Everything is on this device ✓</span>
+          <span class="off-ok">{t("settings.offlineOk")}</span>
           <span class="off-note">
-            Plumbline works with no connection at all.{offline?.bytesOnDevice
-              ? ` Using ${mb(offline.bytesOnDevice)}.`
+            {t("settings.offlineNoConnection")}{offline?.bytesOnDevice
+              ? ` ${t("settings.offlineUsing", { size: mb(offline.bytesOnDevice) })}`
               : ""}
           </span>
           {#if preparingNote}
@@ -660,48 +729,44 @@
                claims, and only the first one is ours to make: browsers evict
                storage under pressure. Say which of the two is true. -->
           {#if offline?.persisted === false}
-            <span class="off-note">
-              Your browser may still clear it if the device runs low on space. Installing Plumbline
-              to your home screen usually makes it permanent.
-            </span>
+            <span class="off-note">{t("settings.offlineMayClear")}</span>
           {:else if offline?.persisted}
-            <span class="off-note">Marked permanent — your browser won't clear it to save space.</span>
+            <span class="off-note">{t("settings.offlinePermanent")}</span>
           {/if}
         {:else}
           <span class="off-note">{offlineSummary}</span>
-          <button class="off-go" onclick={downloadEverything}>Download everything</button>
+          <button class="off-go" onclick={downloadEverything}>{t("settings.offlineGo")}</button>
         {/if}
       </div>
       <hr />
-      <p class="label">Your study data — notes, tags, threads, weaves, memorization</p>
+      <p class="label">{t("settings.data")}</p>
       <div class="row">
-        <button class="action" onclick={backup}>Back up (.zip)</button>
+        <button class="action" onclick={backup}>{t("settings.backup")}</button>
         <label class="action">
-          Restore from backup…
+          {t("settings.restore")}
           <input type="file" accept=".zip,application/zip" onchange={restore} hidden />
         </label>
       </div>
-      <p class="desc-note">
-        The same zip restores on Android and the web. Restoring replaces items with the same
-        name; everything else is kept.
-      </p>
+      <p class="desc-note">{t("settings.dataDesc")}</p>
       <hr />
-      <p class="label">Report a problem</p>
+      <p class="label">{t("settings.report")}</p>
       <!-- ALWAYS here, whether or not this build is measuring itself. This used to
            live inside the PERF block below, so shipping with the perf switch off —
            which is how it must ship — shipped with nothing to paste, and the only
            other option was handing readers a debug build (D-20). -->
-      <p class="desc-note">
-        Which build you're running, which data pack, and what kind of device — the facts that make
-        a report answerable. Nothing about your notes, your study or your church is in it.
-      </p>
+      <p class="desc-note">{t("settings.reportDesc")}</p>
       <div class="row">
-        <button class="action" onclick={copyReport}>{copied ? "Copied ✓" : "Copy bug report"}</button>
+        <button class="action" onclick={copyReport}>{copied ? t("settings.reportCopied") : t("settings.reportCopy")}</button>
       </div>
       <details class="diag">
-        <summary>Show what gets copied</summary>
+        <summary>{t("settings.reportShow")}</summary>
         <pre class="report">{reportText}</pre>
       </details>
+      <!-- i18n-ignore-start: PERF-only. This whole block renders only in a
+           measuring build, so no reader in any language can reach it, and its
+           contents are stage names straight out of the engine's own trace —
+           translating "worst single stall" would be translating a variable
+           name. See scripts/check-i18n.mjs. -->
       {#if PERF && s.bootTrace.length}
         <hr />
         <details class="diag">
@@ -769,8 +834,9 @@
           {/if}
         </details>
       {/if}
+      <!-- i18n-ignore-end -->
     </div>
-    <button class="done" onclick={() => (s.showSettings = false)}>Done</button>
+    <button class="done" onclick={() => (s.showSettings = false)}>{t("settings.done")}</button>
   </div>
 {/if}
 
@@ -790,13 +856,13 @@
     class="err-dialog"
     role="alertdialog"
     aria-modal="true"
-    aria-label="Restore didn't finish"
+    aria-label={t("settings.restoreFailedTitle")}
     data-surface="restore-failed"
     use:modal
   >
-    <h2>Restore didn't finish</h2>
+    <h2>{t("settings.restoreFailedTitle")}</h2>
     <p class="err-body">{restoreFailed}</p>
-    <button class="done" data-modal-focus onclick={() => (restoreFailed = null)}>Close</button>
+    <button class="done" data-modal-focus onclick={() => (restoreFailed = null)}>{t("common.close")}</button>
   </div>
 {/if}
 

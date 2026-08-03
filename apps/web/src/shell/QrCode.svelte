@@ -16,6 +16,7 @@
   // and a full-length share link, all read back exactly.
   import qrcode from "qrcode-generator";
   import { PWA_URL } from "./church";
+  import { t } from "../lib/i18n.svelte";
 
   // The library's default byte conversion is ASCII-only, and its ESM build
   // doesn't ship the UTF-8 one (`stringToBytesFuncs` exists only in the CJS
@@ -58,7 +59,7 @@
   height={size}
   viewBox="0 0 {n + 2 * QUIET} {n + 2 * QUIET}"
   role="img"
-  aria-label="QR code linking to the Plumbline web app"
+  aria-label={t("qr.label")}
   shape-rendering="crispEdges"
 >
   <rect width={n + 2 * QUIET} height={n + 2 * QUIET} fill="#ffffff" />

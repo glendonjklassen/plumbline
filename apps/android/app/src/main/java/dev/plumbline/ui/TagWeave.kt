@@ -73,9 +73,9 @@ fun TagWeaveSheet(
                 .navigationBarsPadding()
                 .padding(horizontal = 16.dp),
         ) {
-            Text("Make a weave — ${tag.name}", color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Text(t("weave.heading", "tag" to tag.name), color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             Text(
-                "Links the verses you have ticked into a weave. Run it again later to add verses you have tagged since.",
+                t("weave.hint"),
                 color = palette.inkFaded,
                 fontSize = 12.5.sp,
                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
@@ -100,14 +100,14 @@ fun TagWeaveSheet(
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Weave name") },
+                label = { Text(t("weave.name")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             )
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${checked.size} of ${members.size} passages", color = palette.inkFaded, fontSize = 12.5.sp)
+                Text(t("weave.chosen", "n" to checked.size, "total" to members.size), color = palette.inkFaded, fontSize = 12.5.sp)
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onDone) { Text("Cancel") }
+                TextButton(onClick = onDone) { Text(t("common.cancel")) }
                 TextButton(
                     enabled = checked.size >= 2 && name.isNotBlank(),
                     onClick = {
@@ -117,12 +117,12 @@ fun TagWeaveSheet(
                         val err = engine.WeaveFromTag(tag.name, refsJson, name.trim().takeIf { it != tag.name }, nowUtc())
                         Toast.makeText(
                             context,
-                            err ?: "Weave “${name.trim()}” — ${checked.size} passages chained",
+                            err ?: t("weave.made", "name" to name.trim(), "n" to checked.size),
                             Toast.LENGTH_SHORT,
                         ).show()
                         onDone()
                     },
-                ) { Text("Create weave") }
+                ) { Text(t("weave.create")) }
             }
             Spacer(Modifier.height(8.dp))
         }

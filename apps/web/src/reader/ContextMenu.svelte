@@ -18,6 +18,7 @@
   import { dispatchLink } from "../study/links";
   import { refDisplay } from "./refname";
   import { hasChurch, PWA_URL, shareUrl } from "../shell/church";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -41,7 +42,7 @@
     const text = await s.rpc.call("copyText", ref, kind);
     if (text) {
       await navigator.clipboard.writeText(text);
-      s.showToast("Copied");
+      s.showToast(t("menu.copied"));
     }
   }
 
@@ -70,7 +71,9 @@
     const said = shown;
     close();
     const url = shareUrl(PWA_URL, s.church, { at: ref });
-    const title = hasChurch(s.church) ? `Plumbline — ${said}, from ${s.church.name}` : `Plumbline — ${said}`;
+    const title = hasChurch(s.church)
+      ? t("menu.shareTitleChurch", { passage: said, church: s.church.name })
+      : t("menu.shareTitle", { passage: said });
     // Reached with no await before it on purpose: the share sheet is gated on the
     // click's transient user activation, which awaiting anything first can lose.
     if (navigator.share) {
@@ -86,9 +89,9 @@
     }
     try {
       await navigator.clipboard.writeText(url);
-      s.showToast(`Link copied — it opens at ${said}`);
+      s.showToast(t("menu.linkCopied", { passage: said }));
     } catch {
-      s.showToast("Couldn't share the link — this browser blocked the clipboard.");
+      s.showToast(t("menu.shareBlocked"));
     }
   }
 
@@ -111,9 +114,9 @@
   });
 
   function markRead(): void {
-    const t = markable;
+    const chapter = markable;
     close();
-    if (t) s.markReadFor = t;
+    if (chapter) s.markReadFor = chapter;
   }
 
   function tagPick(): void {
@@ -132,7 +135,7 @@
     const ref = menu!.refKey;
     const said = shown;
     close();
-    void s.author("memoryAdd", ref, nowStamp()).then((err) => s.showToast(err ?? `Memorizing ${said}`));
+    void s.author("memoryAdd", ref, nowStamp()).then((err) => s.showToast(err ?? t("menu.memorizing", { passage: said })));
   }
 
   /** A whole section as one card — this verse starts it, the picker ends it. */
@@ -160,20 +163,20 @@
   <div class="backdrop" onclick={close} oncontextmenu={(e) => (e.preventDefault(), close())}></div>
   <div class="menu" bind:this={el} style:left="{pos.x}px" style:top="{pos.y}px">
     <div class="ref">{shown}</div>
-    <button onclick={() => copy(copyStyle)}>Copy</button>
-    <button onclick={() => copy("chapter")}>Copy chapter</button>
-    <button onclick={shareLink}>Share link</button>
+    <button onclick={() => copy(copyStyle)}>{t("menu.copy")}</button>
+    <button onclick={() => copy("chapter")}>{t("menu.copyChapter")}</button>
+    <button onclick={shareLink}>{t("menu.shareLink")}</button>
     <hr />
-    <button onclick={note}>Note…</button>
+    <button onclick={note}>{t("menu.note")}</button>
     <hr />
-    <button onclick={tagPick}>Tag…</button>
-    <button onclick={addThread}>Add to thread…</button>
+    <button onclick={tagPick}>{t("menu.tag")}</button>
+    <button onclick={addThread}>{t("menu.addThread")}</button>
     <hr />
-    <button onclick={memorize}>Memorize this verse</button>
-    <button onclick={memorizePassage}>Memorize passage…</button>
+    <button onclick={memorize}>{t("menu.memorizeVerse")}</button>
+    <button onclick={memorizePassage}>{t("menu.memorizePassage")}</button>
     {#if markable}
       <hr />
-      <button onclick={markRead}>Mark chapter read…</button>
+      <button onclick={markRead}>{t("menu.markRead")}</button>
     {/if}
   </div>
 {/if}

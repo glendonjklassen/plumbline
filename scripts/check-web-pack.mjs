@@ -63,7 +63,7 @@ for (const f of manifest.files) {
   if (f.seedOnce && !SEED_DIRS.has(f.path.split("/")[0])) {
     fail(`${at}: seedOnce outside the stock dirs {${[...SEED_DIRS]}} — it would be treated as user-authored`);
   }
-  if (f.role !== undefined && !["corpusCache", "suggestedWeaves"].includes(f.role)) {
+  if (f.role !== undefined && !["corpusCache", "suggestedWeaves", "germanCorpus"].includes(f.role)) {
     fail(`${at}: unknown role ${JSON.stringify(f.role)}`);
   }
   // The retired v1 tier flags. Loud, because a half-migrated producer is worse
@@ -80,6 +80,24 @@ if (roles.length !== 1) {
   fail(`expected exactly one role:"corpusCache" entry, found ${roles.length} — the fast open keys off it`);
 } else if (roles[0].stage !== "text") {
   fail(`the corpusCache is stage ${roles[0].stage}; it must be "text" or the reader waits for it`);
+}
+
+// The GERMAN CORPUS, same shape and the same two things to get wrong.
+//
+// It must NOT claim `corpusCache`: that role is how the loader finds the text to
+// open at boot, and a second file claiming it would make which language opens
+// depend on manifest order. And it must be `optional`, or every English reader
+// downloads 2.4 MB of German scripture before they can read Genesis.
+const german = manifest.files.filter((f) => f.role === "germanCorpus");
+if (german.length > 1) {
+  fail(`expected at most one role:"germanCorpus" entry, found ${german.length}`);
+} else if (german.length === 1) {
+  if (german[0].stage !== "optional") {
+    fail(`the German corpus is stage ${german[0].stage}; it must be "optional" — nobody reading English should download it`);
+  }
+  if (german[0].role === "corpusCache") {
+    fail("the German corpus claims the corpusCache role, which decides what opens at boot");
+  }
 }
 
 // The suggested-weave bundle is found by role, like the corpus cache, and it
@@ -100,8 +118,10 @@ if (sugg.length > 1) {
 // The raw JSONL must NOT ship: with a corpus cache present nothing fetches it,
 // and if it ever reached the home the engine would parse 19 MB and write a
 // 37 MB cache back (see the note in build-web-pack.mjs).
-if (seen.has("data/kjv.jsonl")) {
-  fail("data/kjv.jsonl is in the pack — it is superseded by the corpus cache and is unsafe in the home");
+for (const raw of ["data/kjv.jsonl", "data/luther1912.jsonl"]) {
+  if (seen.has(raw)) {
+    fail(`${raw} is in the pack — it is superseded by its corpus cache and is unsafe in the home`);
+  }
 }
 
 // The concept embedding must NOT ship either. Removed 2026-07-30 with the two

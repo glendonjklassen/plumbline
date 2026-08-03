@@ -148,6 +148,7 @@ fun PlumblineApp(
     fold: FoldingFeature?,
     bundledOn: Boolean = true,
     onToggleBundled: () -> Unit = {},
+    onLanguage: (String) -> Unit = {},
 ) {
     // The reader's theme choice, persisted in the shared config
     // ("system" | "light" | "dark" | "night"); System follows the OS.
@@ -179,6 +180,7 @@ fun StudyScreen(
     onThemeChoice: (String) -> Unit = {},
     bundledOn: Boolean = true,
     onToggleBundled: () -> Unit = {},
+    onLanguage: (String) -> Unit = {},
 ) {
     val toc = remember {
         runCatching { parseWire<Toc>(engine.TocJson()).books }.getOrElse { emptyList() }
@@ -553,7 +555,7 @@ fun StudyScreen(
                             ?.let { runCatching { parseWire<UserNote>(it).text }.getOrNull() } ?: ""
                     },
                 ) { cur ->
-                    prompt = AuthorPrompt("Note on $ref", cur ?: "") { text -> saveNote(ref, text) }
+                    prompt = AuthorPrompt(t("notes.on", "passage" to ref), cur ?: "") { text -> saveNote(ref, text) }
                 }
             }
             // The write, then the list it changed. Turn-guarded unlike [saveNote],
@@ -566,9 +568,9 @@ fun StudyScreen(
             // — so it asks first, like every other destructive action (2026-07-29).
             "reject" -> link.index?.let { idx ->
                 confirmAction = ConfirmRequest(
-                    title = "Reject this suggested weave?",
-                    body = "It is deleted, not hidden — it will not come back for review.",
-                    verb = "Reject",
+                    title = t("suggested.rejectAsk"),
+                    body = t("suggested.rejectBody"),
+                    verb = t("suggested.rejectVerb"),
                 ) {
                     scope.engineCall(engine, turns, { engine.WeaveReject(idx) }) { openLibrary(Library.Suggested) }
                 }
@@ -749,14 +751,14 @@ fun StudyScreen(
             drillRef?.let { ref ->
                 MemorizeReview(engine, palette, onClose = { drillRef = null }, only = ref)
             }
-            if (showConstellation) MapOverlay("Constellation", palette, { showConstellation = false }) {
+            if (showConstellation) MapOverlay(t("map.constellation"), palette, { showConstellation = false }) {
                 Constellation(
                     engine, palette, Modifier.fillMaxSize(),
                     onNavigate = { b, ch, _ -> book = b; chapter = ch; showConstellation = false; dest = Dest.Read },
                     onOpenWeave = {},
                 )
             }
-            if (showChord) MapOverlay("Chord map", palette, { showChord = false }) {
+            if (showChord) MapOverlay(t("map.chordMap"), palette, { showChord = false }) {
                 ChordMap(
                     engine, toc, palette, Modifier.fillMaxSize(),
                     onPickBook = { b -> book = b; chapter = 1; showChord = false; dest = Dest.Read },
@@ -790,35 +792,35 @@ fun StudyScreen(
                 selected = dest == Dest.Read && !showPresent,
                 onClick = { showPresent = false; showChord = false; showConstellation = false; dest = Dest.Read },
                 icon = { Icon(NavIconRead, contentDescription = null) },
-                label = { Text("Read") },
+                label = { Text(t("nav.read")) },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = dest == Dest.Explore && !showPresent,
                 onClick = { showPresent = false; showChord = false; showConstellation = false; dest = Dest.Explore },
                 icon = { Icon(NavIconExplore, contentDescription = null) },
-                label = { Text("Explore") },
+                label = { Text(t("nav.explore")) },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = showPresent,
                 onClick = { showChord = false; showConstellation = false; showPresent = true },
                 icon = { Icon(NavIconPresent, contentDescription = null) },
-                label = { Text("Present") },
+                label = { Text(t("nav.present")) },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = dest == Dest.Memorize && !showPresent,
                 onClick = { showPresent = false; showChord = false; showConstellation = false; memView = MemorizeView.List; dest = Dest.Memorize },
                 icon = { Icon(NavIconMemorize, contentDescription = null) },
-                label = { Text("Memorize") },
+                label = { Text(t("nav.memorize")) },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = dest == Dest.Hymnal && !showPresent,
                 onClick = { showPresent = false; showChord = false; showConstellation = false; dest = Dest.Hymnal },
                 icon = { Icon(NavIconHymnal, contentDescription = null) },
-                label = { Text("Hymnal") },
+                label = { Text(t("nav.hymnal")) },
                 colors = navColors,
             )
         }
@@ -900,6 +902,8 @@ fun StudyScreen(
                 onToggleAkjv = { akjvOverlay = !akjvOverlay },
                 presentSharesAsNew = presentSharesAsNew,
                 onPresentSharesAsNew = { presentSharesAsNew = !presentSharesAsNew },
+                language = loadedCfg?.language ?: "",
+                onLanguage = { showSettings = false; onLanguage(it) },
                 onDismiss = { showSettings = false; persistCfg() },
             )
         }
@@ -916,9 +920,9 @@ fun StudyScreen(
                         // notes before the write had taken the monitor.
                         p.onConfirm(text)
                         prompt = null
-                    }) { Text("Save") }
+                    }) { Text(t("common.save")) }
                 },
-                dismissButton = { TextButton(onClick = { prompt = null }) { Text("Cancel") } },
+                dismissButton = { TextButton(onClick = { prompt = null }) { Text(t("common.cancel")) } },
             )
         }
         // Presentation mode (the top-priority request): once a thread is chosen
@@ -1150,11 +1154,11 @@ private fun PaneHeader(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onPrev) {
-                Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "Previous chapter", tint = palette.ink)
+                Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = t("common.previousChapter"), tint = palette.ink)
             }
             TextButton(onClick = onOpenNav) { Text("$name $chapter", color = palette.ink) }
             IconButton(onClick = onNext) {
-                Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Next chapter", tint = palette.ink)
+                Icon(Icons.Filled.KeyboardArrowRight, contentDescription = t("common.nextChapter"), tint = palette.ink)
             }
         }
     }
@@ -1195,11 +1199,11 @@ private fun TopBar(
             if (mode == UiMode.FullscreenVertical) {
                 val name = toc.firstOrNull { it.id == book }?.name ?: book
                 IconButton(onClick = onPrev) {
-                    Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "Previous chapter", tint = palette.ink)
+                    Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = t("common.previousChapter"), tint = palette.ink)
                 }
                 TextButton(onClick = onOpenNav) { Text("$name $chapter", color = palette.ink, fontSize = 16.sp) }
                 IconButton(onClick = onNext) {
-                    Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Next chapter", tint = palette.ink)
+                    Icon(Icons.Filled.KeyboardArrowRight, contentDescription = t("common.nextChapter"), tint = palette.ink)
                 }
             }
 
@@ -1209,7 +1213,7 @@ private fun TopBar(
             // not a menu trip: the QR + link sheet (QrShare.kt).
             var shareApp by remember { mutableStateOf(false) }
             IconButton(onClick = { shareApp = true }) {
-                Icon(Icons.Filled.Share, contentDescription = "Share the app", tint = palette.ink)
+                Icon(Icons.Filled.Share, contentDescription = t("common.shareApp"), tint = palette.ink)
             }
             if (shareApp) {
                 ShareAppDialog(
@@ -1220,7 +1224,7 @@ private fun TopBar(
             }
 
             IconButton(onClick = onSearch) {
-                Icon(Icons.Filled.Search, contentDescription = "Search", tint = palette.ink)
+                Icon(Icons.Filled.Search, contentDescription = t("common.search"), tint = palette.ink)
             }
 
             // Fold only: flip the right pane between the study panel and a second
@@ -1229,7 +1233,7 @@ private fun TopBar(
                 IconButton(onClick = onToggleSecondPane) {
                     Icon(
                         Icons.AutoMirrored.Filled.List,
-                        contentDescription = if (secondStudy) "Right pane: study (tap for a second Bible)" else "Right pane: second Bible (tap for study)",
+                        contentDescription = if (secondStudy) t("pane.rightStudy") else t("pane.rightBible"),
                         tint = if (secondStudy) palette.gold else palette.ink,
                     )
                 }
@@ -1238,13 +1242,13 @@ private fun TopBar(
             Box {
                 var menu by remember { mutableStateOf(false) }
                 IconButton(onClick = { menu = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "Menu", tint = palette.ink)
+                    Icon(Icons.Filled.MoreVert, contentDescription = t("common.menu"), tint = palette.ink)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     val context = LocalContext.current
                     if (hasChurch(church)) {
                         DropdownMenuItem(
-                            text = { Text("Church") },
+                            text = { Text(t("shell.church")) },
                             onClick = {
                                 menu = false
                                 visitChurch(context, church) { /* no site: the label said who */ }
@@ -1253,13 +1257,13 @@ private fun TopBar(
                     }
                     if (intro != null) {
                         DropdownMenuItem(
-                            text = { Text("Welcome") },
+                            text = { Text(t("shell.welcome")) },
                             onClick = { menu = false; onWelcome() },
                         )
                     }
-                    DropdownMenuItem(text = { Text("History") }, onClick = { onHistory(); menu = false })
-                    DropdownMenuItem(text = { Text("Guide & About") }, onClick = { onGuide(); menu = false })
-                    DropdownMenuItem(text = { Text("Settings") }, onClick = { onSettings(); menu = false })
+                    DropdownMenuItem(text = { Text(t("shell.history")) }, onClick = { onHistory(); menu = false })
+                    DropdownMenuItem(text = { Text(t("shell.guideAndAbout")) }, onClick = { onGuide(); menu = false })
+                    DropdownMenuItem(text = { Text(t("shell.settings")) }, onClick = { onSettings(); menu = false })
                 }
             }
         }
@@ -1369,12 +1373,12 @@ private fun SearchOverlay(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onClose) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close search", tint = palette.ink)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("common.closeSearch"), tint = palette.ink)
                 }
                 OutlinedTextField(
                     value = q,
                     onValueChange = { q = it; onQueryChange(it) },
-                    placeholder = { Text("Word, phrase, or reference") },
+                    placeholder = { Text(t("search.placeholder")) },
                     singleLine = true,
                     trailingIcon = {
                         if (q.isNotEmpty()) {
@@ -1388,7 +1392,7 @@ private fun SearchOverlay(
                                 onHits(emptySet())
                                 blocks = null
                             }) {
-                                Icon(Icons.Filled.Close, contentDescription = "Clear", tint = palette.ink)
+                                Icon(Icons.Filled.Close, contentDescription = t("common.clear"), tint = palette.ink)
                             }
                         }
                     },
@@ -1403,7 +1407,7 @@ private fun SearchOverlay(
             if (blocks == null && !searching) {
                 Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                     Text(
-                        "Search the Holy Bible — a word, a phrase, or a reference like “John 3:16”.",
+                        t("search.hint"),
                         color = palette.faded,
                     )
                 }
@@ -1434,14 +1438,14 @@ private fun ExploreScreen(
     onChord: () -> Unit,
     onClose: () -> Unit,
 ) {
-    MapOverlay("Explore", palette, onClose) {
+    MapOverlay(t("nav.explore"), palette, onClose) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            ExploreCard("Notes", "Everything you've written about a verse.", palette, onNotes)
-            ExploreCard("Threads", "Passages you have linked together for sermons or study themes.", palette, onThreads)
-            ExploreCard("Tags", "Labelled verses by topic.", palette, onTags)
-            ExploreCard("Weaves", "Parallel passages tied together.", palette, onWeaves)
-            ExploreCard("Constellation", "Every weave drawn as a row of dots across the Bible. Tap a dot to open that verse.", palette, onConstellation)
-            ExploreCard("Chord map", "A visualization of weaves across the Bible.", palette, onChord)
+            ExploreCard(t("explore.notes"), t("explore.notes.desc"), palette, onNotes)
+            ExploreCard(t("explore.threads"), t("explore.threads.desc"), palette, onThreads)
+            ExploreCard(t("explore.tags"), t("explore.tags.desc"), palette, onTags)
+            ExploreCard(t("explore.weaves"), t("explore.weaves.desc"), palette, onWeaves)
+            ExploreCard(t("explore.constellation"), t("explore.constellation.desc"), palette, onConstellation)
+            ExploreCard(t("map.chordMap"), t("explore.weaveMap.desc"), palette, onChord)
         }
     }
 }
@@ -1484,15 +1488,15 @@ private fun WeavesScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onClose) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = palette.ink)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("bar.back"), tint = palette.ink)
                 }
-                Text("Weaves", color = palette.ink)
+                Text(t("weaves.title"), color = palette.ink)
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = { suggested = false }) {
-                    Text("All", color = if (!suggested) palette.gold else palette.faded)
+                    Text(t("weaves.all"), color = if (!suggested) palette.gold else palette.faded)
                 }
                 TextButton(onClick = { suggested = true }) {
-                    Text("Suggested", color = if (suggested) palette.gold else palette.faded)
+                    Text(t("weaves.suggested"), color = if (suggested) palette.gold else palette.faded)
                 }
             }
         }
@@ -1515,13 +1519,13 @@ private fun HistorySheet(
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = palette.panelBg) {
         Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).navigationBarsPadding()) {
             Text(
-                "Recently read",
+                t("history.title"),
                 color = palette.faded, fontSize = 12.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
             )
             if (history.isEmpty()) {
                 Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                    Text("No history yet.", color = palette.ink)
+                    Text(t("history.empty"), color = palette.ink)
                 }
             } else {
                 LazyColumn(Modifier.fillMaxWidth()) {
@@ -1544,6 +1548,19 @@ private fun HistorySheet(
 /** One Settings dialog: the per-tier analysis gates, theme, text
  *  size/margin/spacing, copy format, and the bundled study set — folded
  *  together so the overflow menu stays short. */
+/** One radio row — the shape the theme and copy-format lists already use, named
+ *  so the language picker above them does not spell it a third time. */
+@Composable
+private fun SettingRadio(label: String, selected: Boolean, palette: ReaderPalette, onPick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onPick).padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = onPick)
+        Text(label, color = palette.ink)
+    }
+}
+
 @Composable
 private fun SettingsDialog(
     palette: ReaderPalette,
@@ -1570,6 +1587,8 @@ private fun SettingsDialog(
     onChurch: (ChurchState) -> Unit,
     presentSharesAsNew: Boolean,
     onPresentSharesAsNew: () -> Unit,
+    language: String,
+    onLanguage: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     // The three reader-pref sliders are DRAFTED. Text size, margin and line
@@ -1596,19 +1615,36 @@ private fun SettingsDialog(
     }
     AlertDialog(
         onDismissRequest = { commitDrafts(); onDismiss() },
-        title = { Text("Settings") },
+        title = { Text(t("settings.title")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
+                // FIRST, above everything: it decides what the rest of this
+                // dialog is written in, and a reader who cannot read the labels
+                // should not have to scroll past twenty of them to find it.
+                Text(t("settings.language"), color = palette.faded, fontSize = 12.sp)
+                Text(
+                    t("settings.languageDesc"),
+                    color = palette.faded, fontSize = 13.sp,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
+                )
+                // "" is "follow the device" — see ConfigState.language. The rest
+                // are ENDONYMS, always: someone looking for German is looking for
+                // "Deutsch", on a screen they may not be able to read.
+                SettingRadio(t("settings.languageDevice"), language.isEmpty(), palette) { onLanguage("") }
+                for (l in Strings.languages) {
+                    SettingRadio(l.endonym, language == l.code, palette) { onLanguage(l.code) }
+                }
+                HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 10.dp))
                 // The text is always on; each analysis tier switches off on its
                 // own (the old all-or-nothing Full study switch is gone).
                 SettingToggle(
-                    "Scholars' analysis",
-                    "Renderings, morphology, same-root, treasury cross-references.",
+                    t("settings.human"),
+                    t("settings.humanDesc"),
                     humanAnalysis, palette, onToggleHuman,
                 )
                 SettingToggle(
-                    "Machine analysis",
-                    "Appears-alongside, most-used-in, repeated key words.",
+                    t("settings.machine"),
+                    t("settings.machineDesc"),
                     machineAnalysis, palette, onToggleMachine,
                 )
                 // A reading aid over the SAME text, not a version picker: the
@@ -1618,19 +1654,18 @@ private fun SettingsDialog(
                 // than offering a switch that does nothing.
                 if (akjvAvailable) {
                     SettingToggle(
-                        "Plain-English overlay",
-                        "Show where the American King James Version words a verse differently — " +
-                            "dotted underline; tap one to see the KJV word it replaced.",
+                        t("settings.akjv"),
+                        t("settings.akjvDesc"),
                         akjvOverlay, palette, onToggleAkjv,
                     )
                 }
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
-                Text("Theme", color = palette.faded, fontSize = 12.sp)
+                Text(t("settings.theme"), color = palette.faded, fontSize = 12.sp)
                 val themes = listOf(
-                    "system" to "Follow system",
-                    "light" to "Light",
-                    "dark" to "Dark",
-                    "night" to "Night (true black)",
+                    "system" to t("settings.themeSystem"),
+                    "light" to t("settings.themeLight"),
+                    "dark" to t("settings.themeDark"),
+                    "night" to t("settings.themeNight"),
                 )
                 for ((token, label) in themes) {
                     Row(
@@ -1642,7 +1677,7 @@ private fun SettingsDialog(
                     }
                 }
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
-                Text("Text size — reader & study", color = palette.faded, fontSize = 12.sp)
+                Text(t("settings.textSize"), color = palette.faded, fontSize = 12.sp)
                 // The live feedback a drag has instead of the pane behind the
                 // scrim: the specimen takes the drafted SIZE and the drafted line
                 // multiple, so two of the three sliders show what they do while
@@ -1651,6 +1686,9 @@ private fun SettingsDialog(
                 // column, so any preview of it here would be a made-up scale. It
                 // lands when the finger lifts, like the pane's own layout.)
                 Text(
+                    // A TYPE SPECIMEN, not copy: it shows the reader what the size
+                    // and spacing they are dragging look like, and the letters are
+                    // the point. i18n-ignore: specimen
                     "Aa\nAa",
                     fontSize = bodyDraft.value.sp,
                     lineHeight = (bodyDraft.value * spacingDraft.value).sp,
@@ -1663,14 +1701,14 @@ private fun SettingsDialog(
                     valueRange = 12f..40f,
                     steps = 27,
                 )
-                Text("Margin — space either side of the text", color = palette.faded, fontSize = 12.sp)
+                Text(t("settings.margin"), color = palette.faded, fontSize = 12.sp)
                 Slider(
                     value = marginDraft.value,
                     onValueChange = { marginDraft.drag(it) },
                     onValueChangeFinished = { marginDraft.commit { v -> onSideMargin(v.toDouble()) } },
                     valueRange = 8f..96f,
                 )
-                Text("Line spacing", color = palette.faded, fontSize = 12.sp)
+                Text(t("settings.lineSpacing"), color = palette.faded, fontSize = 12.sp)
                 Slider(
                     value = spacingDraft.value,
                     onValueChange = { spacingDraft.drag(it) },
@@ -1678,11 +1716,11 @@ private fun SettingsDialog(
                     valueRange = 1.0f..2.2f,
                 )
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
-                Text("Copy format", color = palette.faded, fontSize = 12.sp)
+                Text(t("settings.copyFormat"), color = palette.faded, fontSize = 12.sp)
                 val copyOpts = listOf(
-                    "verse" to "Verse text only",
-                    "verseRef" to "Verse with reference",
-                    "verseMarkdown" to "Markdown blockquote",
+                    "verse" to t("settings.copyVerse"),
+                    "verseRef" to t("settings.copyVerseRef"),
+                    "verseMarkdown" to t("settings.copyMarkdown"),
                 )
                 for ((token, label) in copyOpts) {
                     Row(
@@ -1698,10 +1736,9 @@ private fun SettingsDialog(
                 // twin: SettingsDialog.svelte → "Your church". Held locally in
                 // edit state and pushed up on every change, so the config write
                 // is the same shape as every other setting here.
-                Text("Your church", color = palette.faded, fontSize = 12.sp)
+                Text(t("settings.church"), color = palette.faded, fontSize = 12.sp)
                 Text(
-                    "Attached to every link and QR you share, so whoever you hand this to can find " +
-                        "your church. Leave it blank to share the Bible on its own.",
+                    t("settings.churchDesc"),
                     color = palette.faded, fontSize = 12.sp,
                 )
                 val cc = remember(church) { cleanChurch(church) }
@@ -1712,36 +1749,36 @@ private fun SettingsDialog(
                 OutlinedTextField(
                     value = cName,
                     onValueChange = { cName = it; pushChurch() },
-                    label = { Text("Church name") },
+                    label = { Text(t("settings.churchName")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                 )
                 OutlinedTextField(
                     value = cInfo,
                     onValueChange = { cInfo = it; pushChurch() },
-                    label = { Text("When and where you meet") },
+                    label = { Text(t("settings.churchInfo")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                 )
                 OutlinedTextField(
                     value = cUrl,
                     onValueChange = { cUrl = it; pushChurch() },
-                    label = { Text("Website") },
+                    label = { Text(t("settings.churchUrl")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                 )
                 SettingToggle(
-                    "Present shares as a new believer",
-                    "When someone opens a link you shared from Present, they see the new believer welcome first.",
+                    t("settings.presentAsNew"),
+                    t("settings.presentAsNewDesc"),
                     presentSharesAsNew, palette, onPresentSharesAsNew,
                 )
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
-                SettingToggle("Bundled study set", "Threads, tags, and weaves that come with the app.", bundledOn, palette, onToggleBundled)
+                SettingToggle(t("settings.bundled"), t("settings.bundledDesc"), bundledOn, palette, onToggleBundled)
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 BackupRestoreRows(palette)
             }
         },
-        confirmButton = { TextButton(onClick = { commitDrafts(); onDismiss() }) { Text("Done") } },
+        confirmButton = { TextButton(onClick = { commitDrafts(); onDismiss() }) { Text(t("settings.done")) } },
     )
 }
 

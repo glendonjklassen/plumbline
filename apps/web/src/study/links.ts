@@ -5,6 +5,7 @@
 
 import { nowStamp } from "../engine/StudyEngine";
 import type { Session } from "../state/session.svelte";
+import { t } from "../lib/i18n.svelte";
 
 export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Promise<void> {
   const link = await s.rpc.static("routeLink", uri);
@@ -67,9 +68,9 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       if (!tag) break;
       if (
         !(await s.askConfirm(
-          `Remove ${link.refKey} from “${tag.name}”?`,
-          "The verse leaves this tag. The tag and its other verses stay as they are.",
-          "Remove",
+          t("tag.removeAsk", { passage: link.refKey, tag: tag.name }),
+          t("tag.removeBody"),
+          t("tag.removeVerb"),
         ))
       ) {
         break;
@@ -87,9 +88,9 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
     case "reject":
       if (
         !(await s.askConfirm(
-          "Reject this suggested weave?",
-          "It is deleted, not hidden — it will not come back for review.",
-          "Reject",
+          t("suggested.rejectAsk"),
+          t("suggested.rejectBody"),
+          t("suggested.rejectVerb"),
         ))
       ) {
         break;

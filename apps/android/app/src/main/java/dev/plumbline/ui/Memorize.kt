@@ -155,7 +155,7 @@ fun MemorizeList(
     val verses = coverage?.verses ?: emptyList()
     val dueCount = cards.count { it.due }
 
-    MemFrame("Memorize", palette, onClose) {
+    MemFrame(t("nav.memorize"), palette, onClose) {
         Column(Modifier.fillMaxSize()) {
             // Actions: Review due (with a count) and Activity.
             Row(
@@ -167,11 +167,11 @@ fun MemorizeList(
                     onClick = { onSelectView(MemorizeView.ReviewDue) },
                     enabled = dueCount > 0,
                     colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
-                ) { Text(if (dueCount > 0) "Review $dueCount due" else "Nothing due") }
+                ) { Text(if (dueCount > 0) t("memorize.reviewDueN", "n" to dueCount) else t("memorize.nothingDueShort")) }
                 OutlinedButton(
                     onClick = { onSelectView(MemorizeView.Activity) },
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.ink),
-                ) { Text("Activity") }
+                ) { Text(t("memorize.activity")) }
             }
             HorizontalDivider(color = palette.rule)
 
@@ -179,7 +179,7 @@ fun MemorizeList(
             // not a screen (fullscreen felt like leaving the hub).
             if (verses.isNotEmpty()) {
                 Text(
-                    "Coverage — the canon shaded by mastery",
+                    t("memorize.coverage"),
                     color = palette.faded, fontSize = 12.sp,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
@@ -193,8 +193,7 @@ fun MemorizeList(
             if (cards.isEmpty()) {
                 Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                     Text(
-                        "No verses yet.\n\nLong-press a verse → “Memorize this verse”, or " +
-                            "“Memorize passage…” for a whole section.",
+                        t("memorize.empty"),
                         color = palette.ink, fontSize = 16.sp,
                     )
                 }
@@ -203,8 +202,10 @@ fun MemorizeList(
                     item {
                         val nv = cards.sumOf { it.verses }
                         Text(
-                            "${cards.size} card${if (cards.size == 1) "" else "s"} · " +
-                                "$nv verse${if (nv == 1) "" else "s"} · tap to drill",
+                            Strings.plural(
+                                "memorize.cardsVerses.one", "memorize.cardsVerses.other", cards.size,
+                                "verses" to Strings.plural("memorize.verses.one", "memorize.verses.other", nv),
+                            ),
                             color = palette.faded, fontSize = 12.sp,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                         )
@@ -230,7 +231,7 @@ fun MemorizeList(
                                 )
                             }
                             if (v.due) {
-                                Text("due", color = palette.gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(t("memorize.due"), color = palette.gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                         HorizontalDivider(color = palette.rule)
@@ -243,10 +244,10 @@ fun MemorizeList(
 
 /** A mastery token → a reader-facing label. */
 private fun masteryLabel(m: String): String = when (m) {
-    "new" -> "New"
-    "learning" -> "Learning"
-    "young" -> "Young"
-    "mature" -> "Mature"
+    "new" -> t("memorize.masteryNew")
+    "learning" -> t("memorize.masteryLearning")
+    "young" -> t("memorize.masteryYoung")
+    "mature" -> t("memorize.masteryMature")
     else -> m.replaceFirstChar { it.uppercase() }
 }
 
@@ -295,12 +296,11 @@ fun MemorizeReview(engine: StudyEngine, palette: ReaderPalette, onClose: () -> U
         }
     }
 
-    MemFrame(if (only != null) "Memorize verse" else "Memorize", palette, onClose) {
+    MemFrame(if (only != null) t("memorize.verse") else t("nav.memorize"), palette, onClose) {
         if (due.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(22.dp), contentAlignment = Alignment.Center) {
                 Text(
-                    "Nothing due for review.\n\n" +
-                        "Long-press a verse → “Memorize this verse” to start a card.",
+                    t("memorize.nothingDueBody"),
                     color = palette.ink,
                     fontSize = 16.sp,
                 )
@@ -377,7 +377,7 @@ private fun ReviewBody(
         val outcome = saveOutcome(runCatching { synchronized(engine) { engine.MemoryGrade(curRef, g, nowUtc()) } })
         when (outcome) {
             is SaveOutcome.Saved -> advance()
-            is SaveOutcome.Failed -> gradeError = "Not saved — ${outcome.message}. This card is still due."
+            is SaveOutcome.Failed -> gradeError = t("memorize.notSaved", "why" to outcome.message)
         }
     }
 
@@ -399,7 +399,7 @@ private fun ReviewBody(
             .padding(horizontal = 22.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("Card ${idx + 1} of ${due.size}", color = palette.faded, fontSize = 12.sp)
+        Text(t("memorize.cardOf", "i" to idx + 1, "n" to due.size), color = palette.faded, fontSize = 12.sp)
         Text(refDisplay, color = palette.ink, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
 
         // The prompt/hint — natural height (no weight), so it can't be squeezed
@@ -413,7 +413,7 @@ private fun ReviewBody(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             TextButton(onClick = { mode = Prompt.FirstLetters }) {
-                Text("First letters", color = palette.ink)
+                Text(t("memorize.modeFirst"), color = palette.ink)
             }
             Slider(
                 value = level.toFloat().coerceIn(0f, maxLevel.toFloat()),
@@ -427,7 +427,7 @@ private fun ReviewBody(
                 ),
             )
             TextButton(onClick = { mode = Prompt.Full }) {
-                Text("Reveal", color = palette.gold)
+                Text(t("memorize.reveal"), color = palette.gold)
             }
         }
 
@@ -440,10 +440,10 @@ private fun ReviewBody(
             OutlinedTextField(
                 value = typed,
                 onValueChange = { typed = it },
-                placeholder = { Text("Type the verse from memory, then Check") },
+                placeholder = { Text(t("memorize.typeHint")) },
                 modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = { check() }) { Text("Check", color = palette.ink) }
+            TextButton(onClick = { check() }) { Text(t("memorize.check"), color = palette.ink) }
         }
         if (result.isNotEmpty()) Text(result, color = palette.ink, fontSize = 14.sp)
 
@@ -454,10 +454,10 @@ private fun ReviewBody(
         // Grade buttons (SM-2's four). Again resets to relearning (destructive
         // tone); Easy carries the strongest accent — GTK's suggested-action.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            GradeButton("Again", filled = false, accent = palette.disputed, paper = palette.paper) { grade("again") }
-            GradeButton("Hard", filled = false, accent = palette.ink, paper = palette.paper) { grade("hard") }
-            GradeButton("Good", filled = true, accent = palette.sectionGold, paper = palette.paper) { grade("good") }
-            GradeButton("Easy", filled = true, accent = palette.gold, paper = palette.paper) { grade("easy") }
+            GradeButton(t("memorize.gradeAgain"), filled = false, accent = palette.disputed, paper = palette.paper) { grade("again") }
+            GradeButton(t("memorize.gradeHard"), filled = false, accent = palette.ink, paper = palette.paper) { grade("hard") }
+            GradeButton(t("memorize.gradeGood"), filled = true, accent = palette.sectionGold, paper = palette.paper) { grade("good") }
+            GradeButton(t("memorize.gradeEasy"), filled = true, accent = palette.gold, paper = palette.paper) { grade("easy") }
         }
     }
 }
@@ -588,11 +588,11 @@ fun MemorizeActivity(engine: StudyEngine, palette: ReaderPalette, onClose: () ->
                 ?.let { parseWire<MemoryActivity>(it).days }
         }.getOrNull() ?: emptyList()
     }
-    MemFrame("Memory activity", palette, onClose) {
+    MemFrame(t("memorize.activityTitle"), palette, onClose) {
         if (days.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                 Text(
-                    "No reviews yet — grade some cards in Review due.",
+                    t("memorize.noReviews"),
                     color = palette.ink, fontSize = 15.sp,
                 )
             }
@@ -606,7 +606,7 @@ fun MemorizeActivity(engine: StudyEngine, palette: ReaderPalette, onClose: () ->
                 LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
                     item {
                         Text(
-                            "History",
+                            t("memorize.history"),
                             color = palette.faded, fontSize = 12.sp,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                         )
@@ -618,7 +618,7 @@ fun MemorizeActivity(engine: StudyEngine, palette: ReaderPalette, onClose: () ->
                         ) {
                             Text(prettyDay(d.day), color = palette.ink, fontSize = 15.sp, modifier = Modifier.weight(1f))
                             Text(
-                                "${d.reviews} review${if (d.reviews == 1) "" else "s"}",
+                                Strings.plural("memorize.reviews.one", "memorize.reviews.other", d.reviews),
                                 color = palette.gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                             )
                         }

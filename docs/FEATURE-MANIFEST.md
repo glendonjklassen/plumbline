@@ -706,6 +706,56 @@ the web lists **Suggested** as its own seventh card (`ExploreScreen.svelte`);
 Android folds it into one Weaves screen with an All/Suggested filter
 (`WeavesScreen`).
 
+## Languages (2026-08-02, both shells)
+
+Full detail in [I18N.md](I18N.md). The contract, in one place:
+
+**Every word the reader sees is core data.** The catalogue lives in
+`crates/core/src/i18n/*.json`, keyed by stable dotted ids, and a shell reaches
+it with two engine-independent calls at startup —
+`plumbline_i18n_catalog_json` for what the shell spells and
+`plumbline_i18n_set_language` for what the core spells (book names, references,
+the reading map). Both take the reader's setting AND the device's locale,
+because `i18n::resolve` owns the rule that an empty setting means "follow the
+device" and a rule implemented twice disagrees with itself once.
+
+English and German ship. `config.language` holds the choice; empty is the
+device's. `refKey` does not move under any language — `VRef::ref_key` is frozen
+storage, `VRef::display` is what localizes ("Joh 3,16", with a comma).
+
+Both shells are done: every string, a picker in Settings, and
+`scripts/check-i18n.mjs` failing the build on a stray literal in either. The web
+reloads to apply a language change and Android recreates its activity — same
+reason, which is that the table of contents is built once when the engine opens.
+
+**SHELL DELTA.** `settings.bundledReloads` is web-only: the web reloads to apply
+the bundled study set and Android does not. It is the ONLY copy difference left
+between the shells — extracting Android turned up eleven others that were pure
+drift and are now one wording each.
+
+**SHELL DELTA.** The welcome pages are English in both shells on purpose: they
+are the maintainer's own first-person writing, and a machine draft of that is
+not a translation. `ENGLISH_ONLY` in `i18n.rs` is the list.
+
+**Provenance.** Every user-authored file (note, thread, tag, weave, memory card)
+carries `lang`, stamped at CREATE and never on re-save. Nothing reads it: it is
+what makes the versification migration runnable later. Absent means "unknown",
+not English — see I18N.md.
+
+**The German Bible** (2026-08-03, both shells). Luther 1912, public domain, its
+own tokenization stamp `luther1912-tok1`, AT THE KJV'S OWN VERSE ADDRESSES — the
+source was already mapped to KJV numbering, so `refKey` means one verse in both
+and no migration exists. `corpus_for`/`open_corpus` in crates/ffi choose the
+text, and the language must be set BEFORE the engine opens because that is when
+the choice is made. Strong's, morphology and the plain-English overlay are
+withheld from it: they are keyed by token index against the KJV's tokenization.
+
+**SHELL DELTA — delivery.** Android BUNDLES the German corpus in the APK
+(~1.8 MB, marker `.data-v4`); the web fetches it on demand as `stage: "optional"`
+(2.4 MB gz) when the reader picks German, because nothing on the web is bundled
+and an English reader must not download a German Bible. Same split as the
+hymnal.
+
 ## Hymnal (2026-08-02, both shells)
 
 The fifth destination. A book of public-domain hymns with chords, meant to be

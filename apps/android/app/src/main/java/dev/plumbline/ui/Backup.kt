@@ -247,7 +247,7 @@ fun BackupRestoreRows(palette: ReaderPalette) {
             }
             Toast.makeText(
                 context,
-                if (n >= 0) "Backed up $n files" else "Backup failed",
+                if (n >= 0) Strings.plural("settings.backedUpN.one", "settings.backedUpN.other", n) else t("settings.backupFailedShort"),
                 Toast.LENGTH_SHORT,
             ).show()
         }
@@ -262,15 +262,15 @@ fun BackupRestoreRows(palette: ReaderPalette) {
             }
             when {
                 n > 0 -> (context as? Activity)?.recreate()
-                n == 0 -> Toast.makeText(context, "No study data found in that zip", Toast.LENGTH_SHORT).show()
-                else -> Toast.makeText(context, "Restore failed", Toast.LENGTH_SHORT).show()
+                n == 0 -> Toast.makeText(context, t("settings.restoreNothing"), Toast.LENGTH_SHORT).show()
+                else -> Toast.makeText(context, t("settings.restoreFailedShort"), Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     Column {
         Text(
-            "Your study data — notes, tags, threads, weaves, memorization",
+            t("settings.data"),
             color = palette.faded,
             fontSize = 12.sp,
         )
@@ -279,16 +279,16 @@ fun BackupRestoreRows(palette: ReaderPalette) {
                 backupLauncher.launch("plumbline-backup-${Instant.now().toString().take(10)}.zip")
             }.padding(vertical = 6.dp),
         ) {
-            Text("Back up (.zip)…", color = palette.ink, fontSize = 15.sp)
+            Text(t("settings.backup"), color = palette.ink, fontSize = 15.sp)
         }
         Column(
             Modifier.fillMaxWidth().clickable {
                 restoreLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
             }.padding(vertical = 6.dp),
         ) {
-            Text("Restore from backup…", color = palette.ink, fontSize = 15.sp)
+            Text(t("settings.restore"), color = palette.ink, fontSize = 15.sp)
             Text(
-                "The same zip restores on the web and Android. Same-name items are replaced.",
+                t("settings.dataDesc"),
                 color = palette.faded,
                 fontSize = 12.sp,
             )

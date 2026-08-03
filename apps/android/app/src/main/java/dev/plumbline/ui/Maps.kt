@@ -231,7 +231,7 @@ private fun MapBuilding(label: String, palette: ReaderPalette) {
         Text(label, color = palette.faded)
         if (slow) {
             Text(
-                "Every link in your weave library is being counted across the canon.",
+                t("map.countingNote"),
                 color = palette.faded,
                 fontSize = 12.5.sp,
                 lineHeight = 18.sp,
@@ -314,8 +314,8 @@ fun Constellation(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            TextButton(onClick = { if (page > 0) page -= 1 }) { Text("‹ prev", color = palette.ink) }
-            TextButton(onClick = { page += 1 }) { Text("next ›", color = palette.ink) }
+            TextButton(onClick = { if (page > 0) page -= 1 }) { Text(t("map.prev"), color = palette.ink) }
+            TextButton(onClick = { page += 1 }) { Text(t("map.next"), color = palette.ink) }
             Text(model?.caption ?: "", color = palette.faded, fontSize = 12.sp)
         }
 
@@ -540,8 +540,8 @@ fun ChordMap(
     ) {
         val map = data
         when {
-            loading -> MapBuilding("Building weave map…", palette)
-            map == null || map.pairs.isEmpty() -> Text("No weaves to map yet.", color = palette.faded)
+            loading -> MapBuilding(t("map.buildingWeave"), palette)
+            map == null || map.pairs.isEmpty() -> Text(t("map.noWeaves"), color = palette.faded)
             else -> Canvas(
                 Modifier
                     .fillMaxSize()
@@ -626,9 +626,9 @@ fun ChordMap(
                     drawCircle(c, radius = 4.dp.toPx(), center = Offset(x, 14.dp.toPx()))
                     drawLabel(paint, listOf(label), x + 8.dp.toPx(), 7.dp.toPx(), Paint.Align.LEFT, Color(red = 89, green = 77, blue = 56, alpha = 220).toArgbInt())
                 }
-                legendDot(12.dp.toPx(), Color(red = 184, green = 145, blue = 61, alpha = 220), "OT ↔ OT")
-                legendDot(92.dp.toPx(), Color(red = 77, green = 135, blue = 199, alpha = 220), "NT ↔ NT")
-                legendDot(172.dp.toPx(), Color(red = 148, green = 97, blue = 179, alpha = 220), "OT ↔ NT")
+                legendDot(12.dp.toPx(), Color(red = 184, green = 145, blue = 61, alpha = 220), t("map.otOt"))
+                legendDot(92.dp.toPx(), Color(red = 77, green = 135, blue = 199, alpha = 220), t("map.ntNt"))
+                legendDot(172.dp.toPx(), Color(red = 148, green = 97, blue = 179, alpha = 220), t("map.otNt"))
                 drawLabel(
                     paint, listOf("heavier = more links · tap a book to open it"),
                     262.dp.toPx(), 7.dp.toPx(), Paint.Align.LEFT,

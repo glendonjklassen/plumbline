@@ -507,6 +507,12 @@ data class ConfigState(
     val akjvOverlay: Boolean? = null,
     /** The welcome this reader was given, "new" | "curious" (additive). */
     val intro: String? = null,
+    /** The reader's interface language, as a code (additive, 2026-08-02).
+     *  ABSENT OR EMPTY MEANS "follow the device" — not English. Writing "en" the
+     *  first time a locale resolved would have frozen that reader into English
+     *  permanently. `i18n::resolve` in the core weighs this against the platform
+     *  locale; see ui/Strings.kt. */
+    val language: String = "",
 )
 
 @Serializable

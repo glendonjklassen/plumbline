@@ -94,7 +94,11 @@ test("first-run: a new believer's welcome reference opens beside John", async ({
   await page.goto("/");
   await page.getByRole("button", { name: "New believer" }).click({ timeout: 90_000 });
   await expect(page.getByText("I'm so glad you've put your faith in Jesus")).toBeVisible();
-  await page.getByRole("button", { name: "Psalm 12:6–7" }).click();
+  // "Psalms", not "Psalm": the chip's label is DERIVED now — the book's name
+  // from the canon plus the catalogue's `ref.range` template — so that it
+  // localizes and so that it cannot disagree with what the app calls the book
+  // everywhere else. It was hand-typed as "Psalm 12:6–7" before (2026-08-03).
+  await page.getByRole("button", { name: "Psalms 12:6–7" }).click();
   const panes = await page.evaluate(() => {
     const s = (window as any).__plumbline;
     return { gates: s.gates, panes: s.panes.map((p: any) => ({ book: p.book, chapter: p.chapter, verse: p.targetVerse })) };

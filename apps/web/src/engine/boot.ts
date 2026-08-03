@@ -23,17 +23,19 @@
 
 import { instantiate, type WasmEngine } from "./engine";
 import { depotAvailable, depotHas, depotResponse } from "./depot";
-import { buildHome, dropLegacyIdxcache, type VirtualHome } from "./home";
+import { buildHome, dropLegacyIdxcache, GERMAN_CACHE, installedOptional, type VirtualHome } from "./home";
 import {
   assetUrl,
   devicePackFiles,
+  hasOptional,
+  type PackFile,
   fetchManifest,
   fetchPack,
   fetchStageLocal,
   type PackManifest,
 } from "./pack";
 import { manifestFromPin, pinIsFromAnOlderBuild, readPin, writePin } from "./pin";
-import { StudyEngine } from "./StudyEngine";
+import { configLoad, i18nSetLanguage, StudyEngine } from "./StudyEngine";
 
 /** Where the engine binary lives — content-addressed on the build id, so a new
  *  build is a new depot entry beside the old one rather than an overwrite.
@@ -99,7 +101,7 @@ export interface BootResult {
   staleManifest: boolean;
 }
 
-export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult> {
+export async function boot(onPhase: (p: BootPhase) => void, locale = ""): Promise<BootResult> {
   const trace: [string, number][] = [];
   // NOT PERF-gated, deliberately — and it used to be (fixed with D-20, when
   // flipping PERF off for release turned two tests red and would have quietly
@@ -157,6 +159,12 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   // — one manifest fetch, then just the absent bytes. A partially-evicted device
   // therefore gets one coherent decision instead of a per-file mix.
   const base = assetUrl("");
+  // What this device has already chosen to keep, read before anything is
+  // fetched: the German corpus is an `optional` entry, so nothing on the stage-1
+  // path would carry it otherwise, and the engine would open the English text
+  // for a reader who downloaded the German one.
+  const taken = await timed("optional markers (idb)", installedOptional);
+  const mine = (f: PackFile) => hasOptional(taken, f);
   let pinned = await timed("pin read (depot)", () => readPin(base));
   let manifest: PackManifest | null = null;
   let pack: Map<string, Uint8Array> | null = null;
@@ -164,7 +172,7 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
 
   if (pinned) {
     const m = manifestFromPin(pinned);
-    const local = await timed("stage1 read (depot, no network)", () => fetchStageLocal(m, "text"));
+    const local = await timed("stage1 read (depot, no network)", () => fetchStageLocal(m, "text", mine));
     if (local) {
       manifest = m;
       pack = local;
@@ -183,7 +191,9 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
     const live = await timed("manifest (network)", fetchManifest);
     manifest = live;
     pack = await timed("stage1 fetch+gunzip (text)", () =>
-      fetchPack(live, (p) => onPhase({ phase: "download", fraction: p.fraction, detail: p.currentFile })),
+      fetchPack(live, (p) => onPhase({ phase: "download", fraction: p.fraction, detail: p.currentFile }), {
+        also: mine,
+      }),
     );
     pinned = null; // stale: a fresh pin is written below, once the open succeeds
   }
@@ -200,6 +210,18 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   const handedOff = await timed("engine bytes wait (overlapped)", () => engineBytes);
   if (!handedOff) trace.push(["engine bytes not stored — instantiate refetches", 1]);
   const wasm = await timed("wasm compile+instantiate", () => instantiate(home.root));
+
+  // THE LANGUAGE, BEFORE THE OPEN. The engine picks which corpus to open, so a
+  // language set after this point picks nothing — the worker used to do it a
+  // dozen lines later, next to the TOC, and every German reader got the English
+  // text with the download sitting unused on their device
+  // (e2e/language.spec.ts).
+  //
+  // `configLoad` is engine-independent, so it can be asked before there is an
+  // engine; `locale` is the device's, forwarded from the main thread because a
+  // worker's own `navigator.language` is not the page's.
+  const cfg = configLoad(wasm) ?? {};
+  i18nSetLanguage(wasm, typeof cfg.language === "string" ? cfg.language : "", locale);
 
   onPhase({ phase: "open" });
   // Yield so the "opening" progress message lands before the synchronous
@@ -228,12 +250,15 @@ export async function boot(onPhase: (p: BootPhase) => void): Promise<BootResult>
   // act on it without asking the network, so it must never name a pack that could
   // not actually boot this one. Cold path only — on the fast path it already
   // describes exactly this pack.
-  if (!fromPin) await writePin(manifest, base, devicePackFiles(manifest, home.suggestedInstalled));
+  if (!fromPin) await writePin(manifest, base, devicePackFiles(manifest, mine));
 
   // The corpus cache is the big one: `load_cache` does a single whole-file read
   // and MOVES the bytes into the engine's own buffer, which every unvisited
   // chapter is then decoded out of. The node here is a pure duplicate of ~37 MB.
-  const freed = home.evict(["data/kjv.jsonl.idxcache"]);
+  // BOTH corpus caches, for the same reason: whichever one the engine opened, the
+  // home's copy is now a pure duplicate of what the engine holds — and the one it
+  // did NOT open was never read at all, so it is 28 MB of nothing.
+  const freed = home.evict(["data/kjv.jsonl.idxcache", GERMAN_CACHE]);
   if (freed) trace.push(["home evict after open (KB)", Math.round(freed / 1024)]);
 
   // Reclaim the legacy IndexedDB copy of the corpus cache, but only now — after

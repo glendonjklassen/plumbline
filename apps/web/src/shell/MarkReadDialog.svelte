@@ -12,6 +12,7 @@
   // date set by mistake.
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
+  import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -36,25 +37,26 @@
   }
 
   async function set(when: string): Promise<void> {
-    const t = target;
+    // `at`, not `t`: the catalogue lookup is called `t` and this shadowed it.
+    const at = target;
     close();
-    if (!t) return;
-    const err = await s.author("readingMarkRead", t.book, t.chapter, when);
-    s.showToast(err ?? `Marked read — ${when}`);
+    if (!at) return;
+    const err = await s.author("readingMarkRead", at.book, at.chapter, when);
+    s.showToast(err ?? t("markRead.marked", { when }));
   }
 
   async function clear(): Promise<void> {
-    const t = target;
-    if (!t) return;
+    const at = target;
+    if (!at) return;
     const ok = await s.askConfirm(
-      `Clear the reading history for ${label}?`,
-      "It goes back to unread — including a date you set here by hand, which nothing else records.",
-      "Clear history",
+      t("markRead.clearAsk", { chapter: label }),
+      t("markRead.clearBody"),
+      t("markRead.clear"),
     );
     if (!ok) return;
     close();
-    const err = await s.author("readingForget", t.book, t.chapter);
-    s.showToast(err ?? "Reading history cleared");
+    const err = await s.author("readingForget", at.book, at.chapter);
+    s.showToast(err ?? t("markRead.cleared"));
   }
 </script>
 
@@ -65,29 +67,26 @@
     class="dialog"
     role="dialog"
     aria-modal="true"
-    aria-label="Mark chapter read"
+    aria-label={t("markRead.title")}
     data-surface="mark read"
     use:modal={{ close }}
   >
-    <h2>When did you last read {label}?</h2>
-    <p class="sub">
-      For reading you did somewhere else — a paper Bible, or another app. It counts as a full read
-      on the date you give.
-    </p>
+    <h2>{t("markRead.question", { chapter: label })}</h2>
+    <p class="sub">{t("markRead.sub")}</p>
     <div class="quick">
-      <button onclick={() => set(daysAgo(0))}>Today</button>
-      <button onclick={() => set(daysAgo(1))}>Yesterday</button>
-      <button onclick={() => set(daysAgo(7))}>Last week</button>
+      <button onclick={() => set(daysAgo(0))}>{t("markRead.today")}</button>
+      <button onclick={() => set(daysAgo(1))}>{t("markRead.yesterday")}</button>
+      <button onclick={() => set(daysAgo(7))}>{t("markRead.lastWeek")}</button>
     </div>
     <label class="pick">
-      <span>Or pick a date</span>
+      <span>{t("markRead.orPickDate")}</span>
       <input type="date" bind:value={date} max={today} />
     </label>
     <div class="row">
-      <button class="clear" onclick={clear}>Clear history</button>
+      <button class="clear" onclick={clear}>{t("markRead.clear")}</button>
       <span class="spacer"></span>
-      <button onclick={close}>Cancel</button>
-      <button class="primary" onclick={() => set(date)}>Set</button>
+      <button onclick={close}>{t("common.cancel")}</button>
+      <button class="primary" onclick={() => set(date)}>{t("markRead.set")}</button>
     </div>
   </div>
 {/if}
