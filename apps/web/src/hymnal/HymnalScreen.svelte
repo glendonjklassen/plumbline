@@ -9,6 +9,7 @@
   // showing, and how fast the page should scroll while they sing.
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
+  import { languages, t } from "../lib/i18n.svelte";
   import ScreenBar from "../lib/ScreenBar.svelte";
 
   const s = getSession();
@@ -42,6 +43,14 @@
   const langs = $derived(hymn ? Object.keys(hymn.texts) : []);
   const lang = $derived(pick(langs, s.hymnLang));
   const text = $derived(hymn ? hymn.texts[lang] : null);
+
+  /** A language chip's label. The endonym from the central list — a singer
+   *  looking for the German text is looking for "Deutsch" — and the bare code
+   *  upper-cased only for a language the hymnal has but the app does not ship
+   *  an interface in, which is a thing the hymn files are allowed to do. */
+  function endonym(code: string): string {
+    return languages().find((l) => l.code === code)?.endonym ?? code.toUpperCase();
+  }
 
   function openHymn(id: string): void {
     s.hymn = { id, semis: 0 };
@@ -90,40 +99,40 @@
   });
 </script>
 
-<section class="screen" aria-label="Hymnal">
+<section class="screen" aria-label={t("hymnal.title")}>
   <ScreenBar
-    title={open && text ? text.title : "Hymnal"}
+    title={open && text ? text.title : t("hymnal.title")}
     onBack={() => (open ? (s.hymn = null) : s.goRead())}
-    backLabel={open ? "Back to the hymn list" : "Back to reading"}
+    backLabel={open ? t("hymnal.backToList") : t("bar.backToReading")}
   >
     {#snippet actions()}
       {#if open && hymn}
         {#if langs.length > 1}
           <!-- One hymn, two texts: the same tune sung in either language. This is
                the toggle the German release grows out of. -->
-          <div class="langs" role="group" aria-label="Language">
+          <div class="langs" role="group" aria-label={t("hymnal.language")}>
             {#each langs as l (l)}
               <button class="chip" class:on={l === lang} onclick={() => (s.hymnLang = l)}>
-                {l.toUpperCase()}
+                {endonym(l)}
               </button>
             {/each}
           </div>
         {/if}
         <button class="chip" class:on={s.hymnChords} onclick={() => (s.hymnChords = !s.hymnChords)}>
-          Chords
+          {t("hymnal.chords")}
         </button>
         {#if s.hymnChords}
-          <div class="transpose" role="group" aria-label="Transpose">
-            <button onclick={() => (s.hymn = { id: open.id, semis: open.semis - 1 })} aria-label="Transpose down"
+          <div class="transpose" role="group" aria-label={t("hymnal.transpose")}>
+            <button onclick={() => (s.hymn = { id: open.id, semis: open.semis - 1 })} aria-label={t("hymnal.transposeDown")}
               >−</button
             >
             <span class="key">{hymn.transposedKey}</span>
-            <button onclick={() => (s.hymn = { id: open.id, semis: open.semis + 1 })} aria-label="Transpose up"
+            <button onclick={() => (s.hymn = { id: open.id, semis: open.semis + 1 })} aria-label={t("hymnal.transposeUp")}
               >+</button
             >
           </div>
         {/if}
-        <button class="sing" onclick={() => (s.hymnSinging = true)}>Sing</button>
+        <button class="sing" onclick={() => (s.hymnSinging = true)}>{t("hymnal.sing")}</button>
       {/if}
     {/snippet}
   </ScreenBar>
@@ -132,16 +141,16 @@
     <div class="find">
       <input
         type="search"
-        placeholder="Number, title or first line…"
+        placeholder={t("hymnal.find")}
         bind:value={filter}
-        aria-label="Find a hymn"
+        aria-label={t("hymnal.findLabel")}
       />
     </div>
     <div class="content">
       {#if index.length === 0}
-        <p class="empty">The hymnal has not finished loading yet.</p>
+        <p class="empty">{t("hymnal.loading")}</p>
       {:else if shown.length === 0}
-        <p class="empty">No hymn matches “{filter}”.</p>
+        <p class="empty">{t("hymnal.noMatch", { query: filter })}</p>
       {:else}
         {#each shown as h (h.id)}
           {@const l = pick(Object.keys(h.titles ?? {}), s.hymnLang)}
@@ -157,11 +166,11 @@
       {/if}
     </div>
   {:else if !hymn || !text}
-    <div class="content"><p class="empty">— loading —</p></div>
+    <div class="content"><p class="empty">{t("hymnal.loadingOne")}</p></div>
   {:else}
     <div class="content hymn">
       <p class="credit">
-        {text.author}{#if text.translator}, tr. {text.translator}{/if}{#if text.year}, {text.year}{/if}
+        {text.author}{#if text.translator}, {t("hymnal.tr", { name: text.translator })}{/if}{#if text.year}, {text.year}{/if}
         · {hymn.tune} {hymn.meter}
       </p>
       {#each text.stanzas as st, i (i)}
@@ -183,7 +192,7 @@
           <div class="stanza refrain">
             <span class="sn" aria-hidden="true"></span>
             <div class="slines">
-              <p class="rlabel">Refrain</p>
+              <p class="rlabel">{t("hymnal.refrain")}</p>
               {#each text.chorus.lines as line, li (li)}
                 <p class="line" class:chorded={s.hymnChords && line.parts.some((p: any) => p.chord)}>
                   {#each line.parts as part, pi (pi)}<span class="part"
@@ -197,7 +206,7 @@
           </div>
         {/if}
       {/each}
-      <p class="pd">Public domain.</p>
+      <p class="pd">{t("hymnal.publicDomain")}</p>
     </div>
   {/if}
 </section>
@@ -207,15 +216,15 @@
        a phone held up between two people in a room with the lights on. Fixed
        light, big type, and the app theme deliberately does not reach it. -->
   <div class="sing-host" use:modal={{ close: () => (s.hymnSinging = false) }} role="dialog" aria-modal="true"
-       aria-label="Singing {text.title}">
+       aria-label={t("hymnal.singing", { title: text.title })}>
     <div class="sbar">
-      <button class="sclose" onclick={() => (s.hymnSinging = false)} aria-label="Stop singing">✕</button>
+      <button class="sclose" onclick={() => (s.hymnSinging = false)} aria-label={t("hymnal.stopSinging")}>✕</button>
       <span class="stitle">{text.title}</span>
       <span class="spacer"></span>
-      <div class="transpose" role="group" aria-label="Scroll speed">
-        <button onclick={() => (s.hymnScroll = Math.max(0, s.hymnScroll - 1))} aria-label="Scroll slower">−</button>
-        <span class="key">{s.hymnScroll === 0 ? "hold" : `${s.hymnScroll}`}</span>
-        <button onclick={() => (s.hymnScroll = Math.min(9, s.hymnScroll + 1))} aria-label="Scroll faster">+</button>
+      <div class="transpose" role="group" aria-label={t("hymnal.scrollSpeed")}>
+        <button onclick={() => (s.hymnScroll = Math.max(0, s.hymnScroll - 1))} aria-label={t("hymnal.scrollSlower")}>−</button>
+        <span class="key">{s.hymnScroll === 0 ? t("hymnal.hold") : `${s.hymnScroll}`}</span>
+        <button onclick={() => (s.hymnScroll = Math.min(9, s.hymnScroll + 1))} aria-label={t("hymnal.scrollFaster")}>+</button>
       </div>
     </div>
     <div class="sbody" bind:this={scroller}>

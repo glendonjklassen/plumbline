@@ -10,6 +10,7 @@ import { precacheShell } from "../engine/precache";
 import { updateAvailable } from "../engine/update";
 import { EngineRpc, type BootInfo } from "../engine/worker-client";
 import { cleanChurch, PWA_URL, shareUrl, type Church } from "../shell/church";
+import { lang } from "../lib/i18n.svelte";
 
 export interface PaneState {
   book: string;
@@ -217,8 +218,19 @@ export class Session {
    *  would silently rewrite a chart they never asked to change. */
   hymn = $state<{ id: string; semis: number } | null>(null);
   /** Which language the hymnal shows where a hymn has more than one. A
-   *  PREFERENCE, not a promise — a German-only hymn still shows German. */
-  hymnLang = $state("en");
+   *  PREFERENCE, not a promise — a German-only hymn still shows German.
+   *
+   *  IT STARTS AS THE APP'S LANGUAGE, and that is the whole point of seeding it
+   *  from `lang()` rather than from `"en"`. This field predates i18n and was a
+   *  hard-coded English default, so a German reader would have opened a German
+   *  interface onto English hymn texts and had to say "Deutsch" again on every
+   *  hymn. Two ideas of what language this reader wants is exactly the drift
+   *  there is no reason to have.
+   *
+   *  It is still its OWN field, because the chips do a different job from the
+   *  language setting: a bilingual singer picking the German text of one hymn
+   *  has not asked for a German interface, and must not get one. */
+  hymnLang = $state(lang());
   /** Whether chords are drawn above the words. Off by default: most people
    *  singing are not playing, and a chart over every line is noise to them. */
   hymnChords = $state(false);
