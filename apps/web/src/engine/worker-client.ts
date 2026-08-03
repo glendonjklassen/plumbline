@@ -237,11 +237,14 @@ export class EngineRpc {
   /** `deferRnd` skips the automatic machine-tier download (phones: the shell
    *  offers an explicit "load analysis" action instead — 2026-07-26).
    *
+   *  `lang` is what this device resolved LAST time (`localStorage`), which is a
+   *  guess the corpus loader uses and the engine then confirms from the config.
+   *
    *  `locale` is the DEVICE's language, which only decides when the reader has
    *  not chosen one; a worker has no `navigator.languages` worth trusting, and
    *  the setting it is weighed against lives in a config only the worker can
    *  read, so the two meet there. */
-  boot(opts: { deferRnd?: boolean; locale?: string } = {}): Promise<BootInfo> {
+  boot(opts: { deferRnd?: boolean; locale?: string; lang?: string } = {}): Promise<BootInfo> {
     const base = new URL(import.meta.env.BASE_URL, location.href).href;
     // Armed for the whole boot, rearmed by every message, dropped the moment boot
     // settles either way. A boot that never comes back is otherwise indistinguishable
@@ -258,6 +261,10 @@ export class EngineRpc {
       italicUrl: new URL(READER_FONT_FILES.italic, base).href,
       deferRnd: opts.deferRnd === true,
       locale: opts.locale ?? "",
+      // The language this device last resolved, from `localStorage` — which only
+      // THIS thread can read. Stage 1 uses it to inflate one corpus instead of
+      // two; see `corpusRoleFor`.
+      lang: opts.lang ?? "",
     })
       .then((info: BootInfo) => {
         for (const m of BOOT_READS) {

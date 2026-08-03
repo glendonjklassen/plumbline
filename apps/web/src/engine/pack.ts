@@ -272,10 +272,12 @@ export async function fetchStageLocal(
   manifest: PackManifest,
   stage: PackFile["stage"],
   also: (f: PackFile) => boolean = () => false,
+  skip: (f: PackFile) => boolean = () => false,
 ): Promise<Map<string, Uint8Array> | null> {
   const out = new Map<string, Uint8Array>();
   for (const f of manifest.files) {
     if (f.stage !== stage && !also(f)) continue;
+    if (skip(f)) continue;
     const hit = await depotGet(packFileUrl(f, manifest.version));
     if (!hit) return null;
     out.set(f.path, await gunzip(await hit.arrayBuffer()));
@@ -293,13 +295,15 @@ export async function fetchStageLocal(
 export function fetchPack(
   manifest: PackManifest,
   onProgress?: (p: PackProgress) => void,
-  opts: { needText?: boolean; also?: (f: PackFile) => boolean } = {},
+  opts: { needText?: boolean; also?: (f: PackFile) => boolean; skip?: (f: PackFile) => boolean } = {},
 ): Promise<Map<string, Uint8Array>> {
   const also = opts.also ?? (() => false);
+  const skip = opts.skip ?? (() => false);
   return fetchFiles(
     manifest.version,
     manifest.files.filter(
-      (f) => (f.stage === "text" && (opts.needText !== false || f.role !== "corpusCache")) || also(f),
+      (f) =>
+        !skip(f) && ((f.stage === "text" && (opts.needText !== false || f.role !== "corpusCache")) || also(f)),
     ),
     onProgress,
   );
@@ -368,6 +372,40 @@ export function hasOptional(
   if (f.role === "suggestedWeaves") return home.suggestedInstalled;
   if (f.role === "germanCorpus") return home.germanInstalled;
   return false;
+}
+
+/**
+ * The corpus this boot should actually INFLATE, by role — and therefore the one
+ * it should skip.
+ *
+ * Two corpus caches are in the pack now, and a German reader has both on the
+ * device. Until this existed, stage 1 gunzipped and copied BOTH into the home
+ * on every launch — about 63 MB of work and memory before any text appeared,
+ * against 35 MB for an English reader, and then the home evicted both. Only one
+ * is ever opened.
+ *
+ * BY `plumbline.lang`, and not by the config, because stage 1 runs before there
+ * is an engine to read a config with. That key is already the splash's own seed
+ * and is written on every boot and on every language switch, so it is the one
+ * answer available this early.
+ *
+ * BOTH STAY IN THE PIN AND THE DEPOT. This decides what to inflate, never what
+ * to keep: switching back to English has to work with no network, and prune
+ * keeps exactly what the pin names. Skipping the load is not the same as
+ * dropping the file.
+ *
+ * Every way of being wrong lands on the KJV, which is what a boot does today: a
+ * missing key, a stale key, a language whose corpus was never downloaded.
+ */
+export function corpusRoleFor(lang: string | null, has: (role: string) => boolean): "corpusCache" | "germanCorpus" {
+  const wants = (lang ?? "").split(/[-_]/)[0].toLowerCase();
+  if (wants === "de" && has("germanCorpus")) return "germanCorpus";
+  return "corpusCache";
+}
+
+/** Whether this pack file is a corpus cache the reader is NOT reading. */
+export function isOtherCorpus(f: PackFile, want: "corpusCache" | "germanCorpus"): boolean {
+  return (f.role === "corpusCache" || f.role === "germanCorpus") && f.role !== want;
 }
 
 export function devicePackFiles(manifest: PackManifest, has: (f: PackFile) => boolean): PackFile[] {

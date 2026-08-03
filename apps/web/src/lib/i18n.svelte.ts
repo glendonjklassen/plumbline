@@ -21,6 +21,18 @@ import { BOOT_STRINGS } from "./i18n.generated";
 /** Where the resolved code is remembered between visits — see `seed()`. */
 const LAST_LANG = "plumbline.lang";
 
+/** The code this device resolved last time, or "" if it never has.
+ *
+ *  Read here because `localStorage` is main-thread only — the engine worker has
+ *  none, and stage 1 needs this answer before there is an engine to ask. */
+export function lastLang(): string {
+  try {
+    return localStorage.getItem(LAST_LANG) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 /** The device's own languages, most-preferred first, as BCP-47 tags. */
 export function deviceLocale(): string {
   return navigator.languages?.[0] || navigator.language || "en";

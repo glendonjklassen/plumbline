@@ -734,7 +734,7 @@ self.onmessage = async (ev: MessageEvent) => {
         // a refused face itself, so this is the belt for a platform that throws
         // somewhere it does not expect to.
         void fonts.catch(() => {});
-        booted = await boot((p) => self.postMessage({ type: "progress", ...p }), m.locale ?? "");
+        booted = await boot((p) => self.postMessage({ type: "progress", ...p }), m.locale ?? "", m.lang ?? "");
         // BEFORE the reply, and therefore before any layout op can be answered:
         // measurement must see the real Garamond metrics or lines wrap where they
         // are not painted.

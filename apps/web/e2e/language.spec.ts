@@ -59,9 +59,22 @@ async function pick(page: Page, now: Record<string, string>, want: string): Prom
   await page.locator(".menu").getByRole("button", { name: now["shell.settings"] }).click();
   const dialog = page.locator('[data-surface="settings"]');
   await expect(dialog).toBeVisible();
+  // STAMP THIS DOCUMENT FIRST. Everything else that looks like a "the switch
+  // finished" signal is already true before the reload: the canvas is on screen,
+  // and `setLanguage` writes `config.language` on the live session before it
+  // reloads. Waiting on either returned instantly and every assertion after it
+  // read the PRE-SWITCH page — which reported `lang=- de=false` and sent me
+  // hunting a fix that was already correct (2026-08-03).
+  //
+  // A property on `window` cannot survive a new document, so its disappearance is
+  // the one unambiguous "this is the page after the reload".
+  await page.evaluate(() => ((globalThis as any).__beforeSwitch = true));
   await dialog.getByRole("radio", { name: want, exact: true }).check();
-  // Picking German downloads a 2.4 MB corpus before it reloads, so this waits
-  // longer than a settings change normally would.
+  await page.waitForFunction(
+    () => !(globalThis as any).__beforeSwitch && !!(globalThis as any).__plumbline,
+    undefined,
+    { timeout: 120_000 },
+  );
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 120_000 });
 }
 
@@ -139,6 +152,64 @@ test.describe("an English device", () => {
       return (await s.rpc.call("verse", "John 3:16"))?.body ?? "";
     });
     expect(again, "the German text did not survive a relaunch").toContain("Gott");
+  });
+});
+
+/** A boot-trace entry's value, or null. */
+async function traced(page: Page, prefix: string): Promise<number | null> {
+  const trace = (await page.evaluate(() => (window as any).__plumbline.rpc.bootTrace())) as [string, number][];
+  return trace.find(([k]) => k.startsWith(prefix))?.[1] ?? null;
+}
+
+test.describe("a German reader's boot", () => {
+  test.use({ locale: "en-US" });
+
+  /**
+   * ONE CORPUS IS INFLATED, NOT TWO.
+   *
+   * Two corpus caches ship now, and a German reader has both on the device. Stage
+   * 1 used to gunzip and copy BOTH into the home on every launch — ~63 MB of work
+   * and memory before any text appeared, against ~35 MB for an English reader,
+   * and then the home evicted both. Only one is ever opened. It was the whole
+   * answer to "German seems crazy slow to load" (UAT, 2026-08-03).
+   *
+   * Asserted through the home's own eviction figure, which is the number that
+   * exposed it: `home evict after open (KB)` is what stage 1 put in the home and
+   * the engine no longer needs. Two corpora is ~63,000 KB; one is ~28,000–35,000.
+   *
+   * MUTATION: in boot.ts, drop `skipOther` from both stage-1 calls. Red — the
+   * evicted figure roughly doubles.
+   */
+  test("inflates the corpus it reads and not the other one", async ({ page }) => {
+    await reader(page, EN);
+    const english = await traced(page, "home evict after open");
+    expect(english, "no eviction figure in the boot trace").not.toBeNull();
+
+    await pick(page, EN, "Deutsch");
+    const german = await traced(page, "home evict after open");
+    expect(german, "no eviction figure after the switch").not.toBeNull();
+
+    // The German corpus is SMALLER than the KJV's (no Strong's arrays), so a
+    // German boot should evict LESS than an English one — and certainly not the
+    // sum of the two, which is what loading both looks like.
+    expect(
+      german!,
+      `a German boot put ${german} KB in the home; English put ${english} KB. ` +
+        `Anything near their sum means both corpora were inflated.`,
+    ).toBeLessThan(english! * 1.4);
+
+    // Which corpus stage 1 actually chose — the trace says so out loud, so a
+    // failure here names the cause instead of only the symptom.
+    const trace = (await page.evaluate(() => (window as any).__plumbline.rpc.bootTrace())) as [string, number][];
+    const chose = trace.find(([k]) => k.startsWith("corpus loaded"))?.[0];
+    expect(chose, `stage 1 chose ${chose}; trace: ${JSON.stringify(trace)}`).toBe("corpus loaded (germanCorpus)");
+
+    // And the text really is German, so this did not pass by loading neither.
+    const verse = await page.evaluate(async () => {
+      const s = (window as any).__plumbline;
+      return (await s.rpc.call("verse", "John 3:16"))?.body ?? "";
+    });
+    expect(verse).toContain("Gott");
   });
 });
 

@@ -26,8 +26,10 @@ import { depotAvailable, depotHas, depotResponse } from "./depot";
 import { buildHome, dropLegacyIdxcache, GERMAN_CACHE, installedOptional, type VirtualHome } from "./home";
 import {
   assetUrl,
+  corpusRoleFor,
   devicePackFiles,
   hasOptional,
+  isOtherCorpus,
   type PackFile,
   fetchManifest,
   fetchPack,
@@ -101,7 +103,12 @@ export interface BootResult {
   staleManifest: boolean;
 }
 
-export async function boot(onPhase: (p: BootPhase) => void, locale = ""): Promise<BootResult> {
+/** Whether the reader has taken the optional corpus behind `role`. */
+function manifestHasInstalled(role: string, taken: { germanInstalled: boolean }): boolean {
+  return role === "germanCorpus" ? taken.germanInstalled : true;
+}
+
+export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = ""): Promise<BootResult> {
   const trace: [string, number][] = [];
   // NOT PERF-gated, deliberately — and it used to be (fixed with D-20, when
   // flipping PERF off for release turned two tests red and would have quietly
@@ -165,6 +172,19 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = ""): Promis
   // for a reader who downloaded the German one.
   const taken = await timed("optional markers (idb)", installedOptional);
   const mine = (f: PackFile) => hasOptional(taken, f);
+  // WHICH CORPUS TO INFLATE — see `corpusRoleFor`. Both stay in the pin and the
+  // depot; this only decides which one is gunzipped and copied into the home,
+  // and skipping the other is worth ~28 MB of work and memory before first text.
+  //
+  // `lang` is HANDED IN by the main thread. It lives in `localStorage`, and this
+  // function runs in the engine worker, where there is no `localStorage` at all —
+  // reading it here threw, the catch swallowed it, and every boot silently fell
+  // back to the KJV. So a German reader got the English text with the download
+  // sitting unused, which is the same failure the language work has now produced
+  // three ways (e2e/language.spec.ts caught all three).
+  const wantCorpus = corpusRoleFor(lang, (role) => manifestHasInstalled(role, taken));
+  const skipOther = (f: PackFile) => isOtherCorpus(f, wantCorpus);
+  trace.push([`corpus loaded (${wantCorpus})`, 1]);
   let pinned = await timed("pin read (depot)", () => readPin(base));
   let manifest: PackManifest | null = null;
   let pack: Map<string, Uint8Array> | null = null;
@@ -172,7 +192,7 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = ""): Promis
 
   if (pinned) {
     const m = manifestFromPin(pinned);
-    const local = await timed("stage1 read (depot, no network)", () => fetchStageLocal(m, "text", mine));
+    const local = await timed("stage1 read (depot, no network)", () => fetchStageLocal(m, "text", mine, skipOther));
     if (local) {
       manifest = m;
       pack = local;
@@ -193,6 +213,7 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = ""): Promis
     pack = await timed("stage1 fetch+gunzip (text)", () =>
       fetchPack(live, (p) => onPhase({ phase: "download", fraction: p.fraction, detail: p.currentFile }), {
         also: mine,
+        skip: skipOther,
       }),
     );
     pinned = null; // stale: a fresh pin is written below, once the open succeeds

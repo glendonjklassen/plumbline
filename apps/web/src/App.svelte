@@ -10,7 +10,7 @@
   // 2026-07-26). Honest progress beats a decoy — the work now goes into
   // making the wait short rather than disguising it.
   import { bootErrorCopy } from "./engine/bootError";
-  import { deviceLocale, setCatalog, t } from "./lib/i18n.svelte";
+  import { deviceLocale, lastLang, setCatalog, t } from "./lib/i18n.svelte";
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
   import { churchFromQuery, hasChurch, sharedAtRef, startsAsNewBeliever } from "./shell/church";
   import { initSession, type Session } from "./state/session.svelte";
@@ -110,7 +110,7 @@
       // download and the worker time behind the reader's back.
       const deferRnd = matchMedia("(max-width: 700px)").matches;
       const [info] = await Promise.all([
-        rpc.boot({ deferRnd, locale: deviceLocale() }),
+        rpc.boot({ deferRnd, locale: deviceLocale(), lang: lastLang() }),
         document.fonts.load('18px "EB Garamond"'),
         document.fonts.load('italic 18px "EB Garamond"'),
         document.fonts.load('bold 18px "EB Garamond"'),
