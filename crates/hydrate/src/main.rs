@@ -28,8 +28,16 @@ use plumbline_rnd::{bridge, morph};
 
 /// The pack files, relative to a home. Core files gate the reader; the R&D
 /// files are optional tiers. Sidecars ride with their primary file.
-const CORE_FILES: &[(&str, bool)] =
-    &[("data/kjv.jsonl", true), ("data/strongs.json", true), ("data/kjv-notes.jsonl", false)];
+const CORE_FILES: &[(&str, bool)] = &[
+    ("data/kjv.jsonl", true),
+    ("data/strongs.json", true),
+    ("data/kjv-notes.jsonl", false),
+    // The German corpus (data-prep/README.md). OPTIONAL, so a home hydrated
+    // from a checkout that has not built it still passes: the engine falls back
+    // to the KJV when it is absent, which is the same thing a web reader who has
+    // not downloaded it sees.
+    ("data/luther1912.jsonl", false),
+];
 const RND_FILES: &[&str] = &[
     "data/cross-references.tsv",
     "data/morphology.jsonl",
@@ -372,6 +380,17 @@ fn check(home: &Path) -> ExitCode {
             println!("  ✗ kjv.jsonl — {e}");
             core_ok = false;
         }
+    }
+    // Optional, and reported as such: a checkout without it is not broken.
+    let german = data.join("luther1912.jsonl");
+    if german.exists() {
+        match corpus::load_corpus(&german) {
+            Ok(c) => println!("  ✓ luther1912.jsonl — {} verses (German)", c.len()),
+            // NOT a core failure: German readers fall back to the KJV.
+            Err(e) => println!("  ! luther1912.jsonl — {e}"),
+        }
+    } else {
+        println!("  – luther1912.jsonl — absent (German readers get the KJV)");
     }
     match strongs::load_strongs(data.join("strongs.json")) {
         Ok(d) => println!("  ✓ strongs.json — {} entries", d.len()),
