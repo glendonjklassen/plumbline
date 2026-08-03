@@ -277,6 +277,50 @@ fun StudyScreen(
     var confirmAction by remember { mutableStateOf<ConfirmRequest?>(null) } // pending destructive act
     var prompt by remember { mutableStateOf<AuthorPrompt?>(null) }   // text-input authoring dialog
 
+    /**
+     * Close every surface layered over the reader.
+     *
+     * ONE PLACE, and it lives here beside the declarations above rather than at
+     * the call sites, because the call sites were a hand-kept list of three
+     * (`showPresent`, `showChord`, `showConstellation`) while there are fifteen
+     * of these. Every surface added since that list was written inherited the
+     * trap: open Notes from Explore, tap Memorize, and Notes was still there
+     * covering the screen (UAT, 2026-08-03).
+     *
+     * The web hit exactly this and fixed it the same way on 2026-07-29 — its
+     * `Session.TRANSIENT` table carries the identical reasoning, and the feedback
+     * that prompted it was almost word for word today's ("this is likely a class
+     * of bug"). It was fixed on one shell and not the other, which is its own
+     * lesson: a class of bug is a class on both.
+     *
+     * NOT `showFirstRun`: a reader who has never chosen a path must not be able
+     * to tab past the question — it closes by being answered. NOT `confirmAction`
+     * or `prompt` either: both are asked FROM another surface, so closing what is
+     * under them would leave the question with nothing behind it.
+     *
+     * `CallbackWiringTest` checks that every surface declared above appears here.
+     */
+    fun dismissTransient() {
+        actionVerse = null
+        showConstellation = false
+        showChord = false
+        studySheet = false
+        showSearch = false
+        showPresent = false
+        hymnSing = null
+        showNotes = false
+        showHistory = false
+        showSettings = false
+        reopenIntro = null
+        showWeaves = false
+        bookNavPane = null
+        tagPickRef = null
+        threadPickRef = null
+        makeWeaveTag = null
+        drillRef = null
+        presentThread = null
+    }
+
     // The navigator's verse target: ReaderPane scrolls it into view on layout.
     var pendingVerse by remember { mutableStateOf<Int?>(null) }
     var navEpoch by remember { mutableStateOf(0) }
@@ -804,35 +848,37 @@ fun StudyScreen(
         NavigationBar(containerColor = palette.paneNavBg) {
             NavigationBarItem(
                 selected = dest == Dest.Read && !showPresent,
-                onClick = { showPresent = false; showChord = false; showConstellation = false; dest = Dest.Read },
+                onClick = { dismissTransient(); dest = Dest.Read },
                 icon = { Icon(NavIconRead, contentDescription = null) },
                 label = { Text(t("nav.read")) },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = dest == Dest.Explore && !showPresent,
-                onClick = { showPresent = false; showChord = false; showConstellation = false; dest = Dest.Explore },
+                onClick = { dismissTransient(); dest = Dest.Explore },
                 icon = { Icon(NavIconExplore, contentDescription = null) },
                 label = { Text(t("nav.explore")) },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = showPresent,
-                onClick = { showChord = false; showConstellation = false; showPresent = true },
+                // Present is a surface rather than a `Dest`, so it is cleared with the
+                // rest and then raised — the order matters.
+                onClick = { dismissTransient(); showPresent = true },
                 icon = { Icon(NavIconPresent, contentDescription = null) },
                 label = { Text(t("nav.present")) },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = dest == Dest.Memorize && !showPresent,
-                onClick = { showPresent = false; showChord = false; showConstellation = false; memView = MemorizeView.List; dest = Dest.Memorize },
+                onClick = { dismissTransient(); memView = MemorizeView.List; dest = Dest.Memorize },
                 icon = { Icon(NavIconMemorize, contentDescription = null) },
                 label = { Text(t("nav.memorize")) },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = dest == Dest.Hymnal && !showPresent,
-                onClick = { showPresent = false; showChord = false; showConstellation = false; dest = Dest.Hymnal },
+                onClick = { dismissTransient(); dest = Dest.Hymnal },
                 icon = { Icon(NavIconHymnal, contentDescription = null) },
                 label = { Text(t("nav.hymnal")) },
                 colors = navColors,

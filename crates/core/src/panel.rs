@@ -104,6 +104,12 @@ fn sn(id: &str, n: usize) -> String {
     crate::i18n::t(crate::i18n::active(), id, &[("n", &n.to_string())])
 }
 
+/// One/other by `n`, from a `<id>.one` / `<id>.other` pair. Replaces this
+/// module's own `plural()` helper, which appended an English "s".
+fn sp(id: &str, n: usize) -> String {
+    crate::i18n::plural(crate::i18n::active(), &format!("{id}.one"), &format!("{id}.other"), n as u64, &[])
+}
+
 impl Block {
     fn para(runs: Vec<Run>) -> Block {
         Block::Para { runs, indent: false, top_gap: false }
@@ -551,14 +557,6 @@ pub fn go_uri(refkey: &str) -> String {
     }
 }
 
-fn plural(n: usize, one: &str, many: &str) -> String {
-    if n == 1 {
-        one.to_string()
-    } else {
-        many.to_string()
-    }
-}
-
 /// A `go:` link run for a verse.
 fn go(refkey: &str, display: &str, size: f32) -> Run {
     Run::new(display, size, Color::Gold).link(go_uri(refkey))
@@ -733,7 +731,7 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
     out.push(Block::para(vec![
         Run::new(code, sz::BODY, Color::Ink).bold(),
         Run::new("   ", sz::BODY, Color::Ink),
-        Run::new(format!("{n} occurrence{} ▸", plural(n, "", "s")), sz::BODY, Color::Gold).link(format!("occ:{code}")),
+        Run::new(sp("panel.occurrences", n), sz::BODY, Color::Gold).link(format!("occ:{code}")),
     ]));
 
     match src.strongs(code) {
@@ -757,7 +755,7 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
                 out.push(Block::para(vec![Run::new(format!("KJV: {k}"), sz::NOTE, Color::Faded)]));
             }
         }
-        None => out.push(Block::para(vec![Run::new("(not in the dictionary)", sz::BODY, Color::Faded).italic()])),
+        None => out.push(Block::para(vec![Run::new(s("panel.notInDictionary"), sz::BODY, Color::Faded).italic()])),
     }
 
     if !gates.any() {
@@ -895,7 +893,7 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
             }
             if sx.len() > 40 {
                 out.push(Block::para(vec![
-                    Run::new(format!("… {} more", sx.len() - 40), sz::CAPTION, Color::Faded).italic()
+                    Run::new(sn("panel.more", sx.len() - 40), sz::CAPTION, Color::Faded).italic()
                 ]));
             }
         }
@@ -975,7 +973,12 @@ pub fn concordance(src: &dyn PanelSource, code: &str) -> Vec<Block> {
     let mut out = Vec::new();
     let occ = src.occurrences(code);
     if occ.total == 0 && occ.verses.is_empty() {
-        return vec![Block::para(vec![Run::new(format!("no occurrences of {code}"), sz::BODY, Color::Faded).italic()])];
+        return vec![Block::para(vec![Run::new(
+            crate::i18n::t(crate::i18n::active(), "panel.noOccurrences", &[("code", code)]),
+            sz::BODY,
+            Color::Faded,
+        )
+        .italic()])];
     }
     let lemma = src.strongs(code).and_then(|e| e.lemma);
     let mut head = vec![Run::new(code, sz::TITLE, Color::Ink).bold()];
@@ -993,9 +996,12 @@ pub fn concordance(src: &dyn PanelSource, code: &str) -> Vec<Block> {
     }
     let shown = occ.verses.len() as u32;
     if occ.total > shown {
-        out.push(Block::para(vec![
-            Run::new(format!("… {} more", occ.total - shown), sz::CAPTION, Color::Faded).italic()
-        ]));
+        out.push(Block::para(vec![Run::new(
+            sn("panel.more", (occ.total - shown) as usize),
+            sz::CAPTION,
+            Color::Faded,
+        )
+        .italic()]));
     }
     out
 }
@@ -1004,7 +1010,7 @@ pub fn concordance(src: &dyn PanelSource, code: &str) -> Vec<Block> {
 pub fn rendering_concordance(src: &dyn PanelSource, code: &str, rendering: &str) -> Vec<Block> {
     let Some(m) = src.rendering_refs(code, rendering) else {
         return vec![Block::para(vec![Run::new(
-            format!("no “{rendering}” rendering of {code}"),
+            crate::i18n::t(crate::i18n::active(), "panel.noRendering", &[("rendering", rendering), ("code", code)]),
             sz::BODY,
             Color::Faded,
         )
@@ -1026,9 +1032,9 @@ pub fn rendering_concordance(src: &dyn PanelSource, code: &str, rendering: &str)
     }
     let shown = m.refs.len() as u32;
     if m.total > shown {
-        out.push(Block::para(
-            vec![Run::new(format!("… {} more", m.total - shown), sz::CAPTION, Color::Faded).italic()],
-        ));
+        out.push(Block::para(vec![
+            Run::new(sn("panel.more", (m.total - shown) as usize), sz::CAPTION, Color::Faded).italic()
+        ]));
     }
     out
 }
@@ -1040,8 +1046,7 @@ const LIST_CAP: usize = 40;
 
 pub fn threads_list(src: &dyn PanelSource) -> Vec<Block> {
     let threads = src.threads();
-    let mut out =
-        vec![Block::para(vec![Run::new(format!("Threads ({})", threads.len()), sz::TITLE, Color::Ink).bold()])];
+    let mut out = vec![Block::para(vec![Run::new(sn("panel.threads", threads.len()), sz::TITLE, Color::Ink).bold()])];
     if threads.is_empty() {
         out.push(Block::para(vec![Run::new(
             "No threads yet — open a word study and “＋ add to thread”.",
@@ -1053,11 +1058,7 @@ pub fn threads_list(src: &dyn PanelSource) -> Vec<Block> {
     for (i, t) in threads.iter().enumerate() {
         out.push(Block::para(vec![
             Run::new(&t.name, sz::BODY, Color::Gold).link(format!("thread:{i}")),
-            Run::new(
-                format!("   {} passage{}", t.entries.len(), plural(t.entries.len(), "", "s")),
-                sz::CAPTION,
-                Color::Faded,
-            ),
+            Run::new(format!("   {}", sp("panel.passages", t.entries.len())), sz::CAPTION, Color::Faded),
         ]));
     }
     out
@@ -1069,11 +1070,7 @@ pub fn thread_detail(src: &dyn PanelSource, index: usize) -> Vec<Block> {
     let mut out = vec![
         Block::para(vec![Run::new(&t.name, sz::TITLE, Color::Ink).bold()]),
         Block::para(vec![
-            Run::new(
-                format!("{} passage{}", t.entries.len(), plural(t.entries.len(), "", "s")),
-                sz::SMALL,
-                Color::Faded,
-            ),
+            Run::new(sp("panel.passages", t.entries.len()), sz::SMALL, Color::Faded),
             Run::new("   ", sz::SMALL, Color::Ink),
             Run::new(s("panel.notes"), sz::CAPTION, Color::Faded).link(format!("editthreadnotes:{index}")),
         ]),
@@ -1108,7 +1105,7 @@ pub fn thread_detail(src: &dyn PanelSource, index: usize) -> Vec<Block> {
 
 pub fn tags_list(src: &dyn PanelSource) -> Vec<Block> {
     let tags = src.tags();
-    let mut out = vec![Block::para(vec![Run::new(format!("Tags ({})", tags.len()), sz::TITLE, Color::Ink).bold()])];
+    let mut out = vec![Block::para(vec![Run::new(sn("panel.tagsCount", tags.len()), sz::TITLE, Color::Ink).bold()])];
     if tags.is_empty() {
         out.push(Block::para(vec![Run::new(
             "No tags yet — open a word study and “＋ tag verse”.",
@@ -1120,11 +1117,7 @@ pub fn tags_list(src: &dyn PanelSource) -> Vec<Block> {
     for (i, t) in tags.iter().enumerate() {
         out.push(Block::para(vec![
             Run::new(&t.name, sz::BODY, Color::Gold).link(format!("tag:{i}")),
-            Run::new(
-                format!("   {} member{}", t.members.len(), plural(t.members.len(), "", "s")),
-                sz::CAPTION,
-                Color::Faded,
-            ),
+            Run::new(format!("   {}", sp("panel.members", t.members.len())), sz::CAPTION, Color::Faded),
         ]));
     }
     out
@@ -1165,7 +1158,7 @@ pub fn tag_detail(src: &dyn PanelSource, index: usize) -> Vec<Block> {
 pub fn weaves_list(src: &dyn PanelSource) -> Vec<Block> {
     let mut ws = src.weaves();
     ws.sort_by_key(|w| std::cmp::Reverse(w.links.len()));
-    let mut out = vec![Block::para(vec![Run::new(format!("Weaves ({})", ws.len()), sz::TITLE, Color::Ink).bold()])];
+    let mut out = vec![Block::para(vec![Run::new(sn("panel.weaves", ws.len()), sz::TITLE, Color::Ink).bold()])];
     if ws.is_empty() {
         // A heading over nothing reads as a broken panel. Threads, tags and the
         // review queue all say what to do here; this one said nothing.
@@ -1176,7 +1169,7 @@ pub fn weaves_list(src: &dyn PanelSource) -> Vec<Block> {
         out.push(Block::para(vec![
             Run::new(&w.name, sz::BODY, Color::Gold).link(format!("weave:{}", w.index)),
             Run::new(
-                format!("   {} · {} link{}{suffix}", w.kind_label, w.links.len(), plural(w.links.len(), "", "s")),
+                format!("   {} · {}{suffix}", w.kind_label, sp("panel.links", w.links.len())),
                 sz::CAPTION,
                 Color::Faded,
             ),
@@ -1190,7 +1183,7 @@ pub fn weaves_list(src: &dyn PanelSource) -> Vec<Block> {
 pub fn suggested(src: &dyn PanelSource) -> Vec<Block> {
     let items = src.suggested();
     let mut out =
-        vec![Block::para(vec![Run::new(format!("Suggested weaves ({})", items.len()), sz::TITLE, Color::Ink).bold()])];
+        vec![Block::para(vec![Run::new(sn("panel.suggestedWeaves", items.len()), sz::TITLE, Color::Ink).bold()])];
     if items.is_empty() {
         out.push(Block::para(vec![Run::new(s("panel.emptyQueue"), sz::SMALL, Color::Faded).italic()]));
     }
@@ -1216,7 +1209,7 @@ pub fn suggested(src: &dyn PanelSource) -> Vec<Block> {
         }
         if w.links.len() > LIST_CAP {
             out.push(Block::para(vec![Run::new(
-                format!("… {} more", w.links.len() - LIST_CAP),
+                sn("panel.more", w.links.len() - LIST_CAP),
                 sz::CAPTION,
                 Color::Faded,
             )
@@ -1252,8 +1245,7 @@ pub fn compare_card(src: &dyn PanelSource, full: bool, index: usize) -> Vec<Bloc
     // ✎ note is the reader's own annotation — always available (author
     // actions left the Simple/Full gate with the 2026-07-25 product change).
     let _ = full;
-    let mut head =
-        vec![Run::new(format!("{} link{}", w.links.len(), plural(w.links.len(), "", "s")), sz::SMALL, Color::Faded)];
+    let mut head = vec![Run::new(sp("panel.links", w.links.len()), sz::SMALL, Color::Faded)];
     head.push(Run::new("   ", sz::SMALL, Color::Ink));
     head.push(Run::new(s("panel.note"), sz::CAPTION, Color::Faded).link(format!("editweavenotes:{index}")));
     out.push(Block::para(head));
@@ -1269,12 +1261,9 @@ pub fn compare_card(src: &dyn PanelSource, full: bool, index: usize) -> Vec<Bloc
         compare_side(src, &l.b, &l.b_display, l.span_b, &mut out);
     }
     if w.links.len() > LIST_CAP {
-        out.push(Block::para(vec![Run::new(
-            format!("… {} more", w.links.len() - LIST_CAP),
-            sz::CAPTION,
-            Color::Faded,
-        )
-        .italic()]));
+        out.push(Block::para(vec![
+            Run::new(sn("panel.more", w.links.len() - LIST_CAP), sz::CAPTION, Color::Faded).italic()
+        ]));
     }
     out
 }
@@ -1304,15 +1293,16 @@ pub fn search(src: &dyn PanelSource, query: &str) -> Vec<Block> {
                 Some(v) => format!("go:{book}:{chapter}:{v}"),
                 None => format!("go:{book}:{chapter}"),
             };
-            vec![Block::para(vec![Run::new(format!("go to {display}"), sz::SEARCH_GOTO, Color::Gold).link(uri)])]
+            vec![Block::para(vec![Run::new(
+                crate::i18n::t(crate::i18n::active(), "panel.goTo", &[("passage", &display)]),
+                sz::SEARCH_GOTO,
+                Color::Gold,
+            )
+            .link(uri)])]
         }
         SearchView::Hits { how, total, capped, hits } => {
-            let mut out = vec![Block::para(vec![Run::new(
-                format!("{total} result{}", plural(total, "", "s")),
-                sz::SUGGEST_HEAD,
-                Color::Ink,
-            )
-            .bold()])];
+            let mut out =
+                vec![Block::para(vec![Run::new(sp("panel.results", total), sz::SUGGEST_HEAD, Color::Ink).bold()])];
             if !how.is_empty() {
                 out.push(Block::para(vec![Run::new(how, sz::CAPTION, Color::Faded).italic()]));
             }
@@ -1550,7 +1540,7 @@ pub fn guide_blocks() -> Vec<Block> {
     );
 
     out.push(Block::Rule);
-    out.push(Block::para(vec![Run::new("Press ? for keyboard shortcuts.", sz::SMALL, Color::Faded)]));
+    out.push(Block::para(vec![Run::new(s("panel.shortcutsHint"), sz::SMALL, Color::Faded)]));
     // Guide & About are one combined card — inline the About content here.
     out.push(Block::Rule);
     about_body(&mut out);

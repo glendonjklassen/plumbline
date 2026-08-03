@@ -169,6 +169,14 @@
     <div class="content"><p class="empty">{t("hymnal.loadingOne")}</p></div>
   {:else}
     <div class="content hymn">
+      {#if lang !== s.hymnLang}
+        <!-- The reader's language is a PREFERENCE, not a promise: a hymn that
+             exists in one language only shows that one. Saying so beats silently
+             handing a German reader an English hymn (UAT, 2026-08-03). -->
+        <p class="fellback">
+          {t("hymnal.notInYourLanguage", { language: endonym(s.hymnLang), shown: endonym(lang) })}
+        </p>
+      {/if}
       <p class="credit">
         {text.author}{#if text.translator}, {t("hymnal.tr", { name: text.translator })}{/if}{#if text.year}, {text.year}{/if}
         · {hymn.tune} {hymn.meter}
@@ -374,6 +382,14 @@
   .hymn {
     font-family: "EB Garamond", Georgia, serif;
     max-width: 46rem;
+  }
+  /* A note, not a warning: nothing is wrong, this hymn simply exists in one
+     language. Quieter than the credit line under it. */
+  .fellback {
+    font-size: calc(12.5px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
+    font-style: italic;
+    margin: 0 0 6px;
   }
   .credit {
     font-size: calc(13px * var(--uiScale, 1));

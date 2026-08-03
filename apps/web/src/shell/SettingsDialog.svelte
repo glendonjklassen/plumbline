@@ -10,7 +10,7 @@
   import { zipRead, zipWrite } from "../engine/zip";
   import { idbApply } from "../engine/idb";
   import { nowStamp } from "../engine/StudyEngine";
-  import { languages, plural, t } from "../lib/i18n.svelte";
+  import { deviceLocale, fill, languages, plural, t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -158,7 +158,12 @@
   /** The switch in progress: which language, and how far its Bible has come
    *  (null fraction = nothing to download). Drives the full-screen overlay at
    *  the bottom of this file. */
-  let switching = $state<{ endonym: string; fraction: number | null } | null>(null);
+  let switching = $state<{
+    endonym: string;
+    fraction: number | null;
+    /** The TARGET language's catalogue, falling back to the live one. */
+    say: (id: string, args?: Record<string, string | number>) => string;
+  } | null>(null);
 
   async function setLanguage(code: string): Promise<void> {
     if ((s.config.language ?? "") === code) return;
@@ -175,7 +180,22 @@
     // existed the reader tapped Deutsch and watched an unchanged English screen
     // do nothing (UAT, 2026-08-03). It is full-screen rather than a line in this
     // dialog because the reader's attention is on what they just tapped.
-    switching = { endonym: languages().find((l) => l.code === code)?.endonym ?? code, fraction: null };
+    // IN THE LANGUAGE BEING SWITCHED TO, not the one being left — "Wechsel zu
+    // Deutsch…", not "Switching to Deutsch" (UAT, 2026-08-03). The reader has
+    // already asked for that language; answering in the old one is the app
+    // lagging behind its own reader. `t()` still reads the live table, so the
+    // sentence is fetched from the target catalogue up front.
+    const target = await s.rpc
+      .static("i18nCatalog", code, deviceLocale())
+      .then((c: any) => c?.strings ?? null)
+      .catch(() => null);
+    const say = (id: string, args?: Record<string, string | number>) =>
+      target?.[id] ? fill(target[id], args) : t(id, args);
+    switching = {
+      endonym: languages().find((l) => l.code === code)?.endonym ?? code,
+      fraction: null,
+      say,
+    };
 
     // THE SPLASH AFTER THE RELOAD MUST SPEAK THE NEW LANGUAGE. `i18n.svelte.ts`
     // seeds it from this key, and it is only written when a catalogue ARRIVES —
@@ -866,13 +886,13 @@
        fires, and the two should read as one motion rather than two screens. -->
   <div class="switching" role="status" aria-live="polite">
     <div class="sw-mark" aria-hidden="true">✦</div>
-    <p class="sw-what">{t("settings.switchingTo", { language: switching.endonym })}</p>
+    <p class="sw-what">{switching.say("settings.switchingTo", { language: switching.endonym })}</p>
     {#if switching.fraction !== null}
       <div class="sw-bar">
         <div class="sw-fill" style:width="{Math.round(switching.fraction * 100)}%"></div>
       </div>
-      <p class="sw-detail">{t("settings.gettingTheBible", { percent: Math.round(switching.fraction * 100) })}</p>
-      <p class="sw-note">{t("settings.gettingTheBibleNote")}</p>
+      <p class="sw-detail">{switching.say("settings.gettingTheBible", { percent: Math.round(switching.fraction * 100) })}</p>
+      <p class="sw-note">{switching.say("settings.gettingTheBibleNote")}</p>
     {/if}
   </div>
 {/if}

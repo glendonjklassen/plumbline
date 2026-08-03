@@ -53,6 +53,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -73,6 +74,13 @@ import kotlinx.coroutines.withContext
  *  transposed at that moment, the language showing, and whether chords are on.
  *  The overlay is hosted by StudyScreen over everything (the Present pattern). */
 class HymnSing(val hymn: Hymn1, val lang: String, val chords: Boolean)
+
+/** A language code as that language calls itself, from the central list — a
+ *  singer looking for the German text is looking for "Deutsch". Falls back to the
+ *  bare code upper-cased for a language the hymn files carry but the app does not
+ *  ship an interface in, which they are allowed to do. */
+private fun endonymOf(code: String): String =
+    Strings.languages.firstOrNull { it.code == code }?.endonym ?: code.uppercase()
 
 /** The language to show, given what this hymn actually has. The reader's
  *  preference is a preference, not a promise: a German-only hymn shows German
@@ -95,7 +103,15 @@ fun HymnalScreen(
     var openId by remember { mutableStateOf<String?>(null) }
     var semis by remember { mutableIntStateOf(0) }
     var hymn by remember { mutableStateOf<Hymn1?>(null) }
-    var wantLang by remember { mutableStateOf("en") }
+    // FOLLOWS THE APP'S LANGUAGE. It was a hard-coded "en", so a German reader
+    // opened a German interface onto English hymn texts and had to say "Deutsch"
+    // again on every hymn (UAT, 2026-08-03) — the web was fixed for this and
+    // Android was missed, which is the drift the whole catalogue exists to stop.
+    //
+    // Still its own state: the chips do a different job from the language
+    // setting, and a bilingual singer picking the German text of one hymn has not
+    // asked for a German interface.
+    var wantLang by remember { mutableStateOf(Strings.lang) }
     var chords by remember { mutableStateOf(false) }
 
     BackHandler {
@@ -169,7 +185,7 @@ fun HymnalScreen(
                 Text(t("hymnal.loadingOne"), color = palette.faded)
             }
         } else {
-            HymnBody(open, text, chords, palette)
+            HymnBody(open, text, chords, palette, shown = lang, wanted = wantLang)
         }
     }
 }
@@ -249,11 +265,31 @@ private fun HymnIndex(
 // ── one hymn ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun HymnBody(hymn: Hymn1, text: HymnText1, chords: Boolean, palette: ReaderPalette) {
+private fun HymnBody(
+    hymn: Hymn1,
+    text: HymnText1,
+    chords: Boolean,
+    palette: ReaderPalette,
+    /** The language actually being shown, and the one the reader asked for.
+     *  Equal on almost every hymn; when they differ this hymn does not exist in
+     *  the reader's language and the note below says so. */
+    shown: String = "",
+    wanted: String = "",
+) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 12.dp),
     ) {
+        if (shown.isNotEmpty() && wanted.isNotEmpty() && shown != wanted) {
+            // A note, not a warning: nothing is wrong, this hymn simply exists in
+            // one language. Silently handing a German reader an English hymn is
+            // what looked broken (UAT, 2026-08-03).
+            Text(
+                t("hymnal.notInYourLanguage", "language" to endonymOf(wanted), "shown" to endonymOf(shown)),
+                color = palette.faded, fontSize = 12.5.sp, fontStyle = FontStyle.Italic,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+        }
         val credit = buildString {
             append(text.author)
             text.translator?.let { append(", tr. $it") }

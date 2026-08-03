@@ -604,6 +604,17 @@
     role="region"
     aria-label={`${bookName} ${pane.chapter}`}
   >
+    {#if items.length === 0}
+      <!-- WHILE THE FIRST LAYOUT IS PENDING. The engine lives in one thread and
+           a chapter's display list is a round trip, so between mounting and the
+           first paint this pane is an empty rectangle. Usually that is one frame
+           and nobody sees it; after a language switch the German corpus is being
+           decoded at the same time and it is long enough to read as a dead screen
+           (UAT, 2026-08-03).
+           `aria-hidden`: the region already announces its chapter, and the mirror
+           below carries the words for a screen reader. -->
+      <p class="settling" aria-hidden="true">{t("pane.settling")}</p>
+    {/if}
     <div class="spacer" style:height={`${spacerH}px`}>
       <canvas
         bind:this={canvas}
@@ -706,6 +717,20 @@
      `white-space: nowrap` matters for cost: inside a 1px-wide box, wrapping would
      ask the browser to break a chapter into a couple of thousand line boxes. One
      unwrapped line per verse is a handful of text runs and no line-breaking. */
+  /* Quiet and centred — a note that something is coming, not a spinner that
+     implies something is wrong. Absolute so it does not move the canvas. */
+  .settling {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    font-size: calc(15px * var(--uiScale, 1));
+    font-style: italic;
+    color: var(--faded, #8a8276);
+    pointer-events: none;
+  }
   .mirror {
     position: fixed;
     top: 0;
