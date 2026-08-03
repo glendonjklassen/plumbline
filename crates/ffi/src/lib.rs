@@ -269,8 +269,19 @@ impl PlumblineEngine {
         // probed at all (a CWD-relative probe would be nondeterministic and a
         // mild data-injection surface).
 
+        // KJV-ONLY, and this gate is load-bearing rather than an optimisation.
+        // Morphology is keyed by (refKey, TOKEN INDEX) against `kjv1769-tok2`,
+        // and the German corpus tokenizes the same verse into different words at
+        // different indices — so applying it there would attach English grammar
+        // notes to whichever German word happened to sit at that index. Same
+        // argument for Strong's and for the plain-English overlay below, which is
+        // a delta over KJV token runs.
+        //
+        // Not a version check on the sidecar file: the file is fine, it is the
+        // CORPUS that is a different text.
+        let kjv_text = corpus.tokenization_version() == canon::TOKENIZATION_VERSION;
         let morph = OnceLock::new();
-        if let Some(h) = &home {
+        if let (Some(h), true) = (&home, kjv_text) {
             let data = h.join("data");
             if let Some(m) = morph::load_morph(canon::TOKENIZATION_VERSION, data.join("morphology.jsonl")) {
                 let _ = morph.set(m);
@@ -367,16 +378,23 @@ impl PlumblineEngine {
     /// search index built before this call keeps the notes it saw then.
     fn load_core_data(&self) {
         let Some(h) = &self.home else { return };
-        if self.strongs.get().is_none() {
-            if let Ok(sd) = strongs::load_strongs(h.join("data").join("strongs.json")) {
-                let _ = self.strongs.set(sd);
+        // The study data (the 1769 margin notes among it) reloads whatever text
+        // is open; Strong's and the overlay are the KJV's — see the gate in
+        // `new`. On the German corpus both stay unset, which is what makes
+        // `AkjvAvailable()` false and hides the toggle rather than offering a
+        // reader an English overlay for a German verse.
+        if self.corpus.tokenization_version() == canon::TOKENIZATION_VERSION {
+            if self.strongs.get().is_none() {
+                if let Ok(sd) = strongs::load_strongs(h.join("data").join("strongs.json")) {
+                    let _ = self.strongs.set(sd);
+                }
             }
-        }
-        if self.akjv.get().is_none() {
-            // Stage 2, beside Strong's: small, and wanted the moment the reader
-            // flips the toggle rather than after a download they must approve.
-            if let Some(a) = akjv::load_akjv(canon::TOKENIZATION_VERSION, h.join("data").join("akjv.jsonl")) {
-                let _ = self.akjv.set(a);
+            if self.akjv.get().is_none() {
+                // Stage 2, beside Strong's: small, and wanted the moment the reader
+                // flips the toggle rather than after a download they must approve.
+                if let Some(a) = akjv::load_akjv(canon::TOKENIZATION_VERSION, h.join("data").join("akjv.jsonl")) {
+                    let _ = self.akjv.set(a);
+                }
             }
         }
         *self.study_write() = load_study(&self.home);
@@ -981,6 +999,25 @@ pub unsafe extern "C" fn plumbline_string_free(ptr: *mut c_char) {
 
 // ── engine lifecycle ────────────────────────────────────────────────────────────
 
+/// The corpus file for a language, under `home`.
+///
+/// One place, so the engine, the hydrator and any tool agree. English is
+/// `data/kjv.jsonl`; a language with its own corpus uses it IF THE FILE IS
+/// THERE, and falls back to the KJV if it is not — the German text is an
+/// optional download and a reader who has switched language without fetching it
+/// must still get a Bible.
+pub fn corpus_for(home: &str, lang: i18n::Lang) -> PathBuf {
+    let data = PathBuf::from(home).join("data");
+    let named = match lang {
+        i18n::Lang::De => Some("luther1912.jsonl"),
+        i18n::Lang::En => None,
+    };
+    match named.map(|f| data.join(f)) {
+        Some(p) if p.exists() || corpus::cache_path(&p).exists() => p,
+        _ => data.join("kjv.jsonl"),
+    }
+}
+
 /// Open an engine from an overlay-style home directory containing
 /// `data/kjv.jsonl` and `data/strongs.json`.
 ///
@@ -1000,7 +1037,17 @@ pub unsafe extern "C" fn plumbline_engine_open(home: *const c_char, out_err: *mu
             set_err(out_err, "home path is null or not valid UTF-8".into());
             return ptr::null_mut();
         };
-        let corpus = match corpus::load_corpus(format!("{home}/data/kjv.jsonl")) {
+        // WHICH TEXT. The reader's language decides, and the language was set by
+        // `plumbline_i18n_set_language` before this call — both shells do that in
+        // their startup, before anything reads a book name.
+        //
+        // FALLS BACK TO THE KJV when the German corpus is not on the device, and
+        // that is the common case rather than an error: the German text is an
+        // optional download, so a reader who has switched language but not yet
+        // fetched it gets a German interface over the English text instead of a
+        // dead app. The shell offers the download; nothing here fails.
+        let corpus_path = corpus_for(home, i18n::active());
+        let corpus = match corpus::load_corpus(&corpus_path) {
             Ok(c) => c,
             Err(e) => {
                 set_err(out_err, e.to_string());

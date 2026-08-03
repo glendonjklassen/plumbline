@@ -14,7 +14,30 @@ use std::sync::OnceLock;
 ///
 /// `tok2`: pilcrows (¶) are no longer tokens; they became the paragraph flag
 /// on the following word.
+///
+/// This is the KJV's, and it is the one written into the reader's own files. It
+/// is NOT "the only tokenization this build understands" — see
+/// [`SHIPPED_TOKENIZATIONS`].
 pub const TOKENIZATION_VERSION: &str = "kjv1769-tok2";
+
+/// Every tokenization stamp this build ships a corpus for.
+///
+/// A corpus (or its start-up cache) carrying one of these was written by a
+/// tokenizer we agree with; anything else is refused, which is the check's whole
+/// purpose. Before there was a second corpus this was the same question as
+/// "does it match [`TOKENIZATION_VERSION`]", and the German Bible
+/// (`luther1912-tok1`, see `data-prep/README.md`) is what pulled the two apart.
+///
+/// The German corpus sits at the KJV's own verse addresses, so `refKey` means
+/// one verse in both and nothing keyed on a ref has to care which is loaded.
+/// TOKEN INDICES are a different matter — they are per-corpus by nature, which
+/// is what a tokenization stamp has always been about.
+pub const SHIPPED_TOKENIZATIONS: [&str; 2] = [TOKENIZATION_VERSION, "luther1912-tok1"];
+
+/// Whether this build ships a corpus with `tok`'s tokenization.
+pub fn tokenization_is_ours(tok: &str) -> bool {
+    SHIPPED_TOKENIZATIONS.contains(&tok)
+}
 
 /// A canonical book: its OSIS id (used in data files and refs), the name as
 /// printed by SWORD's `mod2imp`, and the display name.

@@ -2570,3 +2570,79 @@ fn the_catalogue_crosses_the_abi_whole_and_falls_back_to_english() {
         assert_eq!(none["lang"], "en");
     }
 }
+
+/// The German corpus, opened for real from the repo's own `data/`.
+///
+/// Reads the shipped 15 MB file rather than a fixture, deliberately: the claim
+/// worth testing is not that the loader works — `corpus.rs` covers that — but
+/// that THE FILE WE SHIP sits at the KJV's verse addresses and comes back as
+/// German. A fixture would prove neither.
+///
+/// `#[ignore]`d so the default `cargo test` stays fast and works in a checkout
+/// with no data pack hydrated. Run it with:
+///
+/// ```sh
+/// cargo test --locked -p plumbline-ffi -- --ignored german_corpus
+/// ```
+#[test]
+#[ignore]
+fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    if !repo.join("data/luther1912.jsonl").exists() {
+        eprintln!("no data/luther1912.jsonl in this checkout — skipping");
+        return;
+    }
+    let home = CString::new(repo.to_str().unwrap()).unwrap();
+
+    unsafe {
+        // The language is what selects the text, and it is set before open —
+        // exactly as both shells do it.
+        let _ = take(plumbline_i18n_set_language(c"de".as_ptr(), ptr::null()));
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home.as_ptr(), &mut err);
+        assert!(!e.is_null(), "German open failed: {:?}", opt_str(err));
+
+        // The same address, in the other language. John 3:16 is the test the
+        // whole design turns on: if the German corpus had its own versification
+        // this refKey would land somewhere else.
+        let v: Value = serde_json::from_str(&take(plumbline_engine_verse_json(e, c"John 3:16".as_ptr())).unwrap())
+            .unwrap();
+        let body = v["body"].as_str().unwrap();
+        assert!(body.contains("Gott"), "John 3:16 is not German: {body}");
+        assert!(!body.contains("God so loved"), "John 3:16 came back in English: {body}");
+
+        // Book names come from the catalogue for the same reader.
+        let toc: Value = serde_json::from_str(&take(plumbline_engine_toc_json(e)).unwrap()).unwrap();
+        let books = toc["books"].as_array().unwrap();
+        assert_eq!(books.len(), 66);
+        assert_eq!(books.iter().find(|b| b["id"] == "Gen").unwrap()["name"], "1. Mose");
+        // Every book present, with the KJV's chapter counts.
+        assert_eq!(books.iter().find(|b| b["id"] == "Ps").unwrap()["chapters"], 150);
+        assert_eq!(books.iter().find(|b| b["id"] == "Mal").unwrap()["chapters"], 4, "Malachi keeps the KJV's 4");
+        assert_eq!(books.iter().find(|b| b["id"] == "Joel").unwrap()["chapters"], 3, "Joel keeps the KJV's 3");
+
+        // The plain-English overlay is a delta over KJV TOKEN RUNS, so it must
+        // not be offered here — it would rewrite whichever German words happened
+        // to sit at those indices.
+        //
+        // AFTER `load_core_data`, which is what loads the overlay: without this
+        // call the assertion below is vacuously true, because nothing had tried
+        // to load one yet. (Found by mutation-testing this test — removing the
+        // gate left it green.)
+        let _ = take(plumbline_engine_load_core_data(e));
+        assert!(!plumbline_engine_akjv_available(e), "the KJV overlay was offered over German text");
+        // And Strong's is withheld for the same reason: its codes are attached to
+        // KJV tokens, so a German word study would be looking up whatever code
+        // sat at that index in the other text.
+        let w: Value =
+            serde_json::from_str(&take(plumbline_engine_token_json(e, c"John 3:16".as_ptr(), 0)).unwrap()).unwrap();
+        assert!(
+            w["strongs"].as_array().is_none_or(|a| a.is_empty()),
+            "a German token carries Strong's codes: {w}"
+        );
+
+        plumbline_engine_free(e);
+        // English again, so nothing after this test inherits German.
+        let _ = take(plumbline_i18n_set_language(c"en".as_ptr(), ptr::null()));
+    }
+}
