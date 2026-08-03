@@ -14,7 +14,7 @@
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
   import { readingTint, tintStyle, tintTitle, type ReadingHeat } from "./readingTint";
-  import { t } from "../lib/i18n.svelte";
+  import { lang, t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -137,7 +137,9 @@
     </p>
     <div class="content">
       {#if !book}
-        <div class="grid books">
+        <!-- `lang`: `hyphens: auto` above needs to know the language to break a
+             word where a reader of it expects. -->
+        <div class="grid books" lang={lang()}>
           {#each books as b (b.id)}
             <button
               data-book={b.id}
@@ -278,12 +280,23 @@
     grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
   }
   .grid button {
-    padding: 14px 6px;
+    padding: 10px 6px;
     min-height: 52px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 8px;
     background: var(--paper, #fcf9f4);
     font-size: calc(16px * var(--uiScale, 1));
+    /* German book names are long single words — "Apostelgeschichte",
+       "Thessalonicher" — and a word with no space in it will not wrap however
+       narrow the box gets, so they ran straight out of the sides (UAT,
+       2026-08-03). `anywhere` is the only value that breaks a word with no
+       break opportunity in it; `hyphens` puts the break somewhere a German
+       reader expects when the language is declared, and `lang` on the grid
+       below is what lets the browser know which rules to use. */
+    line-height: 1.15;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    hyphens: auto;
   }
   .grid button:hover {
     border-color: var(--gold, #9e7d38);

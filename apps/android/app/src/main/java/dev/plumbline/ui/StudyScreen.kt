@@ -167,7 +167,21 @@ fun PlumblineApp(
     }
     // Garamond for the chrome too, matching the web shell (see ui/Typography.kt).
     MaterialTheme(colorScheme = scheme, typography = rememberSerifTypography()) {
-        StudyScreen(engine, fold, palette, themeChoice, { themeChoice = it }, bundledOn, onToggleBundled)
+        // NAMED, not positional. `onLanguage` was added with a `{}` default and
+        // then not forwarded here — so the compiler said nothing, the picker
+        // called the no-op, and switching to Deutsch closed the dialog and did
+        // nothing else (UAT, 2026-08-03). A defaulted parameter cannot be
+        // forgotten if every argument is named.
+        StudyScreen(
+            engine = engine,
+            fold = fold,
+            palette = palette,
+            themeChoice = themeChoice,
+            onThemeChoice = { themeChoice = it },
+            bundledOn = bundledOn,
+            onToggleBundled = onToggleBundled,
+            onLanguage = onLanguage,
+        )
     }
 }
 

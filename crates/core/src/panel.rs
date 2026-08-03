@@ -89,6 +89,21 @@ pub enum Block {
     Rule,
 }
 
+/// A catalogue string, in the reader's language.
+///
+/// This module generates PROSE the reader reads, so it is as much a part of the
+/// catalogue as any shell — the labels here were English on a German screen until
+/// UAT caught it (2026-08-03). Shorthand because there are twenty call sites and
+/// `crate::i18n::t(crate::i18n::active(), …)` at each of them would be noise.
+fn s(id: &str) -> String {
+    crate::i18n::t(crate::i18n::active(), id, &[])
+}
+
+/// The same, with `{n}` filled.
+fn sn(id: &str, n: usize) -> String {
+    crate::i18n::t(crate::i18n::active(), id, &[("n", &n.to_string())])
+}
+
 impl Block {
     fn para(runs: Vec<Run>) -> Block {
         Block::Para { runs, indent: false, top_gap: false }
@@ -327,6 +342,13 @@ pub struct SearchHitView {
 pub trait PanelSource {
     /// The surface English word at a token, if the verse/token resolve.
     fn token_word(&self, verse: &str, token: u32) -> Option<String>;
+    /// Whether the open corpus is the KJV — the text every analytic in this
+    /// module is tagged against. False for a translation with its own
+    /// tokenization (the German Luther 1912), where the study card says so
+    /// instead of showing evidence about a different set of words.
+    fn is_kjv_text(&self) -> bool {
+        true
+    }
     /// A verse's display form (`"John 3:16"`), if it resolves.
     fn verse_display(&self, refkey: &str) -> Option<String>;
     /// The morphology gloss for a token (Full study), when the sidecar has it.
@@ -641,7 +663,21 @@ pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token:
     if !word.is_empty() {
         out.push(Block::para(vec![Run::new(&word, sz::WORD, Color::Ink)]));
     }
-    if gates.human {
+    // WHAT A SECOND TRANSLATION CAN AND CANNOT HAVE, and the line between them
+    // is exactly whether a thing is keyed by TOKEN INDEX or by refKey.
+    //
+    // Token-keyed, so meaningless here: Strong's, the morphology gloss,
+    // renderings, same-root, the concept lens. The German corpus tokenizes the
+    // same verse into different words at different indices, so this evidence
+    // would describe a different set of words while appearing to describe these.
+    //
+    // refKey-keyed, so perfectly valid here: the reader's own note, their tags
+    // and threads, and the Treasury's CROSS-REFERENCES — which is the one that
+    // matters, because it is a lot of real study value and my first pass threw it
+    // away by returning early (caught by reading the test's own output).
+    let kjv = src.is_kjv_text();
+
+    if kjv && gates.human {
         if let Some(g) = src.morph_gloss(verse, token) {
             out.push(Block::para(vec![Run::new(g, sz::NOTE, Color::Morph).italic()]));
         }
@@ -649,14 +685,27 @@ pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token:
     // The reader's own note rides near the top — it's what they wrote, not
     // evidence to scroll for (product feedback 2026-07-25).
     user_note_block(src, verse, &mut out);
-    if codes.is_empty() {
-        out.push(Block::para(vec![Run::new("no Strong's tag on this word", sz::BODY, Color::Faded).italic()]));
-    }
-    for code in codes {
-        code_study(src, code, &word, gates, &mut out);
+
+    if !kjv {
+        // Said once, plainly, in the reader's language. Showing the English
+        // evidence instead read as an app that had half-forgotten which language
+        // it was in (UAT, 2026-08-03).
+        out.push(Block::para(vec![
+            Run::new(crate::i18n::t(crate::i18n::active(), "study.onlyKjv", &[]), sz::NOTE, Color::Faded).italic(),
+        ]));
+    } else {
+        if codes.is_empty() {
+            out.push(Block::para(vec![
+                Run::new(crate::i18n::t(crate::i18n::active(), "study.noStrongs", &[]), sz::BODY, Color::Faded)
+                    .italic(),
+            ]));
+        }
+        for code in codes {
+            code_study(src, code, &word, gates, &mut out);
+        }
     }
     verse_extras(src, verse, gates, &mut out);
-    if gates.any() && !codes.is_empty() {
+    if kjv && gates.any() && !codes.is_empty() {
         out.push(legend());
     }
     out
@@ -799,9 +848,9 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
 fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<Block>) {
     out.push(Block::Para {
         runs: vec![
-            Run::new("＋ tag verse", sz::LIST, Color::Gold).link(format!("addtag:{verse}")),
+            Run::new(s("panel.tagVerse"), sz::LIST, Color::Gold).link(format!("addtag:{verse}")),
             Run::new("     ", sz::LIST, Color::Ink),
-            Run::new("＋ add to thread", sz::LIST, Color::Gold).link(format!("addthread:{verse}")),
+            Run::new(s("panel.addToThread"), sz::LIST, Color::Gold).link(format!("addthread:{verse}")),
         ],
         indent: false,
         top_gap: true,
@@ -810,7 +859,7 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
     let xrefs = src.verse_xrefs(verse);
     if !xrefs.is_empty() {
         out.push(Block::para(vec![
-            Run::new(format!("cross-references ({})", xrefs.len()), sz::LABEL, Color::Ink).bold()
+            Run::new(sn("panel.xrefs", xrefs.len()), sz::LABEL, Color::Ink).bold()
         ]));
         for p in xrefs.iter().take(40) {
             let weave = match p.weave_index {
@@ -829,7 +878,7 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
         let sx = src.study_xrefs(verse);
         if !sx.is_empty() {
             out.push(Block::para(vec![
-                Run::new(format!("study cross-references ({})", sx.len()), sz::LABEL, Color::Ink).bold(),
+                Run::new(sn("panel.studyXrefs", sx.len()), sz::LABEL, Color::Ink).bold(),
                 Run::new("  TSK", sz::FINE, Color::Mono),
                 Run::new("  †", sz::MARK, Color::TierHuman),
             ]));
@@ -851,7 +900,7 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
 
     let tags = src.verse_tags(verse);
     if !tags.is_empty() {
-        out.push(Block::para(vec![Run::new("tags", sz::LABEL, Color::Ink).bold()]));
+        out.push(Block::para(vec![Run::new(s("panel.tags"), sz::LABEL, Color::Ink).bold()]));
         for (i, name) in &tags {
             out.push(Block::para(vec![
                 Run::new(name, sz::LIST, Color::Gold).link(format!("tag:{i}")),
@@ -864,7 +913,7 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
     let notes = src.verse_notes(verse);
     if !notes.is_empty() {
         out.push(Block::para(vec![
-            Run::new("margin notes", sz::LABEL, Color::Ink).bold(),
+            Run::new(s("panel.marginNotes"), sz::LABEL, Color::Ink).bold(),
             Run::new("  †", sz::MARK, Color::TierHuman),
         ]));
         for n in &notes {
@@ -880,10 +929,10 @@ fn user_note_block(src: &dyn PanelSource, verse: &str, out: &mut Vec<Block>) {
     let mine = src.user_note(verse);
     out.push(Block::Para {
         runs: vec![
-            Run::new("your note", sz::LABEL, Color::Ink).bold(),
+            Run::new(s("panel.yourNote"), sz::LABEL, Color::Ink).bold(),
             Run::new("   ", sz::LABEL, Color::Ink),
             Run::new(
-                if mine.as_deref().is_some_and(|t| !t.is_empty()) { "✎ edit" } else { "✎ add" },
+                if mine.as_deref().is_some_and(|t| !t.is_empty()) { s("panel.editNote") } else { s("panel.addNote") },
                 sz::CAPTION,
                 Color::Gold,
             )
@@ -1023,7 +1072,7 @@ pub fn thread_detail(src: &dyn PanelSource, index: usize) -> Vec<Block> {
                 Color::Faded,
             ),
             Run::new("   ", sz::SMALL, Color::Ink),
-            Run::new("✎ notes", sz::CAPTION, Color::Faded).link(format!("editthreadnotes:{index}")),
+            Run::new(s("panel.notes"), sz::CAPTION, Color::Faded).link(format!("editthreadnotes:{index}")),
         ]),
     ];
     if !t.notes.is_empty() {
@@ -1034,7 +1083,7 @@ pub fn thread_detail(src: &dyn PanelSource, index: usize) -> Vec<Block> {
         out.push(Block::para(vec![
             go(&en.verse, &en.display, sz::LIST),
             Run::new("   ", sz::LIST, Color::Ink),
-            Run::new("✎ note", sz::CAPTION, Color::Faded).link(format!("editentrynote:{index}:{e}")),
+            Run::new(s("panel.note"), sz::CAPTION, Color::Faded).link(format!("editentrynote:{index}:{e}")),
         ]));
         let joined = en.text.join(" ");
         let snap = if joined.chars().count() > 70 {
@@ -1087,8 +1136,8 @@ pub fn tag_detail(src: &dyn PanelSource, index: usize) -> Vec<Block> {
     let verse_members = t.members.iter().filter(|m| m.kind == "verse").count();
     if verse_members >= 2 {
         out.push(Block::para(vec![
-            Run::new("⇔ make weave", sz::LIST, Color::Gold).link(format!("makeweave:{index}")),
-            Run::new("   chain these passages through the canon", sz::CAPTION, Color::Faded),
+            Run::new(s("panel.makeWeave"), sz::LIST, Color::Gold).link(format!("makeweave:{index}")),
+            Run::new(format!("   {}", s("panel.makeWeaveHint")), sz::CAPTION, Color::Faded),
         ]));
     }
     for m in &t.members {
@@ -1118,7 +1167,7 @@ pub fn weaves_list(src: &dyn PanelSource) -> Vec<Block> {
         // A heading over nothing reads as a broken panel. Threads, tags and the
         // review queue all say what to do here; this one said nothing.
         out.push(Block::para(vec![Run::new(
-            "No weaves yet — tag a few passages, then “⇔ make weave” on the tag to chain them through the canon.",
+            s("panel.noWeaves"),
             sz::SMALL,
             Color::Faded,
         )
@@ -1146,7 +1195,7 @@ pub fn suggested(src: &dyn PanelSource) -> Vec<Block> {
         vec![Block::para(vec![Run::new(format!("Suggested weaves ({})", items.len()), sz::TITLE, Color::Ink).bold()])];
     if items.is_empty() {
         out.push(Block::para(vec![
-            Run::new("The review queue is empty (weaves/suggested).", sz::SMALL, Color::Faded).italic()
+            Run::new(s("panel.emptyQueue"), sz::SMALL, Color::Faded).italic()
         ]));
     }
     for w in &items {
@@ -1179,15 +1228,15 @@ pub fn suggested(src: &dyn PanelSource) -> Vec<Block> {
         }
         let mut actions = Vec::new();
         if let Some(li) = w.lib_index {
-            actions.push(Run::new("⇔ compare", sz::LIST, Color::Gold).link(format!("weave:{li}")));
+            actions.push(Run::new(s("panel.compare"), sz::LIST, Color::Gold).link(format!("weave:{li}")));
             actions.push(Run::new("   ", sz::LIST, Color::Ink));
         }
-        actions.push(Run::new("✓ approve", sz::LIST, Color::Gold).link(format!("approve:{}", w.index)));
+        actions.push(Run::new(s("panel.approve"), sz::LIST, Color::Gold).link(format!("approve:{}", w.index)));
         actions.push(Run::new("   ", sz::LIST, Color::Ink));
-        actions.push(Run::new("✕ reject", sz::LIST, Color::Gold).link(format!("reject:{}", w.index)));
+        actions.push(Run::new(s("panel.reject"), sz::LIST, Color::Gold).link(format!("reject:{}", w.index)));
         if let Some(li) = w.lib_index {
             actions.push(Run::new("   ", sz::LIST, Color::Ink));
-            actions.push(Run::new("✎ note", sz::CAPTION, Color::Faded).link(format!("editweavenotes:{li}")));
+            actions.push(Run::new(s("panel.note"), sz::CAPTION, Color::Faded).link(format!("editweavenotes:{li}")));
         }
         out.push(Block::para(actions));
     }
@@ -1210,7 +1259,7 @@ pub fn compare_card(src: &dyn PanelSource, full: bool, index: usize) -> Vec<Bloc
     let mut head =
         vec![Run::new(format!("{} link{}", w.links.len(), plural(w.links.len(), "", "s")), sz::SMALL, Color::Faded)];
     head.push(Run::new("   ", sz::SMALL, Color::Ink));
-    head.push(Run::new("✎ note", sz::CAPTION, Color::Faded).link(format!("editweavenotes:{index}")));
+    head.push(Run::new(s("panel.note"), sz::CAPTION, Color::Faded).link(format!("editweavenotes:{index}")));
     out.push(Block::para(head));
     if !w.notes.is_empty() {
         out.push(Block::para(vec![Run::new(&w.notes, sz::NOTE, Color::Faded)]));
@@ -1288,7 +1337,7 @@ pub fn search(src: &dyn PanelSource, query: &str) -> Vec<Block> {
                     runs.push(Run::new(format!("   {}", h.why), sz::CAPTION, Color::Mono));
                 }
                 if h.note {
-                    runs.push(Run::new("   ※ note", sz::CAPTION, Color::Gold));
+                    runs.push(Run::new(format!("   {}", s("panel.hasNote")), sz::CAPTION, Color::Gold));
                 }
                 out.push(Block::para(runs));
                 if let Some(snip) = snippet(src, &h.verse, query) {

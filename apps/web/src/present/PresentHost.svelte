@@ -339,6 +339,16 @@
     font-size: calc(14px * var(--uiScale, 1));
   }
   .overview {
+    /* `flex: 1; min-height: 0` — the list takes what is left and scrolls INSIDE
+       itself. Without it the default `flex: 0 1 auto` sized this to its content,
+       so the column overflowed its own fixed height and the share sheet above
+       drew over the verses. It fit in English by luck: German's longer strings
+       ("Scannen, um … auf dem eigenen Telefon zu öffnen") make the sheet taller
+       and tipped it over (UAT, 2026-08-03). `min-height: 0` is the half that
+       actually matters — a flex item will not shrink below its content without
+       it, whatever `flex` says. */
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: 14px 18px 40px;
     display: flex;
@@ -432,6 +442,9 @@
   }
   /* The overview's Share reveals the same QR inline, above the passage list. */
   .sharesheet {
+    /* Never shrinks and never grows: it is a fixed-size sheet above a list that
+       does both (see `.overview`). */
+    flex: none;
     padding: 12px 0 4px;
     border-bottom: 1px solid #e0d6bd;
   }

@@ -2489,6 +2489,12 @@ pub unsafe extern "C" fn plumbline_engine_gloss(engine: *const PlumblineEngine, 
 const PANEL_OCC_CAP: usize = 300;
 
 impl PanelSource for PlumblineEngine {
+    /// Whether the open text is the KJV — the same question `new` asks before it
+    /// wires Strong's, morphology and the overlay, and for the same reason.
+    fn is_kjv_text(&self) -> bool {
+        self.corpus.tokenization_version() == canon::TOKENIZATION_VERSION
+    }
+
     fn token_word(&self, verse: &str, token: u32) -> Option<String> {
         let v = VRef::parse_ref_key(verse)?;
         self.corpus.verse(&v)?.tokens.get(token as usize).map(|t| t.word.clone())

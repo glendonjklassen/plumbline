@@ -155,8 +155,10 @@
    *  `session.svelte.ts` PINS in its cache precisely because it cannot change
    *  while a session runs. Swapping the chrome and leaving "Genesis" in the
    *  passage navigator would be a half-translated app that looks like a bug. */
-  /** Progress of the German corpus download, or null when none is running. */
-  let corpusFraction = $state<number | null>(null);
+  /** The switch in progress: which language, and how far its Bible has come
+   *  (null fraction = nothing to download). Drives the full-screen overlay at
+   *  the bottom of this file. */
+  let switching = $state<{ endonym: string; fraction: number | null } | null>(null);
 
   async function setLanguage(code: string): Promise<void> {
     if ((s.config.language ?? "") === code) return;
@@ -168,6 +170,24 @@
     // The RPC is ordered, so awaiting the flush is awaiting the save with it.
     // (Caught by e2e/language.spec.ts, which is the only thing that ever
     // exercised this: every other setting here takes effect without a reload.)
+    // THE OVERLAY GOES UP FIRST, before any await. Everything below can take
+    // seconds — a config flush, a 2 MB download, a reload — and until this
+    // existed the reader tapped Deutsch and watched an unchanged English screen
+    // do nothing (UAT, 2026-08-03). It is full-screen rather than a line in this
+    // dialog because the reader's attention is on what they just tapped.
+    switching = { endonym: languages().find((l) => l.code === code)?.endonym ?? code, fraction: null };
+
+    // THE SPLASH AFTER THE RELOAD MUST SPEAK THE NEW LANGUAGE. `i18n.svelte.ts`
+    // seeds it from this key, and it is only written when a catalogue ARRIVES —
+    // which is after the boot the splash belongs to. So without this the reader
+    // sees: German overlay, English splash, German app. Three languages in one
+    // gesture, and the reason the transition read as broken.
+    try {
+      localStorage.setItem("plumbline.lang", code || (navigator.languages?.[0] ?? "en").split("-")[0]);
+    } catch {
+      // A private window costs one frame of the old language. Not worth failing.
+    }
+
     s.flushConfig();
     await s.rpc.flush();
     // THE TEXT, not just the interface. A language with its own Bible needs it
@@ -182,10 +202,9 @@
     if (code === "de") {
       const state = await s.rpc.germanState().catch(() => null);
       if (state?.available && !state.installed) {
-        corpusFraction = 0;
-        s.rpc.onGermanProgress = (f) => (corpusFraction = f);
+        switching = { ...switching!, fraction: 0 };
+        s.rpc.onGermanProgress = (f) => (switching = { ...switching!, fraction: f });
         await s.rpc.installGerman().catch(() => false);
-        corpusFraction = null;
       }
     }
     location.reload();
@@ -499,11 +518,6 @@
         />
         {t("settings.languageDevice")}
       </label>
-      {#if corpusFraction !== null}
-        <!-- The one place a language change can take real time. Shown as a bar
-             rather than a spinner because it is ~2.4 MB. -->
-        <p class="desc-note">{t("settings.languageDownloading", { percent: Math.round(corpusFraction * 100) })}</p>
-      {/if}
       {#each languages() as l (l.code)}
         <label class="radio">
           <input
@@ -840,6 +854,29 @@
   </div>
 {/if}
 
+{#if switching}
+  <!-- THE LANGUAGE TRANSITION.
+       Full-screen and above everything, because a language change is the one
+       setting that takes the whole app with it: a config write, possibly a 2 MB
+       download, then a reload. Before this the reader tapped Deutsch and watched
+       an unmoved English screen for several seconds (UAT, 2026-08-03).
+
+       Styled like the SPLASH rather than like this dialog, and from the same
+       palette variables — it hands straight over to the splash when the reload
+       fires, and the two should read as one motion rather than two screens. -->
+  <div class="switching" role="status" aria-live="polite">
+    <div class="sw-mark" aria-hidden="true">✦</div>
+    <p class="sw-what">{t("settings.switchingTo", { language: switching.endonym })}</p>
+    {#if switching.fraction !== null}
+      <div class="sw-bar">
+        <div class="sw-fill" style:width="{Math.round(switching.fraction * 100)}%"></div>
+      </div>
+      <p class="sw-detail">{t("settings.gettingTheBible", { percent: Math.round(switching.fraction * 100) })}</p>
+      <p class="sw-note">{t("settings.gettingTheBibleNote")}</p>
+    {/if}
+  </div>
+{/if}
+
 {#if restoreFailed}
   <!-- The one thing here that must not be a toast. A restore can fail with the
        phone already back in a pocket, and a reader who missed the 2.2 seconds is
@@ -867,6 +904,60 @@
 {/if}
 
 <style>
+  /* ── the language transition ──────────────────────────────────────────────
+     The splash's own look (App.svelte), on purpose: this screen is replaced by
+     the splash a moment later and a different treatment would read as two
+     unrelated waits. A system serif for the same reason the splash uses one —
+     EB Garamond is not needed to say "one moment". */
+  .switching {
+    position: fixed;
+    inset: 0;
+    z-index: 100; /* above the dialog (40/41) and the failure bar (70) */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 0 24px;
+    text-align: center;
+    font-family: Georgia, "Times New Roman", serif;
+    background: var(--paper, #fcf9f4);
+    color: var(--ink, #211f1a);
+  }
+  .sw-mark {
+    font-size: 28px;
+    color: var(--gold, #7d632c);
+  }
+  .sw-what {
+    font-size: calc(19px * var(--uiScale, 1));
+  }
+  .sw-bar {
+    width: min(340px, 70vw);
+    height: 5px;
+    margin-top: 10px;
+    border-radius: 3px;
+    background: var(--rule, #d8cba8);
+    overflow: hidden;
+  }
+  .sw-fill {
+    height: 100%;
+    background: var(--gold, #7d632c);
+    border-radius: 3px;
+    transition: width 0.15s ease;
+  }
+  .sw-detail {
+    font-size: calc(13px * var(--uiScale, 1));
+    color: var(--faded, #6c665d);
+  }
+  /* Reassurance, not progress — quieter than the line above it, like the
+     splash's own "3 MB download". */
+  .sw-note {
+    font-size: calc(12px * var(--uiScale, 1));
+    color: var(--faded, #6c665d);
+    opacity: 0.85;
+    max-width: 30em;
+  }
+
   .backdrop {
     position: fixed;
     inset: 0;

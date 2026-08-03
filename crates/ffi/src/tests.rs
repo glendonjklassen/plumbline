@@ -2641,6 +2641,40 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
             "a German token carries Strong's codes: {w}"
         );
 
+        // THE STUDY CARD SAYS WHY IT IS EMPTY, in German, rather than showing
+        // English evidence about the KJV's words (UAT, 2026-08-03). Everything in
+        // it — Strong's, morphology, renderings, cross-references — is keyed to
+        // KJV token indices, so on this text it would describe different words.
+        let blocks = take(plumbline_engine_word_study_blocks2_json(e, c"John 3:16".as_ptr(), 1, 3)).unwrap();
+        let de_notice = plumbline_core::i18n::t(plumbline_core::i18n::Lang::De, "study.onlyKjv", &[]);
+        assert!(
+            blocks.contains(de_notice.split(" — ").next().unwrap()),
+            "the German study card does not say why it is empty: {blocks}"
+        );
+        // And none of the token-keyed English evidence leaked in beside it.
+        for english in ["no Strong's tag", "Renderings", "same root"] {
+            assert!(!blocks.contains(english), "English study prose {english:?} reached a German reader: {blocks}");
+        }
+        // Nor any of the PANEL'S OWN LABELS, which were English on a German
+        // screen until UAT caught it — they are catalogue strings now.
+        for label in ["＋ tag verse", "＋ add to thread", "your note", "cross-references ("] {
+            assert!(!blocks.contains(label), "the study panel's English label {label:?} reached a German reader");
+        }
+        assert!(
+            blocks.contains(&plumbline_core::i18n::t(plumbline_core::i18n::Lang::De, "panel.tagVerse", &[])),
+            "the German study card has no German tag action: {blocks}"
+        );
+
+        // THE CROSS-REFERENCES STAY. They key on refKey, not on a token index, so
+        // they are as true of this text as of the KJV — and they are a lot of real
+        // study value. My first pass returned early and threw them away; only
+        // reading this test's own failure output showed it.
+        assert!(
+            blocks.contains(&plumbline_core::i18n::t(plumbline_core::i18n::Lang::De, "panel.studyXrefs", &[("n", "23")])),
+            "the German study card lost its cross-references: {blocks}"
+        );
+        assert!(blocks.contains("Römer 5,8"), "a German cross-reference is not in German: {blocks}");
+
         plumbline_engine_free(e);
         // English again, so nothing after this test inherits German.
         let _ = take(plumbline_i18n_set_language(c"en".as_ptr(), ptr::null()));
