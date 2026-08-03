@@ -999,22 +999,43 @@ pub unsafe extern "C" fn plumbline_string_free(ptr: *mut c_char) {
 
 // ── engine lifecycle ────────────────────────────────────────────────────────────
 
-/// The corpus file for a language, under `home`.
+/// The corpus file for a language, under `home` — the path, not a promise that
+/// it is there.
 ///
 /// One place, so the engine, the hydrator and any tool agree. English is
-/// `data/kjv.jsonl`; a language with its own corpus uses it IF THE FILE IS
-/// THERE, and falls back to the KJV if it is not — the German text is an
-/// optional download and a reader who has switched language without fetching it
-/// must still get a Bible.
+/// `data/kjv.jsonl`; German is `data/luther1912.jsonl` (`data-prep/README.md`).
+/// Whether it can actually be opened is [`open_corpus`]'s question.
 pub fn corpus_for(home: &str, lang: i18n::Lang) -> PathBuf {
     let data = PathBuf::from(home).join("data");
-    let named = match lang {
-        i18n::Lang::De => Some("luther1912.jsonl"),
-        i18n::Lang::En => None,
-    };
-    match named.map(|f| data.join(f)) {
-        Some(p) if p.exists() || corpus::cache_path(&p).exists() => p,
-        _ => data.join("kjv.jsonl"),
+    match lang {
+        i18n::Lang::De => data.join("luther1912.jsonl"),
+        i18n::Lang::En => data.join("kjv.jsonl"),
+    }
+}
+
+/// The corpus for `lang`, falling back to the KJV when it will not open.
+///
+/// BY TRYING, not by testing for the file, and the difference is not academic:
+/// the web's home is a WASI shim over an in-memory tree where `Path::exists` does
+/// not answer usefully, so an existence check silently sent every German reader
+/// to the English text (caught by e2e/language.spec.ts). "Can this be opened" is
+/// also the question actually being asked.
+///
+/// The fallback is the ordinary case rather than an error path: the German text
+/// is an optional download, so a reader who switches language before fetching it
+/// gets a German interface over the English text and a Bible either way.
+fn open_corpus(home: &str, lang: i18n::Lang) -> Result<Corpus, plumbline_core::Error> {
+    let path = corpus_for(home, lang);
+    match corpus::load_corpus(&path) {
+        Ok(c) => Ok(c),
+        Err(e) if lang != i18n::Lang::En => {
+            // The reader is owed a Bible, not a diagnosis — but somebody
+            // debugging a device deserves to know which text they are looking at
+            // and why it is not the one they asked for.
+            eprintln!("plumbline: {} unavailable ({e}); opening the KJV", path.display());
+            corpus::load_corpus(corpus_for(home, i18n::Lang::En))
+        }
+        Err(e) => Err(e),
     }
 }
 
@@ -1046,8 +1067,7 @@ pub unsafe extern "C" fn plumbline_engine_open(home: *const c_char, out_err: *mu
         // optional download, so a reader who has switched language but not yet
         // fetched it gets a German interface over the English text instead of a
         // dead app. The shell offers the download; nothing here fails.
-        let corpus_path = corpus_for(home, i18n::active());
-        let corpus = match corpus::load_corpus(&corpus_path) {
+        let corpus = match open_corpus(home, i18n::active()) {
             Ok(c) => c,
             Err(e) => {
                 set_err(out_err, e.to_string());

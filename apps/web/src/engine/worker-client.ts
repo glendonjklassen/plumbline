@@ -108,6 +108,8 @@ export class EngineRpc {
   onRndReady: () => void = () => {};
   /** R&D pack download progress (0..1) — drives the "load analysis" UI. */
   onRndProgress: (fraction: number) => void = () => {};
+  /** How far the German corpus download has got, 0..1. */
+  onGermanProgress: (fraction: number) => void = () => {};
   /** Download finished; the engine is now parsing it (seconds on a phone). */
   onRndPreparing: () => void = () => {};
   /** A save to this device's storage did not land — quota, blocked storage, a
@@ -167,6 +169,7 @@ export class EngineRpc {
         this.#stage = m.phase;
         return this.onProgress(m);
       }
+      if (m.type === "germanProgress") return this.onGermanProgress(m.fraction ?? 0);
       if (m.type === "authored") return this.onAuthored();
       if (m.type === "readingWrote") return this.onReadingWrote();
       if (m.type === "coreReady") return this.onCoreReady();
@@ -357,5 +360,16 @@ export class EngineRpc {
    *  were written. */
   installSuggested(): Promise<number> {
     return this.#send({ op: "installSuggested" });
+  }
+
+  /** Whether this build offers the German corpus, and whether it is here. */
+  germanState(): Promise<{ available: boolean; installed: boolean; gzBytes: number }> {
+    return this.#send({ op: "germanState" });
+  }
+
+  /** Download and store the German corpus. The caller RELOADS afterwards: the
+   *  corpus is chosen when the engine opens, so nothing changes until it does. */
+  installGerman(): Promise<boolean> {
+    return this.#send({ op: "installGerman" });
   }
 }

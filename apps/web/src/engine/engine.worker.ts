@@ -42,10 +42,13 @@ import { pinnedUrls, writePin } from "./pin";
 import {
   assetUrl,
   devicePackFiles,
+  hasOptional,
   fetchManifest,
   fetchRndPack,
   fetchStage2Pack,
   fetchSuggestedWeaves,
+  fetchGermanCorpus,
+  germanCorpusEntry,
   packFileUrl,
   setAssetBase,
   suggestedWeavesEntry,
@@ -434,7 +437,7 @@ async function reconcilePack(): Promise<void> {
   // What this device's pack IS — the optional bundle only where the reader
   // installed it. The same call decides what gets pinned below, so the sweep
   // and the pin can never disagree about which files should be here.
-  const mine = devicePackFiles(live, booted!.home.suggestedInstalled);
+  const mine = devicePackFiles(live, (f) => hasOptional(booted!.home, f));
   for (const f of mine) {
     const url = packFileUrl(f, live.version);
     if (await depotHas(url)) continue; // unchanged: same hash, same URL, already here
@@ -731,7 +734,7 @@ self.onmessage = async (ev: MessageEvent) => {
         // a refused face itself, so this is the belt for a platform that throws
         // somewhere it does not expect to.
         void fonts.catch(() => {});
-        booted = await boot((p) => self.postMessage({ type: "progress", ...p }));
+        booted = await boot((p) => self.postMessage({ type: "progress", ...p }), m.locale ?? "");
         // BEFORE the reply, and therefore before any layout op can be answered:
         // measurement must see the real Garamond metrics or lines wrap where they
         // are not painted.
@@ -767,10 +770,9 @@ self.onmessage = async (ev: MessageEvent) => {
           self.postMessage({ type: "readingWrote" });
         };
         const cfg = configLoad(booted.wasm) ?? {};
-        // BEFORE the TOC below, and before any read the shell makes: this is
-        // what puts the core's own book names and references in the reader's
-        // language, and the TOC is built from them a dozen lines down.
-        i18nSetLanguage(booted.wasm, typeof cfg.language === "string" ? cfg.language : "", m.locale ?? "");
+        // The language was set inside `boot`, before the engine opened — which is
+        // where it has to be, because the engine picks WHICH CORPUS to open. Doing
+        // it here left every German reader on the English text.
         // Opt-in: absent means off, so a first visit does NOT pull the analysis
         // pack in the background.
         const machineOn = cfg.machineAnalysis === true;
@@ -960,13 +962,45 @@ self.onmessage = async (ev: MessageEvent) => {
         // RE-PIN. The bundle is part of this device's pack now, and prune keeps
         // only what the pin names — without this the next sweep reclaims the
         // download, and the device then looks like one that declined it.
-        await writePin(booted!.manifest, assetUrl(""), devicePackFiles(booted!.manifest, true));
+        await writePin(booted!.manifest, assetUrl(""), devicePackFiles(booted!.manifest, (f) => hasOptional(booted!.home, f)));
         // The engine holds the weave library it read at open, so the files are
         // on disk and invisible until it re-reads them. Same call stage 2 uses
         // for exactly this reason.
         booted!.engine.loadCoreData();
         self.postMessage({ type: "authored" });
         reply(written);
+        break;
+      }
+      // ── the German corpus ────────────────────────────────────────────────
+      // The reader picking German IS the ask, so there is no Settings row: the
+      // picker calls this and then reloads. A progress fraction, unlike the
+      // suggested bundle, because this is ~2.4 MB and a phone deserves to see
+      // it moving.
+      case "germanState": {
+        const entry = germanCorpusEntry(booted!.manifest);
+        reply({
+          available: !!entry,
+          installed: booted!.home.germanInstalled,
+          gzBytes: entry?.gzBytes ?? 0,
+        });
+        break;
+      }
+      case "installGerman": {
+        const cache = await fetchGermanCorpus(booted!.manifest, (p) =>
+          self.postMessage({ type: "germanProgress", fraction: p.fraction }),
+        );
+        if (!cache) {
+          fail("this build has no German corpus");
+          break;
+        }
+        await booted!.home.installGermanCorpus(cache);
+        // RE-PIN, for `installSuggested`'s reason: the corpus is part of this
+        // device's pack now, and prune keeps only what the pin names — without
+        // this the next sweep reclaims a 28 MB download.
+        await writePin(booted!.manifest, assetUrl(""), devicePackFiles(booted!.manifest, (f) => hasOptional(booted!.home, f)));
+        // NOT `loadCoreData`: the corpus is chosen when the engine OPENS, so
+        // this one needs a reload rather than a re-read. The picker does that.
+        reply(true);
         break;
       }
       default:

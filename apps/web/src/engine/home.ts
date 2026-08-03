@@ -79,6 +79,11 @@ export interface VirtualHome {
   setBundled(on: boolean): Promise<void>;
   /** Whether the optional suggested-weave set is already installed here. */
   suggestedInstalled: boolean;
+  /** Whether the optional German corpus is already installed here. */
+  germanInstalled: boolean;
+  /** Put the downloaded German corpus cache in `data/` and persist the marker.
+   *  Rejects if the write did not land, like `installSuggestedWeaves`. */
+  installGermanCorpus(cache: Uint8Array): Promise<void>;
   /** Unpack the downloaded suggested-weave bundle into `weaves/suggested/` and
    *  persist it. Returns how many files were written (0 if the reader already
    *  has them all). Rejects if the write did not land — the caller owes the
@@ -94,6 +99,15 @@ const BUNDLED = "meta:bundled";
  *  the bundled set off and on again must not silently re-acquire 422 KB they
  *  never asked for a second time. */
 const SUGGESTED_INSTALLED = "meta:suggestedInstalled";
+/** Set once the German corpus cache has been stored in this home.
+ *
+ *  A MARKER rather than "is the file in the home", because the in-memory home
+ *  evicts pack files under `data/` once the engine has read them — so the file's
+ *  absence proves nothing, and the pin would flip between claiming and
+ *  disclaiming the download depending on when it was asked. */
+const GERMAN_INSTALLED = "meta:germanInstalled";
+/** Where the German corpus's start-up cache lives in the home. */
+export const GERMAN_CACHE = "data/luther1912.jsonl.idxcache";
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
@@ -227,16 +241,34 @@ function changedFiles(
   return { puts, prints };
 }
 
+/**
+ * Which optional pack files this device has already taken, read straight from
+ * IndexedDB.
+ *
+ * BEFORE the home exists, which is why it is its own function: stage 1 has to
+ * know whether to carry the German corpus, and the home it would ask is built
+ * from stage 1's own result. One `idbGet` against a marker key, on the boot path
+ * — cheaper than the alternative, which was a second boot to notice.
+ */
+export async function installedOptional(): Promise<{ suggestedInstalled: boolean; germanInstalled: boolean }> {
+  const [suggested, german] = await Promise.all([
+    idbGet("cache", SUGGESTED_INSTALLED),
+    idbGet("cache", GERMAN_INSTALLED),
+  ]);
+  return { suggestedInstalled: suggested !== undefined, germanInstalled: german !== undefined };
+}
+
 export async function buildHome(
   pack: Map<string, Uint8Array>,
   stockPaths: Set<string> = new Set(),
 ): Promise<VirtualHome> {
   const root = new Map<string, Directory | File>();
-  const [userFiles, seededFlag, bundledFlag, suggestedFlag] = await Promise.all([
+  const [userFiles, seededFlag, bundledFlag, suggestedFlag, germanFlag] = await Promise.all([
     idbEntries("user"),
     idbGet("cache", STOCK_SEEDED),
     idbGet("cache", BUNDLED),
     idbGet("cache", SUGGESTED_INSTALLED),
+    idbGet("cache", GERMAN_INSTALLED),
   ]);
   const bundledOn = bundledFlag ? dec.decode(bundledFlag) !== "off" : true;
   // Whether the suggested-weave bundle is in this home. MUTABLE, and read
@@ -245,6 +277,9 @@ export async function buildHome(
   // already completed. A plain boolean captured here reads correctly at boot
   // and then lies until the next reload.
   let suggestedOn = suggestedFlag !== undefined;
+  // Same shape, same reason: an install has to change the answer inside the
+  // session that made it, or Settings keeps offering a completed download.
+  let germanOn = germanFlag !== undefined;
   // The stock set seeds ONCE (Android parity): after that the user's own
   // copies rule, so edits and deletions stick across pack updates.
   const seedStock = bundledOn && !seededFlag;
@@ -379,6 +414,26 @@ export async function buildHome(
     bundledOn,
     get suggestedInstalled() {
       return suggestedOn;
+    },
+    get germanInstalled() {
+      return germanOn;
+    },
+    async installGermanCorpus(cache: Uint8Array) {
+      if (frozen) return;
+      await serial(async () => {
+        if (frozen) return;
+        // Into the live home so this session could read it, and then ONLY THE
+        // MARKER into IndexedDB.
+        //
+        // NOT the 28 MB itself, and that is the point. The bytes are already in
+        // the DEPOT — that is where `fetchGermanCorpus` put them — and the depot
+        // is what boot reads. Writing them to IndexedDB as well is precisely the
+        // mistake `dropLegacyIdxcache` exists to undo for the English corpus: a
+        // second full copy of a Bible on the device, rewritten on every launch.
+        insertFile(root, GERMAN_CACHE, cache);
+        await idbApply("cache", new Map([[GERMAN_INSTALLED, enc.encode("1")]]));
+        germanOn = true;
+      });
     },
     async installSuggestedWeaves(bundle: Uint8Array) {
       if (frozen) return 0;

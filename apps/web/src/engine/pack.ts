@@ -42,7 +42,7 @@ export interface PackFile {
    *  the suggested-weave bundle, which the reader downloads from Settings.
    *  Both are found by role rather than by filename, so a rename cannot quietly
    *  unhook them. */
-  role?: "corpusCache" | "suggestedWeaves";
+  role?: "corpusCache" | "suggestedWeaves" | "germanCorpus";
   /** Where these bytes live, relative to the app base. Present on files that came
    *  from a PIN, absent on a manifest straight off the network (where it is
    *  derived). Storing it lets two pack generations coexist in the depot: an
@@ -271,10 +271,11 @@ export async function verifyStored(f: PackFile, version: string): Promise<boolea
 export async function fetchStageLocal(
   manifest: PackManifest,
   stage: PackFile["stage"],
+  also: (f: PackFile) => boolean = () => false,
 ): Promise<Map<string, Uint8Array> | null> {
   const out = new Map<string, Uint8Array>();
   for (const f of manifest.files) {
-    if (f.stage !== stage) continue;
+    if (f.stage !== stage && !also(f)) continue;
     const hit = await depotGet(packFileUrl(f, manifest.version));
     if (!hit) return null;
     out.set(f.path, await gunzip(await hit.arrayBuffer()));
@@ -292,12 +293,13 @@ export async function fetchStageLocal(
 export function fetchPack(
   manifest: PackManifest,
   onProgress?: (p: PackProgress) => void,
-  opts: { needText?: boolean } = {},
+  opts: { needText?: boolean; also?: (f: PackFile) => boolean } = {},
 ): Promise<Map<string, Uint8Array>> {
+  const also = opts.also ?? (() => false);
   return fetchFiles(
     manifest.version,
     manifest.files.filter(
-      (f) => f.stage === "text" && (opts.needText !== false || f.role !== "corpusCache"),
+      (f) => (f.stage === "text" && (opts.needText !== false || f.role !== "corpusCache")) || also(f),
     ),
     onProgress,
   );
@@ -334,6 +336,13 @@ export function fetchRndPack(
  * home's install marker — NOT whether the bytes happen to be in the depot,
  * which prune is free to reclaim.
  *
+ * `has` is asked PER FILE rather than once for the whole stage. It was a single
+ * boolean while the suggested weaves were the only optional entry; the German
+ * corpus made that wrong, because a reader can easily have one and not the
+ * other, and either answer would have been a lie about half the set — the pin
+ * naming a file that is absent, or the update sweep silently pushing a German
+ * Bible onto a device that never asked for it.
+ *
  * Two things read this and they must not disagree. The update sweep fetches
  * exactly this set, so a deploy never pushes an optional file onto a device
  * that declined it. And the PIN names exactly this set, because the pin's
@@ -342,12 +351,51 @@ export function fetchRndPack(
  * what the pin names, would be asked to preserve something that was never
  * there.
  */
-export function devicePackFiles(manifest: PackManifest, hasOptional: boolean): PackFile[] {
-  return manifest.files.filter((f) => f.stage !== "optional" || hasOptional);
+/** Whether an optional pack file is one THIS home has asked for.
+ *
+ *  Keyed on `role`, so a new optional entry has to be named here to count —
+ *  which is the failure mode worth designing for: an unnamed optional file
+ *  defaults to "not ours", so it is never pinned as present and never swept onto
+ *  a device that declined it. The alternative default would put a download the
+ *  reader never approved on the update path.
+ *
+ *  The home is passed structurally rather than as `VirtualHome` so `pack.ts`
+ *  stays free of a `home.ts` import — they already point the other way. */
+export function hasOptional(
+  home: { suggestedInstalled: boolean; germanInstalled: boolean },
+  f: PackFile,
+): boolean {
+  if (f.role === "suggestedWeaves") return home.suggestedInstalled;
+  if (f.role === "germanCorpus") return home.germanInstalled;
+  return false;
+}
+
+export function devicePackFiles(manifest: PackManifest, has: (f: PackFile) => boolean): PackFile[] {
+  return manifest.files.filter((f) => f.stage !== "optional" || has(f));
 }
 
 export function suggestedWeavesEntry(manifest: PackManifest): PackFile | null {
   return manifest.files.find((f) => f.role === "suggestedWeaves") ?? null;
+}
+
+/** The German corpus cache, and ONLY when the reader has picked German.
+ *
+ *  Found by role for the same reason as the bundle above. Null when this pack
+ *  has none, which a shell reads as "German scripture is not on offer in this
+ *  build" — the interface is still German, over the English text, because
+ *  `corpus_for` in crates/ffi falls back rather than failing. */
+export function germanCorpusEntry(manifest: PackManifest): PackFile | null {
+  return manifest.files.find((f) => f.role === "germanCorpus") ?? null;
+}
+
+export async function fetchGermanCorpus(
+  manifest: PackManifest,
+  onProgress?: (p: PackProgress) => void,
+): Promise<Uint8Array | null> {
+  const entry = germanCorpusEntry(manifest);
+  if (!entry) return null;
+  const got = await fetchFiles(manifest.version, [entry], onProgress);
+  return got.get(entry.path) ?? null;
 }
 
 export async function fetchSuggestedWeaves(

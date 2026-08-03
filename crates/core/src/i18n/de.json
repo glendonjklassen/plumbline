@@ -397,6 +397,7 @@
   "settings.language": "Sprache",
   "settings.languageDesc": "Die Sprache der Oberfläche. Folgt Ihrem Gerät, solange Sie keine auswählen.",
   "settings.languageDevice": "Dem Gerät folgen",
+  "settings.languageDownloading": "Die deutsche Bibel wird geladen — {percent} %",
   "settings.lineSpacing": "Zeilenabstand",
   "settings.machine": "Maschinenanalyse",
   "settings.machineDesc": "Gemeinsames Vorkommen, wo ein Wort sich häuft, Leitwort.",

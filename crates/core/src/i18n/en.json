@@ -355,6 +355,7 @@
   "settings.language": "Language",
   "settings.languageDesc": "The language of the interface. Follows your device unless you pick one.",
   "settings.languageDevice": "Follow the device",
+  "settings.languageDownloading": "Downloading the German Bible — {percent}%",
   "settings.lineSpacing": "Line spacing",
   "settings.machine": "Machine analysis",
   "settings.machineDesc": "Appears-alongside, where a word concentrates, leitwort.",

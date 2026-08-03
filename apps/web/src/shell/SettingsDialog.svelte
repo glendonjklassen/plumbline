@@ -155,6 +155,9 @@
    *  `session.svelte.ts` PINS in its cache precisely because it cannot change
    *  while a session runs. Swapping the chrome and leaving "Genesis" in the
    *  passage navigator would be a half-translated app that looks like a bug. */
+  /** Progress of the German corpus download, or null when none is running. */
+  let corpusFraction = $state<number | null>(null);
+
   async function setLanguage(code: string): Promise<void> {
     if ((s.config.language ?? "") === code) return;
     s.config.language = code;
@@ -167,6 +170,24 @@
     // exercised this: every other setting here takes effect without a reload.)
     s.flushConfig();
     await s.rpc.flush();
+    // THE TEXT, not just the interface. A language with its own Bible needs it
+    // on the device, and picking the language IS the ask — a separate "download
+    // German scripture" row would be a second decision about one intention.
+    //
+    // Failure is not fatal and must not block the switch: `corpus_for` in the
+    // core falls back to the KJV, so a reader with no connection gets a German
+    // interface over the English text and can try again by re-picking. Silent
+    // beyond the bar, because the alternative is an error about a download they
+    // did not explicitly start.
+    if (code === "de") {
+      const state = await s.rpc.germanState().catch(() => null);
+      if (state?.available && !state.installed) {
+        corpusFraction = 0;
+        s.rpc.onGermanProgress = (f) => (corpusFraction = f);
+        await s.rpc.installGerman().catch(() => false);
+        corpusFraction = null;
+      }
+    }
     location.reload();
   }
 
@@ -478,6 +499,11 @@
         />
         {t("settings.languageDevice")}
       </label>
+      {#if corpusFraction !== null}
+        <!-- The one place a language change can take real time. Shown as a bar
+             rather than a spinner because it is ~2.4 MB. -->
+        <p class="desc-note">{t("settings.languageDownloading", { percent: Math.round(corpusFraction * 100) })}</p>
+      {/if}
       {#each languages() as l (l.code)}
         <label class="radio">
           <input

@@ -742,9 +742,19 @@ carries `lang`, stamped at CREATE and never on re-save. Nothing reads it: it is
 what makes the versification migration runnable later. Absent means "unknown",
 not English — see I18N.md.
 
-**Not a language feature: the Bible text.** A German Bible is a second corpus
-with its own tokenization stamp, not a string table. See I18N.md on
-versification.
+**The German Bible** (2026-08-03, both shells). Luther 1912, public domain, its
+own tokenization stamp `luther1912-tok1`, AT THE KJV'S OWN VERSE ADDRESSES — the
+source was already mapped to KJV numbering, so `refKey` means one verse in both
+and no migration exists. `corpus_for`/`open_corpus` in crates/ffi choose the
+text, and the language must be set BEFORE the engine opens because that is when
+the choice is made. Strong's, morphology and the plain-English overlay are
+withheld from it: they are keyed by token index against the KJV's tokenization.
+
+**SHELL DELTA — delivery.** Android BUNDLES the German corpus in the APK
+(~1.8 MB, marker `.data-v4`); the web fetches it on demand as `stage: "optional"`
+(2.4 MB gz) when the reader picks German, because nothing on the web is bundled
+and an English reader must not download a German Bible. Same split as the
+hymnal.
 
 ## Hymnal (2026-08-02, both shells)
 

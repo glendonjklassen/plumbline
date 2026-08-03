@@ -35,11 +35,13 @@ const EXPECTED_ASSETS: &[&str] = &[
     "hymnal.json",
     "kjv-notes.jsonl",
     "kjv.jsonl",
+    // The v4 addition: the German corpus.
+    "luther1912.jsonl",
     "strongs.json",
 ];
 
 /// The marker the CURRENT asset set is paired with.
-const EXPECTED_MARKER: &str = ".data-v3";
+const EXPECTED_MARKER: &str = ".data-v4";
 
 #[test]
 fn bundled_data_marker_is_bumped_for_the_current_asset_set() {
@@ -48,13 +50,16 @@ fn bundled_data_marker_is_bumped_for_the_current_asset_set() {
     let kt = std::fs::read_to_string(repo().join("apps/android/app/src/main/java/dev/plumbline/MainActivity.kt"))
         .expect("MainActivity.kt is readable");
 
-    // The include(...) line that names the bundled data files.
-    let line = gradle
-        .lines()
-        .find(|l| l.contains("include(") && l.contains("kjv.jsonl"))
-        .expect("build.gradle.kts still has an include() naming the bundled data");
+    // The `syncData` block's include(...), which may span lines — it grew a file
+    // per line when the German corpus was added, and this test used to look at a
+    // single line and simply stop finding it.
+    let sync = gradle.split("syncData").nth(1).expect("build.gradle.kts still has a syncData task");
+    let open = sync.find("include(").expect("syncData still has an include() naming the bundled data");
+    let close = sync[open..].find(')').map(|i| open + i).expect("the include( is closed");
+    let listing = &sync[open..close];
+    assert!(listing.contains("kjv.jsonl"), "the syncData include() no longer names the corpus:\n{listing}");
     let mut listed: Vec<String> =
-        line.split('"').filter(|p| p.contains('.') && !p.contains('(')).map(str::to_string).collect();
+        listing.split('"').filter(|p| p.contains('.') && !p.contains('(')).map(str::to_string).collect();
     listed.sort();
     listed.dedup();
 

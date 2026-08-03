@@ -60,8 +60,9 @@ async function pick(page: Page, now: Record<string, string>, want: string): Prom
   const dialog = page.locator('[data-surface="settings"]');
   await expect(dialog).toBeVisible();
   await dialog.getByRole("radio", { name: want, exact: true }).check();
-  // The picker reloads (book names come from the TOC, not the string table).
-  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+  // Picking German downloads a 2.4 MB corpus before it reloads, so this waits
+  // longer than a settings change normally would.
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 120_000 });
 }
 
 test.describe("a German device", () => {
@@ -118,10 +119,44 @@ test.describe("an English device", () => {
     await expect(nav).not.toContainText("Revelation");
     await nav.getByLabel(DE["common.close"]).click();
 
+    // THE TEXT ITSELF, which is the other half of picking a language and the
+    // half that needed a 2.4 MB download to get here. Asked of the engine rather
+    // than read off the screen: the reader is a canvas.
+    const verse = await page.evaluate(async () => {
+      const s = (window as any).__plumbline;
+      return (await s.rpc.call("verse", "John 3:16"))?.body ?? "";
+    });
+    expect(verse, `John 3:16 is not German: ${verse}`).toContain("Gott");
+    expect(verse, "John 3:16 came back in English").not.toContain("God so loved");
+
     // Again with the document thrown away: the setting lives in the config, not
-    // in this page.
+    // in this page — and neither does the corpus, which is in the depot.
     await page.goto("about:blank");
     await reader(page, DE);
     await expect(destinations(page)).toContainText(DE["nav.hymnal"]);
+    const again = await page.evaluate(async () => {
+      const s = (window as any).__plumbline;
+      return (await s.rpc.call("verse", "John 3:16"))?.body ?? "";
+    });
+    expect(again, "the German text did not survive a relaunch").toContain("Gott");
+  });
+});
+
+// MUTATION: build-web-pack.mjs — give the German corpus `stage: "text"`. Red
+// here (and check-web-pack.mjs refuses the pack outright, which is the real
+// guard; this is the behavioural half).
+test.describe("an English reader", () => {
+  test.use({ locale: "en-US" });
+
+  test("never downloads the German Bible", async ({ page }) => {
+    const asked: string[] = [];
+    page.on("request", (r) => {
+      if (r.url().includes("luther1912")) asked.push(r.url());
+    });
+    await reader(page, EN);
+    // Past first text, and past the idle work that sweeps caches and checks for
+    // updates — the sweep is the other thing that could pull an optional file.
+    await page.waitForTimeout(2500);
+    expect(asked, `an English reader fetched the German corpus: ${asked.join(", ")}`).toEqual([]);
   });
 });

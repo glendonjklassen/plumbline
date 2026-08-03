@@ -13,10 +13,12 @@ cross-references) and **Machine** (statistical patterns).
 Everything runs on your device and works offline. No account and no sign-in,
 and your data remains local and private.
 
-Available in **English and German**, on both the web and Android. It follows
-your device's language, and you can pick one under Settings. The German
-interface is machine translated for now, so expect it to read a little stiff in
-places; the Bible text itself is the King James Version and is English only.
+Available in **English and German**, on both the web and Android — interface and
+scripture. It follows your device's language, and you can pick one under
+Settings. English reads the King James Version; German reads the Luther 1912,
+both public domain. The German interface is machine translated for now, so
+expect it to read a little stiff in places. Word study (Strong's, grammar) is
+English only, because those are tied to the King James text.
 
 ![Isaiah 2 and Micah 4 open side by side, joined by weave connector lines,
 with the study panel on "treasures" — Strong's H214, its morphology, every

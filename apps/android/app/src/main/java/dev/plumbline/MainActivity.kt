@@ -130,7 +130,8 @@ class MainActivity : ComponentActivity() {
                     // described this exact failure and it happened anyway, so
                     // `bundledDataMarkerIsBumpedForTheCurrentAssetSet` in
                     // MainActivityTest now fails the build instead.
-                    val corpus = File(home, ".data-v3")
+                    // v4: luther1912.jsonl, the German corpus (2026-08-03).
+                    val corpus = File(home, ".data-v4")
                     if (!corpus.exists()) {
                         copyAsset("data", File(home, "data"), buf = buf)
                         if ((assets.list("bridge")?.size ?: 0) > 0) {

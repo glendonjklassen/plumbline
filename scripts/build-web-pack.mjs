@@ -50,8 +50,9 @@ const STOCK = join(repo, "apps/android/app/src/main/assets/stock");
 //              bridge witnesses. Fetched right after the reader hands over.
 //   analysis — the machine tier. Background, and deferred behind an explicit
 //              action on phones.
-//   optional — never fetched unless the reader asks for it in Settings. Today
-//              that is the suggested-weave bundle (see the bottom of this file).
+//   optional — never fetched unless the reader asks for it: the suggested-weave
+//              bundle, and the German corpus (a reader picking German is the
+//              ask). Both are at the bottom of this file.
 //
 // Anything under data/ or bridge/ not named here defaults to `study`, which is
 // the safe default: it loads, just not on the boot path.
@@ -96,6 +97,10 @@ const AKJV_PACKED = "akjv.akjvb";
 // web that is a boot that hangs for seconds and then blows the storage budget.
 // The cache is the text now; the JSONL stays a data-prep input.
 const KJV_TEXT = "kjv.jsonl";
+// Same argument, same file for the other text. Missing it meant every English
+// reader fetched 1.8 MB of German JSONL from the generic `data/` walk below —
+// found by e2e/language.spec.ts, which watches for exactly that request.
+const GERMAN_TEXT = "luther1912.jsonl";
 
 // (srcDir, homeDir, filter, seedOnce) tuples for the home shipped to the browser.
 const SOURCES = [
@@ -105,6 +110,7 @@ const SOURCES = [
     (n) =>
       !n.endsWith(".idxcache") &&
       n !== KJV_TEXT &&
+      n !== GERMAN_TEXT &&
       !n.startsWith(VEC_PREFIX) &&
       n !== MORPH_TEXT &&
       n !== MORPH_PACKED &&
@@ -197,6 +203,33 @@ rmSync(cacheTmp, { force: true });
 // is stage-1 — it is the one file whose presence decides whether the engine
 // takes the fast open or parses the JSONL that is no longer shipped.
 emit("data", "kjv.jsonl.idxcache", cacheRaw, { stage: "text", role: "corpusCache" });
+
+// ── the German corpus: the same cache, for the other text ────────────────────
+//
+// OPTIONAL, and that is the whole delivery decision. Android bundles this file
+// in the APK, where 1.8 MB compressed is nothing; on the web nothing is ever
+// bundled, so the only question is which stage — and an English reader must not
+// download a German Bible to read Genesis. It is fetched when the reader picks
+// German (see the loader), and until it lands `corpus_for` in crates/ffi opens
+// the KJV instead, so the app is never without a text.
+//
+// `role` rather than a filename match, for the corpus cache's reason: the loader
+// has to be able to FIND it. Its own role, not `corpusCache`, because the stage-1
+// boot must keep taking the English one — a second file claiming that role would
+// make which text opens depend on manifest order.
+const germanSrc = join(repo, "data/luther1912.jsonl");
+if (existsSync(germanSrc)) {
+  const germanTmp = join(tmpdir(), `plumbline-idxcache-de-${process.pid}`);
+  execFileSync(
+    "cargo",
+    ["run", "--release", "--locked", "-q", "-p", "plumbline-hydrate", "--", "web-cache",
+     "--data", germanSrc, "--out", germanTmp],
+    { cwd: repo, stdio: ["ignore", "inherit", "inherit"] },
+  );
+  const germanRaw = readFileSync(germanTmp);
+  rmSync(germanTmp, { force: true });
+  emit("data", "luther1912.jsonl.idxcache", germanRaw, { stage: "optional", role: "germanCorpus" });
+}
 
 // ── the suggested weaves: one bundle, downloaded only if asked for ───────────
 //
