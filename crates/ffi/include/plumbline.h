@@ -801,6 +801,28 @@ char *plumbline_engine_user_note_set(struct PlumblineEngine *engine,
 // `theme` is null or valid NUL-terminated UTF-8 for the call.
 char *plumbline_theme_palette_json(const char *theme);
 
+// EVERY user-visible string, for one language, in ONE call:
+// `{"lang","strings":{id: text, …},"languages":[{"code","endonym"}]}`.
+//
+// The whole catalogue at once, deliberately. A shell asks at startup and holds
+// the map; a call per string would be thousands of round trips across the wasm
+// boundary to render one screen.
+//
+// `lang` is a code, tolerating a region tag — a browser reporting `de-CH` gets
+// German. Anything unrecognised is English, so a reader with an unsupported
+// locale gets a working app rather than an error. Strings absent from the
+// requested language fall back to English key by key, so every id resolves.
+//
+// `languages` rides along because a language picker needs the list, each
+// labelled in ITSELF — someone looking for German is looking for "Deutsch".
+//
+// Engine-independent: the shells need their chrome before an engine exists.
+// Never null.
+//
+// # Safety
+// `lang` is null or valid NUL-terminated UTF-8 for the call.
+char *plumbline_i18n_catalog_json(const char *lang);
+
 // Force the lazy analytics indexes (concept engine, leitwort scan) to build
 // now — call once on a background thread at startup in Full mode so the first
 // study click doesn't stall. Safe to call from any thread (the builds are

@@ -174,6 +174,14 @@ internal interface PlumblineNative : Library {
     // ── theme palettes (engine-independent) ─────────────────────────────────
     fun plumbline_theme_palette_json(theme: String?): Pointer?
 
+    // ── every user-visible string, one language at a time ───────────────────
+    /** `{lang, strings:{id: text}, languages:[{code, endonym}]}`. The WHOLE
+     *  catalogue in one call — a call per string would be thousands of trips
+     *  across the boundary to draw one screen. A region tag is tolerated
+     *  (`de-CH` → German) and anything unknown is English, so an unsupported
+     *  locale still gets a working app. Engine-independent; never null. */
+    fun plumbline_i18n_catalog_json(lang: String?): Pointer?
+
     // ── the share link + the church it carries (engine-independent) ─────────
     /** `{base?, church?, startAsNewBeliever?, at?}` in, `{url, base, church,
      *  hasChurch, title, siteUrl}` out. Null only on malformed JSON. */

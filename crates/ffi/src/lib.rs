@@ -65,7 +65,7 @@ use plumbline_core::strongs::{self, OccurrenceIx, StrongsDict};
 use plumbline_core::tag::{self, LoadedTag, TagTarget};
 use plumbline_core::thread::{self, LoadedThread, ThreadEntry};
 use plumbline_core::weave::{self, Link, LoadedWeave, WeaveKind};
-use plumbline_core::{canon, export, hymnal, notes, theme, usernote, VRef};
+use plumbline_core::{canon, export, hymnal, i18n, notes, theme, usernote, VRef};
 use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure, MeasureMemo, Memoized};
 use plumbline_rnd::{bridge, burst, concept, morph};
 
@@ -3296,6 +3296,34 @@ pub unsafe extern "C" fn plumbline_theme_palette_json(theme: *const c_char) -> *
     guard(ptr::null_mut(), || {
         let t = opt_str(theme).and_then(theme::Theme::parse).unwrap_or(theme::Theme::Light);
         out_json(&theme::palette(t))
+    })
+}
+
+/// EVERY user-visible string, for one language, in ONE call:
+/// `{"lang","strings":{id: text, …},"languages":[{"code","endonym"}]}`.
+///
+/// The whole catalogue at once, deliberately. A shell asks at startup and holds
+/// the map; a call per string would be thousands of round trips across the wasm
+/// boundary to render one screen.
+///
+/// `lang` is a code, tolerating a region tag — a browser reporting `de-CH` gets
+/// German. Anything unrecognised is English, so a reader with an unsupported
+/// locale gets a working app rather than an error. Strings absent from the
+/// requested language fall back to English key by key, so every id resolves.
+///
+/// `languages` rides along because a language picker needs the list, each
+/// labelled in ITSELF — someone looking for German is looking for "Deutsch".
+///
+/// Engine-independent: the shells need their chrome before an engine exists.
+/// Never null.
+///
+/// # Safety
+/// `lang` is null or valid NUL-terminated UTF-8 for the call.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_i18n_catalog_json(lang: *const c_char) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let l = i18n::Lang::parse(opt_str(lang).unwrap_or("en"));
+        out_json(&wire::catalog_to_wire(l))
     })
 }
 

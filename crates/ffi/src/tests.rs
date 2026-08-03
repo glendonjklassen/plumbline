@@ -8,7 +8,7 @@ use super::*;
 // was already past the no-3k-line rule); `use super::*` does not reach into it.
 use crate::reading_map::*;
 use serde_json::Value;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 
 const KJV: &str = concat!(
     r#"{"format":"x","tokenization":"kjv1769-tok2","verses":2}"#,
@@ -2514,5 +2514,44 @@ fn hymnal_arriving_after_open_is_not_cached_empty() {
 
         plumbline_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
+#[test]
+fn the_catalogue_crosses_the_abi_whole_and_falls_back_to_english() {
+    unsafe {
+        // Engine-independent: the shells need their chrome before an engine
+        // exists, and this is the call they make at startup.
+        let en: Value = serde_json::from_str(&take(plumbline_i18n_catalog_json(c"en".as_ptr())).unwrap()).unwrap();
+        assert_eq!(en["lang"], "en");
+        let strings = en["strings"].as_object().unwrap();
+        assert!(strings.len() > 20, "the English catalogue looks empty: {} keys", strings.len());
+        assert_eq!(strings["nav.read"], "Read");
+
+        // A picker needs every language labelled in ITSELF.
+        let langs = en["languages"].as_array().unwrap();
+        assert!(langs.iter().any(|l| l["code"] == "en" && l["endonym"] == "English"));
+        assert!(langs.iter().any(|l| l["code"] == "de" && l["endonym"] == "Deutsch"));
+
+        // German resolves to German and answers EVERY English key, translated
+        // or not — a shell must never meet a missing id.
+        let de: Value = serde_json::from_str(&take(plumbline_i18n_catalog_json(c"de".as_ptr())).unwrap()).unwrap();
+        assert_eq!(de["lang"], "de");
+        let de_strings = de["strings"].as_object().unwrap();
+        for k in strings.keys() {
+            assert!(de_strings.contains_key(k), "the German catalogue is missing {k}");
+        }
+
+        // A region tag is still that language; anything unknown is English
+        // rather than an error, so an unsupported locale gets a working app.
+        for (asked, want) in [("de-CH", "de"), ("de_AT", "de"), ("en-GB", "en"), ("fr", "en"), ("", "en")] {
+            let cs = CString::new(asked).unwrap();
+            let got: Value = serde_json::from_str(&take(plumbline_i18n_catalog_json(cs.as_ptr())).unwrap()).unwrap();
+            assert_eq!(got["lang"], want, "{asked:?} should resolve to {want}");
+        }
+
+        // Null is not a crash and not null — it is English.
+        let none: Value = serde_json::from_str(&take(plumbline_i18n_catalog_json(ptr::null())).unwrap()).unwrap();
+        assert_eq!(none["lang"], "en");
     }
 }
