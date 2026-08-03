@@ -706,7 +706,7 @@ the web lists **Suggested** as its own seventh card (`ExploreScreen.svelte`);
 Android folds it into one Weaves screen with an All/Suggested filter
 (`WeavesScreen`).
 
-## Languages (2026-08-02) — WEB ONLY so far
+## Languages (2026-08-02, both shells)
 
 Full detail in [I18N.md](I18N.md). The contract, in one place:
 
@@ -723,19 +723,28 @@ English and German ship. `config.language` holds the choice; empty is the
 device's. `refKey` does not move under any language — `VRef::ref_key` is frozen
 storage, `VRef::display` is what localizes ("Joh 3,16", with a comma).
 
-**SHELL DELTA.** The web shell is done: every string, a picker in Settings, and
-`scripts/check-i18n.mjs` failing the build on a stray literal. **Android is
-still English** — ~333 literals and a picker to go. Its Kotlin binding already
-carries both ABI calls.
+Both shells are done: every string, a picker in Settings, and
+`scripts/check-i18n.mjs` failing the build on a stray literal in either. The web
+reloads to apply a language change and Android recreates its activity — same
+reason, which is that the table of contents is built once when the engine opens.
+
+**SHELL DELTA.** `settings.bundledReloads` is web-only: the web reloads to apply
+the bundled study set and Android does not. It is the ONLY copy difference left
+between the shells — extracting Android turned up eleven others that were pure
+drift and are now one wording each.
 
 **SHELL DELTA.** The welcome pages are English in both shells on purpose: they
 are the maintainer's own first-person writing, and a machine draft of that is
 not a translation. `ENGLISH_ONLY` in `i18n.rs` is the list.
 
+**Provenance.** Every user-authored file (note, thread, tag, weave, memory card)
+carries `lang`, stamped at CREATE and never on re-save. Nothing reads it: it is
+what makes the versification migration runnable later. Absent means "unknown",
+not English — see I18N.md.
+
 **Not a language feature: the Bible text.** A German Bible is a second corpus
 with its own tokenization stamp, not a string table. See I18N.md on
-versification, which is the part that has to be got right before content written
-against a German numbering can ever be migrated.
+versification.
 
 ## Hymnal (2026-08-02, both shells)
 
