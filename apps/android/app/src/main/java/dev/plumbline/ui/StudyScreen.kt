@@ -148,6 +148,7 @@ fun PlumblineApp(
     fold: FoldingFeature?,
     bundledOn: Boolean = true,
     onToggleBundled: () -> Unit = {},
+    onLanguage: (String) -> Unit = {},
 ) {
     // The reader's theme choice, persisted in the shared config
     // ("system" | "light" | "dark" | "night"); System follows the OS.
@@ -179,6 +180,7 @@ fun StudyScreen(
     onThemeChoice: (String) -> Unit = {},
     bundledOn: Boolean = true,
     onToggleBundled: () -> Unit = {},
+    onLanguage: (String) -> Unit = {},
 ) {
     val toc = remember {
         runCatching { parseWire<Toc>(engine.TocJson()).books }.getOrElse { emptyList() }
@@ -900,6 +902,8 @@ fun StudyScreen(
                 onToggleAkjv = { akjvOverlay = !akjvOverlay },
                 presentSharesAsNew = presentSharesAsNew,
                 onPresentSharesAsNew = { presentSharesAsNew = !presentSharesAsNew },
+                language = loadedCfg?.language ?: "",
+                onLanguage = { showSettings = false; onLanguage(it) },
                 onDismiss = { showSettings = false; persistCfg() },
             )
         }
@@ -1544,6 +1548,19 @@ private fun HistorySheet(
 /** One Settings dialog: the per-tier analysis gates, theme, text
  *  size/margin/spacing, copy format, and the bundled study set — folded
  *  together so the overflow menu stays short. */
+/** One radio row — the shape the theme and copy-format lists already use, named
+ *  so the language picker above them does not spell it a third time. */
+@Composable
+private fun SettingRadio(label: String, selected: Boolean, palette: ReaderPalette, onPick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onPick).padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = onPick)
+        Text(label, color = palette.ink)
+    }
+}
+
 @Composable
 private fun SettingsDialog(
     palette: ReaderPalette,
@@ -1570,6 +1587,8 @@ private fun SettingsDialog(
     onChurch: (ChurchState) -> Unit,
     presentSharesAsNew: Boolean,
     onPresentSharesAsNew: () -> Unit,
+    language: String,
+    onLanguage: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     // The three reader-pref sliders are DRAFTED. Text size, margin and line
@@ -1599,6 +1618,23 @@ private fun SettingsDialog(
         title = { Text(t("settings.title")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
+                // FIRST, above everything: it decides what the rest of this
+                // dialog is written in, and a reader who cannot read the labels
+                // should not have to scroll past twenty of them to find it.
+                Text(t("settings.language"), color = palette.faded, fontSize = 12.sp)
+                Text(
+                    t("settings.languageDesc"),
+                    color = palette.faded, fontSize = 13.sp,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
+                )
+                // "" is "follow the device" — see ConfigState.language. The rest
+                // are ENDONYMS, always: someone looking for German is looking for
+                // "Deutsch", on a screen they may not be able to read.
+                SettingRadio(t("settings.languageDevice"), language.isEmpty(), palette) { onLanguage("") }
+                for (l in Strings.languages) {
+                    SettingRadio(l.endonym, language == l.code, palette) { onLanguage(l.code) }
+                }
+                HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 10.dp))
                 // The text is always on; each analysis tier switches off on its
                 // own (the old all-or-nothing Full study switch is gone).
                 SettingToggle(
@@ -1650,6 +1686,9 @@ private fun SettingsDialog(
                 // column, so any preview of it here would be a made-up scale. It
                 // lands when the finger lifts, like the pane's own layout.)
                 Text(
+                    // A TYPE SPECIMEN, not copy: it shows the reader what the size
+                    // and spacing they are dragging look like, and the letters are
+                    // the point. i18n-ignore: specimen
                     "Aa\nAa",
                     fontSize = bodyDraft.value.sp,
                     lineHeight = (bodyDraft.value * spacingDraft.value).sp,

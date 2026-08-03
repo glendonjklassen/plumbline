@@ -6,6 +6,7 @@
 
 export const BOOT_STRINGS: Record<string, Record<string, string>> = {
   de: {
+    "boot.couldNotOpen": "Der Korpus konnte nicht geöffnet werden",
     "boot.details": "Technische Details",
     "boot.dismiss": "Ausblenden",
     "boot.error.corpus": "Plumbline konnte die Bibeldaten auf diesem Gerät nicht lesen. Beim Neuladen wird nachgeladen, was fehlt.",
@@ -24,9 +25,11 @@ export const BOOT_STRINGS: Record<string, Record<string, string>> = {
     "boot.phase.warm": "Die Analysen werden aufgebaut…",
     "boot.reload": "Neu laden",
     "boot.retry": "Erneut versuchen",
+    "boot.startupFailed": "Start fehlgeschlagen: {why}",
     "boot.tagline": "Die Heilige Schrift"
   },
   en: {
+    "boot.couldNotOpen": "could not open corpus",
     "boot.details": "Technical details",
     "boot.dismiss": "Dismiss",
     "boot.error.corpus": "Plumbline could not read the scripture data on this device. Reloading re-downloads what is missing.",
@@ -45,6 +48,7 @@ export const BOOT_STRINGS: Record<string, Record<string, string>> = {
     "boot.phase.warm": "Building the analytics…",
     "boot.reload": "Reload",
     "boot.retry": "Retry",
+    "boot.startupFailed": "Startup failed: {why}",
     "boot.tagline": "The Holy Bible"
   },
 };

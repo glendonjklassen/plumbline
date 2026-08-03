@@ -105,7 +105,7 @@ fun TagWeaveSheet(
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             )
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${checked.size} of ${members.size} passages", color = palette.inkFaded, fontSize = 12.5.sp)
+                Text(t("weave.chosen", "n" to checked.size, "total" to members.size), color = palette.inkFaded, fontSize = 12.5.sp)
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onDone) { Text(t("common.cancel")) }
                 TextButton(

@@ -231,7 +231,7 @@ fun MemorizeList(
                                 )
                             }
                             if (v.due) {
-                                Text("due", color = palette.gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(t("memorize.due"), color = palette.gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                         HorizontalDivider(color = palette.rule)
@@ -618,7 +618,7 @@ fun MemorizeActivity(engine: StudyEngine, palette: ReaderPalette, onClose: () ->
                         ) {
                             Text(prettyDay(d.day), color = palette.ink, fontSize = 15.sp, modifier = Modifier.weight(1f))
                             Text(
-                                "${d.reviews} review${if (d.reviews == 1) "" else "s"}",
+                                Strings.plural("memorize.reviews.one", "memorize.reviews.other", d.reviews),
                                 color = palette.gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                             )
                         }

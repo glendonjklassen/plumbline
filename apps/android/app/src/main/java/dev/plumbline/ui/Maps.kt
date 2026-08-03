@@ -314,8 +314,8 @@ fun Constellation(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            TextButton(onClick = { if (page > 0) page -= 1 }) { Text("‹ prev", color = palette.ink) }
-            TextButton(onClick = { page += 1 }) { Text("next ›", color = palette.ink) }
+            TextButton(onClick = { if (page > 0) page -= 1 }) { Text(t("map.prev"), color = palette.ink) }
+            TextButton(onClick = { page += 1 }) { Text(t("map.next"), color = palette.ink) }
             Text(model?.caption ?: "", color = palette.faded, fontSize = 12.sp)
         }
 

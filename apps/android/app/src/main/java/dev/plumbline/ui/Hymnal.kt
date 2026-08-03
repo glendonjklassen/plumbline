@@ -166,7 +166,7 @@ fun HymnalScreen(
             HymnIndex(index, filter, { filter = it }, wantLang, palette) { openId = it; semis = 0 }
         } else if (text == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("— loading —", color = palette.faded)
+                Text(t("hymnal.loadingOne"), color = palette.faded)
             }
         } else {
             HymnBody(open, text, chords, palette)

@@ -142,7 +142,7 @@ fun ShareAppDialog(
             if (share.hasChurch) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "with ${share.church.name}",
+                    t("share.with", "church" to share.church.name),
                     color = Color(0xFF101010), fontSize = 13.sp, fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
                 )

@@ -196,7 +196,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val e = engine
             when {
-                e != null -> PlumblineApp(e, fold, bundledOn, ::toggleBundled)
+                e != null -> PlumblineApp(e, fold, bundledOn, ::toggleBundled, ::setLanguage)
                 loadError != null -> ErrorScreen(loadError!!)
                 else -> LoadingScreen()
             }
@@ -289,6 +289,32 @@ class MainActivity : ComponentActivity() {
      *  Turning it OFF says how many of the reader's own edits it kept, because a
      *  toggle that silently leaves files behind is as confusing as one that
      *  silently deletes them. */
+    /**
+     * The reader picked a language.
+     *
+     * RECREATES THE ACTIVITY, which is this shell's version of the web's reload,
+     * and for the same reason: the string table alone would repaint on the spot,
+     * but book names come from the table of contents, which the engine builds
+     * once at open. A German menu over an English passage navigator reads as a
+     * bug, not as a setting.
+     *
+     * The write is AWAITED before the recreate. `persistCfg` in StudyScreen
+     * fires and forgets, which is right for a slider and wrong here: the same
+     * race on the web meant a reader picked German, watched the app reload, and
+     * got English back (e2e/language.spec.ts).
+     */
+    private fun setLanguage(code: String) {
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val cfg = parseWire<ConfigState>(StudyConfig.LoadJson()).copy(language = code)
+                    StudyConfig.SaveJson(PlumblineJson.encodeToString(ConfigState.serializer(), cfg))
+                }
+            }
+            recreate()
+        }
+    }
+
     private fun toggleBundled() {
         val home = filesDir
         bundledOn = !bundledOn
@@ -310,7 +336,7 @@ class MainActivity : ComponentActivity() {
                 kept > 0 -> Strings.plural("settings.bundledOffKept.one", "settings.bundledOffKept.other", kept)
                 else -> t("settings.bundledOff")
             }
-            Toast.makeText(this@MainActivity, "$what — restart to apply", Toast.LENGTH_LONG).show()
+            Toast.makeText(this@MainActivity, t("settings.restartToApply", "what" to what), Toast.LENGTH_LONG).show()
         }
     }
 

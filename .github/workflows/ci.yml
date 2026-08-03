@@ -155,6 +155,21 @@ jobs:
             exit 1
           fi
 
+  # Every user-visible string in BOTH shells comes from crates/core/src/i18n —
+  # see docs/I18N.md. Its own job rather than a step inside the web build,
+  # because it also reads the Kotlin shell, and because a stray literal should
+  # fail fast rather than after a wasm compile and a browser download.
+  i18n:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: No user-visible strings outside the catalogue
+        run: node scripts/check-i18n.mjs
+
   # Build the web shell end to end and run its Playwright suite — boots the
   # real engine (wasm) in a real browser: boot, stock seeding, menu
   # responsiveness (freeze regression), word study, search, themes, the

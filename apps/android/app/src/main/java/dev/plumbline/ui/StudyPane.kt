@@ -129,7 +129,7 @@ fun StudyPane(
                 if (loading) {
                     SlotItem {
                         Text(
-                            "— loading —",
+                            t("panel.loading"),
                             color = palette.faded,
                             fontStyle = FontStyle.Italic,
                             fontSize = (14 * scale).sp,

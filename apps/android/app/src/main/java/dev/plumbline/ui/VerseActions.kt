@@ -547,7 +547,7 @@ private fun PassageEndPicker(
         onDismissRequest = onCancel,
         title = {
             Text(
-                "Memorize " + startDisplay + (picked?.let { "–$it" } ?: ""),
+                t("memorize.passageTo", "passage" to startDisplay + (picked?.let { "–$it" } ?: "")),
                 color = palette.ink,
             )
         },
@@ -555,8 +555,7 @@ private fun PassageEndPicker(
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 if (ends.isEmpty()) {
                     Text(
-                        "$startDisplay is the last verse of its chapter — a passage has to end " +
-                            t("memorize.passageEndHint"),
+                        t("memorize.lastVerse", "passage" to startDisplay),
                         color = palette.inkFaded, fontSize = 13.sp,
                     )
                 } else {
@@ -693,7 +692,7 @@ fun TagPickerSheet(
                     ) {
                         Text(t.name, color = palette.ink, fontSize = 16.sp, modifier = Modifier.weight(1f))
                         Text(
-                            "${t.members.size} verse${if (t.members.size == 1) "" else "s"}",
+                            Strings.plural("memorize.verses.one", "memorize.verses.other", t.members.size),
                             color = palette.faded, fontSize = 12.sp,
                         )
                     }
@@ -873,7 +872,7 @@ fun ThreadPickerSheet(
                     ) {
                         Text(t.name, color = palette.ink, fontSize = 16.sp, modifier = Modifier.weight(1f))
                         Text(
-                            "${t.entries.size} passage${if (t.entries.size == 1) "" else "s"}",
+                            Strings.plural("present.passages.one", "present.passages.other", t.entries.size),
                             color = palette.faded, fontSize = 12.sp,
                         )
                         Text(
@@ -887,7 +886,7 @@ fun ThreadPickerSheet(
                 }
                 if (list.isEmpty()) {
                     Text(
-                        "No threads yet — name your first below.",
+                        t("thread.empty"),
                         color = palette.faded, fontSize = 14.sp,
                         modifier = Modifier.padding(vertical = 12.dp),
                     )
@@ -896,7 +895,7 @@ fun ThreadPickerSheet(
 
             HorizontalDivider(color = palette.rule)
             if (!newMode) {
-                ActionRow("New thread…", palette.ink) { newMode = true }
+                ActionRow(t("thread.new"), palette.ink) { newMode = true }
             } else {
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -906,7 +905,7 @@ fun ThreadPickerSheet(
                     OutlinedTextField(
                         value = newName,
                         onValueChange = { newName = it },
-                        placeholder = { Text("Thread name") },
+                        placeholder = { Text(t("thread.name")) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )

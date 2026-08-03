@@ -309,7 +309,7 @@ private fun PresentPicker(
                         Text(t.name, color = palette.ink, fontSize = 22.sp, fontFamily = serif, fontWeight = FontWeight.Bold)
                         val first = t.entries.firstOrNull()?.display
                         Text(
-                            "${t.entries.size} passage${if (t.entries.size == 1) "" else "s"}" +
+                            Strings.plural("present.passages.one", "present.passages.other", t.entries.size) +
                                 (first?.let { " · begins at $it" } ?: ""),
                             color = palette.faded, fontSize = 13.sp,
                             modifier = Modifier.padding(top = 3.dp),

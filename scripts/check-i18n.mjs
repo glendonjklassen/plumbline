@@ -29,6 +29,15 @@
 // allowlist became the file. The property names below are the narrow exception:
 // they are what a UI table calls its human-readable column, and nothing else.
 //
+// ── Kotlin ───────────────────────────────────────────────────────────────────
+//
+// Compose has no markup/script split, so there is nothing as cheap as a text
+// node to look at. What it has instead is a small set of places a sentence can
+// legally sit: the argument to `Text(...)`, a `contentDescription`, a
+// `placeholder`/`label` lambda, and a `Toast`. Those are checked; a bare string
+// anywhere else in Kotlin is not, for the same reason it is not in a `<script>`
+// — most strings there are keys, ids and paths.
+//
 // ── Escape hatch ─────────────────────────────────────────────────────────────
 //
 // `<!-- i18n-ignore: why -->` on the line before, or `// i18n-ignore: why` for a
@@ -48,9 +57,16 @@ import { dirname, join, relative } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const WEB = join(root, "apps/web/src");
+const ANDROID = join(root, "apps/android/app/src/main/java/dev/plumbline");
 
-/** Text that is not language: symbols, punctuation, numbers, single glyphs. */
-const NOT_WORDS = /^[^\p{L}]*$/u;
+/** Text that is not language: symbols, punctuation, numbers, single glyphs.
+ *
+ *  Interpolations are stripped before the test, so `"$name $chapter"` and
+ *  `"${i + 1}"` are correctly seen as holding no words of their own. The
+ *  variables' CONTENTS are somebody else's problem — and usually the engine's,
+ *  which already hands back a localized book name. */
+const words = (s) => s.replace(/\$\{[^}]*\}|\$\w+/g, "");
+const NOT_WORDS = (s) => /^[^\p{L}]*$/u.test(words(s));
 
 /**
  * Words that are the same in every language we ship, and are not copy.
@@ -150,7 +166,7 @@ for (const file of files) {
     let m;
     while ((m = re.exec(stripped))) {
       const value = m[1].trim();
-      if (!value || NOT_WORDS.test(value) || NAMES.has(value)) continue;
+      if (!value || NOT_WORDS(value) || NAMES.has(value)) continue;
       const line = src.slice(0, markupFrom + m.index).split("\n").length - 1;
       if (exempt(line)) continue;
       findings.push({ file, line: line + 1, what: `${attr}="${value}"` });
@@ -164,7 +180,7 @@ for (const file of files) {
     let hit;
     while ((hit = re.exec(script))) {
       const value = hit[1].trim();
-      if (!value || NOT_WORDS.test(value) || NAMES.has(value)) continue;
+      if (!value || NOT_WORDS(value) || NAMES.has(value)) continue;
       const line = script.slice(0, hit.index).split("\n").length - 1;
       if (exempt(line)) continue;
       findings.push({ file, line: line + 1, what: `${prop}: "${value}"` });
@@ -179,12 +195,92 @@ for (const file of files) {
   let m;
   while ((m = nodes.exec(stripped))) {
     const text = m[2].replace(/\s+/g, " ").trim();
-    if (!text || NOT_WORDS.test(text) || NAMES.has(text)) continue;
+    if (!text || NOT_WORDS(text) || NAMES.has(text)) continue;
     const line = src.slice(0, markupFrom + m.index).split("\n").length - 1;
     if (exempt(line)) continue;
     findings.push({ file, line: line + 2, what: text.slice(0, 60) });
   }
 }
+
+// ── Kotlin: the places a sentence can legally sit in Compose ─────────────────
+const kotlinFiles = [];
+(function walkKt(dir) {
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) walkKt(p);
+    else if (name.endsWith(".kt")) kotlinFiles.push(p);
+  }
+})(ANDROID);
+
+/** A literal in one of these reaches a reader. `Text(` first: it is the bulk. */
+const KOTLIN_SITES = [
+  /\bText\(\s*"((?:[^"\\]|\\.)*)"/g,
+  /\bcontentDescription\s*=\s*"((?:[^"\\]|\\.)*)"/g,
+  /\b(?:placeholder|label)\s*=\s*\{\s*Text\(\s*"((?:[^"\\]|\\.)*)"/g,
+  /\bmakeText\([^,]+,\s*"((?:[^"\\]|\\.)*)"/g,
+  // A DEFAULT PARAMETER or a NAMED ARGUMENT whose name is copy-shaped:
+  // `backLabel: String = "Back to reading"`, `title = "Weaves"`. Found by
+  // mutation-testing this checker — a literal there reaches a screen, and none
+  // of the patterns above look at a signature or a call's arguments.
+  //
+  // By NAME rather than by `: String =`, which was the first draft and was too
+  // broad: every wire-JSON default (`standing: String = "unread"`) tripped it.
+  /\b(?:backLabel|title|label|desc|hint|caption|placeholder|message|body|verb)\s*(?::\s*String\s*)?=\s*"((?:[^"\\]|\\.)*)"/g,
+];
+
+/**
+ * Files the copy-shaped-name rule skips.
+ *
+ * `Wire.kt` is the wire layer: every string in it is a protocol value with a
+ * matching `#[serde]` field on the Rust side — `"unread"`, `"verseRef"`,
+ * `"system"` — and `ShareState.title` defaults to the same English the core's
+ * `church::title` does, for a field whose real value always arrives from the
+ * engine. Nothing in it is ever painted as written.
+ */
+const KOTLIN_WIRE = /\/Wire\.kt$/;
+
+for (const file of kotlinFiles) {
+  const src = readFileSync(file, "utf8");
+  const lines = src.split("\n");
+  // Comments blanked, length-preserving: a `Text("…")` in a doc comment is
+  // documentation, and this checker had already rewritten some by hand once.
+  const code = src
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length));
+
+  for (const id of code.matchAll(/\bt\(\s*"([^"]+)"/g)) {
+    if (!(id[1] in EN)) unknown.push({ file, id: id[1], line: code.slice(0, id.index).split("\n").length });
+  }
+
+  for (const re of KOTLIN_SITES) {
+    if (KOTLIN_WIRE.test(file) && re === KOTLIN_SITES[KOTLIN_SITES.length - 1]) continue;
+    re.lastIndex = 0;
+    let hit;
+    while ((hit = re.exec(code))) {
+      const value = hit[1].trim();
+      if (!value || NOT_WORDS(value) || NAMES.has(value)) continue;
+      // The END of the match, not its start. `Text(` and its string can be lines
+      // apart, and blanked comments in between count as whitespace to `\s*` — so
+      // anchoring on the start reported the wrong line AND looked for the
+      // exemption comment above the wrong one.
+      const line = code.slice(0, hit.index + hit[0].length).split("\n").length - 1;
+      if (lines.slice(Math.max(0, line - 2), line + 1).some((l) => /i18n-ignore/.test(l))) continue;
+      findings.push({ file, line: line + 1, what: value.slice(0, 60) });
+    }
+  }
+}
+
+// Two site patterns can match the same literal — `label = { Text("x") }` is both
+// a `Text(` and a `label =`. One finding per place.
+const seen = new Set();
+const unique = findings.filter((f) => {
+  const k = `${f.file}:${f.line}:${f.what}`;
+  if (seen.has(k)) return false;
+  seen.add(k);
+  return true;
+});
+findings.length = 0;
+findings.push(...unique);
 
 if (unknown.length) {
   console.error(`\ni18n: ${unknown.length} id${unknown.length === 1 ? "" : "s"} the catalogue does not define.\n`);
@@ -206,4 +302,6 @@ if (findings.length) {
   process.exit(1);
 }
 
-console.log(`i18n: ${files.length} components, no stray user-visible strings, every id defined.`);
+console.log(
+  `i18n: ${files.length} components + ${kotlinFiles.length} Kotlin files, no stray user-visible strings, every id defined.`,
+);
