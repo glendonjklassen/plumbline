@@ -14,6 +14,7 @@
   import { nowStamp } from "../engine/StudyEngine";
   import { dispatchLink } from "../study/links";
   import ScreenBar from "../lib/ScreenBar.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   const MAX_BLANK_LEVEL = 4; // core memory::MAX_BLANK_LEVEL
 
@@ -44,13 +45,13 @@
    *  which is why it asks first. */
   async function removeCard(ref: string, label: string): Promise<void> {
     const ok = await s.askConfirm(
-      `Stop memorizing ${label}?`,
-      "Do you really want to delete this?",
-      "Remove card",
+      t("memorize.removeAsk", { label }),
+      t("memorize.removeBody"),
+      t("memorize.removeCard"),
     );
     if (!ok) return;
     const err = await s.author("memoryRemove", ref);
-    s.showToast(err ?? `Removed ${label}`);
+    s.showToast(err ?? t("memorize.removed", { label }));
   }
 
   function close(): void {
@@ -131,15 +132,19 @@
 </script>
 
 {#if view}
-  <section class="screen" aria-label="Memorize">
+  <section class="screen" aria-label={t("nav.memorize")}>
     <ScreenBar
-      title={view.view === "hub" ? "Memorize" : view.view === "review" ? "Review" : "Coverage & activity"}
+      title={view.view === "hub"
+        ? t("nav.memorize")
+        : view.view === "review"
+          ? t("memorize.review")
+          : t("memorize.stats")}
       onBack={close}
-      backLabel={view.view === "hub" ? "Back to reading" : "Back"}
+      backLabel={view.view === "hub" ? t("bar.backToReading") : t("bar.back")}
     >
       {#snippet actions()}
         {#if view.view !== "hub"}
-          <button class="navbtn" onclick={() => (s.memorize = { view: "hub" })}>hub</button>
+          <button class="navbtn" onclick={() => (s.memorize = { view: "hub" })}>{t("memorize.hub")}</button>
         {/if}
       {/snippet}
     </ScreenBar>
@@ -152,29 +157,26 @@
             disabled={dueRefs.length === 0}
             onclick={() => (s.memorize = { view: "review" })}
           >
-            Review due ({dueRefs.length})
+            {t("memorize.reviewDue", { n: dueRefs.length })}
           </button>
-          <button onclick={() => (s.memorize = { view: "stats" })}>Coverage & activity</button>
+          <button onclick={() => (s.memorize = { view: "stats" })}>{t("memorize.stats")}</button>
         </div>
         <!-- One row per CARD, not per verse: a passage card is a single row
              labelled "Ps 23:1–6" (its `ref` is the first verse, which every
              card endpoint takes). -->
         {#if !coverage?.cards?.length}
-          <p class="empty">
-            No cards yet — long-press or right-click a verse and choose “Memorize this verse”, or
-            “Memorize passage…” for a whole section.
-          </p>
+          <p class="empty">{t("memorize.empty")}</p>
         {:else}
           {#each coverage.cards as v (v.ref)}
             <div class="card">
               <button class="ref" onclick={() => goRef(v.ref)}>{v.label ?? v.ref}</button>
               <span class="mastery" style:color={masteryColor[v.mastery] ?? "inherit"}>{v.mastery}</span>
-              {#if v.due}<span class="due">due</span>{/if}
+              {#if v.due}<span class="due">{t("memorize.due")}</span>{/if}
               <span class="spacer"></span>
-              <button class="drill" onclick={() => (s.memorize = { view: "review", only: v.ref })}>drill</button>
+              <button class="drill" onclick={() => (s.memorize = { view: "review", only: v.ref })}>{t("memorize.drill")}</button>
               <button
                 class="remove"
-                title="Remove card"
+                title={t("memorize.removeCard")}
                 onclick={() => void removeCard(v.ref, v.label ?? v.ref)}>✕</button
               >
             </div>
@@ -185,7 +187,7 @@
       <div class="content">
         {#if !currentRef}
           <p class="empty">
-            {queue.length === 0 ? "Nothing due — well kept." : "Done — every card reviewed."}
+            {queue.length === 0 ? t("memorize.nothingDue") : t("memorize.allReviewed")}
           </p>
         {:else if drill}
           <p class="drillref">
@@ -193,18 +195,18 @@
             <span class="pos">{qi + 1} / {queue.length}</span>
           </p>
           <div class="modes">
-            <button class:checked={mode === "first"} onclick={() => (mode = "first")}>First letters</button>
-            <button class:checked={mode === "blank"} onclick={() => (mode = "blank")}>Blank out</button>
-            <button class:checked={mode === "typed"} onclick={() => (mode = "typed")}>Type it</button>
+            <button class:checked={mode === "first"} onclick={() => (mode = "first")}>{t("memorize.modeFirst")}</button>
+            <button class:checked={mode === "blank"} onclick={() => (mode = "blank")}>{t("memorize.modeBlank")}</button>
+            <button class:checked={mode === "typed"} onclick={() => (mode = "typed")}>{t("memorize.modeTyped")}</button>
           </div>
           {#if mode === "first"}
             <p class="drilltext">{drill.firstLetters}</p>
           {:else if mode === "blank"}
             <p class="drilltext">{drill.blanked}</p>
-            <input type="range" min="0" max={MAX_BLANK_LEVEL} bind:value={level} aria-label="Blank level" />
+            <input type="range" min="0" max={MAX_BLANK_LEVEL} bind:value={level} aria-label={t("memorize.blankLevel")} />
           {:else}
-            <textarea rows="3" bind:value={typed} placeholder="Type the verse from memory…"></textarea>
-            <button class="checkbtn" onclick={() => void check()}>Check</button>
+            <textarea rows="3" bind:value={typed} placeholder={t("memorize.typePlaceholder")}></textarea>
+            <button class="checkbtn" onclick={() => void check()}>{t("memorize.check")}</button>
             {#if score}
               <p class="drilltext">
                 {#each score.words as w, i (i)}<span
@@ -212,22 +214,29 @@
                     class:hit={w.ok}>{w.word}
                   </span>{/each}
               </p>
-              <p class="accuracy">{Math.round((score.accuracy ?? 0) * 100)}% recalled</p>
+              <p class="accuracy">{t("memorize.recalled", { percent: Math.round((score.accuracy ?? 0) * 100) })}</p>
             {/if}
           {/if}
-          <details class="reveal"><summary>Show the verse</summary><p class="drilltext">{drill.text}</p></details>
+          <details class="reveal"><summary>{t("memorize.showVerse")}</summary><p class="drilltext">{drill.text}</p></details>
           <div class="grades">
-            <button onclick={() => grade("again")}>Again</button>
-            <button onclick={() => grade("hard")}>Hard</button>
-            <button onclick={() => grade("good")}>Good</button>
-            <button onclick={() => grade("easy")}>Easy</button>
+            <button onclick={() => grade("again")}>{t("memorize.gradeAgain")}</button>
+            <button onclick={() => grade("hard")}>{t("memorize.gradeHard")}</button>
+            <button onclick={() => grade("good")}>{t("memorize.gradeGood")}</button>
+            <button onclick={() => grade("easy")}>{t("memorize.gradeEasy")}</button>
           </div>
         {/if}
       </div>
     {:else}
       <div class="content">
         <table class="sections">
-          <thead><tr><th>Section</th><th>Cards</th><th>Mature</th><th>Reviews</th></tr></thead>
+          <thead>
+            <tr>
+              <th>{t("memorize.colSection")}</th>
+              <th>{t("memorize.colCards")}</th>
+              <th>{t("memorize.colMature")}</th>
+              <th>{t("memorize.colReviews")}</th>
+            </tr>
+          </thead>
           <tbody>
             {#each coverage?.sections ?? [] as sec (sec.label)}
               <tr>
@@ -239,9 +248,9 @@
             {/each}
           </tbody>
         </table>
-        <h3>Activity</h3>
+        <h3>{t("memorize.activity")}</h3>
         {#if activity.length === 0}
-          <p class="empty">No reviews yet.</p>
+          <p class="empty">{t("memorize.noReviews")}</p>
         {:else}
           {#each [...activity].reverse().slice(0, 30) as d (d.day)}
             <div class="day">

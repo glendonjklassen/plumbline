@@ -85,8 +85,14 @@ export function languages(): { code: string; endonym: string }[] {
   return choices;
 }
 
+/** What may be substituted into a placeholder. `null`/`undefined` are allowed
+ *  and leave the brace on screen, which is the same outcome as omitting the
+ *  argument — a caller with an optional label should not have to decide between
+ *  a cast and inventing an empty string. */
+export type Arg = string | number | null | undefined;
+
 /** Fill `{placeholders}`; an unfilled one stays visible. Mirrors `i18n::format`. */
-export function fill(template: string, args?: Record<string, string | number>): string {
+export function fill(template: string, args?: Record<string, Arg>): string {
   if (!template.includes("{")) return template;
   return template.replace(/\{(\w+)\}/g, (whole, name) => {
     const v = args?.[name];
@@ -95,7 +101,7 @@ export function fill(template: string, args?: Record<string, string | number>): 
 }
 
 /** One string, in the reader's language. */
-export function t(id: string, args?: Record<string, string | number>): string {
+export function t(id: string, args?: Record<string, Arg>): string {
   const s = strings[id];
   return s === undefined ? id : fill(s, args);
 }
@@ -105,6 +111,6 @@ export function t(id: string, args?: Record<string, string | number>): string {
  *  Deliberately not a plural engine — see `i18n::plural`. English and German
  *  split exactly one/other; a language with more forms needs CLDR rules and
  *  this function replaced, not extended. */
-export function plural(idOne: string, idOther: string, n: number, args?: Record<string, string | number>): string {
+export function plural(idOne: string, idOther: string, n: number, args?: Record<string, Arg>): string {
   return t(n === 1 ? idOne : idOther, { n, ...args });
 }
