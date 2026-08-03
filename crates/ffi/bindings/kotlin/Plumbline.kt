@@ -180,7 +180,7 @@ internal interface PlumblineNative : Library {
      *  across the boundary to draw one screen. A region tag is tolerated
      *  (`de-CH` → German) and anything unknown is English, so an unsupported
      *  locale still gets a working app. Engine-independent; never null. */
-    fun plumbline_i18n_catalog_json(lang: String?): Pointer?
+    fun plumbline_i18n_catalog_json(chosen: String?, device: String?): Pointer?
 
     // ── the share link + the church it carries (engine-independent) ─────────
     /** `{base?, church?, startAsNewBeliever?, at?}` in, `{url, base, church,

@@ -2522,7 +2522,8 @@ fn the_catalogue_crosses_the_abi_whole_and_falls_back_to_english() {
     unsafe {
         // Engine-independent: the shells need their chrome before an engine
         // exists, and this is the call they make at startup.
-        let en: Value = serde_json::from_str(&take(plumbline_i18n_catalog_json(c"en".as_ptr())).unwrap()).unwrap();
+        let en: Value =
+            serde_json::from_str(&take(plumbline_i18n_catalog_json(c"en".as_ptr(), ptr::null())).unwrap()).unwrap();
         assert_eq!(en["lang"], "en");
         let strings = en["strings"].as_object().unwrap();
         assert!(strings.len() > 20, "the English catalogue looks empty: {} keys", strings.len());
@@ -2535,7 +2536,8 @@ fn the_catalogue_crosses_the_abi_whole_and_falls_back_to_english() {
 
         // German resolves to German and answers EVERY English key, translated
         // or not — a shell must never meet a missing id.
-        let de: Value = serde_json::from_str(&take(plumbline_i18n_catalog_json(c"de".as_ptr())).unwrap()).unwrap();
+        let de: Value =
+            serde_json::from_str(&take(plumbline_i18n_catalog_json(c"de".as_ptr(), ptr::null())).unwrap()).unwrap();
         assert_eq!(de["lang"], "de");
         let de_strings = de["strings"].as_object().unwrap();
         for k in strings.keys() {
@@ -2546,12 +2548,25 @@ fn the_catalogue_crosses_the_abi_whole_and_falls_back_to_english() {
         // rather than an error, so an unsupported locale gets a working app.
         for (asked, want) in [("de-CH", "de"), ("de_AT", "de"), ("en-GB", "en"), ("fr", "en"), ("", "en")] {
             let cs = CString::new(asked).unwrap();
-            let got: Value = serde_json::from_str(&take(plumbline_i18n_catalog_json(cs.as_ptr())).unwrap()).unwrap();
+            let got: Value =
+                serde_json::from_str(&take(plumbline_i18n_catalog_json(cs.as_ptr(), ptr::null())).unwrap()).unwrap();
             assert_eq!(got["lang"], want, "{asked:?} should resolve to {want}");
         }
 
-        // Null is not a crash and not null — it is English.
-        let none: Value = serde_json::from_str(&take(plumbline_i18n_catalog_json(ptr::null())).unwrap()).unwrap();
+        // The DEVICE locale is the second argument and only decides when the
+        // reader has not: a German phone opens in German with nobody visiting
+        // Settings, and a reader who picked English keeps it.
+        let device_wins: Value =
+            serde_json::from_str(&take(plumbline_i18n_catalog_json(ptr::null(), c"de-DE".as_ptr())).unwrap()).unwrap();
+        assert_eq!(device_wins["lang"], "de");
+        let choice_wins: Value =
+            serde_json::from_str(&take(plumbline_i18n_catalog_json(c"en".as_ptr(), c"de-DE".as_ptr())).unwrap())
+                .unwrap();
+        assert_eq!(choice_wins["lang"], "en");
+
+        // Both null is not a crash and not null — it is English.
+        let none: Value =
+            serde_json::from_str(&take(plumbline_i18n_catalog_json(ptr::null(), ptr::null())).unwrap()).unwrap();
         assert_eq!(none["lang"], "en");
     }
 }

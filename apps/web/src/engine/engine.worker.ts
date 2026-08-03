@@ -62,6 +62,7 @@ import {
   engineVersion,
   guideBlocks,
   routeLink,
+  i18nCatalog,
   themePalette,
   shareLink,
   readingSpec,
@@ -686,6 +687,7 @@ function statics(): Record<string, (...a: any[]) => any> {
     configLoad: () => configLoad(w),
     configSave: (cfg: unknown) => configSave(w, cfg),
     themePalette: (theme: string) => themePalette(w, theme),
+    i18nCatalog: (chosen: string, device: string) => i18nCatalog(w, chosen, device),
     guideBlocks: () => guideBlocks(w),
     aboutBlocks: () => aboutBlocks(w),
     engineVersion: () => engineVersion(w),
@@ -781,7 +783,13 @@ self.onmessage = async (ev: MessageEvent) => {
           night: themePalette(booted.wasm, "night"),
         };
         const toc = booted.engine.toc();
-        booted.trace.push(["boot reply extras (palettes + toc)", Math.round(performance.now() - x0)]);
+        // Every word the shell paints, resolved against the reader's setting and
+        // the device's locale by the CORE (i18n::resolve), not by either shell.
+        // Here rather than as its own call for the palettes' reason: this thread
+        // answers one thing at a time, and the shell cannot paint a single screen
+        // without it.
+        const i18n = i18nCatalog(booted.wasm, typeof cfg.language === "string" ? cfg.language : "", m.locale ?? "");
+        booted.trace.push(["boot reply extras (palettes + toc + i18n)", Math.round(performance.now() - x0)]);
         void backgroundLoad(machineOn, m.deferRnd === true);
         reply({
           packVersion: booted.packVersion,
@@ -803,6 +811,7 @@ self.onmessage = async (ev: MessageEvent) => {
           // session.svelte.ts PINS the TOC in its read-through cache.
           palettes,
           toc,
+          i18n,
         });
         break;
       }

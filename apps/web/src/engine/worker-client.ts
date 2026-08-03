@@ -23,6 +23,11 @@ export interface BootInfo {
   /** The table of contents. Handed over here rather than fetched, and then
    *  served back out of [[BOOT_READS]] — see `call`. */
   toc: any;
+  /** Every string the shell paints, in the language the CORE resolved from the
+   *  reader's setting and the device's locale (`{lang, strings, languages}`).
+   *  Here for the palettes' reason: no screen can be painted without it, so it
+   *  must not be one more queue hop after the reply that unblocks painting. */
+  i18n: { lang: string; strings: Record<string, string>; languages: { code: string; endonym: string }[] };
 }
 
 /** Engine reads the BOOT REPLY already carries, by the method name the shell
@@ -227,8 +232,13 @@ export class EngineRpc {
   }
 
   /** `deferRnd` skips the automatic machine-tier download (phones: the shell
-   *  offers an explicit "load analysis" action instead — 2026-07-26). */
-  boot(opts: { deferRnd?: boolean } = {}): Promise<BootInfo> {
+   *  offers an explicit "load analysis" action instead — 2026-07-26).
+   *
+   *  `locale` is the DEVICE's language, which only decides when the reader has
+   *  not chosen one; a worker has no `navigator.languages` worth trusting, and
+   *  the setting it is weighed against lives in a config only the worker can
+   *  read, so the two meet there. */
+  boot(opts: { deferRnd?: boolean; locale?: string } = {}): Promise<BootInfo> {
     const base = new URL(import.meta.env.BASE_URL, location.href).href;
     // Armed for the whole boot, rearmed by every message, dropped the moment boot
     // settles either way. A boot that never comes back is otherwise indistinguishable
@@ -244,6 +254,7 @@ export class EngineRpc {
       fontUrl: new URL(READER_FONT_FILES.normal, base).href,
       italicUrl: new URL(READER_FONT_FILES.italic, base).href,
       deferRnd: opts.deferRnd === true,
+      locale: opts.locale ?? "",
     })
       .then((info: BootInfo) => {
         for (const m of BOOT_READS) {

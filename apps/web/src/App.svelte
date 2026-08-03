@@ -10,6 +10,7 @@
   // 2026-07-26). Honest progress beats a decoy — the work now goes into
   // making the wait short rather than disguising it.
   import { bootErrorCopy } from "./engine/bootError";
+  import { deviceLocale, setCatalog, t } from "./lib/i18n.svelte";
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
   import { churchFromQuery, hasChurch, sharedAtRef, startsAsNewBeliever } from "./shell/church";
   import { initSession, type Session } from "./state/session.svelte";
@@ -109,7 +110,7 @@
       // download and the worker time behind the reader's back.
       const deferRnd = matchMedia("(max-width: 700px)").matches;
       const [info] = await Promise.all([
-        rpc.boot({ deferRnd }),
+        rpc.boot({ deferRnd, locale: deviceLocale() }),
         document.fonts.load('18px "EB Garamond"'),
         document.fonts.load('italic 18px "EB Garamond"'),
         document.fonts.load('bold 18px "EB Garamond"'),
@@ -124,6 +125,10 @@
             `layout is being measured with fallback metrics`,
         );
       }
+      // Before ANY of the work below, and well before the shell mounts: this is
+      // the point the guessed splash language (i18n.svelte.ts `seed`) is
+      // replaced by the one the core resolved from the reader's own setting.
+      setCatalog(info.i18n);
       // The palettes RIDE ON THE BOOT REPLY (audit F-11). They used to be three
       // more `static` calls awaited here, and the engine lives in ONE worker
       // thread — so on the single path where nothing else can proceed, that was
@@ -253,12 +258,8 @@
 
   const phaseLabel = $derived(
     phase.phase === "download"
-      ? `Fetching scripture data — ${Math.round((phase.fraction ?? 0) * 100)}%`
-      : phase.phase === "prepare"
-        ? "Preparing the study engine…"
-        : phase.phase === "warm"
-          ? "Building the analytics…"
-          : "Opening the text…",
+      ? t("boot.phase.download", { percent: Math.round((phase.fraction ?? 0) * 100) })
+      : t(`boot.phase.${phase.phase}`),
   );
 </script>
 
@@ -266,11 +267,11 @@
   <!-- Outside the session block on purpose: whatever broke may be the thing that
        renders the app, so this must not be nested inside it. -->
   <div class="mishap" role="alert">
-    <span class="what">Something went wrong — reload</span>
-    <button class="act" onclick={() => location.reload()}>Reload</button>
-    <button class="act" onclick={() => (mishap = null)}>Dismiss</button>
+    <span class="what">{t("boot.mishap")}</span>
+    <button class="act" onclick={() => location.reload()}>{t("boot.reload")}</button>
+    <button class="act" onclick={() => (mishap = null)}>{t("boot.dismiss")}</button>
     <details>
-      <summary>Technical details</summary>
+      <summary>{t("boot.details")}</summary>
       <pre>{mishap}</pre>
     </details>
   </div>
@@ -294,15 +295,15 @@
   <div class="splash">
     <div class="mark">✦</div>
     <h1>Plumbline</h1>
-    <p class="sub">The Holy Bible</p>
+    <p class="sub">{t("boot.tagline")}</p>
     {#if error}
       <!-- The reader gets a sentence they can act on; the RAW string stays one
            disclosure away, because it is what a bug report pastes and the only
            evidence of which rung of the boot ladder broke (audit D-11). -->
-      <p class="error">{bootErrorCopy(error)}</p>
-      <button onclick={() => location.reload()}>Retry</button>
+      <p class="error">{t(bootErrorCopy(error))}</p>
+      <button onclick={() => location.reload()}>{t("boot.retry")}</button>
       <details>
-        <summary>Technical details</summary>
+        <summary>{t("boot.details")}</summary>
         <pre>{error}</pre>
       </details>
     {:else}
@@ -318,7 +319,7 @@
         <!-- Only while something is actually being downloaded — which, now that
              boot opens in `prepare`, is only ever a cold visit. Saying it on a
              warm boot would be a bill for a purchase already made. -->
-        <p class="once">3 MB download</p>
+        <p class="once">{t("boot.oneTime")}</p>
       {/if}
     {/if}
   </div>

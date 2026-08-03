@@ -53,9 +53,12 @@ test("an engine worker that cannot start shows an error, not an endless splash",
   // painted "Fetching scripture data — 0%" and stayed there.
   await page.route(/engine\.worker/, (route) => route.abort());
   await page.goto("/");
-  await expect(page.locator(".splash .error")).toContainText(/The study engine stopped unexpectedly/, {
+  // The reader's sentence, not the machine's: the raw "The study engine stopped
+  // unexpectedly — …" is built at the throw site and stays in the <details>.
+  await expect(page.locator(".splash .error")).toContainText(/engine stopped before Plumbline finished opening/, {
     timeout: 30_000,
   });
+  await expect(page.locator(".splash details pre")).toContainText(/The study engine stopped unexpectedly/);
   await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
   // And it is an ERROR screen, not an error next to a progress bar that is
   // still pretending something is happening.

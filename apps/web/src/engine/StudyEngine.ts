@@ -619,6 +619,20 @@ export function readingSpec(w: WasmEngine): any {
   return s === null ? null : JSON.parse(s);
 }
 
+/** Every string the shell paints, in the reader's language, in ONE call.
+ *
+ *  Both arguments, because the core owns the rule that an empty setting means
+ *  "follow the device" — see `i18n::resolve`. The reply's `lang` says which one
+ *  won. Engine-independent: the chrome has to exist before an engine does. */
+export function i18nCatalog(w: WasmEngine, chosen: string, device: string): any {
+  const a = w.inStr(chosen);
+  const b = w.inStr(device);
+  const s = w.takeStr((w.exports.plumbline_i18n_catalog_json as Function)(a, b) as number);
+  w.freeStr(a);
+  w.freeStr(b);
+  return s === null ? null : JSON.parse(s);
+}
+
 export function themePalette(w: WasmEngine, theme: string): any {
   const p = w.inStr(theme);
   const s = w.takeStr((w.exports.plumbline_theme_palette_json as Function)(p) as number);

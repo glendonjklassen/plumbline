@@ -13,41 +13,51 @@
 // cause it cannot see: anything unrecognised falls through to a sentence that
 // admits as much rather than guessing.
 //
+// It returns CATALOGUE IDS, not sentences (i18n, 2026-08-02). The words live in
+// crates/core/src/i18n/*.json with every other string the reader can meet, and
+// the `boot.*` keys are bundled into the shell (scripts/gen-i18n.mjs) precisely
+// so that a boot which never reached the engine can still speak the reader's
+// language — the one failure where the engine cannot be asked for the words.
+//
 // FIRST MATCH WINS, and the order below is deliberate — a failed download on a
 // device that is also out of room reports the download, because that is the
 // thing the reader is being asked to retry.
 
-/** One bucket: what the raw string has to look like, and what to say instead. */
+/** One bucket: what the raw string has to look like, and the catalogue id of
+ *  what to say instead. */
 type Rule = { when: RegExp; say: string };
 
 const RULES: Rule[] = [
-  // Already the reader's language. The engine-worker client (worker-client.ts)
-  // writes its own copy for a dead or silent worker — "The study engine stopped
-  // unexpectedly", "The study engine went quiet for 60s and never finished
-  // starting. It got as far as opening the text." — and translating those again
-  // would only make them vaguer. e2e/worker-death.spec.ts holds this pass-through.
-  { when: /^The study engine\b/, say: "" },
+  // The worker died or went silent. worker-client.ts writes those strings for a
+  // reader ("The study engine stopped unexpectedly — …", "…went quiet for 60s
+  // and never finished starting. It got as far as opening the text.") and they
+  // USED to pass straight through, which was fine while the app was English
+  // only. They cannot now: they are built at the throw site out of a browser's
+  // own error text and a stage name, so there is nothing there to translate.
+  // The reader gets one sentence in their language and the whole raw string
+  // stays one disclosure away, which is where the detail belonged anyway.
+  { when: /^The study engine\b/, say: "boot.error.engine" },
 
   // The pack format moved under a shell that predates it (pack.ts `checked`).
   // A reload picks up the current bundle, which is a thing the reader can do;
   // the rest of that message is a note to whoever builds the pack.
   {
     when: /data pack format/i,
-    say: "This copy of Plumbline is older than the scripture data it just downloaded. Reload the page to pick up the current version.",
+    say: "boot.error.stale",
   },
 
   // No room. Two shapes: the Cache API refusing a put, and IndexedDB refusing a
   // transaction. Both mean the same thing to the reader.
   {
     when: /QuotaExceeded|quota|storage is full|no space left/i,
-    say: "There is no room left on this device to store the Bible.",
+    say: "boot.error.quota",
   },
 
   // Storage refused outright rather than being full: private windows, a browser
   // set to block site data, an IndexedDB the profile has disowned.
   {
     when: /SecurityError|IDBFactory|access to storage|not allowed to (use|access)/i,
-    say: "This browser is not letting Plumbline store anything on the device. Site data (cookies and storage) has to be allowed for this address. A private window may block it too.",
+    say: "boot.error.storage",
   },
 
   // The network. `Failed to fetch` is chromium, `Load failed` is WebKit,
@@ -62,30 +72,29 @@ const RULES: Rule[] = [
   // identical either way, so the sentence does not need to guess.
   {
     when: /Failed to fetch|Load failed|NetworkError|ERR_|HTTP \d{3}|data pack (manifest|file)/i,
-    say: "Plumbline could not finish downloading what it needs to open. Check the connection and try again. Once it is on the device it opens with no connection at all.",
+    say: "boot.error.network",
   },
 
   // The engine binary itself would not compile or start.
   {
     when: /WebAssembly|CompileError|LinkError|RuntimeError|out of memory/i,
-    say: "Plumbline's engine would not start in this browser. Closing other tabs and reloading is worth trying; if it keeps happening, the browser may be too old for WebAssembly.",
+    say: "boot.error.wasm",
   },
 
   // The engine opened the home and refused it (StudyEngine.open).
   {
     when: /engine open failed|tokenization|kjv1769/i,
-    say: "Plumbline could not read the scripture data on this device. Reloading re-downloads what is missing.",
+    say: "boot.error.corpus",
   },
 ];
 
-const FALLBACK =
-  "Plumbline could not start. Reloading usually clears it; if it does not, the details below are what a bug report needs.";
+const FALLBACK = "boot.error.unknown";
 
-/** The reader-facing sentence for a boot failure. The raw string stays the
- *  caller's to show — see the <details> on the splash. */
+/** The catalogue id of the reader-facing sentence for a boot failure. The raw
+ *  string stays the caller's to show — see the <details> on the splash. */
 export function bootErrorCopy(raw: string): string {
   const text = (raw ?? "").trim();
   if (!text) return FALLBACK;
-  for (const r of RULES) if (r.when.test(text)) return r.say || text;
+  for (const r of RULES) if (r.when.test(text)) return r.say;
   return FALLBACK;
 }

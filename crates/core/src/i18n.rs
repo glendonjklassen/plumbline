@@ -59,16 +59,33 @@ impl Lang {
         }
     }
 
-    /// Parse a code, tolerating a region tag: a browser reporting `de-CH` wants
-    /// German. Unknown languages are English, never an error — a reader with an
-    /// unsupported locale gets a working app.
-    pub fn parse(code: &str) -> Lang {
+    /// The language this code names, if the app ships it — tolerating a region
+    /// tag, since a browser reporting `de-CH` wants German.
+    ///
+    /// `None` for anything else, and that distinction matters: [`resolve`] has
+    /// to tell "this reader asked for a language we do not have" apart from
+    /// "this reader asked for English".
+    pub fn shipped(code: &str) -> Option<Lang> {
         let base = code.split(['-', '_']).next().unwrap_or("").to_ascii_lowercase();
-        match base.as_str() {
-            "de" => Lang::De,
-            _ => Lang::En,
-        }
+        Lang::ALL.into_iter().find(|l| l.code() == base)
     }
+
+    /// Parse a code, tolerating a region tag. Unknown languages are English,
+    /// never an error — a reader with an unsupported locale gets a working app.
+    pub fn parse(code: &str) -> Lang {
+        Lang::shipped(code).unwrap_or(Lang::En)
+    }
+}
+
+/// The language to paint in, given the reader's setting and the device's locale.
+///
+/// An EMPTY setting means "follow the device" — see [`crate::config::Config`] —
+/// so a German phone opens in German without anybody visiting Settings, and a
+/// reader who later chooses English is not overruled by their own hardware.
+/// Both shells call this rather than deciding for themselves, because a rule
+/// implemented twice is a rule that disagrees with itself once.
+pub fn resolve(chosen: &str, device: &str) -> Lang {
+    Lang::shipped(chosen).or_else(|| Lang::shipped(device)).unwrap_or(Lang::En)
 }
 
 const EN: &str = include_str!("i18n/en.json");
@@ -215,6 +232,20 @@ mod tests {
         for lang in Lang::ALL {
             assert_eq!(Lang::parse(lang.code()), lang);
         }
+    }
+
+    #[test]
+    fn a_setting_beats_the_device_and_an_empty_setting_follows_it() {
+        // Nobody has visited Settings: the phone decides.
+        assert_eq!(resolve("", "de-DE"), Lang::De);
+        assert_eq!(resolve("", "en-US"), Lang::En);
+        // A choice was made, and the hardware does not get to overrule it.
+        assert_eq!(resolve("en", "de-DE"), Lang::En);
+        assert_eq!(resolve("de", "en-US"), Lang::De);
+        // A language this build does not ship, in either slot, is not an error.
+        assert_eq!(resolve("fr", "de-DE"), Lang::De);
+        assert_eq!(resolve("", "fr-FR"), Lang::En);
+        assert_eq!(resolve("", ""), Lang::En);
     }
 
     #[test]

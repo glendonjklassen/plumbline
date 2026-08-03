@@ -4,16 +4,17 @@
   "version": "0.39.2",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "dev": "npm run pack:i18n && vite",
+    "build": "npm run pack:i18n && vite build",
+    "check": "npm run pack:i18n && svelte-check --tsconfig ./tsconfig.json",
     "pack:hymnal": "node ../../scripts/build-hymnal.mjs",
     "pack:data": "npm run pack:hymnal && node ../../scripts/build-web-pack.mjs && node ../../scripts/check-web-pack.mjs",
     "pack:wasm": "node scripts/copy-wasm.mjs",
     "pack:fonts": "node scripts/subset-fonts.mjs",
     "preview": "vite preview",
     "test:e2e": "playwright test",
-    "pack:check": "node ../../scripts/check-web-pack.mjs"
+    "pack:check": "node ../../scripts/check-web-pack.mjs",
+    "pack:i18n": "node scripts/gen-i18n.mjs"
   },
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "^0.4.2",
