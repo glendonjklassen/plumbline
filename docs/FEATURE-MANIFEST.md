@@ -706,6 +706,37 @@ the web lists **Suggested** as its own seventh card (`ExploreScreen.svelte`);
 Android folds it into one Weaves screen with an All/Suggested filter
 (`WeavesScreen`).
 
+## Languages (2026-08-02) — WEB ONLY so far
+
+Full detail in [I18N.md](I18N.md). The contract, in one place:
+
+**Every word the reader sees is core data.** The catalogue lives in
+`crates/core/src/i18n/*.json`, keyed by stable dotted ids, and a shell reaches
+it with two engine-independent calls at startup —
+`plumbline_i18n_catalog_json` for what the shell spells and
+`plumbline_i18n_set_language` for what the core spells (book names, references,
+the reading map). Both take the reader's setting AND the device's locale,
+because `i18n::resolve` owns the rule that an empty setting means "follow the
+device" and a rule implemented twice disagrees with itself once.
+
+English and German ship. `config.language` holds the choice; empty is the
+device's. `refKey` does not move under any language — `VRef::ref_key` is frozen
+storage, `VRef::display` is what localizes ("Joh 3,16", with a comma).
+
+**SHELL DELTA.** The web shell is done: every string, a picker in Settings, and
+`scripts/check-i18n.mjs` failing the build on a stray literal. **Android is
+still English** — ~333 literals and a picker to go. Its Kotlin binding already
+carries both ABI calls.
+
+**SHELL DELTA.** The welcome pages are English in both shells on purpose: they
+are the maintainer's own first-person writing, and a machine draft of that is
+not a translation. `ENGLISH_ONLY` in `i18n.rs` is the list.
+
+**Not a language feature: the Bible text.** A German Bible is a second corpus
+with its own tokenization stamp, not a string table. See I18N.md on
+versification, which is the part that has to be got right before content written
+against a German numbering can ever be migrated.
+
 ## Hymnal (2026-08-02, both shells)
 
 The fifth destination. A book of public-domain hymns with chords, meant to be
