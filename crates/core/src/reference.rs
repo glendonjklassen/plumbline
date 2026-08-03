@@ -38,9 +38,45 @@ impl VRef {
         format!("{} {}:{}", self.book, self.chapter, self.verse)
     }
 
-    /// Human display form, e.g. `"Genesis 1:7"` (display name, not OSIS id).
+    /// Human display form in English, e.g. `"Genesis 1:7"`.
+    ///
+    /// Kept as the no-argument call because most of the codebase predates
+    /// languages and English is the source; [`VRef::display_in`] is the one to
+    /// reach for anywhere a reader's language is known.
     pub fn display(&self) -> String {
-        format!("{} {}:{}", canon::display_name(&self.book), self.chapter, self.verse)
+        self.display_in(crate::i18n::Lang::En)
+    }
+
+    /// Human display form in `lang` — localized book name AND separator.
+    ///
+    /// German writes `Joh 3,16`: a comma, not a colon. That is not decoration,
+    /// it is what a reference looks like in German, and a colon reads as wrong
+    /// there the way `3.16` would in English. The whole shape is a catalogue
+    /// template (`ref.verse`) rather than a separator constant, because the next
+    /// language may not put the book first at all.
+    ///
+    /// NEVER confuse this with [`VRef::ref_key`], which is frozen storage and
+    /// stays `"Gen 1:7"` in every language — it is inside saved notes, threads,
+    /// weave endpoints and backup zips.
+    pub fn display_in(&self, lang: crate::i18n::Lang) -> String {
+        crate::i18n::t(
+            lang,
+            "ref.verse",
+            &[
+                ("book", &crate::i18n::book_name(lang, &self.book)),
+                ("chapter", &self.chapter.to_string()),
+                ("verse", &self.verse.to_string()),
+            ],
+        )
+    }
+
+    /// A chapter without a verse, e.g. `"John 3"` / `"Johannes 3"`.
+    pub fn chapter_display_in(&self, lang: crate::i18n::Lang) -> String {
+        crate::i18n::t(
+            lang,
+            "ref.chapter",
+            &[("book", &crate::i18n::book_name(lang, &self.book)), ("chapter", &self.chapter.to_string())],
+        )
     }
 
     /// Parse a compact ref key like `"Gen 1:7"`. Ported from `parseRefKey`.
@@ -103,5 +139,32 @@ mod tests {
         assert!(gen.reading_key() < john.reading_key());
         // Derived Ord is alphabetical (matches overlay): "1Cor" < "Gen".
         assert!(VRef::new("1Cor", 1, 1) < VRef::new("Gen", 1, 1));
+    }
+
+    #[test]
+    fn a_reference_localizes_its_book_and_its_separator() {
+        use crate::i18n::Lang;
+        let v = VRef::new("John", 3, 16);
+
+        assert_eq!(v.display(), "John 3:16");
+        assert_eq!(v.display_in(Lang::En), "John 3:16");
+        // German writes a comma, and the book is Johannes. Both, or neither is
+        // worth doing — "Johannes 3:16" is still wrong to a German reader.
+        assert_eq!(v.display_in(Lang::De), "Johannes 3,16");
+        assert_eq!(VRef::new("Ezek", 1, 1).display_in(Lang::De), "Hesekiel 1,1");
+        assert_eq!(VRef::new("Gen", 1, 7).display_in(Lang::De), "1. Mose 1,7");
+
+        assert_eq!(v.chapter_display_in(Lang::En), "John 3");
+        assert_eq!(v.chapter_display_in(Lang::De), "Johannes 3");
+
+        // THE STORAGE KEY NEVER MOVES. It is inside saved notes, threads, weave
+        // endpoints and backup zips; a German build writing "Johannes 3,16"
+        // there would author data no other build could read.
+        assert_eq!(v.ref_key(), "John 3:16");
+        for lang in Lang::ALL {
+            let _ = v.display_in(lang);
+            assert_eq!(v.ref_key(), "John 3:16", "ref_key moved under {}", lang.code());
+        }
+        assert_eq!(VRef::parse_ref_key(&v.ref_key()), Some(v));
     }
 }

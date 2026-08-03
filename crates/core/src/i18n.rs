@@ -158,6 +158,25 @@ pub fn t(lang: Lang, id: &str, args: &[(&str, &str)]) -> String {
     }
 }
 
+/// A book's name in `lang`, by OSIS id.
+///
+/// English is NOT in the catalogue: [`crate::canon::BOOKS`] already holds it,
+/// that table is frozen, and parsing reads it too — a second copy in en.json
+/// would be two sources for one fact and they would drift. So the catalogue
+/// OVERRIDES, and the absence of an override means English.
+///
+/// Because of that, `missing()` cannot see an untranslated book (there is no
+/// English key to be missing against); `every_book_is_named_in_every_language`
+/// checks them directly instead.
+pub fn book_name(lang: Lang, osis: &str) -> String {
+    if lang != Lang::En {
+        if let Some(name) = catalog(lang).get(&format!("book.{osis}")) {
+            return name.clone();
+        }
+    }
+    crate::canon::display_name(osis).to_string()
+}
+
 /// Pick between a one-form and a many-form key.
 ///
 /// DELIBERATELY NOT A PLURAL ENGINE. English and German both split exactly
@@ -223,6 +242,33 @@ mod tests {
     #[test]
     fn an_unknown_id_shows_itself() {
         assert_eq!(t(Lang::En, "no.such.key", &[]), "no.such.key");
+    }
+
+    #[test]
+    fn every_book_is_named_in_every_language() {
+        // `missing()` cannot catch these: English keeps its book names in
+        // canon.rs, so there is no en.json key for a translation to be missing
+        // against. A reader must never meet "Hesekiel" as "Ezek".
+        for lang in Lang::ALL {
+            if lang == Lang::En {
+                continue;
+            }
+            let c = catalog(lang);
+            for b in crate::canon::BOOKS {
+                let key = format!("book.{}", b.id);
+                assert!(c.contains_key(&key), "{} has no name for {} ({key})", lang.code(), b.name);
+            }
+        }
+    }
+
+    #[test]
+    fn book_names_localize_and_fall_back_to_the_canon_table() {
+        assert_eq!(book_name(Lang::En, "Ezek"), "Ezekiel");
+        assert_eq!(book_name(Lang::De, "Ezek"), "Hesekiel");
+        assert_eq!(book_name(Lang::De, "Gen"), "1. Mose");
+        assert_eq!(book_name(Lang::De, "1Cor"), "1. Korinther");
+        // An unknown id is not a panic; canon decides what it answers.
+        let _ = book_name(Lang::De, "Nope");
     }
 
     #[test]
