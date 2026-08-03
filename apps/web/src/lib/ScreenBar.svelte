@@ -38,6 +38,10 @@
     align-items: center;
     gap: 6px;
     padding: 10px 14px;
+    /* Set by Shell when this bar is the topmost chrome on a phone (the app
+       header hides on a destination), so the status bar does not sit on the
+       title. Zero everywhere else, where the header is still above us. */
+    padding-top: calc(10px + var(--screenBarTop, 0px));
     min-height: 52px;
     background: var(--paneNavBg, #efeae1);
     border-bottom: 1px solid var(--rule, #d8cba8);

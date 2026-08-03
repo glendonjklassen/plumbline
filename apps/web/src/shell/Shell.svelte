@@ -344,7 +344,7 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<div class="frame">
+<div class="frame" data-screen={dest}>
   <!-- One rem wide, and that is the whole of it: the browser's own default text
        size, as a box a ResizeObserver can watch. lib/uiScale.ts turns it and the
        reader's setting into `--uiScale`. -->
@@ -767,6 +767,22 @@
     .browse,
     .subtitle {
       display: none;
+    }
+    /* A DESTINATION REPLACES THE TOP BAR, it does not stack under it.
+       Explore, Memorize and the Hymnal sat below the READER'S bar — its chapter
+       nav, its search, its share — so the phone showed "‹ 1 Corinthians 7 ›"
+       above a second bar saying "Explore", advertising a passage the screen had
+       nothing to do with (feedback 2026-08-02). Present has always replaced the
+       lot and looked right for it; Android does the same, because its
+       destinations own the whole column.
+       Only on a phone: above 700px the header IS the destination switcher (there
+       is no bottom bar up there), so hiding it would strand the reader. The bar
+       that takes over needs the status-bar inset the header was carrying. */
+    .frame:not([data-screen="read"]) > header {
+      display: none;
+    }
+    .frame:not([data-screen="read"]) {
+      --screenBarTop: var(--safeTop);
     }
     /* ONE BAR on a phone, as on Android. The chapter nav comes up into the
        header and the pane's own strip goes away — two stacked strips of chrome

@@ -193,3 +193,44 @@ test("the bottom bar does not cover the reader, and is absent on a desktop width
   // …because at that width the destinations are first-class in the top bar.
   await expect(page.locator("nav.browse").getByRole("button", { name: "Explore" })).toBeVisible();
 });
+
+// A DESTINATION REPLACES THE TOP BAR — it does not stack under the reader's.
+//
+// Explore, Memorize and the Hymnal each rendered below the READER'S bar, so a
+// phone showed "‹ 1 Corinthians 7 ›" — with its search and share — above a
+// second bar saying "Explore", advertising a passage that screen has nothing to
+// do with. Present has always replaced the lot, and Android's destinations own
+// the whole column (feedback 2026-08-02: "should probably just look like present
+// does").
+//
+// Mutation-tested 2026-08-02: drop the
+// `.frame:not([data-screen="read"]) > header { display: none }` rule and each
+// destination goes red on the header still being visible.
+test("phone: a destination shows its own bar and not the reader's", async ({ page }) => {
+  await page.setViewportSize({ width: 430, height: 860 });
+  await boot(page);
+
+  // Read keeps the reader's bar, chapter nav and all — the baseline.
+  await expect(page.locator("header")).toBeVisible();
+  await expect(page.locator("header .chapter-nav")).toBeVisible();
+
+  for (const label of ["Explore", "Memorize", "Hymnal"]) {
+    await page.locator(".bottom-nav").getByRole("button", { name: label }).click();
+
+    // The reader's bar is gone: no chapter nav, no search, no share.
+    await expect(page.locator("header"), `${label} still shows the reader's bar`).toBeHidden();
+
+    // Exactly ONE bar of chrome, and it names this destination.
+    const bar = page.locator(".screen .bar, section .bar").first();
+    await expect(bar).toBeVisible();
+    await expect(bar.locator("h2")).toHaveText(label);
+
+    // It clears the status bar, which the header used to be carrying.
+    const top = await bar.evaluate((el) => parseFloat(getComputedStyle(el).paddingTop));
+    expect(top, `${label}'s bar lost the safe-area inset`).toBeGreaterThanOrEqual(10);
+
+    // And back returns to the reader, whose bar comes back with it.
+    await page.locator(".bottom-nav").getByRole("button", { name: "Read" }).click();
+    await expect(page.locator("header")).toBeVisible();
+  }
+});
