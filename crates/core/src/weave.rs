@@ -236,7 +236,12 @@ impl Weave {
             // the same path an edited one is.
             id: None,
             updated: None,
-            extra: Map::new(),
+            // The one place a new file's provenance can honestly be recorded:
+            // its refKeys are being written NOW, in the language the reader is
+            // reading. A writer would be the wrong place — it also runs on
+            // re-save, where an unstamped older file would gain a confident
+            // wrong answer. See `i18n::stamp`.
+            extra: crate::i18n::stamped_extra(),
         }
     }
 
@@ -1477,7 +1482,9 @@ mod tests {
     }
 
     /// A weave with nothing unknown in it is written byte for byte as it was
-    /// before any of that landed — these files already ship inside backup zips.
+    /// before any of that landed, plus the language stamp a NEW file gets
+    /// (`i18n::stamp`) — these files already ship inside backup zips, so the
+    /// exact bytes matter and the one addition is deliberate.
     #[test]
     fn a_weave_with_no_unknown_keys_is_written_exactly_as_before() {
         let mut w = Weave::empty("Passover", WeaveKind::Typological, "kjv1769-tok2", "2026-07-01T00:00:00Z");
@@ -1488,10 +1495,33 @@ mod tests {
                 r#"{"format":"overlay-weave-v2","name":"Passover","kind":"type","#,
                 r#""tokenization":"kjv1769-tok2","notes":"","created":"2026-07-01T00:00:00Z","#,
                 r#""approved":false,"links":[{"a":"Exod 12:46","b":"John 19:36","#,
-                r#""label":"not a bone broken"}]}"#,
+                r#""label":"not a bone broken"}],"lang":"en"}"#,
                 "\n"
             )
         );
+    }
+
+    /// The other half of the stamp's contract, and the one that matters more: a
+    /// file that has NO stamp does not gain one by being re-saved.
+    ///
+    /// A note or weave written last year was written under English numbering and
+    /// says nothing about it. If its German-reading owner edits it and the save
+    /// wrote the CURRENT language, that file would claim German numbering it was
+    /// never written in — a confident wrong answer where there was an honest
+    /// absence, and the versification migration would act on it.
+    ///
+    /// MUTATION: move `stamped_extra()` from `Weave::empty` into `write_weave`
+    /// (or make it an `or_insert` there). Red here; the test above stays green.
+    #[test]
+    fn a_weave_from_an_older_build_does_not_gain_a_language_it_never_had() {
+        let older = concat!(
+            r#"{"format":"overlay-weave-v2","name":"Passover","kind":"type","#,
+            r#""tokenization":"kjv1769-tok2","notes":"","created":"2026-07-01T00:00:00Z","#,
+            r#""approved":false,"links":[{"a":"Exod 12:46","b":"John 19:36"}]}"#,
+        );
+        let w: Weave = serde_json::from_str(older).unwrap();
+        let back = to_json(&w).unwrap();
+        assert!(!back.contains("\"lang\""), "a re-save invented a provenance the file never had: {back}");
     }
 }
 

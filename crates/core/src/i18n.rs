@@ -127,6 +127,64 @@ pub fn active() -> Lang {
     Lang::ALL.get(ACTIVE.load(Ordering::Relaxed) as usize).copied().unwrap_or(Lang::En)
 }
 
+/// The language stamp written into a file the reader authors.
+///
+/// PROVENANCE, not display. Every user-authored format — notes, threads, tags,
+/// weaves, memory cards, the reading map — carries the language its refKeys were
+/// written against, and the reason is a door that only stays open if we write it
+/// now.
+///
+/// `refKey` is frozen storage and means a verse in KJV/OSIS numbering. A German
+/// Bible (Luther 1912) numbers a hundred-odd verses differently — 3 John, the
+/// Joel and Malachi chapter splits, a few others. A reader who picks one language
+/// and stays is unaffected: their own notes are self-consistent, and nothing is
+/// corrupted. What is affected is the bundled stock study set, which is keyed to
+/// KJV numbering, and passages shared between readers of different languages.
+///
+/// When the versification map lands it will want to migrate exactly the refKeys
+/// written under German numbering and leave the rest alone — and that migration
+/// is UNRUNNABLE unless the data says which numbering each key meant. Hence the
+/// stamp, written before there is a second corpus to need it.
+///
+/// ABSENT is not the same as `"en"`. An absent stamp means "written by a build
+/// that did not record this", which is strictly more information than assuming
+/// English, and a migration is entitled to treat the two differently.
+///
+/// ## Stamped at CREATE, never on re-save
+///
+/// This is the part that is easy to get wrong, and getting it wrong is worse
+/// than not stamping at all. A note written last year carries no stamp. If its
+/// German-reading owner edits it and the save writes the CURRENT language, that
+/// note now claims German numbering it was never written in — a confident wrong
+/// answer where there was an honest absence, and a migration would act on it.
+///
+/// So [`stamp_new`] only fills an empty slot. Every format already carries a
+/// round-trip map for keys it does not model, and a save lifts that map off the
+/// file it is replacing, so preserve-on-re-save falls out for free.
+///
+/// ## Why it lives in that map rather than as a modelled field
+///
+/// Because nothing in this build reads it. It is written once and carried
+/// forward, which is precisely what those maps are for; a real field would mean
+/// a `lang` on five domain structs, five construction sites, two hand-written
+/// serializers, and five dead-code allows, all to hold a value no code branches
+/// on. When something finally does read it — the versification migration — it
+/// can be promoted to a field, and serde stops routing it here the moment that
+/// field exists.
+pub fn stamp() -> String {
+    active().code().to_string()
+}
+
+/// The extra-keys map a NEWLY CREATED file starts with: just its language stamp.
+///
+/// Called from the constructors rather than the writers, because a writer also
+/// runs on re-save — see [`stamp`].
+pub fn stamped_extra() -> serde_json::Map<String, serde_json::Value> {
+    let mut m = serde_json::Map::new();
+    m.insert("lang".to_string(), serde_json::Value::String(stamp()));
+    m
+}
+
 /// Set the language for the rest of this process. A shell calls this once, at
 /// startup, with what [`resolve`] gave it.
 pub fn set_active(lang: Lang) {
@@ -413,6 +471,24 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn a_new_file_is_stamped_with_the_language_the_reader_is_reading() {
+        // The stamp is the reader's ACTIVE language, not a constant. Every
+        // format's create path goes through `stamped_extra`, so this is the one
+        // place that has to prove it follows the reader; the per-format tests
+        // prove the key lands in the file and that a re-save does not add one.
+        //
+        // Restores the previous language: this is process-wide state and the
+        // tests in this binary share a process.
+        let before = active();
+        set_active(Lang::De);
+        assert_eq!(stamp(), "de");
+        assert_eq!(stamped_extra()["lang"], "de");
+        set_active(Lang::En);
+        assert_eq!(stamped_extra()["lang"], "en");
+        set_active(before);
     }
 
     #[test]

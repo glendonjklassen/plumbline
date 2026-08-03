@@ -305,7 +305,12 @@ pub fn add_member(
             id: None,
             updated: None,
             members: vec![member],
-            extra: Map::new(),
+            // The one place a new file's provenance can honestly be recorded:
+            // its refKeys are being written NOW, in the language the reader is
+            // reading. A writer would be the wrong place — it also runs on
+            // re-save, where an unstamped older file would gain a confident
+            // wrong answer. See `i18n::stamp`.
+            extra: crate::i18n::stamped_extra(),
         };
         write_tag(&path, &tag, added)?;
         Ok(path)

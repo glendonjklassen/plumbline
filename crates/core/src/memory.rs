@@ -177,7 +177,12 @@ impl Card {
             lapses: 0,
             due: days_to_date(date_to_days(created).unwrap_or(0)),
             reviews: Vec::new(),
-            extra: Map::new(),
+            // The one place a new file's provenance can honestly be recorded:
+            // its refKeys are being written NOW, in the language the reader is
+            // reading. A writer would be the wrong place — it also runs on
+            // re-save, where an unstamped older file would gain a confident
+            // wrong answer. See `i18n::stamp`.
+            extra: crate::i18n::stamped_extra(),
         }
     }
 
@@ -977,8 +982,10 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// A card with nothing unknown in it is written byte for byte as it was before
-    /// any of that landed — these files already ship inside backup zips.
+    /// A card with nothing unknown in it is written byte for byte as it was
+    /// before any of that landed, plus the language stamp a NEW file gets
+    /// (`i18n::stamp`) — these files already ship inside backup zips, so the
+    /// exact bytes matter and the one addition is deliberate.
     #[test]
     fn a_card_with_no_unknown_keys_is_written_exactly_as_before() {
         let card = Card::new(VRef::new("John", 3, 16), "kjv1769-tok2", T0);
@@ -994,7 +1001,8 @@ mod tests {
   "reps": 0,
   "lapses": 0,
   "due": "2026-01-01",
-  "reviews": []
+  "reviews": [],
+  "lang": "en"
 }
 "#
         );
