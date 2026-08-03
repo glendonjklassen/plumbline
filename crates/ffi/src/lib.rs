@@ -1113,7 +1113,7 @@ pub unsafe extern "C" fn plumbline_engine_toc_json(engine: *const PlumblineEngin
         };
         let books: Vec<wire::TocBook> = canon::BOOKS
             .iter()
-            .map(|b| wire::TocBook { id: b.id, name: b.name, chapters: engine.corpus.chapter_count(b.id) })
+            .map(|b| wire::TocBook { id: b.id, name: i18n::book_name(i18n::active(), b.id), chapters: engine.corpus.chapter_count(b.id) })
             .collect();
         out_json(&wire::Toc { books })
     })
@@ -2350,7 +2350,7 @@ pub unsafe extern "C" fn plumbline_engine_concept_json(
             n: b.n,
             win_count: b.win_count,
             score: b.score,
-            label: burst::span_label(|id| canon::display_name(id).to_string(), &b.win_start, &b.win_end),
+            label: burst::span_label(|id| i18n::book_name(i18n::active(), id), &b.win_start, &b.win_end),
         });
         out_json(&wire::WireConcept {
             code: code.to_string(),
@@ -2361,7 +2361,7 @@ pub unsafe extern "C" fn plumbline_engine_concept_json(
                 .top_books(code, 5)
                 .into_iter()
                 .map(|(book, count)| wire::WireBookCount {
-                    display: canon::display_name(&book).to_string(),
+                    display: i18n::book_name(i18n::active(), &book),
                     book,
                     count,
                 })
@@ -2513,14 +2513,14 @@ impl PanelSource for PlumblineEngine {
             n: b.n,
             win_count: b.win_count,
             score: b.score,
-            label: burst::span_label(|id| canon::display_name(id).to_string(), &b.win_start, &b.win_end),
+            label: burst::span_label(|id| i18n::book_name(i18n::active(), id), &b.win_start, &b.win_end),
         });
         Some(panel::ConceptView {
             community: ce.community(code),
             top_books: ce
                 .top_books(code, 5)
                 .into_iter()
-                .map(|(b, n)| (canon::display_name(&b).to_string(), n))
+                .map(|(b, n)| (i18n::book_name(i18n::active(), &b), n))
                 .collect(),
             ot,
             nt,
@@ -2711,7 +2711,7 @@ impl PanelSource for PlumblineEngine {
             Some(search::SearchAnswer::GoTo { book, chapter, verse }) => {
                 let display = match verse {
                     Some(v) => VRef::new(book.clone(), chapter, v).display(),
-                    None => format!("{} {}", canon::display_name(&book), chapter),
+                    None => VRef::new(book.clone(), chapter, 1).chapter_display_in(i18n::active()),
                 };
                 panel::SearchView::Goto { book, chapter: chapter as u32, verse: verse.map(u32::from), display }
             }
@@ -3330,6 +3330,35 @@ pub unsafe extern "C" fn plumbline_i18n_catalog_json(chosen: *const c_char, devi
     guard(ptr::null_mut(), || {
         let l = i18n::resolve(opt_str(chosen).unwrap_or(""), opt_str(device).unwrap_or(""));
         out_json(&wire::catalog_to_wire(l))
+    })
+}
+
+/// Set the language the ENGINE writes in, and answer with the code it resolved.
+///
+/// A shell calls this ONCE, at startup, alongside
+/// `plumbline_i18n_catalog_json`. The catalogue covers what a shell spells; this
+/// covers what the CORE spells — every book name and every reference it hands
+/// back, in the table of contents, search hits, weave endpoints, note headers,
+/// thread entries, the reading map. Without it a German reader gets a German
+/// interface listing a book called Genesis, which is worse than either language
+/// on its own.
+///
+/// Two calls rather than one on purpose. Resolving a language and choosing one
+/// are different acts, and a getter with a global side effect would mean every
+/// test that asked for a catalogue silently repainted the whole process.
+///
+/// Same arguments and same rule as the catalogue call: an empty or unknown
+/// `chosen` falls through to `device`, and an unknown device is English.
+/// Caller-freed; never null.
+///
+/// # Safety
+/// `chosen` and `device` are null or valid NUL-terminated UTF-8 for the call.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_i18n_set_language(chosen: *const c_char, device: *const c_char) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let l = i18n::resolve(opt_str(chosen).unwrap_or(""), opt_str(device).unwrap_or(""));
+        i18n::set_active(l);
+        out_string(l.code().to_string())
     })
 }
 

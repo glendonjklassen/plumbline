@@ -30,6 +30,7 @@
 //! localizes ("Joh 3,16" — German writes a comma).
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 /// The languages the app ships. Adding one is a variant, a JSON file and a line
 /// in [`Lang::ALL`] — the completeness test then insists it carries every key.
@@ -96,6 +97,41 @@ fn raw(lang: Lang) -> &'static str {
         Lang::En => EN,
         Lang::De => DE,
     }
+}
+
+// ── the active language ──────────────────────────────────────────────────────
+//
+// A PROCESS GLOBAL, and deliberately.
+//
+// Thirty places in the wire layer turn a `VRef` into something a reader reads —
+// search hits, weave endpoints, note headers, thread entries, tag targets,
+// occurrence lists — and every one of them would have had to grow a `lang`
+// parameter, threaded from an engine handle that several of them do not have.
+// Every one of those is a place to forget, and forgetting looks like a German
+// app that says "Genesis" in the passage navigator: not a crash, not a test
+// failure, just an app that reads as broken.
+//
+// The honest justification is that this is not really global state — it is a
+// property of the ONE READER this process serves. There is no second reader in
+// another language, on either shell. An atomic rather than a lock because
+// Android may call the ABI from more than one thread and this is read on nearly
+// every call; a torn read is impossible for a u8 and a stale one would be a
+// single frame in the wrong language during a switch that reloads anyway.
+
+static ACTIVE: AtomicU8 = AtomicU8::new(0);
+
+/// The language `VRef::display` and book names come out in. English until a
+/// shell says otherwise, which is what keeps every test and every tool that
+/// never sets it reading the way it always did.
+pub fn active() -> Lang {
+    Lang::ALL.get(ACTIVE.load(Ordering::Relaxed) as usize).copied().unwrap_or(Lang::En)
+}
+
+/// Set the language for the rest of this process. A shell calls this once, at
+/// startup, with what [`resolve`] gave it.
+pub fn set_active(lang: Lang) {
+    let idx = Lang::ALL.iter().position(|l| *l == lang).unwrap_or(0);
+    ACTIVE.store(idx as u8, Ordering::Relaxed);
 }
 
 /// One language's strings, id → text.
@@ -288,6 +324,93 @@ mod tests {
             for b in crate::canon::BOOKS {
                 let key = format!("book.{}", b.id);
                 assert!(c.contains_key(&key), "{} has no name for {} ({key})", lang.code(), b.name);
+            }
+        }
+    }
+
+    /// Keys deliberately left in English, and the only reason that is allowed.
+    ///
+    /// The welcome pages are the maintainer's own writing, in the first person
+    /// — "I've known many people for whom that prayer has been answered". A
+    /// machine draft of that is not a translation, it is words put in
+    /// somebody's mouth in a language they cannot check. So these fall back to
+    /// English until a person writes them, and the fallback means a German
+    /// reader meets English prose rather than a blank page.
+    ///
+    /// Nothing else may be on this list. Adding a key here is a decision, not a
+    /// convenience, and `every_shipped_string_is_translated` is what makes it
+    /// one.
+    const ENGLISH_ONLY: [&str; 2] = ["intro.welcome.", "intro.curious."];
+
+    #[test]
+    fn every_shipped_string_is_translated() {
+        for lang in Lang::ALL {
+            if lang == Lang::En {
+                continue;
+            }
+            let gaps: Vec<String> = missing(lang)
+                .into_iter()
+                .filter(|k| !ENGLISH_ONLY.iter().any(|p| k.starts_with(p)))
+                .collect();
+            assert!(
+                gaps.is_empty(),
+                "{} is missing {} key(s), and only the welcome prose may be missing: {:?}",
+                lang.code(),
+                gaps.len(),
+                gaps
+            );
+        }
+    }
+
+    #[test]
+    fn a_translation_never_invents_a_key_english_does_not_have() {
+        // The other direction, and the one that rots quietly: a key renamed in
+        // en.json leaves its translation behind, where it is dead weight that
+        // still LOOKS translated. Nothing reads it, `missing()` cannot see it,
+        // and the next person to grep for the id finds the stale German.
+        let en = catalog(Lang::En);
+        for lang in Lang::ALL {
+            if lang == Lang::En {
+                continue;
+            }
+            let orphans: Vec<String> = catalog(lang)
+                .into_keys()
+                .filter(|k| !en.contains_key(k) && !k.starts_with("book."))
+                .collect();
+            assert!(orphans.is_empty(), "{} has keys English does not: {:?}", lang.code(), orphans);
+        }
+    }
+
+    #[test]
+    fn a_translated_string_keeps_every_placeholder_it_was_given() {
+        // A dropped `{n}` is a sentence that silently loses its number, and it
+        // reads as finished copy — "Backed up  files as" is not obviously
+        // broken to anybody who does not know what it should say. An ADDED
+        // placeholder is worse: no caller supplies it, so the braces reach the
+        // screen (see `format`).
+        let en = catalog(Lang::En);
+        let names = |s: &str| -> Vec<String> {
+            let mut out: Vec<String> = s
+                .split('{')
+                .skip(1)
+                .filter_map(|part| part.split_once('}').map(|(n, _)| n.to_string()))
+                .collect();
+            out.sort();
+            out
+        };
+        for lang in Lang::ALL {
+            if lang == Lang::En {
+                continue;
+            }
+            for (key, translated) in catalog(lang) {
+                let Some(source) = en.get(&key) else { continue };
+                assert_eq!(
+                    names(source),
+                    names(&translated),
+                    "{} {key}: placeholders differ\n  en: {source}\n  {}: {translated}",
+                    lang.code(),
+                    lang.code()
+                );
             }
         }
     }

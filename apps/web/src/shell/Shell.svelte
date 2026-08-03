@@ -132,10 +132,14 @@
   // The bottom bar's four destinations. Icon paths are copied verbatim from the
   // Compose shell's NavIcons.kt (standard Material Symbols: book, explore,
   // present_to_all, school) so both shells draw the same glyphs.
+  // Ids, not labels. This array is built ONCE, so a label in it is a snapshot of
+  // whatever language the app booted in; the `nav.hymnal` entry was still a bare
+  // "Hymnal" after the extraction pass and nothing caught it, because a string
+  // in a script body does not look like copy. Rendered through `t()` below, the
+  // question cannot come up again.
   const NAV = [
     {
       key: "read",
-      label: t("nav.read"),
       path:
         "M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" +
         "M6 4h5v8l-2.5-1.5L6 12V4z",
@@ -145,7 +149,6 @@
     },
     {
       key: "explore",
-      label: t("nav.explore"),
       path:
         "M12 10.9c-.61 0-1.1.49-1.1 1.1s.49 1.1 1.1 1.1c.61 0 1.1-.49 1.1-1.1s-.49-1.1-1.1-1.1z" +
         "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" +
@@ -154,7 +157,6 @@
     },
     {
       key: "present",
-      label: t("nav.present"),
       path:
         "M21 3H3c-1.11 0-2 .89-2 2v14c0 1.11.89 2 2 2h18c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2z" +
         "m0 16.02H3V4.98h18v14.04zM10 12H8l4-4 4 4h-2v4h-4v-4z",
@@ -162,7 +164,6 @@
     },
     {
       key: "memorize",
-      label: t("nav.memorize"),
       path: "M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 11-6-11-6z",
       // `dismissTransient` resets the screen first, so these set it after.
       go: () => {
@@ -172,7 +173,6 @@
     },
     {
       key: "hymnal",
-      label: "Hymnal",
       // Material Symbols "music_note".
       path: "M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z",
       go: () => (s.screen = "hymnal"),
@@ -501,7 +501,7 @@
         onclick={go(item.go)}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d={item.path} /></svg>
-        <span>{item.label}</span>
+        <span>{t(`nav.${item.key}`)}</span>
       </button>
     {/each}
   </nav>

@@ -16,12 +16,18 @@
 //      alt. `<input placeholder="Church name" />`. These are the ones that get
 //      missed by eye, because they do not look like copy in a diff.
 //
-// It deliberately does NOT read `<script>` bodies for bare strings. Almost every
-// string in a script is a key, a class, a CSS value, an engine method name or a
-// URL, so the false-positive rate would be high enough that the allowlist became
-// the file — and the strings that do reach a reader from a script (toasts,
-// confirm bodies) go through `showToast`/`askConfirm`, which are checked below
-// by their own rule.
+//   3. A LABEL PROPERTY in a script body — `{ key: "hymnal", label: "Hymnal" }`.
+//      This one was added after it bit: the bottom bar's nav table survived the
+//      whole extraction pass with one bare label in it, and neither review nor
+//      the first two rules saw it, because a string in a script does not look
+//      like copy. Only e2e/language.spec.ts caught it, and only because it
+//      happened to assert that exact word.
+//
+// It deliberately does NOT read script bodies for bare strings in general.
+// Almost every string in a script is a key, a class, a CSS value, an engine
+// method name or a URL, so the false-positive rate would be high enough that the
+// allowlist became the file. The property names below are the narrow exception:
+// they are what a UI table calls its human-readable column, and nothing else.
 //
 // ── Escape hatch ─────────────────────────────────────────────────────────────
 //
@@ -54,6 +60,9 @@ const NOT_WORDS = /^[^\p{L}]*$/u;
  * catalogue honest about what a translator actually has to do.
  */
 const NAMES = new Set(["Plumbline", "KJV", "AKJV", "QR", "OK", "Aa", "plumblinebible.org", "OSIS"]);
+
+/** Object properties that hold copy in a UI table — see rule 3 above. */
+const LABEL_PROPS = ["label", "desc", "hint", "placeholder", "heading", "caption", "tooltip"];
 
 /** Attributes a reader can hear or read. `title` included: it is a tooltip. */
 const SPEAKING_ATTRS = ["aria-label", "placeholder", "title", "alt", "aria-valuetext", "aria-description"];
@@ -145,6 +154,20 @@ for (const file of files) {
       const line = src.slice(0, markupFrom + m.index).split("\n").length - 1;
       if (exempt(line)) continue;
       findings.push({ file, line: line + 1, what: `${attr}="${value}"` });
+    }
+  }
+
+  // ── label properties in the script ─────────────────────────────────────────
+  const script = scriptEnd < 0 ? "" : src.slice(0, scriptEnd);
+  for (const prop of LABEL_PROPS) {
+    const re = new RegExp(`\\b${prop}\\s*:\\s*"([^"]*)"`, "g");
+    let hit;
+    while ((hit = re.exec(script))) {
+      const value = hit[1].trim();
+      if (!value || NOT_WORDS.test(value) || NAMES.has(value)) continue;
+      const line = script.slice(0, hit.index).split("\n").length - 1;
+      if (exempt(line)) continue;
+      findings.push({ file, line: line + 1, what: `${prop}: "${value}"` });
     }
   }
 

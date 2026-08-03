@@ -829,6 +829,28 @@ char *plumbline_theme_palette_json(const char *theme);
 // `chosen` and `device` are null or valid NUL-terminated UTF-8 for the call.
 char *plumbline_i18n_catalog_json(const char *chosen, const char *device);
 
+// Set the language the ENGINE writes in, and answer with the code it resolved.
+//
+// A shell calls this ONCE, at startup, alongside
+// `plumbline_i18n_catalog_json`. The catalogue covers what a shell spells; this
+// covers what the CORE spells — every book name and every reference it hands
+// back, in the table of contents, search hits, weave endpoints, note headers,
+// thread entries, the reading map. Without it a German reader gets a German
+// interface listing a book called Genesis, which is worse than either language
+// on its own.
+//
+// Two calls rather than one on purpose. Resolving a language and choosing one
+// are different acts, and a getter with a global side effect would mean every
+// test that asked for a catalogue silently repainted the whole process.
+//
+// Same arguments and same rule as the catalogue call: an empty or unknown
+// `chosen` falls through to `device`, and an unknown device is English.
+// Caller-freed; never null.
+//
+// # Safety
+// `chosen` and `device` are null or valid NUL-terminated UTF-8 for the call.
+char *plumbline_i18n_set_language(const char *chosen, const char *device);
+
 // Force the lazy analytics indexes (concept engine, leitwort scan) to build
 // now — call once on a background thread at startup in Full mode so the first
 // study click doesn't stall. Safe to call from any thread (the builds are

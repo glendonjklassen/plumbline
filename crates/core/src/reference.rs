@@ -38,13 +38,16 @@ impl VRef {
         format!("{} {}:{}", self.book, self.chapter, self.verse)
     }
 
-    /// Human display form in English, e.g. `"Genesis 1:7"`.
+    /// Human display form in the reader's language, e.g. `"Genesis 1:7"` or
+    /// `"1. Mose 1,7"`.
     ///
-    /// Kept as the no-argument call because most of the codebase predates
-    /// languages and English is the source; [`VRef::display_in`] is the one to
-    /// reach for anywhere a reader's language is known.
+    /// Reads [`crate::i18n::active`], which is the process-wide language a shell
+    /// sets once at startup — see the reasoning there. This is what makes the
+    /// thirty wire sites that turn a reference into copy correct without any of
+    /// them knowing a language exists. [`VRef::display_in`] is the explicit form,
+    /// for a caller that has a language in hand and should not consult a global.
     pub fn display(&self) -> String {
-        self.display_in(crate::i18n::Lang::En)
+        self.display_in(crate::i18n::active())
     }
 
     /// Human display form in `lang` — localized book name AND separator.

@@ -47,8 +47,10 @@ pub struct Toc {
 pub struct TocBook {
     /// OSIS id, e.g. `"John"`.
     pub id: &'static str,
-    /// Display name, e.g. `"John"` / `"1 Corinthians"`.
-    pub name: &'static str,
+    /// Display name in the reader's language, e.g. `"John"` / `"1. Johannes"`.
+    /// Owned rather than `&'static str`: it is a translation now, not a slice of
+    /// the compiled-in canon table.
+    pub name: String,
     /// Chapters in the loaded corpus (floored at 1 for a book it lacks).
     pub chapters: u16,
 }
@@ -1338,7 +1340,8 @@ pub fn search_to_wire(a: &SearchAnswer) -> WireSearch {
         SearchAnswer::GoTo { book, chapter, verse } => {
             let display = match verse {
                 Some(v) => plumbline_core::VRef::new(book.clone(), *chapter, *v).display(),
-                None => format!("{} {}", plumbline_core::canon::display_name(book), chapter),
+                None => plumbline_core::VRef::new(book.clone(), *chapter, 1)
+                    .chapter_display_in(plumbline_core::i18n::active()),
             };
             WireSearch::Goto { book: book.clone(), chapter: *chapter, verse: *verse, display }
         }

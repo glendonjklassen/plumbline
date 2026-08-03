@@ -63,6 +63,7 @@ import {
   guideBlocks,
   routeLink,
   i18nCatalog,
+  i18nSetLanguage,
   themePalette,
   shareLink,
   readingSpec,
@@ -688,6 +689,7 @@ function statics(): Record<string, (...a: any[]) => any> {
     configSave: (cfg: unknown) => configSave(w, cfg),
     themePalette: (theme: string) => themePalette(w, theme),
     i18nCatalog: (chosen: string, device: string) => i18nCatalog(w, chosen, device),
+    i18nSetLanguage: (chosen: string, device: string) => i18nSetLanguage(w, chosen, device),
     guideBlocks: () => guideBlocks(w),
     aboutBlocks: () => aboutBlocks(w),
     engineVersion: () => engineVersion(w),
@@ -765,6 +767,10 @@ self.onmessage = async (ev: MessageEvent) => {
           self.postMessage({ type: "readingWrote" });
         };
         const cfg = configLoad(booted.wasm) ?? {};
+        // BEFORE the TOC below, and before any read the shell makes: this is
+        // what puts the core's own book names and references in the reader's
+        // language, and the TOC is built from them a dozen lines down.
+        i18nSetLanguage(booted.wasm, typeof cfg.language === "string" ? cfg.language : "", m.locale ?? "");
         // Opt-in: absent means off, so a first visit does NOT pull the analysis
         // pack in the background.
         const machineOn = cfg.machineAnalysis === true;

@@ -51,92 +51,105 @@
   // pop in a beat after the page (feedback 2026-07-27). The 1769 text is
   // frozen, so a copy of thirteen verses cannot drift — each was taken
   // verbatim from data/kjv.jsonl, rendered exactly as Verse::body() does.
+  /** A quoted verse. The LABEL IS DERIVED, not stored: "Psalm 12:6–7" is a
+   *  book name plus the catalogue's own reference template, and both localize
+   *  (German writes "Psalm 12,6–7"). Storing the label would have been fifteen
+   *  more English strings in a table nobody reads as copy. */
   interface Ref {
-    label: string;
     book: string;
     chapter: number;
     verse: number;
+    /** Last verse of a range; absent for a single verse. */
+    end?: number;
     text: string;
+  }
+
+  /** How this reference reads, in the reader's language. */
+  function label(r: Ref): string {
+    const book = s.bookName(r.book);
+    return r.end === undefined
+      ? t("ref.verse", { book, chapter: r.chapter, verse: r.verse })
+      : t("ref.range", { book, chapter: r.chapter, verse: r.verse, end: r.end });
   }
   const REF: Record<string, Ref> = {
     love: {
-      label: "Romans 5:8", book: "Rom", chapter: 5, verse: 8,
+      book: "Rom", chapter: 5, verse: 8,
       text: "But God commendeth his love toward us, in that, while we were yet sinners, Christ died for us.",
     },
     pure: {
-      label: "Psalm 12:6–7", book: "Ps", chapter: 12, verse: 6,
+      end: 7, book: "Ps", chapter: 12, verse: 6,
       text:
         "The words of the LORD are pure words: as silver tried in a furnace of earth, purified seven times. " +
         "Thou shalt keep them, O LORD, thou shalt preserve them from this generation for ever.",
     },
     church: {
-      label: "Hebrews 10:24–25", book: "Heb", chapter: 10, verse: 24,
+      end: 25, book: "Heb", chapter: 10, verse: 24,
       text:
         "And let us consider one another to provoke unto love and to good works: " +
         "Not forsaking the assembling of ourselves together, as the manner of some is; but exhorting one another: " +
         "and so much the more, as ye see the day approaching.",
     },
     heart: {
-      label: "Psalm 119:11", book: "Ps", chapter: 119, verse: 11,
+      book: "Ps", chapter: 119, verse: 11,
       text: "Thy word have I hid in mine heart, that I might not sin against thee.",
     },
     loved: {
-      label: "John 3:16", book: "John", chapter: 3, verse: 16,
+      book: "John", chapter: 3, verse: 16,
       text:
         "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him " +
         "should not perish, but have everlasting life.",
     },
     know: {
-      label: "1 John 5:13", book: "1John", chapter: 5, verse: 13,
+      book: "1John", chapter: 5, verse: 13,
       text:
         "These things have I written unto you that believe on the name of the Son of God; that ye may know " +
         "that ye have eternal life, and that ye may believe on the name of the Son of God.",
     },
     kept: {
-      label: "John 10:28–29", book: "John", chapter: 10, verse: 28,
+      end: 29, book: "John", chapter: 10, verse: 28,
       text:
         "And I give unto them eternal life; and they shall never perish, neither shall any man pluck them " +
         "out of my hand.",
     },
     perfected: {
-      label: "Philippians 1:6", book: "Phil", chapter: 1, verse: 6,
+      book: "Phil", chapter: 1, verse: 6,
       text:
         "Being confident of this very thing, that he which hath begun a good work in you will perform it " +
         "until the day of Jesus Christ:",
     },
     forgiven: {
-      label: "1 John 1:9", book: "1John", chapter: 1, verse: 9,
+      book: "1John", chapter: 1, verse: 9,
       text:
         "If we confess our sins, he is faithful and just to forgive us our sins, and to cleanse us from all " +
         "unrighteousness.",
     },
     treasure: {
-      label: "Proverbs 2:4–5", book: "Prov", chapter: 2, verse: 4,
+      end: 5, book: "Prov", chapter: 2, verse: 4,
       text:
         "If thou seekest her as silver, and searchest for her as for hid treasures; " +
         "Then shalt thou understand the fear of the LORD, and find the knowledge of God.",
     },
     unbelief: {
-      label: "Mark 9:24", book: "Mark", chapter: 9, verse: 24,
+      book: "Mark", chapter: 9, verse: 24,
       text:
         "And straightway the father of the child cried out, and said with tears, Lord, I believe; " +
         "help thou mine unbelief.",
     },
     ask: {
-      label: "Matthew 7:7", book: "Matt", chapter: 7, verse: 7,
+      book: "Matt", chapter: 7, verse: 7,
       text: "Ask, and it shall be given you; seek, and ye shall find; knock, and it shall be opened unto you:",
     },
     seek: {
-      label: "Jeremiah 29:13", book: "Jer", chapter: 29, verse: 13,
+      book: "Jer", chapter: 29, verse: 13,
       text: "And ye shall seek me, and find me, when ye shall search for me with all your heart.",
     },
     struggle: {
-      label: "Psalm 34:18", book: "Ps", chapter: 34, verse: 18,
+      book: "Ps", chapter: 34, verse: 18,
       text:
         "The LORD is nigh unto them that are of a broken heart; and saveth such as be of a contrite spirit.",
     },
     wisdom: {
-      label: "2 Timothy 3:16–17", book: "2Tim", chapter: 3, verse: 16,
+      end: 17, book: "2Tim", chapter: 3, verse: 16,
       text:
         "All scripture is given by inspiration of God, and is profitable for doctrine, for reproof, for " +
         "correction, for instruction in righteousness: That the man of God may be perfect, throughly " +
@@ -231,13 +244,14 @@
 </script>
 
 {#snippet refchip(r: Ref)}
-  <button class="ref" onclick={() => openRef(r)} title={t("intro.openRef", { passage: r.label })}>{r.label}</button>
+  {@const said = label(r)}
+  <button class="ref" onclick={() => openRef(r)} title={t("intro.openRef", { passage: said })}>{said}</button>
 {/snippet}
 
 {#snippet vquote(refs: Ref[])}
   <blockquote class="vq">
     <span class="vq-text">“{refs.map((r) => r.text).join(" ")}”</span>
-    <span class="vq-refs">{#each refs as r (r.label)}{@render refchip(r)}{/each}</span>
+    <span class="vq-refs">{#each refs as r (`${r.book}${r.chapter}:${r.verse}`)}{@render refchip(r)}{/each}</span>
   </blockquote>
 {/snippet}
 

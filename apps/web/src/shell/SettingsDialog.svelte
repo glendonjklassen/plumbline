@@ -158,8 +158,15 @@
   async function setLanguage(code: string): Promise<void> {
     if ((s.config.language ?? "") === code) return;
     s.config.language = code;
-    s.saveConfig();
+    // FLUSH, THEN AWAIT, THEN RELOAD. `flushConfig` posts the save and returns;
+    // the worker still has to write it into the home and persist that to
+    // IndexedDB, and a reload fired in the same tick tears the page down first —
+    // so the reader picks German, watches the app reload, and gets English back.
+    // The RPC is ordered, so awaiting the flush is awaiting the save with it.
+    // (Caught by e2e/language.spec.ts, which is the only thing that ever
+    // exercised this: every other setting here takes effect without a reload.)
     s.flushConfig();
+    await s.rpc.flush();
     location.reload();
   }
 

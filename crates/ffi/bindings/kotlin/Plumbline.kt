@@ -182,6 +182,8 @@ internal interface PlumblineNative : Library {
      *  locale still gets a working app. Engine-independent; never null. */
     fun plumbline_i18n_catalog_json(chosen: String?, device: String?): Pointer?
 
+    fun plumbline_i18n_set_language(chosen: String?, device: String?): Pointer?
+
     // ── the share link + the church it carries (engine-independent) ─────────
     /** `{base?, church?, startAsNewBeliever?, at?}` in, `{url, base, church,
      *  hasChurch, title, siteUrl}` out. Null only on malformed JSON. */
