@@ -300,13 +300,13 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(&home);
     }
+
     /// The other half of the stamp's contract, and the one that matters more: a
     /// file that has NO stamp does not gain one by being re-saved. See
     /// `i18n::stamp` — inventing a provenance is worse than admitting none.
-
-    /// MUTATION: in `set_note`, change `unwrap_or_else(stamped_extra)` to
-    /// `map(|r| { let mut e = r.extra; crate::i18n::stamp_new(&mut e); e })`-style
-    /// stamping on every save. Red here; the golden test above stays green.
+    ///
+    /// MUTATION: in `set_note`, stamp on every save instead of only when there
+    /// was no existing file. Red here; the golden test above stays green.
     #[test]
     fn a_note_from_an_older_build_does_not_gain_a_language_it_never_had() {
         let home = scratch("older-note");

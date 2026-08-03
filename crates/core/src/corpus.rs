@@ -269,8 +269,7 @@ pub fn load_cache(path: impl AsRef<Path>, stamp: Option<(u64, i64)>) -> Option<C
     // what it always meant — it only looked like an equality test while there
     // was one corpus.
     let fresh = |src_len: u64, src_mtime: i64, tok: &str| {
-        crate::canon::tokenization_is_ours(tok)
-            && stamp.is_none_or(|(len, mtime)| src_len == len && src_mtime == mtime)
+        crate::canon::tokenization_is_ours(tok) && stamp.is_none_or(|(len, mtime)| src_len == len && src_mtime == mtime)
     };
 
     // The chapter-directory format: decode the header, leave the payload

@@ -2605,8 +2605,8 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
         // The same address, in the other language. John 3:16 is the test the
         // whole design turns on: if the German corpus had its own versification
         // this refKey would land somewhere else.
-        let v: Value = serde_json::from_str(&take(plumbline_engine_verse_json(e, c"John 3:16".as_ptr())).unwrap())
-            .unwrap();
+        let v: Value =
+            serde_json::from_str(&take(plumbline_engine_verse_json(e, c"John 3:16".as_ptr())).unwrap()).unwrap();
         let body = v["body"].as_str().unwrap();
         assert!(body.contains("Gott"), "John 3:16 is not German: {body}");
         assert!(!body.contains("God so loved"), "John 3:16 came back in English: {body}");
@@ -2636,10 +2636,7 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
         // sat at that index in the other text.
         let w: Value =
             serde_json::from_str(&take(plumbline_engine_token_json(e, c"John 3:16".as_ptr(), 0)).unwrap()).unwrap();
-        assert!(
-            w["strongs"].as_array().is_none_or(|a| a.is_empty()),
-            "a German token carries Strong's codes: {w}"
-        );
+        assert!(w["strongs"].as_array().is_none_or(|a| a.is_empty()), "a German token carries Strong's codes: {w}");
 
         // THE STUDY CARD SAYS WHY IT IS EMPTY, in German, rather than showing
         // English evidence about the KJV's words (UAT, 2026-08-03). Everything in
@@ -2670,7 +2667,11 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
         // study value. My first pass returned early and threw them away; only
         // reading this test's own failure output showed it.
         assert!(
-            blocks.contains(&plumbline_core::i18n::t(plumbline_core::i18n::Lang::De, "panel.studyXrefs", &[("n", "23")])),
+            blocks.contains(&plumbline_core::i18n::t(
+                plumbline_core::i18n::Lang::De,
+                "panel.studyXrefs",
+                &[("n", "23")]
+            )),
             "the German study card lost its cross-references: {blocks}"
         );
         assert!(blocks.contains("Römer 5,8"), "a German cross-reference is not in German: {blocks}");

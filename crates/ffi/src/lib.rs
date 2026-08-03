@@ -1180,7 +1180,11 @@ pub unsafe extern "C" fn plumbline_engine_toc_json(engine: *const PlumblineEngin
         };
         let books: Vec<wire::TocBook> = canon::BOOKS
             .iter()
-            .map(|b| wire::TocBook { id: b.id, name: i18n::book_name(i18n::active(), b.id), chapters: engine.corpus.chapter_count(b.id) })
+            .map(|b| wire::TocBook {
+                id: b.id,
+                name: i18n::book_name(i18n::active(), b.id),
+                chapters: engine.corpus.chapter_count(b.id),
+            })
             .collect();
         out_json(&wire::Toc { books })
     })

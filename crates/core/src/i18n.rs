@@ -406,10 +406,8 @@ mod tests {
             if lang == Lang::En {
                 continue;
             }
-            let gaps: Vec<String> = missing(lang)
-                .into_iter()
-                .filter(|k| !ENGLISH_ONLY.iter().any(|p| k.starts_with(p)))
-                .collect();
+            let gaps: Vec<String> =
+                missing(lang).into_iter().filter(|k| !ENGLISH_ONLY.iter().any(|p| k.starts_with(p))).collect();
             assert!(
                 gaps.is_empty(),
                 "{} is missing {} key(s), and only the welcome prose may be missing: {:?}",
@@ -431,10 +429,8 @@ mod tests {
             if lang == Lang::En {
                 continue;
             }
-            let orphans: Vec<String> = catalog(lang)
-                .into_keys()
-                .filter(|k| !en.contains_key(k) && !k.starts_with("book."))
-                .collect();
+            let orphans: Vec<String> =
+                catalog(lang).into_keys().filter(|k| !en.contains_key(k) && !k.starts_with("book.")).collect();
             assert!(orphans.is_empty(), "{} has keys English does not: {:?}", lang.code(), orphans);
         }
     }
@@ -448,11 +444,8 @@ mod tests {
         // screen (see `format`).
         let en = catalog(Lang::En);
         let names = |s: &str| -> Vec<String> {
-            let mut out: Vec<String> = s
-                .split('{')
-                .skip(1)
-                .filter_map(|part| part.split_once('}').map(|(n, _)| n.to_string()))
-                .collect();
+            let mut out: Vec<String> =
+                s.split('{').skip(1).filter_map(|part| part.split_once('}').map(|(n, _)| n.to_string())).collect();
             out.sort();
             out
         };

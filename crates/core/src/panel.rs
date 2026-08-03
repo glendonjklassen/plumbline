@@ -690,15 +690,20 @@ pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token:
         // Said once, plainly, in the reader's language. Showing the English
         // evidence instead read as an app that had half-forgotten which language
         // it was in (UAT, 2026-08-03).
-        out.push(Block::para(vec![
-            Run::new(crate::i18n::t(crate::i18n::active(), "study.onlyKjv", &[]), sz::NOTE, Color::Faded).italic(),
-        ]));
+        out.push(Block::para(vec![Run::new(
+            crate::i18n::t(crate::i18n::active(), "study.onlyKjv", &[]),
+            sz::NOTE,
+            Color::Faded,
+        )
+        .italic()]));
     } else {
         if codes.is_empty() {
-            out.push(Block::para(vec![
-                Run::new(crate::i18n::t(crate::i18n::active(), "study.noStrongs", &[]), sz::BODY, Color::Faded)
-                    .italic(),
-            ]));
+            out.push(Block::para(vec![Run::new(
+                crate::i18n::t(crate::i18n::active(), "study.noStrongs", &[]),
+                sz::BODY,
+                Color::Faded,
+            )
+            .italic()]));
         }
         for code in codes {
             code_study(src, code, &word, gates, &mut out);
@@ -858,9 +863,7 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
 
     let xrefs = src.verse_xrefs(verse);
     if !xrefs.is_empty() {
-        out.push(Block::para(vec![
-            Run::new(sn("panel.xrefs", xrefs.len()), sz::LABEL, Color::Ink).bold()
-        ]));
+        out.push(Block::para(vec![Run::new(sn("panel.xrefs", xrefs.len()), sz::LABEL, Color::Ink).bold()]));
         for p in xrefs.iter().take(40) {
             let weave = match p.weave_index {
                 Some(wi) => Run::new(&p.weave, sz::CAPTION, Color::Faded).link(format!("weave:{wi}")),
@@ -1166,12 +1169,7 @@ pub fn weaves_list(src: &dyn PanelSource) -> Vec<Block> {
     if ws.is_empty() {
         // A heading over nothing reads as a broken panel. Threads, tags and the
         // review queue all say what to do here; this one said nothing.
-        out.push(Block::para(vec![Run::new(
-            s("panel.noWeaves"),
-            sz::SMALL,
-            Color::Faded,
-        )
-        .italic()]));
+        out.push(Block::para(vec![Run::new(s("panel.noWeaves"), sz::SMALL, Color::Faded).italic()]));
     }
     for w in &ws {
         let suffix = if w.suggested { " · suggested" } else { "" };
@@ -1194,9 +1192,7 @@ pub fn suggested(src: &dyn PanelSource) -> Vec<Block> {
     let mut out =
         vec![Block::para(vec![Run::new(format!("Suggested weaves ({})", items.len()), sz::TITLE, Color::Ink).bold()])];
     if items.is_empty() {
-        out.push(Block::para(vec![
-            Run::new(s("panel.emptyQueue"), sz::SMALL, Color::Faded).italic()
-        ]));
+        out.push(Block::para(vec![Run::new(s("panel.emptyQueue"), sz::SMALL, Color::Faded).italic()]));
     }
     for w in &items {
         out.push(Block::Rule);
