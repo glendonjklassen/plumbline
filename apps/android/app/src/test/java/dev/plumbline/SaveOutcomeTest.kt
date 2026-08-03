@@ -97,6 +97,9 @@ class SaveOutcomeTest {
      *  keeps by staying open. */
     @Test
     fun theNoteFailureLineKeepsTheReasonAndTheNote() {
+        // The line comes from the catalogue now, and a JVM test has no engine to
+        // ask for it — see CatalogForTest.kt.
+        useEnglishCatalogue()
         val line = noteSaveFailedLine("No space left on device (os error 28)")
         assertTrue(
             "the reader must be told why it did not save: $line",

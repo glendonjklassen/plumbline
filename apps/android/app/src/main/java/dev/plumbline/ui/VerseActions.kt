@@ -136,7 +136,7 @@ fun saveOutcome(attempt: Result<String?>): SaveOutcome {
 /** The note editor's failure line: the engine's own words, then what the dialog is
  *  doing about it — it is still open, so the note can be retried or lifted out. */
 fun noteSaveFailedLine(message: String): String =
-    "Not saved — $message. Your note is still here; try again, or copy it out."
+    t("notes.notSaved", "why" to message)
 
 /**
  * The verse-action sheet. Opened by the reader's long-press with the verse
@@ -223,7 +223,7 @@ fun VerseActionSheet(
                         type = "text/plain"
                         putExtra(Intent.EXTRA_TEXT, text)
                     }
-                    runCatching { context.startActivity(Intent.createChooser(send, "Share verse")) }
+                    runCatching { context.startActivity(Intent.createChooser(send, t("menu.shareLink"))) }
                 } else {
                     clipboard.setText(AnnotatedString(text))
                 }
@@ -242,8 +242,8 @@ fun VerseActionSheet(
             Toast.makeText(
                 context,
                 when (outcome) {
-                    is SaveOutcome.Saved -> "Added “$display” to your memory list"
-                    is SaveOutcome.Failed -> "Not added — ${outcome.message}"
+                    is SaveOutcome.Saved -> t("memorize.added", "passage" to display)
+                    is SaveOutcome.Failed -> t("memorize.notAdded", "why" to outcome.message)
                 },
                 Toast.LENGTH_SHORT,
             ).show()
@@ -269,8 +269,8 @@ fun VerseActionSheet(
             Toast.makeText(
                 context,
                 when (outcome) {
-                    is SaveOutcome.Saved -> "Memorizing $display–$endVerse"
-                    is SaveOutcome.Failed -> "Not added — ${outcome.message}"
+                    is SaveOutcome.Saved -> t("memorize.memorizingRange", "passage" to display, "end" to endVerse)
+                    is SaveOutcome.Failed -> t("memorize.notAdded", "why" to outcome.message)
                 },
                 Toast.LENGTH_SHORT,
             ).show()
@@ -331,23 +331,23 @@ fun VerseActionSheet(
             // ── copy + share (Tier 0 #1) — one "Copy" in the reader's chosen
             //    shape; the format lives in Options ▸ Copy format. ─────────────
             ActionRow("Copy", palette.ink) { copy(copyStyle) }
-            ActionRow("Copy chapter", palette.ink) { copy("chapter") }
-            ActionRow("Share…", palette.ink) { copy(copyStyle, share = true) }
+            ActionRow(t("menu.copyChapter"), palette.ink) { copy("chapter") }
+            ActionRow(t("menu.shareLink"), palette.ink) { copy(copyStyle, share = true) }
             HorizontalDivider(color = palette.rule)
 
             // ── tag + note + memorize — tagging first: it's how topics
             //    accumulate for later weaving (2026-07-25 feedback) ───────────
-            ActionRow("Tag…", palette.ink) { onDismiss(); onTag(verseRef) }
-            ActionRow("Note…", palette.ink) { showNote = true }
-            ActionRow("Memorize this verse", palette.ink) { memorize() }
-            ActionRow("Memorize passage…", palette.ink) { showPassage = true }
+            ActionRow(t("menu.tag"), palette.ink) { onDismiss(); onTag(verseRef) }
+            ActionRow(t("menu.note"), palette.ink) { showNote = true }
+            ActionRow(t("menu.memorizeVerse"), palette.ink) { memorize() }
+            ActionRow(t("menu.memorizePassage"), palette.ink) { showPassage = true }
             // Log a paper-Bible read, on the chapter's FIRST verse only. Kept to
             // verse 1 on purpose: the affordance should be findable when wanted
             // and too fiddly to do across a whole Bible, which is exactly the
             // balance asked for — it exists for "I read Judges on paper last
             // Tuesday", not for backfilling a reading history wholesale.
             if (parseRef(verseRef)?.verse == 1) {
-                ActionRow("Mark chapter read…", palette.ink) { showMarkRead = true }
+                ActionRow(t("menu.markRead"), palette.ink) { showMarkRead = true }
             }
             HorizontalDivider(color = palette.rule)
 
@@ -396,8 +396,8 @@ fun VerseActionSheet(
                         Toast.makeText(
                             context,
                             when (outcome) {
-                                is SaveOutcome.Saved -> "Marked read — $date"
-                                is SaveOutcome.Failed -> "Not marked — ${outcome.message}"
+                                is SaveOutcome.Saved -> t("markRead.marked", "when" to date)
+                                is SaveOutcome.Failed -> t("markRead.notMarked", "why" to outcome.message)
                             },
                             Toast.LENGTH_SHORT,
                         ).show()
@@ -417,8 +417,8 @@ fun VerseActionSheet(
                         Toast.makeText(
                             context,
                             when (outcome) {
-                                is SaveOutcome.Saved -> "Reading history cleared"
-                                is SaveOutcome.Failed -> "Not cleared — ${outcome.message}"
+                                is SaveOutcome.Saved -> t("markRead.cleared")
+                                is SaveOutcome.Failed -> t("markRead.notCleared", "why" to outcome.message)
                             },
                             Toast.LENGTH_SHORT,
                         ).show()
@@ -467,17 +467,17 @@ private fun MarkReadDialog(
             TextButton(onClick = {
                 val ms = state.selectedDateMillis
                 if (ms != null) onPick(LocalDate.ofEpochDay(ms / 86_400_000L).toString()) else onCancel()
-            }) { Text("Set", color = palette.gold) }
+            }) { Text(t("markRead.set"), color = palette.gold) }
         },
         dismissButton = {
             Row {
-                TextButton(onClick = onClear) { Text("Clear", color = palette.faded) }
-                TextButton(onClick = onCancel) { Text("Cancel", color = palette.faded) }
+                TextButton(onClick = onClear) { Text(t("markRead.clearShort"), color = palette.faded) }
+                TextButton(onClick = onCancel) { Text(t("common.cancel"), color = palette.faded) }
             }
         },
     ) {
         Text(
-            "When did you last read $label?",
+            t("markRead.question", "chapter" to label),
             color = palette.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp),
         )
@@ -485,9 +485,9 @@ private fun MarkReadDialog(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            TextButton(onClick = { pickDaysAgo(0) }) { Text("Today", color = palette.gold, fontSize = 13.sp) }
-            TextButton(onClick = { pickDaysAgo(1) }) { Text("Yesterday", color = palette.gold, fontSize = 13.sp) }
-            TextButton(onClick = { pickDaysAgo(7) }) { Text("Last week", color = palette.gold, fontSize = 13.sp) }
+            TextButton(onClick = { pickDaysAgo(0) }) { Text(t("markRead.today"), color = palette.gold, fontSize = 13.sp) }
+            TextButton(onClick = { pickDaysAgo(1) }) { Text(t("markRead.yesterday"), color = palette.gold, fontSize = 13.sp) }
+            TextButton(onClick = { pickDaysAgo(7) }) { Text(t("markRead.lastWeek"), color = palette.gold, fontSize = 13.sp) }
         }
         DatePicker(state = state, colors = DatePickerDefaults.colors(containerColor = palette.panelBg))
     }
@@ -556,12 +556,12 @@ private fun PassageEndPicker(
                 if (ends.isEmpty()) {
                     Text(
                         "$startDisplay is the last verse of its chapter — a passage has to end " +
-                            "on a later verse of the same chapter.",
+                            t("memorize.passageEndHint"),
                         color = palette.inkFaded, fontSize = 13.sp,
                     )
                 } else {
                     Text(
-                        "Tap the verse this passage ends on.",
+                        t("memorize.passageNote"),
                         color = palette.inkFaded, fontSize = 13.sp,
                     )
                     FlowRow(
@@ -598,10 +598,10 @@ private fun PassageEndPicker(
         },
         confirmButton = {
             TextButton(onClick = { picked?.let(onPick) }, enabled = picked != null) {
-                Text("Memorize", color = if (picked != null) palette.gold else palette.inkFaded)
+                Text(t("nav.memorize"), color = if (picked != null) palette.gold else palette.inkFaded)
             }
         },
-        dismissButton = { TextButton(onClick = onCancel) { Text("Cancel", color = palette.ink) } },
+        dismissButton = { TextButton(onClick = onCancel) { Text(t("common.cancel"), color = palette.ink) } },
         containerColor = palette.panelBg,
     )
 }
@@ -659,7 +659,7 @@ fun TagPickerSheet(
             }
             Toast.makeText(
                 context,
-                if (err.isNullOrBlank()) "Tagged $verseRef — $tag" else err,
+                if (err.isNullOrBlank()) t("tag.tagged", "passage" to verseRef, "tag" to tag) else err,
                 Toast.LENGTH_SHORT,
             ).show()
             onDismiss()
@@ -672,7 +672,7 @@ fun TagPickerSheet(
                 .navigationBarsPadding().padding(horizontal = 16.dp),
         ) {
             Text(
-                "Tag $verseRef",
+                t("tag.heading", "passage" to verseRef),
                 color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
@@ -700,7 +700,7 @@ fun TagPickerSheet(
                 }
                 if (list.isEmpty()) {
                     Text(
-                        "No tags yet — name your first below.",
+                        t("tag.emptyNameFirst"),
                         color = palette.faded, fontSize = 14.sp,
                         modifier = Modifier.padding(vertical = 12.dp),
                     )
@@ -709,7 +709,7 @@ fun TagPickerSheet(
 
             HorizontalDivider(color = palette.rule)
             if (!newMode) {
-                ActionRow("New tag…", palette.ink) { newMode = true }
+                ActionRow(t("tag.new"), palette.ink) { newMode = true }
             } else {
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -719,11 +719,11 @@ fun TagPickerSheet(
                     OutlinedTextField(
                         value = newName,
                         onValueChange = { newName = it },
-                        placeholder = { Text("Tag name") },
+                        placeholder = { Text(t("tag.name")) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { apply(newName) }) { Text("Add", color = palette.gold) }
+                    TextButton(onClick = { apply(newName) }) { Text(t("tag.add"), color = palette.gold) }
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -745,15 +745,15 @@ private fun NoteDialog(
     var text by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onCancel,
-        confirmButton = { TextButton(onClick = { onSave(text) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
-        title = { Text("Note", color = palette.ink) },
+        confirmButton = { TextButton(onClick = { onSave(text) }) { Text(t("common.save")) } },
+        dismissButton = { TextButton(onClick = onCancel) { Text(t("common.cancel")) } },
+        title = { Text(t("notes.on"), color = palette.ink) },
         text = {
             Column {
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    placeholder = { Text("Your note (leave empty to clear)") },
+                    placeholder = { Text(t("notes.fieldClear")) },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
                 )
@@ -817,7 +817,7 @@ fun ThreadPickerSheet(
             }
             Toast.makeText(
                 context,
-                if (err.isNullOrBlank()) "Added to $t" else err,
+                if (err.isNullOrBlank()) t("thread.addedTo", "thread" to t) else err,
                 Toast.LENGTH_SHORT,
             ).show()
             onDismiss()
@@ -831,7 +831,7 @@ fun ThreadPickerSheet(
             }
             if (err.isNullOrBlank()) {
                 reloadEpoch++
-                Toast.makeText(context, "Deleted $name", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, t("thread.deleted", "thread" to name), Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
             }
@@ -843,9 +843,9 @@ fun ThreadPickerSheet(
      *  asks the same way now. */
     fun askDelete(name: String) {
         confirmDelete = ConfirmRequest(
-            title = "Delete “$name”?",
-            body = "Do you really want to delete this?",
-            verb = "Delete thread",
+            title = t("thread.deleteAsk", "thread" to name),
+            body = t("thread.deleteBody"),
+            verb = t("thread.deleteVerb"),
         ) { delete(name) }
     }
 
@@ -855,7 +855,7 @@ fun ThreadPickerSheet(
                 .navigationBarsPadding().padding(horizontal = 16.dp),
         ) {
             Text(
-                "Add $verseRef to a thread",
+                t("thread.heading", "passage" to verseRef),
                 color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
@@ -877,7 +877,7 @@ fun ThreadPickerSheet(
                             color = palette.faded, fontSize = 12.sp,
                         )
                         Text(
-                            "Delete",
+                            t("common.delete"),
                             color = palette.disputed, fontSize = 12.sp,
                             modifier = Modifier
                                 .clickable { askDelete(t.name) }
@@ -910,7 +910,7 @@ fun ThreadPickerSheet(
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { apply(newName) }) { Text("Add", color = palette.gold) }
+                    TextButton(onClick = { apply(newName) }) { Text(t("tag.add"), color = palette.gold) }
                 }
             }
             Spacer(Modifier.height(12.dp))

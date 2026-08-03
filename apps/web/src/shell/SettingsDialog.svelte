@@ -619,7 +619,9 @@
       <label class="toggle">
         <span class="body">
           <span class="name">{t("settings.bundled")}</span>
-          <span class="desc">{t("settings.bundledDesc")}</span>
+          <!-- The reload note is WEB ONLY: Android applies it without one, so it
+               is its own key rather than a second copy of the sentence. -->
+          <span class="desc">{t("settings.bundledDesc")} {t("settings.bundledReloads")}</span>
         </span>
         <input type="checkbox" checked={s.bundledOn} onchange={toggleBundled} />
       </label>

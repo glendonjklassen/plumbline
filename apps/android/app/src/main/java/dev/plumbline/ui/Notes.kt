@@ -80,9 +80,9 @@ fun NotesScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onClose) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = palette.ink)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("bar.back"), tint = palette.ink)
                 }
-                Text("Notes", color = palette.ink)
+                Text(t("notes.title"), color = palette.ink)
             }
         }
         HorizontalDivider(color = palette.rule)
@@ -90,11 +90,11 @@ fun NotesScreen(
         val list = notes
         when {
             list == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Loading…", color = palette.faded)
+                Text(t("common.loading"), color = palette.faded)
             }
             list.isEmpty() -> Box(Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.Center) {
                 Text(
-                    "No notes yet.\n\nLong-press a verse → “Note…” to write one.",
+                    t("notes.empty"),
                     color = palette.ink, fontSize = 16.sp,
                 )
             }
@@ -114,7 +114,7 @@ fun NotesScreen(
                                 modifier = Modifier.padding(top = 3.dp),
                             )
                         }
-                        TextButton(onClick = { editing = n }) { Text("Edit", color = palette.gold) }
+                        TextButton(onClick = { editing = n }) { Text(t("notes.edit"), color = palette.gold) }
                     }
                     HorizontalDivider(color = palette.rule)
                 }
@@ -130,13 +130,13 @@ fun NotesScreen(
         var error by remember(n) { mutableStateOf<String?>(null) }
         AlertDialog(
             onDismissRequest = { editing = null },
-            title = { Text("Note on ${n.display}", color = palette.ink) },
+            title = { Text(t("notes.on", "passage" to n.display), color = palette.ink) },
             text = {
                 Column {
                     OutlinedTextField(
                         value = text,
                         onValueChange = { text = it },
-                        placeholder = { Text("Your note (leave empty to remove)") },
+                        placeholder = { Text(t("notes.field")) },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 3,
                     )
@@ -166,9 +166,9 @@ fun NotesScreen(
                             is SaveOutcome.Failed -> error = noteSaveFailedLine(outcome.message)
                         }
                     }
-                }) { Text("Save") }
+                }) { Text(t("common.save")) }
             },
-            dismissButton = { TextButton(onClick = { editing = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { editing = null }) { Text(t("common.cancel")) } },
             containerColor = palette.panelBg,
         )
     }

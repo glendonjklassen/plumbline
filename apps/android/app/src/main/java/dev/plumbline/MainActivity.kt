@@ -29,6 +29,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import dev.plumbline.ui.PlumblineApp
+import dev.plumbline.ui.Strings
+import dev.plumbline.ui.t
 import dev.plumbline.ui.warmSerifType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -39,6 +41,11 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicLong
+
+/** The device's own language, as a BCP-47 tag. Only decides when the reader has
+ *  not chosen one — `i18n::resolve` in the core owns that rule. */
+private fun deviceLocale(): String =
+    java.util.Locale.getDefault().toLanguageTag()
 
 class MainActivity : ComponentActivity() {
 
@@ -64,6 +71,22 @@ class MainActivity : ComponentActivity() {
         // .so as a clear crash rather than a lazy failure deep in the binding.
         runCatching { System.loadLibrary("plumbline_ffi") }
         bundledOn = !File(filesDir, ".no-bundle").exists()
+
+        // The reader's language, BEFORE the engine opens and before anything
+        // composes. Two halves: the catalogue this shell paints from, and the
+        // language the CORE writes book names and references in — a shell that
+        // loaded only the first gets a German interface listing a book called
+        // Genesis. See ui/Strings.kt.
+        //
+        // The setting is read straight from the config here rather than waiting
+        // for StudyScreen's copy, because the engine's table of contents is
+        // built at open and would otherwise be English for the life of the
+        // session. `XDG_CONFIG_HOME` is set above, so this is the first
+        // `plumbline_config_*` call and it reads the real file.
+        runCatching {
+            val chosen = parseWire<ConfigState>(StudyConfig.LoadJson())?.language ?: ""
+            Strings.load(chosen, deviceLocale())
+        }
 
         // Parse the 1.6 MB of bundled EB Garamond into the process-wide cache
         // (ui/Typography.kt) off the main thread, before anything composes a
@@ -155,7 +178,7 @@ class MainActivity : ComponentActivity() {
                 // keeps the notes it saw then — an empty set (see
                 // `PlumblineEngine::load_core_data`).
                 warmIndexes(e)
-            }.onFailure { loadError = it.message ?: "could not open corpus" }
+            }.onFailure { loadError = it.message ?: t("boot.couldNotOpen") }
         }
 
         // Track the fold posture lifecycle-aware; expose the FoldingFeature (if any)
@@ -283,9 +306,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
             val what = when {
-                bundledOn -> "Bundled study set on"
-                kept > 0 -> "Bundled study set off — kept $kept you had edited"
-                else -> "Bundled study set off"
+                bundledOn -> t("settings.bundledOn")
+                kept > 0 -> Strings.plural("settings.bundledOffKept.one", "settings.bundledOffKept.other", kept)
+                else -> t("settings.bundledOff")
             }
             Toast.makeText(this@MainActivity, "$what — restart to apply", Toast.LENGTH_LONG).show()
         }
@@ -338,7 +361,7 @@ private fun LoadingScreen() {
 private fun ErrorScreen(message: String) {
     MaterialTheme(typography = dev.plumbline.ui.rememberSerifTypography()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Startup failed: $message")
+            Text(t("boot.startupFailed", "why" to message))
         }
     }
 }

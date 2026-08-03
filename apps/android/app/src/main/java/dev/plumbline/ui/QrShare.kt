@@ -97,7 +97,7 @@ fun shareAppLink(context: Context, church: ChurchState?, startAsNewBeliever: Boo
         type = "text/plain"
         putExtra(Intent.EXTRA_TEXT, "Plumbline — the Holy Bible, free and offline$from: ${share.url}")
     }
-    context.startActivity(Intent.createChooser(send, "Share Plumbline"))
+    context.startActivity(Intent.createChooser(send, t("share.title")))
 }
 
 /**
@@ -126,10 +126,10 @@ fun ShareAppDialog(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Share Plumbline", color = Color(0xFF101010), fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
+            Text(t("share.title"), color = Color(0xFF101010), fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
             Text(
-                "Free, private, offline, no account required.",
+                t("share.subChurch"),
                 color = Color(0xFF5A564E), fontSize = 13.sp, textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(16.dp))
@@ -149,12 +149,12 @@ fun ShareAppDialog(
             }
             Spacer(Modifier.height(16.dp))
             Button(onClick = { shareAppLink(context, church, startAsNewBeliever) }) {
-                Text("Share the link")
+                Text(t("share.action"))
             }
             if (onWelcome != null) {
-                TextButton(onClick = onWelcome) { Text("Welcome") }
+                TextButton(onClick = onWelcome) { Text(t("shell.welcome")) }
             }
-            TextButton(onClick = onDismiss) { Text("Close") }
+            TextButton(onClick = onDismiss) { Text(t("common.close")) }
         }
     }
 }

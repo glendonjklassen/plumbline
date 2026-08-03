@@ -44,7 +44,7 @@ fun ScreenBar(
     title: String,
     palette: ReaderPalette,
     onBack: () -> Unit,
-    backLabel: String = "Back to reading",
+    backLabel: String = t("bar.backToReading"),
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     Surface(color = palette.paneNavBg) {
