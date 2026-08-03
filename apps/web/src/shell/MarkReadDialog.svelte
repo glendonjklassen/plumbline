@@ -72,10 +72,7 @@
     use:modal={{ close }}
   >
     <h2>{t("markRead.question", { chapter: label })}</h2>
-    <p class="sub">
-      For reading you did somewhere else — a paper Bible, or another app. It counts as a full read
-      on the date you give.
-    </p>
+    <p class="sub">{t("markRead.sub")}</p>
     <div class="quick">
       <button onclick={() => set(daysAgo(0))}>{t("markRead.today")}</button>
       <button onclick={() => set(daysAgo(1))}>{t("markRead.yesterday")}</button>

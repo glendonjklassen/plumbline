@@ -727,6 +727,11 @@
         <summary>{t("settings.reportShow")}</summary>
         <pre class="report">{reportText}</pre>
       </details>
+      <!-- i18n-ignore-start: PERF-only. This whole block renders only in a
+           measuring build, so no reader in any language can reach it, and its
+           contents are stage names straight out of the engine's own trace —
+           translating "worst single stall" would be translating a variable
+           name. See scripts/check-i18n.mjs. -->
       {#if PERF && s.bootTrace.length}
         <hr />
         <details class="diag">
@@ -794,6 +799,7 @@
           {/if}
         </details>
       {/if}
+      <!-- i18n-ignore-end -->
     </div>
     <button class="done" onclick={() => (s.showSettings = false)}>{t("settings.done")}</button>
   </div>

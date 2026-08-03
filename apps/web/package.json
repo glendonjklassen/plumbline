@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "npm run pack:i18n && vite",
     "build": "npm run pack:i18n && vite build",
-    "check": "npm run pack:i18n && svelte-check --tsconfig ./tsconfig.json",
+    "check": "npm run pack:i18n && npm run check:i18n && svelte-check --tsconfig ./tsconfig.json",
     "pack:hymnal": "node ../../scripts/build-hymnal.mjs",
     "pack:data": "npm run pack:hymnal && node ../../scripts/build-web-pack.mjs && node ../../scripts/check-web-pack.mjs",
     "pack:wasm": "node scripts/copy-wasm.mjs",
@@ -14,7 +14,8 @@
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "pack:check": "node ../../scripts/check-web-pack.mjs",
-    "pack:i18n": "node scripts/gen-i18n.mjs"
+    "pack:i18n": "node scripts/gen-i18n.mjs",
+    "check:i18n": "node ../../scripts/check-i18n.mjs"
   },
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "^0.4.2",

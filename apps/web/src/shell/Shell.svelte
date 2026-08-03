@@ -403,7 +403,7 @@
     {#if s.intro}
       <!-- The welcome a reader was given, on demand: they should not have to
            reinstall to read it twice (feedback 2026-07-27). -->
-      <button class="church-btn" onclick={go(() => (s.reopenIntro = s.intro))}>Welcome</button>
+      <button class="church-btn" onclick={go(() => (s.reopenIntro = s.intro))}>{t("shell.welcome")}</button>
     {/if}
     {#if hasChurch(s.church)}
       <!-- Front and centre, not in Settings: someone handed this to a reader
@@ -441,7 +441,7 @@
             <button class="phone-only" onclick={go(visitChurch)}>{t("shell.church")}</button>
           {/if}
           {#if s.intro}
-            <button class="phone-only" onclick={go(() => (s.reopenIntro = s.intro))}>Welcome</button>
+            <button class="phone-only" onclick={go(() => (s.reopenIntro = s.intro))}>{t("shell.welcome")}</button>
           {/if}
           <button onclick={go(() => (s.showHistory = true))}>{t("shell.history")}</button>
           <button onclick={go(() => (s.panel = { kind: "guide" }))}>{t("shell.guideAndAbout")}</button>
@@ -527,7 +527,7 @@
     {#if s.intro}
       <!-- The welcome a reader was given, on demand: they should not have to
            reinstall to read it twice (feedback 2026-07-27). -->
-      <button class="church-btn" onclick={go(() => (s.reopenIntro = s.intro))}>Welcome</button>
+      <button class="church-btn" onclick={go(() => (s.reopenIntro = s.intro))}>{t("shell.welcome")}</button>
     {/if}
     {#if hasChurch(s.church)}
       <p class="share-with">{t("share.with", { church: s.church.name })}</p>

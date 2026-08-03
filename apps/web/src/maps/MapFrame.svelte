@@ -77,12 +77,9 @@
     {@render children()}
     {#if loading}
       <div class="wait" aria-live="polite">
-        <span class="waitline">— building —</span>
+        <span class="waitline">{t("map.building")}</span>
         {#if slow}
-          <span class="waitnote">
-            The first map of a session takes a few seconds: the whole text is being swept for this.
-            The maps you open after it appear at once.
-          </span>
+          <span class="waitnote">{t("map.buildingNote")}</span>
         {/if}
       </div>
     {/if}

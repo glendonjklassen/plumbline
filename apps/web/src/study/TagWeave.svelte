@@ -58,10 +58,7 @@
     use:modal={{ close }}
   >
     <h2>{t("weave.heading", { tag: tag.name })}</h2>
-    <p class="hint">
-      Links the verses you have ticked into a weave. Run it again later to add verses you have
-      tagged since.
-    </p>
+    <p class="hint">{t("weave.hint")}</p>
     <div class="list">
       {#each members as m (m.verse)}
         <label class="member">
@@ -72,10 +69,10 @@
     </div>
     <input class="name" bind:value={name} placeholder={t("weave.name")} aria-label={t("weave.name")} />
     <div class="actions">
-      <span class="count">{checked.size} of {members.length} passages</span>
+      <span class="count">{t("weave.chosen", { n: checked.size, total: members.length })}</span>
       <button onclick={close}>{t("common.cancel")}</button>
       <button class="primary" disabled={checked.size < 2 || !name.trim()} onclick={create}>
-        Create weave
+        {t("weave.create")}
       </button>
     </div>
   </div>

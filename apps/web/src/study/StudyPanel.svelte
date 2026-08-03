@@ -184,7 +184,7 @@
           {/if}
         {:else}
           <!-- Never look frozen: the worker is answering. -->
-          <p class="loading" aria-live="polite">— loading —</p>
+          <p class="loading" aria-live="polite">{t("panel.loading")}</p>
         {/if}
       {/if}
     </div>
