@@ -204,12 +204,99 @@ test.describe("a German reader's boot", () => {
     const chose = trace.find(([k]) => k.startsWith("corpus loaded"))?.[0];
     expect(chose, `stage 1 chose ${chose}; trace: ${JSON.stringify(trace)}`).toBe("corpus loaded (germanCorpus)");
 
+    // AND THE TRACE MUST NOT LIE ABOUT IT. `hadIdxcache` only looked for the
+    // KJV's cache, so a German boot that took the fast path was reported as
+    // "cold corpus parse" — the first thing anyone reads when a launch is slow on
+    // a device, pointing at a 19 MB re-parse that never happened (2026-08-03).
+    // app.spec.ts asserts the English half of this same label.
+    //
+    // MUTATION: in home.ts, drop `|| pack.has(GERMAN_CACHE)`. Red here, green
+    // there, which is why both exist.
+    const open = trace.find(([k]) => k.startsWith("engine open"))?.[0];
+    expect(open, `trace: ${JSON.stringify(trace)}`).toBe("engine open (idxcache fast path)");
+
     // And the text really is German, so this did not pass by loading neither.
     const verse = await page.evaluate(async () => {
       const s = (window as any).__plumbline;
       return (await s.rpc.call("verse", "John 3:16"))?.body ?? "";
     });
     expect(verse).toContain("Gott");
+  });
+});
+
+/**
+ * Lay one chapter out COLD, then ask for the very same layout again — the
+ * worker's turn cache answers the second one — and return both costs in ms.
+ *
+ * The cached call is the calibration: it ships the identical display list over
+ * the identical postMessage on this machine, and does none of the work. So
+ * `cold / cached` is "how expensive is producing this list, in units of handing
+ * it over", which is a budget the device sets for itself.
+ */
+async function layoutCostAndFloor(page: Page, book: string, chapter: number, width: number): Promise<[number, number]> {
+  return page.evaluate(
+    async ([book, chapter, width]) => {
+      const s = (window as any).__plumbline;
+      const cfg = { font: 20, width: width as number, lineSpacing: 1.45, versePerLine: false };
+      const t0 = performance.now();
+      await s.rpc.layout(book, chapter as number, cfg);
+      const t1 = performance.now();
+      // Same key, so this is served from the turn cache: transport only.
+      await s.rpc.layout(book, chapter as number, cfg);
+      const t2 = performance.now();
+      return [t1 - t0, Math.max(t2 - t1, 0.2)] as [number, number];
+    },
+    [book, chapter, width] as [string, number, number],
+  );
+}
+
+test.describe("a German reader's chapter turn", () => {
+  test.use({ locale: "en-US" });
+
+  /**
+   * NOTHING IS REDONE PER WORD when a chapter is laid out.
+   *
+   * `i18n::catalog()` used to re-parse its JSON on every call, `t()` called it for
+   * every lookup, and the wire layer turns EVERY WORD of a laid-out chapter into a
+   * reference through `VRef::display()`. So one German Psalm 119 re-parsed the
+   * catalogues some 7,000 times — en and de merged in `t`, plus de again in
+   * `book_name` — and cost 686 ms against 9 ms with the tables shared. A reader
+   * felt it as the word TAP rather than the page: the tap RPC queues behind the
+   * layout on the single engine thread, so tapping a German word answered in
+   * ~480 ms and read as a broken study panel (UAT, 2026-08-03).
+   *
+   * German because that is where it was 4× worst and where a reader reported it.
+   * Psalm 119 because the cost was per word and this is the longest chapter in the
+   * canon. But the assertion is NOT a comparison against English, and that is the
+   * whole design of this test: the first draft compared the two languages, and it
+   * PASSED against the very bug it describes, because the defect made English slow
+   * too (207 ms) and the ratio stayed inside the threshold. A cross-language ratio
+   * cannot see a cost both languages pay.
+   *
+   * So the unit is the same chapter's SECOND layout, which the worker's turn cache
+   * answers: identical display list, identical postMessage, none of the work. That
+   * makes the budget "producing this list may cost N times handing it over", which
+   * every machine sets for itself — no millisecond constant to be wrong about on a
+   * loaded CI box, and no way for a device that is uniformly slow to look healthy.
+   *
+   * MUTATION: in `crates/core/src/i18n.rs`, make `t()` call `resolved(lang)` again
+   * and `book_name()` call `catalog(lang)`, restoring the per-call parse. Red at
+   * ~340× against the 40× allowed. `a_catalogue_is_parsed_once_and_shared` in that
+   * same file is the deterministic half of this pair.
+   */
+  test("does not redo work per word", async ({ page }) => {
+    await reader(page, EN);
+    await pick(page, EN, "Deutsch");
+    // Past the background load, so the cold measurement is not queued behind it.
+    await page.waitForTimeout(6000);
+    const [cold, transport] = await layoutCostAndFloor(page, "Ps", 119, 902);
+
+    expect(
+      cold / transport,
+      `Psalm 119 took ${cold.toFixed(0)} ms to lay out and ${transport.toFixed(1)} ms to hand over again ` +
+        `(${(cold / transport).toFixed(0)}× the transport). A chapter is ~2,300 words; a ratio this large ` +
+        `means per-word work that should have been done once.`,
+    ).toBeLessThan(40);
   });
 });
 

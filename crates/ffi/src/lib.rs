@@ -338,10 +338,20 @@ impl PlumblineEngine {
         self.load_morph_only();
     }
 
-    /// The morphology sidecar alone (~10 MB of JSONL to parse).
+    /// The morphology sidecar alone (~10 MB of JSONL, or 3.3 MB packed, to parse).
+    ///
+    /// KJV-ONLY, the same gate `new` applies and for the same reason: morphology
+    /// is keyed by (refKey, TOKEN INDEX) against `kjv1769-tok2`, so on the German
+    /// corpus it would describe whichever word happened to sit at that index.
+    /// [`PanelSource::is_kjv_text`] already withholds the gloss, so what the gate
+    /// was missing here was not correctness but the WORK: a German reader with
+    /// machine analysis on parsed 355,603 entries — in one synchronous block, on
+    /// the only thread that answers taps — to build an index nothing would ever
+    /// read. `new` had the gate; this path is the one the web shell takes, because
+    /// its pack arrives after the engine opens (2026-08-03).
     fn load_morph_only(&self) {
         let Some(h) = &self.home else { return };
-        if self.morph.get().is_some() {
+        if self.morph.get().is_some() || self.corpus.tokenization_version() != canon::TOKENIZATION_VERSION {
             return;
         }
         let path = h.join("data").join("morphology.jsonl");

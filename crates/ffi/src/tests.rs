@@ -2686,8 +2686,52 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
         );
         assert!(blocks.contains("Römer 5,8"), "a German cross-reference is not in German: {blocks}");
 
+        // THE MORPHOLOGY IS NOT EVEN PARSED for this text, and this is about work
+        // rather than about correctness — `is_kjv_text` already withholds the
+        // gloss, so a German reader saw nothing wrong either way. What they paid
+        // was 355,603 entries parsed in ONE synchronous block on the only thread
+        // that answers taps, to build an index nothing would read: 3.3 MB of
+        // download and seconds of a phone's CPU (2026-08-03).
+        //
+        // `new` had the gate; `load_morph_only` did not, and that is the path the
+        // WEB takes — its analysis pack lands after the engine has opened, so the
+        // deferred load is the only one that runs there. Android was unaffected,
+        // which is exactly why this went unnoticed.
+        //
+        // MUTATION: drop the tokenization check from `load_morph_only`. Red here.
+        let _ = take(plumbline_engine_load_rnd_data(e));
+        assert!(
+            e.as_ref().unwrap().morph.get().is_none(),
+            "the KJV morphology was parsed for a German reader who can never be shown it"
+        );
+
         plumbline_engine_free(e);
         // English again, so nothing after this test inherits German.
         let _ = take(plumbline_i18n_set_language(c"en".as_ptr(), ptr::null()));
+    }
+}
+
+/// The other half of the morphology gate: on the KJV the deferred load DOES
+/// bring it in, so the assertion above cannot pass by the loader being broken
+/// for everybody.
+///
+/// `#[ignore]`d with its sibling — it reads the real hydrated data pack.
+#[test]
+#[ignore]
+fn the_deferred_load_still_brings_the_morphology_to_an_english_reader() {
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    if !repo.join("data/morphology.jsonl").exists() {
+        eprintln!("no data/morphology.jsonl in this checkout — skipping");
+        return;
+    }
+    let home = CString::new(repo.to_str().unwrap()).unwrap();
+    unsafe {
+        let _ = take(plumbline_i18n_set_language(c"en".as_ptr(), ptr::null()));
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home.as_ptr(), &mut err);
+        assert!(!e.is_null(), "open failed: {:?}", opt_str(err));
+        let _ = take(plumbline_engine_load_rnd_data(e));
+        assert!(e.as_ref().unwrap().morph.get().is_some(), "the KJV reader lost their morphology");
+        plumbline_engine_free(e);
     }
 }

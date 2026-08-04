@@ -31,6 +31,7 @@
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::OnceLock;
 
 /// The languages the app ships. Adding one is a variant, a JSON file and a line
 /// in [`Lang::ALL`] — the completeness test then insists it carries every key.
@@ -195,21 +196,66 @@ pub fn set_active(lang: Lang) {
 /// One language's strings, id → text.
 pub type Strings = BTreeMap<String, String>;
 
-/// Parse a catalogue. Panics on malformed JSON, deliberately: the files are
-/// compiled into the binary, so a bad one is a build-time mistake that every
-/// test will hit immediately, not something a device can encounter.
+/// One language's catalogue, parsed ONCE for the life of the process.
+///
+/// THE PARSE IS NOT CHEAP AND IT IS NOT RARE. Every string in the app comes
+/// through [`t`], and [`crate::reference::VRef::display`] is one `t` per
+/// reference — which the wire layer calls FOR EVERY WORD in a laid-out chapter.
+/// Parsing on each call meant one German chapter turn re-parsed the catalogues
+/// thousands of times: Psalm 119 is 2,318 words × (en + de, merged, in `t`) plus
+/// a third parse each in [`book_name`]. Measured on the web shell, serializing
+/// one display list — 238 ms in German against 59 ms for the same chapter in
+/// English, and effectively ALL of the difference was here. It read to a reader
+/// as "German takes forever": the tap RPC queues behind the layout on the one
+/// thread that answers both (2026-08-03).
+///
+/// A `match` rather than an array indexed by `lang`, so adding a language is a
+/// compile error here instead of a silently shared cell.
+///
+/// Panics on malformed JSON, deliberately: the files are compiled into the
+/// binary, so a bad one is a build-time mistake every test hits immediately, not
+/// something a device can encounter.
+fn table(lang: Lang) -> &'static Strings {
+    static EN_TABLE: OnceLock<Strings> = OnceLock::new();
+    static DE_TABLE: OnceLock<Strings> = OnceLock::new();
+    let cell = match lang {
+        Lang::En => &EN_TABLE,
+        Lang::De => &DE_TABLE,
+    };
+    cell.get_or_init(|| {
+        serde_json::from_str(raw(lang)).unwrap_or_else(|e| panic!("i18n/{}.json is not valid: {e}", lang.code()))
+    })
+}
+
+/// `lang`'s strings laid over English, memoized like [`table`] — the map [`t`]
+/// reads on every lookup, so the merge cannot happen per call either.
+fn merged(lang: Lang) -> &'static Strings {
+    static EN_MERGED: OnceLock<Strings> = OnceLock::new();
+    static DE_MERGED: OnceLock<Strings> = OnceLock::new();
+    let cell = match lang {
+        Lang::En => &EN_MERGED,
+        Lang::De => &DE_MERGED,
+    };
+    cell.get_or_init(|| {
+        let mut out = table(Lang::En).clone();
+        if lang != Lang::En {
+            out.extend(table(lang).iter().map(|(k, v)| (k.clone(), v.clone())));
+        }
+        out
+    })
+}
+
+/// A copy of one language's catalogue. Prefer [`t`] for a single string; this is
+/// for callers that hand the whole table somewhere else (the shells' catalogue
+/// JSON) or walk it (the completeness tests).
 pub fn catalog(lang: Lang) -> Strings {
-    serde_json::from_str(raw(lang)).unwrap_or_else(|e| panic!("i18n/{}.json is not valid: {e}", lang.code()))
+    table(lang).clone()
 }
 
 /// The catalogue a shell should paint with: `lang`'s strings laid over English,
 /// so every key is present even where the translation is not.
 pub fn resolved(lang: Lang) -> Strings {
-    let mut out = catalog(Lang::En);
-    if lang != Lang::En {
-        out.extend(catalog(lang));
-    }
-    out
+    merged(lang).clone()
 }
 
 /// Keys English has that `lang` does not. Empty for English by definition.
@@ -262,8 +308,7 @@ pub fn format(template: &str, args: &[(&str, &str)]) -> String {
 /// back as the id itself — visible, greppable, and impossible to mistake for
 /// copy.
 pub fn t(lang: Lang, id: &str, args: &[(&str, &str)]) -> String {
-    let strings = resolved(lang);
-    match strings.get(id) {
+    match merged(lang).get(id) {
         Some(s) => format(s, args),
         None => id.to_string(),
     }
@@ -281,7 +326,7 @@ pub fn t(lang: Lang, id: &str, args: &[(&str, &str)]) -> String {
 /// checks them directly instead.
 pub fn book_name(lang: Lang, osis: &str) -> String {
     if lang != Lang::En {
-        if let Some(name) = catalog(lang).get(&format!("book.{osis}")) {
+        if let Some(name) = table(lang).get(&format!("book.{osis}")) {
             return name.clone();
         }
     }
@@ -351,6 +396,34 @@ mod tests {
         for k in en.keys() {
             assert!(de.contains_key(k), "resolved de lost the key {k}");
         }
+    }
+
+    /// EVERY CATALOGUE IS PARSED ONCE PER PROCESS, and this is a correctness
+    /// test about cost rather than a stopwatch.
+    ///
+    /// `t()` is on the hottest path in the app — the wire layer turns every word
+    /// of a laid-out chapter into a reference through it — and parsing per call
+    /// made one German chapter turn cost 686 ms against 9 ms with the tables
+    /// shared (Psalm 119, web shell, 2026-08-03). The reader felt it as a word tap
+    /// that took half a second, because the tap queues behind the layout on the
+    /// one thread that answers both.
+    ///
+    /// Asserted as POINTER IDENTITY, so it cannot pass by being fast on a fast
+    /// machine: two lookups of the same language must be the same table.
+    ///
+    /// MUTATION: return `Box::leak(Box::new(…parse…))` from `table` instead of
+    /// `cell.get_or_init(…)` — still `&'static Strings`, still correct copy, and
+    /// this goes red where nothing else in the suite does.
+    #[test]
+    fn a_catalogue_is_parsed_once_and_shared() {
+        for lang in Lang::ALL {
+            assert!(std::ptr::eq(table(lang), table(lang)), "{} is re-parsed per lookup", lang.code());
+            assert!(std::ptr::eq(merged(lang), merged(lang)), "{} is re-merged per lookup", lang.code());
+        }
+        // And the shared table is the same one `catalog()` hands out a copy of,
+        // so the memoized path and the public one cannot drift.
+        assert_eq!(catalog(Lang::De), *table(Lang::De));
+        assert_eq!(resolved(Lang::De), *merged(Lang::De));
     }
 
     #[test]

@@ -43,8 +43,15 @@ export async function dropLegacyIdxcache(): Promise<number> {
 export interface VirtualHome {
   /** Root contents map handed to PreopenDirectory("/home", …). */
   root: Map<string, Directory | File>;
-  /** Whether a persisted corpus idxcache was restored into this home — when
-   *  true the engine open should take the fast path (no 19 MB re-parse). */
+  /** Whether the cache for the corpus this home will open was restored into it —
+   *  when true the engine open should take the fast path (no 19 MB re-parse).
+   *
+   *  EITHER CORPUS COUNTS, and it only looked at the KJV's until 2026-08-03: a
+   *  German boot took the fast path and the trace called it a "cold corpus
+   *  parse", which is a diagnostic that lies about the one stage everybody looks
+   *  at first when a launch is slow. Stage 1 inflates exactly one corpus (see
+   *  `corpusRoleFor`), so at most one of these is ever here and either one means
+   *  the fast path fired. */
   hadIdxcache: boolean;
   /** Insert read-only pack files into the live home (the WASI shim resolves
    *  paths on open, so the engine sees them immediately) — the late R&D pack. */
@@ -353,7 +360,7 @@ export async function buildHome(
 
   return {
     root,
-    hadIdxcache: pack.has(IDXCACHE),
+    hadIdxcache: pack.has(IDXCACHE) || pack.has(GERMAN_CACHE),
     addFiles(files: Map<string, Uint8Array>) {
       for (const [path, bytes] of files) insertFile(root, path, bytes);
     },
