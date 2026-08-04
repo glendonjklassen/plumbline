@@ -135,7 +135,16 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
   stalling origin, see `e2e/network.spec.ts`), the other used a fixed
   millisecond ceiling that a whole un-chunked warm still fit inside (budgets
   for worker-scheduling tests must be **derived from the machine's own
-  measured chunk cost**, not a constant).
+  measured chunk cost**, not a constant). A third on 2026-08-03: a *ratio*
+  between two things that BOTH regress. It compared a German chapter turn
+  against an English one to catch a per-word cost, and passed against the very
+  bug it described because the defect slowed English too. **A comparative
+  budget cannot see a cost both sides pay** — calibrate against something the
+  defect does not touch (there, the same chapter re-served from the turn cache).
+  A mutation is also only faithful if the artifact under test was actually
+  rebuilt: `pack:wasm` stages to `public/`, and only `npm run build` copies it
+  into `dist/`, so a skipped build tests the *fixed* engine twice and reports
+  the mutation as survived.
 - **A warm boot must make ZERO network requests before text.** The pin
   (`engine/pin.ts`) is a manifest stored in the depot, written only after every
   file it names is verified present — so boot never asks the network anything it
