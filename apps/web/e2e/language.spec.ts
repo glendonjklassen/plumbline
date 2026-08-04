@@ -224,6 +224,42 @@ test.describe("a German reader's boot", () => {
   });
 });
 
+test.describe("the guide", () => {
+  test.use({ locale: "en-US" });
+
+  /**
+   * GUIDE & ABOUT IS THE LONGEST PROSE IN THE APP and it was the last English
+   * left: about forty paragraphs of literals in `panel.rs`, so a German reader met
+   * a German app right up to this card and then a wall of English (2026-08-04).
+   *
+   * The core proves its own half — `the_guide_is_readable_by_a_german_reader` in
+   * `crates/core/src/panel/tests.rs` renders the card in German and refuses the
+   * old English phrases. What only the shell can prove is the JOIN: that this
+   * button asks the engine for the guide AFTER the language is set, rather than
+   * handing back something built or cached in English. That is not a hypothetical
+   * — the hymnal asked for "en" outright until UAT caught it two days ago.
+   *
+   * MUTATION: in `panel.rs`, make `guide_blocks()` call `guide_blocks_in(Lang::En)`
+   * instead of `i18n::active()`. Red here.
+   */
+  test("opens in the reader's language", async ({ page }) => {
+    await reader(page, EN);
+    await pick(page, EN, "Deutsch");
+
+    await page.getByLabel(DE["common.menu"]).click();
+    await page.locator(".menu").getByRole("button", { name: DE["shell.guideAndAbout"] }).click();
+
+    const card = page.locator('[data-surface="study panel"]').first();
+    await expect(card).toContainText(DE["guide.title"], { timeout: 30_000 });
+    // The German headings, and none of the English the card used to be built from.
+    await expect(card).toContainText(DE["guide.memorize.title"]);
+    await expect(card).toContainText(DE["about.covenant.title"]);
+    await expect(card).not.toContainText(EN["guide.title"]);
+    await expect(card).not.toContainText("HIDE IT IN YOUR HEART");
+    await expect(card).not.toContainText("MAKE IT YOURS");
+  });
+});
+
 /**
  * Lay one chapter out COLD, then ask for the very same layout again — the
  * worker's turn cache answers the second one — and return both costs in ms.

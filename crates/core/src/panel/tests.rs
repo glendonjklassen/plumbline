@@ -749,6 +749,68 @@ fn guide_and_about_render_combined() {
     assert!(about.iter().any(|b| text_of(b).contains("covenant") || text_of(b).contains("COVENANT")));
 }
 
+/// THE GUIDE IS THE LAST PLACE ENGLISH HID.
+///
+/// Roughly forty paragraphs of it lived as literals in this file — every other
+/// user-visible string had been moved into the catalogue, so a German reader met a
+/// fully German app right up until they opened Guide & About, and then met a wall
+/// of English (2026-08-04).
+///
+/// The completeness test in `i18n.rs` proves every id HAS German. It cannot prove
+/// the guide asks for those ids: literals left behind would sail past it, since a
+/// literal is not a missing key. So this reads the rendered card in German and
+/// looks for the English it used to be built from.
+///
+/// The phrases are the section headings and a few distinctive sentence openings —
+/// they must not appear in the German card at all. `PROVENANCE`/`BIBLIOGRAPHY.md`
+/// are deliberately not among them: the credits name real projects and a filename,
+/// which stay as they are in every language.
+///
+/// MUTATION: put any one paragraph back as a literal — e.g. `Block::para(vec![
+/// Run::new("MAKE IT YOURS", …)])` in `guide_blocks` instead of its id. Red here,
+/// and green in `every_shipped_string_is_translated`, which is why both exist.
+#[test]
+fn the_guide_is_readable_by_a_german_reader() {
+    const ENGLISH_ONLY_IN_THE_OLD_GUIDE: [&str; 10] = [
+        "Using Plumbline",
+        "READ THE BIBLE",
+        "SHARE THE GOSPEL",
+        "PREPARE TO TEACH",
+        "STUDY A PASSAGE",
+        "HIDE IT IN YOUR HEART",
+        "MAKE IT YOURS",
+        "THE COVENANT",
+        "Whatever you came here to do",
+        "A weave is a connection you FIND",
+    ];
+    // `guide_blocks_in`, NOT `set_active`: the active language is a process global,
+    // so the first draft of this test set it to German and broke eight unrelated
+    // tests that were reading English in parallel at the time. That is what the
+    // explicit-language entry point is for.
+    let german = guide_blocks_in(crate::i18n::Lang::De).iter().map(text_of).collect::<Vec<_>>().join("\n");
+
+    for phrase in ENGLISH_ONLY_IN_THE_OLD_GUIDE {
+        assert!(
+            !german.contains(phrase),
+            "the German guide still says {phrase:?} — that paragraph is a literal, not a catalogue id"
+        );
+    }
+    // And it is not empty or half-built: the German headings are really there.
+    for id in ["guide.title", "guide.read.title", "guide.memorize.title", "about.covenant.title"] {
+        let heading = crate::i18n::t(crate::i18n::Lang::De, id, &[]);
+        assert!(german.contains(&heading), "the German guide is missing {id} ({heading:?})");
+    }
+    // Roughly forty paragraphs of prose, so a card that lost its body is caught
+    // rather than passing for want of English.
+    assert!(german.len() > 4_000, "the German guide is only {} characters — it lost its body", german.len());
+    // A MISTYPED ID RENDERS AS ITSELF (`i18n::t` returns the id, on purpose), and
+    // that is invisible to every assertion above: `guide.yours.p9` is not English
+    // and not a missing key. So no id may survive into the rendered card.
+    for leak in ["guide.", "about.", "panel."] {
+        assert!(!german.contains(leak), "the German guide printed a raw id containing {leak:?}:\n{german}");
+    }
+}
+
 /// A heading over nothing is a panel that looks broken. Threads, tags and the
 /// review queue always said what to do when empty; the weave library and a
 /// fruitless search did not — fixing them in the core fixes both shells, which is

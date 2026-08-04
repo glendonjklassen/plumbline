@@ -123,18 +123,11 @@
       {/if}
       <button class="close" onclick={close} aria-label={t("common.close")}>✕</button>
     </div>
-    <!-- The tint has to explain itself on screen. Every tile carries a `title`
-         with its own story, and on a phone — where most reading happens — a
-         title never fires, so the colours were simply unexplained. One line,
-         above the grid it describes, and it does not scroll away with it. -->
-    <p class="legend" data-tint-legend>
-      <span class="hue unread">{t("booknav.tint.gold")}</span>
-      {t("booknav.tint.goldWhat")}
-      <span class="hue partial">{t("booknav.tint.copper")}</span>
-      {t("booknav.tint.copperWhat")}
-      <span class="hue read">{t("booknav.tint.sage")}</span>
-      {t("booknav.tint.sageWhat")}
-    </p>
+    <!-- NO COLOUR LEGEND. It was added so the tint would explain itself on a
+         phone, where the per-tile `title` never fires — but a row of colour
+         words above the grid is chrome in front of the thing the reader opened
+         this to do, which is pick a book (Glendon, 2026-08-04). The tiles still
+         carry their `title`, and the guide explains the tint in prose. -->
     <div class="content">
       {#if !book}
         <!-- `lang`: `hyphens: auto` above needs to know the language to break a
@@ -152,7 +145,9 @@
           {/each}
         </div>
       {:else}
-        <p class="sect">{s.bookName(book)} — chapter</p>
+        <!-- The word came through as an English literal, on a German screen too,
+             and check-i18n never saw it because the line is mostly `{…}`. -->
+        <p class="sect">{s.bookName(book)} — {t("booknav.chapter")}</p>
         <div class="grid nums">
           {#each Array.from({ length: chapterCount }, (_, i) => i + 1) as c (c)}
             <button
@@ -229,27 +224,6 @@
     color: var(--faded, #8a8276);
     font-size: calc(18px * var(--uiScale, 1));
     padding: 8px 12px;
-  }
-  .legend {
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--rule, #d8cba8);
-    font-size: calc(12.5px * var(--uiScale, 1));
-    line-height: 1.45;
-    color: var(--faded, #8a8276);
-  }
-  /* The three hue words, written in their own hue — the legend is then legible
-     next to the tiles without becoming a chart of swatches. */
-  .hue {
-    font-weight: 600;
-  }
-  .hue.unread {
-    color: var(--readUnread, #c9a227);
-  }
-  .hue.partial {
-    color: var(--readPartial, #a8642c);
-  }
-  .hue.read {
-    color: var(--readDone, #6f8f6a);
   }
   .content {
     overflow-y: auto;

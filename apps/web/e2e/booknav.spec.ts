@@ -157,37 +157,29 @@ test("the book the reader is in is marked, and only that one", async ({ page }) 
     .toEqual({ ...OT_ONLY, marked: ["Gen"] });
 });
 
-// Mutation 2026-07-29: the `<p class="legend" data-tint-legend>` element removed
-// from BookNav.svelte — the pre-fix state, where `title` was the only
-// explanation. Failed with
-//   Error: expect(locator).toBeVisible() failed
-//   Locator: locator('[data-tint-legend]')
-//   Expected: visible
-//   Error: element(s) not found
-test("the reading tint explains itself on screen, not in a tooltip", async ({ page }) => {
+// THE COLOUR LEGEND IS GONE ON PURPOSE (Glendon, 2026-08-04): "your PWA still
+// has the color guide on nav, I don't want that." It was added on 2026-07-29 so
+// the tint would explain itself where a `title` never fires, and the test that
+// used to live here asserted exactly that. The product call outranks it — a row
+// of colour words above the grid is chrome in front of picking a book — so the
+// assertion is inverted rather than deleted, to keep it from drifting back in.
+//
+// What survives from it: the long chapter grid must still scroll to its end.
+test("the navigator is the grid, with no colour legend above it", async ({ page }) => {
   await boot(page);
   await openNav(page);
 
-  const legend = page.locator("[data-tint-legend]");
-  await expect(legend).toBeVisible();
+  await expect(page.locator("[data-tint-legend]")).toHaveCount(0);
+  // Nor the copy by any other route: no hue words in the dialog's rendered text.
+  const shown = await page.locator(".dialog").innerText();
+  expect(shown, "the tint copy came back into the navigator").not.toMatch(/not read yet|partway|read through/i);
 
-  // `innerText` is the assertion that matters: it is the RENDERED text, so a
-  // `title` — the thing that never fires on touch — contributes nothing to it.
-  // The tiles still carry their own titles, and this must pass without them.
-  const shown = await legend.innerText();
-  expect(shown, "the legend must name the unread hue").toMatch(/not read yet/i);
-  expect(shown, "the legend must name the partway hue").toMatch(/partway/i);
-  expect(shown, "the legend must name the read-through hue").toMatch(/read through/i);
-  expect(shown, "the legend must say what the bloom means").toMatch(/glow/i);
-  // One line of copy, not a chart.
-  expect(shown.length, `the legend ran long: ${shown}`).toBeLessThan(160);
-
-  // It explains the chapter grid too, and must not scroll away from a long one —
-  // a legend you have to go looking for is the tooltip problem again.
+  // The tiles keep their own explanation, which is where it belongs.
   await ot(page).click();
+  await expect(tile(page, "Ps")).toHaveAttribute("title", /.+/);
+
   await tile(page, "Ps").click();
   await expect(page.locator(".grid.nums button")).toHaveCount(150);
   await page.locator(".dialog .content").evaluate((el) => (el.scrollTop = el.scrollHeight));
   await expect(page.locator(".grid.nums button").last()).toBeInViewport();
-  await expect(legend, "the legend scrolled away with the grid").toBeVisible();
 });

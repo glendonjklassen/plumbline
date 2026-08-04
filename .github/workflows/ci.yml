@@ -1,15 +1,27 @@
 name: CI
 
+# ONLY WHEN A VERSION IS CUT (Glendon, 2026-08-04): "all I want is CI to run
+# when we cut a new version."
+#
+# It used to run on a push to any branch, which meant that cutting a release —
+# where the feature branch and `main` are pushed at the same commit — ran the
+# whole suite TWICE over identical code. The concurrency group is keyed by ref,
+# so two refs at one commit are two groups and neither cancels the other; it
+# happened at v0.39.2 (batch-7 + main), v0.40.0 and v0.40.4.
+#
+# `workflow_dispatch` stays so the suite can still be run by hand against any
+# ref without cutting a tag for it.
+#
+# THE TRADE-OFF, said out loud: nothing tests `main` between releases now, and
+# this workflow does not gate the Release one — both fire on the tag and run
+# alongside each other, so a red CI does not stop an APK being published. The
+# maintainer runs the suite locally before tagging; that is the actual gate.
 on:
   push:
-    branches: ["**"]
-  pull_request:
+    tags: ["v*"]
+  workflow_dispatch:
 
-# A push to any branch and a pull_request for the same commit would otherwise
-# run everything twice. Two guards close that:
-#   1. This concurrency group cancels superseded runs on the same ref.
-#   2. Every job carries a `fork-guard` if: (see below) so pull_request events
-#      only run for forks — same-repo PRs are already covered by the push run.
+# One run per tag. Kept because a re-pushed tag would otherwise pile up.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -22,9 +34,6 @@ jobs:
   # and the C ABI.
   test:
     runs-on: ubuntu-latest
-    # fork-guard: run on every push; run pull_request only when the PR comes
-    # from a fork (same-repo PRs already ran via the push event).
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -59,8 +68,6 @@ jobs:
   # (or another crate's dev-deps) can't silently switch its features on.
   rnd-featureless:
     runs-on: ubuntu-latest
-    # fork-guard: see `test`.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -81,8 +88,6 @@ jobs:
   # down, so a warning is now a failure.
   lint:
     runs-on: ubuntu-latest
-    # fork-guard: see `test`.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     steps:
       - uses: actions/checkout@v4
       # 224 stock files sat tracked against .gitignore's stated intent until
@@ -126,8 +131,6 @@ jobs:
   # crates actually still compile on that toolchain, not just on stable.
   msrv:
     runs-on: ubuntu-latest
-    # fork-guard: see `test`.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.85
@@ -144,8 +147,6 @@ jobs:
   # C# P/Invoke shim was retired with the desktop shells, 2026-07-25.)
   bindings:
     runs-on: ubuntu-latest
-    # fork-guard: see `test`.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -168,7 +169,6 @@ jobs:
   # fail fast rather than after a wasm compile and a browser download.
   i18n:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -183,8 +183,6 @@ jobs:
   # navigator, and the backup round-trip.
   web:
     runs-on: ubuntu-latest
-    # fork-guard: see `test`.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -237,8 +235,6 @@ jobs:
   # keystore.
   android:
     runs-on: ubuntu-latest
-    # fork-guard: see `test`.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
