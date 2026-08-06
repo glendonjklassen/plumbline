@@ -15,7 +15,7 @@
       "number": 2,
       "id": "praise-to-the-lord-the-almighty",
       "title": "Praise to the Lord, the Almighty",
-      "deTitle": "Lobe den Herren, den mächtigen König der Ehren",
+      "deTitle": "Lobe den Herren, den m\u00e4chtigen K\u00f6nig der Ehren",
       "author": "Joachim Neander",
       "translator": "Catherine Winkworth",
       "year": 1680,
@@ -167,16 +167,6 @@
     },
     {
       "number": 17,
-      "id": "there-is-a-fountain",
-      "title": "There Is a Fountain Filled with Blood",
-      "author": "William Cowper",
-      "year": 1772,
-      "langs": [
-        "en"
-      ]
-    },
-    {
-      "number": 18,
       "id": "alas-and-did-my-savior-bleed",
       "title": "Alas! and Did My Savior Bleed",
       "author": "Isaac Watts",
@@ -186,7 +176,7 @@
       ]
     },
     {
-      "number": 19,
+      "number": 18,
       "id": "nothing-but-the-blood",
       "title": "Nothing but the Blood",
       "author": "Robert Lowry",
@@ -196,7 +186,7 @@
       ]
     },
     {
-      "number": 20,
+      "number": 19,
       "id": "jesus-paid-it-all",
       "title": "Jesus Paid It All",
       "author": "Elvina M. Hall",
@@ -206,7 +196,7 @@
       ]
     },
     {
-      "number": 21,
+      "number": 20,
       "id": "and-can-it-be",
       "title": "And Can It Be That I Should Gain",
       "author": "Charles Wesley",
@@ -216,7 +206,7 @@
       ]
     },
     {
-      "number": 22,
+      "number": 21,
       "id": "hallelujah-what-a-savior",
       "title": "Hallelujah! What a Savior",
       "author": "Philip P. Bliss",
@@ -226,7 +216,7 @@
       ]
     },
     {
-      "number": 23,
+      "number": 22,
       "id": "o-sacred-head",
       "title": "O Sacred Head, Now Wounded",
       "deTitle": "O Haupt voll Blut und Wunden",
@@ -239,7 +229,7 @@
       ]
     },
     {
-      "number": 24,
+      "number": 23,
       "id": "grace-greater-than-our-sin",
       "title": "Grace Greater than Our Sin",
       "author": "Julia H. Johnston",
@@ -249,7 +239,7 @@
       ]
     },
     {
-      "number": 25,
+      "number": 24,
       "id": "it-is-well",
       "title": "It Is Well with My Soul",
       "author": "Horatio Spafford",
@@ -259,7 +249,7 @@
       ]
     },
     {
-      "number": 26,
+      "number": 25,
       "id": "blessed-assurance",
       "title": "Blessed Assurance",
       "author": "Fanny Crosby",
@@ -269,7 +259,7 @@
       ]
     },
     {
-      "number": 27,
+      "number": 26,
       "id": "abide-with-me",
       "title": "Abide with Me",
       "author": "Henry F. Lyte",
@@ -279,7 +269,7 @@
       ]
     },
     {
-      "number": 28,
+      "number": 27,
       "id": "be-still-my-soul",
       "title": "Be Still, My Soul",
       "author": "Katharina von Schlegel",
@@ -290,7 +280,7 @@
       ]
     },
     {
-      "number": 29,
+      "number": 28,
       "id": "what-a-friend",
       "title": "What a Friend We Have in Jesus",
       "deTitle": "Welch ein Freund ist unser Jesus",
@@ -303,7 +293,7 @@
       ]
     },
     {
-      "number": 30,
+      "number": 29,
       "id": "my-hope-is-built",
       "title": "My Hope Is Built on Nothing Less",
       "author": "Edward Mote",
@@ -313,7 +303,7 @@
       ]
     },
     {
-      "number": 31,
+      "number": 30,
       "id": "leaning-on-the-everlasting-arms",
       "title": "Leaning on the Everlasting Arms",
       "author": "Elisha Hoffman",
@@ -323,7 +313,7 @@
       ]
     },
     {
-      "number": 32,
+      "number": 31,
       "id": "how-firm-a-foundation",
       "title": "How Firm a Foundation",
       "author": "\"K\" in Rippon's Selection",
@@ -333,7 +323,7 @@
       ]
     },
     {
-      "number": 33,
+      "number": 32,
       "id": "guide-me-o-thou-great-jehovah",
       "title": "Guide Me, O Thou Great Jehovah",
       "author": "William Williams",
@@ -343,7 +333,7 @@
       ]
     },
     {
-      "number": 34,
+      "number": 33,
       "id": "o-god-our-help",
       "title": "O God, Our Help in Ages Past",
       "author": "Isaac Watts",
@@ -353,7 +343,7 @@
       ]
     },
     {
-      "number": 35,
+      "number": 34,
       "id": "a-mighty-fortress",
       "title": "A Mighty Fortress Is Our God",
       "deTitle": "Ein feste Burg ist unser Gott",
@@ -366,7 +356,7 @@
       ]
     },
     {
-      "number": 36,
+      "number": 35,
       "id": "be-thou-my-vision",
       "title": "Be Thou My Vision",
       "author": "Irish, 8th century",
@@ -377,7 +367,7 @@
       ]
     },
     {
-      "number": 37,
+      "number": 36,
       "id": "take-my-life",
       "title": "Take My Life, and Let It Be",
       "author": "Frances R. Havergal",
@@ -387,7 +377,7 @@
       ]
     },
     {
-      "number": 38,
+      "number": 37,
       "id": "i-need-thee-every-hour",
       "title": "I Need Thee Every Hour",
       "author": "Annie S. Hawks",
@@ -397,7 +387,7 @@
       ]
     },
     {
-      "number": 39,
+      "number": 38,
       "id": "just-as-i-am",
       "title": "Just As I Am",
       "author": "Charlotte Elliott",
@@ -407,7 +397,7 @@
       ]
     },
     {
-      "number": 40,
+      "number": 39,
       "id": "jesus-lover-of-my-soul",
       "title": "Jesus, Lover of My Soul",
       "author": "Charles Wesley",
@@ -417,7 +407,7 @@
       ]
     },
     {
-      "number": 41,
+      "number": 40,
       "id": "trust-and-obey",
       "title": "Trust and Obey",
       "author": "John H. Sammis",
@@ -427,7 +417,7 @@
       ]
     },
     {
-      "number": 42,
+      "number": 41,
       "id": "i-surrender-all",
       "title": "I Surrender All",
       "author": "Judson W. Van DeVenter",
@@ -437,7 +427,7 @@
       ]
     },
     {
-      "number": 43,
+      "number": 42,
       "id": "nearer-my-god-to-thee",
       "title": "Nearer, My God, to Thee",
       "author": "Sarah Flower Adams",
@@ -447,7 +437,7 @@
       ]
     },
     {
-      "number": 44,
+      "number": 43,
       "id": "fairest-lord-jesus",
       "title": "Fairest Lord Jesus",
       "author": "German, 17th century",
@@ -458,7 +448,7 @@
       ]
     },
     {
-      "number": 45,
+      "number": 44,
       "id": "savior-like-a-shepherd",
       "title": "Savior, Like a Shepherd Lead Us",
       "author": "attr. Dorothy A. Thrupp",
@@ -468,7 +458,7 @@
       ]
     },
     {
-      "number": 46,
+      "number": 45,
       "id": "softly-and-tenderly",
       "title": "Softly and Tenderly Jesus Is Calling",
       "author": "Will L. Thompson",
@@ -478,7 +468,7 @@
       ]
     },
     {
-      "number": 47,
+      "number": 46,
       "id": "pass-me-not",
       "title": "Pass Me Not, O Gentle Savior",
       "author": "Fanny Crosby",
@@ -488,7 +478,7 @@
       ]
     },
     {
-      "number": 48,
+      "number": 47,
       "id": "to-god-be-the-glory",
       "title": "To God Be the Glory",
       "author": "Fanny Crosby",
@@ -498,7 +488,7 @@
       ]
     },
     {
-      "number": 49,
+      "number": 48,
       "id": "i-love-to-tell-the-story",
       "title": "I Love to Tell the Story",
       "author": "Katherine Hankey",
@@ -508,7 +498,7 @@
       ]
     },
     {
-      "number": 50,
+      "number": 49,
       "id": "wonderful-words-of-life",
       "title": "Wonderful Words of Life",
       "author": "Philip P. Bliss",
@@ -518,7 +508,7 @@
       ]
     },
     {
-      "number": 51,
+      "number": 50,
       "id": "revive-us-again",
       "title": "Revive Us Again",
       "author": "William P. Mackay",
@@ -528,7 +518,7 @@
       ]
     },
     {
-      "number": 52,
+      "number": 51,
       "id": "are-you-washed-in-the-blood",
       "title": "Are You Washed in the Blood?",
       "author": "Elisha Hoffman",
@@ -538,7 +528,7 @@
       ]
     },
     {
-      "number": 53,
+      "number": 52,
       "id": "joy-to-the-world",
       "title": "Joy to the World",
       "author": "Isaac Watts",
@@ -548,7 +538,7 @@
       ]
     },
     {
-      "number": 54,
+      "number": 53,
       "id": "hark-the-herald",
       "title": "Hark! The Herald Angels Sing",
       "author": "Charles Wesley",
@@ -558,7 +548,7 @@
       ]
     },
     {
-      "number": 55,
+      "number": 54,
       "id": "o-come-all-ye-faithful",
       "title": "O Come, All Ye Faithful",
       "author": "Latin, tr. Frederick Oakeley",
@@ -568,7 +558,7 @@
       ]
     },
     {
-      "number": 56,
+      "number": 55,
       "id": "silent-night",
       "title": "Silent Night, Holy Night",
       "deTitle": "Stille Nacht, heilige Nacht",
@@ -581,7 +571,7 @@
       ]
     },
     {
-      "number": 57,
+      "number": 56,
       "id": "o-little-town",
       "title": "O Little Town of Bethlehem",
       "author": "Phillips Brooks",
@@ -591,7 +581,7 @@
       ]
     },
     {
-      "number": 58,
+      "number": 57,
       "id": "come-thou-long-expected",
       "title": "Come, Thou Long-Expected Jesus",
       "author": "Charles Wesley",
@@ -601,7 +591,7 @@
       ]
     },
     {
-      "number": 59,
+      "number": 58,
       "id": "christ-the-lord-is-risen",
       "title": "Christ the Lord Is Risen Today",
       "author": "Charles Wesley",
@@ -611,7 +601,7 @@
       ]
     },
     {
-      "number": 60,
+      "number": 59,
       "id": "christ-arose",
       "title": "Low in the Grave He Lay",
       "author": "Robert Lowry",
@@ -621,7 +611,7 @@
       ]
     },
     {
-      "number": 61,
+      "number": 60,
       "id": "the-churchs-one-foundation",
       "title": "The Church's One Foundation",
       "author": "Samuel J. Stone",
@@ -631,7 +621,7 @@
       ]
     },
     {
-      "number": 62,
+      "number": 61,
       "id": "onward-christian-soldiers",
       "title": "Onward, Christian Soldiers",
       "author": "Sabine Baring-Gould",
@@ -641,7 +631,7 @@
       ]
     },
     {
-      "number": 63,
+      "number": 62,
       "id": "stand-up-stand-up-for-jesus",
       "title": "Stand Up, Stand Up for Jesus",
       "author": "George Duffield",
@@ -651,7 +641,7 @@
       ]
     },
     {
-      "number": 64,
+      "number": 63,
       "id": "shall-we-gather-at-the-river",
       "title": "Shall We Gather at the River",
       "author": "Robert Lowry",
@@ -661,7 +651,7 @@
       ]
     },
     {
-      "number": 65,
+      "number": 64,
       "id": "in-the-sweet-by-and-by",
       "title": "In the Sweet By and By",
       "author": "Sanford F. Bennett",
@@ -671,7 +661,7 @@
       ]
     },
     {
-      "number": 66,
+      "number": 65,
       "id": "nun-danket-alle-gott",
       "title": "Nun danket alle Gott",
       "author": "Martin Rinckart",
@@ -682,7 +672,7 @@
       "optEn": "Now Thank We All Our God (tr. Catherine Winkworth)"
     },
     {
-      "number": 67,
+      "number": 66,
       "id": "befiehl-du-deine-wege",
       "title": "Befiehl du deine Wege",
       "author": "Paul Gerhardt",
@@ -693,7 +683,7 @@
       "optEn": "Commit Thou All Thy Griefs (tr. John Wesley)"
     },
     {
-      "number": 68,
+      "number": 67,
       "id": "ich-singe-dir-mit-herz-und-mund",
       "title": "Ich singe dir mit Herz und Mund",
       "author": "Paul Gerhardt",
@@ -703,7 +693,7 @@
       ]
     },
     {
-      "number": 69,
+      "number": 68,
       "id": "wie-soll-ich-dich-empfangen",
       "title": "Wie soll ich dich empfangen",
       "author": "Paul Gerhardt",
@@ -714,7 +704,7 @@
       "optEn": "O Lord, How Shall I Meet Thee (tr. Catherine Winkworth)"
     },
     {
-      "number": 70,
+      "number": 69,
       "id": "sollt-ich-meinem-gott-nicht-singen",
       "title": "Sollt ich meinem Gott nicht singen",
       "author": "Paul Gerhardt",
@@ -724,7 +714,7 @@
       ]
     },
     {
-      "number": 71,
+      "number": 70,
       "id": "vom-himmel-hoch",
       "title": "Vom Himmel hoch, da komm ich her",
       "author": "Martin Luther",
@@ -735,7 +725,7 @@
       "optEn": "From Heaven Above to Earth I Come (tr. Catherine Winkworth)"
     },
     {
-      "number": 72,
+      "number": 71,
       "id": "aus-tiefer-not",
       "title": "Aus tiefer Not schrei ich zu dir",
       "author": "Martin Luther",
@@ -746,7 +736,7 @@
       "optEn": "From Depths of Woe I Cry to Thee (tr. Catherine Winkworth)"
     },
     {
-      "number": 73,
+      "number": 72,
       "id": "nun-freut-euch",
       "title": "Nun freut euch, lieben Christen g'mein",
       "author": "Martin Luther",
@@ -757,7 +747,7 @@
       "optEn": "Dear Christians, One and All, Rejoice (tr. Richard Massie)"
     },
     {
-      "number": 74,
+      "number": 73,
       "id": "christ-lag-in-todesbanden",
       "title": "Christ lag in Todesbanden",
       "author": "Martin Luther",
@@ -768,7 +758,7 @@
       "optEn": "Christ Jesus Lay in Death's Strong Bands (tr. Richard Massie)"
     },
     {
-      "number": 75,
+      "number": 74,
       "id": "wachet-auf",
       "title": "Wachet auf, ruft uns die Stimme",
       "author": "Philipp Nicolai",
@@ -779,9 +769,9 @@
       "optEn": "Wake, Awake, for Night Is Flying (tr. Catherine Winkworth)"
     },
     {
-      "number": 76,
+      "number": 75,
       "id": "wie-schoen-leuchtet",
-      "title": "Wie schön leuchtet der Morgenstern",
+      "title": "Wie sch\u00f6n leuchtet der Morgenstern",
       "author": "Philipp Nicolai",
       "year": 1599,
       "langs": [
@@ -790,7 +780,7 @@
       "optEn": "O Morning Star, How Fair and Bright (tr. Catherine Winkworth)"
     },
     {
-      "number": 77,
+      "number": 76,
       "id": "jesu-meine-freude",
       "title": "Jesu, meine Freude",
       "author": "Johann Franck",
@@ -801,9 +791,9 @@
       "optEn": "Jesus, Priceless Treasure (tr. Catherine Winkworth)"
     },
     {
-      "number": 78,
+      "number": 77,
       "id": "schmuecke-dich",
-      "title": "Schmücke dich, o liebe Seele",
+      "title": "Schm\u00fccke dich, o liebe Seele",
       "author": "Johann Franck",
       "year": 1649,
       "langs": [
@@ -812,9 +802,9 @@
       "optEn": "Deck Thyself, My Soul, with Gladness (tr. Catherine Winkworth)"
     },
     {
-      "number": 79,
+      "number": 78,
       "id": "allein-gott-in-der-hoeh",
-      "title": "Allein Gott in der Höh sei Ehr",
+      "title": "Allein Gott in der H\u00f6h sei Ehr",
       "author": "Nikolaus Decius",
       "year": 1523,
       "langs": [
@@ -823,7 +813,7 @@
       "optEn": "All Glory Be to God on High (tr. Catherine Winkworth)"
     },
     {
-      "number": 80,
+      "number": 79,
       "id": "es-ist-das-heil",
       "title": "Es ist das Heil uns kommen her",
       "author": "Paul Speratus",
@@ -834,7 +824,7 @@
       "optEn": "Salvation unto Us Has Come (tr. Arthur T. Russell)"
     },
     {
-      "number": 81,
+      "number": 80,
       "id": "herzliebster-jesu",
       "title": "Herzliebster Jesu, was hast du verbrochen",
       "author": "Johann Heermann",
@@ -845,9 +835,9 @@
       "optEn": "Ah, Holy Jesus (tr. Robert Bridges)"
     },
     {
-      "number": 82,
+      "number": 81,
       "id": "o-dass-ich-tausend-zungen-haette",
-      "title": "O daß ich tausend Zungen hätte",
+      "title": "O da\u00df ich tausend Zungen h\u00e4tte",
       "author": "Johann Mentzer",
       "year": 1704,
       "langs": [
@@ -856,9 +846,9 @@
       "optEn": "O That I Had a Thousand Voices (tr. Henry Mills)"
     },
     {
-      "number": 83,
+      "number": 82,
       "id": "grosser-gott-wir-loben-dich",
-      "title": "Großer Gott, wir loben dich",
+      "title": "Gro\u00dfer Gott, wir loben dich",
       "author": "Ignaz Franz",
       "year": 1771,
       "langs": [
@@ -867,9 +857,9 @@
       "optEn": "Holy God, We Praise Thy Name (tr. Clarence Walworth)"
     },
     {
-      "number": 84,
+      "number": 83,
       "id": "gott-ist-gegenwaertig",
-      "title": "Gott ist gegenwärtig",
+      "title": "Gott ist gegenw\u00e4rtig",
       "author": "Gerhard Tersteegen",
       "year": 1729,
       "langs": [
@@ -878,7 +868,7 @@
       "optEn": "God Himself Is with Us"
     },
     {
-      "number": 85,
+      "number": 84,
       "id": "ich-bete-an-die-macht-der-liebe",
       "title": "Ich bete an die Macht der Liebe",
       "author": "Gerhard Tersteegen",
@@ -888,9 +878,9 @@
       ]
     },
     {
-      "number": 86,
+      "number": 85,
       "id": "so-nimm-denn-meine-haende",
-      "title": "So nimm denn meine Hände",
+      "title": "So nimm denn meine H\u00e4nde",
       "author": "Julie Hausmann",
       "year": 1862,
       "langs": [
@@ -899,7 +889,7 @@
       "optEn": "Take Thou My Hand, O Father (tr. Herman Brueckner)"
     },
     {
-      "number": 87,
+      "number": 86,
       "id": "jesu-geh-voran",
       "title": "Jesu, geh voran",
       "author": "Nikolaus von Zinzendorf",
@@ -910,7 +900,7 @@
       "optEn": "Jesus, Still Lead On (tr. Jane Borthwick)"
     },
     {
-      "number": 88,
+      "number": 87,
       "id": "ach-bleib-mit-deiner-gnade",
       "title": "Ach bleib mit deiner Gnade",
       "author": "Josua Stegmann",
@@ -921,7 +911,7 @@
       "optEn": "Abide, O Dearest Jesus (tr. August Crull)"
     },
     {
-      "number": 89,
+      "number": 88,
       "id": "lobt-gott-ihr-christen",
       "title": "Lobt Gott, ihr Christen alle gleich",
       "author": "Nikolaus Herman",
@@ -932,20 +922,20 @@
       "optEn": "Praise God the Lord, Ye Sons of Men (tr. August Crull)"
     },
     {
-      "number": 90,
+      "number": 89,
       "id": "harre-meine-seele",
       "title": "Harre, meine Seele",
-      "author": "Johann Friedrich Räder",
+      "author": "Johann Friedrich R\u00e4der",
       "year": 1845,
       "langs": [
         "de"
       ]
     },
     {
-      "number": 91,
+      "number": 90,
       "id": "bis-hierher-hat-mich-gott-gebracht",
       "title": "Bis hierher hat mich Gott gebracht",
-      "author": "Ämilie Juliane von Schwarzburg-Rudolstadt",
+      "author": "\u00c4milie Juliane von Schwarzburg-Rudolstadt",
       "year": 1699,
       "langs": [
         "de"
