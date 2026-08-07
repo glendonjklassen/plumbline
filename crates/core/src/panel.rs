@@ -382,8 +382,9 @@ pub trait PanelSource {
     fn occurrences(&self, code: &str) -> OccurrencesView;
 
     fn bridge_partners(&self, code: &str) -> Vec<BridgePartnerView>;
-    /// `(near, cross)` embedding neighbour codes (Full study; empty w/o an
-    /// embedding).
+    /// The symbolic concept engine's view of a code: its community (same-root
+    /// members), concentrating books, testament split, and leitwort. `None`
+    /// without the `concept` feature or its index.
     fn concept(&self, code: &str) -> Option<ConceptView>;
 
     fn verse_xrefs(&self, verse: &str) -> Vec<XrefView>;
@@ -618,7 +619,7 @@ fn legend() -> Block {
 /// Which analysis tiers the reader has switched on. The text (and the reader's
 /// own data — tags, notes, author actions) is always on; **human** gates the
 /// curated-scholarship tiers (renderings, morphology, same-root, TSK) and
-/// **machine** the learned/statistical ones (embeddings, concept, SIF,
+/// **machine** the learned/statistical ones (the symbolic concept engine, SIF,
 /// leitwort). Replaces the old all-or-nothing Simple/Full request flag — the
 /// reader accumulates tags in any mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

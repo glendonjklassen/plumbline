@@ -52,7 +52,7 @@ jobs:
       - name: Test portable crates
         run: cargo test --locked -p plumbline-core -p plumbline-layout -p plumbline-rnd -p plumbline-ffi -p plumbline-hydrate
       - name: Test the R&D features
-        run: cargo test --locked -p plumbline-rnd --features "bridge embeddings morphology concept"
+        run: cargo test --locked -p plumbline-rnd --features "bridge morphology concept"
       # The GERMAN CORPUS against the file that actually ships. `#[ignore]`d in
       # the default run because it reads 15 MB and needs a hydrated checkout;
       # here it is the only thing proving `data/luther1912.jsonl` sits at the
@@ -131,7 +131,7 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
       # The R&D crate's shipped feature set, linted the way it is tested.
       - name: clippy (the R&D features)
-        run: cargo clippy --locked -p plumbline-rnd --all-targets --features "bridge embeddings morphology concept" -- -D warnings
+        run: cargo clippy --locked -p plumbline-rnd --all-targets --features "bridge morphology concept" -- -D warnings
       # And the web engine's own target. `crates/ffi` carries `cfg(target_arch =
       # "wasm32")` code — the whole `wasm.rs` shim, plus the sliced-warm cluster
       # that only it and the tests call — which a host-target clippy never sees.

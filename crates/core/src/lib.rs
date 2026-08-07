@@ -7,7 +7,7 @@
 //! unit-testable, so the native shells (GTK/WinUI/Compose) and the FFI layer
 //! can sit on top without duplicating any study logic.
 //!
-//! Optional "R&D" features (embeddings, morphology, concept, bridge) live in
+//! Optional "R&D" features (morphology, concept, bridge) live in
 //! the separate, feature-gated `plumbline-rnd` crate so a simple-reader build can
 //! omit them entirely.
 

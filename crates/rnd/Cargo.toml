@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Optional, feature-gated R&D layer for Plumbline: bridge, embeddings, morphology, concept."
+description = "Optional, feature-gated R&D layer for Plumbline: bridge, morphology, concept."
 
 [dependencies]
 plumbline-core = { workspace = true }
@@ -22,9 +22,8 @@ default = []
 # (Strong's own derivation strings) — no ML, no external packs. It is the
 # primitive the concept engine follows across the testaments.
 bridge = []
-embeddings = []
 morphology = []
 # The symbolic concept engine: co-occurrence statistics + community graph, pure
 # corpus folds (no ML data).
 concept = []
-full = ["bridge", "embeddings", "morphology", "concept"]
+full = ["bridge", "morphology", "concept"]

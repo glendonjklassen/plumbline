@@ -1,10 +1,13 @@
 //! `plumbline-rnd` — the optional, feature-gated "R&D" layer for Plumbline.
 //!
 //! Everything a casual reader should never be forced to see lives here, behind
-//! cargo features: the OT↔NT etymology bridge (`bridge`), concept embeddings +
-//! neighbourhoods (`embeddings`), the morphology layer (`morphology`), and the
-//! symbolic concept engine (`concept`). A simple-reader build depends on
-//! `plumbline-rnd` with no features and compiles none of it.
+//! cargo features: the OT↔NT etymology bridge (`bridge`), the morphology layer
+//! (`morphology`), and the symbolic concept engine (`concept`). A simple-reader
+//! build depends on `plumbline-rnd` with no features and compiles none of it.
+//!
+//! The learned concept embeddings (`embeddings`) were retired 2026-07-30 — the
+//! nearest-neighbour "concepts near this one" surface was unreliable and is
+//! gone from both shells; the symbolic `concept` engine below is what remains.
 //!
 //! Ported from overlay `Concept*`, `Embed`, `Morph`, `Burst`, `Witness`,
 //! `Bridge`. The **etymology bridge** (`bridge` feature) is ported and pure
@@ -23,11 +26,6 @@ pub mod bridge;
 #[cfg(feature = "bridge")]
 pub mod witness;
 
-/// Concept embeddings: loader + neighbour search over the offline-trained
-/// `concept-vectors.vec` artifact. Compiled in with the `embeddings` feature.
-#[cfg(feature = "embeddings")]
-pub mod embed;
-
 /// Morphology: OSHM/Robinson parsing-code parsers + renderer + sidecar loader
 /// over the offline-projected `morphology.jsonl`. With the `morphology` feature.
 #[cfg(feature = "morphology")]
@@ -39,7 +37,7 @@ pub mod morph;
 pub mod concept;
 
 /// Grammatical function-word Strong's codes, excluded from concept-neighbour
-/// surfaces (pure data, no feature gate — used by `embeddings` and `concept`).
+/// surfaces (pure data, no feature gate — used by the `concept` engine).
 pub mod stopwords;
 
 /// Leitwort / burst discovery (Poisson scan statistic over concept positions).
@@ -55,8 +53,8 @@ pub mod burst;
 /// reader PREFERENCE, set at first run (decision #4) and changeable in Settings.
 /// This is a BUILD FACT: whether the code behind a tier was compiled in at all.
 /// A build can perfectly well have `concept` compiled in and the reader's machine
-/// tier switched off, and today every shipped build has all four (see
-/// `crates/ffi/Cargo.toml`; `plumbline-hydrate` takes three).
+/// tier switched off, and today every shipped build has all three (see
+/// `crates/ffi/Cargo.toml`; `plumbline-hydrate` takes two).
 ///
 /// So nothing crosses the C ABI yet, and this is deliberately not wired to a
 /// shell: `plumbline-rnd` cannot see a shell, and the endpoint that should carry
@@ -74,7 +72,6 @@ pub mod burst;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Capabilities {
     pub bridge: bool,
-    pub embeddings: bool,
     pub morphology: bool,
     pub concept: bool,
 }
@@ -83,7 +80,6 @@ pub struct Capabilities {
 pub const fn capabilities() -> Capabilities {
     Capabilities {
         bridge: cfg!(feature = "bridge"),
-        embeddings: cfg!(feature = "embeddings"),
         morphology: cfg!(feature = "morphology"),
         concept: cfg!(feature = "concept"),
     }
@@ -93,7 +89,7 @@ pub const fn capabilities() -> Capabilities {
 /// in reader-only mode with no "Full study" affordances.
 pub const fn any_enabled() -> bool {
     let c = capabilities();
-    c.bridge || c.embeddings || c.morphology || c.concept
+    c.bridge || c.morphology || c.concept
 }
 
 #[cfg(test)]
@@ -103,7 +99,7 @@ mod tests {
 
     // Only meaningful in a featureless build (a plain `cargo test`); skip it
     // when any R&D feature is enabled on the command line.
-    #[cfg(not(any(feature = "bridge", feature = "embeddings", feature = "morphology", feature = "concept")))]
+    #[cfg(not(any(feature = "bridge", feature = "morphology", feature = "concept")))]
     #[test]
     fn default_build_has_no_rnd() {
         assert!(!any_enabled());
@@ -115,13 +111,12 @@ mod tests {
     // could have gone permanently all-false in the build that ships (every
     // shipped build has all four — see `crates/ffi/Cargo.toml`) and only the
     // featureless job, where all-false is CORRECT, would have been watching.
-    #[cfg(all(feature = "bridge", feature = "embeddings", feature = "morphology", feature = "concept"))]
+    #[cfg(all(feature = "bridge", feature = "morphology", feature = "concept"))]
     #[test]
     fn full_build_reports_every_tier() {
         assert!(any_enabled());
         let c = capabilities();
         assert!(c.bridge, "bridge compiled in but not reported");
-        assert!(c.embeddings, "embeddings compiled in but not reported");
         assert!(c.morphology, "morphology compiled in but not reported");
         assert!(c.concept, "concept compiled in but not reported");
     }

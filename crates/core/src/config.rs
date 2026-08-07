@@ -116,7 +116,8 @@ pub struct Config {
     /// same-root, TSK). Replaces half of the old Simple/Full switch; the text
     /// and the reader's own data are never gated.
     pub human_analysis: bool,
-    /// Show the learned/statistical tiers (embeddings, concept, SIF, leitwort).
+    /// Show the learned/statistical tiers (the symbolic concept engine, SIF,
+    /// leitwort).
     pub machine_analysis: bool,
     /// The reader's home church — shown in the welcome when a shared link
     /// carried one, and attached to the links this reader shares.

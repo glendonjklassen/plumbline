@@ -31,7 +31,7 @@
 |-----------------|------------|
 | `crates/core` (`plumbline-core`) | Pure domain: corpus, Strong's, search, weaves, tags, config, atomic store |
 | `crates/layout` (`plumbline-layout`) | Greedy line-breaker + hit regions (measures via callback) |
-| `crates/rnd` (`plumbline-rnd`) | Feature-gated analytics: bridge, embeddings, morphology, keyness, witness, concept |
+| `crates/rnd` (`plumbline-rnd`) | Feature-gated analytics: bridge, morphology, keyness, witness, concept |
 | `crates/ffi` (`plumbline-ffi`) | The single flat C ABI for native shells (cdylib) — see [crates/ffi/README.md](crates/ffi/README.md) |
 | `crates/hydrate` (`plumbline-hydrate`) | CLI: copy/verify the data pack into a home |
 | `apps/android` | The Compose shell (Android) — the UX gold standard |
@@ -190,7 +190,7 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
 
 - `cargo test --locked -p plumbline-core -p plumbline-layout -p plumbline-rnd -p plumbline-ffi -p plumbline-hydrate`
 - `cargo test --locked -p plumbline-rnd` (featureless — must stay compiling)
-- `cargo test --locked -p plumbline-rnd --features "bridge embeddings morphology concept"`
+- `cargo test --locked -p plumbline-rnd --features "bridge morphology concept"`
 - After touching `crates/ffi`'s extern surface: regenerate bindings
   (`cargo run -p plumbline-ffi --features bindgen --bin plumbline-bindgen`) — CI fails
   on drift (the check is header ↔ the hand-written Kotlin JNA binding) — and

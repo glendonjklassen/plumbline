@@ -356,8 +356,8 @@ knows its provenance. The model is `plumbline_rnd::bridge` (`crates/rnd/src/brid
 - `Tier = God | Human | Machine`. **God** = the text itself (TR/Masoretic words,
   and scripture-quotes-scripture, "the words read twice"). **Human** = curated
   scholarship (lexicons, the 1769 renderings, TSK). **Machine** = a
-  learned/aligned artifact (the LXX alignment, embeddings, the R&D layer), and
-  the default for an unrecognized source so nothing over-claims.
+  learned/aligned artifact (the LXX alignment and the rest of the R&D layer),
+  and the default for an unrecognized source so nothing over-claims.
 - `source_tiers(src) -> &[Tier]` — a *set* (a source can carry two): `quotation`
   → `[God, Machine]`; `etymology`/`rendering`/`abbott-smith`/`stepbible-*`/`tsk`
   → `[Human]`; `lxx`/`embedding`/`text-witness` → `[Machine]`; unknown →

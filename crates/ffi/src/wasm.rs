@@ -104,10 +104,11 @@ pub unsafe extern "C" fn plumbline_engine_defer_builds(engine: *const PlumblineE
     }
 }
 
-/// Load ONE machine-tier artifact: step 0 the concept embedding, step 1 the
-/// morphology sidecar. Returns 1 while steps remain, 0 when done (or on a null
-/// engine). Idempotent — an artifact already loaded, or still missing from the
-/// home, is a cheap no-op.
+/// Load ONE machine-tier artifact: step 1 the morphology sidecar. Step 0 was the
+/// concept embedding, retired 2026-07-30 — it is now a vestigial no-op kept so
+/// the two-step contract and both shells' load loop stay unchanged. Returns 1
+/// while steps remain, 0 when done (or on a null engine). Idempotent — an
+/// artifact already loaded, or still missing from the home, is a cheap no-op.
 ///
 /// [`plumbline_engine_load_rnd_data`](crate::plumbline_engine_load_rnd_data)
 /// does both in one call, which parses ~17 MB of text. On a phone that is many

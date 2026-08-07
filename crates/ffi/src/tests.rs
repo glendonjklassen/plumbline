@@ -569,17 +569,6 @@ fn rnd_tier_via_abi() {
         std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
         std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
 
-        // Tiny aligned embedding over the fixture's codes + one Hebrew row.
-        std::fs::write(
-            home.join("data").join("concept-vectors.vec"),
-            "4 2\nG2316 1 0\nG25 0.9 0.1\nG4100 0.2 1\nH7225 0.95 0.05\n",
-        )
-        .unwrap();
-        std::fs::write(
-            home.join("data").join("concept-vectors.vec.meta"),
-            r#"{"tokenization":"kjv1769-tok2","aligned":"procrustes"}"#,
-        )
-        .unwrap();
         // Morphology annotating "loved" (token 3, G25) in John 3:16.
         std::fs::write(
             home.join("data").join("morphology.jsonl"),
@@ -1436,17 +1425,7 @@ fn rnd_data_loads_after_open() {
         // A no-op load while the files are still missing is harmless.
         assert!(plumbline_engine_load_rnd_data(e).is_null());
 
-        // The R&D pack arrives (same artifacts as rnd_tier_via_abi).
-        std::fs::write(
-            home.join("data").join("concept-vectors.vec"),
-            "4 2\nG2316 1 0\nG25 0.9 0.1\nG4100 0.2 1\nH7225 0.95 0.05\n",
-        )
-        .unwrap();
-        std::fs::write(
-            home.join("data").join("concept-vectors.vec.meta"),
-            r#"{"tokenization":"kjv1769-tok2","aligned":"procrustes"}"#,
-        )
-        .unwrap();
+        // The R&D pack arrives: the morphology sidecar (same as rnd_tier_via_abi).
         std::fs::write(
             home.join("data").join("morphology.jsonl"),
             "{\"format\":\"overlay-morphology-v1\",\"tokenization\":\"kjv1769-tok2\",\"source\":\"test\"}\n\
@@ -1465,8 +1444,8 @@ fn rnd_data_loads_after_open() {
     }
 }
 
-/// A corpus of `chapters * per` verses over Psalms, every verse carrying codes
-/// the test embedding covers. Deliberately bigger than one warm slice — see
+/// A corpus of `chapters * per` verses over Psalms, every verse carrying the
+/// four Strong's codes the fixtures use. Deliberately bigger than one warm slice — see
 /// `sif_model_is_built_in_slices` for why that is the whole point.
 fn generated_kjv(chapters: u16, per: u16) -> String {
     const CODES: [&str; 4] = ["G2316", "G25", "G4100", "H7225"];
