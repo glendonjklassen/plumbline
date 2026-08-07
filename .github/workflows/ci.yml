@@ -1,27 +1,38 @@
 name: CI
 
-# ONLY WHEN A VERSION IS CUT (Glendon, 2026-08-04): "all I want is CI to run
-# when we cut a new version."
+# WHEN A VERSION IS CUT, AND ON EVERY PR TO `main` (Glendon, 2026-08-04;
+# PR gating added 2026-08-06).
 #
 # It used to run on a push to any branch, which meant that cutting a release —
 # where the feature branch and `main` are pushed at the same commit — ran the
 # whole suite TWICE over identical code. The concurrency group is keyed by ref,
 # so two refs at one commit are two groups and neither cancels the other; it
-# happened at v0.39.2 (batch-7 + main), v0.40.0 and v0.40.4.
+# happened at v0.39.2 (batch-7 + main), v0.40.0 and v0.40.4. So branch pushes
+# no longer trigger it — only the tag does.
+#
+# `pull_request` gates work BEFORE it reaches `main`: a PR runs the whole suite
+# against its merge commit. This does NOT bring back the release double-run —
+# that was two `push` events at one commit, and a tag push fires no
+# `pull_request`. A PR fires no branch-push trigger either (there is none), so
+# each PR runs once.
 #
 # `workflow_dispatch` stays so the suite can still be run by hand against any
 # ref without cutting a tag for it.
 #
-# THE TRADE-OFF, said out loud: nothing tests `main` between releases now, and
-# this workflow does not gate the Release one — both fire on the tag and run
-# alongside each other, so a red CI does not stop an APK being published. The
-# maintainer runs the suite locally before tagging; that is the actual gate.
+# THE TRADE-OFF, said out loud: this workflow does not gate the Release one —
+# both fire on the tag and run alongside each other, so a red CI does not stop
+# an APK being published. The maintainer runs the suite locally before tagging,
+# and the PR gate above is what catches a regression before it lands; that is
+# the actual gate.
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    branches: ["main"]
   workflow_dispatch:
 
-# One run per tag. Kept because a re-pushed tag would otherwise pile up.
+# One run per ref. A re-pushed tag would otherwise pile up, and a new push to a
+# PR branch supersedes the in-flight run for that PR rather than racing it.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
