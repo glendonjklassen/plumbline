@@ -218,6 +218,11 @@ fun StudyScreen(
     // Second Bible pane state (for Bible∥Bible in fold mode).
     var secondBook by remember { mutableStateOf(lastPane?.book ?: "John") }
     var secondChapter by remember { mutableStateOf(lastPane?.chapter?.takeIf { it > 0 } ?: 3) }
+    // The fold's second pane scrolls to its own target verse — a weave's `b`
+    // endpoint — tracked apart from the primary pane's pendingVerse/navEpoch so
+    // the two panes land on their own verses independently.
+    var secondPendingVerse by remember { mutableStateOf<Int?>(null) }
+    var secondNavEpoch by remember { mutableStateOf(0) }
 
     var studyBlocks by remember { mutableStateOf<String?>(null) }
     /** The About/Guide card is showing — it gets the build stamp footer. */
@@ -520,7 +525,10 @@ fun StudyScreen(
             if (w == null) return@engineCall
             w.opening?.let { o ->
                 goToRef(o.primary)
-                o.second?.let { s -> secondBook = s.book; secondChapter = s.chapter }
+                o.second?.let { s ->
+                    secondBook = s.book; secondChapter = s.chapter
+                    secondPendingVerse = o.secondVerse; secondNavEpoch++
+                }
             }
             if (w.blocks != null) studyBlocks = w.blocks
         }
@@ -685,8 +693,8 @@ fun StudyScreen(
                 onSwipeChapter = { dir -> val (nb, nc) = step(b, c, dir); setPane(nb, nc) },
                 noteEpoch = noteEpoch,
                 akjvOverlay = akjvOverlay,
-                targetVerse = if (isSecond) null else pendingVerse,
-                targetEpoch = if (isSecond) 0 else navEpoch,
+                targetVerse = if (isSecond) secondPendingVerse else pendingVerse,
+                targetEpoch = if (isSecond) secondNavEpoch else navEpoch,
                 clearPinEpoch = clearPinEpoch,
                 onFirstVisibleVerse = if (isSecond) ({ }) else ({ v ->
                     firstVisibleVerse = v
@@ -812,7 +820,10 @@ fun StudyScreen(
             if (showConstellation) MapOverlay(t("map.constellation"), palette, { showConstellation = false }) {
                 Constellation(
                     engine, palette, Modifier.fillMaxSize(),
-                    onNavigate = { b, ch, _ -> book = b; chapter = ch; showConstellation = false; dest = Dest.Read },
+                    // Carry the tapped node's verse, not just its chapter, so the
+                    // reader lands ON the verse. goToRef parses "Book c:v" (and a
+                    // bare "Book c" when a node names only a chapter).
+                    onNavigate = { b, ch, refKey -> goToRef(refKey ?: "$b $ch"); showConstellation = false },
                     onOpenWeave = {},
                 )
             }
@@ -922,7 +933,7 @@ fun StudyScreen(
                 engine, palette, studyScale, searchText,
                 onQueryChange = { searchText = it },
                 onHits = { searchHits = it },
-                onNavigate = { b, c -> book = b; chapter = c },
+                onNavigate = { b, c, v -> book = b; chapter = c; pendingVerse = v; navEpoch++ },
                 onLink = ::onLink,
                 onClose = { showSearch = false },
             )
@@ -1165,6 +1176,9 @@ internal data class WeaveOpening(
     /** The `b` end, for the fold's second pane, or null when it is the same
      *  chapter as [primary] (two panes on one chapter show nothing new). */
     val second: ChapterRef? = null,
+    /** The verse of the `b` end, so the second pane scrolls to it and not just
+     *  to the top of its chapter. Null when [second] is null or names a chapter. */
+    val secondVerse: Int? = null,
 )
 
 /**
@@ -1179,7 +1193,8 @@ internal fun weaveOpening(links: List<WeaveLink1>): WeaveOpening? {
     val link = links.firstOrNull { it.resolved } ?: links.firstOrNull() ?: return null
     val a = chapterRefOf(link.a) ?: return null
     val b = chapterRefOf(link.b)
-    return WeaveOpening(link.a, if (b != null && b != a) b else null)
+    val second = if (b != null && b != a) b else null
+    return WeaveOpening(link.a, second, if (second != null) verseOf(link.b) else null)
 }
 
 /** A refKey's book and chapter ("Gen 1:7" → Gen 1), or null if it is not one. */
@@ -1189,6 +1204,9 @@ private fun chapterRefOf(refKey: String): ChapterRef? {
     val ch = refKey.substring(sp + 1).substringBefore(':').toIntOrNull() ?: return null
     return ChapterRef(refKey.substring(0, sp), ch)
 }
+
+/** A refKey's verse ("Gen 1:7" → 7), or null when it names only a chapter. */
+private fun verseOf(refKey: String): Int? = refKey.substringAfterLast(':', "").toIntOrNull()
 
 /** True when a search answer is a reference to open rather than hits to list.
  *  Both halves matter: the engine has to say `goto` AND say where — the reader's
@@ -1368,7 +1386,7 @@ private fun SearchOverlay(
     initialQuery: String,
     onQueryChange: (String) -> Unit,
     onHits: (Set<String>) -> Unit,
-    onNavigate: (book: String, chapter: Int) -> Unit,
+    onNavigate: (book: String, chapter: Int, verse: Int?) -> Unit,
     onLink: (String) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -1417,7 +1435,7 @@ private fun SearchOverlay(
             if (a == null) return@engineCall
             onHits(a.hits)
             if (a.goto != null) {
-                onNavigate(a.goto.book!!, a.goto.chapter!!.toInt())
+                onNavigate(a.goto.book!!, a.goto.chapter!!.toInt(), a.goto.verse)
                 onQueryChange("")
                 onClose()
             } else {
