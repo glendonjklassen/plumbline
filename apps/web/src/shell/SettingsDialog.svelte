@@ -114,6 +114,14 @@
       s.restoring = true;
       await s.rpc.freeze(); // the debounced authoring persist must not fire either
       await idbApply("user", safe);
+      // The close-safe theme cache is a mirror of THIS session's config; the
+      // restored home carries its own theme, and the boot reconcile would
+      // otherwise trust the stale cache over it. Drop it so the restore wins.
+      try {
+        localStorage.removeItem("plumbline:themeChoice");
+      } catch {
+        /* no storage: nothing cached to override the restore anyway */
+      }
       location.reload(); // the engine re-opens over the restored home
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);

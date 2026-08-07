@@ -237,27 +237,27 @@ test("a note written 5 ms before the tab is put away still reaches storage", asy
 });
 
 // A reader changed the theme and it was gone next launch (UAT, 2026-08-06). The
-// theme lives in the shared config, which flushes on pagehide like everything
-// else — this drives the real Settings radio, flushes the way close does, then
-// reloads and checks it stuck (stored AND re-applied).
-test("the theme is saved and restored across a relaunch", async ({ page }) => {
+// config save that carries the theme to the home is debounced and posted to the
+// worker, so a fast close races the worker's IndexedDB write and the theme
+// reverts to the default. The fix mirrors the theme CHOICE to localStorage
+// synchronously (close-safe) and reconciles it on boot.
+//
+// This drives the REAL close path — no explicit flush, no wait — which is what
+// reproduced the loss: with the fix reverted the theme comes back "system".
+test("the theme survives a fast close, with no explicit flush", async ({ page }) => {
   await boot(page);
 
   await page.evaluate(() => ((window as any).__plumbline.showSettings = true));
   await page.getByRole("radio", { name: "Night (true black)" }).check();
-  // Flush the way a close does, and WAIT for the worker to land it before the
-  // reload tears the tab down — the race the persist notice exists for.
-  await page.evaluate(async () => {
-    const s = (window as any).__plumbline;
-    s.flushConfig();
-    await s.rpc.flush();
-  });
+  await page.evaluate(() => ((window as any).__plumbline.showSettings = false));
 
+  // Straight to reload — the config save has NOT been awaited, exactly like a
+  // reader who picks a theme and closes the tab (or backgrounds a phone).
   await page.reload({ timeout: 45_000 });
   await boot(page);
 
   expect(
     await page.evaluate(() => (window as any).__plumbline.config.theme),
-    "the theme chosen last launch must survive the relaunch",
+    "the theme chosen last launch must survive a fast close",
   ).toBe("night");
 });

@@ -756,6 +756,21 @@ export class Session {
 
     const loaded = boot.config ?? {};
     this.config = loaded;
+    // Trust the close-safe theme cache over the home config: if the last change
+    // never reached the worker's IndexedDB write (a frozen debounce on a
+    // backgrounded tab), the home still says the old theme while localStorage
+    // holds the reader's actual last choice. Re-persist so the home and the
+    // backup catch up. Cleared on restore (SettingsDialog), so a restored
+    // backup's theme still wins over a stale cache.
+    try {
+      const cachedTheme = localStorage.getItem("plumbline:themeChoice");
+      if (cachedTheme && cachedTheme !== this.config.theme) {
+        this.config.theme = cachedTheme;
+        this.saveConfig();
+      }
+    } catch {
+      /* no storage: the home config stands as loaded */
+    }
     this.showFirstRun = !!loaded.firstRun;
 
     const saved = loaded.openPanes?.length ? loaded.openPanes : [{ book: "John", chapter: 3 }];
@@ -939,6 +954,13 @@ export class Session {
     // session's palette without asking the worker.
     try {
       localStorage.setItem("plumbline:palette", JSON.stringify(this.palette));
+      // The theme CHOICE, close-safe. The config save that carries it to the
+      // home is debounced and posted to the worker, so a mobile background that
+      // freezes the timer and then discards the tab can lose it — the reader
+      // picks a theme and it is gone next launch (UAT, 2026-08-06). localStorage
+      // is synchronous and survives pagehide, so this write always lands; the
+      // boot reconcile trusts it over a home config that may not have caught up.
+      localStorage.setItem("plumbline:themeChoice", this.config.theme ?? "system");
     } catch {
       /* storage full/blocked: the snapshot just paints in default light */
     }
