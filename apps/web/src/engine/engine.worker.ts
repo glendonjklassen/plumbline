@@ -789,6 +789,11 @@ self.onmessage = async (ev: MessageEvent) => {
           light: themePalette(booted.wasm, "light"),
           dark: themePalette(booted.wasm, "dark"),
           night: themePalette(booted.wasm, "night"),
+          dracula: themePalette(booted.wasm, "dracula"),
+          "solarized-light": themePalette(booted.wasm, "solarized-light"),
+          "solarized-dark": themePalette(booted.wasm, "solarized-dark"),
+          gruvbox: themePalette(booted.wasm, "gruvbox"),
+          nord: themePalette(booted.wasm, "nord"),
         };
         const toc = booted.engine.toc();
         // Every word the shell paints, resolved against the reader's setting and

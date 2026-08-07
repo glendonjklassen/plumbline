@@ -17,8 +17,8 @@ export interface BootInfo {
    *  silent otherwise, and it degrades to platform-serif METRICS while the main
    *  thread paints real Garamond — wrong wrap points, no error. */
   fontFaces: number;
-  /** The three theme palettes (light/dark/night), so `applyTheme()` is
-   *  synchronous from the first frame without three more round trips. */
+  /** Every theme's palette, keyed by token, so `applyTheme()` is synchronous
+   *  from the first frame without a round trip per theme. */
   palettes: Record<string, any>;
   /** The table of contents. Handed over here rather than fetched, and then
    *  served back out of [[BOOT_READS]] — see `call`. */

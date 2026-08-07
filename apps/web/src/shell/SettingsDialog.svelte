@@ -513,8 +513,18 @@
   // Tokens only: the label is looked up at RENDER, so a language change
   // repaints the radio list instead of leaving last language's words beside a
   // live control.
-  const themes = ["system", "light", "dark", "night"] as const;
-  const themeLabel = { system: "themeSystem", light: "themeLight", dark: "themeDark", night: "themeNight" };
+  const themes = ["system", "light", "dark", "night", "dracula", "solarized-light", "solarized-dark", "gruvbox", "nord"] as const;
+  const themeLabel: Record<(typeof themes)[number], string> = {
+    system: "themeSystem",
+    light: "themeLight",
+    dark: "themeDark",
+    night: "themeNight",
+    dracula: "themeDracula",
+    "solarized-light": "themeSolarizedLight",
+    "solarized-dark": "themeSolarizedDark",
+    gruvbox: "themeGruvbox",
+    nord: "themeNord",
+  };
   const copyOpts = ["verse", "verseRef", "verseMarkdown"] as const;
   const copyLabel = { verse: "copyVerse", verseRef: "copyVerseRef", verseMarkdown: "copyMarkdown" };
 </script>

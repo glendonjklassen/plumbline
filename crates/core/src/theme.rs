@@ -25,6 +25,14 @@ pub enum Theme {
     Light,
     Dark,
     Night,
+    /// Named presets, inspired by well-known editor themes and tuned to clear
+    /// the same WCAG-AA bar the built-ins do (so they read as this app, not as a
+    /// pixel-copy). Dark unless noted.
+    Dracula,
+    SolarizedLight,
+    SolarizedDark,
+    Gruvbox,
+    Nord,
 }
 
 impl Theme {
@@ -33,6 +41,11 @@ impl Theme {
             Theme::Light => "light",
             Theme::Dark => "dark",
             Theme::Night => "night",
+            Theme::Dracula => "dracula",
+            Theme::SolarizedLight => "solarized-light",
+            Theme::SolarizedDark => "solarized-dark",
+            Theme::Gruvbox => "gruvbox",
+            Theme::Nord => "nord",
         }
     }
     pub fn parse(t: &str) -> Option<Theme> {
@@ -40,12 +53,17 @@ impl Theme {
             "light" => Some(Theme::Light),
             "dark" => Some(Theme::Dark),
             "night" => Some(Theme::Night),
+            "dracula" => Some(Theme::Dracula),
+            "solarized-light" => Some(Theme::SolarizedLight),
+            "solarized-dark" => Some(Theme::SolarizedDark),
+            "gruvbox" => Some(Theme::Gruvbox),
+            "nord" => Some(Theme::Nord),
             _ => None,
         }
     }
     /// Whether the system chrome (scrollbars, dialogs) should be dark.
     pub fn is_dark(self) -> bool {
-        !matches!(self, Theme::Light)
+        !matches!(self, Theme::Light | Theme::SolarizedLight)
     }
 }
 
@@ -59,6 +77,11 @@ pub enum ThemeChoice {
     Light,
     Dark,
     Night,
+    Dracula,
+    SolarizedLight,
+    SolarizedDark,
+    Gruvbox,
+    Nord,
 }
 
 impl ThemeChoice {
@@ -68,6 +91,11 @@ impl ThemeChoice {
             ThemeChoice::Light => "light",
             ThemeChoice::Dark => "dark",
             ThemeChoice::Night => "night",
+            ThemeChoice::Dracula => "dracula",
+            ThemeChoice::SolarizedLight => "solarized-light",
+            ThemeChoice::SolarizedDark => "solarized-dark",
+            ThemeChoice::Gruvbox => "gruvbox",
+            ThemeChoice::Nord => "nord",
         }
     }
     pub fn parse(t: &str) -> Option<ThemeChoice> {
@@ -76,15 +104,26 @@ impl ThemeChoice {
             "light" => Some(ThemeChoice::Light),
             "dark" => Some(ThemeChoice::Dark),
             "night" => Some(ThemeChoice::Night),
+            "dracula" => Some(ThemeChoice::Dracula),
+            "solarized-light" => Some(ThemeChoice::SolarizedLight),
+            "solarized-dark" => Some(ThemeChoice::SolarizedDark),
+            "gruvbox" => Some(ThemeChoice::Gruvbox),
+            "nord" => Some(ThemeChoice::Nord),
             _ => None,
         }
     }
-    /// Resolve to a concrete theme; `System` uses `system_dark`.
+    /// Resolve to a concrete theme; `System` uses `system_dark`. The named
+    /// presets are already concrete — they map straight through.
     pub fn resolve(self, system_dark: bool) -> Theme {
         match self {
             ThemeChoice::Light => Theme::Light,
             ThemeChoice::Dark => Theme::Dark,
             ThemeChoice::Night => Theme::Night,
+            ThemeChoice::Dracula => Theme::Dracula,
+            ThemeChoice::SolarizedLight => Theme::SolarizedLight,
+            ThemeChoice::SolarizedDark => Theme::SolarizedDark,
+            ThemeChoice::Gruvbox => Theme::Gruvbox,
+            ThemeChoice::Nord => Theme::Nord,
             ThemeChoice::System => {
                 if system_dark {
                     Theme::Dark
@@ -95,13 +134,15 @@ impl ThemeChoice {
         }
     }
     /// The next choice when cycling the header toggle (light → dark → night →
-    /// system → light).
+    /// system → light). The named presets are Settings-only and sit outside the
+    /// cycle — cycling out of one returns to `System`.
     pub fn next(self) -> ThemeChoice {
         match self {
             ThemeChoice::Light => ThemeChoice::Dark,
             ThemeChoice::Dark => ThemeChoice::Night,
             ThemeChoice::Night => ThemeChoice::System,
             ThemeChoice::System => ThemeChoice::Light,
+            _ => ThemeChoice::System,
         }
     }
     /// A short human label for the toggle button.
@@ -111,6 +152,11 @@ impl ThemeChoice {
             ThemeChoice::Light => "Theme: light",
             ThemeChoice::Dark => "Theme: dark",
             ThemeChoice::Night => "Theme: night",
+            ThemeChoice::Dracula => "Theme: Dracula",
+            ThemeChoice::SolarizedLight => "Theme: Solarized Light",
+            ThemeChoice::SolarizedDark => "Theme: Solarized Dark",
+            ThemeChoice::Gruvbox => "Theme: Gruvbox",
+            ThemeChoice::Nord => "Theme: Nord",
         }
     }
 }
@@ -290,6 +336,141 @@ pub fn palette(theme: Theme) -> Palette {
             read_partial: "#b87338".into(),
             read_done: "#86ac82".into(),
         },
+        // ── named presets ─────────────────────────────────────────────────────
+        // Inspired by well-known editor themes; muted roles are pushed lighter
+        // (dark themes) or darker (light) than the originals so every text role
+        // clears WCAG AA on every surface — the originals' comment/base tones do
+        // not. Tune the hex to taste; the contrast test is the floor.
+        Theme::Dracula => Palette {
+            dark: true,
+            paper: "#282a36".into(),
+            ink: "#f8f8f2".into(),
+            faded: "#9aa4d6".into(),
+            added: "#e6e6e0".into(),
+            divine: "#ffb86c".into(),
+            title_ink: "#cdd0ea".into(),
+            gold: "#f1d98c".into(),
+            section: "#d8c07a".into(),
+            tier_god: "#f1d98c".into(),
+            tier_human: "#6ff0a0".into(),
+            tier_machine: "#b6bccc".into(),
+            tier_research: "#ff8080".into(),
+            mono: "#b6bccc".into(),
+            morph: "#d8c88c".into(),
+            lemma: "#d0c29a".into(),
+            rule: "#44475a".into(),
+            popup_paper: "#21222c".into(),
+            pane_nav_bg: "#21222c".into(),
+            strip_bg: "#1e1f28".into(),
+            pin: "#6a9bd8".into(),
+            read_unread: "#e0bb45".into(),
+            read_partial: "#d08a5a".into(),
+            read_done: "#6ff0a0".into(),
+        },
+        Theme::SolarizedDark => Palette {
+            dark: true,
+            paper: "#002b36".into(),
+            ink: "#cdd6d6".into(),
+            faded: "#9fadad".into(),
+            added: "#b9c6c6".into(),
+            divine: "#e0a060".into(),
+            title_ink: "#a9b7b7".into(),
+            gold: "#d0ab4d".into(),
+            section: "#c0a55a".into(),
+            tier_god: "#d0ab4d".into(),
+            tier_human: "#93c37a".into(),
+            tier_machine: "#9fadad".into(),
+            tier_research: "#f2857f".into(),
+            mono: "#9fadad".into(),
+            morph: "#bfae76".into(),
+            lemma: "#c2b487".into(),
+            rule: "#0e3b47".into(),
+            popup_paper: "#073642".into(),
+            pane_nav_bg: "#073642".into(),
+            strip_bg: "#062f3a".into(),
+            pin: "#268bd2".into(),
+            read_unread: "#cba94a".into(),
+            read_partial: "#cb6b3a".into(),
+            read_done: "#93c37a".into(),
+        },
+        Theme::SolarizedLight => Palette {
+            dark: false,
+            paper: "#fdf6e3".into(),
+            ink: "#3f4d52".into(),
+            faded: "#465458".into(),
+            added: "#4c5a56".into(),
+            divine: "#6e3f22".into(),
+            title_ink: "#4c5a50".into(),
+            gold: "#6e5410".into(),
+            section: "#66531f".into(),
+            tier_god: "#6e5410".into(),
+            tier_human: "#425720".into(),
+            tier_machine: "#4c5654".into(),
+            tier_research: "#9c2f1c".into(),
+            mono: "#4c5654".into(),
+            morph: "#544b22".into(),
+            lemma: "#564f2b".into(),
+            rule: "#d8d2bf".into(),
+            popup_paper: "#eee8d5".into(),
+            pane_nav_bg: "#eee8d5".into(),
+            strip_bg: "#e8e1cd".into(),
+            pin: "#1c6aa8".into(),
+            read_unread: "#b58900".into(),
+            read_partial: "#cb4b16".into(),
+            read_done: "#718100".into(),
+        },
+        Theme::Gruvbox => Palette {
+            dark: true,
+            paper: "#282828".into(),
+            ink: "#ebdbb2".into(),
+            faded: "#b0a189".into(),
+            added: "#d5c9a5".into(),
+            divine: "#fe8019".into(),
+            title_ink: "#cabfa0".into(),
+            gold: "#fabd2f".into(),
+            section: "#d6a94a".into(),
+            tier_god: "#fabd2f".into(),
+            tier_human: "#b8bb26".into(),
+            tier_machine: "#b0a99c".into(),
+            tier_research: "#fb6a5a".into(),
+            mono: "#b0a99c".into(),
+            morph: "#d5be7a".into(),
+            lemma: "#cdbf94".into(),
+            rule: "#3c3836".into(),
+            popup_paper: "#32302f".into(),
+            pane_nav_bg: "#32302f".into(),
+            strip_bg: "#1d2021".into(),
+            pin: "#83a598".into(),
+            read_unread: "#fabd2f".into(),
+            read_partial: "#d65d0e".into(),
+            read_done: "#b8bb26".into(),
+        },
+        Theme::Nord => Palette {
+            dark: true,
+            paper: "#2e3440".into(),
+            ink: "#eceff4".into(),
+            faded: "#9aa5b8".into(),
+            added: "#d8dee9".into(),
+            divine: "#dc9a80".into(),
+            title_ink: "#c2cad8".into(),
+            gold: "#ebcb8b".into(),
+            section: "#d0b978".into(),
+            tier_god: "#ebcb8b".into(),
+            tier_human: "#a3be8c".into(),
+            tier_machine: "#aab4c4".into(),
+            tier_research: "#e08a94".into(),
+            mono: "#aab4c4".into(),
+            morph: "#d6c48c".into(),
+            lemma: "#cdbf9a".into(),
+            rule: "#434c5e".into(),
+            popup_paper: "#292e39".into(),
+            pane_nav_bg: "#292e39".into(),
+            strip_bg: "#272b34".into(),
+            pin: "#81a1c1".into(),
+            read_unread: "#ebcb8b".into(),
+            read_partial: "#d0876c".into(),
+            read_done: "#a3be8c".into(),
+        },
     }
 }
 
@@ -299,10 +480,29 @@ mod tests {
 
     #[test]
     fn theme_tokens_roundtrip() {
-        for t in [Theme::Light, Theme::Dark, Theme::Night] {
+        for t in [
+            Theme::Light,
+            Theme::Dark,
+            Theme::Night,
+            Theme::Dracula,
+            Theme::SolarizedLight,
+            Theme::SolarizedDark,
+            Theme::Gruvbox,
+            Theme::Nord,
+        ] {
             assert_eq!(Theme::parse(t.token()), Some(t));
         }
-        for c in [ThemeChoice::System, ThemeChoice::Light, ThemeChoice::Dark, ThemeChoice::Night] {
+        for c in [
+            ThemeChoice::System,
+            ThemeChoice::Light,
+            ThemeChoice::Dark,
+            ThemeChoice::Night,
+            ThemeChoice::Dracula,
+            ThemeChoice::SolarizedLight,
+            ThemeChoice::SolarizedDark,
+            ThemeChoice::Gruvbox,
+            ThemeChoice::Nord,
+        ] {
             assert_eq!(ThemeChoice::parse(c.token()), Some(c));
         }
         assert_eq!(Theme::parse("nope"), None);
@@ -439,7 +639,16 @@ mod contrast {
 
     #[test]
     fn every_text_role_clears_aa_on_every_surface() {
-        for theme in [Theme::Light, Theme::Dark, Theme::Night] {
+        for theme in [
+            Theme::Light,
+            Theme::Dark,
+            Theme::Night,
+            Theme::Dracula,
+            Theme::SolarizedLight,
+            Theme::SolarizedDark,
+            Theme::Gruvbox,
+            Theme::Nord,
+        ] {
             let p = palette(theme);
             for (role, fg) in text_roles(&p) {
                 for (surface, bg) in surfaces(&p) {

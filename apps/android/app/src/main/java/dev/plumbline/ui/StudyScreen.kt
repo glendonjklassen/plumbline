@@ -1748,6 +1748,11 @@ private fun SettingsDialog(
                     "light" to t("settings.themeLight"),
                     "dark" to t("settings.themeDark"),
                     "night" to t("settings.themeNight"),
+                    "dracula" to t("settings.themeDracula"),
+                    "solarized-light" to t("settings.themeSolarizedLight"),
+                    "solarized-dark" to t("settings.themeSolarizedDark"),
+                    "gruvbox" to t("settings.themeGruvbox"),
+                    "nord" to t("settings.themeNord"),
                 )
                 for ((token, label) in themes) {
                     Row(
