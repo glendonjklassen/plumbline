@@ -733,6 +733,18 @@
         />
       </label>
       <hr />
+      <p class="label">{t("settings.welcome")}</p>
+      <p class="desc-note">{t("settings.welcomeDesc")}</p>
+      <div class="row">
+        <!-- Reachable for EVERY reader, not just the ones whose path set `intro`
+             (an established believer never had one set, so the top-bar Welcome
+             button never showed for them). Falls back to the new-believer
+             welcome. Reopening changes no data — it only sets shell state. -->
+        <button class="action" onclick={() => { s.reopenIntro = s.intro ?? "new"; s.showSettings = false; }}>
+          {t("settings.welcomeShow")}
+        </button>
+      </div>
+      <hr />
       <p class="label">{t("settings.offline")}</p>
       <div class="offline">
         {#if offlineBusy}

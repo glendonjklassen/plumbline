@@ -97,3 +97,34 @@ test("however first run ends, the welcome stays reachable", async ({ page }) => 
     "the intro was not persisted — the button is there this launch and gone the next",
   ).toBeVisible();
 });
+
+// A reader whose path never recorded an `intro` — the established believer — has
+// no top-bar Welcome button (the previous test is the new-believer twin). Their
+// way back is the Settings entry, and it must reopen the welcome without
+// touching data (UAT, 2026-08-06). Drives the established path, confirms no
+// top-bar button, then reopens from Settings.
+//
+// MUTATION: make the Settings button's onclick a no-op in SettingsDialog.svelte.
+// Red: `reopenIntro` stays null and the poll below times out.
+test("the intro is reachable from Settings when no top-bar Welcome exists", async ({ page }) => {
+  await firstRun(page);
+  await page.getByRole("button", { name: "Established believer" }).click();
+  await page.getByRole("button", { name: "Start reading" }).click();
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+
+  // The established path records no `intro`, so the top-bar Welcome button never
+  // appears — this reader's only route back is Settings.
+  expect(await page.evaluate(() => (window as any).__plumbline?.intro ?? null)).toBeNull();
+  await expect(page.getByRole("button", { name: "Welcome" })).toHaveCount(0);
+
+  // Reopen the welcome from Settings.
+  await page.evaluate(() => ((window as any).__plumbline.showSettings = true));
+  await page.getByRole("button", { name: "Show the welcome" }).click();
+
+  // The welcome is back, and Settings closed. Non-destructive: reopenIntro is
+  // shell state, no config path fired.
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__plumbline?.reopenIntro ?? null))
+    .not.toBeNull();
+  expect(await page.evaluate(() => (window as any).__plumbline?.showSettings)).toBe(false);
+});

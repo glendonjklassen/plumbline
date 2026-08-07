@@ -975,6 +975,9 @@ fun StudyScreen(
                 onPresentSharesAsNew = { presentSharesAsNew = !presentSharesAsNew },
                 language = loadedCfg?.language ?: "",
                 onLanguage = { showSettings = false; onLanguage(it) },
+                // Reachable for every reader (introChoice is null for an
+                // established believer); falls back to the new-believer welcome.
+                onWelcome = { showSettings = false; reopenIntro = introChoice ?: "new" },
                 onDismiss = { showSettings = false; persistCfg() },
             )
         }
@@ -1667,6 +1670,7 @@ private fun SettingsDialog(
     onPresentSharesAsNew: () -> Unit,
     language: String,
     onLanguage: (String) -> Unit,
+    onWelcome: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     // The three reader-pref sliders are DRAFTED. Text size, margin and line
@@ -1850,6 +1854,16 @@ private fun SettingsDialog(
                     t("settings.presentAsNewDesc"),
                     presentSharesAsNew, palette, onPresentSharesAsNew,
                 )
+                HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
+                // Re-reading the welcome, reachable for EVERY reader — the ⋮-menu
+                // entry only shows for a reader whose path set an intro, so an
+                // established believer had no way back to it. Web twin:
+                // SettingsDialog.svelte → "Welcome & intro". Changes no data.
+                Text(t("settings.welcome"), color = palette.faded, fontSize = 12.sp)
+                Text(t("settings.welcomeDesc"), color = palette.faded, fontSize = 12.sp)
+                TextButton(onClick = onWelcome) {
+                    Text(t("settings.welcomeShow"), color = palette.gold)
+                }
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 SettingToggle(t("settings.bundled"), t("settings.bundledDesc"), bundledOn, palette, onToggleBundled)
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
