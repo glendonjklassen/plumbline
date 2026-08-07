@@ -235,3 +235,29 @@ test("a note written 5 ms before the tab is put away still reaches storage", asy
     })
     .toBeGreaterThan(0);
 });
+
+// A reader changed the theme and it was gone next launch (UAT, 2026-08-06). The
+// theme lives in the shared config, which flushes on pagehide like everything
+// else — this drives the real Settings radio, flushes the way close does, then
+// reloads and checks it stuck (stored AND re-applied).
+test("the theme is saved and restored across a relaunch", async ({ page }) => {
+  await boot(page);
+
+  await page.evaluate(() => ((window as any).__plumbline.showSettings = true));
+  await page.getByRole("radio", { name: "Night (true black)" }).check();
+  // Flush the way a close does, and WAIT for the worker to land it before the
+  // reload tears the tab down — the race the persist notice exists for.
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    s.flushConfig();
+    await s.rpc.flush();
+  });
+
+  await page.reload({ timeout: 45_000 });
+  await boot(page);
+
+  expect(
+    await page.evaluate(() => (window as any).__plumbline.config.theme),
+    "the theme chosen last launch must survive the relaunch",
+  ).toBe("night");
+});
