@@ -68,7 +68,7 @@ function seed(): { code: string; strings: Record<string, string> } {
 const initial = seed();
 let strings = $state<Record<string, string>>(initial.strings);
 let code = $state<string>(initial.code);
-let choices = $state<{ code: string; endonym: string }[]>([]);
+let choices = $state<{ code: string; endonym: string; name: string }[]>([]);
 
 /** The catalogue the engine resolved, as it came back over the ABI. Replaces
  *  the boot seed wholesale — including the `boot.*` keys, so a language the
@@ -77,7 +77,11 @@ export function setCatalog(cat: { lang?: string; strings?: Record<string, string
   if (!cat?.strings) return;
   strings = cat.strings;
   code = cat.lang ?? "en";
-  choices = (cat.languages ?? []).map((l) => ({ code: String(l.code), endonym: String(l.endonym) }));
+  choices = (cat.languages ?? []).map((l) => ({
+    code: String(l.code),
+    endonym: String(l.endonym),
+    name: String(l.name ?? ""),
+  }));
   try {
     localStorage.setItem(LAST_LANG, code);
   } catch {
@@ -93,7 +97,7 @@ export function lang(): string {
 
 /** Every language this build ships, each labelled in ITSELF — a reader looking
  *  for German is looking for "Deutsch". Empty until the boot reply lands. */
-export function languages(): { code: string; endonym: string }[] {
+export function languages(): { code: string; endonym: string; name: string }[] {
   return choices;
 }
 

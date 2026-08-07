@@ -784,6 +784,14 @@ lands. Both texts share the tune, so they share one chart. The reader's language
 is a *preference, not a promise*: a German-only hymn shows German to an English
 reader rather than showing nothing.
 
+**The finder matches number, title and first line** in any of a hymn's
+languages, and a token that *names* a language narrows the book to hymns
+carrying it — `de` (code), `German` (English name) or `Deutsch` (endonym),
+case-insensitively, stackable with the text query (`de jesu`). The three labels
+come from one source: `i18n::Lang::{code,exonym,endonym}` in the core, crossing
+in the catalogue wire's `languages: [{code, endonym, name}]`, so a future
+language is searchable by all three the day it is added with no shell change.
+
 **Sing mode** reuses Present's sunlight palette (fixed light, near-black on
 white, big type) for exactly Present's reason — a phone held up between people in
 a lit room — but is its own surface, not wired into the Present thread flow. Its

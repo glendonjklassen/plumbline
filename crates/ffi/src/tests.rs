@@ -2529,10 +2529,11 @@ fn the_catalogue_crosses_the_abi_whole_and_falls_back_to_english() {
         assert!(strings.len() > 20, "the English catalogue looks empty: {} keys", strings.len());
         assert_eq!(strings["nav.read"], "Read");
 
-        // A picker needs every language labelled in ITSELF.
+        // A picker needs every language labelled in ITSELF; the hymnal finder
+        // also needs the English name, so "German" narrows the book like "de".
         let langs = en["languages"].as_array().unwrap();
-        assert!(langs.iter().any(|l| l["code"] == "en" && l["endonym"] == "English"));
-        assert!(langs.iter().any(|l| l["code"] == "de" && l["endonym"] == "Deutsch"));
+        assert!(langs.iter().any(|l| l["code"] == "en" && l["endonym"] == "English" && l["name"] == "English"));
+        assert!(langs.iter().any(|l| l["code"] == "de" && l["endonym"] == "Deutsch" && l["name"] == "German"));
 
         // German resolves to German and answers EVERY English key, translated
         // or not — a shell must never meet a missing id.

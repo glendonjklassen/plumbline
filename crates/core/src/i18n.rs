@@ -61,6 +61,17 @@ impl Lang {
         }
     }
 
+    /// This language's English name — the exonym, for a reader who narrows the
+    /// hymnal by typing "German" rather than "Deutsch". Pairs with
+    /// [`Self::endonym`]; the finder in both shells matches either, plus the
+    /// [`Self::code`].
+    pub fn exonym(self) -> &'static str {
+        match self {
+            Lang::En => "English",
+            Lang::De => "German",
+        }
+    }
+
     /// The language this code names, if the app ships it — tolerating a region
     /// tag, since a browser reporting `de-CH` wants German.
     ///

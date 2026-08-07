@@ -1653,6 +1653,10 @@ pub struct WireLanguage {
     pub code: String,
     /// What this language calls itself — "Deutsch", not "German".
     pub endonym: String,
+    /// Its English name — "German", not "Deutsch". The hymnal finder matches
+    /// this, the endonym or the code, so a reader narrows the book by any of
+    /// "de", "German" or "Deutsch".
+    pub name: String,
 }
 
 pub fn catalog_to_wire(lang: i18n::Lang) -> WireCatalog {
@@ -1661,7 +1665,11 @@ pub fn catalog_to_wire(lang: i18n::Lang) -> WireCatalog {
         strings: i18n::resolved(lang),
         languages: i18n::Lang::ALL
             .iter()
-            .map(|l| WireLanguage { code: l.code().to_string(), endonym: l.endonym().to_string() })
+            .map(|l| WireLanguage {
+                code: l.code().to_string(),
+                endonym: l.endonym().to_string(),
+                name: l.exonym().to_string(),
+            })
             .collect(),
     }
 }
