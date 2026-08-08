@@ -84,10 +84,7 @@ impl Theme {
     }
     /// Whether the system chrome (scrollbars, dialogs) should be dark.
     pub fn is_dark(self) -> bool {
-        !matches!(
-            self,
-            Theme::Light | Theme::SolarizedLight | Theme::Sepia | Theme::CatppuccinLatte
-        )
+        !matches!(self, Theme::Light | Theme::SolarizedLight | Theme::Sepia | Theme::CatppuccinLatte)
     }
 }
 

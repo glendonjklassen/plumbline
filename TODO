@@ -1,0 +1,41 @@
+Spec: independent type axes — theme (M) × text font (N) × chrome font (O)
+Model. Two new config fields, both additive, both round-tripping, absent = today's behavior:
+
+
+"textFont": "eb-garamond",    // scripture rendering
+"chromeFont": "eb-garamond"   // controls, labels, navigation, dialogs
+Theme stays a pure color axis. Any theme × any text font × any chrome font is legal; there is no pairing table anywhere. Defaults preserve the current look — flipping a default later (e.g. chrome to a system stack) is a one-constant change, not part of this work.
+
+1. Core (config.rs + FFI wire) — the two fields, camelCase on the wire, additive evolution rules as usual. Unknown font tokens are not an error: a shell that doesn't recognize the token falls back to its default and preserves the value on save (same stance as the 6–96 bodySize rule — honor, don't clamp away).
+
+2. Font registry, one per shell, kept in parity. A constant table, token → { displayName, faces }, where faces declares what physically exists per family and the policy for what doesn't:
+
+regular (required), italic (file | synthetic-oblique), bold (file | wght-axis | synthetic). The reader needs all three styles: FLAG_ADDED renders italic, verse numbers render bold.
+Example rows: eb-garamond (italic file, bold off the wght axis — current behavior), fira-code (no italic exists → synthetic-oblique, bold off wght axis).
+Both pickers (text + chrome) read the same registry. Adding a font later = TTF into both shells + subset run + one registry row.
+3. Text-font plumbing (the substantive part).
+
+Web: the font family reaches two places that must agree — the engine worker's measure callback and the main-thread painter. Both read from the session's resolved textFont. document.fonts.load must resolve for every face the reader uses (regular, italic, bold) before the first measure, or measureText silently measures the fallback → the wrap-where-it-isn't-painted bug. A textFont change triggers relayout through the same path a zoom change uses; the FFI already keys layouts on font identity.
+Android: registry → Typeface for ReaderPane's paint; relayout on change; persist with the other config writes.
+Applies to every surface that renders corpus/hymn body text: the reader canvas, Present's passage rendering, the memorize drills, hymnal stanzas. One boundary call for the maintainer: the study panel's blocks mix verse snippets with labels — v1 renders the whole panel in chromeFont, and whether verse snippets inside blocks should follow textFont instead is flagged as a follow-up decision, not silently chosen.
+4. Chrome-font plumbing (cheap).
+
+Web: body { font-family: var(--chrome-font) } in app.css, the variable set from config at boot and on change. This replaces the hardcoded scaffold-era "EB Garamond" on body — that line dies here.
+Android: Typography.kt's theme-level substitution becomes parameterized by chromeFont instead of hardcoding the serif family. Surfaces that opted into Garamond by hand (FirstRun, Present chrome) follow chromeFont like everything else unless the maintainer says otherwise.
+The boot splash keeps Georgia (deliberate: first paint waits on no download).
+5. Web delivery + offline. Extend subset-fonts.mjs to iterate the registry (it currently hardcodes the two Garamond files); it already emits content-hashed woff2 + generated fonts.css. @font-face is lazy per family, so a reader downloads only the fonts their config names. Invariant to verify, not assume: a font fetched after first visit must persist for offline boot — the fetch must land in the depot/cache path, because a bare fetch() works on desktop and fails offline on a phone (CLAUDE.md's depot rule). The default font ships in the first-visit set as it does today.
+
+6. Settings UI. Two picker rows beside the theme picker, labels from the registry's displayName (font names are proper nouns — not translated; wire whatever check-i18n needs so the build stays green rather than sprinkling exemptions ad hoc).
+
+7. Tests.
+
+Core: config round-trip with both fields present/absent/unknown-token.
+Web e2e: changing textFont relayouts (assert line breaks actually change between a serif and a monospace — that also proves measure/paint agreement); config survives reload; offline boot with a non-default font chosen. Mutation-test per CLAUDE.md: break the font-load-before-measure gate and watch the test fail.
+Android: JVM config tests; visual/relayout is on-device UAT per house rules.
+8. Documentation. Rewrite FEATURE-MANIFEST.md §Type: the "one face, chrome included" claim is superseded by the three-axis model; record that the old behavior is the pair of defaults, and note the scaffold-commit provenance of the old rule so nobody re-canonizes it.
+
+Effort: text-font plumbing ~a session (font-load gating + relayout is the bulk); chrome axis + registry + pickers + config ~half; e2e on top. No ABI surface changes → no bindgen. Wasm rebuild before Playwright as always.
+
+
+
+TAG DELETION IS BROKEN< SO IS TAG ELEMENT DELETION< SO IS WEAVE AND THREAD
