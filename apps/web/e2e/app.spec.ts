@@ -500,7 +500,7 @@ test("settings switch the theme", async ({ page }) => {
   await boot(page);
   await page.getByLabel("Menu").click();
   await page.getByRole("button", { name: "Settings" }).click();
-  await page.getByText("Night (true black)").click();
+  await page.getByLabel("Theme").selectOption("night");
   const paper = await page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue("--paper").trim(),
   );

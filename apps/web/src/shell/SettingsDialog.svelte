@@ -509,19 +509,44 @@
   }
 
   // Tokens only: the label is looked up at RENDER, so a language change
-  // repaints the radio list instead of leaving last language's words beside a
-  // live control.
-  const themes = ["system", "light", "dark", "night", "dracula", "solarized-light", "solarized-dark", "gruvbox", "nord"] as const;
+  // repaints the picker instead of leaving last language's words beside a
+  // live control. Keep in step with core::theme::ThemeChoice and the worker's
+  // THEME_TOKENS.
+  const themes = [
+    "system",
+    "light",
+    "dark",
+    "night",
+    "darcula",
+    "solarized-light",
+    "solarized-dark",
+    "gruvbox",
+    "nord",
+    "one-dark",
+    "sepia",
+    "catppuccin-mocha",
+    "catppuccin-latte",
+    "tokyo-night",
+    "rose-pine",
+    "synthwave",
+  ] as const;
   const themeLabel: Record<(typeof themes)[number], string> = {
     system: "themeSystem",
     light: "themeLight",
     dark: "themeDark",
     night: "themeNight",
-    dracula: "themeDracula",
+    darcula: "themeDarcula",
     "solarized-light": "themeSolarizedLight",
     "solarized-dark": "themeSolarizedDark",
     gruvbox: "themeGruvbox",
     nord: "themeNord",
+    "one-dark": "themeOneDark",
+    sepia: "themeSepia",
+    "catppuccin-mocha": "themeCatppuccinMocha",
+    "catppuccin-latte": "themeCatppuccinLatte",
+    "tokyo-night": "themeTokyoNight",
+    "rose-pine": "themeRosePine",
+    synthwave: "themeSynthwave",
   };
   const copyOpts = ["verse", "verseRef", "verseMarkdown"] as const;
   const copyLabel = { verse: "copyVerse", verseRef: "copyVerseRef", verseMarkdown: "copyMarkdown" };
@@ -637,40 +662,39 @@
       </label>
       <hr />
       <p class="label">{t("settings.theme")}</p>
-      {#each themes as token (token)}
-        <label class="radio">
-          <input
-            type="radio"
-            name="theme"
-            checked={(s.config.theme ?? "system") === token}
-            onchange={() => setTheme(token)}
-          />
-          {t(`settings.${themeLabel[token]}`)}
-        </label>
-      {/each}
+      <select
+        class="dropdown"
+        aria-label={t("settings.theme")}
+        value={s.config.theme ?? "system"}
+        onchange={(e) => setTheme((e.currentTarget as HTMLSelectElement).value)}
+      >
+        {#each themes as token (token)}
+          <option value={token}>{t(`settings.${themeLabel[token]}`)}</option>
+        {/each}
+      </select>
       <hr />
       <p class="label">{t("settings.textSize")}</p>
       <p class="aa" style:font-size="{Number(s.config.bodySize ?? 18)}px">Aa</p>
       <input
         type="range"
-        min="12"
-        max="40"
+        min="14"
+        max="30"
         value={Number(s.config.bodySize ?? 18)}
         oninput={(e) => setNum("bodySize", Number((e.target as HTMLInputElement).value))}
       />
       <p class="label">{t("settings.margin")}</p>
       <input
         type="range"
-        min="8"
-        max="96"
+        min="16"
+        max="56"
         value={Number(s.config.sideMargin ?? 28)}
         oninput={(e) => setNum("sideMargin", Number((e.target as HTMLInputElement).value))}
       />
       <p class="label">{t("settings.lineSpacing")}</p>
       <input
         type="range"
-        min="1"
-        max="2.2"
+        min="1.2"
+        max="2"
         step="0.05"
         value={Number(s.config.lineSpacing ?? 1.35)}
         oninput={(e) => setNum("lineSpacing", Number((e.target as HTMLInputElement).value))}
@@ -1228,6 +1252,19 @@
     font-size: calc(14.5px * var(--uiScale, 1));
     cursor: pointer;
     padding: 2px 0;
+  }
+  /* The theme picker: a dropdown, not a radio column — the list grew past what a
+     column of radios can show without dominating the dialog. */
+  .dropdown {
+    font: inherit;
+    font-size: calc(14.5px * var(--uiScale, 1));
+    color: var(--ink, #211f1a);
+    background: var(--popupPaper, #f2eee6);
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 7px;
+    padding: 6px 10px;
+    max-width: 100%;
+    cursor: pointer;
   }
   .done {
     align-self: flex-end;

@@ -248,7 +248,7 @@ test("the theme survives a fast close, with no explicit flush", async ({ page })
   await boot(page);
 
   await page.evaluate(() => ((window as any).__plumbline.showSettings = true));
-  await page.getByRole("radio", { name: "Night (true black)" }).check();
+  await page.getByLabel("Theme").selectOption("night");
   await page.evaluate(() => ((window as any).__plumbline.showSettings = false));
 
   // Straight to reload — the config save has NOT been awaited, exactly like a
