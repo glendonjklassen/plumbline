@@ -68,9 +68,16 @@ compounds it) — sizes and line heights up roughly 2 px / 2.5 sp over the body.
 | LINK_INSET / YINSET | 14 / 5 px | connector gutter inset / clamp margin (`ConnectorsOverlay.svelte`) |
 
 Palette: the one source is `plumbline_core::theme::palette(theme)`, served as
-`plumbline_theme_palette_json` — **four themes** (light / dark / night /
-follow-system), and both shells paint reader + chrome + study panel from the
-returned values rather than any hex of their own. The LIGHT values, which are the
+`plumbline_theme_palette_json` — **fifteen concrete themes** plus follow-system:
+the built-ins (light / dark / night) and the named presets (Darcula, Solarized
+Light/Dark, Gruvbox, Nord, One Dark, Sepia, Catppuccin Mocha/Latte, Tokyo Night,
+Rosé Pine, Synthwave). Both shells paint reader + chrome + study panel from the
+returned values rather than any hex of their own, and pick the theme from a
+dropdown (`ThemeChoice`), not a radio column. The navigator's reading-map tiles
+(`read_unread`/`read_partial`/`read_done`) reuse each theme's own
+gold/divine/tier_human, so the map always belongs to the active theme. Every
+text role clears WCAG-AA on every surface across all fifteen — a core test
+(`contrast::every_text_role_clears_aa_on_every_surface`), not a convention. The LIGHT values, which are the
 shipped originals: paper `#fcf9f4`; ink `#211f1a`; gold accent `#9e7d38`;
 added-word gray `#6b6862`; divine `#4d3326`; popup paper `#f2eee6`; pane-nav bg
 `#efeae1`; canon-strip bg `#ebe6db`; section-header gold `#a0894a`; rule

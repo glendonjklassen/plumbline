@@ -45,6 +45,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -1736,24 +1737,44 @@ private fun SettingsDialog(
                 }
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 Text(t("settings.theme"), color = palette.faded, fontSize = 12.sp)
+                // A dropdown, not a radio column: the theme list outgrew what a
+                // column of radios can show without swamping the dialog. Keep the
+                // tokens in step with core::theme::ThemeChoice.
                 val themes = listOf(
                     "system" to t("settings.themeSystem"),
                     "light" to t("settings.themeLight"),
                     "dark" to t("settings.themeDark"),
                     "night" to t("settings.themeNight"),
-                    "dracula" to t("settings.themeDracula"),
+                    "darcula" to t("settings.themeDarcula"),
                     "solarized-light" to t("settings.themeSolarizedLight"),
                     "solarized-dark" to t("settings.themeSolarizedDark"),
                     "gruvbox" to t("settings.themeGruvbox"),
                     "nord" to t("settings.themeNord"),
+                    "one-dark" to t("settings.themeOneDark"),
+                    "sepia" to t("settings.themeSepia"),
+                    "catppuccin-mocha" to t("settings.themeCatppuccinMocha"),
+                    "catppuccin-latte" to t("settings.themeCatppuccinLatte"),
+                    "tokyo-night" to t("settings.themeTokyoNight"),
+                    "rose-pine" to t("settings.themeRosePine"),
+                    "synthwave" to t("settings.themeSynthwave"),
                 )
-                for ((token, label) in themes) {
+                var themeMenu by remember { mutableStateOf(false) }
+                val currentTheme = themes.firstOrNull { it.first == themeChoice } ?: themes.first()
+                Box {
                     Row(
-                        Modifier.fillMaxWidth().clickable { onTheme(token) }.padding(vertical = 2.dp),
+                        Modifier.fillMaxWidth().clickable { themeMenu = true }.padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        RadioButton(selected = themeChoice == token, onClick = { onTheme(token) })
-                        Text(label, color = palette.ink)
+                        Text(currentTheme.second, color = palette.ink, modifier = Modifier.weight(1f))
+                        Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = palette.faded)
+                    }
+                    DropdownMenu(expanded = themeMenu, onDismissRequest = { themeMenu = false }) {
+                        for ((token, label) in themes) {
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = { onTheme(token); themeMenu = false },
+                            )
+                        }
                     }
                 }
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
@@ -1778,22 +1799,22 @@ private fun SettingsDialog(
                     value = bodyDraft.value,
                     onValueChange = { bodyDraft.drag(it) },
                     onValueChangeFinished = { bodyDraft.commit { v -> onBodySize(v.toDouble()) } },
-                    valueRange = 12f..40f,
-                    steps = 27,
+                    valueRange = 14f..30f,
+                    steps = 15,
                 )
                 Text(t("settings.margin"), color = palette.faded, fontSize = 12.sp)
                 Slider(
                     value = marginDraft.value,
                     onValueChange = { marginDraft.drag(it) },
                     onValueChangeFinished = { marginDraft.commit { v -> onSideMargin(v.toDouble()) } },
-                    valueRange = 8f..96f,
+                    valueRange = 16f..56f,
                 )
                 Text(t("settings.lineSpacing"), color = palette.faded, fontSize = 12.sp)
                 Slider(
                     value = spacingDraft.value,
                     onValueChange = { spacingDraft.drag(it) },
                     onValueChangeFinished = { spacingDraft.commit { v -> onLineSpacing(v.toDouble()) } },
-                    valueRange = 1.0f..2.2f,
+                    valueRange = 1.2f..2.0f,
                 )
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 Text(t("settings.copyFormat"), color = palette.faded, fontSize = 12.sp)

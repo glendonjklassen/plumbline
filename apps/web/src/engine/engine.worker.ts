@@ -763,16 +763,28 @@ self.onmessage = async (ev: MessageEvent) => {
         // as every other boot stage. It is the same work either way; what changed
         // is that it no longer needs four more queue hops to deliver it.
         const x0 = performance.now();
-        const palettes = {
-          light: themePalette(booted.wasm, "light"),
-          dark: themePalette(booted.wasm, "dark"),
-          night: themePalette(booted.wasm, "night"),
-          dracula: themePalette(booted.wasm, "dracula"),
-          "solarized-light": themePalette(booted.wasm, "solarized-light"),
-          "solarized-dark": themePalette(booted.wasm, "solarized-dark"),
-          gruvbox: themePalette(booted.wasm, "gruvbox"),
-          nord: themePalette(booted.wasm, "nord"),
-        };
+        // Every concrete theme (core::theme::Theme) — the palettes the shell
+        // paints from without a round trip. Keep in step with the Rust enum and
+        // SettingsDialog's `themes` list.
+        const THEME_TOKENS = [
+          "light",
+          "dark",
+          "night",
+          "darcula",
+          "solarized-light",
+          "solarized-dark",
+          "gruvbox",
+          "nord",
+          "one-dark",
+          "sepia",
+          "catppuccin-mocha",
+          "catppuccin-latte",
+          "tokyo-night",
+          "rose-pine",
+          "synthwave",
+        ];
+        const palettes: Record<string, unknown> = {};
+        for (const tk of THEME_TOKENS) palettes[tk] = themePalette(booted.wasm, tk);
         const toc = booted.engine.toc();
         // Every word the shell paints, resolved against the reader's setting and
         // the device's locale by the CORE (i18n::resolve), not by either shell.
