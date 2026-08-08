@@ -10,7 +10,7 @@
 //!
 //! Kotlin/Android binds this surface via JNA (`bindings/kotlin/Plumbline.kt`,
 //! hand-written); the web shell's TS binding drives the same surface compiled
-//! to wasm. The C#/WinUI shim was retired with the desktop shells (2026-07-25).
+//! to wasm.
 //!
 //! This is a developer tool, kept out of the cdylib so a plain build /
 //! cross-compile never pulls host-only generators.

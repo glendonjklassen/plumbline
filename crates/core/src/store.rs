@@ -539,9 +539,9 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    /// The rescue lifted here from `config.rs` (2026-07-30), so `usernote.rs`
-    /// could use the same rule: damaged bytes move aside once, and a second
-    /// failure does not spend the slot the first one is using.
+    /// The rescue lives here so `config.rs` and `usernote.rs` share one rule:
+    /// damaged bytes move aside once, and a second failure does not spend the
+    /// slot the first one is using.
     #[test]
     fn damaged_bytes_are_set_aside_once() {
         let dir = scratch("aside");

@@ -1,6 +1,6 @@
 // The home church a shared link carries — the web half of `core::church`.
 //
-// The point (2026-07-27): one QR hands over both the Bible and the people who
+// The point: one QR hands over both the Bible and the people who
 // sent it. Whoever shares sets their church in Settings; the link they share
 // carries it; whoever opens that link has it saved locally and sees it in the
 // welcome, so a card handed out at a service leads back to that service.
@@ -9,7 +9,7 @@
 // deciding whether to open a link should be able to see what is in it, and a
 // church that mistypes its own details can fix them by reading the URL.
 //
-// ── why this is still TypeScript (2026-08-01) ──
+// ── why this is still TypeScript ──
 //
 // The clamps, the link and the checks now live in `crates/core/src/church.rs`,
 // and Android reaches them through `plumbline_share_url_json`. This shell cannot:
@@ -38,11 +38,11 @@ export interface Church {
   url: string;
 }
 
-// No EMPTY_CHURCH constant. One shipped with this module and was never read
-// once: `cleanChurch(null)` already returns the empty church, and it is what
-// every caller goes through anyway (a church arrives from a query string or a
-// settings field, both of which need normalizing). A second source for the same
-// value is a second thing to keep in step with `Church`.
+// No EMPTY_CHURCH constant: `cleanChurch(null)` already returns the empty
+// church, and it is what every caller goes through anyway (a church arrives
+// from a query string or a settings field, both of which need normalizing). A
+// second source for the same value is a second thing to keep in step with
+// `Church`.
 
 export const hasChurch = (c: Church | undefined | null): c is Church =>
   !!c && c.name.trim().length > 0;
@@ -81,16 +81,16 @@ export function churchFromQuery(search: string): Church | null {
  *  Bible — the recipient's welcome opens on the new-believer path instead of
  *  asking them to pick. ONLY the Present screen sets it: an ordinary share
  *  goes to whoever, often someone from the same church, and must stay an
- *  ordinary link (2026-07-27). */
+ *  ordinary link. */
 export function shareUrl(
   base: string,
   church: Church | undefined | null,
   opts: { startAsNewBeliever?: boolean; at?: string | null } = {},
 ): string {
   const u = new URL(base);
-  // Cleaned here, not left to the caller: an uncapped church used to be able to
-  // reach a shared URL from the web and not from the phone, because only the
-  // Kotlin twin cleaned inside its own `shareUrl`.
+  // Cleaned here, not left to the caller, so the web and the Kotlin `shareUrl`
+  // twin cap identically — an uncleaned church must not be able to reach a
+  // shared URL from one shell and not the other.
   const c = cleanChurch(church);
   if (hasChurch(c)) {
     u.searchParams.set("church", c.name);
@@ -124,9 +124,8 @@ export function sharedAtRef(search: string): string | null {
  *  something a church typed.
  *
  *  Returns the input TRIMMED BUT OTHERWISE UNTOUCHED. The reader typed it; the
- *  address bar should show what they typed. (It used to return `new URL(u).href`,
- *  which normalizes — `https://x.org` came back as `https://x.org/` — while the
- *  Kotlin twin returned the raw string.) */
+ *  address bar should show what they typed — no normalization, matching the
+ *  Kotlin twin. */
 export function safeChurchUrl(url: string | null | undefined): string | null {
   const t = (url ?? "").trim();
   // The cap is the URL field's own (200) with room for percent escapes.
@@ -142,7 +141,7 @@ export function safeChurchUrl(url: string | null | undefined): string | null {
 
 /** What the reader sees on the Church button when there is no site to open:
  *  who and when, which is all we were given. The Kotlin twin is `churchTitle`
- *  in ui/Church.kt; this used to live inline in Shell.svelte.
+ *  in ui/Church.kt.
  *
  *  `fallback` is PASSED IN rather than looked up here. This module is the web
  *  twin of `core::church`, pinned to it by a shared vector table that

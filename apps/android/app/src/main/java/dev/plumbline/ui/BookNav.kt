@@ -1,13 +1,10 @@
-// The passage navigator (product feedback, 2026-07-24): the book dropdown
-// replaced by tap stages — Testament (OT | NT) → book grid → chapter grid —
-// every step a big touch target. Fullscreen overlay; back steps a stage, then
-// closes.
+// The passage navigator: tap stages — Testament (OT | NT) → book grid →
+// chapter grid — every step a big touch target. Fullscreen overlay; back steps
+// a stage, then closes.
 //
-// The verse stage was dropped 2026-07-26: book and chapter is the navigation
-// people actually use, and verse counts aren't a core endpoint — the stage had
-// to binary-search VerseJson existence to size its grid, so every chapter tap
-// showed a "…" while the probes ran. Verse targeting still arrives through
-// links, cross-references and search, which already carry a verse.
+// There is no verse stage: book and chapter is the navigation people actually
+// use, and verse counts aren't a core endpoint. Verse targeting still arrives
+// through links, cross-references and search, which already carry a verse.
 //
 // Author D (Compose UI).
 
@@ -102,8 +99,7 @@ fun BookNavScreen(
     var newTestament by remember { mutableStateOf(currentIdx >= OT_BOOKS) }
     var pickedBook by remember { mutableStateOf<TocBook?>(null) }
 
-    // Marking a chapter read lives here now, not on the first verse's action
-    // sheet (UAT, 2026-08-07): a long-press opens the date dialog, and a
+    // Marking a chapter read: a long-press opens the date dialog, and a
     // book-level button logs the whole book. `reloadKey` re-fetches the tint
     // after a write so the tile recolours in place.
     val scope = rememberCoroutineScope()
@@ -237,8 +233,8 @@ fun BookNavScreen(
         }
     }
 
-    // Long-press a chapter → the same date dialog the verse sheet used to open
-    // (today / yesterday / last week shortcuts, a picker, and clear).
+    // Long-press a chapter → the date dialog (today / yesterday / last week
+    // shortcuts, a picker, and clear).
     val mc = markChapter
     val pb = pickedBook
     if (mc != null && pb != null) {

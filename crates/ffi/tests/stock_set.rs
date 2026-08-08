@@ -65,8 +65,7 @@ fn every_stock_tag_loads() {
     let dir = stock().join("tags");
     let files = json_files(&dir);
     // Not merely "whatever is there parses": there IS a stock tag, because it is
-    // the only example a reader ever sees of what a tag is for, and the set
-    // shipped with none until 2026-07-29.
+    // the only example a reader ever sees of what a tag is for.
     assert!(!files.is_empty(), "no stock tag ships in {}", dir.display());
     for f in &files {
         let bytes = std::fs::read(f).unwrap();

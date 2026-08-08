@@ -45,11 +45,12 @@
    *  sticky at the top of its scrollport, so that edge is exactly where MARGIN
    *  and the display list begin.
    *
-   *  This used to be a `NAV_H = 33` constant. The strip then grew to Android's
-   *  48dp touch targets and nothing told the overlay, so every connector met its
-   *  verse some 25px too high. `--bottomNavH` in Shell.svelte was written for the
-   *  same mistake: two declarations of one length drift the moment either side is
-   *  touched, and a measurement cannot. */
+   *  MEASURED, not a `NAV_H` constant: the strip changes height (Android's 48dp
+   *  touch targets, a zoom, a re-styled button) and nothing tells the overlay,
+   *  so a hard-coded height leaves every connector meeting its verse too high.
+   *  `--bottomNavH` in Shell.svelte carries the same rule — two declarations of
+   *  one length drift the moment either side is touched, and a measurement
+   *  cannot. */
   function paneTextTops(): number[] {
     const top = host.getBoundingClientRect().top;
     return scrollports().map((port) => port.getBoundingClientRect().top - top);
@@ -114,7 +115,7 @@
 
     // Which pairs actually cross the panes on screen, resolved before any of the
     // drawing machinery is set up: two panes showing unwoven chapters is the
-    // common case, and it used to pay the same allocation to draw nothing at all.
+    // common case, and resolving them first spares that frame the allocation.
     const crossing: { li: number; lv: number; ri: number; rv: number }[] = [];
     for (const pr of pairs) {
       const ia = paneFor.get(`${pr.aBook}|${pr.aChapter}`);

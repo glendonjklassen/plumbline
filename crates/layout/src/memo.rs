@@ -5,8 +5,8 @@
 //! text stack, and on both shipped shells that measurement is a *boundary
 //! crossing* — a wasm→JS `measureText` call (which also decodes a C string on the
 //! way) on the web, a JNA upcall into `android.graphics.Paint` on Android.
-//! Scripture, meanwhile, repeats itself. Counted from `data/kjv.jsonl` on
-//! 2026-07-30 by replaying exactly what `layout_chapter` measures (each verse
+//! Scripture, meanwhile, repeats itself. Counted from `data/kjv.jsonl` by
+//! replaying exactly what `layout_chapter` measures (each verse
 //! number, then each rendered token):
 //!
 //!  - Gen 1 measures 828 runs, of which **229 are distinct** — 72% redundant.

@@ -81,11 +81,10 @@ mod wire;
 // build if they ever drift from the core's canonical values, so the mirror
 // stays honest without costing the bindings.
 //
-// EVERY flag bit a shell tests belongs here, with its assertion. `FLAG_RERENDERED`
-// bypassed this until 2026-07-29 — the value lived only as a bare `16` in each
-// shell, answering to nothing, while the mechanism for exactly that sat four
-// lines up. `flag_bits_are_exported_with_their_assertion` in `tests.rs` now
-// checks the header, the assertions, and both shells' mirrors.
+// EVERY flag bit a shell tests belongs here, with its assertion — otherwise a
+// bare literal in a shell answers to nothing while it drifts from the core.
+// `flag_bits_are_exported_with_their_assertion` in `tests.rs` checks the header,
+// the assertions, and both shells' mirrors.
 
 /// Word supplied by the KJV translators (rendered in italics).
 pub const PLUMBLINE_FLAG_ADDED: u32 = 1;
@@ -116,11 +115,10 @@ pub const OCCURRENCE_CAP: usize = 500;
 /// can fail loudly instead of silently reading nulls; purely additive fields
 /// do not bump it. Exported to the C header; golden samples are pinned in
 /// `tests.rs`.
-/// 2 (2026-07-29): `rename_all_fields` on the tagged unions in `wire.rs`. Three
-/// keys changed spelling — `mark_glyph`/`mark_color`/`top_gap` → camelCase — which
-/// is a rename, so it bumps by the rule above. Nothing compares this constant yet
-/// (TODO §H tracks making it a live handshake), so today the bump is a record
-/// rather than a gate.
+/// Currently 2: the last bump was `rename_all_fields` on the tagged unions in
+/// `wire.rs` (a rename, so it bumped by the rule above). Nothing compares this
+/// constant yet (TODO §H tracks making it a live handshake), so the value is a
+/// record rather than a gate.
 pub const PLUMBLINE_WIRE_VERSION: u32 = 2;
 
 /// Verses per warm slice on the web's chunked warm-up
@@ -157,8 +155,8 @@ pub struct PlumblineEngine {
     /// ABI from more than one thread; the web worker is single-threaded.
     search_partial: std::sync::Mutex<Option<search::SearchIxBuilder>>,
     /// Sliced builders for the two indexes a WORD CLICK needs. Warmed at boot
-    /// the same way the search index is; before that they were built whole on
-    /// the first click of every session (feedback 2026-07-27).
+    /// the same way the search index is, so a click does not build them whole
+    /// on the first tap of every session.
     occ_partial: std::sync::Mutex<Option<strongs::OccurrenceIxBuilder>>,
     renderings_partial: std::sync::Mutex<Option<renderings::RenderingsBuilder>>,
     concept_partial: std::sync::Mutex<Option<concept::ConceptBuilder>>,
@@ -177,8 +175,7 @@ pub struct PlumblineEngine {
     /// `get_or_init` inside a study call throws every bit of that away in a
     /// single blocking lump. Measured on a phone: **21,966 ms inside one
     /// `wordStudyBlocks`**, which froze the worker so completely that it also
-    /// stranded its own in-flight downloads (a 2.6 MB file the network delivered
-    /// in 1,673 ms was collected 23,825 ms later). 2026-07-28.
+    /// stranded its own in-flight downloads.
     ///
     /// So the study answers with what is READY. The warm keeps going in the
     /// background and the shell re-fetches as each index lands, which is the same
@@ -332,8 +329,8 @@ impl PlumblineEngine {
     /// Load the optional R&D artifact (morphology) from the home if it was
     /// absent at open. Idempotent; nothing loads twice.
     ///
-    /// The concept embedding used to load here too. It went with the last thing
-    /// that read it (2026-07-30) and no longer ships in the pack.
+    /// The concept embedding no longer loads here — it went with the last thing
+    /// that read it and no longer ships in the pack.
     fn load_rnd_data(&self) {
         self.load_morph_only();
     }
@@ -348,7 +345,7 @@ impl PlumblineEngine {
     /// machine analysis on parsed 355,603 entries — in one synchronous block, on
     /// the only thread that answers taps — to build an index nothing would ever
     /// read. `new` had the gate; this path is the one the web shell takes, because
-    /// its pack arrives after the engine opens (2026-08-03).
+    /// its pack arrives after the engine opens.
     fn load_morph_only(&self) {
         let Some(h) = &self.home else { return };
         if self.morph.get().is_some() || self.corpus.tokenization_version() != canon::TOKENIZATION_VERSION {
@@ -466,13 +463,12 @@ impl PlumblineEngine {
     /// reader's request.
     ///
     /// MUST BE SET AT OPEN, not when the warm happens to start. Arming it on the
-    /// first `warm_next` looked equivalent and was not: the web's warm begins only
+    /// first `warm_next` looks equivalent and is not: the web's warm begins only
     /// after stage 2 has been fetched and parsed, which on a phone is ~550 ms
     /// after text appears — and a reader taps a word inside that window. The flag
-    /// was still false, the tap built everything, and the freeze it was written to
-    /// prevent happened anyway: 26,042 ms, on the very build that shipped the fix
-    /// (2026-07-28). A desktop hid it because stage 2 there takes 40 ms and the
-    /// warm won the race.
+    /// would still be false, the tap would build everything, and the freeze this
+    /// prevents happens anyway. A desktop hides it because stage 2 there takes
+    /// 40 ms and the warm wins the race.
     ///
     /// `allow(dead_code)`: only a slicing shell arms it, and the only slicing
     /// shell is the web — Android builds everything up front.
@@ -561,12 +557,12 @@ impl PlumblineEngine {
     /// tests can drive smaller steps.
     ///
     /// This is the whole point of the boot warm: every one of these is built on
-    /// FIRST USE otherwise, and none of them survives the tab, so the reader's
-    /// first word click of every session paid for all of them at once — "it
-    /// loads for a while, every time I reopen it" (feedback 2026-07-27). The
-    /// sliced phases come first because they are the biggest; what is left as a
-    /// single build is only what measured small enough to be one — the bridge, at
-    /// 3 ms (2026-07-30) — so a tap between phases is still answered. Re-running after the R&D pack lands picks up the SIF model.
+    /// FIRST USE otherwise, and none of them survives the tab, so without it the
+    /// reader's first word click of every session pays for all of them at once.
+    /// The sliced phases come first because they are the biggest; what is left as
+    /// a single build is only what measured small enough to be one — the bridge,
+    /// at 3 ms — so a tap between phases is still answered. Re-running after the
+    /// R&D pack lands picks up the SIF model.
     ///
     /// `allow(dead_code)` for the same reason as [`WARM_SLICE`]: the only callers
     /// are the wasm-only export and the tests, and a plain host build compiles
@@ -609,7 +605,7 @@ impl PlumblineEngine {
     /// Advance the concept model by one budgeted stage-slice. 1 while work
     /// remains. The heaviest thing the warm does — twelve stages over the
     /// corpus, the co-occurrence counts, PPMI, kNN and label propagation — and
-    /// as one call it blocked the worker for ~640ms (feedback 2026-07-27).
+    /// as one call it blocked the worker for ~640ms.
     fn warm_concept_slice(&self, n: usize) -> i32 {
         if self.concept.get().is_some() {
             return 0;
@@ -630,9 +626,9 @@ impl PlumblineEngine {
 
     /// Parse `n` more rows of the cross-reference TSV. 1 while work remains.
     ///
-    /// 344k rows, 89 ms in one call on the maintainer's desktop (measured
-    /// 2026-07-30) — a phone's whole warm-chunk budget, spent with the worker
-    /// unable to answer a tap. Sliced, like the three phases before it.
+    /// 344k rows, 89 ms in one call on the maintainer's desktop — a phone's whole
+    /// warm-chunk budget, spent with the worker unable to answer a tap. Sliced,
+    /// like the three phases before it.
     fn warm_xref_slice(&self, n: usize) -> i32 {
         if self.xref_ix.get().is_some() {
             return 0;
@@ -1398,8 +1394,8 @@ pub unsafe extern "C" fn plumbline_engine_layout_chapter(
             }
             None => verses,
         };
-        // Measure through the engine's memo. Counted from `data/kjv.jsonl`
-        // (2026-07-30): 58% of a cold chapter's measurements are of a run this
+        // Measure through the engine's memo. Counted from `data/kjv.jsonl`:
+        // 58% of a cold chapter's measurements are of a run this
         // layout already measured (Gen 1: 828 runs, 229 distinct), 84% over twenty
         // consecutive chapters through one memo, and a re-layout at the same font
         // measures nothing at all. It sits below the ABI, so Android's JNA upcalls
@@ -2466,7 +2462,7 @@ const CONCEPT_KEEP_NAMES: &[&str] = &["H3068", "H3069", "H3050", "H136", "G2424"
 
 /// Whether `code` is a proper noun that has no business ringing a concept:
 /// "faith" surrounded by Ephraim, Jerusalem and Shechem reads as noise rather
-/// than meaning (feedback 2026-07-27). Names stay fully reachable in word study,
+/// than meaning. Names stay fully reachable in word study,
 /// concordance and search; only the collocate lists drop them.
 fn name_noise(e: &PlumblineEngine, code: &str) -> bool {
     !CONCEPT_KEEP_NAMES.contains(&code) && e.strongs().get(code).is_some_and(strongs::is_proper_noun)
@@ -3589,8 +3585,8 @@ pub unsafe extern "C" fn plumbline_engine_memory_add(
 }
 
 /// Start memorizing the passage `start_ref`…`through_ref` (inclusive) as ONE
-/// card — the whole section recalled in one go, rather than a card per verse
-/// (2026-07-27). The card is keyed and listed by `start_ref`.
+/// card — the whole section recalled in one go, rather than a card per verse.
+/// The card is keyed and listed by `start_ref`.
 ///
 /// `through_ref` must name a later verse of the same chapter; anything else
 /// seeds a plain single-verse card. Already memorizing `start_ref` is a no-op,

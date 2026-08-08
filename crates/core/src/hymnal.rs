@@ -9,7 +9,7 @@
 //! A hymn is one entry with a stable book `number` and one text per language
 //! (`texts: {"en": ..., "de": ...}`) — a translation is a second text on the
 //! SAME hymn, not a second hymn, because the language toggle is the seed of
-//! full multi-language support (decision 2026-08-01) and a hymn split across
+//! full multi-language support and a hymn split across
 //! entries would need stitching back together the day that lands.
 //!
 //! Chords ride ChordPro-style inside the text — `A[G]mazing [C]grace` — so a

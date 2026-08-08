@@ -1,5 +1,5 @@
 <script lang="ts">
-  // First run: who is opening the Book? (product 2026-07-26, both shells)
+  // First run: who is opening the Book? (both shells)
   //  - New in the faith → a welcome from the maintainer with next steps
   //    (references tappable — they open BESIDE John), then lands in John 1
   //    with both analysis tiers off: just the text.
@@ -16,7 +16,7 @@
 
   type Stage = "choose" | "welcome" | "curious" | "tiers" | "church";
   // A link shared from Present says who it was meant for, so the person
-  // holding it is not asked to classify themselves (2026-07-27).
+  // holding it is not asked to classify themselves.
   let stage = $state<Stage>("choose");
   // Re-reading is the same page without the setup: no path is chosen, no
   // settings move, and the button at the bottom just closes it.
@@ -28,13 +28,13 @@
     if (s.reopenIntro) stage = s.reopenIntro === "curious" ? "curious" : "welcome";
   });
   // Unchecked to begin with: the tiers are opt-in, so this screen ASKS rather
-  // than confirming something already decided (2026-07-28).
+  // than confirming something already decided.
   let human = $state(false);
   let machine = $state(false);
 
   // The home church, asked of the people likely to hand this on: the
   // established believer setting the app up, and whoever is about to walk
-  // someone down the Romans Road (2026-07-27). Optional, and the screen says
+  // someone down the Romans Road. Optional, and the screen says
   // plainly why it is collected — it travels in the links they share, and
   // nowhere else.
   let churchName = $state("");
@@ -48,9 +48,9 @@
   // The welcome's verses (refKeys use OSIS book ids — canon.rs). The text is
   // WRITTEN HERE, not fetched: this screen is the first thing a new believer
   // sees, and asking the engine for ten verses one at a time made the quotes
-  // pop in a beat after the page (feedback 2026-07-27). The 1769 text is
-  // frozen, so a copy of thirteen verses cannot drift — each was taken
-  // verbatim from data/kjv.jsonl, rendered exactly as Verse::body() does.
+  // pop in a beat after the page. The 1769 text is frozen, so a copy of
+  // thirteen verses cannot drift — each was taken verbatim from
+  // data/kjv.jsonl, rendered exactly as Verse::body() does.
   /** A quoted verse. The LABEL IS DERIVED, not stored: "Psalm 12:6–7" is a
    *  book name plus the catalogue's own reference template, and both localize
    *  (German writes "Psalm 12,6–7"). Storing the label would have been fifteen
@@ -193,7 +193,7 @@
 
   function startInJohn(ref?: Ref): void {
     // Remember which welcome they read: the top bar offers it again, and a
-    // reader shouldn't have to reinstall to see it twice (2026-07-27).
+    // reader shouldn't have to reinstall to see it twice.
     s.config.intro = stage === "curious" ? "curious" : "new";
     finish(false, false);
     if (ref && s.narrow) {
@@ -290,7 +290,7 @@
       <h2>{t("intro.title")}</h2>
       {@render sharedBy()}
       <p class="sub">{t("intro.sub")}</p>
-      <!-- Curious leads (2026-07-28): a stranger to the Bible is the likelier
+      <!-- Curious leads: a stranger to the Bible is the likelier
            first-time reader of the two, and the path that asks the least of
            someone should be the one they see first. -->
       <button class="path" onclick={() => (stage = "curious")}>
@@ -303,7 +303,7 @@
       </button>
       <!-- A link shared from Present was handed to someone in person, so it
            offers only the two paths it was meant for: the rest is setup for a
-           reader who already has a Bible habit (2026-07-27). -->
+           reader who already has a Bible habit. -->
       {#if !s.startAsNewBeliever}
       <button class="path" onclick={sharing}>
         <span class="name">{t("intro.pathSharing")}</span>
@@ -431,9 +431,7 @@
     max-height: 82vh;
     overflow-y: auto;
     /* The reader's scrollbars are hidden everywhere else; a grey gutter down
-       the side of a welcome is the same eyesore (feedback 2026-07-27). */
-    /* The reader's scrollbars are hidden everywhere else; a grey gutter down
-       the side of a welcome is the same eyesore (feedback 2026-07-27). */
+       the side of a welcome is the same eyesore. */
     scrollbar-width: none;
     background: var(--popupPaper, #f2eee6);
     border: 1px solid var(--rule, #d8cba8);

@@ -1,6 +1,6 @@
 package dev.plumbline.ui
 
-// Tag→weave conversion sheet (2026-07-25): a topic tag accumulates passages
+// Tag→weave conversion sheet: a topic tag accumulates passages
 // over time; this turns the tag — or a checked subset of its verse members —
 // into a canon-ordered weave via plumbline_engine_weave_from_tag. Re-running after
 // the tag grows just adds the new edges.

@@ -33,15 +33,14 @@
   const s = getSession();
 
   // Night is the one theme where light popup paper is wrong: #f2eee6 against a
-  // true-black reader is an 18:1 step, which glares (2026-07-29). Night is always
-  // an explicit choice, never resolved from the system, so the config token is
-  // exact.
+  // true-black reader is an 18:1 step, which glares. Night is always an explicit
+  // choice, never resolved from the system, so the config token is exact.
   const night = $derived((s.config.theme ?? "system") === "night");
 
   // The first analytical map of a session pays for a corpus-wide sweep; the
-  // rest are instant. Blank paper for several seconds reads as broken
-  // (feedback 2026-07-27), so once the wait is real, name it and say it is
-  // one-time. See the twin in StudyPanel.svelte.
+  // rest are instant. Blank paper for several seconds reads as broken, so once
+  // the wait is real, name it and say it is one-time. See the twin in
+  // StudyPanel.svelte.
   const SLOW_MAP_MS = 600;
   let slow = $state(false);
   $effect(() => {
@@ -182,9 +181,9 @@
     line-height: 1.5;
     max-width: 46ch;
   }
-  /* The breath used to be `opacity: 0.35` → 1, which put the words at 1.7:1 for
-     most of the cycle. Between two solid tones instead: 4.9:1 at the quiet end,
-     14.2:1 at the loud one. */
+  /* The breath runs between two solid tones, not opacity: 4.9:1 at the quiet
+     end, 14.2:1 at the loud one (opacity would put the words at 1.7:1 for most
+     of the cycle). */
   @keyframes waitpulse {
     0%,
     100% {

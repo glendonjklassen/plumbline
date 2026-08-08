@@ -1,18 +1,14 @@
 // The reading map's shell half: how long the reader actually spent in a chapter.
 //
 // The core (crates/core/src/reading.rs) owns what "read" MEANS — the word counts,
-// the reading rate, the 90% bar, the glow curve — and, since 2026-08-01, the
-// COUNTING as well: `reading::DwellTracker` holds the grace period, the idle
-// cutoff, the tail-banking and the report cadence. This file owns only the one
-// thing the core cannot know, having no clock and no window: that another second
-// passed with a chapter genuinely in front of somebody.
+// the reading rate, the 90% bar, the glow curve — and the COUNTING as well:
+// `reading::DwellTracker` holds the grace period, the idle cutoff, the
+// tail-banking and the report cadence. This file owns only the one thing the
+// core cannot know, having no clock and no window: that another second passed
+// with a chapter genuinely in front of somebody.
 //
-// It used to run its own ~80 lines of that arithmetic, as did the web
-// (state/readingTracker.ts), and both carried their own copies of the thresholds
-// they were in the middle of fetching, so that the seconds before the fetch
-// landed were measured against a local constant. Android's stand-in reading rate
-// was still 220 words a minute two days after the core moved to 300. There is now
-// no threshold in this file to be stale.
+// The arithmetic lives in the core, shared with the web twin
+// (state/readingTracker.ts); no threshold lives in this file to go stale.
 //
 // Three refusals still shape it, and they are the whole design; they just live in
 // the core:

@@ -1,7 +1,7 @@
 <script lang="ts">
   // Passage navigator: OT/NT → book → chapter, and you're there. Two taps.
   //
-  // There is no verse step (2026-07-26). Picking a verse cost a throwaway
+  // There is no verse step. Picking a verse cost a throwaway
   // layout of the whole chapter just to count its verse numbers — an async
   // round trip on every chapter tap, which on a phone is a visible wait
   // before the grid even appears. Book and chapter is the navigation people
@@ -76,11 +76,11 @@
   // ── mark-read from the navigator ──────────────────────────────────────────
   //
   // Marking a chapter read belongs HERE, on the thing that shows reading
-  // standing, not on the first verse's context menu where it used to hide
-  // (UAT, 2026-08-07). A tap still navigates; a long-press (or right-click)
-  // opens a two-item menu, and the whole book has its own visible button so the
-  // action is discoverable rather than a hidden gesture. "Mark read" logs today
-  // in one tap for backfilling from a fresh state; "on date…" opens the picker.
+  // standing, not on the first verse's context menu. A tap still navigates; a
+  // long-press (or right-click) opens a two-item menu, and the whole book has
+  // its own visible button so the action is discoverable rather than a hidden
+  // gesture. "Mark read" logs today in one tap for backfilling from a fresh
+  // state; "on date…" opens the picker.
   const todayDate = (): string => new Date().toISOString().slice(0, 10);
 
   let tileMenu = $state<{ chapter: number; x: number; y: number } | null>(null);
@@ -190,11 +190,10 @@
       {/if}
       <button class="close" onclick={close} aria-label={t("common.close")}>✕</button>
     </div>
-    <!-- NO COLOUR LEGEND. It was added so the tint would explain itself on a
-         phone, where the per-tile `title` never fires — but a row of colour
-         words above the grid is chrome in front of the thing the reader opened
-         this to do, which is pick a book (Glendon, 2026-08-04). The tiles still
-         carry their `title`, and the guide explains the tint in prose. -->
+    <!-- NO COLOUR LEGEND. A row of colour words above the grid is chrome in
+         front of the thing the reader opened this to do, which is pick a book.
+         The tiles still carry their `title`, and the guide explains the tint in
+         prose. -->
     <div class="content">
       {#if !book}
         <!-- `lang`: `hyphens: auto` above needs to know the language to break a
@@ -387,10 +386,10 @@
     display: grid;
     gap: 6px;
   }
-  /* Bigger targets throughout (feedback 2026-07-29). This is the grid a reader
-     uses to get anywhere in the Bible, on a phone, one-handed; Android's version
-     is a full screen of big tiles and this is now sized to match rather than to
-     fit the most tiles per screen. */
+  /* Bigger targets throughout. This is the grid a reader uses to get anywhere
+     in the Bible, on a phone, one-handed; Android's version is a full screen of
+     big tiles and this is now sized to match rather than to fit the most tiles
+     per screen. */
   .grid.books {
     grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
   }
@@ -406,11 +405,11 @@
     font-size: calc(16px * var(--uiScale, 1));
     /* German book names are long single words — "Apostelgeschichte",
        "Thessalonicher" — and a word with no space in it will not wrap however
-       narrow the box gets, so they ran straight out of the sides (UAT,
-       2026-08-03). `anywhere` is the only value that breaks a word with no
-       break opportunity in it; `hyphens` puts the break somewhere a German
-       reader expects when the language is declared, and `lang` on the grid
-       below is what lets the browser know which rules to use. */
+       narrow the box gets, so they ran straight out of the sides. `anywhere` is
+       the only value that breaks a word with no break opportunity in it;
+       `hyphens` puts the break somewhere a German reader expects when the
+       language is declared, and `lang` on the grid below is what lets the
+       browser know which rules to use. */
     line-height: 1.15;
     white-space: normal;
     overflow-wrap: anywhere;

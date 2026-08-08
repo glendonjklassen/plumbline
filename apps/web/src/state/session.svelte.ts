@@ -46,8 +46,8 @@ export type PanelView =
   | { kind: "about" }
   | { kind: "notesBrowser" };
 
-/** The analytical map popups. Both are weave visualisations — the third,
- *  `conceptMap`, was removed 2026-07-30 with the concept embedding it drew. */
+/** The analytical map popups. Both are weave visualisations, not
+ *  embedding-derived. */
 export type MapPopup = { kind: "chord" } | { kind: "constellation" };
 
 const HISTORY_CAP = 50; // mirrors core config::HISTORY_CAP
@@ -55,14 +55,13 @@ const HISTORY_CAP = 50; // mirrors core config::HISTORY_CAP
 /**
  * The delimiter between an engine method name and its arguments in a cache key.
  *
- * Spelled ONCE, on purpose. `invalidate()` used to hand-write the prefix it
- * exempts as `"toc "` — with a SPACE — while `q()` has always built keys with a
- * NUL, so the exemption never matched a single key. Every core-ready,
- * warm-ready, rnd-ready and authored event therefore dropped the TOC and the
- * canon segments, which is exactly the outcome the comment above it says it
- * exists to prevent: mid-refill the canon strip painted nothing, a click on it
- * did nothing, and stepping across a book boundary had no book list to step
- * into (found 2026-07-29 while writing the accessibility tests).
+ * Spelled ONCE, on purpose: every key builder and every prefix-exemption must
+ * use this exact separator. When `invalidate()` hand-wrote its exempt prefix as
+ * `"toc "` — with a SPACE — while `q()` built keys with a NUL, the exemption
+ * matched no key, so every core-ready, warm-ready, rnd-ready and authored event
+ * dropped the TOC and the canon segments: mid-refill the canon strip painted
+ * nothing, a click on it did nothing, and stepping across a book boundary had no
+ * book list to step into.
  */
 const KEY_SEP = "\0";
 /** Namespace for `qs()` keys — engine-independent statics, never invalidated. */
@@ -116,14 +115,14 @@ export class Session {
   // ── search: what is typed, and what the engine is asked ─────────────────────
   //
   // Two fields, because they are two different things. The web shell searches
-  // LIVE, so every keystroke used to be a full query: the four ranked tiers over
-  // the whole corpus, then a block list of up to 200 hits with their verse text,
-  // then JSON across the worker boundary — and the engine lives in ONE thread,
-  // so the eighth keystroke's answer queued behind seven answers nobody would
-  // ever read, in front of the layout and tap RPCs of the chapter underneath.
-  // Android has never had this: its search runs on the IME Search action, once
-  // (StudyScreen.kt). The debounce is the web coming closer to that, not away
-  // from it.
+  // LIVE, so without a debounce every keystroke is a full query: the four ranked
+  // tiers over the whole corpus, then a block list of up to 200 hits with their
+  // verse text, then JSON across the worker boundary — and the engine lives in
+  // ONE thread, so the eighth keystroke's answer queues behind seven answers
+  // nobody would ever read, in front of the layout and tap RPCs of the chapter
+  // underneath. Android has never had this: its search runs on the IME Search
+  // action, once (StudyScreen.kt). The debounce is the web coming closer to
+  // that, not away from it.
 
   /**
    * How long the field waits after the last keystroke before the engine hears
@@ -203,10 +202,10 @@ export class Session {
   /**
    * Which DESTINATION is on screen — the web twin of Android's `Dest`.
    *
-   * A destination replaces the reader; it does not hover over it. Explore used to
-   * be a study-panel kind (so, on a phone, a bottom sheet over the verse you were
-   * reading) and Memorize a centred modal. Both are screens now (2026-07-29).
-   * `"read"` is the absence of a destination rather than one of its own.
+   * A destination replaces the reader; it does not hover over it — Explore and
+   * Memorize are full screens, not a bottom sheet or modal over the verse you
+   * were reading. `"read"` is the absence of a destination rather than one of
+   * its own.
    */
   screen = $state<"read" | "explore" | "memorize" | "hymnal">("read");
 
@@ -280,8 +279,8 @@ export class Session {
    *  while `config.church` is the reader's own (see shell/church.ts). */
   sharedByChurch = $state<Church | null>(null);
   /** Narrow (phone-shaped) viewport — mirrors the CSS 700px breakpoint. ONE
-   *  pane only there: splits are hidden and links never open "beside"
-   *  (feedback 2026-07-26 — two panes on a phone is jank). */
+   *  pane only there: splits are hidden and links never open "beside" (two panes
+   *  on a phone is jank). */
   narrow = $state(matchMedia("(max-width: 700px)").matches);
   /** Wide enough for a THIRD reading pane. Between this and `narrow` sits the
    *  foldable/small-laptop band, where the shell is the desktop one but there is
@@ -301,11 +300,10 @@ export class Session {
    * Every transient surface, as field → the value that means CLOSED.
    *
    * This lives HERE, next to the declarations, and not in the shell, because the
-   * shell's version was a hand-kept list of five and there are thirteen of these
-   * (2026-07-29: "when I go into notes, then try to navigate to read, it does not
-   * let me — this is likely a class of bug", and it was). Every surface added
-   * since that list was written inherited the same trap: its modal covered the
-   * screen and the Read tab could not dismiss it. Adding a `$state` surface above
+   * shell's version was a hand-kept list of five and there are thirteen of these.
+   * Every surface added since that list was written inherited the same trap: its
+   * modal covered the screen and the Read tab could not dismiss it. Adding a
+   * `$state` surface above
    * without adding it here is now a one-file omission a reviewer can see, rather
    * than a bug in a different file that nobody thinks to look at.
    *
@@ -374,7 +372,7 @@ export class Session {
   /** An open confirmation. One mechanism for every destructive action, so that
    *  "does this ask first?" is answered in one place instead of per button —
    *  deleting a memorize card asked nothing at all while deleting a thread had its
-   *  own bespoke inline prompt (2026-07-29). */
+   *  own bespoke inline prompt. */
   confirmReq = $state<{
     title: string;
     body: string;
@@ -416,7 +414,7 @@ export class Session {
   }
 
   /** Per-tier content gates (bit 0 = human/scholars, bit 1 = machine); the
-   *  text and the reader's own data are always on (2026-07-25 product). */
+   *  text and the reader's own data are always on. */
   get gates(): number {
     // `=== true`, not `!== false`: the tiers are opt-in, so absent means off.
     return (this.config.humanAnalysis === true ? 1 : 0) | (this.config.machineAnalysis === true ? 2 : 0);
@@ -813,7 +811,7 @@ export class Session {
     // A dwell report changed the reading map and nothing else. Without this the
     // navigator kept showing the map from whenever it was first asked — the
     // per-day cache key meant a chapter finished mid-session did not appear until
-    // the next launch (2026-07-29).
+    // the next launch.
     rpc.onReadingWrote = () => this.invalidateOnly("readingBooks", "readingChapters");
     rpc.onCoreReady = () => {
       // Strong's + margin notes just arrived — panels re-fetch.
@@ -837,7 +835,7 @@ export class Session {
       // A study opened while the warm was still running answered with only the
       // sections whose indexes existed — the engine will not build one inside a
       // tap any more, because doing so froze the worker for 22 seconds on a
-      // phone (2026-07-28). They exist now; re-fetch so the panel fills in.
+      // phone. They exist now; re-fetch so the panel fills in.
       this.invalidate();
       this.studyEpoch++;
     };
@@ -957,8 +955,8 @@ export class Session {
       // The theme CHOICE, close-safe. The config save that carries it to the
       // home is debounced and posted to the worker, so a mobile background that
       // freezes the timer and then discards the tab can lose it — the reader
-      // picks a theme and it is gone next launch (UAT, 2026-08-06). localStorage
-      // is synchronous and survives pagehide, so this write always lands; the
+      // picks a theme and it is gone next launch. localStorage is synchronous
+      // and survives pagehide, so this write always lands; the
       // boot reconcile trusts it over a home config that may not have caught up.
       localStorage.setItem("plumbline:themeChoice", this.config.theme ?? "system");
     } catch {
@@ -1302,7 +1300,7 @@ export class Session {
     this.saveConfig();
     // ORDER MATTERS. The engine flag has to be set before anything re-lays, or
     // the new layout is measured against the old setting and the page keeps the
-    // words it already had (feedback 2026-07-27 — the toggle "wasn't live").
+    // words it already had.
     // The reader deliberately does NOT track `config.akjvOverlay`: doing that
     // would fire a layout the instant the line above runs, which is one RPC
     // AHEAD of the call below, and it would race to the worker first.

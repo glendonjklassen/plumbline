@@ -5,7 +5,7 @@
 //! (`morphology`), and the symbolic concept engine (`concept`). A simple-reader
 //! build depends on `plumbline-rnd` with no features and compiles none of it.
 //!
-//! The learned concept embeddings (`embeddings`) were retired 2026-07-30 — the
+//! The learned concept embeddings (`embeddings`) were retired — the
 //! nearest-neighbour "concepts near this one" surface was unreliable and is
 //! gone from both shells; the symbolic `concept` engine below is what remains.
 //!

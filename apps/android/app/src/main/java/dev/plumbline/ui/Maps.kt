@@ -3,10 +3,6 @@
 // (apps/desktop/src/main.rs: draw_constellation, draw_chord_map) and the WinUI
 // popups (apps/windows/PureStudyWin/Popups.cs: Constellation, ChordMap).
 //
-// (There was a third, the embedding-backed concept map. It was removed
-// 2026-07-30 along with the SIF "verses like this" model — machine-generated
-// noise, and the last reader of the concept-vector artifact.)
-//
 // Faithful, not simplified: every geometry constant mirrors the WinUI shell, so
 // a node/lane lands in the same relative spot in every shell. All the study
 // logic lives across the ABI — the shell only paints the returned view-models
@@ -167,7 +163,7 @@ fun Modifier.zoomable(state: ZoomState): Modifier =
 /** The reader's own regular face, not a fourth parse of the same file: the map
  *  popups draw the same Garamond the chapter does, and [readerTypefaces] has
  *  already paid for it once per process (its fallback to the platform serif
- *  covers the missing-asset case this used to handle itself). */
+ *  covers the missing-asset case). */
 private fun mapTypeface(context: Context): Typeface = readerTypefaces(context).regular
 
 @Composable
@@ -209,13 +205,8 @@ private fun DrawScope.drawLabel(
 
 /**
  * What a map shows while it is being built. A silent second under a bare label
- * reads as a hang (feedback 2026-07-27), so once the wait is real, say what is
- * being counted. Web twin: MapFrame.svelte's `slow`.
- *
- * (The line used to promise the wait was one-time — the first analytical map of
- * a session paid for a corpus-wide sweep and the rest were instant. That was the
- * concept map's sweep, and the concept map went on 2026-07-30; what is left here
- * reads the weave library, which is already in memory.)
+ * reads as a hang, so once the wait is real, say what is being counted. Web
+ * twin: MapFrame.svelte's `slow`.
  */
 @Composable
 private fun MapBuilding(label: String, palette: ReaderPalette) {

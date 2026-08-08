@@ -34,12 +34,9 @@ export interface OfflineSurvey {
 /** Everything the manifest promises that the app will actually READ, as depot
  *  keys.
  *
- *  Every file the manifest lists is now a file some stage fetches — the manifest
- *  IS the spec, and `scripts/check-web-pack.mjs` refuses a pack carrying anything
- *  unreachable. It used to also list `data/kjv.jsonl`, which no stage wanted
- *  (the parsed-corpus cache supersedes it), so the device read as permanently
- *  "incomplete" and "Download everything" spent 2.4 MB on a file nothing opens.
- *  That file has left the pack; this is now a straight walk. */
+ *  Every file the manifest lists is a file some stage fetches — the manifest IS
+ *  the spec, and `scripts/check-web-pack.mjs` refuses a pack carrying anything
+ *  unreachable. So this is a straight walk. */
 async function packEntries(): Promise<{ url: string; gzBytes: number }[]> {
   const manifest = await fetchManifest();
   return manifest.files.map((f) => ({ url: packFileUrl(f, manifest.version), gzBytes: f.gzBytes }));

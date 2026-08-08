@@ -1,13 +1,12 @@
 // The reading map's shell half on the web: how long a chapter was really read.
 //
-// THE STATE MACHINE MOVED TO THE CORE (H-11, 2026-07-31). Grace, idle, the
-// interaction reset, the tail-banking and the report cadence all live in
-// `core::reading::DwellTracker` now, reached through one endpoint. What used to
-// be ~80 lines here and ~80 identical lines in `ui/ReadingTracker.kt` — both
-// hardcoding the thresholds they claimed to fetch — is one `readingTick` call
-// per second from each shell.
+// The dwell state machine lives in the core. Grace, idle, the interaction
+// reset, the tail-banking and the report cadence all live in
+// `core::reading::DwellTracker`, reached through one endpoint — so this shell
+// and `ui/ReadingTracker.kt` each make one `readingTick` call per second rather
+// than hardcoding the thresholds they claim to fetch.
 //
-// The three refusals are unchanged, they are just no longer written twice:
+// The three refusals the core enforces:
 //
 //   * a GRACE period before anything accrues, so paging through to find
 //     something never credits what it flew past;

@@ -13,7 +13,7 @@
 // cause it cannot see: anything unrecognised falls through to a sentence that
 // admits as much rather than guessing.
 //
-// It returns CATALOGUE IDS, not sentences (i18n, 2026-08-02). The words live in
+// It returns CATALOGUE IDS, not sentences. The words live in
 // crates/core/src/i18n/*.json with every other string the reader can meet, and
 // the `boot.*` keys are bundled into the shell (scripts/gen-i18n.mjs) precisely
 // so that a boot which never reached the engine can still speak the reader's
@@ -30,12 +30,11 @@ type Rule = { when: RegExp; say: string };
 const RULES: Rule[] = [
   // The worker died or went silent. worker-client.ts writes those strings for a
   // reader ("The study engine stopped unexpectedly — …", "…went quiet for 60s
-  // and never finished starting. It got as far as opening the text.") and they
-  // USED to pass straight through, which was fine while the app was English
-  // only. They cannot now: they are built at the throw site out of a browser's
-  // own error text and a stage name, so there is nothing there to translate.
-  // The reader gets one sentence in their language and the whole raw string
-  // stays one disclosure away, which is where the detail belonged anyway.
+  // and never finished starting. It got as far as opening the text.") built at
+  // the throw site out of a browser's own error text and a stage name, so there
+  // is nothing there to translate. The reader gets one sentence in their
+  // language and the whole raw string stays one disclosure away, which is where
+  // the detail belonged anyway.
   { when: /^The study engine\b/, say: "boot.error.engine" },
 
   // The pack format moved under a shell that predates it (pack.ts `checked`).

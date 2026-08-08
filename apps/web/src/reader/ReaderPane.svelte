@@ -7,7 +7,7 @@
    * dragged, so the only honest test of the debounce below compares the layouts it
    * ASKED FOR against the ticks it was handed. A millisecond ceiling would be
    * satisfied by the bug — the working rules record two tests that passed against
-   * exactly what they described (2026-07-26).
+   * exactly what they described.
    *
    * Module-scoped, so the counts cover every pane on screen. Present in
    * production builds on purpose (the e2e suite runs the production bundle): the
@@ -47,7 +47,7 @@
   // core (display list over the measure callback); this component owns
   // scroll/zoom/gesture state and repaints on any reactive change.
   //
-  // Scrolling is NATIVE (2026-07-26): the canvas sits sticky inside a spacer
+  // Scrolling is NATIVE: the canvas sits sticky inside a spacer
   // sized to the laid-out chapter, and the browser owns the scroll — momentum,
   // fling, and overscroll come free (the hand-rolled 1:1 pointer tracking made
   // the whole app feel dead on phones). `pane.scrollY` mirrors scrollTop both
@@ -153,8 +153,8 @@
     // Moving to a DIFFERENT chapter drops the old display list at once. The
     // nav strip and header change the instant the reader taps, so holding the
     // previous chapter on the canvas until the layout returns showed John's
-    // text under a header reading Acts — which reads as broken (feedback
-    // 2026-07-26). A re-layout of the SAME chapter (resize, zoom, spacing)
+    // text under a header reading Acts — which reads as broken. A re-layout of
+    // the SAME chapter (resize, zoom, spacing)
     // keeps its text on screen: there is nothing stale about it.
     const key = `${pane.book} ${pane.chapter}`;
     if (key !== shownKey) {
@@ -609,8 +609,7 @@
            a chapter's display list is a round trip, so between mounting and the
            first paint this pane is an empty rectangle. Usually that is one frame
            and nobody sees it; after a language switch the German corpus is being
-           decoded at the same time and it is long enough to read as a dead screen
-           (UAT, 2026-08-03).
+           decoded at the same time and it is long enough to read as a dead screen.
            `aria-hidden`: the region already announces its chapter, and the mirror
            below carries the words for a screen reader. -->
       <p class="settling" aria-hidden="true">{t("pane.settling")}</p>
@@ -650,9 +649,9 @@
   .pane.active {
     border-top-color: var(--gold, #9e7d38);
   }
-  /* Sized for a thumb, not for a mouse (feedback 2026-07-29: "verse navigation"
-     was too small). The passage button is the single most-tapped control in the
-     app — it is how a reader gets anywhere — and the chapter arrows either side of
+  /* Sized for a thumb, not for a mouse. The passage button is the single
+     most-tapped control in the app — it is how a reader gets anywhere — and the
+     chapter arrows either side of
      it were 2px of padding away from being un-hittable on a phone. Android's 48dp
      is the standard both shells now meet. */
   .nav {
@@ -694,7 +693,7 @@
     overscroll-behavior: contain;
     /* Scroll natively but WITHOUT the classic scrollbar: the page is a canvas
        of typeset scripture, and a grey gutter down the middle of a two-pane
-       spread is not what this should look like (feedback 2026-07-26). The
+       spread is not what this should look like. The
        canon strip and the verse band carry position instead. */
     scrollbar-width: none; /* Firefox */
   }

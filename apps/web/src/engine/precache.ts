@@ -9,15 +9,15 @@
 // but the shell that runs them wouldn't be.
 //
 // WHAT the shell is comes from `shell-manifest.json`, which the build emits (see
-// the plugin in vite.config.ts). It used to be scraped from
+// the plugin in vite.config.ts). Scraping it from
 // `performance.getEntriesByType("resource")` — whatever this page happened to
-// load. That is clever and it is wrong in both directions:
+// load — is wrong in both directions:
 //
 //   - a chunk imported lazily, for a screen the reader had not opened, never
-//     appeared in the timeline and so was missing offline;
-//   - the same list doubled as the cache sweep's keep-set, so the sweep would
-//     delete assets belonging to any build this page had not loaded — including
-//     the one a pending update had just downloaded.
+//     appears in the timeline and so is missing offline;
+//   - the same list would double as the cache sweep's keep-set, so the sweep
+//     would delete assets belonging to any build this page had not loaded —
+//     including the one a pending update had just downloaded.
 //
 // A build-emitted list is exact, complete, and identical on every page.
 
@@ -102,16 +102,15 @@ export async function precacheShell(): Promise<string[]> {
     // A cached document is a PROMISE that the bundles it names can be served.
     // Breaking that promise is a white screen with no error and nothing to tap:
     // the document is served, `assets/index-<hash>.js` is not, and `#app` is
-    // never mounted (reported 2026-07-31, on a plane).
+    // never mounted.
     //
-    // Two faults produced it, and both are fixed here. The document used to be a
-    // peer of the assets in one unordered `Promise.all`, so it could land without
-    // them. And it was guarded by `depotHas`, which meant that once stored it was
-    // NEVER REPLACED — so the bare-base key kept the FIRST build's document
-    // forever while `pruneToPin` went on keeping only the CURRENT build's assets
-    // and deleting the ones that document asks for. An installed PWA opens
-    // `start_url: "./"`, which is that exact key, so every reader who updated and
-    // then opened the app offline was served a document whose bundle had been
+    // Two faults would produce it. A document that is a peer of the assets in one
+    // unordered `Promise.all` can land without them. And a document guarded by
+    // `depotHas` is NEVER REPLACED once stored — so the bare-base key would keep
+    // the FIRST build's document forever while `pruneToPin` keeps only the CURRENT
+    // build's assets and deletes the ones that document asks for. An installed PWA
+    // opens `start_url: "./"`, which is that exact key, so a reader who updated and
+    // then opened the app offline would be served a document whose bundle had been
     // reclaimed.
     //
     // So: re-fetch the document every time (it is a few KB), store it under BOTH
@@ -119,10 +118,9 @@ export async function precacheShell(): Promise<string[]> {
     // do it only when every other shell file is confirmed present.
     // AN INCOMPLETE SHELL RECLAIMS NOTHING. The caller prunes with what this
     // returns, and `pruneToPin` refuses an empty list — so returning nothing is
-    // how "do not reclaim yet" is said. Skipping only the promotion was not
-    // enough, and left a state worse than the bug: the stale document stayed
-    // while the prune went ahead and deleted the very bundle it names. Promotion
-    // and reclamation are one decision, taken here.
+    // how "do not reclaim yet" is said. Promotion and reclamation are one
+    // decision, taken here: skipping only the promotion would leave the stale
+    // document in place while the prune deleted the very bundle it names.
     if (!complete || !manifest) return [];
 
     // `no-store` so this is the DEPLOYED document and not our own stored copy.

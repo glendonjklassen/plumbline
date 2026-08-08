@@ -4,7 +4,7 @@
 // foldable's inner display is ~1:1 and may not clear the 840dp "Expanded"
 // breakpoint, so a present (vertical, opened) FoldingFeature is the signal.
 //
-// v1 phone shell (product call): the phone is always a single fullscreen
+// Phone shell: the phone is always a single fullscreen
 // reader — study/search/library surface on demand as a dismissible bottom sheet,
 // never a permanent split with a toggle button. Two side-by-side panes appear
 // only when the fold is opened flat with a vertical hinge.

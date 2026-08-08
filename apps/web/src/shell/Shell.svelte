@@ -79,10 +79,9 @@
   }
 
   let menuOpen = $state(false);
-  // Search used to be a permanent field. With Welcome, Church and Share
-  // beside it the bar wrapped onto a second row on a phone (feedback
-  // 2026-07-27), so on narrow screens it collapses to a magnifying glass and
-  // takes the row only while it is being used.
+  // With Welcome, Church and Share beside it a permanent search field wrapped
+  // the bar onto a second row on a phone, so on narrow screens it collapses to a
+  // magnifying glass and takes the row only while it is being used.
   let searchOpen = $state(false);
   let searchEl = $state<HTMLInputElement | null>(null);
   function openSearch(): void {
@@ -95,7 +94,7 @@
     if (s.panel?.kind === "search") s.panel = null;
   }
   // Share the app: the PWA QR + link (Compose ShareAppDialog parity) — a
-  // first-class header button (2026-07-26), not a menu trip.
+  // first-class header button, not a menu trip.
   let shareApp = $state(false);
   // What we actually hand over: the app, plus this reader's church when they
   // have set one (Settings → Your church). One QR, both things.
@@ -117,10 +116,9 @@
   // (Memorize left open over Explore was disorienting). Shared by the
   // header's destination buttons and the ≡ utilities.
   //
-  // The closing list used to live here and named five surfaces. There are
-  // thirteen, so every one added since — the note editor above all — could not be
-  // escaped by tapping a destination (feedback 2026-07-29). `dismissTransient`
-  // owns it now, beside the declarations it has to keep up with.
+  // `dismissTransient` owns the closing list, beside the declarations it has to
+  // keep up with — so a transient surface added later is still escaped by
+  // tapping a destination.
   function go(action: () => void): () => void {
     return () => {
       menuOpen = false;
@@ -132,11 +130,9 @@
   // The bottom bar's four destinations. Icon paths are copied verbatim from the
   // Compose shell's NavIcons.kt (standard Material Symbols: book, explore,
   // present_to_all, school) so both shells draw the same glyphs.
-  // Ids, not labels. This array is built ONCE, so a label in it is a snapshot of
-  // whatever language the app booted in; the `nav.hymnal` entry was still a bare
-  // "Hymnal" after the extraction pass and nothing caught it, because a string
-  // in a script body does not look like copy. Rendered through `t()` below, the
-  // question cannot come up again.
+  // Ids, not labels. This array is built ONCE, so a label in it would be a
+  // snapshot of whatever language the app booted in; storing ids and rendering
+  // them through `t()` below keeps the nav live across a language change.
   const NAV = [
     {
       key: "read",
@@ -185,12 +181,11 @@
   // How much room the bottom bar takes, published as `--bottomNavH` so a
   // full-screen surface can stop above it instead of underlapping it.
   //
-  // MEASURED, not restated. The first version wrote the height into a CSS
-  // constant — `calc(52px + safe-area)` — and was wrong by 5px on the first
-  // device it met, because the bar is a button min-height plus padding plus a
-  // border, and none of those are the number anyone would think to copy. Two
-  // declarations of one length drift the moment either side is touched; an
-  // observer cannot.
+  // MEASURED, not restated. Writing the height into a CSS constant — `calc(52px
+  // + safe-area)` — gets it wrong, because the bar is a button min-height plus
+  // padding plus a border, and none of those are the number anyone would think
+  // to copy. Two declarations of one length drift the moment either side is
+  // touched; an observer cannot.
   //
   // Zero when the bar is `display: none` (desktop widths), which is exactly what
   // a surface wants there.
@@ -314,8 +309,8 @@
       // popup, the study panel, and the destination screens.
       //
       // Note the early return at the top of this function: it drops every key
-      // that came from a field, which is precisely why Escape used to do nothing
-      // while the reader was typing in one.
+      // that came from a field, so Escape pressed while the reader is typing in
+      // one never reaches this ladder.
       case "Escape":
         if (shareApp) shareApp = false;
         else if (s.promptReq) s.cancelPrompt();
@@ -402,13 +397,13 @@
     {/if}
     {#if s.intro}
       <!-- The welcome a reader was given, on demand: they should not have to
-           reinstall to read it twice (feedback 2026-07-27). -->
+           reinstall to read it twice. -->
       <button class="church-btn" onclick={go(() => (s.reopenIntro = s.intro))}>{t("shell.welcome")}</button>
     {/if}
     {#if hasChurch(s.church)}
       <!-- Front and centre, not in Settings: someone handed this to a reader
            along with their church, and the reader should be able to find them
-           without going hunting (feedback 2026-07-27). -->
+           without going hunting. -->
       <button class="church-btn" onclick={visitChurch} title={churchTitle}>{t("shell.church")}</button>
     {/if}
     <!-- An ICON, as on Android, and for the reason a phone bar teaches: a
@@ -428,9 +423,9 @@
         <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
         <div class="backdrop" onclick={() => (menuOpen = false)}></div>
         <div class="menu">
-          <!-- UTILITIES ONLY, at every width. The destinations used to fold in
-               here on narrow screens; they live in the bottom bar now, in thumb
-               reach, which is where Android has always had them.
+          <!-- UTILITIES ONLY, at every width. The destinations live in the
+               bottom bar, in thumb reach, which is where Android has always had
+               them.
 
                Church and Welcome are the exception, and only on a phone: they
                are conditional buttons in the bar on a wide screen (there is
@@ -484,11 +479,9 @@
   </div>
 
   <!-- THE BOTTOM BAR (narrow only) — Android's IA, in thumb reach: Read ·
-       Explore · Present · Memorize. Android has had this since it shipped; the
-       web folded the same four into the ≡ menu, which put the whole information
-       architecture two taps away behind a glyph. The icons are the very same
-       Material paths the Compose shell draws (apps/android/.../NavIcons.kt), so
-       the two shells look like one product rather than two interpretations.
+       Explore · Present · Memorize. The icons are the very same Material paths
+       the Compose shell draws (apps/android/.../NavIcons.kt), so the two shells
+       look like one product rather than two interpretations.
 
        Read is not a destination so much as the absence of one: the reader is
        always mounted underneath, so its tap just clears whatever is layered
@@ -526,7 +519,7 @@
     <p class="share-url">plumblinebible.org</p>
     {#if s.intro}
       <!-- The welcome a reader was given, on demand: they should not have to
-           reinstall to read it twice (feedback 2026-07-27). -->
+           reinstall to read it twice. -->
       <button class="church-btn" onclick={go(() => (s.reopenIntro = s.intro))}>{t("shell.welcome")}</button>
     {/if}
     {#if hasChurch(s.church)}
@@ -615,10 +608,10 @@
     visibility: hidden;
     pointer-events: none;
   }
-  /* The top bar was too small to use comfortably (feedback 2026-07-29). Android
-     sets the standard here: 48dp touch targets and text you do not lean in for.
-     Every control below is sized off that rather than off how little room it can
-     be squeezed into — this bar holds the passage the reader taps most. */
+  /* Android sets the standard for this bar: 48dp touch targets and text you do
+     not lean in for. Every control below is sized off that rather than off how
+     little room it can be squeezed into — this bar holds the passage the reader
+     taps most. */
   header {
     /* Stated once and added to below: two declarations of one padding drift the
        moment either is touched, which is the lesson `--bottomNavH` was taught. */
@@ -717,16 +710,13 @@
       border-top: 1px solid var(--rule, #d8cba8);
       /* Above the surface backdrops, like the header — the destinations have to
          stay reachable from whatever is open, since tapping one closes it.
-         Present used to be the exception, covering the whole chrome; it now stops
-         above this bar instead (`--bottomNavH`, published from the measured
-         height here), so nothing needs to out-stack it. Raising this to 70 was
-         tried first and mutation-testing showed it changed nothing once the
-         geometry was right — one mechanism, not two. */
+         Present stops above this bar (`--bottomNavH`, published from the measured
+         height here) rather than covering it, so nothing needs to out-stack it. */
       position: relative;
       z-index: 46;
-      /* Clear of the home indicator / gesture bar on a notched phone. The one
-         surface that always did this; it reads the shared variable now (app.css)
-         so every surface says it the same way and a test can drive all of them. */
+      /* Clear of the home indicator / gesture bar on a notched phone. Reads the
+         shared variable (app.css) so every surface says it the same way and a
+         test can drive all of them. */
       padding-bottom: var(--safeBottom);
     }
     .bottom-nav button {
@@ -765,13 +755,13 @@
     .subtitle {
       display: none;
     }
-    /* A DESTINATION REPLACES THE TOP BAR, it does not stack under it.
-       Explore, Memorize and the Hymnal sat below the READER'S bar — its chapter
-       nav, its search, its share — so the phone showed "‹ 1 Corinthians 7 ›"
-       above a second bar saying "Explore", advertising a passage the screen had
-       nothing to do with (feedback 2026-08-02). Present has always replaced the
-       lot and looked right for it; Android does the same, because its
-       destinations own the whole column.
+    /* A DESTINATION REPLACES THE TOP BAR, it does not stack under it: otherwise
+       Explore, Memorize and the Hymnal sit below the READER'S bar — its chapter
+       nav, its search, its share — and the phone shows "‹ 1 Corinthians 7 ›"
+       above a second bar saying "Explore", advertising a passage the screen has
+       nothing to do with. Present has always replaced the lot and looks right
+       for it; Android does the same, because its destinations own the whole
+       column.
        Only on a phone: above 700px the header IS the destination switcher (there
        is no bottom bar up there), so hiding it would strand the reader. The bar
        that takes over needs the status-bar inset the header was carrying. */
@@ -803,13 +793,12 @@
        The glass stands in for the field until it's wanted, and while searching
        the field owns the row, so at the default text size this is one row.
 
-       It used to be `flex-wrap: nowrap`, which does not mean "one row" — it
-       means the row overflows and what runs off the end is the ≡, i.e. the way
-       to Settings, on the narrowest phones (below ~340px it already did). Now
-       that the chrome follows the reader's text size, someone reading at 36px
-       reaches that width on any phone, and a control pushed off the screen is
-       worse than a header two rows tall. Wrapping is the graceful version of
-       the same overflow. */
+       `flex-wrap: nowrap` would not mean "one row" — it means the row overflows
+       and what runs off the end is the ≡, i.e. the way to Settings. Because the
+       chrome follows the reader's text size, someone reading at 36px reaches
+       that width on any phone, and a control pushed off the screen is worse than
+       a header two rows tall. Wrapping is the graceful version of the same
+       overflow. */
     header {
       /* The air between controls gives before the controls do. With the app's
          name, Welcome, Church, Share, the glass and the ≡ all in one nowrap row,
@@ -1041,8 +1030,8 @@
   /* Both sticky notices at once: this one sits above the update.
      Its clearance is the update toast's own height, spelled out — a 44px control
      (the tap floor in app.css) inside 8px of padding top and bottom — plus a gap.
-     The number that was here before was measured off a 27px button, so the two
-     notices overlapped the moment the floor applied to Update and ✕. */
+     Spelled out rather than a fixed number, so it cannot go stale against the
+     control's real height. */
   .toast.warn.stacked {
     bottom: calc(var(--toastBottom) + 44px + 16px + 12px);
   }

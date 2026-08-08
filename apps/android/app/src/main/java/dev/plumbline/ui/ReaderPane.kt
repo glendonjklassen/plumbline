@@ -94,8 +94,8 @@ import kotlin.math.min
 
 // The manifest constants are LOGICAL units (the desktop shells run ~1 device px
 // per logical px). On a phone (density ~2.6) treating them as raw device px
-// capped the text column at ~277dp and left wide empty gutters — the
-// "lots of whitespace" feedback (2026-07-24) — so both scale by density here.
+// capped the text column at ~277dp and left wide empty gutters, so both scale
+// by density here.
 private const val MARGIN_DP = 28f      // GTK MARGIN — all sides
 private const val MAX_COLUMN_DP = 720f // GTK MAX_COLUMN
 
@@ -521,8 +521,8 @@ fun ReaderPane(
                     viewportH = h
                     // A shorter viewport (a rotation, a fold) can leave the offset
                     // past the document's end. Re-clamp HERE — from the layout
-                    // phase — rather than in composition, which is what used to
-                    // write scroll state on every frame.
+                    // phase — not in composition, which would write scroll state
+                    // on every frame.
                     scroll.floatValue = scroll.floatValue.coerceIn(0f, max(0f, docHeight - h))
                 }
                 .scrollable(scrollState, Orientation.Vertical)
@@ -685,16 +685,15 @@ private fun recordChapter(
             else -> inks.ink
         }
         canvas.drawText(it.text, it.x, baseline, paint)
-        // NO mark for a Strong's-tagged word. There used to be a faint gold rule
-        // under every one, and since most words carry a Strong's number it
-        // amounted to underlining the Bible: noise that told the reader nothing
-        // they act on. Whether a word answers when tapped is learned once, not
-        // repeated by the page (2026-07-28). Web twin: paint.ts.
+        // NO mark for a Strong's-tagged word. A faint gold rule under every one —
+        // and most words carry a Strong's number — amounts to underlining the
+        // Bible: noise that tells the reader nothing they act on. Whether a word
+        // answers when tapped is learned once, not repeated by the page. Web
+        // twin: paint.ts.
         //
-        // The AKJV overlay's mark: DOTTED, at the natural underline depth — it
-        // sat lower while it had to clear the Strong's rule, and moved up when
-        // that went. Not bold or grey — italic already means "supplied by the
-        // translator", and at 6.9% of words a heavy mark reads as a ransom note.
+        // The AKJV overlay's mark: DOTTED, at the natural underline depth. Not
+        // bold or grey — italic already means "supplied by the translator", and
+        // at 6.9% of words a heavy mark reads as a ransom note.
         if (flags and PlumblineFlags.RERENDERED != 0) {
             var dx = it.x
             val dy = it.y + it.h - 3f
@@ -1071,7 +1070,7 @@ internal fun verseExtents(items: List<DisplayItem>): List<VerseExtent> {
  *  scrolled past [scrollY]. 0 when the offset is below every verse. */
 internal fun verseAtTop(extents: List<VerseExtent>, scrollY: Float): Int {
     // Lower bound on `numberBottom > scrollY` — the FIRST index that satisfies
-    // it, which is what `firstOrNull { it.y + it.h > scrollY }` used to find.
+    // it, which is what `firstOrNull { it.y + it.h > scrollY }` finds.
     var lo = 0
     var hi = extents.size
     while (lo < hi) {
@@ -1085,8 +1084,8 @@ internal fun verseAtTop(extents: List<VerseExtent>, scrollY: Float): Int {
  *  high-water candidate. 0 when none has. */
 internal fun deepestVerseEntered(extents: List<VerseExtent>, fold: Float): Int {
     // Upper bound on `entryBottom <= fold`: the LAST index that satisfies it,
-    // and since verses only ever run down the page that is the same verse the
-    // old filter-every-word-then-max arrived at.
+    // and since verses only ever run down the page that is the same verse a
+    // filter-every-word-then-max would arrive at.
     var lo = 0
     var hi = extents.size
     while (lo < hi) {

@@ -45,7 +45,7 @@ pub struct OccurrenceIx {
 /// [`OccurrenceIx::build`] sliced. The web builds this on ONE worker thread
 /// that also answers layout and taps, and it used to run whole on the reader's
 /// first word click — every session, because the built index cannot outlive the
-/// tab (feedback 2026-07-27). Fed in slices, boot can warm it between yields.
+/// tab. Fed in slices, boot can warm it between yields.
 /// Mirrors [`crate::search::SearchIxBuilder`].
 #[derive(Debug, Default)]
 pub struct OccurrenceIxBuilder {

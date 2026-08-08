@@ -1,5 +1,5 @@
 //! Where you've read, and how long ago — the reading map behind the navigator's
-//! glow (product request, 2026-07-28).
+//! glow.
 //!
 //! The point of the feature is **attention**: the book and chapter grids tint
 //! themselves so the parts of the canon you have drifted away from stand out
@@ -42,11 +42,8 @@
 //!
 //! The glow does not mean one thing. For a chapter you have READ it means *you
 //! have been away a while*. For one you have NEVER read it means *there is
-//! something here you have not seen*, and it is full from the first launch
-//! (revised 2026-07-29: it used to ramp from the reader's start date, which made
-//! the map calm on precisely the day a reader most wants showing where to go, and
-//! dressed "you have never opened this" up as "not due yet"). A part-read chapter
-//! glows in proportion to what is LEFT.
+//! something here you have not seen*, and it is full from the first launch. A
+//! part-read chapter glows in proportion to what is LEFT.
 //!
 //! Over all of that sits one rule: **recency outranks coverage.** The glow ramps
 //! from the most recent CONTACT — `touched` or `last_read`, whichever is later —
@@ -75,10 +72,9 @@ use crate::Error;
 /// inheriting the `overlay-` prefix its siblings are frozen into.
 pub const FORMAT: &str = "plumbline-reading-v1";
 
-/// The reading speed dwell is converted at. Set **generously**, and raised from
-/// 220 on 2026-07-29 after a real read of Jude came out `Partial`: at 220 its 613
-/// words wanted 2.8 minutes of credited dwell, which a brisk reader beats, so
-/// "I just read this" showed as "you are partway through".
+/// The reading speed dwell is converted at. Set **generously**: at 220 wpm a
+/// 613-word chapter like Jude wanted 2.8 minutes of credited dwell, which a brisk
+/// reader beats, so "I just read this" showed as "you are partway through".
 ///
 /// The dwell gate is not a pace to hold a reader to — its ONLY job is to refuse
 /// credit to someone flipping through, and [`GRACE_SECONDS`] plus the high-water
@@ -178,14 +174,12 @@ pub struct ChapterReading {
     #[serde(rename = "lastRead", skip_serializing_if = "Option::is_none", default)]
     pub last_read: Option<String>,
     /// When this chapter last had ANY of the reader's attention — a partial pass
-    /// counts, a completed one counts, `None` means never. Additive (2026-07-29).
+    /// counts, a completed one counts, `None` means never. Additive.
     ///
-    /// It exists because recency has to be able to silence the glow on its own.
-    /// Before it, only a COMPLETED chapter had an anchor, so a chapter you read
-    /// most of an hour ago glowed at you like one you had never opened: "I just
-    /// read the book of Jude and it now shows a bronze glow — bit of a false
-    /// positive." Quite so. Being in a chapter recently is the whole thing the map
-    /// is supposed to notice.
+    /// It exists because recency has to be able to silence the glow on its own:
+    /// without it, only a COMPLETED chapter has an anchor, so a chapter you read
+    /// most of an hour ago glows like one you had never opened. Being in a chapter
+    /// recently is the whole thing the map is supposed to notice.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub touched: Option<String>,
     /// Every key on this record this build has never heard of, carried back out
@@ -343,7 +337,7 @@ pub fn write_book(home: impl AsRef<Path>, book: &str, chapters: &[ChapterReading
 
 /// The date this reader started, creating it at `now` on first call.
 ///
-/// No longer feeds the glow — unread chapters glow at once (2026-07-29) — but it
+/// No longer feeds the glow — unread chapters glow at once — but it
 /// is kept: it is a true fact about this reader, it already ships inside v0.31.0
 /// backup zips, and `since` is part of the wire payload. Deleting it would strip
 /// a field from a contract that only evolves additively, to save one small file.
@@ -551,8 +545,7 @@ fn heat_of(corpus: &Corpus, book: &str, r: Option<&ChapterReading>, words: u32, 
     // inside FRESH_DAYS that ramp is flat zero. So a chapter you were in this
     // morning is silent whatever its coverage says, which is the only honest
     // answer: the map's question is "where have you not been lately", and you
-    // were just there. (2026-07-29: reading Jude and being shown a bronze glow
-    // for it was this rule missing.)
+    // were just there.
     let contact = [last_read.as_deref(), touched.as_deref()].into_iter().flatten().filter_map(date_to_days).max();
     // UPGRADE AMNESTY. `touched` is additive, so a pass that was under way before
     // it existed has progress and no date — and would glow as if the reader had
@@ -1009,7 +1002,7 @@ mod tests {
         let home = scratch("accumulate");
         // Gen 2 is 20 words. Sip time in thirds of what those words cost, so this
         // test states its intent in the rate's own terms and survives a change to
-        // READING_WORDS_PER_MINUTE (which caught it once, at 220 → 300).
+        // READING_WORDS_PER_MINUTE.
         let third = seconds_for_words(20) / 3.0;
         for (reached, secs) in [(1u16, third), (2, third)] {
             let r = record(&home, &c, &w, "Gen", 2, reached, secs, NOW).unwrap();
@@ -1048,10 +1041,9 @@ mod tests {
         let w = ChapterWords::build(&c);
         let home = scratch("just-read");
 
-        // The Jude case (2026-07-29). Read most of a chapter, but not past the 90%
+        // The Jude case. Read most of a chapter, but not past the 90%
         // bar, so it stands as Partial — and it must NOT glow, because the reader
-        // was in it moments ago. "If I just read a chapter it doesn't need to show
-        // glowing… bit of a false positive."
+        // was in it moments ago.
         let r = record(&home, &c, &w, "Gen", 2, 1, seconds_for_words(10), NOW).unwrap();
         assert!(!r.completed, "half of Gen 2 is short of the bar");
         let (store, _) = load(&home);
@@ -1394,7 +1386,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// AUDIT 2026-07-29 forward compatibility: the on-disk formats evolve
+    /// Forward compatibility: the on-disk formats evolve
     /// **additively** (CLAUDE.md §Data formats), and a sideloaded APK never
     /// auto-updates — so a key this build drops is dropped for good on that
     /// device. Reading one chapter of a book rewrites that book's whole file, so

@@ -66,9 +66,9 @@
     for (const e of entries) {
       lines.push(e.display, e.body, "");
     }
-    // The same link the header's Share gives — Present used to hand over a
-    // bare app URL, dropping the church exactly where it matters most, since
-    // this is the screen you show someone face to face (feedback 2026-07-27).
+    // The same link the header's Share gives: the church rides along, and this
+    // is the screen you show someone face to face — exactly where it matters
+    // most.
     lines.push(`Shared from Plumbline — ${s.presentShareLink}`);
     if (hasChurch(s.church)) {
       lines.push("");
@@ -95,9 +95,8 @@
   // Sharing a passage is a QR, not the phone's share sheet. Present is the
   // screen you hold up to someone standing in front of you: a share sheet sends
   // a wall of text to an app they then have to leave, while a QR they scan puts
-  // the passage on THEIR phone, in the reader, at the verse (feedback
-  // 2026-07-27). `shareText()` stays for the copy fallback — handy when the
-  // person isn't in front of you.
+  // the passage on THEIR phone, in the reader, at the verse. `shareText()`
+  // stays for the copy fallback — handy when the person isn't in front of you.
   let showQr = $state(false);
   const firstRef = $derived(entries[0]?.ref ?? null);
   /** The app link plus the verse this thread opens on. */
@@ -130,7 +129,7 @@
 
 {#if s.showPresent}
   <!-- The picker is the OWNER's screen — it follows the app theme; the
-       presentation itself stays fixed-light sunlight (feedback 2026-07-26). -->
+       presentation itself stays fixed-light sunlight. -->
   <div class="present" class:picking={!thread}>
     {#if !thread}
       <div class="bar">
@@ -141,8 +140,8 @@
         <p class="empty">{t("present.empty")}</p>
       {:else}
         <div class="picker">
-          <!-- `th`, not `t`: this list used to bind each thread to `t`, which now
-               shadows the catalogue lookup of the same name inside the block. -->
+          <!-- `th`, not `t`: the catalogue lookup is called `t`, and an
+               each-block binding of the same name would shadow it. -->
           {#each threads as th (th.name)}
             <button
               class="pick"
@@ -200,9 +199,9 @@
         <p class="endnote">{t("present.endNote")}</p>
         <!-- ONE QR, and it carries the passage: the end card's job is to hand
              this thread over, so the code opens the app AT its first verse
-             rather than at whatever the recipient last read (2026-07-27). The
-             app-link button stays for the person who isn't in front of you —
-             and is the only way to grab either link for a test. -->
+             rather than at whatever the recipient last read. The app-link button
+             stays for the person who isn't in front of you — and is the only way
+             to grab either link for a test. -->
         <div class="qr">
           <QrCode size={148} text={passageLink} />
           <span class="qrnote">{t("present.scanFor", { passage: entries[0]?.display ?? thread.name })}</span>
@@ -217,19 +216,17 @@
 
 <style>
   /* Sunlight palette — deliberately fixed light, maximum contrast. Because it is
-     fixed, every value here is a literal rather than a `var(--…)`, and the
-     literals are the light palette's (crates/core/src/theme.rs). They were the
-     OLD light palette, and measured against this paper (#fcf9f4) the muted ones
-     failed WCAG AA: #8a8276 was 3.61:1 and .linkbtn's #d8cba8 was 1.53:1 —
-     effectively invisible, on the one screen most likely to be projected in front
-     of a room (2026-07-29). Restated at 5.4:1 and 6.9:1. */
+     fixed, every value here is a literal rather than a `var(--…)`, restated from
+     the light palette (crates/core/src/theme.rs) to clear WCAG AA against this
+     paper (#fcf9f4): the muted tones sit at 5.4:1 and 6.9:1, on the one screen
+     most likely to be projected in front of a room. */
   .present {
     position: fixed;
     /* Stops ABOVE the bottom bar rather than covering it — both the picker and
-       the passage being presented. Present was the one surface that took the
-       whole screen, which left a reader mid-presentation with no destinations
-       and only a ✕ to find (feedback 2026-07-28). `--bottomNavH` is 0 at desktop
-       widths, where there is no bar, so this is `inset: 0` there. */
+       the passage being presented. Covering it would leave a reader
+       mid-presentation with no destinations and only a ✕ to find. `--bottomNavH`
+       is 0 at desktop widths, where there is no bar, so this is `inset: 0`
+       there. */
     top: 0;
     left: 0;
     right: 0;
@@ -247,8 +244,9 @@
     font-family: "EB Garamond", Georgia, serif;
     /* Present is `position: fixed`, so it escapes the frame's insets and has to
        carry its own: it is the one surface that covers the status bar and both
-       edges. The ✕ used to sit under the clock, and a verse set in 54px type ran
-       under the camera cutout. Bottom is the `max()` above, not padding. */
+       edges — without them the ✕ sits under the clock and a verse set in 54px
+       type runs under the camera cutout. Bottom is the `max()` above, not
+       padding. */
     padding: var(--safeTop) var(--safeRight) 0 var(--safeLeft);
   }
   .bar {
@@ -344,7 +342,7 @@
        so the column overflowed its own fixed height and the share sheet above
        drew over the verses. It fit in English by luck: German's longer strings
        ("Scannen, um … auf dem eigenen Telefon zu öffnen") make the sheet taller
-       and tipped it over (UAT, 2026-08-03). `min-height: 0` is the half that
+       and tipped it over. `min-height: 0` is the half that
        actually matters — a flex item will not shrink below its content without
        it, whatever `flex` says. */
     flex: 1;

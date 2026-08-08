@@ -82,11 +82,11 @@
 
   // WHAT THE STRIP SAYS OUT LOUD.
   //
-  // Chromium no longer computes `aria-valuetext` for a canvas with
-  // `role="slider"`: a full AX-tree dump on 2026-07-30 has the node coming back
-  // with `valuetext: ""` and `value` set to `aria-valuenow`, while the DOM
-  // carries `aria-valuetext="Revelation"` at that same instant. So a screen
-  // reader driving this strip was told the position was "42".
+  // Chromium does not compute `aria-valuetext` for a canvas with
+  // `role="slider"`: the node comes back with `valuetext: ""` and `value` set
+  // to `aria-valuenow`, while the DOM carries `aria-valuetext="Revelation"` at
+  // that same instant. So a screen reader driving this strip was told the
+  // position was "42".
   //
   // The attributes below stay — they are correct, and they are what other AT
   // reads. This is a second channel beside them: a polite live region carrying

@@ -8,12 +8,11 @@
 // WHY APP CODE STORES ITS OWN DOWNLOADS RATHER THAN LEAVING IT TO THE SERVICE
 // WORKER. On a first visit the SW is not controlling the page while the shell
 // loads, and it claims the clients somewhere in the middle of boot — so whether
-// the ~12 MB pack passed through its fetch handler came down to a race with
-// clients.claim() (measured 2026-07-26: the wasm landed in the cache, the pack
-// did not, and the app could not boot offline afterwards). A dedicated worker
-// inherits its creator's controller at creation, so the engine worker spawned
-// during an uncontrolled first load is itself uncontrolled. Downloading code
-// already holds the bytes; storing them here is deterministic.
+// the ~12 MB pack passed through its fetch handler comes down to a race with
+// clients.claim(). A dedicated worker inherits its creator's controller at
+// creation, so the engine worker spawned during an uncontrolled first load is
+// itself uncontrolled. Downloading code already holds the bytes; storing them
+// here is deterministic.
 //
 // INVARIANT, and the reason this module exists as a chokepoint: nothing the
 // engine worker needs may depend on being SW-controlled. Every pack and wasm
@@ -24,10 +23,10 @@
 //
 //  1. `ignoreVary: true` on EVERY lookup. Our responses come back
 //     `Vary: Origin`, and Vite's `<script crossorigin>` requests carry an
-//     Origin header that a plain fetch does not — honouring Vary made a cached
-//     entry invisible to the very request it was stored for, and the app failed
-//     to boot offline with every byte already on disk (2026-07-26). Baked in
-//     here so no call site can forget it.
+//     Origin header that a plain fetch does not — honouring Vary makes a cached
+//     entry invisible to the very request it was stored for, and the app fails
+//     to boot offline with every byte already on disk. Baked in here so no call
+//     site can forget it.
 //  2. We store a Response we CONSTRUCT, never the network's. A constructed
 //     Response carries no Vary header at all, so trap 1 cannot even arise for
 //     anything we wrote; and it lets us set `content-type` ourselves, which
@@ -39,11 +38,9 @@
 //
 // RECLAMATION IS NOT HERE. This module hands out primitives (`depotKeys`,
 // `depotDelete`); the sweep itself is `pruneToPin` in engine.worker.ts, because
-// the pin is the authority on what to keep and the pin lives in the worker.
-// There used to be a second sweeper here — `pruneStale`, a DENYLIST keyed on
-// `?v=` — and it went unreferenced the day the pin landed (2026-07-28) while
-// still reading as live code. One sweeper, in the module that holds the
-// keep-set: a second one either disagrees with the first or is dead.
+// the pin is the authority on what to keep and the pin lives in the worker. One
+// sweeper, in the module that holds the keep-set: a second one either disagrees
+// with the first or is dead.
 
 /** The single Cache bucket. Must match the name in public/sw.js — a plain
  *  script served from /, which cannot import this module. Change both together.

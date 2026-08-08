@@ -5,10 +5,9 @@
 </script>
 
 <script lang="ts">
-  // A QR of whatever we're handing over. This used to be a build-time constant
-  // matrix for one fixed URL; a shared link can now carry the sender's church
-  // (shell/church.ts), so the code is encoded at render time — one scan gives
-  // someone both the Bible and the people who sent it.
+  // A QR of whatever we're handing over. A shared link can carry the sender's
+  // church (shell/church.ts), so the code is encoded at render time — one scan
+  // gives someone both the Bible and the people who sent it.
   //
   // qrcode-generator (MIT, no dependencies of its own) does the encoding.
   // Verified locally by DECODING what it produces with zxing-cpp — 32 cases

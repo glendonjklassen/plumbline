@@ -112,10 +112,8 @@ fun HymnalScreen(
     var openId by remember { mutableStateOf<String?>(null) }
     var semis by remember { mutableIntStateOf(0) }
     var hymn by remember { mutableStateOf<Hymn1?>(null) }
-    // FOLLOWS THE APP'S LANGUAGE. It was a hard-coded "en", so a German reader
-    // opened a German interface onto English hymn texts and had to say "Deutsch"
-    // again on every hymn (UAT, 2026-08-03) — the web was fixed for this and
-    // Android was missed, which is the drift the whole catalogue exists to stop.
+    // FOLLOWS THE APP'S LANGUAGE, so a German reader gets German hymn texts by
+    // default rather than an English interface onto English texts (web parity).
     //
     // Still its own state: the chips do a different job from the language
     // setting, and a bilingual singer picking the German text of one hymn has not
@@ -303,7 +301,7 @@ private fun HymnBody(
         if (shown.isNotEmpty() && wanted.isNotEmpty() && shown != wanted) {
             // A note, not a warning: nothing is wrong, this hymn simply exists in
             // one language. Silently handing a German reader an English hymn is
-            // what looked broken (UAT, 2026-08-03).
+            // what looks broken.
             Text(
                 t("hymnal.notInYourLanguage", "language" to endonymOf(wanted), "shown" to endonymOf(shown)),
                 color = palette.faded, fontSize = 12.5.sp, fontStyle = FontStyle.Italic,

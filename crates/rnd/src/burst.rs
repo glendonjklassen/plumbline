@@ -282,8 +282,8 @@ pub fn discover_leitworter(bp: &BurstParams, corpus: &Corpus) -> Vec<Burst> {
 ///
 /// [`discover_leitworter`] walks the whole corpus building a positions map, then
 /// scans every code for a burst, in ONE call on the only thread that answers
-/// layout, taps and word studies. Measured 2026-07-30 on the maintainer's
-/// desktop: **83 ms**, against a ~300 ms warm-chunk budget — which on a phone
+/// layout, taps and word studies. Measured on the maintainer's desktop:
+/// **83 ms**, against a ~300 ms warm-chunk budget — which on a phone
 /// (5–10× slower) is the whole budget for one phase, and the reader feels it as
 /// the app being unavailable.
 ///

@@ -3,7 +3,7 @@
 // authoring writes and their persistence. The main thread never blocks on an
 // engine call again; it speaks the tiny RPC below and paints.
 //
-// SCHEDULING RULE (2026-07-26, the half-width-pane bug): this thread is the
+// SCHEDULING RULE: this thread is the
 // only one that can answer layout/tap RPCs, so background loading must never
 // hold it for one long synchronous block. Stage-2 load, index warming, and
 // the R&D load all run as separate macrotasks with yields between them —
@@ -84,30 +84,24 @@ let lastTurn: [string, number][] = [];
 // those continuations needs the event loop, so a file can finish arriving at the
 // radio and then sit in a queue behind a quarter-second of arithmetic.
 //
-// That second effect is INVISIBLE in a wall-clock timer, and it burned us: a
-// phone reported "stage2 fetch+gunzip: 33993 ms" where a desktop over localhost
-// reported 907 ms, and dividing bytes by seconds produced a confident, invented
-// "200 KB/s connection" (2026-07-28). The bytes-per-second of a starved reader
-// measures the starvation, not the network.
+// That second effect is INVISIBLE in a wall-clock timer: dividing bytes by a
+// wall clock that includes the starvation produces a confident, invented
+// "connection speed". The bytes-per-second of a starved reader measures the
+// starvation, not the network.
 //
 // So measure the starvation directly. A heartbeat that should fire every tick,
 // and how late it actually was. Total lateness during boot IS the time this
 // thread spent unavailable — no division, no inference, no assumption about
 // anyone's wifi.
-// A LATE TIMER IS NOT ALWAYS A BUSY THREAD, and the first version of this meter
-// could not tell the difference. It reported a 24,921 ms "stall" on a launch
-// where every byte came off the device and the largest measured chunk was 886 ms
-// — arithmetic that cannot block for 25 seconds. The cause was the tab going to
-// the background: Chrome freezes a hidden page's timers AND its in-flight
-// requests, so the meter billed the reader's screen turning off as engine work,
-// and on the launch before it billed a backgrounded download as a 34-second
-// fetch of a 787 KB file (2026-07-28).
 //
-// A measurement that cannot distinguish "we were busy" from "the phone was
-// asleep" is worse than none: it invents a crisis and points at the wrong code.
-// So the page tells the worker when it is hidden, hidden time is excluded rather
-// than counted, and it is reported separately — because "you were away for 25 s"
-// is also a thing a reader of this report needs to know.
+// A LATE TIMER IS NOT ALWAYS A BUSY THREAD. A hidden page has its timers AND its
+// in-flight requests frozen by the browser, so a meter that counted that time
+// would bill the reader's screen turning off as engine work. A measurement that
+// cannot distinguish "we were busy" from "the phone was asleep" is worse than
+// none: it invents a crisis and points at the wrong code. So the page tells the
+// worker when it is hidden, hidden time is excluded rather than counted, and it
+// is reported separately — because "you were away for 25 s" is also a thing a
+// reader of this report needs to know.
 const STALL_TICK = 50;
 /** Lateness under this is timer jitter, not a stall worth counting. */
 const STALL_FLOOR = 20;
@@ -175,8 +169,8 @@ type LaidOut = { items: unknown[]; height: number };
 const turnCache = new Map<string, LaidOut>();
 /** Whether the AKJV overlay is on. Tracked HERE because it changes the words a
  *  chapter lays out to, and the turn cache is keyed on everything that does —
- *  without it, flipping the toggle served the cached KJV display list straight
- *  back and the page never changed (feedback 2026-07-27, "isn't live").
+ *  without it, flipping the toggle serves the cached KJV display list straight
+ *  back and the page never changes.
  *  Keeping it in the key rather than clearing the cache means toggling back and
  *  forth stays free, which is exactly what someone comparing wordings does. */
 let akjvOn = false;
@@ -246,28 +240,21 @@ function layoutChapter(m: LayoutReq): LaidOut | null {
 /** Let queued messages (layout, taps) run before the next synchronous chunk. */
 const yieldTask = () => new Promise<void>((r) => setTimeout(r, 0));
 
-// NOTHING THE ENGINE BUILDS IS PERSISTED ANY MORE. There was one exception: the
-// "verses like this" (SIF) model, the most expensive thing a launch did — 11.2 s
-// of phone CPU, 41 sweeps of the whole corpus (2026-07-28) — which this worker
-// saved into the depot after the warm built it and reinstalled on the next open.
-// The feature was removed 2026-07-30 with the concept embedding it was built
-// from, and the saved blob with it: prune is an allowlist, so any copy still on a
-// device is reclaimed on that device's next launch.
+// NOTHING THE ENGINE BUILDS IS PERSISTED. Prune is an allowlist, so any stale
+// saved artifact still on a device is reclaimed on that device's next launch.
 
 // ── engine calls ──────────────────────────────────────────────────────────────
-// EVERY engine request the shell makes arrives as `call` or `static`, and until
-// now not one of them was timed. That is the hole three days of traces kept
-// falling into: the boot stages, the warm chunks and the analysis chunks all
-// report themselves, so a trace looks complete — while a single `call` can hold
+// EVERY engine request the shell makes arrives as `call` or `static`, and each is
+// timed. The boot stages, the warm chunks and the analysis chunks all report
+// themselves, so a trace looks complete — while a single un-timed `call` can hold
 // this thread for as long as it likes and leave no mark anywhere.
 //
 // It is not a hypothetical hole. `wordStudyBlocks` builds the occurrence index,
 // the rendering lens, the cross-references, the concept model and the bridge
 // SYNCHRONOUSLY when the reader taps a word before the warm has reached them —
-// 818 ms on a desktop, and a phone reported a 24,921 ms freeze that no timed
-// section accounted for (2026-07-28). A frozen thread also strands its own
-// in-flight downloads, which is how one 787 KB file came to be reported at
-// 34,448 ms beside a 3.3 MB file that took 475 ms.
+// hundreds of ms on a desktop, many seconds on a phone, that no timed section
+// would otherwise account for. A frozen thread also strands its own in-flight
+// downloads.
 //
 // Cheap by construction: two clock reads per call, and only calls that actually
 // cost something are kept.
@@ -370,9 +357,7 @@ function loadRndChunked(): Promise<void> {
       const more = timedChunk(`rnd load step ${step}`, () => booted!.engine.loadRndStep(step));
       if (!more) break;
     }
-    // Both are parsed into wasm memory by the steps above and never re-read. The
-    // concept vectors used to be evicted here too; that artifact was dropped from
-    // the pack on 2026-07-30 with the features that read it.
+    // Both are parsed into wasm memory by the steps above and never re-read.
     const freedRnd = booted!.home.evict(["data/morphology.morphb", "data/text-witness.json"]);
     if (freedRnd) booted!.trace.push(["home evict after analysis (KB)", Math.round(freedRnd / 1024)]);
     await warmChunked();
@@ -394,7 +379,7 @@ const saveData = (): boolean => (navigator as any).connection?.saveData === true
  *  network at all, and putting a one-time-download button in front of a download
  *  that will not happen is theatre. The deferral exists to protect the
  *  reader's data and their first paint; neither is at stake once the bytes are
- *  cached (feedback 2026-07-27). */
+ *  cached. */
 async function rndAlreadyCached(): Promise<boolean> {
   const files = booted!.manifest.files.filter((f) => f.stage === "analysis");
   if (!files.length) return false;
@@ -470,16 +455,13 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
     // A warm boot's manifest IS the pin, and the pin describes the release this
     // device last completed. Stage 2 then fetches the study files THAT release
     // listed, so a file added since is never fetched and the feature reading it
-    // is simply missing. v0.39.0 shipped that: every existing reader opened the
-    // hymn tab to "The hymnal has not finished loading yet." A fresh install was
-    // fine, which is why the whole hymnal suite passed.
+    // is simply missing.
     //
     // Gated on the pin coming from an older BUILD, because a warm boot on an
     // unchanged release must ask the network for nothing whatsoever — not even
-    // 5 KB (e2e/app.spec.ts counts requests and was right to fail an earlier,
-    // unconditional version of this). So: one extra fetch on the first launch
-    // after an upgrade, none ever again, and `fetchManifest` falls back to the
-    // stored copy so an offline upgrade behaves exactly as before.
+    // 5 KB (e2e/app.spec.ts counts requests). So: one extra fetch on the first
+    // launch after an upgrade, none ever again, and `fetchManifest` falls back to
+    // the stored copy so an offline upgrade behaves exactly as before.
     //
     // Everything downstream then works through the path that already existed,
     // which is the point — the alternative was a second mechanism for injecting
@@ -559,10 +541,9 @@ async function pruneToPin(shell: string[]): Promise<number> {
   // From boot.ts, which is also what prefetches it: an allowlist that spells the
   // URL out for itself deletes the engine the day the spelling changes.
   keep.add(engineUrl());
-  // NOTHING ELSE IS EXEMPT. The saved "verses like this" model (`verse-sim.simb`)
-  // was named here until 2026-07-30; with the feature gone the blob is unknown to
-  // this list, which is exactly right — an allowlist reclaims it on the next
-  // launch of a device that still carries one.
+  // NOTHING ELSE IS EXEMPT. A retired artifact like the old "verses like this"
+  // model is unknown to this list, which is exactly right — an allowlist reclaims
+  // it on the next launch of a device that still carries one.
 
   let gone = 0;
   for (const url of await depotKeys()) {
@@ -573,15 +554,15 @@ async function pruneToPin(shell: string[]): Promise<number> {
 }
 
 // ── persisting the reader's own work ─────────────────────────────────────────
-// This used to be `void booted.home.persistUserData()` inside a 50 ms debounce,
-// and it lost writes two different ways.
+// A plain debounced `void persistUserData()` loses writes two ways, and both are
+// guarded against here:
 //
-//  * A FAILED WRITE went nowhere. QuotaExceededError on a full phone, or a
-//    browser that has decided this origin may not have a database, rejected a
-//    promise nobody was holding — while the shell had already told the reader
-//    their note was saved. It was saved in the in-memory home, which dies with
-//    the tab. So failures come back out to the shell now, and are retried.
-//  * A TAB THAT WENT AWAY inside the debounce lost the note entirely: 50 ms is
+//  * A FAILED WRITE must not go nowhere. QuotaExceededError on a full phone, or a
+//    browser that has decided this origin may not have a database, rejects a
+//    promise nobody is holding — while the shell has already told the reader
+//    their note was saved. It was saved only in the in-memory home, which dies
+//    with the tab. So failures come back out to the shell, and are retried.
+//  * A TAB THAT GOES AWAY inside the debounce loses the note entirely: 50 ms is
 //    nothing, and a hidden page has its timers frozen, so the pending callback
 //    may simply never run. `flush` awaits the write instead of scheduling it,
 //    and the main thread calls it on pagehide / visibilitychange-hidden.
@@ -700,7 +681,7 @@ function statics(): Record<string, (...a: any[]) => any> {
     // the church clamps, and the reading spec is the core's own tuning table.
     // They are on the STATIC path so the shell can ask for them before (or
     // without) an engine, which is what the church button and the dwell timer
-    // both need (H-10, H-11).
+    // both need.
     shareLink: (request: unknown) => shareLink(w, request as Parameters<typeof shareLink>[1]),
     readingSpec: () => readingSpec(w),
   };
@@ -771,19 +752,16 @@ self.onmessage = async (ev: MessageEvent) => {
         };
         const cfg = configLoad(booted.wasm) ?? {};
         // The language was set inside `boot`, before the engine opened — which is
-        // where it has to be, because the engine picks WHICH CORPUS to open. Doing
-        // it here left every German reader on the English text.
+        // where it has to be, because the engine picks WHICH CORPUS to open.
         // Opt-in: absent means off, so a first visit does NOT pull the analysis
         // pack in the background.
         const machineOn = cfg.machineAnalysis === true;
         // Tell the shell up front, so it never offers a "Load analysis" button
-        // for a load that is already on its way (feedback 2026-07-27).
+        // for a load that is already on its way.
         const rndAuto = await willAutoLoadRnd(machineOn, m.deferRnd === true);
         // What the folded-in reads actually cost this device, in the same trace
-        // as every other boot stage — so the thing F-11 moved is a number on a
-        // real phone rather than an argument. It is the same work either way;
-        // what changed is that it no longer needs four more queue hops to
-        // deliver it.
+        // as every other boot stage. It is the same work either way; what changed
+        // is that it no longer needs four more queue hops to deliver it.
         const x0 = performance.now();
         const palettes = {
           light: themePalette(booted.wasm, "light"),
@@ -811,7 +789,7 @@ self.onmessage = async (ev: MessageEvent) => {
           bundledOn: booted.home.bundledOn,
           rndAuto,
           fontFaces,
-          // FOLDED INTO THE BOOT REPLY (audit F-11). This thread is the only one
+          // FOLDED INTO THE BOOT REPLY. This thread is the only one
           // that can answer anything, so the shell's first four reads — three
           // theme palettes and the TOC — were four more full queue hops between
           // the boot reply and the first layout request, on the one path where
@@ -838,17 +816,14 @@ self.onmessage = async (ev: MessageEvent) => {
       case "static": {
         reply(timedCall(m.fn, () => statics()[m.fn](...m.args)));
         // Config writes land in the in-memory WASI home; mirror them to
-        // IndexedDB like any authoring write. Before this, config persisted
-        // only when an authoring write happened to follow — a pure reader's
-        // first-run choice (and pane layout) never survived a relaunch.
+        // IndexedDB like any authoring write.
         //
         // NOT `schedulePersist()`: config is written at exactly the moments the
         // page is about to go away — answering first run, then reloading;
         // choosing a theme, then closing the tab — and a 50 ms debounce is long
         // enough to lose all of them. `persistNow()` still reports failure and
-        // still retries; it just does not wait first. Debouncing this reopened
-        // the 2026-07-26 bug (the chooser returned on every launch) and
-        // app.spec.ts's "the first-run choice survives a relaunch" caught it.
+        // still retries; it just does not wait first. Debouncing this loses the
+        // first-run choice across a relaunch (app.spec.ts pins that it survives).
         if (m.fn === "configSave") void persistNow();
         break;
       }

@@ -1,10 +1,9 @@
 //! The reading-time tracker's C ABI — a shell says "another second passed with
 //! this chapter in front of somebody", and the core decides what it was worth.
 //!
-//! Before this (2026-08-01) each shell ran its own ~80-line copy of the counting:
-//! grace, idle, the tail-banking on the way out, and a hard-coded set of the
-//! thresholds it was in the middle of fetching from `spec`. Now the thresholds
-//! never leave the core and a shell owns only its clock and its window.
+//! The counting — grace, idle, the tail-banking on the way out, and the
+//! thresholds — lives in the core, not duplicated in each shell. A shell owns
+//! only its clock and its window; the thresholds never leave the core.
 //!
 //! Split out of `lib.rs` for the same reason `reading_map.rs` was — that file is
 //! already past the repo's no-3k-line rule. cbindgen walks the whole crate, so

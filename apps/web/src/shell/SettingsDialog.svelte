@@ -184,15 +184,15 @@
     // (Caught by e2e/language.spec.ts, which is the only thing that ever
     // exercised this: every other setting here takes effect without a reload.)
     // THE OVERLAY GOES UP FIRST, before any await. Everything below can take
-    // seconds — a config flush, a 2 MB download, a reload — and until this
-    // existed the reader tapped Deutsch and watched an unchanged English screen
-    // do nothing (UAT, 2026-08-03). It is full-screen rather than a line in this
-    // dialog because the reader's attention is on what they just tapped.
+    // seconds — a config flush, a 2 MB download, a reload — and without it the
+    // reader taps Deutsch and watches an unchanged English screen do nothing. It
+    // is full-screen rather than a line in this dialog because the reader's
+    // attention is on what they just tapped.
     // IN THE LANGUAGE BEING SWITCHED TO, not the one being left — "Wechsel zu
-    // Deutsch…", not "Switching to Deutsch" (UAT, 2026-08-03). The reader has
-    // already asked for that language; answering in the old one is the app
-    // lagging behind its own reader. `t()` still reads the live table, so the
-    // sentence is fetched from the target catalogue up front.
+    // Deutsch…", not "Switching to Deutsch". The reader has already asked for
+    // that language; answering in the old one is the app lagging behind its own
+    // reader. `t()` still reads the live table, so the sentence is fetched from
+    // the target catalogue up front.
     const target = await s.rpc
       .static("i18nCatalog", code, deviceLocale())
       .then((c: any) => c?.strings ?? null)
@@ -288,7 +288,7 @@
 
   // ── the reader's home church ────────────────────────────────────────────
   // Set it here, and every link this reader shares carries it, so a QR handed
-  // out at a service leads back to that service (2026-07-27).
+  // out at a service leads back to that service.
   let churchName = $state("");
   let churchInfo = $state("");
   let churchUrl = $state("");
@@ -312,14 +312,12 @@
   let offlineBusy = $state(false);
   let offlineProgress = $state(0);
   const mb = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
-  // "On this device" is a claim about BYTES, and only about bytes. It used to
-  // also require `rndState === "ready"`, which is a claim about whether this
-  // SESSION has finished preparing what it already downloaded — so a phone
-  // holding every byte was told "Still to download: the analysis pack" for the
-  // whole time the engine was busy parsing it (feedback 2026-07-28, with a
-  // screenshot, on a launch whose own trace showed the analysis pack coming off
-  // the device in 115 ms). Downloading and preparing are different waits and the
-  // reader is owed the difference.
+  // "On this device" is a claim about BYTES, and only about bytes — NOT about
+  // whether this SESSION has finished preparing what it already downloaded.
+  // Otherwise a phone holding every byte is told "Still to download: the
+  // analysis pack" for the whole time the engine is busy parsing it.
+  // Downloading and preparing are different waits and the reader is owed the
+  // difference.
   const offlineComplete = $derived(!!offline && offline.missing.length === 0);
   /** What is still missing, in a sentence — the text itself never is. */
   const offlineSummary = $derived.by(() => {
@@ -404,11 +402,10 @@
    *  NOT PERF-gated, and no line in here may become so (D-20). Every value below
    *  is a fact the app knows whatever the perf switch says — so flipping PERF
    *  cannot change one character of this, and a release build with measurement
-   *  off still pastes something answerable. While this lived inside the PERF
-   *  block the choice was to ship a debug build or to ship with nothing to paste.
+   *  off still pastes something answerable.
    *
    *  Screenshots are not the fallback: they cost a round trip every time and cut
-   *  off exactly the rows that mattered (2026-07-28). */
+   *  off exactly the rows that mattered. */
   function reportHeader(): string[] {
     const nav = navigator as any;
     const c = nav.connection ?? {};
@@ -488,8 +485,9 @@
   }
   /** Shown as well as copied. The clipboard can be refused (see below), and
    *  "select the text and copy it by hand" needs text on the screen to select —
-   *  the diagnostic tables used to be that text, and they are gone in a release
-   *  build. Derived, so what the reader reads is what the button copies. */
+   *  in a release build this is the only such text, since the diagnostic tables
+   *  render only in a measuring build. Derived, so what the reader reads is what
+   *  the button copies. */
   const reportText = $derived(report());
 
   async function copyReport(): Promise<void> {
@@ -814,10 +812,9 @@
       <p class="desc-note">{t("settings.dataDesc")}</p>
       <hr />
       <p class="label">{t("settings.report")}</p>
-      <!-- ALWAYS here, whether or not this build is measuring itself. This used to
-           live inside the PERF block below, so shipping with the perf switch off —
-           which is how it must ship — shipped with nothing to paste, and the only
-           other option was handing readers a debug build (D-20). -->
+      <!-- ALWAYS here, whether or not this build is measuring itself: the app
+           ships with the perf switch off, and a bug report still needs something
+           to paste without handing readers a debug build (D-20). -->
       <p class="desc-note">{t("settings.reportDesc")}</p>
       <div class="row">
         <button class="action" onclick={copyReport}>{copied ? t("settings.reportCopied") : t("settings.reportCopy")}</button>
@@ -908,8 +905,7 @@
   <!-- THE LANGUAGE TRANSITION.
        Full-screen and above everything, because a language change is the one
        setting that takes the whole app with it: a config write, possibly a 2 MB
-       download, then a reload. Before this the reader tapped Deutsch and watched
-       an unmoved English screen for several seconds (UAT, 2026-08-03).
+       download, then a reload.
 
        Styled like the SPLASH rather than like this dialog, and from the same
        palette variables — it hands straight over to the splash when the reload

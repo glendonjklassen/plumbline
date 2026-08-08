@@ -6,10 +6,9 @@
 // The wire JSON is camelCase (serde `rename_all = "camelCase"`). kotlinx uses a
 // property's own name as its JSON key, and every property here is already named
 // in the camelCase the wire emits (`verseDisplay`, `tokenIndex`, `otNtDivide`,
-// `aLaneFrac`, …), so no per-field @SerialName is needed. (The one that was —
-// `SimilarVerses.in`, serde-renamed to a Kotlin hard keyword — went with the
-// "verses like this" removal, 2026-07-30.) Decode through [PlumblineJson], which
-// ignores unknown keys so additive wire evolution never breaks an older shell.
+// `aLaneFrac`, …), so no per-field @SerialName is needed. Decode through
+// [PlumblineJson], which ignores unknown keys so additive wire evolution never
+// breaks an older shell.
 //
 // The tagged unions (search answer, panel block, panel link) arrive as a single
 // flat object with a discriminator (`kind` / `verb`); we mirror Wire.cs and read
@@ -44,12 +43,9 @@ data class TocBook(val id: String, val name: String, val chapters: Int)
 
 // There is deliberately NO `ReadingSpec` model here, and no `spec` field on the
 // two payloads below that carry one (the decoder ignores unknown keys, so the
-// wire is unchanged). It existed to hand the tracker its thresholds, and the
-// defaults it carried for the moment before the fetch landed were a second copy
-// of numbers the core owns — `wordsPerMinute` was still 220f two days after the
-// core moved to 300. The counting itself now lives in the core
-// (`reading::DwellTracker`, driven by `StudyEngine.ReadingTickJson`), so this
-// shell has no threshold to hold and no way to hold a stale one. 2026-08-01.
+// wire is unchanged). The counting lives in the core (`reading::DwellTracker`,
+// driven by `StudyEngine.ReadingTickJson`), so this shell has no threshold to
+// hold and no way to hold a stale one.
 
 /** One chapter's standing. `standing` (`unread` | `partial` | `read`) drives the
  *  hue, `glow` (0–1) the bloom, `pct` the fill. The core flattens its `Heat`
@@ -419,8 +415,7 @@ data class ConstellationEdgeData(
 
 // ── the symbolic concept engine ───────────────────────────────────────────────
 // Co-occurrence statistics over the corpus (APPEARS ALONGSIDE / MOST USED IN /
-// LEITWORT). The embedding-backed concept MAP that used to live here was removed
-// 2026-07-30 with the rest of the machine-similarity features.
+// LEITWORT).
 
 @Serializable
 data class Concept1(
@@ -492,22 +487,22 @@ data class ConfigState(
     val lineSpacing: Double = 1.35,
     // Reading history, most-recent-first (capped by the core). Additive.
     val history: List<PaneRef1> = emptyList(),
-    // Per-tier analysis gates (2026-07-25, additive): curated scholarship and
+    // Per-tier analysis gates (additive): curated scholarship and
     // machine/statistical tiers, independently switchable. Null in an older
     // file → the core derives them from studyMode.
     val humanAnalysis: Boolean? = null,
     val machineAnalysis: Boolean? = null,
-    /** The reader's home church (additive, 2026-07-27) — carried in shared
+    /** The reader's home church (additive) — carried in shared
      *  links by the web shell. Kept here so an Android save round-trips it
      *  instead of dropping it from the shared config. */
     val church: ChurchState? = null,
-    /** Present-screen shares open as a new believer (additive, 2026-07-27). */
+    /** Present-screen shares open as a new believer (additive). */
     val presentSharesAsNew: Boolean? = null,
     /** The plain-English overlay (the AKJV delta). Off unless asked. */
     val akjvOverlay: Boolean? = null,
     /** The welcome this reader was given, "new" | "curious" (additive). */
     val intro: String? = null,
-    /** The reader's interface language, as a code (additive, 2026-08-02).
+    /** The reader's interface language, as a code (additive).
      *  ABSENT OR EMPTY MEANS "follow the device" — not English. Writing "en" the
      *  first time a locale resolved would have frozen that reader into English
      *  permanently. `i18n::resolve` in the core weighs this against the platform
@@ -638,7 +633,7 @@ data class BridgePartners(val code: String, val partners: List<BridgePartner> = 
 @Serializable
 data class MemoryCard(
     val ref: String = "",
-    /** Reader-facing name: "Ps 23:1–6" for a passage card (additive, 2026-07-27). */
+    /** Reader-facing name: "Ps 23:1–6" for a passage card (additive). */
     val label: String = "",
     /** The passage's last verse, when this card spans one. */
     val through: String? = null,
@@ -662,7 +657,7 @@ data class MemoryCoverage(
     /** Per-verse shading for the coverage map — a passage card contributes
      *  every verse it covers. */
     val verses: List<VerseCoverage> = emptyList(),
-    /** One row per card, for the hub's list (additive, 2026-07-27). */
+    /** One row per card, for the hub's list (additive). */
     val cards: List<CardSummary> = emptyList(),
     val sections: List<SectionCoverage> = emptyList(),
 )

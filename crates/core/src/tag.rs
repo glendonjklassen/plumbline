@@ -117,7 +117,7 @@ pub struct Tag {
 }
 
 /// The on-disk shape. `overlay-tag-v1` files written before highlights were
-/// removed (2026-07-29) may still carry `color` and `highlights` keys; those two
+/// removed may still carry `color` and `highlights` keys; those two
 /// load as ordinary unknown keys and are then dropped by name (see
 /// [`Tag::extra`]), so the dead keys still fall away the next time the tag is
 /// written. Nothing about a tag's MEMBERS changed, so no reader loses a tag.
@@ -170,9 +170,9 @@ impl<'de> Deserialize<'de> for Tag {
             return Err(D::Error::custom(format!("unknown tag format: {}", r.format)));
         }
         let mut extra = r.extra;
-        // Highlights and the tag colour that went with them were removed
-        // 2026-07-29. We know these two keys and have retired them, so they are
-        // dropped rather than preserved for ever.
+        // Highlights and the tag colour that went with them were removed. We
+        // know these two keys and have retired them, so they are dropped rather
+        // than preserved for ever.
         extra.remove("color");
         extra.remove("highlights");
         Ok(Tag {
@@ -404,7 +404,7 @@ mod tests {
 
     #[test]
     fn a_tag_file_from_before_highlights_were_removed_still_loads() {
-        // Highlights (and tag colour with them) were removed 2026-07-29. Readers
+        // Highlights (and tag colour with them) were removed. Readers
         // upgrading have `overlay-tag-v1` files on disk that still carry both
         // keys, and losing a reader's TAG because it once had a colour would be
         // unforgivable. Serde ignores unknown fields, so the tag loads whole and
@@ -431,7 +431,7 @@ mod tests {
         assert_eq!(again, t);
     }
 
-    /// AUDIT 2026-07-29 forward compatibility: the on-disk formats evolve
+    /// Forward compatibility: the on-disk formats evolve
     /// **additively** (CLAUDE.md §Data formats), and a sideloaded APK never
     /// auto-updates — so a key this build drops is dropped for good on that
     /// device. A tag written by a later build has to come back out whole, on the

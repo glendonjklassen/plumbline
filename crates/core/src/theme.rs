@@ -15,7 +15,7 @@
 //! it is why the light muted tones are deeper than the ones the shells first
 //! shipped with: `faded`, `gold`, `section`, the tiers, `mono` and `lemma` all sat
 //! between 2.5:1 and 4.0:1 on the warm paper, which is a muted tone you can't
-//! quite read (2026-07-29). The hues are the same; only the lightness moved.
+//! quite read. The hues are the same; only the lightness moved.
 
 use serde::{Deserialize, Serialize};
 
@@ -211,8 +211,7 @@ pub struct Palette {
     ///
     /// A chapter never read. GOLD, and glowing from the first launch: unopened
     /// scripture should read as treasure worth going after, not as a gap in a
-    /// checklist (2026-07-29 — it was a cold slate that "doesn't feel like a
-    /// treasure I want to explore", and it was right).
+    /// checklist.
     pub read_unread: String,
     /// A chapter partway through — copper, clearly darker than the unread gold so
     /// "started" never reads as "untouched".
@@ -283,7 +282,7 @@ pub fn palette(theme: Theme) -> Palette {
             ink: "#e8e0d0".into(),
             faded: "#9a9385".into(),
             // Barely below the ink: on dark paper a dimmed added-word grey read
-            // as "darkened" and broke the reading flow (feedback 2026-07-26) —
+            // as "darkened" and broke the reading flow —
             // the italic slant carries the distinction, the tint only whispers.
             added: "#d9cfba".into(),
             divine: "#d8b48c".into(),
@@ -526,7 +525,7 @@ mod tests {
 
     /// The light anchors that must not drift: the paper and ink the whole look
     /// is built on, the tier-God/gold identity the panel relies on, and the
-    /// unread gold (deliberately treasure-bright, 2026-07-29). Everything else in
+    /// unread gold (deliberately treasure-bright). Everything else in
     /// the light palette is governed by the contrast test below, not by a hex.
     #[test]
     fn light_anchors_hold() {

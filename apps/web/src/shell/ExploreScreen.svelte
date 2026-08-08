@@ -1,12 +1,7 @@
 <script lang="ts">
   // Explore, as its own SCREEN — the Android twin is ui/ExploreScreen.kt.
   //
-  // It used to be a `kind: "explore"` inside the study panel, which on a phone is
-  // a bottom sheet: you asked for the app's whole toolbox and got a card deck
-  // sliding up over the verse you were reading, at 62% of the height, with the
-  // reader still scrolling behind it. Feedback 2026-07-29, and fair — "its weird
-  // as a swipe up. See Android." A destination should replace the reader, not
-  // hover over it.
+  // A destination should replace the reader, not hover over it.
   //
   // The cards themselves are unchanged: each study tool with a sentence saying
   // what it is, because "Suggested" and "Constellation" mean nothing cold.

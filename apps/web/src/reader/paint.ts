@@ -13,8 +13,7 @@ export const MARGIN = 28; // top/bottom text margin (manifest constant)
 // one to the core's own constant. Names and values must match that header
 // exactly, and every paint site below tests one of these rather than a number:
 // `flag_bits_are_mirrored_by_both_shells` (crates/ffi/src/tests.rs) fails on
-// either. FLAG_RERENDERED spent its life as a bare 16 here, mirroring nothing,
-// because the ffi crate never exported it (fixed 2026-07-29).
+// either.
 export const FLAG_ADDED = 1;
 export const FLAG_DIVINE = 2;
 export const FLAG_TITLE = 4;
@@ -178,10 +177,6 @@ let lastPainted: WeakRef<readonly LayoutItem[]> | null = null;
  * Weak, so an entry dies with the display list it describes rather than pinning
  * every chapter the reader has visited.
  *
- * Before this, `paintChapter` rebuilt the map inside every frame: all 2,643 of
- * Psalm 119's items walked per frame, for data that changes only when the layout
- * does — and walked through the deep-state proxy that item 1 of this change
- * removed, which measured 2.30 ms against 0.10 ms raw.
  * `e2e/reader-perf.spec.ts` counts the computations across a real scroll.
  */
 const extentsMemo = new WeakMap<readonly LayoutItem[], VerseExtents>();
@@ -294,19 +289,17 @@ export function paintChapter(
       ctx.fillStyle = p.ink ?? "#211f1a";
     }
     ctx.fillText(it.text, x, y);
-    // NO mark for a Strong's-tagged word. There used to be a faint gold rule
-    // under every one of them, and since most words carry a Strong's number it
-    // amounted to underlining the Bible: visual noise that told the reader
-    // nothing they act on. Whether a word answers when tapped is something you
-    // learn once, not something the page needs to keep saying (2026-07-28).
+    // NO mark for a Strong's-tagged word. A faint gold rule under every one of
+    // them — and most words carry a Strong's number — amounts to underlining the
+    // Bible: visual noise that tells the reader nothing they act on. Whether a
+    // word answers when tapped is something you learn once, not something the
+    // page needs to keep saying.
     if (it.flags & FLAG_RERENDERED) {
-      // The AKJV overlay's mark: DOTTED, at the natural underline depth — it sat
-      // 3px lower while it had to clear the Strong's rule above it, and moved up
-      // when that went. Dotted rather than bold or grey because weight and colour
-      // are already spoken for (italics mean "supplied by the translator") and
-      // because at 6.9% of words a heavier mark would read as a ransom note
-      // rather than as text. It also survives a band, which a
-      // background tint would not.
+      // The AKJV overlay's mark: DOTTED, at the natural underline depth. Dotted
+      // rather than bold or grey because weight and colour are already spoken for
+      // (italics mean "supplied by the translator") and because at 6.9% of words
+      // a heavier mark would read as a ransom note rather than as text. It also
+      // survives a band, which a background tint would not.
       ctx.save();
       ctx.strokeStyle = withAlpha(gold, 0.75);
       ctx.lineWidth = 1;

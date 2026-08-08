@@ -9,7 +9,7 @@
   [docs/FEATURE-MANIFEST.md](docs/FEATURE-MANIFEST.md) under shell deltas.
   That manifest is the parity contract — read it before shell work instead
   of re-surveying the repo. (The GTK and WinUI desktop shells were retired
-  and removed 2026-07-25 — git history has them; ignore stale references.)
+  and removed — git history has them; ignore stale references.)
 - Distribution: the PWA (apps/web) for most people; the signed APK on GitHub
   Releases for rooted/sideloading users. No Play Store, no Google account.
 - `../overlay` (Haskell) is the read-only reference implementation — port
@@ -47,16 +47,16 @@ offline pipeline that produced the data pack is documented in
 
 ## Architecture
 
-Decisions locked 2026-07-08, still in force:
+Decisions in force:
 
 | # | Decision | Choice |
 |---|----------|--------|
-| 1 | UI strategy | **Native shell per platform** over a shared Rust core. Today: Jetpack Compose (Android, the UX gold standard) + a PWA (web) covering every desktop. The GTK/WinUI desktop shells were built first and retired 2026-07-25. |
+| 1 | UI strategy | **Native shell per platform** over a shared Rust core. Today: Jetpack Compose (Android, the UX gold standard) + a PWA (web) covering every desktop. The GTK/WinUI desktop shells were built first and retired. |
 | 2 | Build order | Desktop first (GTK4) → Windows → Android → web; the desktops then retired in favour of the PWA. |
 | 3 | Data delivery | **Bundle core, download R&D** — KJV + Strong's ship in-app; heavy analytics artifacts are optional packs. |
-| 4 | R&D default | **Guided first-run** — first launch picks the analysis tiers (scholars' / machine) with examples; the text and the reader's own data are always on (revised 2026-07-25 from the original Simple/Full split). |
+| 4 | R&D default | **Guided first-run** — first launch picks the analysis tiers (scholars' / machine) with examples; the text and the reader's own data are always on. |
 | — | Patches / signed rules | Dropped — the Ed25519 point-patch/rule layer was not ported. |
-| — | Future | The paid sync SaaS was **cancelled 2026-07-25** — the product is entirely free. Keep the data-model discipline it imposed anyway (stable ids, no host-local assumptions, exportable single-file JSON). |
+| — | Future | The paid sync SaaS was **cancelled** — the product is entirely free. Keep the data-model discipline it imposed anyway (stable ids, no host-local assumptions, exportable single-file JSON). |
 
 ```
 Rust core (pure, headless, fully testable)
@@ -129,18 +129,20 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
   engine call starves every layout/tap RPC queued behind it. Background
   loading must stay chunked with yields (see `engine.worker.ts`).
 - **Mutation-test any regression test you add.** Break the fix, watch the new
-  test fail, restore. Two tests written on 2026-07-26 passed against the very
-  bug they described: one used `page.route()` (Playwright interception
-  **bypasses service workers** — SW behaviour must be driven by a real
-  stalling origin, see `e2e/network.spec.ts`), the other used a fixed
-  millisecond ceiling that a whole un-chunked warm still fit inside (budgets
-  for worker-scheduling tests must be **derived from the machine's own
-  measured chunk cost**, not a constant). A third on 2026-08-03: a *ratio*
-  between two things that BOTH regress. It compared a German chapter turn
-  against an English one to catch a per-word cost, and passed against the very
-  bug it described because the defect slowed English too. **A comparative
-  budget cannot see a cost both sides pay** — calibrate against something the
-  defect does not touch (there, the same chapter re-served from the turn cache).
+  test fail, restore. Three traps let a test pass against the very bug it
+  describes:
+  - `page.route()` (Playwright interception) **bypasses service workers** — SW
+    behaviour must be driven by a real stalling origin, see
+    `e2e/network.spec.ts`.
+  - a fixed millisecond ceiling that a whole un-chunked warm still fits inside —
+    budgets for worker-scheduling tests must be **derived from the machine's own
+    measured chunk cost**, not a constant.
+  - a *ratio* between two things that BOTH regress (a German chapter turn against
+    an English one, to catch a per-word cost, where the defect slows English
+    too). **A comparative budget cannot see a cost both sides pay** — calibrate
+    against something the defect does not touch (e.g. the same chapter re-served
+    from the turn cache).
+
   A mutation is also only faithful if the artifact under test was actually
   rebuilt: `pack:wasm` stages to `public/`, and only `npm run build` copies it
   into `dist/`, so a skipped build tests the *fixed* engine twice and reports
@@ -205,16 +207,16 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
   `dist/plumbline_ffi.wasm`. Run `cargo build -p plumbline-ffi --release --target
   wasm32-wasip1 && npm run pack:wasm` before `npm run build`, or Playwright will
   test the last engine you packed and report failures that are stale by
-  construction. This has cost time twice (2026-07-29): once on a theme colour that
-  looked unchanged, once on removed ABI endpoints that looked still-present.
+  construction. The two ways this bites: a theme colour that looks unchanged,
+  and removed ABI endpoints that look still-present.
 - **Same rule for Android, and it is easier to miss: gradle does NOT build the
   engine.** The APK embeds whatever `.so` is sitting in
   `apps/android/app/src/main/jniLibs`, and only `cargo ndk` puts it there. A
   gradle build after a crate change succeeds, its unit tests pass (they are JVM
   tests and never load the native library), lint is clean — and the APK you hand
-  over runs the engine from whenever you last cross-compiled. Caught 2026-07-30
-  with the `.so` **two days stale**, so an on-device UAT would have been testing an
-  engine that predated the whole batch. Before building an APK for anyone to run:
+  over runs the engine from whenever you last cross-compiled. A stale `.so` means
+  an on-device UAT tests an engine that predates your changes. Before building an
+  APK for anyone to run:
   `ANDROID_NDK_HOME=/opt/android-ndk cargo ndk -t arm64-v8a -t x86_64 --platform 26
   -o apps/android/app/src/main/jniLibs build -p plumbline-ffi --release`. To check
   an APK really has it, `unzip -l` it and compare the `.so`'s size with the one on
@@ -226,7 +228,7 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
 - Tag `v*` → `.github/workflows/release.yml` builds a signed Android APK
   (arm64-v8a + x86_64) and attaches it to a GitHub Release — the repo is the
   download page — and deploys the PWA to GitHub Pages at
-  <https://plumblinebible.org/> (custom domain live 2026-07-25; the old
+  <https://plumblinebible.org/> (custom domain; the old
   glendonjklassen.github.io/plumbline URL 301s there).
 - The APK job needs four repo secrets — `ANDROID_KEYSTORE_BASE64`,
   `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`

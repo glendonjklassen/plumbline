@@ -109,7 +109,7 @@
          measured and published by Shell (0 at desktop widths, where there is no
          bar), so this never restates a height that would drift. Getting it wrong
          hides the bottom of the sheet — which for a picker is the "New …" field
-         and its Add button, i.e. the whole point of opening it (2026-07-29). */
+         and its Add button, i.e. the whole point of opening it. */
       bottom: var(--bottomNavH, 0px);
       left: 0;
       transform: none;

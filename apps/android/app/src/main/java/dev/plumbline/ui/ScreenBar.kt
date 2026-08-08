@@ -1,11 +1,6 @@
 // ONE bar for every destination that has one (web twin lib/ScreenBar.svelte).
-//
-// Explore, Memorize and the Hymnal each grew their own and they had drifted:
-// 2dp / 8dp / 2dp horizontal padding, 4dp / 6dp / 4dp vertical, and the title
-// carrying an explicit 18sp in Memorize but nothing at all in MapOverlay and the
-// Hymnal — so the same heading rendered at two different sizes depending on
-// which tab you were on. Switching tabs made the chrome jump (feedback
-// 2026-08-02).
+// Explore, Memorize and the Hymnal each grew their own and drifted, so the same
+// heading rendered at different sizes and switching tabs made the chrome jump.
 //
 // The metrics match the app's TopBar, so a destination's bar reads as the same
 // furniture one row down rather than a different screen's idea of a header.

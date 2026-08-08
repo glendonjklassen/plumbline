@@ -1,6 +1,6 @@
 package dev.plumbline.ui
 
-// Study-data backup/restore (2026-07-25): the authored home dirs as a zip via
+// Study-data backup/restore: the authored home dirs as a zip via
 // SAF. The archive layout is shared with the web shell's Settings backup —
 // authored dirs at the zip root, the config under ".config/" — so one zip
 // restores across devices.
@@ -46,11 +46,8 @@ private val BACKUP_DIRS = listOf("tags", "threads", "weaves", "notes", "memory",
 private const val RESTORE_STAGE = ".restore-tmp"
 
 /** One restore at a time, because [RESTORE_STAGE] is ONE directory for the
- *  whole process and the first thing a restore does is wipe it.
- *
- *  This was free while the zip ran on the main thread — two restores could not
- *  overlap because the UI could not accept the second tap — and moving the I/O
- *  to a background dispatcher is exactly what takes that away. Two overlapping
+ *  whole process and the first thing a restore does is wipe it. The I/O runs
+ *  on a background dispatcher, so two taps can overlap: two overlapping
  *  restores would have the second's `deleteRecursively` delete the first's
  *  staged files out from under it, and the first would then fail its
  *  did-everything-unpack check, having already told the reader nothing.
@@ -103,8 +100,8 @@ internal fun restoreDestination(entryName: String): String? {
  *  staged file *is* the temp file of store.rs's temp+rename, so publishing it is
  *  one atomic rename and no destination is ever half-written. A truncated
  *  download or a bad CRC leaves the reader's study data exactly as it was;
- *  streaming entries straight over the home, as this used to, left it
- *  half-overwritten with no way back. */
+ *  streaming entries straight over the home would leave it half-overwritten
+ *  with no way back. */
 internal fun restoreZipInto(home: File, openZip: () -> InputStream): Int = synchronized(restoreLock) {
     val stage = File(home, RESTORE_STAGE)
     stage.deleteRecursively() // an attempt that died mid-flight leaves one behind
@@ -218,11 +215,10 @@ fun restoreBackupZip(context: Context, home: File, uri: Uri): Int =
 /** The two Settings rows: back up to a zip, restore from one (then the
  *  activity recreates so the engine re-opens over the restored home).
  *
- *  BOTH ZIPS RUN OFF THE MAIN THREAD (2026-07-30). They used to run inside the
- *  SAF result callback, which is the main thread: a backup walks every authored
+ *  BOTH ZIPS RUN OFF THE MAIN THREAD: a backup walks every authored
  *  dir and deflates it into a stream the content provider owns, and a restore
- *  unpacks, fsyncs and renames every entry — file I/O of unbounded size on the
- *  thread that draws.
+ *  unpacks, fsyncs and renames every entry — file I/O of unbounded size that
+ *  must not sit on the thread that draws.
  *
  *  The `runCatching` stays INSIDE the dispatch, and that placement is the whole
  *  of the error contract. It turns a throw into the same -1 the reader was

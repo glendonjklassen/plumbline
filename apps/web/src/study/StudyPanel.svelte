@@ -11,11 +11,9 @@
 
   const s = getSession();
 
-  // NO EMBEDDED MAP CARD. The study surface used to open with a compact canon
-  // strip that tapped through to the concept map; both went on 2026-07-30 with
-  // the concept embedding behind them. The machine tier's remaining sections are
-  // the symbolic concept engine's, and they are ordinary blocks — they come
-  // through `blocks` below like everything else.
+  // NO EMBEDDED MAP CARD. The machine tier's sections are the symbolic concept
+  // engine's, and they are ordinary blocks — they come through `blocks` below
+  // like everything else.
 
   // Notes browser (Explore ▸ Notes parity): every personal note, tap → verse,
   // edit in place. Built shell-side from user_notes_json (no block producer).
@@ -80,21 +78,17 @@
    *  does. Also in App.svelte and MemorizeHost — see App.svelte for why. */
   const goUri = (refKey: string): string => `go:${refKey.replace(/ (?=\S*$)/, ":")}`;
 
-  // The "load analysis" offer — a LAST RESORT, and no longer a progress bar.
-  //
-  // The bar and its percentage are gone (feedback 2026-07-28). They existed to
-  // explain a wait the reader was made to sit through: the analysis load used to
-  // block the one thread that answers taps, so the panel had to account for
-  // itself. It does not block anything now — sections appear as their data
-  // arrives — and a progress bar over a study that is already usable narrates a
-  // problem the reader does not have.
+  // The "load analysis" offer — a LAST RESORT, not a progress bar. The load does
+  // not block the one thread that answers taps; sections appear as their data
+  // arrives, so a progress bar over a study that is already usable would narrate
+  // a problem the reader does not have.
   //
   // What remains is the one case that is a genuine ASK rather than a status: a
   // reader on Data Saver who has not got the pack, where downloading it is their
   // decision to make. `rndDeferred` is false whenever the load is already coming,
-  // so this stays invisible for everyone else — before that, every phone launch
-  // put a one-time-download button in front of someone who had already taken the
-  // download (feedback 2026-07-27).
+  // so this stays invisible for everyone else — otherwise every phone launch
+  // would put a one-time-download button in front of someone who had already
+  // taken the download.
   const rndOffer = $derived.by(() => {
     const k = s.panel?.kind;
     if (!(k === "wordStudy" || k === "codeStudy" || k === "concordance")) return false;
@@ -103,28 +97,16 @@
     return s.rndDeferred && s.rndState !== "loading";
   });
 
-  // GONE: "The first one takes a few seconds… Every look after this is instant."
-  //
-  // It was an apology for a bug, and it was not even accurate. "Every look after
-  // this" meant every look until the tab closed — the next launch rebuilt the
-  // same indexes and said it again, which is what made a reader who had used the
-  // app for days keep being told it was their first time (feedback 2026-07-28).
-  //
-  // The wait it was apologising for is gone too: the engine no longer builds an
-  // index inside a reader's request, so a study answers immediately with what is
-  // ready and fills in when `warmReady` lands. There is nothing left to warn
-  // about, and a message that explains a wait the reader is not having is worse
-  // than silence. "— loading —" remains for the moment the worker is genuinely
-  // still answering.
+  // NO "first look is slow" warning. The engine does not build an index inside a
+  // reader's request, so a study answers immediately with what is ready and fills
+  // in when `warmReady` lands — there is nothing to warn about. "— loading —"
+  // remains for the moment the worker is genuinely still answering.
 
-  // The reader's text-size setting scales the whole study surface too —
-  // fixed 380px/13px chrome reads tiny on a 4K display (feedback 2026-07-25).
-  // Everything inside multiplies by --uiScale (1 at the default 18px body).
-  //
-  // The variable is published on `:root` now (app.css, lib/uiScale.ts) and the
-  // rest of the chrome multiplies by the same one, so this panel no longer
-  // computes a private copy of it. It was the only surface that scaled; that it
-  // had to say so itself is what kept the other thirteen from doing it.
+  // The reader's text-size setting scales the whole study surface too — fixed
+  // 380px/13px chrome reads tiny on a 4K display. Everything inside multiplies by
+  // --uiScale (1 at the default 18px body), which is published on `:root`
+  // (app.css, lib/uiScale.ts) and shared by every surface — this panel does not
+  // compute a private copy.
 </script>
 
 {#if s.panel}
@@ -171,9 +153,9 @@
              "— loading —" is the honest thing to show. -->
         {#if blocks?.length}
           <BlockList {blocks} {onLink} />
-          <!-- Which build is this? Neither of us could answer that from a
-               screenshot (feedback 2026-07-27), and "have you relaunched yet"
-               is a terrible way to debug. The release tag identifies the code,
+          <!-- Which build is this? You cannot answer that from a screenshot, and
+               "have you relaunched yet" is a terrible way to debug. The release
+               tag identifies the code,
                the pack version identifies the DATA (it moves independently),
                and the build id separates two deploys of the same tag. -->
           {#if s.panel.kind === "about"}
@@ -339,14 +321,13 @@
   }
   /* Phones: bottom sheet (Compose-phone pattern).
 
-     THE BREAKPOINT IS 700, matching `s.narrow` and the destination bar, and it
-     used to be 900 — which put every viewport from 701 to 900 in a band where
-     the shell behaved like a desktop (top bar, up to three reading panes) but
-     the study surface still covered the reader as a sheet. An unfolded Pixel
-     Fold browser is ~840 px and landed exactly there, so the one thing the
-     Android app gives you on that hardware — scripture and study side by side —
-     was the one thing the PWA withheld. Android decides by fold posture, the web
-     by width, and 700 is the only width the rest of this shell agrees on. */
+     THE BREAKPOINT IS 700, matching `s.narrow` and the destination bar. Above it
+     the shell behaves like a desktop (top bar, up to three reading panes), so the
+     study surface must sit beside the text rather than cover the reader as a
+     sheet — an unfolded Pixel Fold browser is ~840 px and needs the side-by-side
+     scripture and study the Android app gives it on that hardware. Android
+     decides by fold posture, the web by width, and 700 is the only width the
+     rest of this shell agrees on. */
   @media (max-width: 700px) {
     .panel {
       position: fixed;
@@ -356,7 +337,7 @@
          measured and published by Shell (0 at desktop widths, where there is no
          bar), so this never restates a height that would drift. Getting it wrong
          hides the bottom of the sheet — which for a picker is the "New …" field
-         and its Add button, i.e. the whole point of opening it (2026-07-29). */
+         and its Add button, i.e. the whole point of opening it. */
       bottom: var(--bottomNavH, 0px);
       top: auto;
       width: auto;

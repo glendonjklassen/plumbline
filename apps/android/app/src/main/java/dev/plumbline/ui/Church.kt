@@ -1,6 +1,6 @@
 // The home church a shared link carries — the shell half of `core::church`.
 //
-// The point (2026-07-27): one QR hands over both the Bible and the people who
+// The point: one QR hands over both the Bible and the people who
 // sent it. Whoever shares sets their church in Settings; the link they share
 // carries it; whoever opens that link has it saved locally and sees it in the
 // welcome, so a card handed out at a service leads back to that service.
@@ -9,19 +9,16 @@
 // deciding whether to open a link should be able to see what is in it, and a
 // church that mistypes its own details can fix them by reading the URL.
 //
-// 2026-08-01: the clamps, the link and the checks moved into the core
-// (`crates/core/src/church.rs`) and are reached through one ABI call. They had
-// been written twice, once here and once in the web's `shell/church.ts`, and the
-// copies had drifted:
-//
-//   * `Uri.appendQueryParameter` percent-encodes; `URLSearchParams` form-encodes.
-//     Both decode back, so both links worked — except that `Uri` leaves a literal
-//     `+` alone and the receiving `URLSearchParams` reads a bare `+` as a SPACE,
-//     so "Faith + Hope Chapel" reached the recipient as "Faith  Hope Chapel".
-//   * The web's `shareUrl` did not clean its argument; this one did.
+// The clamps, the link and the checks live in the core
+// (`crates/core/src/church.rs`) and are reached through one ABI call — one
+// implementation shared with the web's `shell/church.ts`, not two that can
+// drift.
 //
 // The core follows the web's encoding, because the thing that opens a shared
-// link is always the web app.
+// link is always the web app: `Uri.appendQueryParameter` percent-encodes while
+// `URLSearchParams` form-encodes, and a literal `+` that `Uri` leaves alone is
+// read back by `URLSearchParams` as a SPACE — so "Faith + Hope Chapel" would
+// otherwise reach the recipient as "Faith  Hope Chapel".
 //
 // Every call here is engine-independent and pure string work — no engine lock,
 // nothing that touches the disk — so it is safe from a composition. Prefer
@@ -64,7 +61,7 @@ val PWA_URL: String by lazy { shareOf(null).base }
  * Bible — the recipient's welcome opens on the new-believer path instead of
  * asking them to pick. ONLY the Present screen sets it: an ordinary share goes
  * to whoever, often someone from the same church, and must stay an ordinary
- * link (2026-07-27). [at] opens the recipient straight at a verse, which is what
+ * link. [at] opens the recipient straight at a verse, which is what
  * a shared PASSAGE means; the refKey ("Ps 23:1") is the frozen compact form.
  *
  * [base] is for the one caller that already holds a finished link and only wants

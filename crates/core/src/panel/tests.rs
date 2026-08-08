@@ -379,8 +379,8 @@ fn verse_extras_gate_on_full_and_prebake_author_uris() {
     assert!(u.contains(&"untag:0:John 3:16".to_string()));
     assert!(blocks.iter().any(|b| text_of(b) == "Or, begotten"));
     // Text-only mode drops the TSK tier but KEEPS the reader's own data:
-    // author actions, tags, margin notes, weave xrefs (2026-07-25 change —
-    // tags accumulate in any mode).
+    // author actions, tags, margin notes, weave xrefs — tags accumulate in any
+    // mode.
     let mut simple = f;
     simple.full = false;
     let sb = word_study(&simple, simple.full, "John 3:16", 1, &["G2316".to_string()]);
@@ -754,7 +754,7 @@ fn guide_and_about_render_combined() {
 /// Roughly forty paragraphs of it lived as literals in this file — every other
 /// user-visible string had been moved into the catalogue, so a German reader met a
 /// fully German app right up until they opened Guide & About, and then met a wall
-/// of English (2026-08-04).
+/// of English.
 ///
 /// The completeness test in `i18n.rs` proves every id HAS German. It cannot prove
 /// the guide asks for those ids: literals left behind would sail past it, since a

@@ -1,10 +1,10 @@
 //! The reading map's C ABI — where the reader has been, and how long ago.
 //!
-//! Split out of `lib.rs` (2026-07-28) rather than added to it: that file was
-//! already past the repo's no-3k-line-files rule at 4,069 lines, and a feature's
-//! worth of endpoints had no business pushing it further. Nothing else moves —
-//! these are the same flat `extern "C"` fns bound the same way, and cbindgen
-//! walks the whole crate, so the generated header is unchanged by the move.
+//! Split out of `lib.rs` rather than added to it: that file is already past the
+//! repo's no-3k-line-files rule, and a feature's worth of endpoints had no
+//! business pushing it further. These are the same flat `extern "C"` fns bound
+//! the same way, and cbindgen walks the whole crate, so the generated header is
+//! unchanged by the move.
 //!
 //! All of these tolerate an engine with no home (opened from bytes): the map
 //! reads as "nothing recorded" rather than failing, so the navigator still opens.

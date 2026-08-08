@@ -198,7 +198,7 @@
       {#if lang !== s.hymnLang}
         <!-- The reader's language is a PREFERENCE, not a promise: a hymn that
              exists in one language only shows that one. Saying so beats silently
-             handing a German reader an English hymn (UAT, 2026-08-03). -->
+             handing a German reader an English hymn. -->
         <p class="fellback">
           {t("hymnal.notInYourLanguage", { language: endonym(s.hymnLang), shown: endonym(lang) })}
         </p>

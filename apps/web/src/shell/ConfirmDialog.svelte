@@ -3,11 +3,6 @@
   // and lands here, so whether something asks before destroying it is a property
   // of the action rather than of whoever wrote its button.
   //
-  // Before this, deleting a memorize card asked nothing, rejecting a suggested
-  // weave asked nothing, untagging asked nothing, and deleting a thread had its
-  // own inline prompt built by hand (2026-07-29). Four different answers to one
-  // question.
-  //
   // It sits above the destination bar like every other surface, and Escape is a
   // "no" — a confirmation the reader cannot back out of is not a confirmation.
   import { getSession } from "../state/session.svelte";
