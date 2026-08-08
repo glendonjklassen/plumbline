@@ -185,9 +185,9 @@ fn mutual_knn_ids(k: usize, n_ids: usize, edges: &HashMap<u64, f32>) -> HashMap<
         .into_iter()
         .map(|mut list| {
             // Weight first, then id: without the id tie-break the truncation
-            // depended on HashMap iteration order, so two runs over identical
-            // data could keep different neighbours (2026-07-27). Id order is
-            // string order, so this matches the rest of the pipeline.
+            // depends on HashMap iteration order, so two runs over identical
+            // data could keep different neighbours. Id order is string order,
+            // so this matches the rest of the pipeline.
             list.sort_by(|x, y| y.1.total_cmp(&x.1).then_with(|| x.0.cmp(&y.0)));
             list.truncate(k);
             list.into_iter().map(|(n, _)| n).collect()
@@ -608,10 +608,9 @@ mod tests {
 //
 // The whole model used to be one synchronous call. On the web that call runs on
 // the ONE worker thread that also answers layout and taps, and it is the single
-// heaviest thing the boot warm does — ~640ms in wasm, during which a tap waits
-// (feedback 2026-07-27). Nothing here is slower than it was; it is the same
-// pipeline with a cursor at every expensive step, so the shell can come back
-// between slices.
+// heaviest thing the boot warm does — ~640ms in wasm, during which a tap waits.
+// Nothing here is slower than it was; it is the same pipeline with a cursor at
+// every expensive step, so the shell can come back between slices.
 //
 // Every stage that costs real time walks an INDEXABLE collection: the corpus by
 // verse ordinal, and the intermediate maps materialised into vectors at the
@@ -759,7 +758,7 @@ impl ConceptBuilder {
                 // weight-then-code, communities by summed weight then smallest
                 // label), so edge order cannot reach the output. Sorting 600k
                 // pairs to get the same answer cost a 259ms chunk — the single
-                // worst thing the warm did (2026-07-27).
+                // worst thing the warm did.
                 self.enter_stage(Stage::Ppmi)
             }
             Stage::Ppmi => {

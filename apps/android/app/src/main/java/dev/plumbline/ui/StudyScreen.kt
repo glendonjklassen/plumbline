@@ -121,7 +121,7 @@ import kotlinx.serialization.encodeToString
 /** What the second (right) pane shows in fold mode. */
 private enum class SecondPane { Study, Bible }
 
-/** The bottom-nav destinations (one-handed reach — product call, 2026-07-24).
+/** The bottom-nav destinations (one-handed reach).
  *  Present is a launcher on the same bar but renders as a fullscreen overlay. */
 private enum class Dest { Read, Explore, Memorize, Hymnal }
 
@@ -167,11 +167,10 @@ fun PlumblineApp(
     }
     // Garamond for the chrome too, matching the web shell (see ui/Typography.kt).
     MaterialTheme(colorScheme = scheme, typography = rememberSerifTypography()) {
-        // NAMED, not positional. `onLanguage` was added with a `{}` default and
-        // then not forwarded here — so the compiler said nothing, the picker
-        // called the no-op, and switching to Deutsch closed the dialog and did
-        // nothing else (UAT, 2026-08-03). A defaulted parameter cannot be
-        // forgotten if every argument is named.
+        // NAMED, not positional: a defaulted parameter (like `onLanguage`, which
+        // carries a `{}` default) is silently dropped if a positional call omits
+        // it — the compiler says nothing and the picker calls the no-op. Every
+        // argument named means it cannot be forgotten.
         StudyScreen(
             engine = engine,
             fold = fold,
@@ -218,6 +217,11 @@ fun StudyScreen(
     // Second Bible pane state (for Bible∥Bible in fold mode).
     var secondBook by remember { mutableStateOf(lastPane?.book ?: "John") }
     var secondChapter by remember { mutableStateOf(lastPane?.chapter?.takeIf { it > 0 } ?: 3) }
+    // The fold's second pane scrolls to its own target verse — a weave's `b`
+    // endpoint — tracked apart from the primary pane's pendingVerse/navEpoch so
+    // the two panes land on their own verses independently.
+    var secondPendingVerse by remember { mutableStateOf<Int?>(null) }
+    var secondNavEpoch by remember { mutableStateOf(0) }
 
     var studyBlocks by remember { mutableStateOf<String?>(null) }
     /** The About/Guide card is showing — it gets the build stamp footer. */
@@ -226,8 +230,8 @@ fun StudyScreen(
     var studyAkjv by remember { mutableStateOf<AkjvToken?>(null) }
     // A study read is in flight. A COLD read is slow and a warm one is instant:
     // the first definition builds the occurrence index, the first analytical
-    // answer sweeps the whole corpus. A bare flash of nothing reads as a hang
-    // (feedback 2026-07-27), so the pane says why, and that it is one-time.
+    // answer sweeps the whole corpus. A bare flash of nothing reads as a hang,
+    // so the pane says why, and that it is one-time.
     var studyLoading by remember { mutableStateOf(false) }
     var searchHits by remember { mutableStateOf<Set<String>>(emptySet()) }
     var searchText by remember { mutableStateOf("") }
@@ -242,14 +246,14 @@ fun StudyScreen(
     var showConstellation by remember { mutableStateOf(false) }
     var showChord by remember { mutableStateOf(false) }
     var noteEpoch by remember { mutableStateOf(0) }            // repaint the note marks after a note edit
-    // Per-tier content gates (2026-07-25): the text is always on; curated and
-    // machine analysis are independently switchable. Persisted in the config.
-    // Opt-in (2026-07-28): absent means off, so a first-time reader gets the text
-    // and their own notes, not a study apparatus they never asked for.
+    // Per-tier content gates: the text is always on; curated and machine analysis
+    // are independently switchable. Persisted in the config.
+    // Opt-in: absent means off, so a first-time reader gets the text and their own
+    // notes, not a study apparatus they never asked for.
     var humanAnalysis by remember { mutableStateOf(loadedCfg?.humanAnalysis ?: false) }
     var machineAnalysis by remember { mutableStateOf(loadedCfg?.machineAnalysis ?: false) }
-    // First run (2026-07-26): the core derives firstRun from "no config file
-    // yet", so this shows exactly once — the first persist clears it for good.
+    // First run: the core derives firstRun from "no config file yet", so this
+    // shows exactly once — the first persist clears it for good.
     var showFirstRun by remember { mutableStateOf(loadedCfg?.firstRun == true) }
     var clearPinEpoch by remember { mutableStateOf(0) }             // un-highlight the tapped word
     var presentThread by remember { mutableStateOf<Thread1?>(null) } // Present: chosen thread (picker keeps nav)
@@ -268,7 +272,7 @@ fun StudyScreen(
     var showHistory by remember { mutableStateOf(false) }           // reading-history sheet
     var showSettings by remember { mutableStateOf(false) }          // settings dialog
     // Re-reading the welcome this reader was given, from the ⋮ menu — changes no
-    // settings, it just reads (2026-07-27). Holds "new"/"curious"; null closed.
+    // settings, it just reads. Holds "new"/"curious"; null closed.
     var reopenIntro by remember { mutableStateOf<String?>(null) }
     var showWeaves by remember { mutableStateOf(false) }            // Weaves screen (All/Suggested filter)
     var bookNavPane by remember { mutableStateOf<Int?>(null) }      // passage navigator (0 primary, 1 second)
@@ -281,17 +285,12 @@ fun StudyScreen(
      * Close every surface layered over the reader.
      *
      * ONE PLACE, and it lives here beside the declarations above rather than at
-     * the call sites, because the call sites were a hand-kept list of three
-     * (`showPresent`, `showChord`, `showConstellation`) while there are fifteen
-     * of these. Every surface added since that list was written inherited the
-     * trap: open Notes from Explore, tap Memorize, and Notes was still there
-     * covering the screen (UAT, 2026-08-03).
+     * the call sites: a hand-kept list at the call sites silently omits every
+     * surface added after it was written (open Notes from Explore, tap Memorize,
+     * and Notes was still there covering the screen).
      *
-     * The web hit exactly this and fixed it the same way on 2026-07-29 — its
-     * `Session.TRANSIENT` table carries the identical reasoning, and the feedback
-     * that prompted it was almost word for word today's ("this is likely a class
-     * of bug"). It was fixed on one shell and not the other, which is its own
-     * lesson: a class of bug is a class on both.
+     * Web twin: the `Session.TRANSIENT` table carries the identical reasoning —
+     * a class of bug is a class on both shells.
      *
      * NOT `showFirstRun`: a reader who has never chosen a path must not be able
      * to tab past the question — it closes by being answered. NOT `confirmAction`
@@ -331,9 +330,9 @@ fun StudyScreen(
     var lineSpacing by remember { mutableStateOf((loadedCfg?.lineSpacing ?: 1.35).coerceIn(1.0, 2.2)) }
     var copyStyle by remember { mutableStateOf(loadedCfg?.copyStyle ?: "verseRef") }
     var history by remember { mutableStateOf(loadedCfg?.history ?: emptyList()) }
-    // The reader's home church — what their own shared links carry (2026-07-27,
-    // web parity). `intro` is which welcome they were given, so the Welcome
-    // button can show it again without a reinstall.
+    // The reader's home church — what their own shared links carry (web parity).
+    // `intro` is which welcome they were given, so the Welcome button can show it
+    // again without a reinstall.
     var church by remember { mutableStateOf(cleanChurch(loadedCfg?.church)) }
     var presentSharesAsNew by remember { mutableStateOf(loadedCfg?.presentSharesAsNew != false) }
     // The plain-English overlay (the AKJV delta). Off unless asked; only
@@ -494,7 +493,7 @@ fun StudyScreen(
     }
 
     // Loading a weave pulls its first link's passages up behind the card
-    // (product 2026-07-25, both shells — the web opens both in split panes):
+    // (both shells — the web opens both in split panes):
     // the reader shows endpoint `a`; the fold's second pane picks up `b` so
     // flipping back to the Bible lands on the other side.
     //
@@ -520,7 +519,10 @@ fun StudyScreen(
             if (w == null) return@engineCall
             w.opening?.let { o ->
                 goToRef(o.primary)
-                o.second?.let { s -> secondBook = s.book; secondChapter = s.chapter }
+                o.second?.let { s ->
+                    secondBook = s.book; secondChapter = s.chapter
+                    secondPendingVerse = o.secondVerse; secondNavEpoch++
+                }
             }
             if (w.blocks != null) studyBlocks = w.blocks
         }
@@ -596,11 +598,11 @@ fun StudyScreen(
             "guide" -> show { StudyEngine.GuideBlocksJson() }
             "about" -> { show { StudyEngine.AboutBlocksJson() }; studyIsAbout = true }
             // Tagging offers the existing tags first; freetext is the secondary
-            // path inside the picker (product call, 2026-07-24).
+            // path inside the picker.
             "addTag" -> link.refKey?.let { ref -> tagPickRef = ref }
             // Pick from the threads that exist, or name a new one — a bare text
             // field made you retype an existing name exactly, and a typo forked a
-            // second thread instead of failing (2026-07-28 feedback).
+            // second thread instead of failing.
             "addThread" -> link.refKey?.let { ref -> threadPickRef = ref }
             // The note the reader already has comes back off the main thread too;
             // the dialog opens with it when it lands. "" is "no note yet", which is
@@ -623,7 +625,7 @@ fun StudyScreen(
                 scope.engineCall(engine, turns, { engine.WeaveApprove(idx) }) { openLibrary(Library.Suggested) }
             }
             // Rejecting DELETES the suggestion — it does not come back for review
-            // — so it asks first, like every other destructive action (2026-07-29).
+            // — so it asks first, like every other destructive action.
             "reject" -> link.index?.let { idx ->
                 confirmAction = ConfirmRequest(
                     title = t("suggested.rejectAsk"),
@@ -640,9 +642,9 @@ fun StudyScreen(
 
     // ── link routing: navigate, open a map, or load a study card into the surface.
     //    Routing the URI is itself an ABI call, so the whole tap — the routing and
-    //    the card it asks for — happens off the main thread. This handler used to
-    //    make up to ten blocking engine calls in a row on the main thread, each one
-    //    waiting on the monitor a cold study read can hold for seconds.
+    //    the card it asks for — happens off the main thread: a link can fan out to
+    //    a row of blocking engine calls, each waiting on the monitor a cold study
+    //    read can hold for seconds.
     fun onLink(uri: String) {
         scope.engineCall(
             engine, turns,
@@ -685,8 +687,8 @@ fun StudyScreen(
                 onSwipeChapter = { dir -> val (nb, nc) = step(b, c, dir); setPane(nb, nc) },
                 noteEpoch = noteEpoch,
                 akjvOverlay = akjvOverlay,
-                targetVerse = if (isSecond) null else pendingVerse,
-                targetEpoch = if (isSecond) 0 else navEpoch,
+                targetVerse = if (isSecond) secondPendingVerse else pendingVerse,
+                targetEpoch = if (isSecond) secondNavEpoch else navEpoch,
                 clearPinEpoch = clearPinEpoch,
                 onFirstVisibleVerse = if (isSecond) ({ }) else ({ v ->
                     firstVisibleVerse = v
@@ -788,9 +790,9 @@ fun StudyScreen(
             }
 
             // ── in-content overlays: these cover the destination but keep the
-            //    bottom nav in reach (2026-07-25 — disappearing chrome is
-            //    disorienting). Fullscreen-by-design surfaces (search, the
-            //    live presentation) stay in the overlay layer below. ──────────
+            //    bottom nav in reach (disappearing chrome is disorienting).
+            //    Fullscreen-by-design surfaces (search, the live presentation)
+            //    stay in the overlay layer below. ──────────
             if (showNotes) {
                 NotesScreen(
                     engine, palette,
@@ -812,7 +814,10 @@ fun StudyScreen(
             if (showConstellation) MapOverlay(t("map.constellation"), palette, { showConstellation = false }) {
                 Constellation(
                     engine, palette, Modifier.fillMaxSize(),
-                    onNavigate = { b, ch, _ -> book = b; chapter = ch; showConstellation = false; dest = Dest.Read },
+                    // Carry the tapped node's verse, not just its chapter, so the
+                    // reader lands ON the verse. goToRef parses "Book c:v" (and a
+                    // bare "Book c" when a node names only a chapter).
+                    onNavigate = { b, ch, refKey -> goToRef(refKey ?: "$b $ch"); showConstellation = false },
                     onOpenWeave = {},
                 )
             }
@@ -922,7 +927,7 @@ fun StudyScreen(
                 engine, palette, studyScale, searchText,
                 onQueryChange = { searchText = it },
                 onHits = { searchHits = it },
-                onNavigate = { b, c -> book = b; chapter = c },
+                onNavigate = { b, c, v -> book = b; chapter = c; pendingVerse = v; navEpoch++ },
                 onLink = ::onLink,
                 onClose = { showSearch = false },
             )
@@ -964,6 +969,9 @@ fun StudyScreen(
                 onPresentSharesAsNew = { presentSharesAsNew = !presentSharesAsNew },
                 language = loadedCfg?.language ?: "",
                 onLanguage = { showSettings = false; onLanguage(it) },
+                // Reachable for every reader (introChoice is null for an
+                // established believer); falls back to the new-believer welcome.
+                onWelcome = { showSettings = false; reopenIntro = introChoice ?: "new" },
                 onDismiss = { showSettings = false; persistCfg() },
             )
         }
@@ -985,7 +993,7 @@ fun StudyScreen(
                 dismissButton = { TextButton(onClick = { prompt = null }) { Text(t("common.cancel")) } },
             )
         }
-        // Presentation mode (the top-priority request): once a thread is chosen
+        // Presentation mode: once a thread is chosen
         // it goes fullscreen, over everything — the reader hands the phone
         // across, so no study chrome bleeds through. (The picker lives
         // in-content above, with the bottom nav.)
@@ -1088,8 +1096,7 @@ fun StudyScreen(
 // monitor the two reader panes and the study surface share, so making one on the
 // main thread costs however long the LONGEST call already running takes — and the
 // first word study, concordance or search sweeps the whole corpus building a lazy
-// index. Two handlers used to do exactly that: routing a panel link made up to ten
-// blocking calls in a row, and searching made two.
+// index.
 
 /**
  * Which read owns the surface it paints into.
@@ -1165,21 +1172,25 @@ internal data class WeaveOpening(
     /** The `b` end, for the fold's second pane, or null when it is the same
      *  chapter as [primary] (two panes on one chapter show nothing new). */
     val second: ChapterRef? = null,
+    /** The verse of the `b` end, so the second pane scrolls to it and not just
+     *  to the top of its chapter. Null when [second] is null or names a chapter. */
+    val secondVerse: Int? = null,
 )
 
 /**
  * Which passages a weave tap opens: its first resolved link (else its first link
  * at all), `a` in the reader and `b` in the fold's second pane.
  *
- * A link whose `a` end is not a refKey opens NOTHING — it used to park the second
- * pane on `b` while the reader's own pane stayed where it was, which reads as the
+ * A link whose `a` end is not a refKey opens NOTHING, rather than parking the
+ * second pane on `b` while the reader's own pane stays put — which reads as the
  * app ignoring the tap and then moving the wrong pane.
  */
 internal fun weaveOpening(links: List<WeaveLink1>): WeaveOpening? {
     val link = links.firstOrNull { it.resolved } ?: links.firstOrNull() ?: return null
     val a = chapterRefOf(link.a) ?: return null
     val b = chapterRefOf(link.b)
-    return WeaveOpening(link.a, if (b != null && b != a) b else null)
+    val second = if (b != null && b != a) b else null
+    return WeaveOpening(link.a, second, if (second != null) verseOf(link.b) else null)
 }
 
 /** A refKey's book and chapter ("Gen 1:7" → Gen 1), or null if it is not one. */
@@ -1189,6 +1200,9 @@ private fun chapterRefOf(refKey: String): ChapterRef? {
     val ch = refKey.substring(sp + 1).substringBefore(':').toIntOrNull() ?: return null
     return ChapterRef(refKey.substring(0, sp), ch)
 }
+
+/** A refKey's verse ("Gen 1:7" → 7), or null when it names only a chapter. */
+private fun verseOf(refKey: String): Int? = refKey.substringAfterLast(':', "").toIntOrNull()
 
 /** True when a search answer is a reference to open rather than hits to list.
  *  Both halves matter: the engine has to say `goto` AND say where — the reader's
@@ -1269,8 +1283,8 @@ private fun TopBar(
 
             Spacer(Modifier.weight(1f))
 
-            // Share the app — first-class beside the search icon (2026-07-26),
-            // not a menu trip: the QR + link sheet (QrShare.kt).
+            // Share the app — first-class beside the search icon, not a menu
+            // trip: the QR + link sheet (QrShare.kt).
             var shareApp by remember { mutableStateOf(false) }
             IconButton(onClick = { shareApp = true }) {
                 Icon(Icons.Filled.Share, contentDescription = t("common.shareApp"), tint = palette.ink)
@@ -1332,7 +1346,7 @@ private fun TopBar(
 
 /** Study as a bottom sheet — the phone surface for a word tap / library / link
  *  result. Opens half-height; drag the handle up to fill (nearly) the whole
- *  screen (product call, 2026-07-24). Swipe down or tap the scrim to dismiss.
+ *  screen. Swipe down or tap the scrim to dismiss.
  *  Links route through [onLink]. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1368,7 +1382,7 @@ private fun SearchOverlay(
     initialQuery: String,
     onQueryChange: (String) -> Unit,
     onHits: (Set<String>) -> Unit,
-    onNavigate: (book: String, chapter: Int) -> Unit,
+    onNavigate: (book: String, chapter: Int, verse: Int?) -> Unit,
     onLink: (String) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -1417,7 +1431,7 @@ private fun SearchOverlay(
             if (a == null) return@engineCall
             onHits(a.hits)
             if (a.goto != null) {
-                onNavigate(a.goto.book!!, a.goto.chapter!!.toInt())
+                onNavigate(a.goto.book!!, a.goto.chapter!!.toInt(), a.goto.verse)
                 onQueryChange("")
                 onClose()
             } else {
@@ -1649,6 +1663,7 @@ private fun SettingsDialog(
     onPresentSharesAsNew: () -> Unit,
     language: String,
     onLanguage: (String) -> Unit,
+    onWelcome: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     // The three reader-pref sliders are DRAFTED. Text size, margin and line
@@ -1726,6 +1741,11 @@ private fun SettingsDialog(
                     "light" to t("settings.themeLight"),
                     "dark" to t("settings.themeDark"),
                     "night" to t("settings.themeNight"),
+                    "dracula" to t("settings.themeDracula"),
+                    "solarized-light" to t("settings.themeSolarizedLight"),
+                    "solarized-dark" to t("settings.themeSolarizedDark"),
+                    "gruvbox" to t("settings.themeGruvbox"),
+                    "nord" to t("settings.themeNord"),
                 )
                 for ((token, label) in themes) {
                     Row(
@@ -1832,6 +1852,16 @@ private fun SettingsDialog(
                     t("settings.presentAsNewDesc"),
                     presentSharesAsNew, palette, onPresentSharesAsNew,
                 )
+                HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
+                // Re-reading the welcome, reachable for EVERY reader — the ⋮-menu
+                // entry only shows for a reader whose path set an intro, so an
+                // established believer had no way back to it. Web twin:
+                // SettingsDialog.svelte → "Welcome & intro". Changes no data.
+                Text(t("settings.welcome"), color = palette.faded, fontSize = 12.sp)
+                Text(t("settings.welcomeDesc"), color = palette.faded, fontSize = 12.sp)
+                TextButton(onClick = onWelcome) {
+                    Text(t("settings.welcomeShow"), color = palette.gold)
+                }
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 SettingToggle(t("settings.bundled"), t("settings.bundledDesc"), bundledOn, palette, onToggleBundled)
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))

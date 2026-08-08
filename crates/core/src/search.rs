@@ -43,7 +43,7 @@ pub struct SearchIx {
 /// Resumable [`SearchIx`] construction: the same fold, a slice of verses at a
 /// time.
 ///
-/// The whole-corpus fold takes seconds on a phone (4.6 s measured 2026-07-26),
+/// The whole-corpus fold takes seconds on a phone (~4.6 s),
 /// and it runs on the one thread that also answers layout and taps — so a
 /// reader who turned a page mid-build waited it out. Feeding it in slices lets
 /// the shell yield between them.
@@ -1034,8 +1034,8 @@ mod review_tests {
         .unwrap()
     }
 
-    /// REVIEW 2026-07-14 correctness #3: equal-distance typo candidates must
-    /// come back in a stable order (word-alphabetical), not HashMap order.
+    /// Equal-distance typo candidates must come back in a stable order
+    /// (word-alphabetical), not HashMap order.
     #[test]
     fn fuzzy_tier_breaks_distance_ties_deterministically() {
         let c = tiny();

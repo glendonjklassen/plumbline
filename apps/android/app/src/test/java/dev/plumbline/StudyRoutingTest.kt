@@ -61,6 +61,9 @@ class StudyRoutingTest {
     fun the_same_book_at_a_different_chapter_does_open_the_second_pane() {
         val opening = weaveOpening(listOf(link("Ps 22:1", "Ps 69:21", resolved = true)))
         assertEquals(ChapterRef("Ps", 69), opening?.second)
+        // The second pane scrolls to the `b` end's VERSE, not just its chapter —
+        // the fold otherwise lands the far side at the top of Ps 69.
+        assertEquals(21, opening?.secondVerse)
     }
 
     /** A refKey carries a book with a space in it. `lastIndexOf(' ')` is what keeps

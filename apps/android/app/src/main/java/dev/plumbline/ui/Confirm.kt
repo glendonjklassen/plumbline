@@ -1,11 +1,8 @@
 // The one confirmation, for anything that destroys something.
 //
-// The web twin is shell/ConfirmDialog.svelte + `session.askConfirm`. Both exist
-// because the app had four different answers to "does this ask first?": deleting a
-// memorize card asked nothing, rejecting a suggested weave asked nothing,
-// untagging asked nothing, and deleting a thread had an AlertDialog built by hand
-// at its own call site (2026-07-29). Whether an action asks should be a property of
-// the action, not of whoever wrote its button.
+// The web twin is shell/ConfirmDialog.svelte + `session.askConfirm`. Whether an
+// action asks first should be a property of the action, not of whoever wrote
+// its button.
 //
 // The confirm button NAMES THE ACT — "Delete thread", "Remove card", "Reject" —
 // rather than saying OK. A reader who only half-read the sentence still knows what

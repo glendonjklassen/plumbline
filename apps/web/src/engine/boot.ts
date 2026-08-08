@@ -17,9 +17,9 @@
 //
 // TWO WAITS RUN AT ONCE. The engine binary and the text need nothing from each
 // other until the instantiate, so the download of the first starts at the top of
-// `boot()` and is collected where it is actually needed. Awaited in order — as
-// this did until 2026-07-29 — the whole wasm download was dead time before first
-// text, which is the number that matters most on a phone.
+// `boot()` and is collected where it is actually needed. Awaited in order, the
+// whole wasm download would be dead time before first text, which is the number
+// that matters most on a phone.
 
 import { instantiate, type WasmEngine } from "./engine";
 import { depotAvailable, depotHas, depotResponse } from "./depot";
@@ -110,17 +110,14 @@ function manifestHasInstalled(role: string, taken: { germanInstalled: boolean })
 
 export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = ""): Promise<BootResult> {
   const trace: [string, number][] = [];
-  // NOT PERF-gated, deliberately — and it used to be (fixed with D-20, when
-  // flipping PERF off for release turned two tests red and would have quietly
-  // hollowed out more).
+  // NOT PERF-gated, deliberately.
   //
   // The trace is this app's FLIGHT RECORDER, not a measurement: which rung the
   // boot took, whether the idxcache fast path fired, how many KB the home freed.
   // `e2e/app.spec.ts` reads exactly those to prove "a first visit never parses the
   // corpus" and "read pack files are freed", and the whole suite's
   // `settleBackground` barrier polls it to know the background pipeline has gone
-  // quiet — which is why every trace push in `engine.worker.ts` was already
-  // ungated. This file was the inconsistent one.
+  // quiet — which is why every trace push in `engine.worker.ts` is ungated too.
   //
   // What PERF still gates is instrumentation that costs something per turn, per
   // engine call or per text measurement: the per-turn cost split, the slow-call
@@ -149,10 +146,9 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
 
   // PREPARE, not download. The ladder below has not decided anything yet, and on
   // a warm boot it never asks the network at all — so opening with
-  // "Fetching scripture data — 0%" told the common case a lie about itself
-  // (audit D-11), and told it for the whole of the pin read and the stage-1
-  // depot read. `download` is announced at the one place a download really
-  // starts: the cold rung.
+  // "Fetching scripture data — 0%" would tell the common case a lie about itself
+  // for the whole of the pin read and the stage-1 depot read. `download` is
+  // announced at the one place a download really starts: the cold rung.
   onPhase({ phase: "prepare" });
   // THE LADDER. First rung that works, wins.
   //
@@ -178,10 +174,9 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
   //
   // `lang` is HANDED IN by the main thread. It lives in `localStorage`, and this
   // function runs in the engine worker, where there is no `localStorage` at all —
-  // reading it here threw, the catch swallowed it, and every boot silently fell
-  // back to the KJV. So a German reader got the English text with the download
-  // sitting unused, which is the same failure the language work has now produced
-  // three ways (e2e/language.spec.ts caught all three).
+  // reading it here would throw, the catch would swallow it, and every boot would
+  // silently fall back to the KJV with the German download sitting unused
+  // (e2e/language.spec.ts).
   const wantCorpus = corpusRoleFor(lang, (role) => manifestHasInstalled(role, taken));
   const skipOther = (f: PackFile) => isOtherCorpus(f, wantCorpus);
   trace.push([`corpus loaded (${wantCorpus})`, 1]);
@@ -206,8 +201,7 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
     onPhase({ phase: "download", fraction: 0 });
     // The text arrives as the parsed-corpus cache — the pack's copy on a first
     // visit, this device's own copy afterwards. Either way the engine never
-    // parses JSONL (8.4 s on a 2026 flagship phone; 2026-07-26 trace) and never
-    // downloads it.
+    // parses JSONL and never downloads it.
     const live = await timed("manifest (network)", fetchManifest);
     manifest = live;
     pack = await timed("stage1 fetch+gunzip (text)", () =>
@@ -233,10 +227,8 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
   const wasm = await timed("wasm compile+instantiate", () => instantiate(home.root));
 
   // THE LANGUAGE, BEFORE THE OPEN. The engine picks which corpus to open, so a
-  // language set after this point picks nothing — the worker used to do it a
-  // dozen lines later, next to the TOC, and every German reader got the English
-  // text with the download sitting unused on their device
-  // (e2e/language.spec.ts).
+  // language set after this point picks nothing, and a German reader gets the
+  // English text with the download sitting unused (e2e/language.spec.ts).
   //
   // `configLoad` is engine-independent, so it can be asked before there is an
   // engine; `locale` is the device's, forwarded from the main thread because a
@@ -258,13 +250,12 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
   );
 
   // BEFORE the reader can touch anything. This shell warms in slices, so the
-  // engine must never build an index inside a tap — that is the 26,042 ms freeze
-  // of 2026-07-28, which also strands every download in flight behind it.
+  // engine must never build an index inside a tap — a freeze that also strands
+  // every download in flight behind it.
   //
   // Here, and not when the warm starts: the warm begins only after stage 2 is
   // fetched and parsed (~550 ms after text on a phone), and the reader taps
-  // inside that window. Deriving the flag from the first warm step shipped once
-  // and fixed nothing.
+  // inside that window.
   engine.deferBuilds(true);
 
   // PIN ONLY AFTER A SUCCESSFUL OPEN. The pin's value is that the next launch can

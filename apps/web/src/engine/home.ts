@@ -22,12 +22,9 @@ const IDXCACHE_VERSION = "meta:idxcacheVersion";
 
 /** Delete the LEGACY IndexedDB copy of the corpus cache.
  *
- *  It used to be the fast path: boot probed IndexedDB before fetching, to avoid
- *  re-downloading 3.3 MB. It was never actually buying that — the depot has held
- *  the same file since the first visit, so the "download" it avoided was already
- *  a local read. What it did cost was real: `persistIdxcache` wrote 37 MB back
- *  into IndexedDB on EVERY launch, including launches that had just read those
- *  same bytes out of it, and it kept a second full copy of the corpus on disk.
+ *  The depot has held the same file since the first visit, so an IndexedDB copy
+ *  buys no download it avoids — while costing a 37 MB rewrite into IndexedDB on
+ *  every launch and a second full copy of the corpus on disk.
  *
  *  Deleted BY KEY, never by clearing the store: `meta:stockSeeded` and
  *  `meta:bundled` live in there too, and they are decisions rather than data —
@@ -46,12 +43,11 @@ export interface VirtualHome {
   /** Whether the cache for the corpus this home will open was restored into it —
    *  when true the engine open should take the fast path (no 19 MB re-parse).
    *
-   *  EITHER CORPUS COUNTS, and it only looked at the KJV's until 2026-08-03: a
-   *  German boot took the fast path and the trace called it a "cold corpus
-   *  parse", which is a diagnostic that lies about the one stage everybody looks
-   *  at first when a launch is slow. Stage 1 inflates exactly one corpus (see
-   *  `corpusRoleFor`), so at most one of these is ever here and either one means
-   *  the fast path fired. */
+   *  EITHER CORPUS COUNTS: looking at only the KJV's would call a German boot's
+   *  fast path a "cold corpus parse", a diagnostic that lies about the one stage
+   *  everybody looks at first when a launch is slow. Stage 1 inflates exactly one
+   *  corpus (see `corpusRoleFor`), so at most one of these is ever here and either
+   *  one means the fast path fired. */
   hadIdxcache: boolean;
   /** Insert read-only pack files into the live home (the WASI shim resolves
    *  paths on open, so the engine sees them immediately) — the late R&D pack. */
@@ -498,10 +494,10 @@ export async function buildHome(
       }
       // OFF REMOVES THE EXAMPLES, NOT THE READER'S WORK.
       //
-      // This used to delete every stock PATH outright, so a stock thread or
-      // weave the reader had renamed, re-noted or added verses to was destroyed
-      // by a settings toggle that reads as "hide the examples". Their copy wins
-      // on the way in (buildHome lays their saved files over freshly-seeded
+      // Deleting every stock PATH outright would destroy a stock thread or weave
+      // the reader had renamed, re-noted or added verses to — by a settings toggle
+      // that reads as "hide the examples". Their copy wins on the way in
+      // (buildHome lays their saved files over freshly-seeded
       // stock, and skips the stock paths entirely once seeded); this is the same
       // invariant on the way out.
       //
@@ -562,11 +558,11 @@ export async function buildHome(
           if (dir instanceof Directory) collectFiles(d, dir, current);
         }
         // THE MULTI-TAB CONTRACT. Two tabs share one IndexedDB but each holds its
-        // own in-memory home, snapshotted at ITS boot. This used to write the
-        // whole subtree, which made every persist an assertion about files this
-        // tab had never touched — the slower tab's stale copies overwrote the
-        // faster tab's edits, and a file deleted over there was resurrected by
-        // any write over here. So:
+        // own in-memory home, snapshotted at ITS boot. Writing the whole subtree
+        // would make every persist an assertion about files this tab had never
+        // touched — the slower tab's stale copies overwriting the faster tab's
+        // edits, and a file deleted over there resurrected by any write over here.
+        // So:
         //
         //  * write ONLY files whose bytes differ from what we last synced —
         //    a file we didn't change is a file we have no opinion about;

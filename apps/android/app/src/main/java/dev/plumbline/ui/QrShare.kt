@@ -2,10 +2,10 @@
 // table (Present end card, or the Share button) carries the app itself — free,
 // offline, no account.
 //
-// Generated at RENDER time (2026-07-27), because the link is per-reader now: it
-// carries whatever church they set in Settings, so there is no one fixed URL to
-// bake in. That replaced a build-time constant 29×29 matrix. Keep in sync with
-// the web twin (QrCode.svelte), which does the same with qrcode-generator.
+// Generated at RENDER time, because the link is per-reader: it carries whatever
+// church they set in Settings, so there is no one fixed URL to bake in. Keep in
+// sync with the web twin (QrCode.svelte), which does the same with
+// qrcode-generator.
 //
 // Encoded as UTF-8 bytes explicitly — zxing defaults to ISO-8859-1 for byte
 // mode, and a church named "Iglesia Bíblica" would come back as mojibake.
@@ -46,9 +46,7 @@ import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import dev.plumbline.ChurchState
 
-// PWA_URL used to be declared here. It lives in Church.kt now, and comes from
-// the core's `church::PWA_URL` — the hosted address was written down in three
-// places (here, church.ts, and the core had none).
+// PWA_URL lives in Church.kt, and comes from the core's `church::PWA_URL`.
 
 /** The QR modules for [text] as rows of booleans (true = dark), or null if it
  *  could not be encoded (absurdly long input — never for our links). */

@@ -334,3 +334,29 @@ test("the reading map survives a relaunch and rides in the backup", async ({ pag
   );
   expect(paths.some((p: string) => p.startsWith("reading/"))).toBe(true);
 });
+
+// Tapping a verse must land ON the verse, not at the top of its chapter — a UAT
+// bug report (2026-08-06). The web funnels every verse-level tap (search goto,
+// cross-refs, the reading map, notes) through `Session.navigate(pane, book,
+// chapter, verse)`, so this drives that one function and watches the viewport.
+// It reproduces the drop directly: if the verse is ignored, the pane sits at the
+// top and scrollTop stays ~0. Ps 119 is the KJV's longest chapter (176 verses),
+// bundled and frozen, so a late verse is unmistakably far down the page.
+test("navigating to a verse scrolls it into view, not just the chapter", async ({ page }) => {
+  await boot(page);
+  const scrollTop = () =>
+    page.locator(".pane .scroll").first().evaluate((el) => (el as HTMLElement).scrollTop);
+
+  await page.evaluate(() => (window as any).__plumbline.navigate(0, "Ps", 119, 170));
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__plumbline.panes[0].targetVerse))
+    .toBe(170);
+  // The one that reproduces the bug: a dropped verse leaves this at the top.
+  await expect.poll(scrollTop, "a late verse must scroll the pane down").toBeGreaterThan(400);
+
+  // And the offset is the VERSE's, not a constant: verse 1 of the same long
+  // chapter sits at the top. (A fix that always scrolled a fixed amount would
+  // pass the check above and fail this one.)
+  await page.evaluate(() => (window as any).__plumbline.navigate(0, "Ps", 119, 1));
+  await expect.poll(scrollTop, "verse 1 sits at the top of the chapter").toBeLessThan(40);
+});

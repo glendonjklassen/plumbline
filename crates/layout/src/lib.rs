@@ -376,7 +376,7 @@ mod para_tests {
 
     /// Two verses; verse 2's FIRST word carries ¶ — the verse number must
     /// move to the new indented line with its verse, not strand at the end
-    /// of the previous one (REVIEW 2026-07-14 correctness #2).
+    /// of the previous one.
     #[test]
     fn paragraph_break_carries_the_verse_number() {
         let sample = concat!(

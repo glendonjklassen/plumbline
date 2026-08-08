@@ -1408,7 +1408,7 @@ mod tests {
         assert_eq!(weave_file_in("weaves", "  "), std::path::Path::new("weaves/weave.json"));
     }
 
-    /// AUDIT 2026-07-29 forward compatibility: the on-disk formats evolve
+    /// Forward compatibility: the on-disk formats evolve
     /// **additively** (CLAUDE.md §Data formats), and a sideloaded APK never
     /// auto-updates — so a key this build drops is dropped for good on that
     /// device. A weave written by a later build has to come back out whole, and
@@ -1530,7 +1530,7 @@ mod review_tests {
     use super::*;
     use crate::VRef;
 
-    /// REVIEW 2026-07-14 correctness #1: a name-matching *suggestion* must
+    /// A name-matching *suggestion* must
     /// never receive a user's link — rejecting the suggestion later would
     /// delete it. add_link creates/extends a canonical weave instead.
     #[test]

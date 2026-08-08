@@ -74,8 +74,8 @@ pub fn parse_cross_refs(text: &str) -> XRefIx {
 ///
 /// [`parse_cross_refs`] is ~344k rows in one call, and the engine worker is the
 /// only thread that answers layout, taps and word studies, so for however long it
-/// runs the reader's app is unavailable. Measured 2026-07-30 on the maintainer's
-/// desktop: **89 ms** for the whole file, against a ~300 ms warm-chunk budget —
+/// runs the reader's app is unavailable. Measured **89 ms** for the whole file
+/// on a desktop, against a ~300 ms warm-chunk budget —
 /// which on a phone (5–10× slower) is the budget, spent on one phase.
 ///
 /// So the warm feeds it instead: [`feed`](Self::feed) parses `n` lines and

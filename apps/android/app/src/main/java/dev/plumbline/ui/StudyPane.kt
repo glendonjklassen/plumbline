@@ -6,15 +6,14 @@
 // URI vocabulary parsed by plumbline_route_link_json). v0 renders text + links; full
 // interactive routing (tag/thread authoring, dialogs) is a TODO.
 //
-// LAZY, not eager (2026-07-30). This was a `Column(verticalScroll)`, which
-// composes, measures and lays out EVERY block before the first frame — and the
-// block list is not always short: the Weaves screen renders the whole weave
-// library through this same pane, hundreds of blocks deep, each one an
-// AnnotatedString of styled runs. A LazyColumn builds only what the viewport
-// shows. The traps that would have silently undone it are all avoided at the
-// call sites: no StudyPane is nested inside a parent `verticalScroll`, nothing
-// asks it for an intrinsic height, and the four call sites all give it bounded
-// height (StudyScreen.kt lines ~641 / ~1263 / ~1392 / ~1478).
+// LAZY, not eager. The block list is not always short: the Weaves screen renders
+// the whole weave library through this same pane, hundreds of blocks deep, each
+// one an AnnotatedString of styled runs. An eager `Column(verticalScroll)`
+// composes, measures and lays out EVERY block before the first frame; a
+// LazyColumn builds only what the viewport shows. The traps that would silently
+// undo it are all avoided at the call sites: no StudyPane is nested inside a
+// parent `verticalScroll`, nothing asks it for an intrinsic height, and the four
+// call sites all give it bounded height (StudyScreen.kt lines ~641 / ~1263 / ~1392 / ~1478).
 //
 // Author D (Compose UI).
 
@@ -81,11 +80,6 @@ private fun SlotItem(content: @Composable () -> Unit) {
  *
  * @param blocksJson a plumbline_engine_*_blocks_json payload (or null).
  * @param onLink invoked with a run's URI when a link is tapped.
- *
- * There used to be a third slot, `embed`, which cut the block flow open just
- * before the first titled section for the concept map + canon heatmap cards.
- * Both cards were embedding-backed and went on 2026-07-30; the blocks now run
- * unbroken from header to footer.
  */
 @Composable
 fun StudyPane(
@@ -106,15 +100,10 @@ fun StudyPane(
             runCatching { parseWire<PanelData>(it).blocks }.getOrNull()
         }?.filter { it.kind in PAINTED_KINDS }
     }
-    // GONE, matching the web (StudyPanel.svelte): "The first one takes a few
-    // seconds... Every look after this is instant."
-    //
-    // It apologised for a wait that no longer happens — the engine stopped
-    // building indexes inside a reader's request — and it was never true anyway:
-    // "every look after this" meant until the process died, so someone who had
-    // used the app for days kept being told it was their first time. A message
-    // explaining a wait the reader is not having is worse than silence.
-    // "— loading —" stays for the moment the engine really is still answering.
+    // No "first look is slow" apology here (the web's StudyPanel.svelte dropped
+    // it too): the engine no longer builds indexes inside a reader's request, so
+    // there is no wait to explain. "— loading —" stays for the moment the engine
+    // really is still answering.
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -153,9 +142,7 @@ fun StudyPane(
     }
 }
 
-/** Every block as one lazy item. (It used to take a `from`/`until` window,
- *  because the `embed` slot cut the flow in two; with that slot gone there is
- *  one span, and the keys are the plain indices again.)
+/** Every block as one lazy item.
  *
  *  Keys are index-derived rather than content-derived on purpose: a study
  *  payload can repeat a rule or a title verbatim, and a duplicate key is a
@@ -201,7 +188,7 @@ fun AkjvHeader(palette: ReaderPalette, scale: Float, akjv: String, kjv: String) 
 }
 
 /** The build stamp under About. Which build is this? Neither the maintainer nor
- *  a reader could answer that from a screenshot (feedback 2026-07-27), and
+ *  a reader could answer that from a screenshot, and
  *  "have you relaunched yet?" is a terrible way to debug. Web twin:
  *  StudyPanel.svelte's `.version`. */
 @Composable

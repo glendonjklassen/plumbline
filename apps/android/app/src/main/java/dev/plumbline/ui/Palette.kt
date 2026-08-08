@@ -25,8 +25,7 @@ data class ReaderPalette(
     val divine: Color,
     val titleInk: Color,
     val gold: Color,
-    val goldFaint: Color,  // α0.30 of gold — study-panel rules (was the
-                           // Strong's underline, removed 2026-07-28)
+    val goldFaint: Color,  // α0.30 of gold — study-panel rules
     val band: Color,       // search-hit / goto band (α0.12 of gold)
     val gutterDot: Color,  // weave-partner gutter mark (α0.75 of gold)
     val pinBand: Color,    // pinned span (blue Pin α0.22)
@@ -123,11 +122,10 @@ data class ReaderPalette(
          *  before the core palette is fetched, and forever if `PaletteJson`
          *  throws.
          *
-         *  These are a COPY of `theme::palette(Theme::Light)` and the copy has
-         *  drifted once already: the WCAG pass on 2026-07-29 darkened ten roles
-         *  in theme.rs and left this fallback painting the failing values. Any
-         *  palette change in the core has to be mirrored here by hand. (The
-         *  reference to WinUI's field initialisers is gone with that shell.) */
+         *  These are a COPY of `theme::palette(Theme::Light)` and drift
+         *  silently: a WCAG-contrast change in theme.rs leaves this fallback
+         *  painting the failing values. Any palette change in the core has to be
+         *  mirrored here by hand. */
         fun default(): ReaderPalette {
             fun c(r: Int, g: Int, b: Int) = Color(red = r, green = g, blue = b)
             val gold = c(0x7D, 0x63, 0x2C)

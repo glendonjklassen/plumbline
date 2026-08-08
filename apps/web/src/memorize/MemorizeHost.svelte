@@ -4,11 +4,9 @@
   // (first letters / blank-out slider / typed recall + four grades), and the
   // stats view (8-section coverage rollup + reviews-per-day activity).
   //
-  // Its own SCREEN, not a modal (2026-07-29 — "memorize should be its own screen
-  // like it is on Android"). It was a 520px centred dialog with a backdrop, which
-  // made the app's second-biggest surface feel like a confirmation prompt and left
-  // the reader scrolling behind it. It now fills the body between the top bar and
-  // the destination nav, exactly as ui/MemorizeScreen.kt does.
+  // Its own SCREEN, not a modal: it fills the body between the top bar and the
+  // destination nav, exactly as ui/MemorizeScreen.kt does — the app's
+  // second-biggest surface should not feel like a confirmation prompt.
   import { untrack } from "svelte";
   import { getSession } from "../state/session.svelte";
   import { nowStamp } from "../engine/StudyEngine";
@@ -28,7 +26,7 @@
   // minted a fresh key every second: the answer went null, `dueRefs` fell back
   // to [], and the reset effect below re-ran — about once a second it threw the
   // reader out of "Type it" and discarded what they had typed, which made typed
-  // recall unusable and the e2e drill tests flaky (feedback 2026-07-27).
+  // recall unusable and the e2e drill tests flaky.
   // Keyed on the dialog being OPEN, not on `view`, so hub→review keeps the same
   // stamp and the queue snapshot below still sees a resolved due list; and on
   // studyEpoch, so a card just added or graded is scored against now.
@@ -110,8 +108,8 @@
   }
   // The engine lives in the worker, so scoring is a round trip. `s.engine` is
   // the console/e2e proxy and returns a PROMISE — assigning it straight to
-  // `score` made every check read "0% recalled", even a perfect copy/paste
-  // (feedback 2026-07-27). Go through the cache like every other read.
+  // `score` made every check read "0% recalled", even a perfect copy/paste.
+  // Go through the cache like every other read.
   async function check(): Promise<void> {
     if (!currentRef) return;
     score = await s.fetchQ("memoryScore", currentRef, typed);

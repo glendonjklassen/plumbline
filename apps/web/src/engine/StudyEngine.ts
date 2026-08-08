@@ -293,10 +293,7 @@ export class StudyEngine {
   deferBuilds(on: boolean): void {
     (this.#w.exports.plumbline_engine_defer_builds as Function)(this.#engine, on ? 1 : 0);
   }
-  // NO verseSimSave / verseSimLoad. The "verses like this" (SIF) model was the
-  // most expensive thing a launch did, so the shell stored the built model in
-  // the depot and reinstalled it through a pair of wasm-only exports. Feature
-  // and exports both removed 2026-07-30; nothing the engine builds now is worth
+  // NO verseSimSave / verseSimLoad. Nothing the engine builds now is worth
   // persisting between tabs.
 
   /** Load the R&D artifacts from the home if they arrived after open (the

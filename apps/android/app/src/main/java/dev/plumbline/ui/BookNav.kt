@@ -1,22 +1,22 @@
-// The passage navigator (product feedback, 2026-07-24): the book dropdown
-// replaced by tap stages — Testament (OT | NT) → book grid → chapter grid —
-// every step a big touch target. Fullscreen overlay; back steps a stage, then
-// closes.
+// The passage navigator: tap stages — Testament (OT | NT) → book grid →
+// chapter grid — every step a big touch target. Fullscreen overlay; back steps
+// a stage, then closes.
 //
-// The verse stage was dropped 2026-07-26: book and chapter is the navigation
-// people actually use, and verse counts aren't a core endpoint — the stage had
-// to binary-search VerseJson existence to size its grid, so every chapter tap
-// showed a "…" while the probes ran. Verse targeting still arrives through
-// links, cross-references and search, which already carry a verse.
+// There is no verse stage: book and chapter is the navigation people actually
+// use, and verse counts aren't a core endpoint. Verse targeting still arrives
+// through links, cross-references and search, which already carry a verse.
 //
 // Author D (Compose UI).
 
 package dev.plumbline.ui
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +33,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,9 +45,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -63,7 +66,10 @@ import dev.plumbline.ReadingChapters
 import dev.plumbline.StudyEngine
 import dev.plumbline.TocBook
 import dev.plumbline.parseWire
+import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Canon position of the OT/NT divide (Gen..Mal = 39 books). The core's
@@ -93,6 +99,15 @@ fun BookNavScreen(
     var newTestament by remember { mutableStateOf(currentIdx >= OT_BOOKS) }
     var pickedBook by remember { mutableStateOf<TocBook?>(null) }
 
+    // Marking a chapter read: a long-press opens the date dialog, and a
+    // book-level button logs the whole book. `reloadKey` re-fetches the tint
+    // after a write so the tile recolours in place.
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var markChapter by remember { mutableStateOf<Int?>(null) }
+    var confirmBook by remember { mutableStateOf(false) }
+    var reloadKey by remember { mutableStateOf(0) }
+
     // The reading map. Fetched once per navigator open — it is a whole-canon
     // roll-up, and nothing can change it while the navigator is up.
     var books by remember { mutableStateOf<Map<String, ReadingBook>>(emptyMap()) }
@@ -104,7 +119,7 @@ fun BookNavScreen(
     }
     // Chapters for the book on screen, fetched when one is picked.
     var chapters by remember { mutableStateOf<Map<Int, ReadingChapter>>(emptyMap()) }
-    LaunchedEffect(pickedBook?.id) {
+    LaunchedEffect(pickedBook?.id, reloadKey) {
         val id = pickedBook?.id
         chapters = if (id == null) {
             emptyMap()
@@ -117,6 +132,45 @@ fun BookNavScreen(
                         }.getOrNull()
                     }
             } ?: emptyMap()
+        }
+    }
+
+    fun logRead(bookId: String, chapter: Int, date: String) {
+        scope.launch {
+            val outcome = withContext(Dispatchers.Default) {
+                saveOutcome(runCatching { synchronized(engine) { engine.ReadingMarkRead(bookId, chapter, date) } })
+            }
+            Toast.makeText(
+                context,
+                when (outcome) {
+                    is SaveOutcome.Saved -> t("markRead.marked", "when" to date)
+                    is SaveOutcome.Failed -> t("markRead.notMarked", "why" to outcome.message)
+                },
+                Toast.LENGTH_SHORT,
+            ).show()
+            reloadKey++
+        }
+    }
+    fun forget(bookId: String, chapter: Int) {
+        scope.launch {
+            withContext(Dispatchers.Default) {
+                runCatching { synchronized(engine) { engine.ReadingForget(bookId, chapter) } }
+            }
+            reloadKey++
+        }
+    }
+    fun logWholeBook(b: TocBook) {
+        scope.launch {
+            val today = LocalDate.now(ZoneOffset.UTC).toString()
+            withContext(Dispatchers.Default) {
+                synchronized(engine) { for (c in 1..b.chapters.toInt()) engine.ReadingMarkRead(b.id, c, today) }
+            }
+            Toast.makeText(
+                context,
+                t("booknav.markedBook", "book" to b.name, "n" to b.chapters.toInt()),
+                Toast.LENGTH_SHORT,
+            ).show()
+            reloadKey++
         }
     }
 
@@ -169,8 +223,44 @@ fun BookNavScreen(
                     chapters[n]?.let { readingTint(palette, it.standing, it.pct, it.glow) }
                 },
                 onPick = { chapter -> onGo(book.id, chapter, null) },
+                onLongPick = { chapter -> markChapter = chapter },
+                headerAction = {
+                    TextButton(onClick = { confirmBook = true }) {
+                        Text(t("booknav.markBook"), color = palette.gold, fontSize = 13.sp)
+                    }
+                },
             )
         }
+    }
+
+    // Long-press a chapter → the date dialog (today / yesterday / last week
+    // shortcuts, a picker, and clear).
+    val mc = markChapter
+    val pb = pickedBook
+    if (mc != null && pb != null) {
+        MarkReadDialog(
+            palette = palette,
+            label = "${pb.name} $mc",
+            onPick = { date -> markChapter = null; logRead(pb.id, mc, date) },
+            onClear = { markChapter = null; forget(pb.id, mc) },
+            onCancel = { markChapter = null },
+        )
+    }
+    if (confirmBook && pb != null) {
+        AlertDialog(
+            onDismissRequest = { confirmBook = false },
+            containerColor = palette.panelBg,
+            title = { Text(t("booknav.markBookAsk", "book" to pb.name), color = palette.ink) },
+            text = { Text(t("booknav.markBookBody", "n" to pb.chapters.toInt()), color = palette.faded) },
+            confirmButton = {
+                TextButton(onClick = { confirmBook = false; logWholeBook(pb) }) {
+                    Text(t("booknav.markBook"), color = palette.gold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmBook = false }) { Text(t("common.cancel"), color = palette.faded) }
+            },
+        )
     }
 }
 
@@ -288,12 +378,17 @@ private fun NumberGrid(
     header: String,
     tint: (Int) -> ReadingTint? = { null },
     onPick: (Int) -> Unit,
+    onLongPick: (Int) -> Unit = {},
+    headerAction: @Composable () -> Unit = {},
 ) {
     Column(Modifier.fillMaxSize()) {
-        Text(
-            header, color = palette.faded, fontSize = 13.sp,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-        )
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(header, color = palette.faded, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            headerAction()
+        }
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 56.dp),
             modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
@@ -302,18 +397,20 @@ private fun NumberGrid(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items((1..count).toList()) { n ->
-                NumberCell(n.toString(), palette, tint(n)) { onPick(n) }
+                NumberCell(n.toString(), palette, tint(n), onClick = { onPick(n) }, onLongClick = { onLongPick(n) })
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NumberCell(
     label: String,
     palette: ReaderPalette,
     tint: ReadingTint? = null,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
 ) {
     Box(
         Modifier
@@ -321,7 +418,7 @@ private fun NumberCell(
             .readingGlow(tint, 8.dp)
             .border(1.dp, tint?.border ?: palette.rule, RoundedCornerShape(8.dp))
             .background(tint?.fill ?: Color.Transparent, RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = palette.ink, fontSize = 16.sp)

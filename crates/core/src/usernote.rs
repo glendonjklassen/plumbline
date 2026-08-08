@@ -240,7 +240,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// AUDIT 2026-07-29 forward compatibility: the on-disk formats evolve
+    /// Forward compatibility: the on-disk formats evolve
     /// **additively** (CLAUDE.md §Data formats), and a sideloaded APK never
     /// auto-updates — so a key this build drops is dropped for good on that
     /// device. Editing a note written by a later build must keep every one.

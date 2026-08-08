@@ -82,6 +82,44 @@ test("the finder matches number, title and first line", async ({ page }) => {
   await expect(page.locator(".empty")).toBeVisible();
 });
 
+test("the finder narrows by language — code, English name and endonym alike", async ({ page }) => {
+  await boot(page);
+  await openHymnal(page);
+  const all = await page.locator(".row").count();
+
+  // The truth, from the engine: how many hymns carry a German text. Asking the
+  // index rather than hard-coding a number keeps this green as the book grows.
+  const german = await page.evaluate(async () => {
+    const ix = await (window as any).__plumbline.rpc.call("hymnal");
+    return (ix?.hymns ?? []).filter((h: any) => Object.keys(h.titles ?? {}).includes("de")).length;
+  });
+  // Not vacuous, and a real narrowing — the book has German hymns but not only.
+  expect(german).toBeGreaterThan(0);
+  expect(german).toBeLessThan(all);
+
+  const find = page.getByLabel("Find a hymn");
+  // "de" (code), "German" (English name) and "Deutsch" (endonym) all mean the
+  // same slice — and case does not matter.
+  for (const q of ["de", "German", "deutsch", "DE"]) {
+    await find.fill(q);
+    await expect(page.locator(".row"), `"${q}" should list every German hymn`).toHaveCount(german);
+  }
+
+  // Stacked on the text search: a language token AND a title fragment. Pick a
+  // German hymn through the engine and narrow to it by "de" + a title slice.
+  const pickTitle = await page.evaluate(async () => {
+    const ix = await (window as any).__plumbline.rpc.call("hymnal");
+    const h = (ix?.hymns ?? []).find((x: any) => Object.keys(x.titles ?? {}).includes("de"));
+    return h?.titles?.de ?? null;
+  });
+  expect(pickTitle).toBeTruthy();
+  const slice = (pickTitle as string).slice(0, 6).toLowerCase();
+  await find.fill(`de ${slice}`);
+  const combined = await page.locator(".row").count();
+  expect(combined).toBeGreaterThanOrEqual(1);
+  expect(combined).toBeLessThanOrEqual(german);
+});
+
 test("chords appear on request and transpose by a real interval", async ({ page }) => {
   await boot(page);
   await openHymnal(page);

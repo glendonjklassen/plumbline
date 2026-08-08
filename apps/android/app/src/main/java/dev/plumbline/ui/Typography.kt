@@ -1,6 +1,6 @@
 // The app's type: EB Garamond everywhere, chrome included.
 //
-// Font parity with the web shell (2026-07-28). Both shells ship the SAME two
+// Font parity with the web shell. Both shells ship the SAME two
 // files — byte-identical variable TTFs, wght 400–700 — and both already used
 // them for scripture. The chrome had drifted: the web sets
 // `body { font-family: "EB Garamond" }` (apps/web/src/app.css), so every
@@ -16,7 +16,7 @@
 // Garamond's x-height is much smaller than Roboto's, so the chrome will read a
 // touch smaller until sizes are re-tuned on-device.
 //
-// ONCE PER PROCESS, not once per composition (2026-07-30). `Font(path, assets)`
+// ONCE PER PROCESS, not once per composition. `Font(path, assets)`
 // is not a description of a font — `AndroidAssetFont` parses the TTF in its
 // CONSTRUCTOR, on whatever thread builds the family — and this was a
 // `remember`, which is scoped to one composition. Five call sites build a

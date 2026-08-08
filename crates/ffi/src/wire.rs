@@ -1135,24 +1135,23 @@ pub struct WireConfigState {
     /// Reading history, most-recent-first (capped by the core).
     #[serde(default)]
     pub history: Vec<WirePaneRef>,
-    /// Show the curated-scholarship analysis tiers (additive, 2026-07-25;
-    /// absent on load → derived from `studyMode`).
+    /// Show the curated-scholarship analysis tiers (additive; absent on load →
+    /// derived from `studyMode`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub human_analysis: Option<bool>,
-    /// Show the learned/statistical analysis tiers (additive, 2026-07-25).
+    /// Show the learned/statistical analysis tiers (additive).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub machine_analysis: Option<bool>,
-    /// The reader's home church (additive, 2026-07-27): shown in the welcome
+    /// The reader's home church (additive): shown in the welcome
     /// when a shared link carried one, and attached to the links this reader
     /// shares. Absent when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub church: Option<WireChurch>,
-    /// Present-screen shares open as a new believer (additive, 2026-07-27).
+    /// Present-screen shares open as a new believer (additive).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub present_shares_as_new: Option<bool>,
-    /// The plain-English overlay (the AKJV delta) on the reader (additive,
-    /// 2026-07-29). Absent → off. Both shells were already writing this key;
-    /// the core had no field for it, so every save dropped it.
+    /// The plain-English overlay (the AKJV delta) on the reader (additive).
+    /// Absent → off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub akjv_overlay: Option<bool>,
     /// The welcome this reader was given, "new" | "curious" (additive).
@@ -1330,7 +1329,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         },
         // Through the core's clamps, not a local trim: this is the one place a
         // shell's church becomes the core's, so it is where the caps stop being
-        // something each shell has to remember (2026-08-01).
+        // something each shell has to remember.
         church: w.church.as_ref().map(|c| church::clean(&c.to_core())).unwrap_or_default(),
     }
 }
@@ -1382,7 +1381,7 @@ pub struct WireUserNotes {
 pub struct WireMemoryCard {
     #[serde(rename = "ref")]
     pub reference: String,
-    /// Reader-facing name: `"Ps 23:1–6"` for a passage card (additive, 2026-07-27).
+    /// Reader-facing name: `"Ps 23:1–6"` for a passage card (additive).
     pub label: String,
     /// The passage's last verse, when this card is a passage.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1453,7 +1452,7 @@ pub struct WireMemoryCoverage {
     /// Per-verse shading for the coverage map — a passage card contributes
     /// every verse it covers.
     pub verses: Vec<memory::VerseCoverage>,
-    /// One row per card, for the hub's list (additive, 2026-07-27).
+    /// One row per card, for the hub's list (additive).
     pub cards: Vec<memory::CardSummary>,
     pub sections: Vec<memory::SectionCoverage>,
 }
@@ -1472,7 +1471,7 @@ pub struct WireMemoryDrill {
     #[serde(rename = "ref")]
     pub reference: String,
     /// What the drill is called on screen — `"Ps 23:1–6"` for a passage card
-    /// (additive, 2026-07-27).
+    /// (additive).
     pub label: String,
     /// Verses in the drill (1 unless this card is a passage).
     pub verses: u32,
@@ -1653,6 +1652,10 @@ pub struct WireLanguage {
     pub code: String,
     /// What this language calls itself — "Deutsch", not "German".
     pub endonym: String,
+    /// Its English name — "German", not "Deutsch". The hymnal finder matches
+    /// this, the endonym or the code, so a reader narrows the book by any of
+    /// "de", "German" or "Deutsch".
+    pub name: String,
 }
 
 pub fn catalog_to_wire(lang: i18n::Lang) -> WireCatalog {
@@ -1661,7 +1664,11 @@ pub fn catalog_to_wire(lang: i18n::Lang) -> WireCatalog {
         strings: i18n::resolved(lang),
         languages: i18n::Lang::ALL
             .iter()
-            .map(|l| WireLanguage { code: l.code().to_string(), endonym: l.endonym().to_string() })
+            .map(|l| WireLanguage {
+                code: l.code().to_string(),
+                endonym: l.endonym().to_string(),
+                name: l.exonym().to_string(),
+            })
             .collect(),
     }
 }

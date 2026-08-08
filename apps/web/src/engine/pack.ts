@@ -125,13 +125,11 @@ async function gunzip(body: ArrayBuffer): Promise<Uint8Array> {
 
 /** Per-file download detail, for the diagnostics panel.
  *
- *  The trace used to carry ONE number per stage — "stage2 fetch+gunzip" — which
- *  conflates three unrelated things: bytes off the network, bytes off this
- *  device, and time the thread simply wasn't available to receive either. On a
- *  phone that read 33,993 ms where a desktop over localhost read 907 ms, and
- *  dividing the byte count by it produced a "connection speed" that was pure
- *  invention (2026-07-28). Never again from one number: record what each file
- *  cost and WHERE IT CAME FROM. */
+ *  ONE number per stage — "stage2 fetch+gunzip" — conflates three unrelated
+ *  things: bytes off the network, bytes off this device, and time the thread
+ *  simply wasn't available to receive either. Dividing the byte count by it
+ *  produces a "connection speed" that is pure invention. So record what each file
+ *  cost and WHERE IT CAME FROM, not one number. */
 export interface PackFileTrace {
   path: string;
   gzBytes: number;
@@ -143,11 +141,10 @@ export interface PackFileTrace {
    *  reading them.
    *
    *  This is the whole argument-settler. Our `ms` above is wall clock around an
-   *  `await`, so a frozen thread inflates it without limit: a phone reported
-   *  34,448 ms for a 787 KB file sitting beside a 3,304 KB file that took 475 ms
-   *  (2026-07-28). If `netMs` is small while `ms` is huge, the bytes arrived on
-   *  time and we were late collecting them — which is a scheduling bug, not a
-   *  bandwidth one, and no amount of shrinking the pack would touch it. */
+   *  `await`, so a frozen thread inflates it without limit. If `netMs` is small
+   *  while `ms` is huge, the bytes arrived on time and we were late collecting
+   *  them — which is a scheduling bug, not a bandwidth one, and no amount of
+   *  shrinking the pack would touch it. */
   netMs?: number;
   transferBytes?: number;
 }
@@ -177,8 +174,8 @@ async function fetchFiles(
 ): Promise<Map<string, Uint8Array>> {
   const totalGz = files.reduce((s, f) => s + f.gzBytes, 0);
   // Bytes as they arrive, not files as they finish: the analysis pack is a
-  // handful of files and one of them dwarfs the rest, so per-file reporting sat
-  // at 0% for the whole download on a phone (2026-07-27).
+  // handful of files and one of them dwarfs the rest, so per-file reporting would
+  // sit at 0% for the whole download on a phone.
   let received = 0;
   const out = new Map<string, Uint8Array>();
   // A few files concurrently; decompression overlaps the network.
@@ -246,10 +243,10 @@ export async function sha16(raw: Uint8Array): Promise<string | null> {
 /** Check a freshly-stored pack file against the hash the manifest claims, and
  *  delete it if it does not match.
  *
- *  Nothing verified downloaded content before this beyond `res.ok`, so a CDN error
- *  page served with a 200, or a truncated body, was stored as a permanently valid
- *  file — and the engine then failed to parse it on every launch with no recovery
- *  path. This is what makes the per-file hash load-bearing rather than decorative. */
+ *  Without this, a CDN error page served with a 200, or a truncated body, is
+ *  stored as a permanently valid file — and the engine then fails to parse it on
+ *  every launch with no recovery path. This is what makes the per-file hash
+ *  load-bearing rather than decorative. */
 export async function verifyStored(f: PackFile, version: string): Promise<boolean> {
   if (!f.hash) return true;
   const url = packFileUrl(f, version);
@@ -340,12 +337,11 @@ export function fetchRndPack(
  * home's install marker — NOT whether the bytes happen to be in the depot,
  * which prune is free to reclaim.
  *
- * `has` is asked PER FILE rather than once for the whole stage. It was a single
- * boolean while the suggested weaves were the only optional entry; the German
- * corpus made that wrong, because a reader can easily have one and not the
- * other, and either answer would have been a lie about half the set — the pin
- * naming a file that is absent, or the update sweep silently pushing a German
- * Bible onto a device that never asked for it.
+ * `has` is asked PER FILE rather than once for the whole stage, because a reader
+ * can easily have one optional file and not another, and one boolean for the
+ * whole set would be a lie about half of it — the pin naming a file that is
+ * absent, or the update sweep silently pushing a German Bible onto a device that
+ * never asked for it.
  *
  * Two things read this and they must not disagree. The update sweep fetches
  * exactly this set, so a deploy never pushes an optional file onto a device
@@ -379,10 +375,9 @@ export function hasOptional(
  * it should skip.
  *
  * Two corpus caches are in the pack now, and a German reader has both on the
- * device. Until this existed, stage 1 gunzipped and copied BOTH into the home
- * on every launch — about 63 MB of work and memory before any text appeared,
- * against 35 MB for an English reader, and then the home evicted both. Only one
- * is ever opened.
+ * device. Without this, stage 1 would gunzip and copy BOTH into the home on
+ * every launch — about 63 MB of work and memory before any text appeared,
+ * against 35 MB for an English reader — when only one is ever opened.
  *
  * BY `plumbline.lang`, and not by the config, because stage 1 runs before there
  * is an engine to read a config with. That key is already the splash's own seed

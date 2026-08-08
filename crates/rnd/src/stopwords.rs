@@ -4,7 +4,7 @@
 //! Concept-neighbour surfaces (embedding spokes, collocates) exclude these:
 //! function words co-occur with *everything*, so distributionally they sit
 //! "near" every content word — the concept map for *believe* was offering
-//! *because* as a similar concept (product feedback, 2026-07-25). The query
+//! *because* as a similar concept. The query
 //! code itself is never filtered — a reader can still open ὅτι or הָיָה
 //! directly and study it; the codes below just stop appearing as neighbours.
 //!

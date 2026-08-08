@@ -123,14 +123,11 @@ class MainActivity : ComponentActivity() {
                     //
                     // v2: the bundled set gained akjv.akjvb (the plain-English
                     // overlay).
-                    // v3: hymnal.json (2026-08-02). Adding it to the gradle
-                    // include list was not enough and shipped broken in v0.39.0
-                    // — every existing install opened the hymn tab to "The
-                    // hymnal has not finished loading yet." The comment above
-                    // described this exact failure and it happened anyway, so
+                    // v3: hymnal.json.
+                    // v4: luther1912.jsonl, the German corpus.
                     // `bundledDataMarkerIsBumpedForTheCurrentAssetSet` in
-                    // MainActivityTest now fails the build instead.
-                    // v4: luther1912.jsonl, the German corpus (2026-08-03).
+                    // MainActivityTest fails the build if this marker lags the
+                    // bundled asset set.
                     val corpus = File(home, ".data-v4")
                     if (!corpus.exists()) {
                         copyAsset("data", File(home, "data"), buf = buf)
@@ -149,23 +146,16 @@ class MainActivity : ComponentActivity() {
                     val opened = StudyEngine.Open(home.absolutePath)
                     // STAGE 2, such as it is. `plumbline_engine_open` loads the
                     // corpus and Strong's, but the plain-English overlay arrives
-                    // only through `load_core_data` — which the web calls in its
-                    // background stage and this shell never called at all.
+                    // only through `load_core_data`, which the web calls in its
+                    // background stage.
                     //
-                    // So every piece of the Android overlay was built and wired —
-                    // the engine binding, the dotted mark in ReaderPane, the
-                    // AkjvHeader on a tap, the Settings toggle — and none of it
-                    // could ever appear, because the toggle hides itself unless
-                    // `AkjvAvailable()` is true and nothing had loaded an overlay
-                    // for it to find (2026-07-28). A whole feature held shut by a
-                    // missing call.
-                    //
-                    // Here, before the engine is handed to the UI, rather than as
-                    // a background stage: Android has every file on local disk at
-                    // open, so there is nothing to stage and nothing to race. That
-                    // also makes `AkjvAvailable()` deterministic by the time
-                    // StudyScreen asks it, instead of a question whose answer
-                    // depends on which finished first.
+                    // Called here, before the engine is handed to the UI, rather
+                    // than as a background stage: Android has every file on local
+                    // disk at open, so there is nothing to stage and nothing to
+                    // race. That also makes `AkjvAvailable()` deterministic by the
+                    // time StudyScreen asks it, instead of a question whose answer
+                    // depends on which finished first. The Settings overlay toggle
+                    // hides itself unless `AkjvAvailable()` is true.
                     opened.LoadCoreData()
                     opened
                 }
@@ -205,23 +195,20 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Build the lazy indexes THIS reader's settings actually use, off the UI
-     *  thread, so their first search / word study isn't a cold stall. (It used
-     *  to say "/ map" too — that was the concept map, which went 2026-07-30; the
-     *  weave maps that are left read the weave library, not these indexes.)
+     *  thread, so their first search / word study isn't a cold stall.
      *
-     *  It used to be one `WarmIndexes()` call, which forces the lot —
-     *  including the machine tier (concept, leitwort), which has been OFF
-     *  by default since the tiers went opt-in (`core::config`
-     *  `machine_analysis: false`). A reader who never asked for machine analysis
-     *  paid its corpus-wide scans at every single cold start, for panels the
-     *  gates then refuse to draw.
+     *  Warming everything (one `WarmIndexes()` call) forces the lot — including
+     *  the machine tier (concept, leitwort), which is OFF by default
+     *  (`core::config` `machine_analysis: false`). A reader who never asked for
+     *  machine analysis would pay its corpus-wide scans at every cold start, for
+     *  panels the gates then refuse to draw.
      *
      *  So the plan comes from the reader's own config ([warmPlan]) and is
      *  executed a step at a time ([warmTouch]). Deliberately NOT inside
-     *  `synchronized(engine)`, exactly as the old single call was: the first
-     *  chapter layout takes that monitor (on `Dispatchers.Default`, see
-     *  `ReaderPane.publishOrClose`), so a warm that held it would put itself in
-     *  front of first text — the opposite of the point.
+     *  `synchronized(engine)`: the first chapter layout takes that monitor (on
+     *  `Dispatchers.Default`, see `ReaderPane.publishOrClose`), so a warm that
+     *  held it would put itself in front of first text — the opposite of the
+     *  point.
      *
      *  The plan is read ONCE, at launch. Turning a tier on mid-session leaves
      *  its indexes to build on first use (the lazy path they have always had);
@@ -517,15 +504,12 @@ internal fun isTempName(name: String): Boolean {
  *  half-written one. Same shape as the core's `store::write_atomic_bytes`: a
  *  sibling temp (rename is only atomic within one filesystem), flushed to disk
  *  before the rename, and cleaned up best-effort if anything throws. The name is
- *  dotted and `.tmp`-suffixed so a stranded one is ignorable.
- *
- *  (This comment had drifted two declarations up the file and was sitting on
- *  [isTempName]; put back where it belongs while the signature changed.) */
+ *  dotted and `.tmp`-suffixed so a stranded one is ignorable. */
 internal fun writeThroughTemp(
     dest: File,
     input: InputStream,
     // A caller with a whole pass to run supplies its own; anything else gets
-    // what `copyTo` used to give every file here.
+    // `copyTo`'s default buffer size.
     buf: ByteArray = ByteArray(DEFAULT_BUFFER_SIZE),
 ) {
     val tmp = File(dest.absoluteFile.parentFile, ".${dest.name}.${tempSeq.incrementAndGet()}.tmp")
@@ -560,10 +544,7 @@ internal fun writeThroughTemp(
  *  order it forces them (`crates/ffi/src/lib.rs`), and each is built once per
  *  session on first use. Which TIER owns which is `core::config`'s own division:
  *  **human** (curated scholarship) owns renderings, same-root and TSK; **machine**
- *  (learned/statistical) owns the concept fold and leitwort.
- *
- *  There was an eighth, the SIF "verses like this" model. It went with the rest
- *  of the machine-similarity features on 2026-07-30. */
+ *  (learned/statistical) owns the concept fold and leitwort. */
 internal enum class WarmIndex {
     /** Full-text search over the corpus + the reader's notes. Ungated: the
      *  search overlay is not analysis, and it is one tap from the reader. */
@@ -583,13 +564,12 @@ internal enum class WarmIndex {
     StudyXrefs,
 
     /** The fused OT↔NT bridge — the word study's SAME ROOT ACROSS TESTAMENTS.
-     *  `gates.human`, and only that since 2026-07-30: the concept map's partner
-     *  band was the machine tier's one reader of it, and the map is gone. */
+     *  `gates.human`. */
     Bridge,
 
     /** The concept model — a corpus-wide co-occurrence fold, behind APPEARS
      *  ALONGSIDE and MOST USED IN. `gates.machine`. Symbolic statistics, not
-     *  embeddings; unrelated to the concept map that was removed. */
+     *  embeddings. */
     Concept,
 
     /** The leitwort scan, discovered over the whole corpus. `gates.machine`.
@@ -604,17 +584,8 @@ internal enum class WarmIndex {
  *  that owns it, because an index the gates will not let a panel draw is an
  *  index nobody asked to be built.
  *
- *  The bridge used to answer to EITHER tier — the human word study lists
- *  same-root partners, and the concept map banded them. The map went on
- *  2026-07-30, and `panel.rs` reaches `bridge_partners` only under `gates.human`,
- *  so the bridge is the curated tier's alone now.
- *
- *  There was also a disagreement worth recording as closed: the embedded
- *  concept-map card was drawn for any tapped code with no tier check at all, in
- *  both shells, so a reader with both tiers off could still make the engine build
- *  the concept model on a tap. Removing the card removed that path — every
- *  machine-tier build is now behind the machine gate, which is what this plan
- *  assumes.
+ *  The bridge is the curated tier's alone: `panel.rs` reaches `bridge_partners`
+ *  only under `gates.human`.
  *
  *  Order matters — see [warmTouch] on why Search goes first. */
 internal fun warmPlan(humanAnalysis: Boolean, machineAnalysis: Boolean): List<WarmIndex> = buildList {

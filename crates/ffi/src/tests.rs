@@ -569,17 +569,6 @@ fn rnd_tier_via_abi() {
         std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
         std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
 
-        // Tiny aligned embedding over the fixture's codes + one Hebrew row.
-        std::fs::write(
-            home.join("data").join("concept-vectors.vec"),
-            "4 2\nG2316 1 0\nG25 0.9 0.1\nG4100 0.2 1\nH7225 0.95 0.05\n",
-        )
-        .unwrap();
-        std::fs::write(
-            home.join("data").join("concept-vectors.vec.meta"),
-            r#"{"tokenization":"kjv1769-tok2","aligned":"procrustes"}"#,
-        )
-        .unwrap();
         // Morphology annotating "loved" (token 3, G25) in John 3:16.
         std::fs::write(
             home.join("data").join("morphology.jsonl"),
@@ -866,8 +855,7 @@ fn config_round_trip_via_abi() {
         assert_eq!(loaded["bodySize"], 21.0);
         assert_eq!(loaded["openPanes"][1]["book"], "Rom");
         assert_eq!(loaded["activePane"], 1);
-        // Not asked for → off (AUDIT 2026-07-29: the field used to be missing
-        // from the wire state entirely, so a shell's save dropped it).
+        // Not asked for → off.
         assert_eq!(loaded["akjvOverlay"], false);
 
         // The plain-English overlay is a reader preference like any other: what
@@ -1100,7 +1088,7 @@ fn tier0_endpoints_via_abi() {
         assert!(plumbline_engine_memory_remove(e, c("John 3:16").as_ptr()).is_null());
         assert!(plumbline_engine_memory_card_json(e, c("John 3:16").as_ptr()).is_null());
 
-        // A passage memorized as ONE chunk (2026-07-27): the card is keyed by
+        // A passage memorized as ONE chunk: the card is keyed by
         // its first verse, labelled as a range, and drilled/scored over the
         // whole span — not one card per verse. (This fixture holds John 3:16 and
         // 3:18 only, which also exercises a span whose middle verse is absent.)
@@ -1292,7 +1280,7 @@ fn timing_harness_concept_parts() {
     let comms = concept::communities(30, &knn);
     println!("communities:      {:?} ({} groups)", t.elapsed(), comms.len());
 
-    // The warm phases that are still ONE call each (2026-07-27): whichever is
+    // The warm phases that are still ONE call each: whichever is
     // worst is the next slice to cut.
     let t = Instant::now();
     let lw = burst::discover_leitworter(&burst::BurstParams::default(), &corpus);
@@ -1436,17 +1424,7 @@ fn rnd_data_loads_after_open() {
         // A no-op load while the files are still missing is harmless.
         assert!(plumbline_engine_load_rnd_data(e).is_null());
 
-        // The R&D pack arrives (same artifacts as rnd_tier_via_abi).
-        std::fs::write(
-            home.join("data").join("concept-vectors.vec"),
-            "4 2\nG2316 1 0\nG25 0.9 0.1\nG4100 0.2 1\nH7225 0.95 0.05\n",
-        )
-        .unwrap();
-        std::fs::write(
-            home.join("data").join("concept-vectors.vec.meta"),
-            r#"{"tokenization":"kjv1769-tok2","aligned":"procrustes"}"#,
-        )
-        .unwrap();
+        // The R&D pack arrives: the morphology sidecar (same as rnd_tier_via_abi).
         std::fs::write(
             home.join("data").join("morphology.jsonl"),
             "{\"format\":\"overlay-morphology-v1\",\"tokenization\":\"kjv1769-tok2\",\"source\":\"test\"}\n\
@@ -1465,8 +1443,8 @@ fn rnd_data_loads_after_open() {
     }
 }
 
-/// A corpus of `chapters * per` verses over Psalms, every verse carrying codes
-/// the test embedding covers. Deliberately bigger than one warm slice — see
+/// A corpus of `chapters * per` verses over Psalms, every verse carrying the
+/// four Strong's codes the fixtures use. Deliberately bigger than one warm slice — see
 /// `sif_model_is_built_in_slices` for why that is the whole point.
 fn generated_kjv(chapters: u16, per: u16) -> String {
     const CODES: [&str; 4] = ["G2316", "G25", "G4100", "H7225"];
@@ -1486,21 +1464,11 @@ fn generated_kjv(chapters: u16, per: u16) -> String {
 
 /// A reader's tap must never BUILD an index while a sliced warm is running.
 ///
-/// This is the bug the whole 2026-07-28 investigation was chasing, and it hid for
-/// three days because `call` — the op every engine request arrives on in the web
-/// shell — was not timed. Once it was, the phone named it immediately:
-///
-///     SLOWEST ENGINE CALLS
-///        21966 ms  wordStudyBlocks
-///        11352 ms  wordStudyBlocks
-///     worst single stall   21984 ms
-///
-/// Tap a word before the chunked warm reaches them and `wordStudyBlocks` built
+/// Tap a word before the chunked warm reaches them and `wordStudyBlocks` builds
 /// the occurrence index, the rendering lens, the cross-references, the concept
-/// model and the bridge in ONE synchronous lump — 22 seconds during which the
-/// only thread that can answer a tap answered nothing, including its own
-/// downloads (a 2.6 MB file the network delivered in 1,673 ms was collected
-/// 23,825 ms later). Slicing the warm is pointless if a tap can undo it.
+/// model and the bridge in ONE synchronous lump — tens of seconds during which
+/// the only thread that can answer a tap answers nothing, including its own
+/// downloads. Slicing the warm is pointless if a tap can undo it.
 ///
 /// Both halves matter, so both are asserted: the tap builds NOTHING, and the tap
 /// still answers. An engine that returned an error, or empty blocks, would
@@ -2529,10 +2497,11 @@ fn the_catalogue_crosses_the_abi_whole_and_falls_back_to_english() {
         assert!(strings.len() > 20, "the English catalogue looks empty: {} keys", strings.len());
         assert_eq!(strings["nav.read"], "Read");
 
-        // A picker needs every language labelled in ITSELF.
+        // A picker needs every language labelled in ITSELF; the hymnal finder
+        // also needs the English name, so "German" narrows the book like "de".
         let langs = en["languages"].as_array().unwrap();
-        assert!(langs.iter().any(|l| l["code"] == "en" && l["endonym"] == "English"));
-        assert!(langs.iter().any(|l| l["code"] == "de" && l["endonym"] == "Deutsch"));
+        assert!(langs.iter().any(|l| l["code"] == "en" && l["endonym"] == "English" && l["name"] == "English"));
+        assert!(langs.iter().any(|l| l["code"] == "de" && l["endonym"] == "Deutsch" && l["name"] == "German"));
 
         // German resolves to German and answers EVERY English key, translated
         // or not — a shell must never meet a missing id.
@@ -2639,7 +2608,7 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
         assert!(w["strongs"].as_array().is_none_or(|a| a.is_empty()), "a German token carries Strong's codes: {w}");
 
         // THE STUDY CARD SAYS WHY IT IS EMPTY, in German, rather than showing
-        // English evidence about the KJV's words (UAT, 2026-08-03). Everything in
+        // English evidence about the KJV's words. Everything in
         // it — Strong's, morphology, renderings, cross-references — is keyed to
         // KJV token indices, so on this text it would describe different words.
         let blocks = take(plumbline_engine_word_study_blocks2_json(e, c"John 3:16".as_ptr(), 1, 3)).unwrap();
@@ -2652,8 +2621,8 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
         for english in ["no Strong's tag", "Renderings", "same root"] {
             assert!(!blocks.contains(english), "English study prose {english:?} reached a German reader: {blocks}");
         }
-        // Nor any of the PANEL'S OWN LABELS, which were English on a German
-        // screen until UAT caught it — they are catalogue strings now.
+        // Nor any of the PANEL'S OWN LABELS — they are catalogue strings, not
+        // English literals, so they localize with the rest.
         for label in ["＋ tag verse", "＋ add to thread", "your note", "cross-references ("] {
             assert!(!blocks.contains(label), "the study panel's English label {label:?} reached a German reader");
         }
@@ -2674,8 +2643,7 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
 
         // THE CROSS-REFERENCES STAY. They key on refKey, not on a token index, so
         // they are as true of this text as of the KJV — and they are a lot of real
-        // study value. My first pass returned early and threw them away; only
-        // reading this test's own failure output showed it.
+        // study value.
         assert!(
             blocks.contains(&plumbline_core::i18n::t(
                 plumbline_core::i18n::Lang::De,
@@ -2691,12 +2659,11 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
         // gloss, so a German reader saw nothing wrong either way. What they paid
         // was 355,603 entries parsed in ONE synchronous block on the only thread
         // that answers taps, to build an index nothing would read: 3.3 MB of
-        // download and seconds of a phone's CPU (2026-08-03).
+        // download and seconds of a phone's CPU.
         //
         // `new` had the gate; `load_morph_only` did not, and that is the path the
         // WEB takes — its analysis pack lands after the engine has opened, so the
-        // deferred load is the only one that runs there. Android was unaffected,
-        // which is exactly why this went unnoticed.
+        // deferred load is the only one that runs there. Android is unaffected.
         //
         // MUTATION: drop the tokenization check from `load_morph_only`. Red here.
         let _ = take(plumbline_engine_load_rnd_data(e));

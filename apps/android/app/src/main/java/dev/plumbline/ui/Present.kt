@@ -1,5 +1,5 @@
-// Thread presentation mode (the top-priority request, 2026-07-24):
-// hand-the-phone-out Gospel sharing. A thread (e.g. "Romans Road") becomes a
+// Thread presentation mode: hand-the-phone-out Gospel sharing. A thread (e.g.
+// "Romans Road") becomes a
 // clean, fullscreen, large-type presentation:
 //
 //   picker    pick which thread to present (big rows, no chrome clutter).
@@ -223,7 +223,7 @@ fun PresentOverlay(
 /** Sharing a passage is a QR, not the system share sheet. Present is held up to
  *  someone standing in front of you: a share sheet sends a wall of text into an
  *  app they then have to leave, while a code they scan puts the passage on THEIR
- *  phone, in the reader, at the verse (feedback 2026-07-27). The plain-text share
+ *  phone, in the reader, at the verse. The plain-text share
  *  stays behind a button for when the person isn't in front of you. Twin of the
  *  web's PresentHost share sheet. */
 @Composable
@@ -546,7 +546,7 @@ private fun EndCard(
         }
         Spacer(Modifier.height(26.dp))
         // The take-home carries the PASSAGE, not just the app: scanning opens
-        // the hosted PWA at this thread's first verse (2026-07-27).
+        // the hosted PWA at this thread's first verse.
         QrCode(text = shareLink, size = 148.dp)
         Spacer(Modifier.height(8.dp))
         Text(

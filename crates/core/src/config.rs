@@ -2,8 +2,8 @@
 //! body-text size, persisted as JSON at the platform's per-user config
 //! directory.
 //!
-//! Decision #4 (README §For developers, decisions table; revised 2026-07-25)
-//! is *guided first-run*: the first launch picks the analysis tiers
+//! Decision #4 (README §For developers, decisions table) is *guided
+//! first-run*: the first launch picks the analysis tiers
 //! (scholars' / machine) with examples — the text and the reader's own data
 //! are always on. That choice — and the live font size — live here so every
 //! shell (Compose and the PWA) reads and writes the same file through one
@@ -54,10 +54,9 @@ impl StudyMode {
     }
 }
 
-/// One reopened reading pane: which passage it showed, and (additively since
-/// 2026-07-25) the first visible verse, so a session reopens mid-chapter where
-/// the reader left off. `None` = top of the chapter; history entries don't
-/// carry it.
+/// One reopened reading pane: which passage it showed, and (additively) the
+/// first visible verse, so a session reopens mid-chapter where the reader left
+/// off. `None` = top of the chapter; history entries don't carry it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PaneRef {
     pub book: String,
@@ -66,7 +65,7 @@ pub struct PaneRef {
 }
 
 /// The reader's home church, carried in a shared link so one QR hands over
-/// both the Bible and where to find the people who sent it (2026-07-27).
+/// both the Bible and where to find the people who sent it.
 /// Every part is optional; an empty name means "not set".
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Church {
@@ -116,7 +115,8 @@ pub struct Config {
     /// same-root, TSK). Replaces half of the old Simple/Full switch; the text
     /// and the reader's own data are never gated.
     pub human_analysis: bool,
-    /// Show the learned/statistical tiers (embeddings, concept, SIF, leitwort).
+    /// Show the learned/statistical tiers (the symbolic concept engine, SIF,
+    /// leitwort).
     pub machine_analysis: bool,
     /// The reader's home church — shown in the welcome when a shared link
     /// carried one, and attached to the links this reader shares.
@@ -124,17 +124,17 @@ pub struct Config {
     /// Whether a link shared from PRESENT opens for a new believer: that
     /// screen is what you show someone face to face, so the person receiving
     /// it is usually meeting the Bible, not setting up a study tool. On by
-    /// default (2026-07-27); the recipient can still change everything.
+    /// default; the recipient can still change everything.
     pub present_shares_as_new: bool,
     /// The plain-English overlay (the AKJV delta) on the reader. Off unless the
     /// reader asks for it, and reader-only either way — memorize, Present, copy
-    /// and share stay KJV (see [`crate::akjv`]). Kept here since 2026-07-29:
-    /// both shells were writing it and the core was dropping it, so the switch
-    /// never survived a restart.
+    /// and share stay KJV (see [`crate::akjv`]). Persisted here because both
+    /// shells write it; if the core dropped it the switch wouldn't survive a
+    /// restart.
     pub akjv_overlay: bool,
     /// Which welcome this reader was given ("new" | "curious"), empty when
     /// none. The shells offer it again from the chrome — a reader shouldn't
-    /// have to reinstall to read it twice (2026-07-27).
+    /// have to reinstall to read it twice.
     pub intro: String,
     /// The reader's language, as a code ([`crate::i18n::Lang::code`]).
     ///
@@ -215,24 +215,23 @@ struct ConfigWire {
     line_spacing: f64,
     #[serde(default)]
     history: Vec<PaneWire>,
-    // The per-tier analysis gates (2026-07-25). Absent in an older file →
+    // The per-tier analysis gates. Absent in an older file →
     // derived from studyMode, preserving what the reader was seeing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     human_analysis: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     machine_analysis: Option<bool>,
-    /// The home church (2026-07-27); absent in every older file.
+    /// The home church; absent in every older file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     church: Option<ChurchWire>,
-    /// Present-screen shares open as a new believer (2026-07-27); absent in an
+    /// Present-screen shares open as a new believer; absent in an
     /// older file → on, which is the default the feature shipped with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     present_shares_as_new: Option<bool>,
-    /// The plain-English overlay (2026-07-29); absent in an older file → off,
-    /// which is what every reader saw while the field was being dropped.
+    /// The plain-English overlay; absent in an older file → off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     akjv_overlay: Option<bool>,
-    /// The welcome this reader was given (2026-07-27); absent when none.
+    /// The welcome this reader was given; absent when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     intro: Option<String>,
     /// The reader's chosen language; absent means "follow the device", which
@@ -337,7 +336,7 @@ impl Config {
             // Absent in an older file → on. (Deriving from studyMode would
             // surprise-hide the tiers on devices whose shell defaulted to Full
             // without persisting it — the gates are opt-OUT switches.)
-            // Absent = off. The tiers are opt-in (2026-07-28): a first-time
+            // Absent = off. The tiers are opt-in: a first-time
             // reader should inherit the text, not a study apparatus. A reader
             // who switched one on has an explicit `true` here and keeps it.
             human_analysis: w.human_analysis.unwrap_or(false),
@@ -581,9 +580,9 @@ mod tests {
         dir
     }
 
-    /// AUDIT 2026-07-29 data loss: a damaged config used to load as the default
-    /// and then be *overwritten* by the next save, taking the reader's history,
-    /// panes and church with it. It has to be moved aside first.
+    /// A damaged config must be moved aside before the next save: otherwise it
+    /// loads as the default and the next save *overwrites* it, taking the
+    /// reader's history, panes and church with it.
     #[test]
     fn damaged_config_is_moved_aside_before_the_next_save() {
         let dir = scratch("rescue");
@@ -602,7 +601,7 @@ mod tests {
             "the damaged bytes must be recoverable at config.json.bad"
         );
 
-        // The save that used to destroy them now writes a fresh, valid file.
+        // The save must now write a fresh, valid file without clobbering the rescue.
         save_to(&path, &cfg).unwrap();
         assert_eq!(std::fs::read_to_string(&bad).unwrap(), damaged, "the save clobbered the rescue");
         let (back, first_run) = load_from(&path);
@@ -654,10 +653,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// AUDIT 2026-07-29: both shells wrote `akjvOverlay`, the core had no field
-    /// for it, and so every save wrote the object back without it — the reader
-    /// turned the plain-English overlay on and found it off again next launch.
-    /// The key spelling here is the one the shells use; absent still means off.
+    /// `akjvOverlay` must survive a load/save/load: the key spelling here is the
+    /// one both shells write, and a save that dropped it would turn the reader's
+    /// plain-English overlay back off next launch. Absent still means off.
     #[test]
     fn akjv_overlay_survives_a_load_save_load() {
         let dir = scratch("akjv");
@@ -669,22 +667,22 @@ mod tests {
         assert!(!first_run);
         assert!(cfg.akjv_overlay, "the shells' akjvOverlay never reached Config");
 
-        // The save that used to drop it. Check the bytes, not just the struct:
-        // it is the written file the next launch reads.
+        // Check the bytes, not just the struct: it is the written file the next
+        // launch reads.
         save_to(&path, &cfg).unwrap();
         let json = std::fs::read_to_string(&path).unwrap();
         assert!(json.contains(r#""akjvOverlay": true"#), "the save dropped akjvOverlay: {json}");
         let (back, _) = load_from(&path);
         assert!(back.akjv_overlay, "the overlay was off again after a restart");
 
-        // Absent → off, which is what every reader saw before this landed.
+        // Absent → off.
         std::fs::write(&path, r#"{"studyMode":"simple"}"#).unwrap();
         assert!(!load_from(&path).0.akjv_overlay);
 
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// AUDIT 2026-07-29 forward compatibility: the on-disk formats evolve
+    /// Forward compatibility: the on-disk formats evolve
     /// **additively** (CLAUDE.md §Data formats), and a sideloaded APK never
     /// auto-updates — so a key this build drops is dropped for good on that
     /// device. Settings are saved on nearly every interaction, so this file is the
@@ -808,8 +806,8 @@ mod tests {
 mod review_tests {
     use super::*;
 
-    /// REVIEW 2026-07-14 correctness #4: shells index panes with `active` —
-    /// a corrupt/stale value must come back clamped.
+    /// Shells index panes with `active` — a corrupt/stale value must come back
+    /// clamped.
     #[test]
     fn active_pane_is_clamped_to_the_pane_list() {
         let dir = std::env::temp_dir().join(format!("plumbline-config-clamp-{}", std::process::id()));

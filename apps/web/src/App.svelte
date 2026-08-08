@@ -4,11 +4,9 @@
   // paints the splash from its progress messages. Fonts load here too, for
   // PAINTING; the worker loads its own copy for layout measurement.
   //
-  // The splash is a SPLASH. A previous build painted last session's chapter
-  // here as a live mini-reader; it looked like the app but answered nothing,
-  // and reading text you can't touch reads as broken, not fast (feedback
-  // 2026-07-26). Honest progress beats a decoy — the work now goes into
-  // making the wait short rather than disguising it.
+  // The splash is a SPLASH. Reading text you can't touch reads as broken, not
+  // fast — honest progress beats a decoy, so the work goes into making the wait
+  // short rather than disguising it.
   import { bootErrorCopy } from "./engine/bootError";
   import { deviceLocale, lastLang, setCatalog, t } from "./lib/i18n.svelte";
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
@@ -105,7 +103,7 @@
     try {
       const rpc = new EngineRpc();
       rpc.onProgress = (p) => (phase = p);
-      // Phones defer the machine-tier auto-download (2026-07-26): the shell
+      // Phones defer the machine-tier auto-download: the shell
       // offers an explicit "load analysis" action instead of spending the
       // download and the worker time behind the reader's back.
       const deferRnd = matchMedia("(max-width: 700px)").matches;
@@ -129,11 +127,10 @@
       // the point the guessed splash language (i18n.svelte.ts `seed`) is
       // replaced by the one the core resolved from the reader's own setting.
       setCatalog(info.i18n);
-      // The palettes RIDE ON THE BOOT REPLY (audit F-11). They used to be three
-      // more `static` calls awaited here, and the engine lives in ONE worker
-      // thread — so on the single path where nothing else can proceed, that was
-      // three full queue hops for three compiled-in colour tables the boot reply
-      // could have carried. See BOOT_READS in engine/worker-client.ts.
+      // The palettes RIDE ON THE BOOT REPLY (audit F-11): the engine lives in
+      // ONE worker thread, so carrying the three compiled-in colour tables on
+      // the reply saves three full queue hops on the single path where nothing
+      // else can proceed. See BOOT_READS in engine/worker-client.ts.
       const s = initSession(rpc, info, info.palettes ?? {}, info.bundledOn);
       // A shared link can carry the sender's church. Save it as this reader's
       // own (theirs wins if they've already set one), then strip it from the
@@ -148,19 +145,19 @@
         s.sharedByChurch = shared; // shown in the welcome, not saved over theirs
       }
       // A shared PASSAGE opens where it points (`?at=Ps 23:1`) — the QR on the
-      // Present end card hands over the weave, not just the app (2026-07-27).
+      // Present end card hands over the weave, not just the app.
       const at = sharedAtRef(location.search);
       if (shared || s.startAsNewBeliever || at) {
         history.replaceState(null, "", location.pathname + location.hash);
       }
       // Returning readers never see the welcome, so without this a link's
-      // church would be saved with no sign it happened (feedback 2026-07-27).
+      // church would be saved with no sign it happened.
       if (hasChurch(shared) && !s.showFirstRun) {
         s.showToast(t("shell.homeChurchSet", { church: shared.name }));
       }
       // "Deferred" has to mean the reader WANTS the machine tier and its download
-      // was held back — not merely that no download happened. Since the tiers
-      // became opt-in (2026-07-28) those two came apart: with the tier off,
+      // was held back — not merely that no download happened. The tiers are
+      // opt-in, so those two came apart: with the tier off,
       // `rndAuto` is correctly false on every device, and without the last clause
       // every phone would be shown StudyPanel's "Load analysis" offer for a tier
       // its reader had never asked for.
@@ -281,14 +278,14 @@
   {#if session.showFirstRun}
     <!-- First launch: the welcome owns the screen, straight off the loader —
          the reader mounts only after a path is chosen (no John 3 flashing
-         under a question, feedback 2026-07-26). -->
+         under a question). -->
     <div class="firstrun-stage">
       <FirstRun />
     </div>
   {:else}
     <Shell />
     <!-- Also mounted over the app: the welcome is re-openable from the top
-         bar, and it renders as its own dialog (feedback 2026-07-27). -->
+         bar, and it renders as its own dialog. -->
     <FirstRun />
   {/if}
 {:else}

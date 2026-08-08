@@ -1,5 +1,5 @@
-// First run: who is opening the Book? (product 2026-07-26; the web twin is
-// FirstRun.svelte — keep the copy in sync). Three paths:
+// First run: who is opening the Book? (the web twin is FirstRun.svelte — keep
+// the copy in sync). Three paths:
 //
 //   new in the faith   → a welcome with next steps; verse references are
 //                        tappable and open BESIDE John (fold: second pane;
@@ -7,7 +7,7 @@
 //                        start), then John 1 with both analysis tiers off —
 //                        just the text.
 //   curious            → a way in for someone who is not sure what they
-//                        believe; same landing as the welcome (2026-07-27).
+//                        believe; same landing as the welcome.
 //   sharing the gospel → the church step, then Present with the Romans Road.
 //   established        → their church + the analysis-tier picker (text always on).
 //
@@ -66,8 +66,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** One tappable verse reference in the welcome; [keys] are the verses QUOTED
- *  inline — the new believer reads scripture itself, not a row of links
- *  (product 2026-07-26).
+ *  inline — the new believer reads scripture itself, not a row of links.
  *
  *  The LABEL IS DERIVED, not stored: "Psalm 12:6–7" is a book name plus the
  *  catalogue's own reference template, and both localize (German writes
@@ -160,7 +159,7 @@ fun FirstRunOverlay(
         )
     }
     // Unchecked to begin with: the tiers are opt-in, so this screen ASKS rather
-    // than confirming something already decided (2026-07-28).
+    // than confirming something already decided.
     var human by remember { mutableStateOf(false) }
     var machine by remember { mutableStateOf(false) }
     // Asked on the two paths that hand the app on. Optional; pushed up only
@@ -259,7 +258,7 @@ private fun Choose(palette: ReaderPalette, serif: FontFamily, onPath: (Int) -> U
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
     Spacer(Modifier.height(22.dp))
-    // Curious leads (2026-07-28): a stranger to the Bible is the likelier
+    // Curious leads: a stranger to the Bible is the likelier
     // first-time reader of the two, and the path that asks the least of someone
     // should be the one they see first. Web twin: FirstRun.svelte's choose stage.
     PathCard(palette, t("intro.pathCurious"), t("intro.pathCuriousDesc")) { onPath(3) }
@@ -379,7 +378,7 @@ private fun Welcome(
 }
 
 /**
- * A way in for someone who is not sure what they believe (2026-07-27) — the
+ * A way in for someone who is not sure what they believe — the
  * copy is shared with the web twin verbatim. Same landing as the welcome: the
  * book of John, both analysis tiers off.
  */

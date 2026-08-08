@@ -7,12 +7,9 @@
 // main thread under `synchronized(engine)` (two reader panes may touch the engine
 // at once, exactly as ReaderPane serialises its layout/hit-test calls).
 //
-// Highlighting is GONE, root and branch (2026-07-29): the tone swatches, the
-// verse-then-trim mechanic, the washes, tag colour, and the five ABI endpoints
-// behind them. "Tags + notes + threads are a better way to annotate and tie
-// together scripture as we read" — three ways to mark a verse was two too many,
-// and the swatches were the loudest thing in a sheet opened to copy a verse.
-// If anyone asks for highlights, they come back; git remembers.
+// No highlighting: tags, notes and threads are the ways to mark and tie together
+// scripture. Three ways to mark a verse was two too many, and the swatches were
+// the loudest thing in a sheet opened to copy a verse.
 //
 // Author D (Compose UI).
 
@@ -109,7 +106,7 @@ private fun parseRef(ref: String): RefParts? {
  * exception instead (a dead native library). Dropping either and closing anyway
  * makes a save that failed — disk full, a refused write, a bad ref — look exactly
  * like one that worked, and the reader's words leave with the sheet. So the
- * decision is one value: close, or stay open and say why (v1.0 audit, 2026-07-29).
+ * decision is one value: close, or stay open and say why.
  */
 sealed interface SaveOutcome {
     /** The engine wrote it: the surface may close (or advance). */
@@ -170,7 +167,6 @@ fun VerseActionSheet(
 
     var showNote by remember(verseRef) { mutableStateOf(false) }
     var showPassage by remember(verseRef) { mutableStateOf(false) }
-    var showMarkRead by remember(verseRef) { mutableStateOf(false) }
     var noteText by remember(verseRef) { mutableStateOf("") }
     var noteLoaded by remember(verseRef) { mutableStateOf(false) }
     // The note dialog's last failure, shown inside it. It stays until the next
@@ -336,19 +332,14 @@ fun VerseActionSheet(
             HorizontalDivider(color = palette.rule)
 
             // ── tag + note + memorize — tagging first: it's how topics
-            //    accumulate for later weaving (2026-07-25 feedback) ───────────
+            //    accumulate for later weaving ───────────
             ActionRow(t("menu.tag"), palette.ink) { onDismiss(); onTag(verseRef) }
             ActionRow(t("menu.note"), palette.ink) { showNote = true }
             ActionRow(t("menu.memorizeVerse"), palette.ink) { memorize() }
             ActionRow(t("menu.memorizePassage"), palette.ink) { showPassage = true }
-            // Log a paper-Bible read, on the chapter's FIRST verse only. Kept to
-            // verse 1 on purpose: the affordance should be findable when wanted
-            // and too fiddly to do across a whole Bible, which is exactly the
-            // balance asked for — it exists for "I read Judges on paper last
-            // Tuesday", not for backfilling a reading history wholesale.
-            if (parseRef(verseRef)?.verse == 1) {
-                ActionRow(t("menu.markRead"), palette.ink) { showMarkRead = true }
-            }
+            // Marking a chapter read lives in the passage navigator (long-press a
+            // chapter tile), where reading standing already lives and a whole book
+            // can be logged at once — see ui/BookNav.kt.
             HorizontalDivider(color = palette.rule)
 
             Spacer(Modifier.height(12.dp))
@@ -375,60 +366,6 @@ fun VerseActionSheet(
             onCancel = { showPassage = false },
         )
     }
-
-    if (showMarkRead) {
-        parseRef(verseRef)?.let { parts ->
-            MarkReadDialog(
-                palette = palette,
-                label = "$display".substringBeforeLast(':'),
-                onPick = { date ->
-                    showMarkRead = false
-                    scope.launch {
-                        val outcome = withContext(Dispatchers.Default) {
-                            saveOutcome(
-                                runCatching {
-                                    synchronized(engine) {
-                                        engine.ReadingMarkRead(parts.book, parts.chapter, date)
-                                    }
-                                },
-                            )
-                        }
-                        Toast.makeText(
-                            context,
-                            when (outcome) {
-                                is SaveOutcome.Saved -> t("markRead.marked", "when" to date)
-                                is SaveOutcome.Failed -> t("markRead.notMarked", "why" to outcome.message)
-                            },
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                        hide()
-                    }
-                },
-                onClear = {
-                    showMarkRead = false
-                    scope.launch {
-                        val outcome = withContext(Dispatchers.Default) {
-                            saveOutcome(
-                                runCatching {
-                                    synchronized(engine) { engine.ReadingForget(parts.book, parts.chapter) }
-                                },
-                            )
-                        }
-                        Toast.makeText(
-                            context,
-                            when (outcome) {
-                                is SaveOutcome.Saved -> t("markRead.cleared")
-                                is SaveOutcome.Failed -> t("markRead.notCleared", "why" to outcome.message)
-                            },
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                        hide()
-                    }
-                },
-                onCancel = { showMarkRead = false },
-            )
-        }
-    }
 }
 
 /**
@@ -442,7 +379,7 @@ fun VerseActionSheet(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MarkReadDialog(
+internal fun MarkReadDialog(
     palette: ReaderPalette,
     label: String,
     onPick: (String) -> Unit,
@@ -496,7 +433,7 @@ private fun MarkReadDialog(
 /**
  * Pick the end of a passage to memorize as one chunk (§Memorization).
  *
- * The convention (2026-07-27, both shells): the verse you long-pressed is the
+ * The convention (both shells): the verse you long-pressed is the
  * START, and you tap the LAST verse from a grid of that chapter's remaining
  * verse numbers — the same tap-grid idiom as the passage navigator's chapter
  * grid. No new gesture, identical under touch and mouse, and the grid only ever
@@ -620,9 +557,8 @@ private fun ActionRow(label: String, color: Color, onClick: () -> Unit) {
 }
 
 /**
- * The tag picker (product feedback, 2026-07-24): tagging a verse offers the
- * EXISTING tags first, alphabetically, and
- * "New tag…" is the secondary, freetext path. New tags are created colourless
+ * The tag picker: tagging a verse offers the EXISTING tags first, alphabetically,
+ * and "New tag…" is the secondary, freetext path. New tags are created colourless
  * (colour stays an explicit, optional choice; core never assigns one).
  * Opened by the study panel's `addtag:REF` link.
  */
@@ -681,8 +617,7 @@ fun TagPickerSheet(
             if (list == null) {
                 Text("…", color = palette.faded, modifier = Modifier.padding(vertical = 12.dp))
             } else {
-                // Every tag is a topic now that highlight tones are gone, so plain
-                // alphabetical is the whole ordering.
+                // Every tag is a topic, so plain alphabetical is the whole ordering.
                 val ordered = list.sortedBy { it.name.lowercase() }
                 for (t in ordered) {
                     Row(
@@ -772,9 +707,8 @@ private fun NoteDialog(
 /**
  * Pick which thread a verse joins — an existing one, or a new one by name.
  *
- * It used to be a bare text field (2026-07-28 feedback: "a nightmare"). A
- * freetext-only prompt makes the common case — adding a fifth passage to the
- * thread you have been building all week — require you to retype its name
+ * Not a freetext-only prompt: that makes the common case — adding a fifth passage
+ * to the thread you have been building all week — require you to retype its name
  * exactly, and a typo silently forks a second thread instead of failing. So this
  * mirrors [TagPickerSheet] exactly: what exists is a list you tap, and freetext
  * is only for something genuinely new.

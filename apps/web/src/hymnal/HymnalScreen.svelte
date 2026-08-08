@@ -20,16 +20,42 @@
 
   let filter = $state("");
 
+  /** If a search token names a language this hymnal knows — its code ("de"),
+   *  English name ("German") or endonym ("Deutsch") — the code it names, else
+   *  null. Empty before the catalogue lands, which simply recognises no
+   *  language tokens yet. */
+  function langToken(tok: string): string | null {
+    for (const l of languages()) {
+      if (tok === l.code.toLowerCase() || tok === l.endonym.toLowerCase() || tok === l.name.toLowerCase())
+        return l.code;
+    }
+    return null;
+  }
+
   /** Number, title or first line, in any of the hymn's languages — a singer
    *  looking for "Amazing grace" should not have to know it is number 14, and
-   *  someone who only knows the tune's opening words should find it by those. */
+   *  someone who only knows the tune's opening words should find it by those.
+   *  A token that NAMES a language ("de", "German", "Deutsch") narrows the book
+   *  to hymns carrying it, on top of the rest of the query — so "de" is every
+   *  German hymn and "de jesu" the German ones whose text says "jesu". */
   const shown = $derived.by(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return index;
+    const langCodes: string[] = [];
+    const textTokens: string[] = [];
+    for (const tok of q.split(/\s+/)) {
+      const code = langToken(tok);
+      if (code) langCodes.push(code);
+      else textTokens.push(tok);
+    }
+    const textQ = textTokens.join(" ");
     return index.filter((h: any) => {
-      if (String(h.number) === q) return true;
+      const have = Object.keys(h.titles ?? {});
+      if (!langCodes.every((c) => have.includes(c))) return false;
+      if (!textQ) return true;
+      if (String(h.number) === textQ) return true;
       const texts = [...Object.values(h.titles ?? {}), ...Object.values(h.firstLines ?? {})];
-      return texts.some((t) => String(t).toLowerCase().includes(q));
+      return texts.some((t) => String(t).toLowerCase().includes(textQ));
     });
   });
 
@@ -172,7 +198,7 @@
       {#if lang !== s.hymnLang}
         <!-- The reader's language is a PREFERENCE, not a promise: a hymn that
              exists in one language only shows that one. Saying so beats silently
-             handing a German reader an English hymn (UAT, 2026-08-03). -->
+             handing a German reader an English hymn. -->
         <p class="fellback">
           {t("hymnal.notInYourLanguage", { language: endonym(s.hymnLang), shown: endonym(lang) })}
         </p>

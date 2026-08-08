@@ -2,17 +2,6 @@
   // Verse context menu (Tier-0 #1): Copy · Copy chapter · Share link · Note… ·
   // Tag… / Add to thread… · Memorize · Mark chapter read…. Opened by right-click
   // or long-press; the target verse rides in session state.
-  //
-  // Trimmed 2026-07-29 on product feedback that it had become noisy. Two things
-  // went:
-  //
-  //   * THREE copy variants collapsed into one "Copy" that honours the reader's
-  //     chosen shape (Settings ▸ Copy format), which is what Android always did.
-  //     A menu is not the place to re-ask a question the settings already answer.
-  //   * The highlight tone swatches and "Remove highlight". Highlighting was then
-  //     removed from the product outright — tags, notes and threads are the better
-  //     way to annotate and tie scripture together, and three ways to mark a verse
-  //     was two too many.
   import { getSession } from "../state/session.svelte";
   import { nowStamp } from "../engine/StudyEngine";
   import { dispatchLink } from "../study/links";
@@ -46,18 +35,14 @@
     }
   }
 
-  /** Hand someone THIS verse. The `?at=` deep link has existed since 2026-07-27
-   *  and, until now, only Present's QR produced one — so a reader looking at a
-   *  verse had no way to send it to anybody, which is the most obvious sharing
-   *  act the app has.
+  /** Hand someone THIS verse.
    *
    *  `shareUrl` builds the link, never string concatenation: the reader's church
    *  rides along (Settings ▸ Your church) exactly as it does from the header and
    *  from Present, and the length clamps in `church.ts` are what keep a shared
    *  URL scannable. The refKey is passed WHOLE — it is the frozen compact form
    *  ("1John 3:16"), `sharedAtRef` shape-checks that form on arrival, and this
-   *  file does not need to know where it splits (see 51123f5: three shell sites
-   *  hand-rolled that split and all three disagreed with the core's rule).
+   *  file does not need to know where it splits.
    *
    *  Phone-first, so the platform share sheet where there is one. Where there
    *  isn't, the clipboard — and it SAYS so, because a share button that appears
@@ -99,24 +84,6 @@
     const ref = menu!.refKey;
     close();
     void dispatchLink(s, `editnote:${ref}`);
-  }
-
-  /** The chapter of the verse under the menu, when it is that chapter's FIRST
-   *  verse — the only place "Mark chapter read…" is offered. Kept to verse 1 on
-   *  purpose: findable when wanted, too fiddly to do across a whole Bible, which
-   *  is exactly the balance the feature asks for. */
-  const markable = $derived.by(() => {
-    const ref = menu?.refKey;
-    if (!ref) return null;
-    const m = /^(.+) (\d+):(\d+)$/.exec(ref);
-    if (!m || m[3] !== "1") return null;
-    return { book: m[1], chapter: Number(m[2]) };
-  });
-
-  function markRead(): void {
-    const chapter = markable;
-    close();
-    if (chapter) s.markReadFor = chapter;
   }
 
   function tagPick(): void {
@@ -174,10 +141,6 @@
     <hr />
     <button onclick={memorize}>{t("menu.memorizeVerse")}</button>
     <button onclick={memorizePassage}>{t("menu.memorizePassage")}</button>
-    {#if markable}
-      <hr />
-      <button onclick={markRead}>{t("menu.markRead")}</button>
-    {/if}
   </div>
 {/if}
 

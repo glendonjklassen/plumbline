@@ -35,11 +35,10 @@
 // can fail loudly instead of silently reading nulls; purely additive fields
 // do not bump it. Exported to the C header; golden samples are pinned in
 // `tests.rs`.
-// 2 (2026-07-29): `rename_all_fields` on the tagged unions in `wire.rs`. Three
-// keys changed spelling — `mark_glyph`/`mark_color`/`top_gap` → camelCase — which
-// is a rename, so it bumps by the rule above. Nothing compares this constant yet
-// (TODO §H tracks making it a live handshake), so today the bump is a record
-// rather than a gate.
+// Currently 2: the last bump was `rename_all_fields` on the tagged unions in
+// `wire.rs` (a rename, so it bumped by the rule above). Nothing compares this
+// constant yet (TODO §H tracks making it a live handshake), so the value is a
+// record rather than a gate.
 #define PLUMBLINE_WIRE_VERSION 2
 
 // One laid-out chapter: the positioned display list a shell paints and
@@ -903,8 +902,8 @@ char *plumbline_engine_memory_add(struct PlumblineEngine *engine,
                                   const char *now);
 
 // Start memorizing the passage `start_ref`…`through_ref` (inclusive) as ONE
-// card — the whole section recalled in one go, rather than a card per verse
-// (2026-07-27). The card is keyed and listed by `start_ref`.
+// card — the whole section recalled in one go, rather than a card per verse.
+// The card is keyed and listed by `start_ref`.
 //
 // `through_ref` must name a later verse of the same chapter; anything else
 // seeds a plain single-verse card. Already memorizing `start_ref` is a no-op,

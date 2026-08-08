@@ -131,7 +131,7 @@ impl ChapterSlot {
 /// chapter directory (~1,200 entries); a chapter's ~800 tokens are turned into
 /// `Verse`/`Token` structs the first time something asks for them, and stay
 /// decoded after that. Materializing the whole canon up front cost ~8 s on a
-/// 2026 flagship phone (measured 2026-07-26) — millions of small allocations
+/// flagship phone — millions of small allocations
 /// through wasm, before a single word was on screen — and the reader needs one
 /// chapter. The whole-corpus consumers (search, renderings, concept, Strong's
 /// occurrences) walk [`Corpus::verses_iter`], which decodes as it goes; they
@@ -257,7 +257,7 @@ pub fn load_corpus(path: impl AsRef<Path>) -> Result<Corpus, Error> {
 /// Open a corpus straight from its cache file, with no `kjv.jsonl` present.
 ///
 /// The web ships the cache in its data pack and the raw JSONL is 2.5 MB of
-/// download the reader would never read (2026-07-26): the cache supersedes it.
+/// download the reader would never read: the cache supersedes it.
 /// `stamp` is the `(len, mtime)` to validate against when the source file DOES
 /// exist; pass `None` to accept the cache on its tokenization stamp alone,
 /// which is the shipped-together case.
@@ -323,8 +323,8 @@ fn encode_dir_cache(corpus: &Corpus, src_len: u64, src_mtime: i64) -> Result<Vec
     // cache is byte-identical and the slots line up with the verse ordinals the
     // JSONL path produces.
     //
-    // Sorting the directory AFTER writing the payload (as this did until
-    // 2026-07-28) canonicalizes the entries but NOT the offsets baked into
+    // Sorting the directory AFTER writing the payload canonicalizes the
+    // entries but NOT the offsets baked into
     // them: those were captured from `chapter_ix`, a HashMap whose iteration
     // order std randomizes per map instance. So every build emitted a
     // semantically identical but byte-different cache — three runs, three
@@ -663,7 +663,7 @@ mod tests {
         // THE structural invariant. The directory is emitted in canonical order;
         // the payload must be laid out in that SAME order, because each entry's
         // offset is captured while the payload is written. Sorting the directory
-        // afterwards (what this code did until 2026-07-28) reorders the entries
+        // afterwards reorders the entries
         // without relocating the blobs they point at, so the offsets come out in
         // HashMap-traversal order — randomly seeded per map instance, hence a
         // different cache on every build and a fresh pack version every release.

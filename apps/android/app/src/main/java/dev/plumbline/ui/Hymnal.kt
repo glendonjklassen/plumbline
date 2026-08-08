@@ -82,6 +82,15 @@ class HymnSing(val hymn: Hymn1, val lang: String, val chords: Boolean)
 private fun endonymOf(code: String): String =
     Strings.languages.firstOrNull { it.code == code }?.endonym ?: code.uppercase()
 
+/** If a search token names a language the hymnal knows — its code ("de"),
+ *  English name ("German") or endonym ("Deutsch") — the code it names, else
+ *  null. Empty before the catalogue lands, which recognises no language tokens
+ *  yet. */
+private fun langTokenOf(tok: String): String? =
+    Strings.languages.firstOrNull {
+        tok == it.code.lowercase() || tok == it.endonym.lowercase() || tok == it.name.lowercase()
+    }?.code
+
 /** The language to show, given what this hymn actually has. The reader's
  *  preference is a preference, not a promise: a German-only hymn shows German
  *  to an English reader rather than showing nothing. */
@@ -103,10 +112,8 @@ fun HymnalScreen(
     var openId by remember { mutableStateOf<String?>(null) }
     var semis by remember { mutableIntStateOf(0) }
     var hymn by remember { mutableStateOf<Hymn1?>(null) }
-    // FOLLOWS THE APP'S LANGUAGE. It was a hard-coded "en", so a German reader
-    // opened a German interface onto English hymn texts and had to say "Deutsch"
-    // again on every hymn (UAT, 2026-08-03) — the web was fixed for this and
-    // Android was missed, which is the drift the whole catalogue exists to stop.
+    // FOLLOWS THE APP'S LANGUAGE, so a German reader gets German hymn texts by
+    // default rather than an English interface onto English texts (web parity).
     //
     // Still its own state: the chips do a different job from the language
     // setting, and a bilingual singer picking the German text of one hymn has not
@@ -211,10 +218,21 @@ private fun HymnIndex(
         )
         val q = filter.trim().lowercase()
         // Number, title or first line, in any of the hymn's languages — a singer
-        // looking for "Amazing grace" should not have to know it is number 14.
+        // looking for "Amazing grace" should not have to know it is number 14. A
+        // token that NAMES a language ("de", "German", "Deutsch") narrows the
+        // book to hymns carrying it, on top of the rest of the query.
         val shown = (index ?: emptyList()).filter { h ->
-            q.isEmpty() || h.number.toString() == q ||
-                (h.titles.values + h.firstLines.values).any { it.lowercase().contains(q) }
+            if (q.isEmpty()) return@filter true
+            val langCodes = mutableListOf<String>()
+            val textTokens = mutableListOf<String>()
+            for (tok in q.split(Regex("\\s+"))) {
+                val code = langTokenOf(tok)
+                if (code != null) langCodes.add(code) else textTokens.add(tok)
+            }
+            if (!langCodes.all { it in h.titles.keys }) return@filter false
+            val textQ = textTokens.joinToString(" ")
+            textQ.isEmpty() || h.number.toString() == textQ ||
+                (h.titles.values + h.firstLines.values).any { it.lowercase().contains(textQ) }
         }
         when {
             index == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -283,7 +301,7 @@ private fun HymnBody(
         if (shown.isNotEmpty() && wanted.isNotEmpty() && shown != wanted) {
             // A note, not a warning: nothing is wrong, this hymn simply exists in
             // one language. Silently handing a German reader an English hymn is
-            // what looked broken (UAT, 2026-08-03).
+            // what looks broken.
             Text(
                 t("hymnal.notInYourLanguage", "language" to endonymOf(wanted), "shown" to endonymOf(shown)),
                 color = palette.faded, fontSize = 12.5.sp, fontStyle = FontStyle.Italic,

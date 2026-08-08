@@ -61,6 +61,17 @@ impl Lang {
         }
     }
 
+    /// This language's English name — the exonym, for a reader who narrows the
+    /// hymnal by typing "German" rather than "Deutsch". Pairs with
+    /// [`Self::endonym`]; the finder in both shells matches either, plus the
+    /// [`Self::code`].
+    pub fn exonym(self) -> &'static str {
+        match self {
+            Lang::En => "English",
+            Lang::De => "German",
+        }
+    }
+
     /// The language this code names, if the app ships it — tolerating a region
     /// tag, since a browser reporting `de-CH` wants German.
     ///
@@ -207,7 +218,7 @@ pub type Strings = BTreeMap<String, String>;
 /// one display list — 238 ms in German against 59 ms for the same chapter in
 /// English, and effectively ALL of the difference was here. It read to a reader
 /// as "German takes forever": the tap RPC queues behind the layout on the one
-/// thread that answers both (2026-08-03).
+/// thread that answers both.
 ///
 /// A `match` rather than an array indexed by `lang`, so adding a language is a
 /// compile error here instead of a silently shared cell.
@@ -404,7 +415,7 @@ mod tests {
     /// `t()` is on the hottest path in the app — the wire layer turns every word
     /// of a laid-out chapter into a reference through it — and parsing per call
     /// made one German chapter turn cost 686 ms against 9 ms with the tables
-    /// shared (Psalm 119, web shell, 2026-08-03). The reader felt it as a word tap
+    /// shared (Psalm 119, web shell). The reader felt it as a word tap
     /// that took half a second, because the tap queues behind the layout on the
     /// one thread that answers both.
     ///

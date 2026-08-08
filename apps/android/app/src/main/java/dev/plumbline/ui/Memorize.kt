@@ -5,7 +5,7 @@
 // the ABI (StudyEngine.Memory*); this file is orchestration + paint only.
 //
 // The hub [MemorizeList] carries the coverage strip INLINE above the verse list
-// (product call, 2026-07-24 — coverage is a section, not a screen), with
+// (coverage is a section, not a screen), with
 // ReviewDue and Activity as the two full-screen destinations, dismissed back to
 // the hub via [MemFrame]'s BackHandler + onClose. Activity is a half/half split:
 // calendar heatmap over a most-recent-first history log.
@@ -94,8 +94,8 @@ fun memorizeVerse(engine: StudyEngine, verseRef: String): String? =
     synchronized(engine) { engine.MemoryAdd(verseRef, nowUtc()) }
 
 /** The memorization destinations: the hub [List] (verse list + inline coverage
- *  strip — product call, 2026-07-24: coverage is a section of the hub, not a
- *  screen that replaces it), the [ReviewDue] drill, and [Activity]. */
+ *  strip — coverage is a section of the hub, not a screen that replaces it),
+ *  the [ReviewDue] drill, and [Activity]. */
 enum class MemorizeView { ReviewDue, List, Activity }
 
 /**
@@ -150,7 +150,7 @@ fun MemorizeList(
     val nameOf = remember(books) { books.associate { it.id to it.name } }
     // The LIST is per card — a passage card is one row labelled "Ps 23:1–6".
     // The coverage strip below keeps using `verses`, which a passage card
-    // contributes every verse to (2026-07-27).
+    // contributes every verse to.
     val cards = coverage?.cards ?: emptyList()
     val verses = coverage?.verses ?: emptyList()
     val dueCount = cards.count { it.due }
@@ -370,9 +370,9 @@ private fun ReviewBody(
         if (idx + 1 >= due.size) onFinish() else idx += 1
     }
 
-    /** Grade and move on — but only on a grade the engine recorded. A refused write
-     *  used to advance anyway, so the reader believed they had rescheduled a card
-     *  that in fact never moved, and the next card buried the reason. */
+    /** Grade and move on — but only on a grade the engine recorded. Advancing on
+     *  a refused write would let the reader believe they had rescheduled a card
+     *  that never moved, with the next card burying the reason. */
     fun grade(g: String) {
         val outcome = saveOutcome(runCatching { synchronized(engine) { engine.MemoryGrade(curRef, g, nowUtc()) } })
         when (outcome) {
@@ -576,9 +576,9 @@ private fun bookOf(refKey: String): String? {
 // ── (c) memory activity: calendar heatmap over a history log ──────────────────
 
 /**
- * When the memory work happened, split half-and-half (product call, 2026-07-24):
- * the top half is a calendar heatmap (weeks as columns, GitHub-style, shaded by
- * reviews that day), the bottom half a most-recent-first history log.
+ * When the memory work happened, split half-and-half: the top half is a calendar
+ * heatmap (weeks as columns, GitHub-style, shaded by reviews that day), the
+ * bottom half a most-recent-first history log.
  */
 @Composable
 fun MemorizeActivity(engine: StudyEngine, palette: ReaderPalette, onClose: () -> Unit) {

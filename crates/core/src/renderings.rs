@@ -87,7 +87,7 @@ impl Renderings {
 /// [`Renderings::build`] sliced. The heaviest of the lazily-built indexes
 /// (~196ms native, multiples of that in wasm on a phone) and it ran on the
 /// reader's FIRST word click, every session — the built lens cannot outlive the
-/// tab (feedback 2026-07-27). Mirrors [`crate::search::SearchIxBuilder`].
+/// tab. Mirrors [`crate::search::SearchIxBuilder`].
 #[derive(Default)]
 pub struct RenderingsBuilder {
     by_code: HashMap<String, HashMap<String, Bucket>>,

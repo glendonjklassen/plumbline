@@ -8,10 +8,10 @@
 //! light up?" is answered concretely rather than by guessing from file presence.
 //!
 //! `concept-vectors.vec` (with its `.meta` / `.freq` sidecars) and the `vecb`
-//! subcommand that packed it are gone as of 2026-07-30: the concept embedding
-//! left the product with the two features that read it, "verses like this" and
-//! the concept map. The file is still an output of the offline pipeline; nothing
-//! in the shipped product opens it, so a home does not need it.
+//! subcommand that packed it are gone: the concept embedding left the product
+//! with the two features that read it, "verses like this" and the concept map.
+//! The file is still an output of the offline pipeline; nothing in the shipped
+//! product opens it, so a home does not need it.
 //!
 //! Usage:
 //!   plumbline-hydrate check [--home <dir>]        # inspect a home (default: resolved)
@@ -57,9 +57,9 @@ const RND_FILES: &[&str] = &[
 /// review queue here; seeding them means a fresh Plumbline home opens with the
 /// same study aids instead of an empty reader.
 ///
-/// `patches` is gone (2026-07-29): the Ed25519 point-patch/rule layer was never
-/// ported, so advertising a dir nothing writes sent readers looking for a
-/// feature that does not exist. This list is also NOT the whole user subtree —
+/// `patches` is gone: the Ed25519 point-patch/rule layer was never ported, so
+/// advertising a dir nothing writes sent readers looking for a feature that
+/// does not exist. This list is also NOT the whole user subtree —
 /// notes, memory and reading are the reader's alone and are never seeded — which
 /// is one of the four hand-kept copies TODO §H proposes to single-source.
 const USER_DIRS: &[&str] = &["weaves", "suggested", "threads", "tags"];
@@ -431,9 +431,9 @@ fn check(home: &Path) -> ExitCode {
         println!("  ✓ cross-references.tsv — {} refs over {} verses", crossref::xref_count(&xr), xr.len());
     }
 
-    // `concept-vectors.vec` is deliberately not checked (removed 2026-07-30):
-    // the embedding left the product with "verses like this" and the concept
-    // map, so a home neither needs it nor is worse off without it.
+    // `concept-vectors.vec` is deliberately not checked: the embedding left the
+    // product with "verses like this" and the concept map, so a home neither
+    // needs it nor is worse off without it.
     match morph::load_morph(TOKENIZATION_VERSION, data.join("morphology.jsonl")) {
         Some(m) => println!("  ✓ morphology.jsonl — {} verses annotated", m.verse_count()),
         None => println!("  · morphology.jsonl — absent or stale (morphology off)"),

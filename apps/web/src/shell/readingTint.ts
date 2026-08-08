@@ -9,7 +9,7 @@
 // chapter read last week is barely tinted; one you have never opened is lit gold
 // from the first launch. Those are two different invitations and they are meant to
 // look different — "you have been away a while" and "there is treasure in here you
-// have not seen" (2026-07-29).
+// have not seen".
 
 /** What the core sends per chapter/book (the flattened `Heat`). */
 export interface ReadingHeat {

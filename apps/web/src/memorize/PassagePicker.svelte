@@ -1,8 +1,8 @@
 <script lang="ts">
   // Pick the end of a passage to memorize as one chunk (§Memorization).
   //
-  // The convention (2026-07-27): the verse you long-pressed is the START, and
-  // you tap the LAST verse from a grid of that chapter's remaining verse
+  // The convention: the verse you long-pressed is the START, and you tap the
+  // LAST verse from a grid of that chapter's remaining verse
   // numbers — the same tap-grid idiom as the passage navigator's chapter grid.
   // It needs no new gesture, reads the same under touch and mouse, and the grid
   // only ever offers verses that exist, which makes the same-chapter limit
@@ -58,7 +58,7 @@
     // `s.memorizePassageFrom`, which close() nulls — and a stale $derived
     // recomputes the moment it is read again, so passing them after closing
     // handed the engine null for both and every attempt came back "null or
-    // invalid argument" with no card written (feedback 2026-07-27).
+    // invalid argument" with no card written.
     const from = start;
     const through = throughRef;
     const named = label;

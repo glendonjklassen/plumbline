@@ -17,8 +17,8 @@ export interface BootInfo {
    *  silent otherwise, and it degrades to platform-serif METRICS while the main
    *  thread paints real Garamond — wrong wrap points, no error. */
   fontFaces: number;
-  /** The three theme palettes (light/dark/night), so `applyTheme()` is
-   *  synchronous from the first frame without three more round trips. */
+  /** Every theme's palette, keyed by token, so `applyTheme()` is synchronous
+   *  from the first frame without a round trip per theme. */
   palettes: Record<string, any>;
   /** The table of contents. Handed over here rather than fetched, and then
    *  served back out of [[BOOT_READS]] — see `call`. */
@@ -48,9 +48,9 @@ export interface WorkerDiagnostics {
    *  network was slow" from "the download was queued behind our own arithmetic".
    *  See the stall meter in engine.worker.ts. */
   stall: { totalMs: number; worstMs: number; count: number; hiddenMs: number };
-  /** The most expensive ENGINE CALLS this session, worst first. Every request
-   *  the shell makes used to be untimed, so a single one could freeze the worker
-   *  for half a minute and leave no trace entry to find it by. */
+  /** The most expensive ENGINE CALLS this session, worst first. Without this an
+   *  untimed request could freeze the worker for half a minute and leave no trace
+   *  entry to find it by. */
   slowCalls: [string, number][];
   packFiles: PackFileTrace[];
   packVersion: string | null;
@@ -138,10 +138,10 @@ export class EngineRpc {
       ? new Worker(opts.workerUrl, { type: "module" })
       : new Worker(new URL("./engine.worker.ts", import.meta.url), { type: "module" });
     // The worker has no `document`, so it cannot tell "I was busy" from "the
-    // phone was asleep" — and its stall meter billed the second as the first
-    // until it was told (2026-07-28). Send the current state now and on every
-    // change; `pagehide` covers the screen going off, which does not always
-    // raise visibilitychange first.
+    // phone was asleep" — its stall meter would bill the second as the first
+    // without being told. Send the current state now and on every change;
+    // `pagehide` covers the screen going off, which does not always raise
+    // visibilitychange first.
     if (typeof document !== "undefined") {
       const send = () => this.#w.postMessage({ op: "visibility", hidden: document.hidden });
       send();
@@ -235,7 +235,7 @@ export class EngineRpc {
   }
 
   /** `deferRnd` skips the automatic machine-tier download (phones: the shell
-   *  offers an explicit "load analysis" action instead — 2026-07-26).
+   *  offers an explicit "load analysis" action instead).
    *
    *  `lang` is what this device resolved LAST time (`localStorage`), which is a
    *  guess the corpus loader uses and the engine then confirms from the config.

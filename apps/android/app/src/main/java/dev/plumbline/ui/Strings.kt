@@ -25,7 +25,7 @@ import kotlinx.serialization.Serializable
 // the braces name the argument that went missing.
 
 @Serializable
-data class WireLanguage(val code: String = "", val endonym: String = "")
+data class WireLanguage(val code: String = "", val endonym: String = "", val name: String = "")
 
 @Serializable
 data class WireCatalog(

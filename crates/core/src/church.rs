@@ -1,6 +1,6 @@
 //! The home church a shared link carries — the clamps, the link, and the checks.
 //!
-//! The point (2026-07-27): one QR hands over both the Bible and the people who
+//! The point: one QR hands over both the Bible and the people who
 //! sent it. Whoever shares sets their church in Settings; the link they share
 //! carries it; whoever opens that link has it saved locally and sees it in the
 //! welcome, so a card handed out at a service leads back to that service.
@@ -9,7 +9,7 @@
 //! deciding whether to open a link should be able to see what is in it, and a
 //! church that mistypes its own details can fix them by reading the URL.
 //!
-//! ## Why this is in the core (2026-08-01)
+//! ## Why this is in the core
 //!
 //! It was written twice — `apps/web/src/shell/church.ts` and Kotlin's
 //! `ui/Church.kt` — and the two copies had drifted:
@@ -59,7 +59,7 @@ pub struct ShareOpts<'a> {
     /// recipient's welcome opens on the new-believer path instead of asking
     /// them to pick. ONLY the Present screen sets it: an ordinary share goes to
     /// whoever, often someone from the same church, and must stay an ordinary
-    /// link (2026-07-27).
+    /// link.
     pub start_as_new_believer: bool,
     /// The verse the recipient opens at, as a refKey (`"Ps 23:1"`). That is the
     /// frozen compact form, so it travels as-is.
@@ -87,8 +87,8 @@ pub fn clean(c: &Church) -> Church {
 /// who and when, which is all we were given.
 ///
 /// Joined with a COLON, because that is what the two parts are: a name, then
-/// what it tells you about it. It was an em dash until 2026-07-31 in both
-/// shells, which is an aside where this is a label.
+/// what it tells you about it — a label, not an aside (an em dash would read as
+/// an aside).
 ///
 /// English. The parity vectors (`church_vectors.json`) are English by
 /// construction and both shells' twins are checked against them, so this is the
@@ -343,7 +343,7 @@ mod tests {
 
     /// The shared expectation table. `apps/web/e2e/church-parity.spec.ts` reads
     /// the same rows and holds the TypeScript copy to them, so the two shells
-    /// cannot drift back apart the way they had by 2026-08-01.
+    /// cannot drift apart.
     #[test]
     fn matches_the_shared_vector_table() {
         let rows: Vec<Value> = serde_json::from_str(include_str!("church_vectors.json")).expect("vector table");

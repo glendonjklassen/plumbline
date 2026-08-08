@@ -1,12 +1,11 @@
 // Publish `--uiScale` on `:root` — the one number the whole chrome multiplies by.
 //
-// The reader can set a text size (Settings ▸ Text size, 12–40px) and until now it
-// moved the scripture and nothing else: the header, the menus, every dialog and
-// every sheet stayed at the sizes they were drawn at. Someone who turns the text
-// up is telling us they cannot read 13px, and the app answered by leaving 13px
-// chrome all around a large page. The study panel was the single exception — it
-// has multiplied by `--uiScale` since 2026-07-25 — so this is that variable moved
-// up to the root rather than a second mechanism beside it.
+// The reader's text size (Settings ▸ Text size, 12–40px) must move the whole
+// chrome — header, menus, every dialog and every sheet — not just the
+// scripture: someone who turns the text up cannot read 13px chrome around a
+// large page. The study panel multiplied by `--uiScale` already, so this lifts
+// that one variable up to the root rather than standing a second mechanism up
+// beside it.
 //
 // IT ALSO CARRIES THE BROWSER'S OWN TEXT SIZE, which is the other half of the
 // same complaint. A reader who has set their browser's default font to 20px has

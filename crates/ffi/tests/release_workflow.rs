@@ -1,11 +1,11 @@
 //! The release path must check what CI checks.
 //!
-//! Both workflows now fire on the same `v*` tag — CI stopped running on every
-//! push on 2026-08-04, because cutting a release pushes the branch and `main` at
-//! one commit and ran the whole suite twice. So they are siblings on the same
-//! ref rather than one covering for the other, and nothing tests a commit
-//! between releases: the release path carrying its own checks matters MORE than
-//! when this file was written, not less. Three things had drifted apart: the pages
+//! Both workflows fire on the same `v*` tag — CI no longer runs on every push,
+//! because cutting a release pushes the branch and `main` at one commit and ran
+//! the whole suite twice. So they are siblings on the same ref rather than one
+//! covering for the other, and nothing tests a commit between releases: the
+//! release path carrying its own checks matters MORE, not less. Three things had
+//! drifted apart: the pages
 //! job built and deployed the PWA without ever running `npm run check`, so a
 //! type error CI would have caught could reach plumblinebible.org; cargo-ndk
 //! was installed with a bare `cargo install` while CI pinned it through

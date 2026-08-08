@@ -41,8 +41,8 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       s.panel = { kind: "compare", index: link.index };
       await openWeavePassages(s, link.index);
       break;
-    // No `conceptMap` case: the `conceptmap:` verb left the core's link
-    // vocabulary on 2026-07-30 when the concept map was removed.
+    // No `conceptMap` case: the `conceptmap:` verb is not in the core's link
+    // vocabulary (the concept map was removed).
     case "guide":
       s.panel = { kind: "guide" };
       break;
@@ -59,7 +59,7 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
     case "addThread":
       // Pick from the threads that exist, or name a new one. A bare prompt made
       // you retype an existing name exactly, and a typo forked a second thread
-      // instead of failing (2026-07-28 feedback).
+      // instead of failing.
       s.threadPickFor = link.refKey;
       break;
     case "untag": {
@@ -148,9 +148,9 @@ function parseRefKey(ref: string | undefined): { book: string; chapter: number; 
   return chapter && verse ? { book: ref.slice(0, sp), chapter, verse } : null;
 }
 
-/** Loading a weave pulls its first link's two passages up (product 2026-07-25,
- *  both shells): active pane → endpoint a, the next pane → endpoint b — no
- *  hunting through the card to see the weave in the text. */
+/** Loading a weave pulls its first link's two passages up (both shells): active
+ *  pane → endpoint a, the next pane → endpoint b — no hunting through the card
+ *  to see the weave in the text. */
 async function openWeavePassages(s: Session, index: number): Promise<void> {
   const links = (await s.fetchQ("weaves"))?.weaves?.[index]?.links ?? [];
   const link = links.find((l: any) => l.resolved) ?? links[0];

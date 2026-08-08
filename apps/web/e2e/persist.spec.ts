@@ -235,3 +235,29 @@ test("a note written 5 ms before the tab is put away still reaches storage", asy
     })
     .toBeGreaterThan(0);
 });
+
+// A reader changed the theme and it was gone next launch (UAT, 2026-08-06). The
+// config save that carries the theme to the home is debounced and posted to the
+// worker, so a fast close races the worker's IndexedDB write and the theme
+// reverts to the default. The fix mirrors the theme CHOICE to localStorage
+// synchronously (close-safe) and reconciles it on boot.
+//
+// This drives the REAL close path — no explicit flush, no wait — which is what
+// reproduced the loss: with the fix reverted the theme comes back "system".
+test("the theme survives a fast close, with no explicit flush", async ({ page }) => {
+  await boot(page);
+
+  await page.evaluate(() => ((window as any).__plumbline.showSettings = true));
+  await page.getByRole("radio", { name: "Night (true black)" }).check();
+  await page.evaluate(() => ((window as any).__plumbline.showSettings = false));
+
+  // Straight to reload — the config save has NOT been awaited, exactly like a
+  // reader who picks a theme and closes the tab (or backgrounds a phone).
+  await page.reload({ timeout: 45_000 });
+  await boot(page);
+
+  expect(
+    await page.evaluate(() => (window as any).__plumbline.config.theme),
+    "the theme chosen last launch must survive a fast close",
+  ).toBe("night");
+});

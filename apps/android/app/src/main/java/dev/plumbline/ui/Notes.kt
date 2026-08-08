@@ -1,4 +1,4 @@
-// The personal-notes browser (product feedback, 2026-07-24): every note the
+// The personal-notes browser: every note the
 // reader has written, browsable from Explore — verse + note text, canonical
 // order (UserNotesJson). Tap a row to open the passage in the reader; Edit
 // rewrites (or clears) the note in place.

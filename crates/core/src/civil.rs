@@ -5,9 +5,8 @@
 //! strings — how many days until an SRS card is due, how many days since a
 //! chapter was last read. That is all this module.
 //!
-//! Lifted out of `memory.rs` (2026-07-28) when `reading.rs` needed the same
-//! four functions; it was private there and duplicating it would have meant two
-//! implementations of the leap-year rule.
+//! Shared by `memory.rs` and `reading.rs`; kept in one place so the leap-year
+//! rule isn't implemented twice.
 
 /// Howard Hinnant's days-from-civil (proleptic Gregorian; 1970-01-01 == 0).
 pub fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {

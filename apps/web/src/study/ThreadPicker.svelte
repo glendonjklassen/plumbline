@@ -2,13 +2,12 @@
   // Thread picker sheet (Android ThreadPickerSheet parity): the threads you have
   // are a list you tap; freetext is only for a genuinely new one.
   //
-  // It used to be a bare `askText` prompt (2026-07-28 feedback: "a nightmare").
-  // A freetext-only prompt makes the common case — adding a fifth passage to the
-  // thread you have been building all week — require retyping its name exactly,
-  // and a typo silently forks a second thread instead of failing.
+  // Not a bare freetext prompt: that makes the common case — adding a fifth
+  // passage to the thread you have been building all week — require retyping its
+  // name exactly, and a typo silently forks a second thread instead of failing.
   //
-  // Deleting lives here for the same reason: a thread started by typo had no way
-  // out at all before.
+  // Deleting lives here for the same reason: a thread started by typo needs a
+  // way out.
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
   import { nowStamp } from "../engine/StudyEngine";
@@ -133,7 +132,7 @@
          measured and published by Shell (0 at desktop widths, where there is no
          bar), so this never restates a height that would drift. Getting it wrong
          hides the bottom of the sheet — which for a picker is the "New …" field
-         and its Add button, i.e. the whole point of opening it (2026-07-29). */
+         and its Add button, i.e. the whole point of opening it. */
       bottom: var(--bottomNavH, 0px);
       left: 0;
       transform: none;

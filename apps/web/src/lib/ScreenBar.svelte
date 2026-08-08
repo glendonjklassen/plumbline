@@ -2,13 +2,6 @@
   import { t } from "./i18n.svelte";
   // ONE bar for every destination that has one.
   //
-  // Explore, Memorize and the Hymnal each grew their own, and they had drifted
-  // into three: 4px / 10px / 6px gaps, 8px / 10px / 8px padding, two of them on
-  // the nav background and one on nothing, and the title as an `h2` in two and
-  // an unsized `span` in the third — so Memorize's heading rendered at body size
-  // while the others sat at 18px. Switching tabs made the chrome jump
-  // (feedback 2026-08-02).
-  //
   // The metrics are the app header's on purpose, so the second bar reads as the
   // same piece of furniture one row down rather than a different designer's
   // work: same background, same rule, same 52px floor, same padding.

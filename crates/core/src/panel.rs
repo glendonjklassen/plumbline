@@ -94,8 +94,8 @@ pub enum Block {
 /// A catalogue string, in the reader's language.
 ///
 /// This module generates PROSE the reader reads, so it is as much a part of the
-/// catalogue as any shell — the labels here were English on a German screen until
-/// UAT caught it (2026-08-03). Shorthand because there are twenty call sites and
+/// catalogue as any shell and must be localized like one. Shorthand because there
+/// are twenty call sites and
 /// `crate::i18n::t(crate::i18n::active(), …)` at each of them would be noise.
 fn s(id: &str) -> String {
     crate::i18n::t(crate::i18n::active(), id, &[])
@@ -382,8 +382,9 @@ pub trait PanelSource {
     fn occurrences(&self, code: &str) -> OccurrencesView;
 
     fn bridge_partners(&self, code: &str) -> Vec<BridgePartnerView>;
-    /// `(near, cross)` embedding neighbour codes (Full study; empty w/o an
-    /// embedding).
+    /// The symbolic concept engine's view of a code: its community (same-root
+    /// members), concentrating books, testament split, and leitwort. `None`
+    /// without the `concept` feature or its index.
     fn concept(&self, code: &str) -> Option<ConceptView>;
 
     fn verse_xrefs(&self, verse: &str) -> Vec<XrefView>;
@@ -618,7 +619,7 @@ fn legend() -> Block {
 /// Which analysis tiers the reader has switched on. The text (and the reader's
 /// own data — tags, notes, author actions) is always on; **human** gates the
 /// curated-scholarship tiers (renderings, morphology, same-root, TSK) and
-/// **machine** the learned/statistical ones (embeddings, concept, SIF,
+/// **machine** the learned/statistical ones (the symbolic concept engine, SIF,
 /// leitwort). Replaces the old all-or-nothing Simple/Full request flag — the
 /// reader accumulates tags in any mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -683,8 +684,7 @@ pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token:
     //
     // refKey-keyed, so perfectly valid here: the reader's own note, their tags
     // and threads, and the Treasury's CROSS-REFERENCES — which is the one that
-    // matters, because it is a lot of real study value and my first pass threw it
-    // away by returning early (caught by reading the test's own output).
+    // matters, because it is a lot of real study value.
     let kjv = src.is_kjv_text();
 
     if kjv && gates.human {
@@ -693,13 +693,13 @@ pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token:
         }
     }
     // The reader's own note rides near the top — it's what they wrote, not
-    // evidence to scroll for (product feedback 2026-07-25).
+    // evidence to scroll for.
     user_note_block(src, verse, &mut out);
 
     if !kjv {
         // Said once, plainly, in the reader's language. Showing the English
         // evidence instead read as an app that had half-forgotten which language
-        // it was in (UAT, 2026-08-03).
+        // it was in.
         out.push(Block::para(vec![Run::new(
             crate::i18n::t(crate::i18n::active(), "study.onlyKjv", &[]),
             sz::NOTE,
@@ -936,8 +936,8 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
 }
 
 /// The reader's own note for a verse — emitted near the **top** of the word
-/// study (their words come before the evidence; product feedback 2026-07-25).
-/// Never gated. The edit link prompts; empty text clears.
+/// study (their words come before the evidence). Never gated. The edit link
+/// prompts; empty text clears.
 fn user_note_block(src: &dyn PanelSource, verse: &str, out: &mut Vec<Block>) {
     let mine = src.user_note(verse);
     out.push(Block::Para {
@@ -1254,8 +1254,8 @@ pub fn compare_card(src: &dyn PanelSource, full: bool, index: usize) -> Vec<Bloc
         Run::new(&w.name, sz::TITLE, Color::Ink).bold(),
         Run::new(format!("   {}{suffix}", w.kind_label), sz::CAPTION, Color::Mono),
     ])];
-    // ✎ note is the reader's own annotation — always available (author
-    // actions left the Simple/Full gate with the 2026-07-25 product change).
+    // ✎ note is the reader's own annotation — always available; author actions
+    // are not gated, so `full` is unused here.
     let _ = full;
     let mut head = vec![Run::new(sp("panel.links", w.links.len()), sz::SMALL, Color::Faded)];
     head.push(Run::new("   ", sz::SMALL, Color::Ink));
@@ -1411,8 +1411,8 @@ fn snippet(src: &dyn PanelSource, refkey: &str, query: &str) -> Option<Block> {
 /// A guide section: its heading and paragraphs, given as CATALOGUE IDS.
 ///
 /// Ids rather than text, because this prose was the last English left in the app
-/// — roughly forty paragraphs a German reader could reach and could not read
-/// (2026-08-04). Passing ids keeps the call sites below readable as an outline of
+/// — roughly forty paragraphs a German reader could reach and could not read.
+/// Passing ids keeps the call sites below readable as an outline of
 /// the guide while the words themselves live in `i18n/`, where the completeness
 /// test can see whether every one of them has been translated.
 fn guide_section(out: &mut Vec<Block>, lang: i18n::Lang, title: &str, paras: &[&str]) {
@@ -1436,8 +1436,8 @@ fn guide_step(out: &mut Vec<Block>, lang: i18n::Lang, title: &str, paras: &[&str
 /// The in-app guide: a concise tour of the reader. (The full manual lives in
 /// docs/GUIDE.md; this is the on-screen version.)
 ///
-/// Organised by **what you came to do**, not by what the app has (product call,
-/// 2026-07-28). Nobody opens a Bible wanting "the study panel"; they want to
+/// Organised by **what you came to do**, not by what the app has. Nobody opens
+/// a Bible wanting "the study panel"; they want to
 /// share the gospel, get ready to teach on Sunday, understand a passage, or keep
 /// reading faithfully. Every feature below earns its place under one of those.
 pub fn guide_blocks() -> Vec<Block> {

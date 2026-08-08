@@ -42,7 +42,7 @@ pub extern "C" fn plumbline_web_measure_fnptr() -> PlumblineMeasureFn {
 /// when there is nothing left (or the engine is null). Idempotent.
 ///
 /// Only the search index is pre-built, and it is built a slice of verses at a
-/// time. Two measurements drove that (a 2026 flagship phone, 2026-07-26):
+/// time. Two measurements drove that:
 ///
 ///  - Warming every index cost ~28 s of worker CPU after boot, 12 s of it on
 ///    machine-tier indexes the reader hadn't switched on. Everything except
@@ -71,11 +71,10 @@ pub unsafe extern "C" fn plumbline_engine_warm_step(engine: *const PlumblineEngi
     // with its own slice constant can pass at a size the product never uses.
     use crate::WARM_SLICE as SLICE;
     // Search first (it answers the search box), then the two indexes a WORD
-    // CLICK needs. Those two used to be built whole on the reader's first click
-    // — every session, since nothing survives the tab — which is the "it loads
-    // for a while, every time" report of 2026-07-27. Warming them here costs
-    // the same work, but off the critical path and in slices, so a tap landing
-    // mid-warm waits milliseconds.
+    // CLICK needs. Otherwise those two are built whole on the reader's first
+    // click — every session, since nothing survives the tab. Warming them here
+    // costs the same work, but off the critical path and in slices, so a tap
+    // landing mid-warm waits milliseconds.
     guard(0, || e.warm_next(SLICE))
 }
 
@@ -86,9 +85,7 @@ pub unsafe extern "C" fn plumbline_engine_warm_step(engine: *const PlumblineEngi
 /// Call it immediately after open. Deriving it from the first
 /// [`plumbline_engine_warm_step`] call instead is a race the reader wins: the
 /// web's warm starts only after stage 2 is fetched and parsed, ~550 ms after text
-/// appears on a phone, and the first tap lands inside that window. That cost a
-/// whole release — the fix shipped, and the phone still froze for 26,042 ms
-/// inside one `wordStudyBlocks` (2026-07-28).
+/// appears on a phone, and the first tap lands inside that window.
 ///
 /// Web-only, hence wasm-only: Android warms through
 /// [`plumbline_engine_warm_indexes`](crate::plumbline_engine_warm_indexes), which
@@ -104,15 +101,16 @@ pub unsafe extern "C" fn plumbline_engine_defer_builds(engine: *const PlumblineE
     }
 }
 
-/// Load ONE machine-tier artifact: step 0 the concept embedding, step 1 the
-/// morphology sidecar. Returns 1 while steps remain, 0 when done (or on a null
-/// engine). Idempotent — an artifact already loaded, or still missing from the
-/// home, is a cheap no-op.
+/// Load ONE machine-tier artifact: step 1 the morphology sidecar. Step 0 was the
+/// concept embedding, now retired — it is a vestigial no-op kept so the two-step
+/// contract and both shells' load loop stay unchanged. Returns 1
+/// while steps remain, 0 when done (or on a null engine). Idempotent — an
+/// artifact already loaded, or still missing from the home, is a cheap no-op.
 ///
 /// [`plumbline_engine_load_rnd_data`](crate::plumbline_engine_load_rnd_data)
 /// does both in one call, which parses ~17 MB of text. On a phone that is many
 /// seconds during which this thread answers nothing — the reader tapped a word
-/// and the study sheet sat on "— loading —" until it finished (2026-07-27).
+/// and the study sheet sat on "— loading —" until it finished.
 /// Split, the worker can serve a tap between artifacts.
 ///
 /// # Safety

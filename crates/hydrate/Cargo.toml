@@ -13,4 +13,4 @@ path = "src/main.rs"
 
 [dependencies]
 plumbline-core = { workspace = true }
-plumbline-rnd = { workspace = true, features = ["bridge", "embeddings", "morphology"] }
+plumbline-rnd = { workspace = true, features = ["bridge", "morphology"] }
