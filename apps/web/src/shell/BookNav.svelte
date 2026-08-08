@@ -65,11 +65,78 @@
 
   function close(): void {
     s.bookNavFor = null;
+    tileMenu = null;
   }
   function go(chapter: number): void {
     if (!book || s.bookNavFor === null) return;
     s.navigate(s.bookNavFor, book, chapter);
     close();
+  }
+
+  // ── mark-read from the navigator ──────────────────────────────────────────
+  //
+  // Marking a chapter read belongs HERE, on the thing that shows reading
+  // standing, not on the first verse's context menu where it used to hide
+  // (UAT, 2026-08-07). A tap still navigates; a long-press (or right-click)
+  // opens a two-item menu, and the whole book has its own visible button so the
+  // action is discoverable rather than a hidden gesture. "Mark read" logs today
+  // in one tap for backfilling from a fresh state; "on date…" opens the picker.
+  const todayDate = (): string => new Date().toISOString().slice(0, 10);
+
+  let tileMenu = $state<{ chapter: number; x: number; y: number } | null>(null);
+  let pressTimer = 0;
+  let longPressed = false;
+
+  function openTileMenu(c: number, x: number, y: number): void {
+    // Keep it on screen — a tile near the right/bottom edge would clip it.
+    tileMenu = { chapter: c, x: Math.min(x, innerWidth - 190), y: Math.min(y, innerHeight - 120) };
+  }
+  function startPress(e: PointerEvent, c: number): void {
+    longPressed = false;
+    clearTimeout(pressTimer);
+    pressTimer = window.setTimeout(() => {
+      longPressed = true;
+      openTileMenu(c, e.clientX, e.clientY);
+    }, 500);
+  }
+  function endPress(): void {
+    clearTimeout(pressTimer);
+  }
+  function onChapterClick(c: number): void {
+    // A long-press already opened the menu — the release must not also navigate.
+    if (longPressed) {
+      longPressed = false;
+      return;
+    }
+    go(c);
+  }
+
+  async function markToday(c: number): Promise<void> {
+    const b = book;
+    tileMenu = null;
+    if (!b) return;
+    const when = todayDate();
+    const err = await s.author("readingMarkRead", b, c, when);
+    s.showToast(err ?? t("markRead.marked", { when }));
+  }
+  function markOnDate(c: number): void {
+    const b = book;
+    tileMenu = null;
+    if (b) s.markReadFor = { book: b, chapter: c };
+  }
+  async function markWholeBook(): Promise<void> {
+    const b = book;
+    if (!b) return;
+    const n = chapterCount;
+    const ok = await s.askConfirm(
+      t("booknav.markBookAsk", { book: s.bookName(b) }),
+      t("booknav.markBookBody", { n }),
+      t("booknav.markBook"),
+    );
+    if (!ok) return;
+    const when = todayDate();
+    for (let c = 1; c <= n; c++) await s.author("readingMarkRead", b, c, when);
+    s.showToast(t("booknav.markedBook", { book: s.bookName(b), n }));
   }
 
   const books = $derived.by(() => {
@@ -147,11 +214,24 @@
       {:else}
         <!-- The word came through as an English literal, on a German screen too,
              and check-i18n never saw it because the line is mostly `{…}`. -->
-        <p class="sect">{s.bookName(book)} — {t("booknav.chapter")}</p>
+        <p class="sect">
+          {s.bookName(book)} — {t("booknav.chapter")}
+          <span class="spacer"></span>
+          <button class="markbook" onclick={markWholeBook}>{t("booknav.markBook")}</button>
+        </p>
+        <p class="hint">{t("booknav.markHint")}</p>
         <div class="grid nums">
           {#each Array.from({ length: chapterCount }, (_, i) => i + 1) as c (c)}
             <button
-              onclick={() => go(c)}
+              onclick={() => onChapterClick(c)}
+              onpointerdown={(e) => startPress(e, c)}
+              onpointerup={endPress}
+              onpointerleave={endPress}
+              onpointercancel={endPress}
+              oncontextmenu={(e) => {
+                e.preventDefault();
+                openTileMenu(c, e.clientX, e.clientY);
+              }}
               style={tintStyle(chapterHeat.get(c))}
               title={tintTitle(`${s.bookName(book)} ${c}`, chapterHeat.get(c))}
             >{c}</button>
@@ -160,6 +240,16 @@
       {/if}
     </div>
   </div>
+
+  {#if tileMenu && book}
+    <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+    <div class="tilemenu-backdrop" onclick={() => (tileMenu = null)}></div>
+    <div class="tilemenu" role="menu" style={`left:${tileMenu.x}px; top:${tileMenu.y}px`}>
+      <p class="tm-title">{s.bookName(book)} {tileMenu.chapter}</p>
+      <button role="menuitem" onclick={() => markToday(tileMenu!.chapter)}>{t("booknav.markRead")}</button>
+      <button role="menuitem" onclick={() => markOnDate(tileMenu!.chapter)}>{t("booknav.markReadOn")}</button>
+    </div>
+  {/if}
 {/if}
 
 <style>
@@ -238,6 +328,60 @@
     display: flex;
     align-items: baseline;
     gap: 12px;
+  }
+  .markbook {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: calc(13px * var(--uiScale, 1));
+    color: var(--gold, #9e7d38);
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 6px;
+    padding: 4px 10px;
+  }
+  .markbook:hover {
+    border-color: var(--gold, #9e7d38);
+  }
+  /* How to reach the per-chapter action, since a long-press is otherwise a
+     hidden gesture. Quiet — it is a hint, not a heading. */
+  .hint {
+    font-size: calc(11.5px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
+    margin: 0 0 8px;
+  }
+  .tilemenu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 44;
+  }
+  .tilemenu {
+    position: fixed;
+    z-index: 45;
+    min-width: 176px;
+    display: flex;
+    flex-direction: column;
+    background: var(--popupPaper, #f2eee6);
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    padding: 6px;
+  }
+  .tm-title {
+    font-size: calc(12px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
+    padding: 4px 10px 6px;
+    margin: 0;
+    border-bottom: 1px solid var(--rule, #d8cba8);
+  }
+  .tilemenu button {
+    text-align: left;
+    padding: 9px 10px;
+    border-radius: 6px;
+    font-size: calc(14.5px * var(--uiScale, 1));
+    color: var(--ink, #211f1a);
+  }
+  .tilemenu button:hover {
+    background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
+    color: var(--gold, #9e7d38);
   }
   .grid {
     display: grid;

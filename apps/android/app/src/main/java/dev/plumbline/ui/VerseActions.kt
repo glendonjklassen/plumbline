@@ -170,7 +170,6 @@ fun VerseActionSheet(
 
     var showNote by remember(verseRef) { mutableStateOf(false) }
     var showPassage by remember(verseRef) { mutableStateOf(false) }
-    var showMarkRead by remember(verseRef) { mutableStateOf(false) }
     var noteText by remember(verseRef) { mutableStateOf("") }
     var noteLoaded by remember(verseRef) { mutableStateOf(false) }
     // The note dialog's last failure, shown inside it. It stays until the next
@@ -341,14 +340,9 @@ fun VerseActionSheet(
             ActionRow(t("menu.note"), palette.ink) { showNote = true }
             ActionRow(t("menu.memorizeVerse"), palette.ink) { memorize() }
             ActionRow(t("menu.memorizePassage"), palette.ink) { showPassage = true }
-            // Log a paper-Bible read, on the chapter's FIRST verse only. Kept to
-            // verse 1 on purpose: the affordance should be findable when wanted
-            // and too fiddly to do across a whole Bible, which is exactly the
-            // balance asked for — it exists for "I read Judges on paper last
-            // Tuesday", not for backfilling a reading history wholesale.
-            if (parseRef(verseRef)?.verse == 1) {
-                ActionRow(t("menu.markRead"), palette.ink) { showMarkRead = true }
-            }
+            // Marking a chapter read moved to the passage navigator (long-press a
+            // chapter tile), where reading standing already lives and a whole book
+            // can be logged at once — see ui/BookNav.kt (UAT, 2026-08-07).
             HorizontalDivider(color = palette.rule)
 
             Spacer(Modifier.height(12.dp))
@@ -375,60 +369,6 @@ fun VerseActionSheet(
             onCancel = { showPassage = false },
         )
     }
-
-    if (showMarkRead) {
-        parseRef(verseRef)?.let { parts ->
-            MarkReadDialog(
-                palette = palette,
-                label = "$display".substringBeforeLast(':'),
-                onPick = { date ->
-                    showMarkRead = false
-                    scope.launch {
-                        val outcome = withContext(Dispatchers.Default) {
-                            saveOutcome(
-                                runCatching {
-                                    synchronized(engine) {
-                                        engine.ReadingMarkRead(parts.book, parts.chapter, date)
-                                    }
-                                },
-                            )
-                        }
-                        Toast.makeText(
-                            context,
-                            when (outcome) {
-                                is SaveOutcome.Saved -> t("markRead.marked", "when" to date)
-                                is SaveOutcome.Failed -> t("markRead.notMarked", "why" to outcome.message)
-                            },
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                        hide()
-                    }
-                },
-                onClear = {
-                    showMarkRead = false
-                    scope.launch {
-                        val outcome = withContext(Dispatchers.Default) {
-                            saveOutcome(
-                                runCatching {
-                                    synchronized(engine) { engine.ReadingForget(parts.book, parts.chapter) }
-                                },
-                            )
-                        }
-                        Toast.makeText(
-                            context,
-                            when (outcome) {
-                                is SaveOutcome.Saved -> t("markRead.cleared")
-                                is SaveOutcome.Failed -> t("markRead.notCleared", "why" to outcome.message)
-                            },
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                        hide()
-                    }
-                },
-                onCancel = { showMarkRead = false },
-            )
-        }
-    }
 }
 
 /**
@@ -442,7 +382,7 @@ fun VerseActionSheet(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MarkReadDialog(
+internal fun MarkReadDialog(
     palette: ReaderPalette,
     label: String,
     onPick: (String) -> Unit,

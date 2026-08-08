@@ -1013,7 +1013,8 @@ New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
 - **1. Copy & context menu.** Formatting is `plumbline_core::export::copy_text`
   (verse / verse+ref / markdown / chapter). Long-press (or right-click) a verse →
   the sheet/menu: Copy · Copy chapter · Share · Tag… · Note… · Add to thread… ·
-  Memorize · Mark chapter read… (`ui/VerseActions.kt` / `ContextMenu.svelte`).
+  Memorize (`ui/VerseActions.kt` / `ContextMenu.svelte`). Marking a chapter read
+  left this menu 2026-08-07 for the passage navigator (see the reading map).
   **Trimmed 2026-07-29:** the three copy variants collapsed into ONE **Copy** that
   honours Settings ▸ Copy format — a menu is not the place to re-ask a question
   the settings already answer — and the highlight swatches went with highlighting
@@ -1202,10 +1203,18 @@ the ABI, so the shells cannot drift. Reports land every 30 s and on the way out 
 a chapter/app; the high-water verse comes from `onVerseReached` (Android) /
 `pane.reached` (web), monotonic per chapter.
 
-**By hand**: long-press a chapter's *first verse* → "Mark chapter read…" → a date
-picker with today/yesterday/last-week shortcuts, plus Clear. Full credit, for
-reading done in a paper Bible; kept to verse 1 so it is findable but not
-bulk-usable.
+**By hand**, in the passage navigator (moved off the first verse's action sheet
+2026-08-07 — reading standing lives on the navigator, and the verse-1 gesture was
+unfindable and not bulk-usable): a chapter tile takes a long-press (or
+right-click), and the book has a **Mark whole book read** button for backfilling
+from a fresh state. Full credit, for reading done in a paper Bible.
+
+*Delta:* web pops a two-item menu at the tile — **Mark read** (today, one tap)
+and **Mark read on date…** (opens `MarkReadDialog`); Android's long-press opens
+that date dialog directly (its today/yesterday/last-week shortcuts are the same
+one tap). Both reach today and a picked date; both offer Clear; the whole-book
+button confirms then loops `mark_read` over the book's chapters. Web
+`shell/BookNav.svelte`, Android `ui/BookNav.kt`.
 
 **Perf**: write paths read ONE book file, not the store (dwell is timer-driven);
 `ChapterWords` is built once per engine and cached; the web persists only

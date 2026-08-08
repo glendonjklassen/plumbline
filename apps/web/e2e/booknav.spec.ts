@@ -183,3 +183,35 @@ test("the navigator is the grid, with no colour legend above it", async ({ page 
   await page.locator(".dialog .content").evaluate((el) => (el.scrollTop = el.scrollHeight));
   await expect(page.locator(".grid.nums button").last()).toBeInViewport();
 });
+
+// Mark-as-read moved off the first verse's context menu onto the navigator
+// (UAT, 2026-08-07): a long-press / right-click on a chapter tile marks it read,
+// and a book-level button marks them all. Drives the right-click path (a
+// deterministic stand-in for the long-press) and checks the engine actually
+// recorded the read.
+test("a chapter is marked read from the navigator", async ({ page }) => {
+  await boot(page);
+  await openNav(page);
+  await tile(page, "John").click();
+  await expect(page.locator(".grid.nums")).toBeVisible();
+
+  const standingOf = (ch: number) =>
+    page.evaluate(async (c) => {
+      const r = await (window as any).__plumbline.rpc.call(
+        "readingChapters",
+        "John",
+        new Date().toISOString(),
+      );
+      return r.chapters.find((x: any) => x.chapter === c)?.standing ?? null;
+    }, ch);
+
+  // Not already read — otherwise the assertion below is vacuous.
+  expect(await standingOf(5)).not.toBe("read");
+
+  const ch5 = page.locator(".grid.nums button").filter({ hasText: /^5$/ });
+  await ch5.click({ button: "right" });
+  await expect(page.locator(".tilemenu")).toBeVisible();
+  await page.getByRole("menuitem", { name: "Mark read", exact: true }).click();
+
+  await expect.poll(() => standingOf(5), { timeout: 15_000 }).toBe("read");
+});

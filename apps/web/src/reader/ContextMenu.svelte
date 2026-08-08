@@ -101,24 +101,6 @@
     void dispatchLink(s, `editnote:${ref}`);
   }
 
-  /** The chapter of the verse under the menu, when it is that chapter's FIRST
-   *  verse — the only place "Mark chapter read…" is offered. Kept to verse 1 on
-   *  purpose: findable when wanted, too fiddly to do across a whole Bible, which
-   *  is exactly the balance the feature asks for. */
-  const markable = $derived.by(() => {
-    const ref = menu?.refKey;
-    if (!ref) return null;
-    const m = /^(.+) (\d+):(\d+)$/.exec(ref);
-    if (!m || m[3] !== "1") return null;
-    return { book: m[1], chapter: Number(m[2]) };
-  });
-
-  function markRead(): void {
-    const chapter = markable;
-    close();
-    if (chapter) s.markReadFor = chapter;
-  }
-
   function tagPick(): void {
     const ref = menu!.refKey;
     close();
@@ -174,10 +156,6 @@
     <hr />
     <button onclick={memorize}>{t("menu.memorizeVerse")}</button>
     <button onclick={memorizePassage}>{t("menu.memorizePassage")}</button>
-    {#if markable}
-      <hr />
-      <button onclick={markRead}>{t("menu.markRead")}</button>
-    {/if}
   </div>
 {/if}
 
