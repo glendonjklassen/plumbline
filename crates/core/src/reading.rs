@@ -23,7 +23,7 @@
 //! than per-verse**: time spent lingering over verse 3 pays for verse 30 once
 //! you get there. That is the generous reading, and generous is the brief.
 //!
-//! Generous in one more place: a pass completes at [`COMPLETE_AT`] (90%), not
+//! Generous in one more place: a pass completes at [`COMPLETE_AT`] (85%), not
 //! 100%, and **snaps** to a full read. Nobody should be hunting a trailing verse
 //! to make a glow go away.
 //!
@@ -51,7 +51,7 @@
 //! [`STALE_DAYS`]. So a chapter you were in this morning says nothing, whether you
 //! finished it or stopped halfway, and a chapter you finished last year but dipped
 //! into today says nothing either. Without this rule, reading a chapter and not
-//! quite crossing the 90% bar left it glowing at you the moment you closed it,
+//! quite crossing the completion bar left it glowing at you the moment you closed it,
 //! which is a map arguing with the person holding it.
 //!
 //! Personal study data, so it rides in the backup zip like `memory/` and
@@ -81,10 +81,17 @@ pub const FORMAT: &str = "plumbline-reading-v1";
 /// mark already do that work: a flip banks no seconds at all. So this can afford
 /// to be fast, and being fast is the difference between a map that agrees with the
 /// reader and one that argues with them.
-pub const READING_WORDS_PER_MINUTE: f32 = 300.0;
+///
+/// 300 was still arguing (street use, 2026-08-08): 1 Thess 3 is 295 words, so at
+/// 300 wpm × [`COMPLETE_AT`]=0.90 it demanded 53s of credited dwell, and a real
+/// ~450 wpm read banked ~36s after grace — reached the end, called Partial. A
+/// flipper still banks nothing (they spend seconds, not half-minutes), so the
+/// rate rose to 500 and the snap dropped to 0.85 together: the pair puts a
+/// 450–600 wpm reader clear of the bar with margin instead of on its edge.
+pub const READING_WORDS_PER_MINUTE: f32 = 500.0;
 
 /// Coverage at or above which a pass counts as a full read and snaps to 1.0.
-pub const COMPLETE_AT: f32 = 0.90;
+pub const COMPLETE_AT: f32 = 0.85;
 
 /// Days after a read during which there is no glow at all — recently read is
 /// recently read, and the map should be quiet about it.
@@ -960,12 +967,12 @@ mod tests {
         let c = toy();
         let w = ChapterWords::build(&c);
         let home = scratch("complete");
-        // Gen 1 is 10 words ≈ 2.7s at 220 wpm. Reach verse 4 (8 words = 80%,
-        // under the 90% bar) with ample time.
+        // Gen 1 is 10 words. Reach verse 4 (8 words = 80%, under the
+        // COMPLETE_AT bar) with ample time.
         let r = record(&home, &c, &w, "Gen", 1, 4, 60.0, NOW).unwrap();
         assert!((r.pct - 0.8).abs() < 1e-6);
         assert!(!r.completed, "80% is short of the bar");
-        // One more verse clears 90% and snaps to a full read.
+        // One more verse clears the bar and snaps to a full read.
         let r = record(&home, &c, &w, "Gen", 1, 5, 1.0, NOW).unwrap();
         assert!(r.completed);
         assert_eq!(r.pct, 1.0);
@@ -985,12 +992,11 @@ mod tests {
         let w = ChapterWords::build(&c);
         let home = scratch("generous");
         // Gen 2 is 2 verses of 10 words. Reaching verse 2 is 100%, but check the
-        // bar itself: a chapter where 90% is reachable without the final verse.
-        // Gen 1: verses 1–5 at 2 words each; 90% of 10 words = 9, so verse 5 is
-        // needed there. Use dwell as the binding constraint instead: 9 words of
-        // dwell over a fully-scrolled chapter must complete it.
+        // bar itself, on a chapter where it is reachable without the final verse.
+        // Gen 1: verses 1–5 at 2 words each; COMPLETE_AT of its 10 words is 8.5,
+        // so 9 words of dwell over a fully-scrolled chapter must complete it.
         let r = record(&home, &c, &w, "Gen", 1, 5, seconds_for_words(9), NOW).unwrap();
-        assert!(r.completed, "90% of the words is a full read");
+        assert!(r.completed, "clearing COMPLETE_AT is a full read");
         assert_eq!(r.pct, 1.0);
         let _ = std::fs::remove_dir_all(&home);
     }
@@ -1006,7 +1012,7 @@ mod tests {
         let third = seconds_for_words(20) / 3.0;
         for (reached, secs) in [(1u16, third), (2, third)] {
             let r = record(&home, &c, &w, "Gen", 2, reached, secs, NOW).unwrap();
-            assert!(!r.completed, "two thirds of the words is short of the 90% bar");
+            assert!(!r.completed, "two thirds of the words is short of the bar");
         }
         let (store, _) = load(&home);
         let rec = &store["Gen"][0];
@@ -1041,7 +1047,7 @@ mod tests {
         let w = ChapterWords::build(&c);
         let home = scratch("just-read");
 
-        // The Jude case. Read most of a chapter, but not past the 90%
+        // The Jude case. Read most of a chapter, but not past the completion
         // bar, so it stands as Partial — and it must NOT glow, because the reader
         // was in it moments ago.
         let r = record(&home, &c, &w, "Gen", 2, 1, seconds_for_words(10), NOW).unwrap();

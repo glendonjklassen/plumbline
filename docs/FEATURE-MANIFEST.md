@@ -1204,16 +1204,19 @@ Create/OpenDocument + java.util.zip; restore recreates the activity.
 `plumbline_core::reading` (`plumbline-reading-v1`, one file per book under
 `home/reading/`, plus `_since.json` for the reader's start date). Coverage of a
 chapter is a **percentage**, gated two ways at once:
-`min(words above the furthest verse reached, dwell × 300 wpm) ÷ chapter words`.
+`min(words above the furthest verse reached, dwell × 500 wpm) ÷ chapter words`.
 Scrolling to the bottom instantly credits nothing; sitting on verse 1 credits only
 verse 1. Dwell is **aggregate, not per-verse** — time over verse 3 pays for verse
-30 once you get there — and a pass completes at **90%** and snaps to 1.0, so there
+30 once you get there — and a pass completes at **85%** and snaps to 1.0, so there
 is never a trailing verse to chase. Stored per chapter: `reached`, `dwell`
 (both belong to the pass under way, cleared when it completes), `lastRead` and
-`touched`. The reading rate is 300 wpm, not a slower one: at 220, Jude's 613
-words wanted 2.8 minutes of dwell, which a brisk reader beats, so a real read came
-out `Partial`. The grace period and the high-water mark are what refuse a
-flip-through; the rate does not need to be slow as well.
+`touched`. The reading rate is 500 wpm, tuned twice and both times upward: at
+220, Jude's 613 words wanted 2.8 minutes of dwell, which a brisk reader beats;
+at 300 × 90%, 1 Thess 3's 295 words wanted 53s and a real ~450 wpm read banked
+~36s after grace — reached the end, called `Partial` (street use, 2026-08-08).
+The grace period and the high-water mark are what refuse a flip-through (a
+flipper banks seconds, not half-minutes); the rate does not need to be slow
+as well.
 
 Two signals in the navigator's grids: **hue** = `Standing` (unread gold
 `readUnread` / partial copper `readPartial` / read sage `readDone`, all three in

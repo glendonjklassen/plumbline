@@ -1758,7 +1758,7 @@ fn reading_map_round_trip_via_abi() {
         assert_eq!(books["books"].as_array().unwrap().len(), 66);
         assert_eq!(books["since"], "2026-07-28");
         assert_eq!(books["spec"]["staleDays"], 365);
-        assert_eq!(books["spec"]["completeAt"], 0.9);
+        assert_eq!(books["spec"]["completeAt"], 0.85);
         let john = books["books"].as_array().unwrap().iter().find(|b| b["book"] == "John").unwrap();
         assert_eq!(john["standing"], "unread");
         // Unread glows from the FIRST launch: the map's job on day one is to show
