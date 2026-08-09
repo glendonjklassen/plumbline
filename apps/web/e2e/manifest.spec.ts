@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
+import { launchDestination } from "../src/shell/church";
+
 // The install identity: the webmanifest, the icons it names, and the colour the
 // browser paints its own chrome with.
 //
@@ -108,6 +110,12 @@ type Manifest = {
   theme_color?: string;
   icons?: { src: string; sizes?: string; type?: string; purpose?: string }[];
   screenshots?: { src: string; sizes?: string; type?: string; form_factor?: string }[];
+  shortcuts?: {
+    name?: string;
+    short_name?: string;
+    url?: string;
+    icons?: { src: string; sizes?: string; type?: string }[];
+  }[];
 };
 
 /** Fetch the manifest the page actually links, and parse it AS JSON.
@@ -462,5 +470,48 @@ test("any screenshot the manifest names is real and the size it says", async ({ 
       { width: got.width, height: got.height },
       `screenshot ${shot.src} is ${got.width}×${got.height}, not the ${shot.sizes} it claims`,
     ).toEqual({ width: w, height: h });
+  }
+});
+
+// -- SHORTCUTS -----------------------------------------------------------------
+// A `shortcuts` entry is stored by the LAUNCHER at install time: the long-press
+// menu keeps whatever URL the manifest declared that day, and nothing revalidates
+// it against the app. So the check has to run the other way round — every URL the
+// manifest hands the launcher must be one `launchDestination` (src/shell/church.ts,
+// the app's own whitelist) accepts. Holding the two to each other is what makes a
+// renamed destination fail HERE, instead of shipping a shortcut that boots to the
+// reader as if it had never been tapped.
+test("every launcher shortcut names a destination the app itself routes", async ({ page }) => {
+  await page.goto("/");
+  const { href, json } = await manifest(page);
+  const shortcuts = json.shortcuts ?? [];
+  expect(shortcuts.length, "the manifest declares no shortcuts — the long-press menu is empty").toBeGreaterThan(0);
+
+  for (const sc of shortcuts) {
+    expect(sc.name, "a shortcut with no name renders as a blank menu row").toBeTruthy();
+    expect(sc.url, `shortcut "${sc.name}" has no url`).toBeTruthy();
+
+    // In scope, or the launcher silently drops the entry.
+    const u = new URL(sc.url!, href);
+    expect(u.origin, `${sc.url} leaves the app's origin`).toBe(new URL(href).origin);
+
+    expect(
+      launchDestination(u.search),
+      `${sc.url} names a destination launchDestination() rejects — tapping it would boot to the reader`,
+    ).not.toBeNull();
+
+    // Same contract as the install icons: the file must exist and be the size
+    // the declaration claims, because the launcher believes the manifest.
+    for (const icon of sc.icons ?? []) {
+      expect(icon.sizes, `shortcut icon ${icon.src} declares no sizes`).toMatch(/^\d+x\d+$/);
+      const [w, h] = icon.sizes!.split("x").map(Number);
+      const got = await decode(page, icon.src, LIGHT_PAPER);
+      expect(got.status, `shortcut icon ${icon.src} is not being served`).toBe(200);
+      expect(got.decoded, `shortcut icon ${icon.src} is not a decodable image`).toBe(true);
+      expect(
+        { width: got.width, height: got.height },
+        `shortcut icon ${icon.src} is really ${got.width}×${got.height}, not the ${icon.sizes} it claims`,
+      ).toEqual({ width: w, height: h });
+    }
   }
 });
