@@ -10,7 +10,7 @@
   import { bootErrorCopy } from "./engine/bootError";
   import { deviceLocale, lastLang, setCatalog, t } from "./lib/i18n.svelte";
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
-  import { churchFromQuery, hasChurch, sharedAtRef, startsAsNewBeliever } from "./shell/church";
+  import { churchFromQuery, hasChurch, launchDestination, sharedAtRef, startsAsNewBeliever } from "./shell/church";
   import { initSession, type Session } from "./state/session.svelte";
   import { dispatchLink } from "./study/links";
   import FirstRun from "./shell/FirstRun.svelte";
@@ -147,7 +147,11 @@
       // A shared PASSAGE opens where it points (`?at=Ps 23:1`) — the QR on the
       // Present end card hands over the weave, not just the app.
       const at = sharedAtRef(location.search);
-      if (shared || s.startAsNewBeliever || at) {
+      // A launcher shortcut names a destination (`?open=review`, from the
+      // manifest's `shortcuts`). Stripped with the rest: a destination is a
+      // way IN, and a reload should reopen the reader, not the drill.
+      const opened = launchDestination(location.search);
+      if (shared || s.startAsNewBeliever || at || opened) {
         history.replaceState(null, "", location.pathname + location.hash);
       }
       // Returning readers never see the welcome, so without this a link's
@@ -209,6 +213,15 @@
       // hash too, and deliberately: `?at=` names a verse, so it is the more
       // specific of the two and wins when a link carries both.
       if (at) void dispatchLink(s, goUri(at));
+      // The shortcut's destination opens ON TOP of the restored reader — the
+      // same states the bottom nav sets (Shell.svelte NAV), so the Read tab and
+      // Back dismiss it the same way. After the hash/`?at=` routing above: the
+      // reader underneath should be where the session left it either way.
+      if (opened === "hymnal") s.screen = "hymnal";
+      else if (opened) {
+        s.screen = "memorize";
+        s.memorize = { view: opened === "review" ? "review" : "hub" };
+      }
       // The on-device boot numbers (also under Settings → boot diagnostics).
       void rpc.bootTrace().then((t) => {
         s.bootTrace = t;
@@ -220,12 +233,20 @@
       idle(() => {
         void s.sweepCaches();
         void s.checkForUpdate();
+        // The launch badge: cards that fell due since last session. At idle
+        // because it is chrome, not text — nothing on screen waits on it.
+        s.refreshAppBadge();
       });
       // An installed PWA is resumed far more often than it is launched, so
       // coming back to the foreground is the moment worth re-checking (the
       // check throttles itself).
       document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") void s.checkForUpdate();
+        if (document.visibilityState === "visible") {
+          void s.checkForUpdate();
+          // Resume crosses midnights: a card can have fallen due while the
+          // app sat in the background, and resume is the only moment to say so.
+          s.refreshAppBadge();
+        }
       });
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);

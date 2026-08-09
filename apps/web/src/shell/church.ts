@@ -118,6 +118,20 @@ export function sharedAtRef(search: string): string | null {
   return /^[1-3]?[A-Za-z]{2,6} \d{1,3}:\d{1,3}$/.test(raw) ? raw : null;
 }
 
+/** The destination a launcher shortcut opens (`?open=review`), or null.
+ *
+ *  The values are the manifest.webmanifest `shortcuts` URLs — the long-press
+ *  menu on the installed icon — so this is web-only by nature (an APK shortcut
+ *  would be a static `<shortcuts>` resource, not a URL). A whitelist, not a
+ *  passthrough: the query string is untrusted input, and anything unrecognized
+ *  must fall through to a normal boot, never to a blank surface. */
+export type LaunchDestination = "review" | "memorize" | "hymnal";
+
+export function launchDestination(search: string): LaunchDestination | null {
+  const raw = new URLSearchParams(search).get("open");
+  return raw === "review" || raw === "memorize" || raw === "hymnal" ? raw : null;
+}
+
 /** Only http(s) links are offered as links — a shared parameter is untrusted
  *  input, and `javascript:` must never reach an anchor's href. ASCII control
  *  characters are refused for the same reason: a newline inside an href is not

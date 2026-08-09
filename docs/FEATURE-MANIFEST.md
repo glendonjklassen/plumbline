@@ -268,9 +268,9 @@ producer emits*, not shell code.
    `plumbline_engine_verse_sim_save` / `_load` / `_step` with it. It was the last
    feature reading the concept embedding, so `data/concept-vectors.vec` (+
    `.vecb`, `.meta`, `.freq`) left the data pack too: 3.08 MB of a 6.4 MB
-   analysis tier, which now holds morphology and text-witness only. One code
-   path still opens the file — `plumbline_engine_concept_neighbours_json`, which
-   no shell has ever called (see §C ABI surface).
+   analysis tier, which now holds morphology and text-witness only. The last
+   code path that opened the file — `plumbline_engine_concept_neighbours_json`,
+   which no shell ever called — is gone too (see §C ABI surface).
 8. (F) **tags** — tags holding this verse; each is a link + `✕` untag (user
    data, not evidence — no tier mark).
 9. **margin notes** *(Human †)* — the verse's 1769 notes, small.
@@ -899,14 +899,16 @@ Pre-existing: `open`/`open_from_bytes`/`free`, `toc_json`, `chapter_count`,
 `tags_json`, `verse_xrefs_json`, `suggested_weaves_json`, authoring
 (`thread_add`, `tag_add`, `tag_remove`, `weave_add_link`, `weave_approve`,
 `weave_reject`, `thread_set_notes`, `thread_entry_set_note`,
-`weave_set_notes`), R&D (`concept_neighbours_json`, `bridge_partners_json`,
-`morph_json`). `similar_verses_json` was here too, before its removal.
+`weave_set_notes`), R&D (`bridge_partners_json`, `morph_json`).
+`similar_verses_json` and `concept_neighbours_json` were here too, before their
+removal.
 
-**`concept_neighbours_json` is a dead endpoint**: both
-shells carry a wrapper (the binding covers the whole ABI automatically) and
-neither has a call site. It is also the only code left that
-opens `data/concept-vectors.vec`, which the pack no longer ships, so it can only
-answer empty. A candidate for deletion.
+**`concept_neighbours_json` is REMOVED**: it outlived every shell caller (it
+never had one) and the embedding it read — the pack stopped shipping
+`data/concept-vectors.vec`, so it could only answer empty. It left the extern
+surface, the header and both bindings in the same change set that took the
+other embedding readers; no `plumbline_*` symbol or wrapper remains (a grep
+for `concept_neighbours` finds only this paragraph).
 
 Added for shell parity:
 
@@ -1283,6 +1285,24 @@ config round-trip incl. scroll-verse restore (flushed on tab hide — the
 ON_PAUSE twin), PWA (installable, offline after first visit; every pack file
 content-addressed per file as `?h=<hash of its raw bytes>` — see the depot + pin
 rules in CLAUDE.md, which this section does NOT restate).
+
+**Installed-app chrome — launcher shortcuts + the icon badge (web only, by
+nature).** The webmanifest declares three `shortcuts` (the long-press menu on
+the installed icon): Review due → `./?open=review`, Memorize →
+`./?open=memorize`, Hymnal → `./?open=hymnal`. The query is the whole contract:
+`launchDestination` (`shell/church.ts`) whitelists the three values, App.svelte
+opens the destination on top of the restored reader (the same states the bottom
+nav sets, so the Read tab and Back dismiss it identically) and strips the query
+from the address bar; anything unrecognized boots the reader as if no query
+came. `manifest.spec.ts` holds the manifest's URLs to the whitelist and
+`launch-shortcuts.spec.ts` holds the whitelist to the actual boot. The
+**Badging API** mirrors the due-card count onto the installed icon:
+`session.refreshAppBadge()` (feature-detected, fire-and-forget) runs at boot
+idle, on resume, and on every authoring write (`rpc.onAuthored`) — the count
+can only move while the app is running, since there is no server to push from.
+**Delta:** Android has neither — a static `<shortcuts>` resource and a
+notification badge are possible there but not built, and the APK's launcher
+menu is empty today.
 
 **The engine lives in ONE worker thread**, not on the main thread
 (`engine/engine.worker.ts` behind the promise RPC in `engine/worker-client.ts`).

@@ -9,6 +9,7 @@
 import { precacheShell } from "../engine/precache";
 import { updateAvailable } from "../engine/update";
 import { EngineRpc, type BootInfo } from "../engine/worker-client";
+import { nowStamp } from "../engine/StudyEngine";
 import { cleanChurch, PWA_URL, shareUrl, type Church } from "../shell/church";
 import { lang, t } from "../lib/i18n.svelte";
 
@@ -569,6 +570,30 @@ export class Session {
     );
   }
 
+  /** Mirror the due-card count onto the installed icon (the Badging API).
+   *
+   *  Feature-detected: browsers without `setAppBadge` — and every un-installed
+   *  tab, where the call resolves but paints nothing — skip out or no-op.
+   *  Fire-and-forget, errors swallowed: a badge the OS refuses is not a state
+   *  the reader can act on. The count can only move while the app is running
+   *  (a card falling due at midnight badges on the next launch or resume —
+   *  there is no server to push from), so the call sites are boot, resume and
+   *  every authoring write. */
+  refreshAppBadge(): void {
+    const nav = navigator as Navigator & {
+      setAppBadge?: (n: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    if (typeof nav.setAppBadge !== "function") return;
+    this.rpc
+      .call("memoryDue", nowStamp())
+      .then((due) => {
+        const n = ((due?.refs ?? []) as string[]).length;
+        return n > 0 ? nav.setAppBadge!(n) : nav.clearAppBadge?.();
+      })
+      .catch(() => {});
+  }
+
   /** Drop cached study reads (authoring landed / R&D pack arrived). The
    *  corpus-derived immutables (toc, canon shape, statics) survive — wiping
    *  them made navigation clamp against an empty TOC mid-refill. Which reads
@@ -807,6 +832,9 @@ export class Session {
     rpc.onAuthored = () => {
       this.invalidate();
       this.studyEpoch++;
+      // Any write can change what is due (a card added, graded, or removed —
+      // and the rest cost one cheap read on a path that just paid a file write).
+      this.refreshAppBadge();
     };
     // A dwell report changed the reading map and nothing else. Without this the
     // navigator kept showing the map from whenever it was first asked — the
