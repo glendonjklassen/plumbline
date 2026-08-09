@@ -118,8 +118,15 @@ pub struct Builtin {
     pub table: Option<&'static str>,
 }
 
-/// The v1 lineup (docs/READING-PLANS.md decision #4). Chronological rides a
-/// curated table shipped in the pack; everything else is generated.
+/// The lineup the picker offers. Every entry here must be START-ABLE into a
+/// non-empty schedule TODAY: a builtin that produces an empty schedule renders
+/// as instantly "finished", so a plan whose backing is not shipped yet must NOT
+/// appear here (it can define the row but not offer it).
+///
+/// Chronological (docs/READING-PLANS.md decision #4) rides a curated table that
+/// has not shipped, so it is DEFERRED: `chronological_pending()` holds its row
+/// and the day this crate can build it, [`builtins`] gains it back — one edit,
+/// with the golden test that pins the offered set as the tripwire.
 pub fn builtins() -> Vec<Builtin> {
     let gen = |scope: Scope, days: u32| Some(Generator { scope, days });
     vec![
@@ -148,14 +155,6 @@ pub fn builtins() -> Vec<Builtin> {
             table: None,
         },
         Builtin {
-            id: "chronological",
-            name_key: "plans.chronological",
-            class: CLASS_WHOLE_BIBLE,
-            kind: Kind::Schedule,
-            generator: None,
-            table: Some("chronological"),
-        },
-        Builtin {
             id: "nt-90",
             name_key: "plans.nt90",
             class: CLASS_NEW_TESTAMENT,
@@ -172,6 +171,20 @@ pub fn builtins() -> Vec<Builtin> {
             table: None,
         },
     ]
+}
+
+/// The chronological plan's row, held back from [`builtins`] until its curated
+/// table ships (offering it now would start an instantly-"finished" plan). When
+/// the table lands, fold this into `builtins` and delete this fn.
+pub fn chronological_pending() -> Builtin {
+    Builtin {
+        id: "chronological",
+        name_key: "plans.chronological",
+        class: CLASS_WHOLE_BIBLE,
+        kind: Kind::Schedule,
+        generator: None,
+        table: Some("chronological"),
+    }
 }
 
 // ── the schedule walk ─────────────────────────────────────────────────────────
@@ -582,8 +595,15 @@ mod tests {
             assert!(b.generator.is_some() != b.table.is_some(), "{}: generator XOR table", b.id);
         }
         let whole: Vec<_> = all.iter().filter(|b| b.class == CLASS_WHOLE_BIBLE).map(|b| b.id).collect();
-        assert_eq!(whole, vec!["bible-365", "bible-180", "bible-90", "chronological"]);
+        // Only the generated whole-Bible plans are OFFERED; chronological is
+        // deferred until its table ships (else it starts instantly "finished").
+        assert_eq!(whole, vec!["bible-365", "bible-180", "bible-90"]);
+        assert!(!all.iter().any(|b| b.id == "chronological"), "an unbuildable plan must not be offered");
         assert!(all.iter().any(|b| b.class == CLASS_NEW_TESTAMENT));
         assert!(all.iter().any(|b| b.class == CLASS_DEVOTIONAL));
+
+        // The deferred row still EXISTS (its table just isn't shipped) — the day
+        // it can build, it folds back into `builtins`.
+        assert_eq!(chronological_pending().id, "chronological");
     }
 }
