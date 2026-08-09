@@ -70,6 +70,7 @@ use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure, Measu
 use plumbline_rnd::{bridge, burst, concept, morph};
 
 pub mod dwell;
+pub mod plans;
 pub mod reading_map;
 pub mod share;
 mod wire;
@@ -1941,10 +1942,7 @@ pub unsafe extern "C" fn plumbline_engine_tag_remove(
 /// # Safety
 /// `engine` is valid; `name` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_tag_delete(
-    engine: *mut PlumblineEngine,
-    name: *const c_char,
-) -> *mut c_char {
+pub unsafe extern "C" fn plumbline_engine_tag_delete(engine: *mut PlumblineEngine, name: *const c_char) -> *mut c_char {
     guard_err(|| {
         let Some(engine) = engine.as_mut() else {
             return out_string("null engine".to_string());

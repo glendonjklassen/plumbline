@@ -21,7 +21,7 @@
   // Must stay in step with engine/home.ts's USER_DIRS and the Android shell's
   // BACKUP_DIRS: a dir missing from this restore filter is a dir that exports
   // into the zip and is then silently dropped on the way back in.
-  const BACKUP_DIRS = ["tags/", "threads/", "weaves/", "notes/", "memory/", "reading/", ".config/"];
+  const BACKUP_DIRS = ["tags/", "threads/", "weaves/", "notes/", "memory/", "reading/", "plans/", ".config/"];
 
   // Archives written before the Plumbline rename carry the config under
   // ".config/pure-study/"; the live home reads ".config/plumbline/". Remapped on

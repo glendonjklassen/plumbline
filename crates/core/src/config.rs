@@ -155,6 +155,12 @@ pub struct Config {
     /// into English forever. The shell passes its locale in and the core
     /// decides; only an explicit choice is written here.
     pub language: String,
+    /// The speedrun the reader is IN — the id of a running
+    /// [`crate::plan::Kind::Speedrun`] plan, empty when in normal reading mode.
+    /// Persisted so the mode survives a relaunch (a sweep is days of work) and
+    /// lives in the config so every pane and both shells agree what a tap
+    /// means. The shell suspends its reading tracker while this is set.
+    pub speedrun: String,
 }
 
 /// A verse copy-shape token accepted for [`Config::copy_style`].
@@ -186,6 +192,7 @@ impl Default for Config {
             akjv_overlay: false,
             intro: String::new(),
             language: String::new(),
+            speedrun: String::new(),
         }
     }
 }
@@ -259,6 +266,9 @@ struct ConfigWire {
     /// not grow a key just because this build knows about languages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     language: Option<String>,
+    /// The active speedrun's plan id; absent when reading normally.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    speedrun: Option<String>,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -389,6 +399,10 @@ impl Config {
                 Some(code) if crate::i18n::Lang::ALL.iter().any(|l| l.code() == code) => code.to_string(),
                 _ => String::new(),
             },
+            // An id, not a token: whether the plan it names still exists is the
+            // plan store's question, answered at use (a stale id reads as
+            // normal mode), so nothing validates it away here.
+            speedrun: w.speedrun.map(|s| s.trim().to_string()).unwrap_or_default(),
             church: w
                 .church
                 .map(|c| Church {
@@ -429,6 +443,7 @@ impl Config {
             akjv_overlay: Some(self.akjv_overlay),
             intro: (!self.intro.is_empty()).then(|| self.intro.clone()),
             language: (!self.language.is_empty()).then(|| self.language.clone()),
+            speedrun: (!self.speedrun.is_empty()).then(|| self.speedrun.clone()),
             church: (!self.church.is_empty()).then(|| ChurchWire {
                 name: self.church.name.clone(),
                 info: self.church.info.clone(),
@@ -594,6 +609,7 @@ mod tests {
             akjv_overlay: true,
             intro: "curious".to_string(),
             language: "de".to_string(),
+            speedrun: "run-grace".to_string(),
             church: Church {
                 name: "Grace Bible Church".into(),
                 info: "Sundays 10am · 12 Long Street".into(),
@@ -714,6 +730,34 @@ mod tests {
         // Absent → off.
         std::fs::write(&path, r#"{"studyMode":"simple"}"#).unwrap();
         assert!(!load_from(&path).0.akjv_overlay);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The active speedrun's plan id must survive a load/save/load — a sweep is
+    /// days of work, and a save that dropped the mode would drop the reader out
+    /// of it on the next launch. Absent means normal reading mode; the value is
+    /// trimmed but never validated away (the plan store answers for it at use).
+    #[test]
+    fn speedrun_mode_survives_a_load_save_load() {
+        let dir = scratch("speedrun");
+        let path = dir.join("config.json");
+
+        std::fs::write(&path, r#"{"studyMode":"simple","speedrun":"run-grace"}"#).unwrap();
+        let (cfg, _) = load_from(&path);
+        assert_eq!(cfg.speedrun, "run-grace", "the shell's speedrun never reached Config");
+
+        save_to(&path, &cfg).unwrap();
+        let json = std::fs::read_to_string(&path).unwrap();
+        assert!(json.contains(r#""speedrun": "run-grace""#), "the save dropped speedrun: {json}");
+        assert_eq!(load_from(&path).0.speedrun, "run-grace");
+
+        // Absent → normal mode, and the key is not written when empty.
+        std::fs::write(&path, r#"{"studyMode":"simple"}"#).unwrap();
+        let (cfg, _) = load_from(&path);
+        assert!(cfg.speedrun.is_empty());
+        save_to(&path, &cfg).unwrap();
+        assert!(!std::fs::read_to_string(&path).unwrap().contains("speedrun"), "empty must not write the key");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
