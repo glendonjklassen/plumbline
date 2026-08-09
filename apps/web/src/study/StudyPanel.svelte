@@ -5,7 +5,7 @@
   // Compose-phone pattern). Re-fetches after any
   // authoring write via studyEpoch (write → reload → re-fetch, never mutate).
   import BlockList from "./BlockList.svelte";
-  import { dispatchLink } from "./links";
+  import { deleteNote, dispatchLink } from "./links";
   import { getSession } from "../state/session.svelte";
   import { t } from "../lib/i18n.svelte";
 
@@ -128,6 +128,14 @@
                 {n.display ?? n.verse}
               </button>
               <button class="nb-edit" onclick={(e) => onLink(`editnote:${n.verse}`, e)}>✎ {t("panel.edit")}</button>
+              <!-- Delete without opening: emptying the editor also deletes (and
+                   also asks), but a row you can only remove by editing it is an
+                   affordance gap — see manifest §Ask before destroying anything. -->
+              <button
+                class="nb-del"
+                onclick={() => void deleteNote(s, n.verse, n.display ?? n.verse)}
+                aria-label={t("notes.deleteVerb")}
+                title={t("notes.deleteVerb")}>✕</button>
             </div>
             <p class="nb-text">{n.text}</p>
           </div>
@@ -287,6 +295,14 @@
   .nb-edit {
     font-size: calc(12px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
+  }
+  .nb-del {
+    font-size: calc(12px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
+    margin-left: auto;
+  }
+  .nb-del:hover {
+    color: var(--tierResearch, #b04a3a);
   }
   .nb-text {
     font-size: calc(14.5px * var(--uiScale, 1));

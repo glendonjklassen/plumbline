@@ -83,11 +83,16 @@ const UNICODES = [
 // all, and a sheared upright looks exactly like a sheared upright; the reader
 // tells translator-supplied words apart by the palette's `added` tone instead
 // (see `core::font`, and `Font::has_italic`, which is the same fact in Rust).
+// `scale` is the face's optical size multiplier — the numbers are
+// `core::font::Font::scale()`'s (crates/core/src/font.rs, the source of truth,
+// where the x-height measurements and the half-correction rationale live) and
+// must stay identical to them, like the tokens.
 const FAMILIES = [
   {
     token: "eb-garamond",
     css: "EB Garamond",
     fallback: "Georgia, serif",
+    scale: 1.0,
     faces: [
       { src: "EBGaramond.ttf", style: "normal" },
       { src: "EBGaramond-Italic.ttf", style: "italic" },
@@ -97,6 +102,7 @@ const FAMILIES = [
     token: "literata",
     css: "Literata",
     fallback: "Georgia, serif",
+    scale: 0.89,
     faces: [
       { src: "Literata.ttf", style: "normal" },
       { src: "Literata-Italic.ttf", style: "italic" },
@@ -106,6 +112,7 @@ const FAMILIES = [
     token: "inter",
     css: "Inter",
     fallback: "system-ui, sans-serif",
+    scale: 0.87,
     faces: [
       { src: "Inter.ttf", style: "normal" },
       { src: "Inter-Italic.ttf", style: "italic" },
@@ -115,6 +122,7 @@ const FAMILIES = [
     token: "fira-code",
     css: "Fira Code",
     fallback: "ui-monospace, monospace",
+    scale: 0.88,
     faces: [{ src: "FiraCode.ttf", style: "normal" }],
   },
 ];
@@ -224,7 +232,9 @@ ${built
 
 const byToken = new Map();
 for (const f of built) {
-  const e = byToken.get(f.family.token) ?? { css: f.family.css, fallback: f.family.fallback, files: {} };
+  const e =
+    byToken.get(f.family.token) ??
+    { css: f.family.css, fallback: f.family.fallback, scale: f.family.scale ?? 1, files: {} };
   e.files[f.style] = `fonts/${f.name}`;
   byToken.set(f.family.token, e);
 }
@@ -268,6 +278,15 @@ export const DEFAULT_FONT = ${JSON.stringify(DEFAULT_TOKEN)};
  *  for one swap, and on a glyph the face is missing it is permanent. */
 export const FONT_FALLBACK: Readonly<Record<string, string>> = {
 ${[...byToken].map(([token, e]) => `  "${token}": ${JSON.stringify(e.fallback)},`).join("\n")}
+};
+
+/** Token → the face's optical size multiplier, mirroring
+ *  \`core::font::Font::scale()\` (which holds the x-height measurements and the
+ *  half-correction rationale). Applied at render time by reader/measure.ts's
+ *  \`readerFontPx\` and composed into \`--uiScale\` for the chrome — NEVER
+ *  written into \`config.bodySize\`. */
+export const FONT_SCALE: Readonly<Record<string, number>> = {
+${[...byToken].map(([token, e]) => `  "${token}": ${e.scale ?? 1},`).join("\n")}
 };
 `,
 );

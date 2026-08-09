@@ -172,6 +172,9 @@ fun VerseActionSheet(
     // The note dialog's last failure, shown inside it. It stays until the next
     // attempt, because until then it is still true: the note is not saved.
     var noteError by remember(verseRef) { mutableStateOf<String?>(null) }
+    // The pending ask for the one destructive act in this sheet: saving an
+    // emptied note editor, which deletes the note.
+    var confirmDelete by remember(verseRef) { mutableStateOf<ConfirmRequest?>(null) }
 
     // The highest valid token index — from the fetched tokens, else the hint param.
     val lastTok = if (tokens.isNotEmpty()) tokens.lastIndex else tokenCount - 1
@@ -351,7 +354,21 @@ fun VerseActionSheet(
             initial = noteText,
             palette = palette,
             error = noteError,
-            onSave = { saveNote(it) },
+            onSave = { written ->
+                // Saving an EMPTIED editor deletes the note (UserNoteSet's
+                // empty-clears contract), so it asks first — same wording as
+                // the notes browser's ✕. A save that never had a note to
+                // delete stays a plain save.
+                if (written.isBlank() && noteText.isNotBlank()) {
+                    confirmDelete = ConfirmRequest(
+                        title = t("notes.deleteAsk", "passage" to display),
+                        body = t("notes.deleteBody"),
+                        verb = t("notes.deleteVerb"),
+                    ) { saveNote(written) }
+                } else {
+                    saveNote(written)
+                }
+            },
             onCancel = { showNote = false },
         )
     }
@@ -366,6 +383,8 @@ fun VerseActionSheet(
             onCancel = { showPassage = false },
         )
     }
+
+    ConfirmDialog(confirmDelete, palette) { confirmDelete = null }
 }
 
 /**

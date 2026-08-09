@@ -35,7 +35,9 @@ const CSS_DEFAULT_PX = 16;
  * The action reads that box rather than `getComputedStyle`, because the box is
  * also what a `ResizeObserver` can watch.
  *
- * @param textScale the reader's own factor, `bodySize / 18`.
+ * @param textScale the app's own factor: `bodySize / 18`, times the chrome
+ *   face's optical scale (`FONT_SCALE`) — composed by the caller so this stays
+ *   one number and `--uiScale` stays one variable.
  */
 export const uiScale: Action<HTMLElement, number> = (node, textScale) => {
   let reader = textScale ?? 1;

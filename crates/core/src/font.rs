@@ -90,6 +90,31 @@ impl Font {
         !matches!(self, Font::FiraCode)
     }
 
+    /// The face's optical size multiplier: what a shell multiplies the reader's
+    /// chosen px size by before measuring or painting this face, so switching
+    /// faces changes the voice of the text without changing its apparent size.
+    ///
+    /// The bundled faces have very different x-heights (as a fraction of the
+    /// em, measured from the shipped files): EB Garamond 0.400, Literata 0.507,
+    /// Fira Code 0.525, Inter 0.546 — so at the same px size Inter reads over a
+    /// third larger than Garamond. These are a HALF correction toward equal
+    /// x-height, not the full one: full equalisation would render Inter at
+    /// 13.2px when the slider says 18, which reads as the app ignoring the
+    /// setting.
+    ///
+    /// A RENDER-TIME factor only. It is never written into `bodySize` — mutating
+    /// the stored setting would make the reader's size drift on every face
+    /// switch — and the default face is exactly 1.0, so nothing moves for a
+    /// reader who never opens the picker.
+    pub fn scale(self) -> f32 {
+        match self {
+            Font::EbGaramond => 1.0,
+            Font::Literata => 0.89,
+            Font::Inter => 0.87,
+            Font::FiraCode => 0.88,
+        }
+    }
+
     /// Every face, in the order the pickers offer them: the default first, then
     /// the alternatives. One list, so a face added to the enum cannot be
     /// forgotten by a shell — [`tests::every_variant_is_in_all`] holds it.
@@ -142,6 +167,26 @@ mod tests {
     #[test]
     fn the_default_is_the_shipped_face() {
         assert_eq!(Font::default(), Font::EbGaramond);
+    }
+
+    #[test]
+    fn the_default_face_scales_by_exactly_one() {
+        // The optical correction must be invisible to a reader who never opens
+        // the picker: the shipped default IS the baseline the other faces are
+        // corrected toward.
+        assert_eq!(Font::default().scale(), 1.0);
+    }
+
+    #[test]
+    fn scales_are_a_partial_correction_not_an_equalisation() {
+        // Every non-default face is corrected DOWN (all have taller x-heights
+        // than Garamond) but never below the full-equalisation floor —
+        // Garamond's 0.400 x-height over Inter's 0.546 is ~0.73, and a scale at
+        // or under it would mean the slider's number stops meaning anything.
+        for f in Font::ALL {
+            let s = f.scale();
+            assert!(s > 0.73 && s <= 1.0, "{} scales by {}", f.name(), s);
+        }
     }
 
     #[test]

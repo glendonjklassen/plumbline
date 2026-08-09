@@ -71,6 +71,26 @@ never a synthetic smear.
   (`FLAG_ADDED`) are then marked by the palette's `added` tone alone, which is
   present in every theme. `Font::has_italic` is the one place that fact lives;
   both shells ask it rather than deciding.
+- **Per-face optical scale** — `Font::scale()` in the core, mirrored as
+  `FONT_SCALE` (web, generated) and `FontSpec.scale` (Android): eb-garamond
+  1.00 · literata 0.89 · inter 0.87 · fira-code 0.88. The bundled faces'
+  x-heights differ enormously (as a fraction of the em: Garamond 0.400,
+  Literata 0.507, Fira Code 0.525, Inter 0.546), so at the same px Inter read
+  over a third larger than Garamond and a face switch changed the apparent
+  size, not just the voice. The correction is deliberately PARTIAL — half way
+  toward equal x-height, not all the way: full equalisation would render Inter
+  at 13.2px when the slider says 18, which reads as the app ignoring the
+  setting. The numbers are a starting point to be tuned by eye on-device.
+  Applied at RENDER TIME only — `readerFontPx` (reader/measure.ts, the one
+  place both the measuring worker and the painting main thread get their px),
+  composed into `--uiScale` for the web chrome, `ReaderPane`'s `fontPx` and
+  `serifTypography` on Android — and NEVER written into `bodySize`: the stored
+  setting keeps the number the reader chose, or it would drift on every
+  switch. The default face is exactly 1.0, so nothing moves for a reader who
+  never opens the picker; an unknown token resolves to 1.0. The layout column
+  is NOT compensated: characters-per-line still differ between faces because
+  advance widths differ (Garamond 0.528 em vs Literata 0.662) — that is the
+  face's voice, and correct.
 - **Delivery.** Web: `@font-face` is lazy, so a reader downloads only the
   families they select; the boot PRELOAD names the default family only (a
   preload of four would compete with the data pack for bandwidth), while the
@@ -491,6 +511,7 @@ rots:
 | delete a weave | asks (`study/links.ts`) | asks (`StudyScreen.kt`) |
 | reject a suggested weave | asks (`study/links.ts`) | asks (`StudyScreen.kt`) |
 | untag a verse | asks (`study/links.ts`) | asks (`StudyScreen.kt`) |
+| delete a personal note | asks — both doors: the notes browser's ✕ (`StudyPanel.svelte` → `deleteNote`, `study/links.ts`) and SAVING AN EMPTIED EDITOR (`editNote` there), which is the same act spelled the old way (`usernote.rs`: empty text removes the file) | asks — the browser's ✕ and its editor (`Notes.kt`), the verse sheet's editor (`VerseActions.kt`), and the study panel's `editNote` prompt (`StudyScreen.kt`); every emptied save confirms |
 | remove a memorization card | asks (`MemorizeHost.svelte`) | **no remove affordance at all**; `MemoryRemove` is an uncalled wrapper |
 | clear a chapter's reading record | asks (`MarkReadDialog.svelte`) | **does not ask** — `onClear` calls `ReadingForget` and toasts |
 
@@ -1578,9 +1599,9 @@ lines would wrap where they are not drawn.)
   for symbol against the generated header and CI fails on any difference. (The C#
   sibling `bindings/csharp/PureStudy.cs` went with the WinUI shell —
   `crates/ffi/bindings/` holds `c/` and `kotlin/` now.) The native lib
-  cross-builds with cargo-ndk into `jniLibs/{arm64-v8a,x86_64}/libplumbline_ffi.so`
+  cross-builds with cargo-ndk into `jniLibs/arm64-v8a/libplumbline_ffi.so`
   (NDK r29, `--platform 26`), verified independently of the emulator/SDK.
-- Build gate: Android NDK + `cargo-ndk` for the `.so` per ABI; the Rust and
+- Build gate: Android NDK + `cargo-ndk` for the `.so`; the Rust and
   the JSON contract are identical.
 - Measure callback: back it with `android.graphics.Paint.measureText` (or
   Compose's TextMeasurer); the core does the rest.

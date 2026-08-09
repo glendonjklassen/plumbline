@@ -196,6 +196,34 @@ test("the chrome follows the browser's own text size", async ({ page }) => {
 //   in Shell.svelte → 'Error: the ≡ menu has been pushed off the side of the
 //   screen  expect(received).toBeLessThanOrEqual(expected)  Expected: <= 321
 //   Received: <the row's min-content width, comfortably past 400>'.
+// AN OPEN FOLD IS NOT A NARROW PHONE: at ~840px the full bar — subtitle,
+// destinations, search, Share, ≡ — fits on one row, but only if the flexible
+// members actually flex. The subtitle is the active pane's passage name and
+// changes LENGTH on every pane switch; when it could not shrink (and the search
+// field held its full 240px), a longer name tipped the row over and
+// Welcome/Church/Share fell to a wrapped second row — the bar jostled on a tap
+// that navigated nothing.
+//
+// Mutation: drop `min-width: 0; overflow: hidden; text-overflow: ellipsis;`
+//   from `.subtitle` in Shell.svelte → 'Error: the header wrapped — the row
+//   after "1 Corinthians 13" is taller than before  expect(received).toBe(
+//   expected)  Expected: <top of Share at boot>  Received: <a row lower>'.
+test("a longer passage name shrinks rather than wrapping the top bar", async ({ page }) => {
+  await boot(page, { width: 840, height: 700 }); // an open fold
+  const share = page.locator("header .share-first");
+  await expect(share).toBeVisible();
+  const before = await share.evaluate((el) => Math.round(el.getBoundingClientRect().top));
+
+  // John 3 → the longest book name in the canon, same header, same everything
+  // else. Only the subtitle's length changes.
+  await page.evaluate(() => (window as any).__plumbline.navigate(0, "1Cor", 13, null));
+  await expect(page.locator("header .subtitle")).toContainText("Corinthians");
+  expect(
+    await share.evaluate((el) => Math.round(el.getBoundingClientRect().top)),
+    "the header wrapped — the row after “1 Corinthians 13” is taller than before",
+  ).toBe(before);
+});
+
 test("the menu stays on screen on a narrow phone at a large text size", async ({ page }) => {
   await boot(page, { width: 320, height: 700 });
   await page.evaluate(() => (window as any).__plumbline.setZoom(40));

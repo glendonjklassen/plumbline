@@ -42,13 +42,13 @@ yay -S android-studio         # SDK Manager: Platform 35, Platform-Tools (adb), 
 
 ### Cross-compile the core → `.so`
 ```bash
-cargo ndk -t arm64-v8a -t x86_64 --platform 24 \
+cargo ndk -t arm64-v8a --platform 24 \
   -o apps/android/app/src/main/jniLibs build -p plumbline-ffi --release
 # NOTE: use --platform (or -P), NOT -p — lowercase -p collides with cargo's --package.
 ```
 NDK r27 (LTS) or r28+; cargo-ndk 4.x auto-injects the mandatory 16 KB page
-alignment (verify with `llvm-readelf -l`). Ship arm64-v8a (device) + x86_64
-(emulator). Loaded via `System.loadLibrary("plumbline_ffi")`; JNA dep
+alignment (verify with `llvm-readelf -l`). Ship arm64-v8a only.
+Loaded via `System.loadLibrary("plumbline_ffi")`; JNA dep
 `net.java.dev.jna:jna:5.17.0@aar` (the `@aar` matters; 5.17+ fixes a 16 KB crash).
 
 ### Data
@@ -84,9 +84,8 @@ toolbar **Ctrl+F / Ctrl+U**, or Extended controls → **Virtual sensors** (hinge
 ## Testing on the phone — emulator-first, sideload good builds, NO USB
 Iterate on the emulator; only put a build on the phone once it's worth it. Two
 no-cable paths:
-1. **Dump the file & tap it** — `./gradlew assembleDebug` → `app-arm64-v8a-debug.apk`
-   (one APK per ABI since the splits landed 2026-07-30); move it
-   over via Syncthing / cloud / a quick `python -m http.server`; open in the
+1. **Dump the file & tap it** — `./gradlew assembleDebug` → `app-debug.apk`;
+   move it over via Syncthing / cloud / a quick `python -m http.server`; open in the
    GrapheneOS Files app → tap → install (grant "install unknown apps" once; no Play
    Protect nag on GrapheneOS).
 2. **Wireless adb** (scriptable, still no cable) — Developer options (Owner profile) →

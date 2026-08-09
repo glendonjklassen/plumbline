@@ -28,6 +28,7 @@
   import { modal } from "../lib/modal";
   import { t } from "../lib/i18n.svelte";
   import { uiScale } from "../lib/uiScale";
+  import { DEFAULT_FONT, FONT_SCALE } from "../engine/fonts.generated";
   import { getSession } from "../state/session.svelte";
   import { startReadingTracker } from "../state/readingTracker";
 
@@ -208,11 +209,17 @@
   // it, `s.screen` IS the destination now that Explore and Memorize are screens.
   const dest = $derived(s.showPresent ? "present" : s.screen);
 
-  // The reader's text size as a factor of the 18px the chrome was drawn at. The
-  // scale itself is published on `:root` by `use:uiScale` on the probe below —
-  // this is only the reader's half of it; the browser's own font preference is
-  // the other half and the probe measures that. See lib/uiScale.ts.
-  const readerScale = $derived(Number(s.config.bodySize ?? 18) / 18);
+  // The reader's text size as a factor of the 18px the chrome was drawn at,
+  // TIMES the chrome face's optical scale (FONT_SCALE — faces differ in
+  // x-height, and switching faces must change the chrome's voice, not its
+  // apparent size). Composed here rather than published as a second variable:
+  // `--uiScale` stays the one number the whole chrome multiplies by. The scale
+  // itself is published on `:root` by `use:uiScale` on the probe below — this
+  // is the app's half of it; the browser's own font preference is the other
+  // half and the probe measures that. See lib/uiScale.ts.
+  const readerScale = $derived(
+    (Number(s.config.bodySize ?? 18) / 18) * (FONT_SCALE[s.config.chromeFont ?? DEFAULT_FONT] ?? 1),
+  );
 
   // The church button opens their site; with no site to open it at least
   // tells the reader who and when, which is all we were given.
@@ -660,6 +667,17 @@
   .subtitle {
     color: var(--faded, #8a8276);
     font-size: calc(16px * var(--uiScale, 1));
+    /* The passage name changes length with every pane switch ("John 3" ↔
+       "1 Corinthians 13"), and on an open fold the row runs close to full: a
+       name that cannot shrink tips it over and Welcome/Church/Share drop to a
+       wrapped second row — the whole bar jostles on a tap that navigated
+       nothing. It is a status readout, so ellipsis beats reflow; the pane's
+       own strip still carries the full name. */
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .browse {
     display: flex;
@@ -849,6 +867,12 @@
     border-radius: 6px;
     padding: 4px 9px;
     font-size: calc(14px * var(--uiScale, 1));
+    /* The width above is the field's IDEAL, not a floor: on an open fold it is
+       the widest flexible thing in the row, and holding 240px while the
+       subtitle grows is what used to wrap the bar. It gives ground down to a
+       still-typable minimum before anything falls to a second row. */
+    flex-shrink: 1;
+    min-width: 110px;
   }
   .menu-host {
     position: relative;

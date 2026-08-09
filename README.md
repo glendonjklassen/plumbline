@@ -56,7 +56,6 @@ canon](assets/readme/reader-weaves.png)
   of the verse text.
 - Weaves: your own verse↔verse link graph, with notes.
 - Convert a tag into a weave as you study
-- 194 common weaves from Protestant tradition
 - Visualizations of your weaves: a chord diagram across the canon, and a
   constellation with pinnable lanes.
 - A notes browser over everything you have written.
@@ -117,9 +116,8 @@ steps, all on the phone.
    open **Plumbline** from your app drawer: the whole Bible is inside the file
    you just installed, so it opens with the network off.
 
-Needs Android 8.0 or newer and a 64-bit phone (`arm64-v8a`; the APK carries
-`x86_64` as well, for emulators). It declares **no INTERNET permission at
-all**, so it cannot phone home even by accident. One study layer rides in the
+Needs Android 8.0 or newer and a 64-bit phone (`arm64-v8a`). It declares **no
+INTERNET permission at all**, so it cannot phone home even by accident. One study layer rides in the
 web version only, because the APK doesn't carry its data file: the word-grammar
 gloss. Everything else is in the APK — the
 text, Strong's, the margin notes, the Treasury's cross-references, the

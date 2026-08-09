@@ -12,9 +12,12 @@
 // The fix is one Typography, applied at the theme, because Material 3's
 // `MaterialTheme` provides `typography.bodyLarge` as `LocalTextStyle`: a bare
 // `Text("…", fontSize = 15.sp)` picks up the family from there without the call
-// site naming it. Existing `fontSize` values are left ALONE on purpose —
-// Garamond's x-height is much smaller than Roboto's, so the chrome will read a
-// touch smaller until sizes are re-tuned on-device.
+// site naming it. Existing `fontSize` values are left ALONE on purpose.
+// Face-to-face consistency is [FontSpec.scale]'s job now — [serifTypography]
+// multiplies every role by it, so a chrome face switch changes voice, not
+// apparent size. Garamond is that scale's 1.0 baseline, so it still reads a
+// touch smaller than Roboto did; if that is ever re-tuned, it is re-tuned by
+// the drawn sizes (or the baseline), not per call site.
 //
 // ONCE PER PROCESS, not once per composition. `Font(path, assets)`
 // is not a description of a font — `AndroidAssetFont` parses the TTF in its
@@ -152,11 +155,13 @@ private fun buildSerifFamily(assets: AssetManager, spec: FontSpec): FontFamily =
     FontFamily(faces)
 }.getOrElse { FontFamily.Serif }
 
-/** Material 3's own type scale with [serif] substituted into every role. Sizes,
- *  line heights and tracking are Material's — only the family changes. */
-fun serifTypography(serif: FontFamily): Typography {
+/** Material 3's own type scale with [serif] substituted into every role, and
+ *  every size and line height multiplied by the face's optical [scale]
+ *  ([FontSpec.scale]) — so switching the chrome face changes its voice, not its
+ *  apparent size. Tracking stays Material's. */
+fun serifTypography(serif: FontFamily, scale: Float = 1f): Typography {
     val base = Typography()
-    fun TextStyle.on() = copy(fontFamily = serif)
+    fun TextStyle.on() = copy(fontFamily = serif, fontSize = fontSize * scale, lineHeight = lineHeight * scale)
     return Typography(
         displayLarge = base.displayLarge.on(),
         displayMedium = base.displayMedium.on(),
@@ -180,7 +185,7 @@ fun serifTypography(serif: FontFamily): Typography {
  *  every `MaterialTheme` in the app passes as its `typography`. */
 fun serifTypography(context: Context, token: String? = null): Typography {
     val spec = fontFor(token)
-    return typographyCache.get(spec.token) { serifTypography(serifFamily(context, spec.token)) }
+    return typographyCache.get(spec.token) { serifTypography(serifFamily(context, spec.token), spec.scale) }
 }
 
 /** Parse the fonts and build the type scale NOW, off the caller's thread's
