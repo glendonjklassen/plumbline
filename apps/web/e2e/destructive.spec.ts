@@ -175,6 +175,88 @@ test("clearing a chapter's reading history asks", async ({ page }) => {
   await expect.poll(lastRead, { timeout: 15_000 }).toBe(null);
 });
 
+// A note is the reader's own writing, and it used to be the only piece of it
+// that could vanish with no affordance and no confirmation — "save an emptied
+// editor" deletes the file (usernote.rs), and nothing asked. Both doors are
+// covered here because BOTH are the action: the browser's ✕ and the emptied
+// editor, same ask, same wording.
+test("deleting a note from the browser asks, clears the gutter mark, and Cancel keeps it", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() =>
+    (window as any).__plumbline.author("userNoteSet", "John 3:16", "Doomed note", new Date().toISOString()),
+  );
+  const notes = async () =>
+    ((await page.evaluate(() => (window as any).__plumbline.rpc.call("userNotes"))) as any).notes.map(
+      (n: any) => n.verse,
+    );
+  await expect.poll(notes, { timeout: 15_000 }).toContain("John 3:16");
+  // The reader's gutter square is fed by this set; John 3 is the booted chapter.
+  const marked = async () =>
+    (await page.evaluate(() => Array.from((window as any).__plumbline.noteVerses("John", 3)))) as number[];
+  await expect.poll(marked, { timeout: 15_000 }).toContain(16);
+
+  await page.evaluate(() => ((window as any).__plumbline.panel = { kind: "notesBrowser" }));
+  const del = page.locator(".nb-note .nb-del").first();
+  await expect(del).toBeVisible({ timeout: 15_000 });
+
+  await del.click();
+  await expect(confirm(page)).toBeVisible();
+  await expect(confirm(page)).toContainText("John 3:16");
+  await confirm(page).getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm(page)).toBeHidden();
+  expect(await notes(), "Cancel must not delete").toContain("John 3:16");
+
+  // Now mean it.
+  await del.click();
+  await confirm(page).getByRole("button", { name: "Delete note" }).click();
+  await expect.poll(notes, { timeout: 15_000 }).not.toContain("John 3:16");
+  await expect.poll(marked, { timeout: 15_000 }).not.toContain(16);
+});
+
+// Mutation: in study/links.ts `editNote`, drop the empty-text askConfirm →
+//   'Error: emptying the editor must ask before it deletes' (the confirm
+//   surface never appears). A test that covered only the ✕ would PASS against
+//   that mutation — and the emptied editor is the door readers actually use.
+test("emptying the note editor asks too — it is the same delete", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() =>
+    (window as any).__plumbline.author("userNoteSet", "John 3:16", "Doomed note", new Date().toISOString()),
+  );
+  const notes = async () =>
+    ((await page.evaluate(() => (window as any).__plumbline.rpc.call("userNotes"))) as any).notes.map(
+      (n: any) => n.verse,
+    );
+  await expect.poll(notes, { timeout: 15_000 }).toContain("John 3:16");
+  const marked = async () =>
+    (await page.evaluate(() => Array.from((window as any).__plumbline.noteVerses("John", 3)))) as number[];
+  await expect.poll(marked, { timeout: 15_000 }).toContain(16);
+
+  await page.evaluate(() => ((window as any).__plumbline.panel = { kind: "notesBrowser" }));
+  const edit = page.locator(".nb-note .nb-edit").first();
+  await expect(edit).toBeVisible({ timeout: 15_000 });
+
+  // Clear the text and save — the delete spelled the way readers already do it.
+  const field = page.locator('[role="dialog"] textarea');
+  await edit.click();
+  await expect(field).toBeVisible();
+  await field.fill("");
+  await page.getByRole("button", { name: "OK" }).click();
+
+  await expect(confirm(page), "emptying the editor must ask before it deletes").toBeVisible();
+  await confirm(page).getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm(page)).toBeHidden();
+  expect(await notes(), "Cancel must not delete").toContain("John 3:16");
+
+  // Again, and mean it.
+  await edit.click();
+  await expect(field).toBeVisible();
+  await field.fill("");
+  await page.getByRole("button", { name: "OK" }).click();
+  await confirm(page).getByRole("button", { name: "Delete note" }).click();
+  await expect.poll(notes, { timeout: 15_000 }).not.toContain("John 3:16");
+  await expect.poll(marked, { timeout: 15_000 }).not.toContain(16);
+});
+
 test("a confirmation always settles — Escape and navigating away both mean no", async ({ page }) => {
   await boot(page);
 

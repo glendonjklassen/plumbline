@@ -208,10 +208,14 @@ fun ReaderPane(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val fontPx = with(density) { fontSizeSp.sp.toPx() }
+    val textFont = LocalTextFont.current
+    // The reader's size under the face's optical scale (FontSpec.scale): faces
+    // differ in x-height, and switching faces must not change the apparent
+    // size. Applied to the px the paints and the layout BOTH use — never to
+    // the stored setting, which keeps the number the reader chose.
+    val fontPx = with(density) { fontSizeSp.sp.toPx() } * fontFor(textFont).scale
     val marginPx = with(density) { MARGIN_DP.dp.toPx() }
 
-    val textFont = LocalTextFont.current
     val typefaces = remember(context, textFont) { readerTypefaces(context, textFont) }
     val paints = remember(fontPx) {
         fun p(tf: Typeface) = Paint(Paint.ANTI_ALIAS_FLAG).apply {

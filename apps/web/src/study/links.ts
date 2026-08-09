@@ -178,12 +178,46 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
     case "editNote": {
       const existing = await s.fetchQ("userNote", link.refKey);
       const text = await s.askText(`Your note — ${link.refKey}`, existing?.text ?? "", true);
-      if (text !== null) report(s, s.author("userNoteSet", link.refKey, text, nowStamp()));
+      if (text === null) break;
+      // Saving an EMPTIED editor deletes the note (usernote.rs's contract), so
+      // it asks exactly like the browser's ✕ — whether an action asks is a
+      // property of the action, not of which button reached it. Same wording
+      // on both paths (deleteNote below).
+      if (text.trim() === "" && (existing?.text ?? "").trim() !== "") {
+        if (
+          !(await s.askConfirm(
+            t("notes.deleteAsk", { passage: link.refKey }),
+            t("notes.deleteBody"),
+            t("notes.deleteVerb"),
+          ))
+        ) {
+          break;
+        }
+      }
+      report(s, s.author("userNoteSet", link.refKey, text, nowStamp()));
       break;
     }
     default:
       console.warn("unhandled panel verb", link);
   }
+}
+
+/** Delete one note outright — the notes browser's ✕, so deleting does not mean
+ *  opening the note and emptying it. Confirms with the SAME wording as the
+ *  emptied-editor path in `editNote` above, then writes empty text: the core's
+ *  `set_note` removes the file (usernote.rs), the engine reloads study data,
+ *  and the browser re-fetches — nothing else about the verse is touched. */
+export async function deleteNote(s: Session, refKey: string, display?: string): Promise<void> {
+  if (
+    !(await s.askConfirm(
+      t("notes.deleteAsk", { passage: display ?? refKey }),
+      t("notes.deleteBody"),
+      t("notes.deleteVerb"),
+    ))
+  ) {
+    return;
+  }
+  report(s, s.author("userNoteSet", refKey, "", nowStamp()));
 }
 
 /** Authoring endpoints resolve null on success, else an error string. */

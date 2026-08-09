@@ -20,12 +20,21 @@ import androidx.compose.runtime.staticCompositionLocalOf
  * tells translator-supplied words apart, by the palette's `added` tone; what it
  * must NOT get is a synthesised italic, which is a sheared upright and looks
  * like one. This mirrors `Font::has_italic` in the core.
+ *
+ * [scale] is the face's optical size multiplier — what the shell multiplies the
+ * reader's chosen size by before measuring or painting, so switching faces
+ * changes the voice of the text without changing its apparent size. The numbers
+ * are `Font::scale()`'s (crates/core/src/font.rs, where the x-height
+ * measurements and the half-correction rationale live) and must stay identical
+ * to them, like the tokens. Render-time only: it is never written into the
+ * stored `bodySize`, or the reader's size would drift on every face switch.
  */
 internal data class FontSpec(
     val token: String,
     val displayName: String,
     val regular: String,
     val italic: String?,
+    val scale: Float,
 )
 
 /**
@@ -37,11 +46,11 @@ internal data class FontSpec(
  * app will speak.
  */
 internal val BUNDLED_FONTS: List<FontSpec> = listOf(
-    FontSpec("eb-garamond", "EB Garamond", "fonts/EBGaramond-Regular.ttf", "fonts/EBGaramond-Italic.ttf"),
-    FontSpec("literata", "Literata", "fonts/Literata-Regular.ttf", "fonts/Literata-Italic.ttf"),
-    FontSpec("inter", "Inter", "fonts/Inter-Regular.ttf", "fonts/Inter-Italic.ttf"),
+    FontSpec("eb-garamond", "EB Garamond", "fonts/EBGaramond-Regular.ttf", "fonts/EBGaramond-Italic.ttf", scale = 1.00f),
+    FontSpec("literata", "Literata", "fonts/Literata-Regular.ttf", "fonts/Literata-Italic.ttf", scale = 0.89f),
+    FontSpec("inter", "Inter", "fonts/Inter-Regular.ttf", "fonts/Inter-Italic.ttf", scale = 0.87f),
     // No italic entry: the file does not exist, and asking for one would get a shear.
-    FontSpec("fira-code", "Fira Code", "fonts/FiraCode-Regular.ttf", null),
+    FontSpec("fira-code", "Fira Code", "fonts/FiraCode-Regular.ttf", null, scale = 0.88f),
 )
 
 /** The face everything falls back to — the shipped default. */

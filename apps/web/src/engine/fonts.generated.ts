@@ -39,3 +39,15 @@ export const FONT_FALLBACK: Readonly<Record<string, string>> = {
   "inter": "system-ui, sans-serif",
   "fira-code": "ui-monospace, monospace",
 };
+
+/** Token → the face's optical size multiplier, mirroring
+ *  `core::font::Font::scale()` (which holds the x-height measurements and the
+ *  half-correction rationale). Applied at render time by reader/measure.ts's
+ *  `readerFontPx` and composed into `--uiScale` for the chrome — NEVER
+ *  written into `config.bodySize`. */
+export const FONT_SCALE: Readonly<Record<string, number>> = {
+  "eb-garamond": 1,
+  "literata": 0.89,
+  "inter": 0.87,
+  "fira-code": 0.88,
+};
