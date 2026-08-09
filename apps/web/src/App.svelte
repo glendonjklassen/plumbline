@@ -9,6 +9,7 @@
   // short rather than disguising it.
   import { bootErrorCopy } from "./engine/bootError";
   import { deviceLocale, lastLang, setCatalog, t } from "./lib/i18n.svelte";
+  import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FILES } from "./engine/fonts.generated";
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
   import { churchFromQuery, hasChurch, sharedAtRef, startsAsNewBeliever } from "./shell/church";
   import { initSession, type Session } from "./state/session.svelte";
@@ -99,6 +100,36 @@
     noteMishap(r instanceof Error ? `${r.name}: ${r.message}` : String(r));
   });
 
+  /** The scripture face this device used LAST launch, written by
+   *  `session.applyFonts()`. Same trick as `lastLang()`: only this thread can
+   *  read localStorage, and it is the only thing available before the worker has
+   *  opened the config. An unknown token (a config from a later build, a wiped
+   *  store) resolves to the shipped default. */
+  function hintedTextFont(): string {
+    try {
+      const token = localStorage.getItem("plumbline:textFont");
+      if (token && FONT_FILES[token]) return token;
+    } catch {
+      /* blocked storage: the default is a Bible either way */
+    }
+    return DEFAULT_FONT;
+  }
+
+  /** The document's own copy of a family, so the CANVAS paints the real face
+   *  rather than the fallback it would otherwise measure once and cache. */
+  function documentFaces(token: string): Promise<unknown>[] {
+    const fam = FONT_CSS_FAMILY[token] ?? FONT_CSS_FAMILY[DEFAULT_FONT];
+    const loads = [document.fonts.load(`18px "${fam}"`), document.fonts.load(`bold 18px "${fam}"`)];
+    if (FONT_FILES[token]?.italic) loads.push(document.fonts.load(`italic 18px "${fam}"`));
+    return loads;
+  }
+
+  /** How many faces the WORKER should have for a family — 1 for a face with no
+   *  italic (Fira Code), 2 otherwise. */
+  function expectedFaces(token: string): number {
+    return FONT_FILES[token]?.italic ? 2 : 1;
+  }
+
   async function start(): Promise<void> {
     try {
       const rpc = new EngineRpc();
@@ -107,19 +138,24 @@
       // offers an explicit "load analysis" action instead of spending the
       // download and the worker time behind the reader's back.
       const deferRnd = matchMedia("(max-width: 700px)").matches;
+      const hinted = hintedTextFont();
       const [info] = await Promise.all([
-        rpc.boot({ deferRnd, locale: deviceLocale(), lang: lastLang() }),
-        document.fonts.load('18px "EB Garamond"'),
-        document.fonts.load('italic 18px "EB Garamond"'),
-        document.fonts.load('bold 18px "EB Garamond"'),
+        // `textFont` is a HINT from localStorage, exactly like `lang`: the
+        // reader's real choice lives in a config only the worker can read, but
+        // the worker needs a face before the first layout and the reply that
+        // carries the config is what unblocks layouts. Guess, overlap the
+        // download with the whole boot, and reconcile below — a wrong guess
+        // costs one relayout before anything has been painted.
+        rpc.boot({ deferRnd, locale: deviceLocale(), lang: lastLang(), textFont: hinted }),
+        ...documentFaces(hinted),
       ]);
       // The worker measures layout with its OWN FontFaceSet. If its load failed
       // it would silently measure platform-serif metrics while this thread
       // paints real Garamond, and lines would wrap where they are not drawn —
       // so say so in the console rather than let it pass as a rendering quirk.
-      if (info.fontFaces !== 2) {
+      if (info.fontFaces !== expectedFaces(hinted)) {
         console.warn(
-          `[plumbline] engine worker loaded ${info.fontFaces}/2 reader faces — ` +
+          `[plumbline] engine worker loaded ${info.fontFaces}/${expectedFaces(hinted)} reader faces — ` +
             `layout is being measured with fallback metrics`,
         );
       }
@@ -132,6 +168,14 @@
       // the reply saves three full queue hops on the single path where nothing
       // else can proceed. See BOOT_READS in engine/worker-client.ts.
       const s = initSession(rpc, info, info.palettes ?? {}, info.bundledOn);
+      // Both type axes, from the config the worker just handed over. If the
+      // guess above was wrong the real face is loaded and the reader relaid
+      // HERE — before the shell mounts, so nothing has been painted in the
+      // wrong one.
+      s.applyFonts();
+      if ((s.config.textFont ?? DEFAULT_FONT) !== hinted) {
+        await s.setTextFont(s.config.textFont ?? DEFAULT_FONT);
+      }
       // A shared link can carry the sender's church. Save it as this reader's
       // own (theirs wins if they've already set one), then strip it from the
       // address bar so a bookmark or a reload isn't a link about a church.

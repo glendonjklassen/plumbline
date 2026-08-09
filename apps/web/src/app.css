@@ -67,7 +67,14 @@ html {
 }
 
 body {
-  font-family: "EB Garamond", Georgia, serif;
+  /* The CHROME face — config `chromeFont`, one of the two independent type axes
+     (core::font). Set on the root by `session.applyFonts()`; the literal here is
+     only what paints before that runs, and it is the shipped default.
+
+     This used to be a hardcoded "EB Garamond" that arrived with the very first
+     web-shell scaffold and was never a decision — Android was later matched TO
+     it, and the manifest wrote it up as design. It is a setting now. */
+  font-family: var(--chrome-font, "EB Garamond", Georgia, serif);
   background: var(--paper, #fcf9f4);
   color: var(--ink, #211f1a);
   -webkit-font-smoothing: antialiased;

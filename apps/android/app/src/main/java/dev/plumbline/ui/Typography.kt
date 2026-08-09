@@ -70,8 +70,28 @@ internal class Once<T : Any> {
     }
 }
 
-private val familyOnce = Once<FontFamily>()
-private val typographyOnce = Once<Typography>()
+// Keyed by FACE, not a bare singleton: the chrome face is a setting now, so a
+// process can legitimately be asked for two of them (a reader switching in
+// Settings) and each must be parsed at most once. Still process-wide, still
+// holding no Activity — see the note on [serifFamily].
+/**
+ * [Once], per key: build-at-most-once for each distinct face, held for the
+ * process. The reader can switch faces, so a plain singleton would hand back
+ * the first family ever built for every later one.
+ *
+ * The map only ever grows to the number of BUNDLED faces, which is four, so
+ * there is nothing to evict.
+ */
+internal class Keyed<T : Any> {
+    private val held = java.util.concurrent.ConcurrentHashMap<String, T>()
+
+    fun get(key: String, build: () -> T): T = held[key] ?: synchronized(this) {
+        held[key] ?: build().also { held[key] = it }
+    }
+}
+
+private val familyCache = Keyed<FontFamily>()
+private val typographyCache = Keyed<Typography>()
 
 /**
  * The bundled EB Garamond as a Compose [FontFamily], falling back to the
@@ -88,27 +108,48 @@ private val typographyOnce = Once<Typography>()
  * resolve it), and an Activity's own AssetManager can be swapped out under a
  * configuration change, which would leave this cache holding a closed one.
  */
-fun serifFamily(context: Context): FontFamily =
-    familyOnce.get { buildSerifFamily(context.applicationContext.assets) }
+fun serifFamily(context: Context, token: String? = null): FontFamily {
+    val spec = fontFor(token)
+    return familyCache.get(spec.token) { buildSerifFamily(context.applicationContext.assets, spec) }
+}
 
-private fun buildSerifFamily(assets: AssetManager): FontFamily = runCatching {
-    FontFamily(
-        Font("fonts/EBGaramond-Regular.ttf", assets, weight = FontWeight.Normal),
-        Font(
-            "fonts/EBGaramond-Regular.ttf",
+private fun buildSerifFamily(assets: AssetManager, spec: FontSpec): FontFamily = runCatching {
+    val faces = mutableListOf<Font>()
+    // The regular weight is pinned to 400 EXPLICITLY rather than left to the
+    // file's default instance. Fira Code's `wght` axis runs 300–700 and defaults
+    // to 300, so a face taken as-shipped would render the Light instance as body
+    // text — and it would do it only for that one family, which is the kind of
+    // bug that reads as "this font just looks thin".
+    faces += Font(
+        spec.regular,
+        assets,
+        weight = FontWeight.Normal,
+        variationSettings = FontVariation.Settings(FontVariation.weight(400)),
+    )
+    faces += Font(
+        spec.regular,
+        assets,
+        weight = FontWeight.Bold,
+        variationSettings = FontVariation.Settings(FontVariation.weight(700)),
+    )
+    // Only when the family HAS an italic. Compose would otherwise synthesise one
+    // for FontStyle.Italic; see FontSpec.
+    spec.italic?.let { italic ->
+        faces += Font(
+            italic,
             assets,
-            weight = FontWeight.Bold,
-            variationSettings = FontVariation.Settings(FontVariation.weight(700)),
-        ),
-        Font("fonts/EBGaramond-Italic.ttf", assets, style = FontStyle.Italic),
-        Font(
-            "fonts/EBGaramond-Italic.ttf",
+            style = FontStyle.Italic,
+            variationSettings = FontVariation.Settings(FontVariation.weight(400)),
+        )
+        faces += Font(
+            italic,
             assets,
             weight = FontWeight.Bold,
             style = FontStyle.Italic,
             variationSettings = FontVariation.Settings(FontVariation.weight(700)),
-        ),
-    )
+        )
+    }
+    FontFamily(faces)
 }.getOrElse { FontFamily.Serif }
 
 /** Material 3's own type scale with [serif] substituted into every role. Sizes,
@@ -137,37 +178,39 @@ fun serifTypography(serif: FontFamily): Typography {
 
 /** [serifTypography] over the bundled family, built once per process — what
  *  every `MaterialTheme` in the app passes as its `typography`. */
-fun serifTypography(context: Context): Typography =
-    typographyOnce.get { serifTypography(serifFamily(context)) }
+fun serifTypography(context: Context, token: String? = null): Typography {
+    val spec = fontFor(token)
+    return typographyCache.get(spec.token) { serifTypography(serifFamily(context, spec.token)) }
+}
 
 /** Parse the fonts and build the type scale NOW, off the caller's thread's
  *  own schedule — call it from a background coroutine at startup so the first
  *  composition finds both already built instead of parsing 1.6 MB of TTF on
  *  the main thread. Safe to call from anywhere: the underlying
  *  `Typeface.Builder` is thread-safe, and [Once] makes a lost race free. */
-fun warmSerifType(context: Context) {
-    serifTypography(context)
+fun warmSerifType(context: Context, chromeFont: String? = null, textFont: String? = null) {
+    serifTypography(context, chromeFont)
     // The CANVAS faces too (ReaderPane's three `android.graphics.Typeface`s,
     // which the map popups share). They are a separate parse of the same files
     // — Compose's FontFamily and the platform Typeface do not share a cache —
     // and they are on the path to first paint, which the chrome's typography is
     // not. Warming only half of it would leave the reader waiting for the half
     // that matters.
-    readerTypefaces(context)
+    readerTypefaces(context, textFont)
 }
 
 /** The bundled family for a call site that styles its own text (FirstRun,
  *  Present). A process-wide lookup behind a `remember`, so a recomposition
  *  does not even pay the volatile read. */
 @Composable
-fun rememberSerifFamily(): FontFamily {
+fun rememberSerifFamily(token: String? = null): FontFamily {
     val context = LocalContext.current
-    return remember(context) { serifFamily(context) }
+    return remember(context, token) { serifFamily(context, token) }
 }
 
 /** The app's `MaterialTheme` typography. */
 @Composable
-fun rememberSerifTypography(): Typography {
+fun rememberSerifTypography(token: String? = null): Typography {
     val context = LocalContext.current
-    return remember(context) { serifTypography(context) }
+    return remember(context, token) { serifTypography(context, token) }
 }

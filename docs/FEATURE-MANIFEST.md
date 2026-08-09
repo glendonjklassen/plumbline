@@ -31,23 +31,63 @@ Conventions used everywhere:
   any write the engine reloads study data from disk — re-fetch, never mutate
   shell-side state.
 
-## Type — one face, chrome included
+## Type — two axes, independent of each other and of the theme
 
-Both shells ship the SAME two font files, byte-identical variable TTFs (upright
-851,176 bytes / italic 754,468, `fvar`, wght 400–700; paths in §Constants), and
-use them for scripture AND chrome. The web sets `body { font-family: "EB Garamond" }`
-(`app.css`); Android builds one `FontFamily` at the theme (`ui/Typography.kt`,
-bold off the `wght` axis, not synthetic) and `serifTypography` substitutes it into
-Material's whole type scale, so `MaterialTheme` provides `typography.bodyLarge` as
-`LocalTextStyle` and a bare `Text(…, fontSize = 15.sp)` picks the family up without
-naming it. Garamond's x-height is smaller than Roboto's, so the chrome reads
-slightly smaller at the same `sp` values.
+**Three orthogonal settings: theme (colour) × `textFont` (scripture) ×
+`chromeFont` (the app's own controls).** Every combination is legal and there is
+no pairing table anywhere — Fira Code scripture under Synthwave is a supported
+choice, not an exotic one. Both faces default to EB Garamond, which is what every
+reader had before, so nothing moves under an upgrade.
+
+The VOCABULARY is core data (`crates/core/src/font.rs`): tokens
+(`eb-garamond` · `literata` · `inter` · `fira-code`), each face's own name, and
+`has_italic`. The FILES are shell assets, because delivery is a platform
+concern — the APK bundles TTFs (`assets/fonts/`, byte-identical to the web's
+build inputs in `apps/web/fonts-src/`), the web ships per-family subset woff2.
+All four are SIL OFL and variable-weight; bold is the `wght` axis in both shells,
+never a synthetic smear.
+
+- **Web.** `scripts/subset-fonts.mjs` walks a family table and generates BOTH
+  consumers from one source — `public/fonts.css` (@font-face per family) and
+  `src/engine/fonts.generated.ts` (token → files, CSS family, fallback stack). The
+  scripture face is per-thread state in `reader/measure.ts`: the ENGINE WORKER
+  measures with it and the MAIN THREAD paints with it, so both are told the same
+  token or lines wrap where they are not drawn. A change is `session.setTextFont`,
+  which loads the face into both sides BEFORE bumping `layoutEpoch`. The chrome
+  face is `--chrome-font` on the root, read by `body` in `app.css`.
+- **Android.** `ui/Fonts.kt` is the same table (same tokens); `Typography.kt`
+  builds a `FontFamily` per face and `serifTypography` substitutes it into
+  Material's whole scale, so a bare `Text(…, fontSize = 15.sp)` picks the chrome
+  face up without naming it. The scripture face reaches the reader, Present,
+  Memorize and the maps through `LocalTextFont` rather than a parameter threaded
+  through every call site. Both caches are keyed BY FACE (`Keyed<T>`), since a
+  process can legitimately be asked for two.
+- **Weight is pinned explicitly at 400**, not left to a file's default instance:
+  Fira Code's `wght` axis runs 300–700 and DEFAULTS to 300, so a face taken
+  as-shipped renders Light as body text — in one family only, which reads as
+  "that font just looks thin" rather than as a bug.
+- **A face with no italic does not get one.** Fira Code ships none, and a
+  synthesised italic is a sheared upright. Translator-supplied words
+  (`FLAG_ADDED`) are then marked by the palette's `added` tone alone, which is
+  present in every theme. `Font::has_italic` is the one place that fact lives;
+  both shells ask it rather than deciding.
+- **Delivery.** Web: `@font-face` is lazy, so a reader downloads only the
+  families they select; the boot PRELOAD names the default family only (a
+  preload of four would compete with the data pack for bandwidth), while the
+  offline PRECACHE names all of them (~1 MB once) so "can I read offline" never
+  depends on whether a font fetch happened to be seen by the service worker.
+  Android bundles all four in the APK.
+
+**Provenance of the old rule, so it is not re-canonised:** "one face, chrome
+included" was never a decision. `body { font-family: "EB Garamond" }` arrived in
+the first web-shell scaffold commit (`747bc99`), Android's Roboto chrome was
+later read as drift FROM it and matched to it, and this manifest wrote the result
+up as design. The accommodations it needed — chrome reading small at the same
+`sp`, sizes "to be re-tuned on-device" — were symptoms. It is a setting now.
 
 One deliberate exception stays: the web boot splash asks for Georgia
 (`App.svelte`), a face already on the device, so the very first paint waits on no
-download. Garamond reaches the browser as two subset woff2 files (~112 KB + ~111 KB,
-`font-display: swap`) — small, but still a network round trip the splash must not
-be behind.
+download — a font is still a network round trip the splash must not be behind.
 
 Intro-pane text is enlarged on both shells (older eyes, and the smaller x-height
 compounds it) — sizes and line heights up roughly 2 px / 2.5 sp over the body.

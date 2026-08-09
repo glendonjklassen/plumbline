@@ -3,7 +3,7 @@
 // nothing here ever blocks — the reactive read-through cache lives in
 // session.svelte.ts, this module only moves messages.
 
-import { READER_FONT_FILES } from "./fonts.generated";
+import { DEFAULT_FONT } from "./fonts.generated";
 import type { PackFileTrace } from "./pack";
 
 export interface BootInfo {
@@ -13,9 +13,10 @@ export interface BootInfo {
   bundledOn: boolean;
   /** This session fetches the machine tier by itself — don't offer a button. */
   rndAuto: boolean;
-  /** Reader faces the WORKER actually loaded (expected 2). A failed load is
-   *  silent otherwise, and it degrades to platform-serif METRICS while the main
-   *  thread paints real Garamond — wrong wrap points, no error. */
+  /** Reader faces the WORKER actually loaded — 2 for a family with an italic, 1
+   *  for one without (Fira Code). A failed load is silent otherwise, and it
+   *  degrades to platform METRICS while the main thread paints the real face —
+   *  wrong wrap points, no error. */
   fontFaces: number;
   /** Every theme's palette, keyed by token, so `applyTheme()` is synchronous
    *  from the first frame without a round trip per theme. */
@@ -244,7 +245,9 @@ export class EngineRpc {
    *  not chosen one; a worker has no `navigator.languages` worth trusting, and
    *  the setting it is weighed against lives in a config only the worker can
    *  read, so the two meet there. */
-  boot(opts: { deferRnd?: boolean; locale?: string; lang?: string } = {}): Promise<BootInfo> {
+  boot(
+    opts: { deferRnd?: boolean; locale?: string; lang?: string; textFont?: string } = {},
+  ): Promise<BootInfo> {
     const base = new URL(import.meta.env.BASE_URL, location.href).href;
     // Armed for the whole boot, rearmed by every message, dropped the moment boot
     // settles either way. A boot that never comes back is otherwise indistinguishable
@@ -253,12 +256,16 @@ export class EngineRpc {
     return this.#send({
       op: "boot",
       base,
-      // From the generated module, so the face the worker MEASURES with is by
-      // construction the same file public/fonts.css gives the document to PAINT
-      // with. Two hardcoded paths could drift, and the symptom would be lines
-      // wrapping where they are not drawn.
-      fontUrl: new URL(READER_FONT_FILES.normal, base).href,
-      italicUrl: new URL(READER_FONT_FILES.italic, base).href,
+      // The face token only; the worker resolves it through the SAME generated
+      // module public/fonts.css was written from, so what it measures with is by
+      // construction the file the document paints with. Two hardcoded paths
+      // could drift, and the symptom would be lines wrapping where they are not
+      // drawn.
+      //
+      // It rides the BOOT message rather than arriving after it because the
+      // worker must have the face before the first layout, and the first layout
+      // is answered the moment boot replies.
+      textFont: opts.textFont ?? DEFAULT_FONT,
       deferRnd: opts.deferRnd === true,
       locale: opts.locale ?? "",
       // The language this device last resolved, from `localStorage` — which only
@@ -311,6 +318,15 @@ export class EngineRpc {
   }
   fontExtent(px: number): Promise<number> {
     return this.#send({ op: "fontExtent", px });
+  }
+
+  /** Point the WORKER at a scripture face and wait for it to hold the real
+   *  metrics. Resolves to the number of faces it now has. The caller must not
+   *  relayout until this settles: a layout measured against the fallback and
+   *  painted in the chosen face wraps where it is not drawn. */
+  setTextFont(token: string): Promise<number> {
+    const base = new URL(import.meta.env.BASE_URL, location.href).href;
+    return this.#send({ op: "setTextFont", base, token });
   }
   loadRnd(): Promise<void> {
     return this.#send({ op: "loadRnd" });

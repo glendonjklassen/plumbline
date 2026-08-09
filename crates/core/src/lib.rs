@@ -19,6 +19,7 @@ pub mod config;
 pub mod corpus;
 pub mod crossref;
 pub mod export;
+pub mod font;
 pub mod home;
 pub mod hymnal;
 pub mod i18n;

@@ -708,20 +708,29 @@ pub fn palette(theme: Theme) -> Palette {
             added: "#d0a8e8".into(),
             divine: "#ffd75e".into(),
             title_ink: "#c4b4ee".into(),
-            gold: "#ff71ce".into(),
-            section: "#f08bd0".into(),
+            // The accent is ELECTRIC CYAN, not the genre's hot pink: this role
+            // paints verse numbers, every link, the connectors and the search
+            // band (at alpha), so it is the colour the reader sees most of, and
+            // pink at that volume reads as a highlighter over the text. Pink
+            // stays as detail — `lemma`, and the `pin` selection.
+            gold: "#4fd6ff".into(),
+            section: "#86c9ee".into(),
             tier_god: "#ffcf6b".into(),
             tier_human: "#66e2a8".into(),
             tier_machine: "#b4b0d8".into(),
             tier_research: "#ff7d92".into(),
             mono: "#b2aed2".into(),
-            morph: "#6fd9d2".into(),
-            lemma: "#7fd4ff".into(),
+            // Violet and pink, moved off the blues they used to sit in: with a
+            // cyan accent, a cyan gloss and a blue lemma read as links.
+            morph: "#c49cff".into(),
+            lemma: "#ff9fe0".into(),
             rule: "#45307a".into(),
             popup_paper: "#221443".into(),
             pane_nav_bg: "#271950".into(),
             strip_bg: "#2d1d5c".into(),
-            pin: "#00d9ff".into(),
+            // Magenta, for the same reason: a cyan selection band under cyan
+            // links is one signal painted twice.
+            pin: "#ff5fd2".into(),
             read_unread: "#ffc94d".into(),
             read_partial: "#ff9e64".into(),
             read_done: "#4ecca3".into(),

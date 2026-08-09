@@ -1,6 +1,26 @@
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
-import { READER_FONT_PATHS } from "./src/engine/fonts.generated";
+import { DEFAULT_FONT, FONT_FILES } from "./src/engine/fonts.generated";
+
+// Two different lists, because preloading and precaching answer two different
+// questions.
+//
+// PRELOAD is a boot-priority hint: it says "fetch this now, ahead of what you
+// would otherwise discover later". Only the DEFAULT family belongs there — a
+// preload of four families would compete with the data pack for bandwidth on
+// the one path where nothing else can proceed, to fetch type the reader has not
+// chosen.
+//
+// PRECACHE is the offline promise, and the offline promise is a test, not a
+// hope (CLAUDE.md). Every family goes in: a reader who picks Fira Code and then
+// gets on a plane must have Fira Code. Leaving the non-default families to be
+// picked up incidentally by sw.js on first use would make "can I read offline"
+// depend on whether that fetch happened while the SW was controlling — exactly
+// the kind of conditional the depot rules exist to remove. ~1 MB, once.
+const fontPathsOf = (token: string): string[] =>
+  Object.values(FONT_FILES[token]).filter((p): p is string => typeof p === "string");
+const DEFAULT_FONT_PATHS: string[] = fontPathsOf(DEFAULT_FONT);
+const ALL_FONT_PATHS: string[] = Object.keys(FONT_FILES).flatMap(fontPathsOf);
 
 // base "./" keeps the bundle host-agnostic: it works at a domain root (Azure
 // SWA) and under a repo subpath (GitHub Pages) without a rebuild.
@@ -30,7 +50,7 @@ export default defineConfig({
       transformIndexHtml(html: string) {
         return {
           html,
-          tags: READER_FONT_PATHS.map((href) => ({
+          tags: DEFAULT_FONT_PATHS.map((href) => ({
             tag: "link",
             attrs: {
               rel: "preload",
@@ -99,7 +119,7 @@ export default defineConfig({
           // The home-screen icon, alongside the webmanifest's own: same kind of
           // file, wanted at the same moment, and 3 KB.
           "apple-touch-icon-180.png",
-          ...READER_FONT_PATHS,
+          ...ALL_FONT_PATHS,
         ];
         this.emitFile({
           type: "asset",

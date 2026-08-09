@@ -75,6 +75,7 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -155,11 +156,13 @@ fun PlumblineApp(
 ) {
     // The reader's theme choice, persisted in the shared config
     // ("system" | "light" | "dark" | "night"); System follows the OS.
-    var themeChoice by remember {
-        mutableStateOf(
-            runCatching { parseWire<ConfigState>(StudyConfig.LoadJson()) }.getOrNull()?.theme ?: "system",
-        )
-    }
+    // Read ONCE, together: three independent axes off one config parse — colour,
+    // the scripture face and the chrome face (core::font). Nothing here derives
+    // one from another; every combination is legal.
+    val bootConfig = remember { runCatching { parseWire<ConfigState>(StudyConfig.LoadJson()) }.getOrNull() }
+    var themeChoice by remember { mutableStateOf(bootConfig?.theme ?: "system") }
+    var textFont by remember { mutableStateOf(fontFor(bootConfig?.textFont).token) }
+    var chromeFont by remember { mutableStateOf(fontFor(bootConfig?.chromeFont).token) }
     val systemDark = isSystemInDarkTheme()
     val resolved = if (themeChoice == "system") (if (systemDark) "dark" else "light") else themeChoice
     val palette = remember(resolved) { ReaderPalette.forTheme(resolved) }
@@ -168,8 +171,11 @@ fun PlumblineApp(
     } else {
         lightColorScheme(background = palette.paper, surface = palette.paper, onSurface = palette.ink)
     }
-    // Garamond for the chrome too, matching the web shell (see ui/Typography.kt).
-    MaterialTheme(colorScheme = scheme, typography = rememberSerifTypography()) {
+    // The CHROME face paints the type scale; the SCRIPTURE face is published to
+    // the reader, Present, Memorize and the maps through LocalTextFont. Two
+    // axes, neither one the other's default (see ui/Fonts.kt).
+    MaterialTheme(colorScheme = scheme, typography = rememberSerifTypography(chromeFont)) {
+      CompositionLocalProvider(LocalTextFont provides textFont) {
         // NAMED, not positional: a defaulted parameter (like `onLanguage`, which
         // carries a `{}` default) is silently dropped if a positional call omits
         // it — the compiler says nothing and the picker calls the no-op. Every
@@ -180,10 +186,15 @@ fun PlumblineApp(
             palette = palette,
             themeChoice = themeChoice,
             onThemeChoice = { themeChoice = it },
+            textFont = textFont,
+            onTextFont = { textFont = it },
+            chromeFont = chromeFont,
+            onChromeFont = { chromeFont = it },
             bundledOn = bundledOn,
             onToggleBundled = onToggleBundled,
             onLanguage = onLanguage,
         )
+      }
     }
 }
 
@@ -194,6 +205,10 @@ fun StudyScreen(
     palette: ReaderPalette,
     themeChoice: String = "system",
     onThemeChoice: (String) -> Unit = {},
+    textFont: String = DEFAULT_FONT.token,
+    onTextFont: (String) -> Unit = {},
+    chromeFont: String = DEFAULT_FONT.token,
+    onChromeFont: (String) -> Unit = {},
     bundledOn: Boolean = true,
     onToggleBundled: () -> Unit = {},
     onLanguage: (String) -> Unit = {},
@@ -361,7 +376,8 @@ fun StudyScreen(
         val cfg = (loadedCfg ?: ConfigState()).copy(
             bodySize = bodySize, sideMargin = sideMargin, lineSpacing = lineSpacing, copyStyle = copyStyle,
             openPanes = listOf(PaneRef1(book, chapter, firstVisibleVerse)), activePane = 0, history = history,
-            theme = themeChoice, humanAnalysis = humanAnalysis, machineAnalysis = machineAnalysis,
+            theme = themeChoice, textFont = textFont, chromeFont = chromeFont,
+            humanAnalysis = humanAnalysis, machineAnalysis = machineAnalysis,
             church = church, presentSharesAsNew = presentSharesAsNew, intro = introChoice,
             akjvOverlay = akjvOverlay,
         )
@@ -1054,6 +1070,8 @@ fun StudyScreen(
                 humanAnalysis = humanAnalysis, onToggleHuman = { humanAnalysis = !humanAnalysis },
                 machineAnalysis = machineAnalysis, onToggleMachine = { machineAnalysis = !machineAnalysis },
                 themeChoice = themeChoice, onTheme = onThemeChoice,
+                textFont = textFont, onTextFont = onTextFont,
+                chromeFont = chromeFont, onChromeFont = onChromeFont,
                 bodySize = bodySize, onBodySize = { bodySize = it },
                 sideMargin = sideMargin, onSideMargin = { sideMargin = it },
                 lineSpacing = lineSpacing, onLineSpacing = { lineSpacing = it },
@@ -1745,6 +1763,10 @@ private fun SettingsDialog(
     onToggleAkjv: () -> Unit,
     themeChoice: String,
     onTheme: (String) -> Unit,
+    textFont: String,
+    onTextFont: (String) -> Unit,
+    chromeFont: String,
+    onChromeFont: (String) -> Unit,
     bodySize: Double,
     onBodySize: (Double) -> Unit,
     sideMargin: Double,
@@ -1871,6 +1893,45 @@ private fun SettingsDialog(
                                 text = { Text(label) },
                                 onClick = { onTheme(token); themeMenu = false },
                             )
+                        }
+                    }
+                }
+                HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
+                // The two TYPE axes, offered exactly like the theme above and
+                // independent of it. Each row renders its options IN the face
+                // they select — a font picker that names faces in one face is
+                // asking the reader to imagine the answer.
+                //
+                // Labels come from BUNDLED_FONTS, not the i18n catalogue: a
+                // typeface name is a proper noun. i18n-ignore: typeface names
+                for ((label, axis) in listOf(
+                    t("settings.textFont") to (textFont to onTextFont),
+                    t("settings.chromeFont") to (chromeFont to onChromeFont),
+                )) {
+                    val (selected, onPick) = axis
+                    Text(label, color = palette.faded, fontSize = 12.sp)
+                    var menu by remember { mutableStateOf(false) }
+                    val current = fontFor(selected)
+                    Box {
+                        Row(
+                            Modifier.fillMaxWidth().clickable { menu = true }.padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                current.displayName,
+                                color = palette.ink,
+                                fontFamily = rememberSerifFamily(current.token),
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = palette.faded)
+                        }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            for (spec in BUNDLED_FONTS) {
+                                DropdownMenuItem(
+                                    text = { Text(spec.displayName, fontFamily = rememberSerifFamily(spec.token)) },
+                                    onClick = { onPick(spec.token); menu = false },
+                                )
+                            }
                         }
                     }
                 }

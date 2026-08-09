@@ -536,6 +536,8 @@
   "settings.suggestedInstalled": "Installiert. Sie stehen unter „Vorschläge“ in der Verknüpfungsbibliothek, wo Sie jede einzelne behalten oder verwerfen können.",
   "settings.suggestedOffer": "Eine große Sammlung vorgeschlagener Versverbindungen zum Prüfen, Behalten oder Verwerfen. Einmaliger Download von {kb} KB.",
   "settings.switchingTo": "Wechsel zu {language}…",
+  "settings.textFont": "Schriftart der Bibel",
+  "settings.chromeFont": "Schriftart der App",
   "settings.textSize": "Textgröße — Leser & Studium",
   "settings.theme": "Darstellung",
   "settings.themeCatppuccinLatte": "Catppuccin Latte",

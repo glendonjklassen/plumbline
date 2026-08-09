@@ -494,6 +494,8 @@
   "settings.suggestedInstalled": "Installed. They sit under Suggested in the weave library, where you can keep or reject each one.",
   "settings.suggestedOffer": "A large set of proposed verse links to review and keep or reject. One-time {kb} KB download.",
   "settings.switchingTo": "Switching to {language}…",
+  "settings.textFont": "Scripture font",
+  "settings.chromeFont": "App font",
   "settings.textSize": "Text size — reader & study",
   "settings.theme": "Theme",
   "settings.themeCatppuccinLatte": "Catppuccin Latte",
