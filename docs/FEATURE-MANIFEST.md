@@ -1578,9 +1578,9 @@ lines would wrap where they are not drawn.)
   for symbol against the generated header and CI fails on any difference. (The C#
   sibling `bindings/csharp/PureStudy.cs` went with the WinUI shell —
   `crates/ffi/bindings/` holds `c/` and `kotlin/` now.) The native lib
-  cross-builds with cargo-ndk into `jniLibs/{arm64-v8a,x86_64}/libplumbline_ffi.so`
+  cross-builds with cargo-ndk into `jniLibs/arm64-v8a/libplumbline_ffi.so`
   (NDK r29, `--platform 26`), verified independently of the emulator/SDK.
-- Build gate: Android NDK + `cargo-ndk` for the `.so` per ABI; the Rust and
+- Build gate: Android NDK + `cargo-ndk` for the `.so`; the Rust and
   the JSON contract are identical.
 - Measure callback: back it with `android.graphics.Paint.measureText` (or
   Compose's TextMeasurer); the core does the rest.

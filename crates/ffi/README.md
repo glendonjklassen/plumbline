@@ -112,7 +112,7 @@ Cross-compiling the same `.dll` *from Linux* instead needs **llvm-mingw**
 - Android `.so`: needs the **Android NDK** + `cargo install cargo-ndk`. Without
   it, `cargo build --target aarch64-linux-android` compiles but fails at link
   (falls back to the host `ld`). Then:
-  `cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o app/src/main/jniLibs build -p plumbline-ffi --release`.
+  `cargo ndk -t arm64-v8a -o app/src/main/jniLibs build -p plumbline-ffi --release`.
 
 ## Tests
 

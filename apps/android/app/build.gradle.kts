@@ -25,46 +25,12 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // NOTE: the ABI allow-list is `splits.abi` below, not `ndk.abiFilters`.
-        // AGP refuses to configure a project that sets both ("Conflicting
-        // configuration : 'arm64-v8a,x86_64' in ndk abiFilters cannot be present
-        // when splits abi filters are set"), and splits do the same filtering —
-        // an ABI with no split gets no APK, so JNA's @aar contributions for
-        // armeabi-v7a/x86 stay out exactly as abiFilters kept them out.
-    }
-
-    // One APK per ABI instead of one APK carrying both. The two ABIs are the ones
-    // we cross-compile the core for — the device (arm64-v8a) and the AOSP
-    // emulator (x86_64); cargo-ndk drops each .so into
-    // src/main/jniLibs/<abi>/libplumbline_ffi.so and JNA's @aar carries its own
-    // libjnidispatch.so per ABI.
-    //
-    // A phone install was paying 2.59 MB for x86_64 it can never load
-    // (libplumbline_ffi.so 2,466,760 B + libjnidispatch.so 126,912 B +
-    // libandroidx.graphics.path.so 10,760 B) out of a 19.2 MB download — the
-    // emulator's copy of the engine, shipped to every reader. x86_64 is still
-    // BUILT (it is how a release build gets smoke-tested on the emulator, and
-    // ChromeOS/WSA installs are real); it just isn't in the phone's file.
-    //
-    // No universal APK on purpose: it is precisely the artifact being removed,
-    // and there is no Play Store here to hand a device the right split
-    // (distribution is a file a reader downloads from a GitHub Release). For the
-    // same reason versionCode is NOT offset per ABI — the usual per-split offset
-    // exists to order variants inside Play, nothing here reads it, and both
-    // splits install in place over the previous release.
-    //
-    // THE OUTPUT FILENAMES CHANGE, for every variant: `app-release.apk` becomes
-    // `app-arm64-v8a-release.apk` + `app-x86_64-release.apk`, and the same for
-    // debug. Anything that copies a built APK by name has to be updated with
-    // this change — .github/workflows/release.yml attaches one file to the
-    // release, and the name readers download (plumbline-<tag>-android.apk) must
-    // keep meaning "the one for a phone", i.e. the arm64-v8a split.
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("arm64-v8a", "x86_64")
-            isUniversalApk = false
+        // arm64-v8a is the only ABI: every device this installs on is a
+        // 64-bit ARM phone, sideloaded from a GitHub Release. The filter is
+        // what keeps JNA's @aar contributions for the other ABIs
+        // (armeabi-v7a/x86/x86_64 libjnidispatch.so) out of the APK.
+        ndk {
+            abiFilters += "arm64-v8a"
         }
     }
 
@@ -94,7 +60,7 @@ android {
             // in proguard-rules.pro). Shrinking is what pays: 22,773,588 bytes of
             // dex across two files became 3,748,844 in one, because a Compose app
             // links far more of Material3/AndroidX than it calls. Together with
-            // the ABI split above, the phone's APK went 20,116,989 → 11,099,262
+            // the arm64-only native libs, the APK went 20,116,989 → 11,099,262
             // bytes (measured 2026-07-30, both builds unsigned).
             //
             // Renaming on top of that is worth 82,179 bytes — 0.7% — because most
@@ -171,8 +137,8 @@ android {
     //
     // `noCompress` would let the first-run extraction read kjv.jsonl and friends
     // straight out of the APK instead of inflating them on the way into the
-    // writable home. Measured against the assets actually shipped in
-    // app-arm64-v8a-release-unsigned.apk (2026-07-30): the four files this
+    // writable home. Measured against the assets actually shipped in the
+    // release APK (2026-07-30): the four files this
     // covers — kjv.jsonl, cross-references.tsv, akjv.akjvb, kjv-notes.jsonl —
     // are 29,079,604 bytes raw and 4,936,245 stored, so keeping them whole adds
     // 24,143,359. The phone's APK goes 11,099,262 → ~35,242,621 bytes: a 3.2×
