@@ -22,6 +22,27 @@
     return s.panel?.kind === "notesBrowser" ? ((s.q("userNotes")?.notes ?? []) as any[]) : [];
   });
 
+  // Reading plans (Explore ▸ Plans): running plans with derived progress, plus
+  // the catalogue to start from and a speedrun launcher. Bespoke, not blocks —
+  // it is interactive (start/stop/enter), which a block list is not.
+  const plans = $derived.by(() => {
+    void s.studyEpoch;
+    return s.panel?.kind === "plans" ? s.q("plans", "") : null;
+  });
+  let speedrunTag = $state("");
+  async function launchSpeedrun(): Promise<void> {
+    const tag = speedrunTag.trim();
+    if (!tag) return;
+    speedrunTag = "";
+    await s.startSpeedrun(tag);
+  }
+  /** A schedule plan's display name, from the builtin catalogue (its `nameKey`
+   *  is a catalogue id); falls back to the raw id for an unknown plan. */
+  function planName(id: string): string {
+    const b = ((plans?.builtins ?? []) as any[]).find((x) => x.id === id);
+    return b ? t(b.nameKey) : id;
+  }
+
   const blocks = $derived.by(() => {
     void s.studyEpoch; // any authoring write invalidates panel content
     const p = s.panel;
@@ -131,6 +152,70 @@
             </div>
             <p class="nb-text">{n.text}</p>
           </div>
+        {/each}
+      {:else if s.panel.kind === "plans"}
+        <h2 class="nb-title">{t("plans.title")}</h2>
+
+        {#if (plans?.running ?? []).length === 0}
+          <p class="nb-empty">{t("plans.empty")}</p>
+        {/if}
+        {#each plans?.running ?? [] as p (p.id)}
+          <div class="plan-card" class:speedrun={p.kind === "speedrun"}>
+            {#if p.kind === "speedrun"}
+              <div class="plan-head">
+                <span class="plan-name">{t("plans.speedrunTag", { tag: p.tag })}</span>
+                <span class="plan-prog">{t("plans.sweepProgress", { done: p.sweepProgress[0], total: p.sweepProgress[1] })}</span>
+              </div>
+              <div class="plan-actions">
+                {#if s.speedrunId !== p.id}
+                  <button onclick={() => s.enterSpeedrun(p.id)}>{t("plans.enter")}</button>
+                {:else}
+                  <button onclick={() => s.exitSpeedrun()}>{t("speedrun.exit")}</button>
+                {/if}
+                <button class="danger" onclick={() => s.stopPlan(p.id, p.tag)}>{t("plans.stop")}</button>
+              </div>
+            {:else}
+              <div class="plan-head">
+                <span class="plan-name">{planName(p.id)}</span>
+                <span class="plan-prog">{t("plans.dayProgress", { done: p.scheduleProgress[0], total: p.scheduleProgress[1] })}</span>
+              </div>
+              {#if p.today}
+                <button class="plan-today" onclick={(e) => p.today.chapters[0] && onLink(goUri(`${p.today.chapters[0].book} ${p.today.chapters[0].chapter}:1`), e)}>
+                  {t("plans.today", { chapters: p.today.chapters.map((c: any) => c.display).join(", ") })}
+                </button>
+              {:else}
+                <p class="plan-done">{t("plans.finished")}</p>
+              {/if}
+              <div class="plan-actions">
+                <button class="danger" onclick={() => s.stopPlan(p.id, planName(p.id))}>{t("plans.stop")}</button>
+              </div>
+            {/if}
+          </div>
+        {/each}
+
+        <h3 class="plans-sub">{t("plans.speedrunHeading")}</h3>
+        <p class="plans-hint">{t("plans.speedrunHint")}</p>
+        <div class="speedrun-launch">
+          <input
+            type="text"
+            bind:value={speedrunTag}
+            placeholder={t("plans.speedrunPlaceholder")}
+            onkeydown={(e) => e.key === "Enter" && launchSpeedrun()}
+          />
+          <button disabled={!speedrunTag.trim()} onclick={launchSpeedrun}>{t("plans.speedrunStart")}</button>
+        </div>
+
+        <h3 class="plans-sub">{t("plans.available")}</h3>
+        {#each plans?.builtins ?? [] as b (b.id)}
+          {@const active = ((plans?.running ?? []) as any[]).some((p) => p.id === b.id)}
+          <button
+            class="plan-builtin"
+            disabled={active}
+            onclick={() => s.startPlan({ id: b.id, class: b.class, name: t(b.nameKey) })}
+          >
+            <span class="plan-name">{t(b.nameKey)}</span>
+            <span class="plan-add">{active ? t("plans.running") : t("plans.start")}</span>
+          </button>
         {/each}
       {:else}
         {#if rndOffer}
@@ -267,6 +352,118 @@
   .nb-empty {
     color: var(--faded, #8a8276);
     font-size: calc(13.5px * var(--uiScale, 1));
+  }
+  /* Reading-plans panel */
+  .plan-card {
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .plan-card.speedrun {
+    border-color: var(--tier-research, #b04a3a);
+    background: color-mix(in srgb, var(--tier-research, #b04a3a) 8%, transparent);
+  }
+  .plan-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .plan-name {
+    font-weight: 600;
+    font-size: calc(14.5px * var(--uiScale, 1));
+  }
+  .plan-prog {
+    color: var(--faded, #8a8276);
+    font-size: calc(12.5px * var(--uiScale, 1));
+    white-space: nowrap;
+  }
+  .plan-today {
+    text-align: left;
+    color: var(--gold, #9e7d38);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-size: calc(13.5px * var(--uiScale, 1));
+  }
+  .plan-done {
+    color: var(--faded, #8a8276);
+    font-size: calc(13px * var(--uiScale, 1));
+  }
+  .plan-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .plan-actions button,
+  .speedrun-launch button,
+  .plan-builtin {
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 5px;
+    padding: 4px 10px;
+    background: var(--paper, #fcf9f4);
+    color: var(--ink, #211f1a);
+    cursor: pointer;
+    font-size: calc(13px * var(--uiScale, 1));
+  }
+  .plan-actions button.danger {
+    color: var(--tier-research, #b04a3a);
+    border-color: color-mix(in srgb, var(--tier-research, #b04a3a) 60%, var(--rule, #d8cba8));
+  }
+  .plans-sub {
+    margin: 14px 0 4px;
+    font-size: calc(13.5px * var(--uiScale, 1));
+    color: var(--section-header, #a0894a);
+    font-variant: small-caps;
+    letter-spacing: 0.04em;
+  }
+  .plans-hint {
+    color: var(--faded, #8a8276);
+    font-size: calc(12.5px * var(--uiScale, 1));
+    margin-bottom: 8px;
+  }
+  .speedrun-launch {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .speedrun-launch input {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 5px;
+    padding: 5px 8px;
+    background: var(--paper, #fcf9f4);
+    color: var(--ink, #211f1a);
+    font: inherit;
+    font-size: calc(13px * var(--uiScale, 1));
+  }
+  .plan-builtin {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    gap: 10px;
+    margin-bottom: 6px;
+    text-align: left;
+  }
+  .plan-builtin:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+  .plan-builtin .plan-add {
+    color: var(--gold, #9e7d38);
+    font-size: calc(12.5px * var(--uiScale, 1));
+    white-space: nowrap;
+  }
+  .plan-actions button:disabled,
+  .speedrun-launch button:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
   .nb-note {
     border-bottom: 1px solid color-mix(in srgb, var(--rule, #d8cba8) 55%, transparent);

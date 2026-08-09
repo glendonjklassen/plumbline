@@ -47,7 +47,8 @@ export type PanelView =
   | { kind: "search" }
   | { kind: "guide" }
   | { kind: "about" }
-  | { kind: "notesBrowser" };
+  | { kind: "notesBrowser" }
+  | { kind: "plans" };
 
 /** The analytical map popups. Both are weave visualisations, not
  *  embedding-derived. */
@@ -1130,7 +1131,104 @@ export class Session {
     this.screen = "read";
     this.activePane = paneIdx;
     this.#pushHistory(book, chapter);
+    // Speedrun sweeps are generous by design (docs/READING-PLANS.md §Speedrun):
+    // opening a chapter in the mode marks it swept — no dwell, any order — so
+    // progress is breadth of the sweep, not time in it. Pane 0 only, the one
+    // the reader is actually paging through.
+    if (paneIdx === 0 && this.inSpeedrun) this.#sweepCurrent(book, chapter);
     this.saveConfig();
+  }
+
+  // ── the speedrun (a concept sweep with its own reader mode) ────────────────
+  /** Whether the reader is in speedrun mode — verse taps tag, the reading
+   *  tracker is suspended (Shell.svelte's `target` guards on this). */
+  get inSpeedrun(): boolean {
+    return !!this.config.speedrun;
+  }
+  get speedrunId(): string {
+    return this.config.speedrun ?? "";
+  }
+  /** The active speedrun's preset tag, from the plans view-model — null when
+   *  not in the mode, or before the plans read has landed. */
+  get speedrunTag(): string | null {
+    const id = this.speedrunId;
+    if (!id) return null;
+    const run = (this.q("plans", "")?.running ?? []).find((p: any) => p.id === id);
+    return run?.tag ?? null;
+  }
+
+  #sweepCurrent(book: string, chapter: number): void {
+    void this.rpc.call("speedrunSweep", this.speedrunId, book, chapter).catch(() => {});
+  }
+
+  /** Start (or resume) a speedrun for `tag` and enter the mode. */
+  async startSpeedrun(tag: string): Promise<void> {
+    const id = await this.rpc.call("speedrunStart", tag, nowStamp());
+    if (typeof id !== "string" || id.startsWith("!")) {
+      this.showToast(t("speedrun.startFailed"));
+      return;
+    }
+    this.config.speedrun = id;
+    this.saveConfig();
+    this.invalidate();
+    this.studyEpoch++;
+    // Into the text, where the sweep happens; the current chapter counts.
+    this.goRead();
+    if (this.panes[0]) this.#sweepCurrent(this.panes[0].book, this.panes[0].chapter);
+    this.showToast(t("speedrun.entered", { tag }));
+  }
+
+  /** Re-enter an existing speedrun (from the Plans screen) without re-seeding. */
+  enterSpeedrun(id: string): void {
+    this.config.speedrun = id;
+    this.saveConfig();
+    this.studyEpoch++;
+    this.goRead();
+    if (this.panes[0]) this.#sweepCurrent(this.panes[0].book, this.panes[0].chapter);
+  }
+
+  /** Leave speedrun mode — the run and its gathered tag stay; taps go back to
+   *  word study and the reading tracker resumes. */
+  exitSpeedrun(): void {
+    this.config.speedrun = "";
+    this.saveConfig();
+  }
+
+  /** A verse tapped in speedrun mode: confirm, then tag it with the preset tag
+   *  (creating the tag on the first one). The chapter is already swept by
+   *  navigation; this is the gather. */
+  async speedrunTagVerse(refKey: string): Promise<void> {
+    const tag = this.speedrunTag;
+    if (!tag || !refKey) return;
+    const ok = await this.askConfirm(t("speedrun.tagAsk", { tag, verse: refKey }), "", t("speedrun.tagVerb", { tag }));
+    if (!ok) return;
+    const err = await this.author("tagAdd", tag, "verse", refKey, null, nowStamp());
+    this.showToast(err ?? t("speedrun.tagged", { tag, verse: refKey }));
+  }
+
+  /** Start a built-in schedule. Its class holds one plan at a time, so a
+   *  conflicting one is confirmed-then-replaced (the FFI replaces; the ask is
+   *  the shell's, per the house rule about destroying a running plan). */
+  async startPlan(b: { id: string; class: string; name: string }): Promise<void> {
+    const running = (this.q("plans", "")?.running ?? []) as any[];
+    const conflict = running.find((p) => p.class === b.class && p.id !== b.id);
+    if (conflict) {
+      const ok = await this.askConfirm(t("plans.replaceAsk", { name: b.name }), t("plans.replaceBody"), t("plans.replaceVerb"));
+      if (!ok) return;
+    }
+    const err = await this.author("planStart", b.id, nowStamp());
+    this.showToast(err ?? t("plans.started", { name: b.name }));
+  }
+
+  /** Stop a plan (schedule or speedrun) — confirmed, since it removes the
+   *  plan's record. A speedrun's gathered tag is untouched. */
+  async stopPlan(id: string, name: string): Promise<void> {
+    const ok = await this.askConfirm(t("plans.stopAsk", { name }), t("plans.stopBody"), t("plans.stopVerb"));
+    if (!ok) return;
+    // Leaving the mode too, if this is the speedrun we are in.
+    if (this.speedrunId === id) this.exitSpeedrun();
+    const err = await this.author("planStop", id);
+    this.showToast(err ?? t("plans.stopped", { name }));
   }
 
   historyStep(paneIdx: number, dir: -1 | 1): void {

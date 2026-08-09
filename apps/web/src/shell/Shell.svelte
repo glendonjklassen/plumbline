@@ -40,7 +40,10 @@
   $effect(() =>
     startReadingTracker({
       target: () => {
-        if (s.showPresent || s.screen !== "read" || s.mapPopup) return null;
+        // Speedrun skimming is not reading (docs/READING-PLANS.md §Speedrun):
+        // the mode suspends the tracker so a sweep credits no dwell to the
+        // reading map or any schedule plan derived from it.
+        if (s.showPresent || s.screen !== "read" || s.mapPopup || s.inSpeedrun) return null;
         const p = s.panes[0];
         return p ? { book: p.book, chapter: p.chapter } : null;
       },
@@ -459,6 +462,14 @@
       <HymnalScreen />
     {:else}
       <div class="reading">
+        {#if s.inSpeedrun}
+          <!-- Speedrun mode: a persistent banner so the reader always knows a
+               tap tags rather than opens study, and can leave with one press. -->
+          <div class="speedrun-banner" role="status">
+            <span class="tag">{t("speedrun.banner", { tag: s.speedrunTag ?? "" })}</span>
+            <button class="exit" onclick={() => s.exitSpeedrun()}>{t("speedrun.exit")}</button>
+          </div>
+        {/if}
         <div class="panes">
           {#each s.panes as _, i (i)}
             <ReaderPane paneIdx={i} onWordStudy={openWordStudy} />
@@ -906,6 +917,30 @@
     min-height: 0;
     display: flex;
     position: relative;
+  }
+  /* Speedrun banner: the app's one alarm colour (tierResearch) tints it, so a
+     reader glances down and knows they are in a mode where a tap tags. */
+  .speedrun-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.35rem 0.9rem;
+    background: color-mix(in srgb, var(--tier-research, #b04a3a) 14%, var(--paper, #fcf9f4));
+    border-bottom: 1px solid var(--tier-research, #b04a3a);
+    color: var(--ink, #211f1a);
+    font-size: 0.95rem;
+  }
+  .speedrun-banner .tag {
+    font-weight: 600;
+  }
+  .speedrun-banner .exit {
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 4px;
+    padding: 0.2rem 0.6rem;
+    background: var(--paper, #fcf9f4);
+    color: var(--ink, #211f1a);
+    cursor: pointer;
   }
   .panes > :global(.pane + .pane) {
     border-left: 1px solid var(--rule, #d8cba8);
