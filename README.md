@@ -56,7 +56,6 @@ canon](assets/readme/reader-weaves.png)
   of the verse text.
 - Weaves: your own verse↔verse link graph, with notes.
 - Convert a tag into a weave as you study
-- 194 common weaves from Protestant tradition
 - Visualizations of your weaves: a chord diagram across the canon, and a
   constellation with pinnable lanes.
 - A notes browser over everything you have written.
