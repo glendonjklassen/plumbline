@@ -57,7 +57,8 @@ import {
 } from "./pack";
 import { depotBytes, depotDelete, depotHas, depotKeys } from "./depot";
 import { PERF } from "./perf";
-import { measureFor, readerFont, fontExtent } from "../reader/measure";
+import { measureFor, readerFont, fontExtent, setReaderFont } from "../reader/measure";
+import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FILES } from "./fonts.generated";
 import {
   aboutBlocks,
   configLoad,
@@ -640,28 +641,49 @@ function schedulePersist(): void {
 
 // ── statics ───────────────────────────────────────────────────────────────────
 
-async function loadFonts(fontUrl: string, italicUrl: string): Promise<number> {
-  // Workers have their own FontFaceSet; measurement must see the real
-  // Garamond metrics or lines would wrap differently than they paint.
+/** Which family tokens this worker has already put in its FontFaceSet, so a
+ *  reader flipping between two faces pays each download once. */
+const fontsLoaded = new Set<string>();
+
+/**
+ * Load one family's faces into the worker's OWN FontFaceSet and point the
+ * measure context at it. Workers do not share the document's fonts, and
+ * measurement must see the REAL metrics of the face the main thread paints, or
+ * lines wrap where they are not drawn.
+ *
+ * Returns how many faces the worker now has for that family — counted, not just
+ * attempted, because a silent failure here is invisible until a reader notices
+ * odd wrapping. The shell compares it against what the family should have.
+ */
+async function loadFonts(base: string, token: string): Promise<number> {
+  const resolved = setReaderFont(token);
+  const files = FONT_FILES[resolved];
+  const want = files.italic ? 2 : 1;
   const scope = self as unknown as { fonts?: FontFaceSet };
-  if (!scope.fonts) return 0; // very old engines: fall back to serif metrics
+  if (!scope.fonts) return 0; // very old engines: fall back to platform metrics
+  if (fontsLoaded.has(resolved)) return want;
   let loaded = 0;
-  for (const [url, style] of [
-    [fontUrl, "normal"],
-    [italicUrl, "italic"],
+  for (const [path, style] of [
+    [files.normal, "normal"],
+    [files.italic, "italic"],
   ] as const) {
+    if (!path) continue; // a family with no italic — see core::font
     try {
-      const face = new FontFace("EB Garamond", `url(${url})`, { style, weight: "400 700" });
+      const face = new FontFace(FONT_CSS_FAMILY[resolved], `url(${new URL(path, base).href})`, {
+        style,
+        // 400 700, not the file's own axis range: Fira Code's `wght` DEFAULTS to
+        // 300, so a declaration that let the default through would measure and
+        // paint the Light instance as body text.
+        weight: "400 700",
+      });
       await face.load();
       scope.fonts.add(face);
       loaded++;
     } catch {
-      /* platform-serif metrics still beat a dead worker */
+      /* platform metrics still beat a dead worker */
     }
   }
-  // Counted, not just attempted: a silent failure here is invisible until a
-  // reader notices text wrapping oddly, so the count is reported to the shell
-  // and asserted by an e2e test.
+  if (loaded === want) fontsLoaded.add(resolved);
   return loaded;
 }
 
@@ -705,7 +727,7 @@ self.onmessage = async (ev: MessageEvent) => {
         // window was spent on fonts before the reader saw a single percent.
         const t0 = performance.now();
         let fontsMs = 0;
-        const fonts = loadFonts(m.fontUrl, m.italicUrl).then((n) => {
+        const fonts = loadFonts(m.base, m.textFont ?? DEFAULT_FONT).then((n) => {
           fontsMs = Math.round(performance.now() - t0);
           return n;
         });
@@ -717,8 +739,8 @@ self.onmessage = async (ev: MessageEvent) => {
         void fonts.catch(() => {});
         booted = await boot((p) => self.postMessage({ type: "progress", ...p }), m.locale ?? "", m.lang ?? "");
         // BEFORE the reply, and therefore before any layout op can be answered:
-        // measurement must see the real Garamond metrics or lines wrap where they
-        // are not painted.
+        // measurement must see the real metrics of the reader's chosen face or
+        // lines wrap where they are not painted.
         const w0 = performance.now();
         const fontFaces = await fonts;
         booted.trace.unshift(
@@ -853,6 +875,14 @@ self.onmessage = async (ev: MessageEvent) => {
       }
       case "layoutTrace": {
         reply(lastTurn);
+        break;
+      }
+      case "setTextFont": {
+        // The reader changed the scripture face. Load it here BEFORE replying:
+        // the shell relayouts as soon as this resolves, and a layout measured
+        // before the face arrived would be measured in the fallback and painted
+        // in the real one. Already-loaded families resolve immediately.
+        reply(await loadFonts(m.base, m.token));
         break;
       }
       case "fontExtent": {

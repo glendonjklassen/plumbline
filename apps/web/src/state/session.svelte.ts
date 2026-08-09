@@ -8,7 +8,10 @@
 
 import { precacheShell } from "../engine/precache";
 import { updateAvailable } from "../engine/update";
+import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FILES } from "../engine/fonts.generated";
 import { EngineRpc, type BootInfo } from "../engine/worker-client";
+import { nowStamp } from "../engine/StudyEngine";
+import { fontStackFor, setReaderFont } from "../reader/measure";
 import { cleanChurch, PWA_URL, shareUrl, type Church } from "../shell/church";
 import { lang, t } from "../lib/i18n.svelte";
 
@@ -569,6 +572,30 @@ export class Session {
     );
   }
 
+  /** Mirror the due-card count onto the installed icon (the Badging API).
+   *
+   *  Feature-detected: browsers without `setAppBadge` — and every un-installed
+   *  tab, where the call resolves but paints nothing — skip out or no-op.
+   *  Fire-and-forget, errors swallowed: a badge the OS refuses is not a state
+   *  the reader can act on. The count can only move while the app is running
+   *  (a card falling due at midnight badges on the next launch or resume —
+   *  there is no server to push from), so the call sites are boot, resume and
+   *  every authoring write. */
+  refreshAppBadge(): void {
+    const nav = navigator as Navigator & {
+      setAppBadge?: (n: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    if (typeof nav.setAppBadge !== "function") return;
+    this.rpc
+      .call("memoryDue", nowStamp())
+      .then((due) => {
+        const n = ((due?.refs ?? []) as string[]).length;
+        return n > 0 ? nav.setAppBadge!(n) : nav.clearAppBadge?.();
+      })
+      .catch(() => {});
+  }
+
   /** Drop cached study reads (authoring landed / R&D pack arrived). The
    *  corpus-derived immutables (toc, canon shape, statics) survive — wiping
    *  them made navigation clamp against an empty TOC mid-refill. Which reads
@@ -807,6 +834,9 @@ export class Session {
     rpc.onAuthored = () => {
       this.invalidate();
       this.studyEpoch++;
+      // Any write can change what is due (a card added, graded, or removed —
+      // and the rest cost one cheap read on a path that just paid a file write).
+      this.refreshAppBadge();
     };
     // A dwell report changed the reading map and nothing else. Without this the
     // navigator kept showing the map from whenever it was first asked — the
@@ -962,6 +992,59 @@ export class Session {
     } catch {
       /* storage full/blocked: the snapshot just paints in default light */
     }
+  }
+
+  /** Point the DOCUMENT at the chrome face and THIS THREAD's canvas at the
+   *  scripture face. Synchronous and safe to call before the faces have
+   *  downloaded — CSS swaps the chrome in when it lands, and the reader canvas
+   *  is only painted after [[setTextFont]] has awaited the face.
+   *
+   *  Type and colour are independent axes: this is the twin of [[applyTheme]]
+   *  and neither one consults the other. */
+  applyFonts(): void {
+    const chrome = this.config.chromeFont ?? DEFAULT_FONT;
+    document.documentElement.style.setProperty("--chrome-font", fontStackFor(chrome));
+    setReaderFont(this.config.textFont ?? DEFAULT_FONT);
+    try {
+      // The boot snapshot paints chrome before the engine exists, for the same
+      // reason the palette is cached here; and the NEXT boot guesses the
+      // scripture face from this, so the worker can start downloading it
+      // alongside the pack instead of after the config arrives (App.svelte
+      // `hintedTextFont`).
+      localStorage.setItem("plumbline:chromeFont", chrome);
+      localStorage.setItem("plumbline:textFont", this.config.textFont ?? DEFAULT_FONT);
+    } catch {
+      /* storage full/blocked: the snapshot paints in the default face */
+    }
+  }
+
+  /** The scripture face. Both threads have to hold it BEFORE anything re-lays:
+   *  the worker measures and this thread paints, and a layout measured against
+   *  the fallback and painted in the chosen face wraps where it is not drawn. */
+  async setTextFont(token: string): Promise<void> {
+    this.config.textFont = token;
+    this.saveConfig();
+    setReaderFont(token);
+    // ORDER MATTERS, as in `setAkjvOverlay`: both sides first, relayout after.
+    // `document.fonts.load` is what makes the main thread's canvas paint the
+    // real face rather than the fallback it would otherwise have cached.
+    const family = FONT_CSS_FAMILY[token] ?? FONT_CSS_FAMILY[DEFAULT_FONT];
+    await Promise.all([
+      this.rpc.setTextFont(token),
+      document.fonts.load(`18px "${family}"`),
+      document.fonts.load(`bold 18px "${family}"`),
+      FONT_FILES[token]?.italic ? document.fonts.load(`italic 18px "${family}"`) : Promise.resolve(),
+    ]);
+    this.layoutEpoch++;
+    this.invalidate();
+  }
+
+  /** The chrome face. No relayout: nothing the ENGINE measured changes, only
+   *  what CSS paints the controls with. */
+  setChromeFont(token: string): void {
+    this.config.chromeFont = token;
+    this.applyFonts();
+    this.saveConfig();
   }
 
   /** A pane's first visible verse (for cross-session scroll restore). */

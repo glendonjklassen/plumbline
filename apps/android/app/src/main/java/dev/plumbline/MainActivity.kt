@@ -88,14 +88,18 @@ class MainActivity : ComponentActivity() {
             Strings.load(chosen, deviceLocale())
         }
 
-        // Parse the 1.6 MB of bundled EB Garamond into the process-wide cache
+        // Parse the reader's OWN two faces into the process-wide cache
         // (ui/Typography.kt) off the main thread, before anything composes a
-        // theme. Its OWN coroutine, not the extraction block below: on a first
+        // theme. The config is read here rather than defaulted, because warming
+        // Garamond for a reader who picked Fira Code warms the wrong thing —
+        // they would then pay the parse on the main thread at first paint,
+        // which is the exact cost this exists to avoid. Its OWN coroutine, not the extraction block below: on a first
         // run that block copies 32 MB of assets, and the type is wanted long
         // before it finishes. applicationContext, so nothing about the cache
         // outlives this Activity by holding it.
         lifecycleScope.launch(Dispatchers.Default) {
-            runCatching { warmSerifType(applicationContext) }
+            val cfg = runCatching { parseWire<ConfigState>(StudyConfig.LoadJson()) }.getOrNull()
+            runCatching { warmSerifType(applicationContext, cfg?.chromeFont, cfg?.textFont) }
         }
 
         // Open from a WRITABLE home so authored study data — notes, tags,

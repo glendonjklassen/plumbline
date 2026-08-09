@@ -320,7 +320,7 @@ test.describe("a German reader's chapter turn", () => {
    * ~340× against the 40× allowed. `a_catalogue_is_parsed_once_and_shared` in that
    * same file is the deterministic half of this pair.
    */
-  test("does not redo work per word", async ({ page }) => {
+  test("does not redo work per word", { tag: "@perf" }, async ({ page }) => {
     await reader(page, EN);
     await pick(page, EN, "Deutsch");
     // Past the background load, so the cold measurement is not queued behind it.

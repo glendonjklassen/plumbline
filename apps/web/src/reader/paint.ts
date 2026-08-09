@@ -3,7 +3,7 @@
 // FLAG_DIVINE / FLAG_TITLE inks; Strong's underline; search/goto bands,
 // word-precise runs, pinned spans, and the weave/note gutter marks.
 
-import { READER_FONT_FAMILY } from "./measure";
+import { readerFontFamily, readerFontHasItalic } from "./measure";
 
 export const MARGIN = 28; // top/bottom text margin (manifest constant)
 
@@ -262,9 +262,14 @@ export function paintChapter(
 
   // ── text ──
   ctx.textBaseline = "top";
-  const bodyFont = `${fontPx}px ${READER_FONT_FAMILY}`;
-  const italicFont = `italic ${fontPx}px ${READER_FONT_FAMILY}`;
-  const boldFont = `bold ${fontPx}px ${READER_FONT_FAMILY}`;
+  const family = readerFontFamily();
+  const bodyFont = `${fontPx}px ${family}`;
+  // A face with no italic (Fira Code) must not be ASKED for one: the browser
+  // would shear the upright, and a fake italic on every translator-supplied word
+  // is worse than none. Those words still read as supplied — the palette's
+  // `added` tone below carries it, in every face.
+  const italicFont = readerFontHasItalic() ? `italic ${fontPx}px ${family}` : bodyFont;
+  const boldFont = `bold ${fontPx}px ${family}`;
   for (const it of items) {
     if (!visible(it.y, it.y + it.h)) continue;
     const x = marginX + it.x;

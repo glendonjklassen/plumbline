@@ -1,7 +1,7 @@
 {
   "name": "plumbline-web",
   "private": true,
-  "version": "0.42.0",
+  "version": "0.43.0",
   "type": "module",
   "scripts": {
     "dev": "npm run pack:i18n && vite",
@@ -12,7 +12,8 @@
     "pack:wasm": "node scripts/copy-wasm.mjs",
     "pack:fonts": "node scripts/subset-fonts.mjs",
     "preview": "vite preview",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --grep-invert @perf && playwright test --grep @perf --workers=1",
+    "test:e2e:perf": "playwright test --grep @perf --workers=1",
     "pack:check": "node ../../scripts/check-web-pack.mjs",
     "pack:i18n": "node scripts/gen-i18n.mjs",
     "check:i18n": "node ../../scripts/check-i18n.mjs"

@@ -195,15 +195,28 @@ test("the canvas itself does not report to a screen reader", async ({ page }) =>
   expect(tree.filter((n) => n.role === "Canvas").map((n) => n.role)).toEqual([]);
 });
 
-// Ctrl+F is not driveable from Playwright (it is browser chrome), so this uses
-// `window.find`, which runs the same "is this text findable in the rendered
-// document" walk: it skips `display: none` and `visibility: hidden` subtrees
-// exactly as find-in-page does. The hiding technique has to survive that.
+// Ctrl+F is not driveable from Playwright (it is browser chrome). This test
+// used to drive `window.find` instead, but that API is INERT in headless
+// Chromium — it returns false even for a plainly visible, in-flow `<div>` of
+// unique text injected as a control, so it called the mirror unfindable however
+// the mirror was styled. A check that fails for every implementation, correct
+// ones included, tests nothing; it only had to be believed once.
 //
-// Mutation: `.mirror { display: none }` → 'Error: the browser cannot find the
-//   chapter text  expect(received).toBe(expected)  Expected: true  Received:
-//   false' — the find comes FIRST here for that reason: it is the outcome, and
-//   the style checks below it are only the explanation.
+// So the same contract is driven through APIs that do work headless.
+// `Element.checkVisibility({checkVisibilityCSS: true})` IS find-in-page's rule:
+// false for `display: none`, `visibility: hidden` and `content-visibility:
+// hidden`, and true for the clipped-and-fixed hiding the mirror uses — which is
+// exactly why find-in-page reaches the mirror's text. It ignores opacity by
+// default, and so does find-in-page.
+//
+// `Range.getClientRects()` is asserted too but is NOT sufficient alone, and
+// that is the trap worth naming: a `visibility: hidden` subtree is still laid
+// out and still hands back a rect, so rects alone see the display mutation and
+// miss the visibility one.
+//
+// Mutations, both driven against this test:
+//   `.mirror { display: none }`      → checkVisibility false (rects 0 too)
+//   `.mirror { visibility: hidden }` → checkVisibility false (rects still 1)
 test("the reader can find a phrase on the chapter with their own browser", async ({ page }) => {
   await boot(page);
   const phrase = "For God so loved the world";
@@ -216,27 +229,55 @@ test("the reader can find a phrase on the chapter with their own browser", async
   expect(before).toBeGreaterThan(0);
 
   const found = await page.evaluate((q) => {
-    getSelection()?.removeAllRanges();
-    return (window as any).find(q, false, false, true) as boolean;
+    const mirror = document.querySelector(".pane .mirror");
+    if (!mirror) return { reached: false as const, why: "no mirror" };
+    // Find the phrase the way find-in-page does: in the rendered text.
+    const walker = document.createTreeWalker(mirror, NodeFilter.SHOW_TEXT);
+    let node: Text | null = null;
+    let at = -1;
+    while (walker.nextNode()) {
+      const t = walker.currentNode as Text;
+      const i = t.data.indexOf(q);
+      if (i >= 0) {
+        node = t;
+        at = i;
+        break;
+      }
+    }
+    if (!node) return { reached: false as const, why: "phrase is not in the mirror's text" };
+
+    const holder = node.parentElement as HTMLElement;
+    const range = document.createRange();
+    range.setStart(node, at);
+    range.setEnd(node, at + q.length);
+
+    // Select it, which is what makes a find quotable, then scroll it into view
+    // — the last thing a find does, and the step that must not move the reader.
+    const sel = getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    const selected = String(sel);
+    holder.scrollIntoView({ block: "center" });
+
+    return {
+      reached: true as const,
+      findable: holder.checkVisibility({ checkVisibilityCSS: true }),
+      rects: range.getClientRects().length,
+      selected,
+      inAriaHidden: !!holder.closest("[aria-hidden='true']"),
+    };
   }, phrase);
-  expect(found, "the browser cannot find the chapter text").toBe(true);
-  // And it selected the words, which is what makes a find quotable.
-  expect(await page.evaluate(() => String(getSelection()))).toContain(phrase);
+
+  expect(found.reached, found.reached ? "" : found.why).toBe(true);
+  if (!found.reached) return;
+  expect(found.findable, "the browser's find-in-page cannot reach the chapter text").toBe(true);
+  expect(found.rects, "the phrase paints no boxes, so nothing can be found there").toBeGreaterThan(0);
+  expect(found.selected).toContain(phrase);
+  // Nothing in the mirror's ancestry may take it back out of the tree.
+  expect(found.inAriaHidden).toBe(false);
   expect(await scroller.evaluate((el) => el.scrollTop), "finding a phrase moved the reader").toBe(
     before,
   );
-
-  // WHY it is findable: hidden the right way — still laid out, still exposed.
-  const mirror = page.locator(".pane .mirror");
-  const how = await mirror.evaluate((el) => {
-    const cs = getComputedStyle(el);
-    return { display: cs.display, visibility: cs.visibility, boxes: el.getClientRects().length };
-  });
-  expect(how.display).not.toBe("none");
-  expect(how.visibility).not.toBe("hidden");
-  expect(how.boxes).toBeGreaterThan(0);
-  // Nothing in the mirror's ancestry may take it back out of the tree.
-  expect(await mirror.evaluate((el) => !!el.closest("[aria-hidden='true']"))).toBe(false);
 });
 
 // Mutation: dropping `role="region"` and `aria-label` from the scroll wrapper →

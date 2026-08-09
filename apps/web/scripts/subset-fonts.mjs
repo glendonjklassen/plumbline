@@ -1,20 +1,24 @@
 #!/usr/bin/env node
-// Subset EB Garamond to what Plumbline can actually render, convert to woff2,
-// and content-hash the filenames.
+// Subset every bundled face to what Plumbline can actually render, convert to
+// woff2, and content-hash the filenames.
 //
 //   node scripts/subset-fonts.mjs        (run by `npm run pack:fonts`)
 //
-// 1,605 KB of TTF becomes ~224 KB of woff2 — 86% off the cold boot, and the
-// fonts are render-blocking, so it is 86% off the slowest part of a first visit.
+// The reader picks TWO faces independently — one for scripture, one for the
+// chrome (`core::font::Font`, config `textFont` / `chromeFont`) — so this script
+// builds a FAMILY TABLE rather than one face. Each family is emitted whole; the
+// browser downloads only the families a reader actually selects, because
+// @font-face is lazy, so bundling four costs a reader who keeps the default
+// exactly nothing over bundling one.
 //
 // THE CORRECTNESS CONSTRAINT, which is why the charset below is generous:
 // chapter layout is measured in the ENGINE WORKER over an OffscreenCanvas, and
 // the shell PAINTS the resulting display list on the main thread. Both contexts
 // load the same file, so they agree — but only if the file has every glyph the
 // text can contain. A missing glyph means one context measures a fallback font's
-// advance width and the other paints Garamond's, and the line wraps somewhere it
-// isn't drawn. A few KB of unused glyphs is nothing against that, so the ranges
-// are whole Unicode blocks rather than a tight codepoint list.
+// advance width and the other paints the real face's, and the line wraps
+// somewhere it isn't drawn. A few KB of unused glyphs is nothing against that,
+// so the ranges are whole Unicode blocks rather than a tight codepoint list.
 //
 // The ranges were DERIVED, not guessed (2026-07-28). Every non-ASCII codepoint
 // in data/kjv.jsonl, data/kjv-notes.jsonl, data/akjv.jsonl, data/strongs.json and
@@ -23,23 +27,25 @@
 //   - reader text needs 104 codepoints total: ASCII, æ Æ, U+2019, U+2026, U+2014,
 //     and 22 Hebrew letters (Psalm 119's acrostic stanza headings);
 //   - Strong's is the demanding one — 69k Greek, 5.5k polytonic Greek Extended,
-//     114k Hebrew, plus modifier letters U+02BB/U+02BC in the transliterations —
-//     and it renders in EB Garamond, because app.css sets it on `body` and the
-//     study panel does not override it;
+//     114k Hebrew, plus modifier letters U+02BB/U+02BC in the transliterations;
 //   - EB Garamond contains NO Hebrew at all (0 of 27 letters, 0 of the points),
 //     so every Hebrew glyph already came from a system fallback before this and
-//     still does. Subsetting cannot regress what the font never had.
+//     still does. Subsetting cannot regress what a font never had, and the same
+//     is true of the three faces added beside it: a family that has no polytonic
+//     Greek simply keeps falling back for it, exactly as Garamond does for Hebrew.
 //
 // Verified after subsetting: zero advance-width differences across every kept
 // glyph, GPOS/GSUB retained (kerning and ligatures affect measured widths too),
-// the `wght` variable axis retained — the faces are VARIABLE and the CSS
-// declares `font-weight: 400 700`, so instancing them would silently kill bold —
-// and no codepoint that we use and the font has was dropped.
+// and the `wght` variable axis retained — every family here is VARIABLE and the
+// CSS declares `font-weight: 400 700`, so instancing them would silently kill
+// bold. Fira Code's axis runs 300–700 with its DEFAULT at 300, which is why the
+// declaration matters more than it looks: without an explicit 400 the browser
+// would render the Light instance as regular text.
 
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -69,10 +75,52 @@ const UNICODES = [
   "U+FFFD", // Replacement char (one occurrence in Strong's — a data artefact)
 ].join(",");
 
-const FACES = [
-  { src: "EBGaramond.ttf", base: "EBGaramond", style: "normal" },
-  { src: "EBGaramond-Italic.ttf", base: "EBGaramond-Italic", style: "italic" },
+// The bundled families, keyed by their `core::font::Font` token — the SAME
+// tokens the config stores and Android's registry uses, so a face cannot be
+// called one thing here and another there.
+//
+// A family with no italic entry does not get one. Fira Code ships no italic at
+// all, and a sheared upright looks exactly like a sheared upright; the reader
+// tells translator-supplied words apart by the palette's `added` tone instead
+// (see `core::font`, and `Font::has_italic`, which is the same fact in Rust).
+const FAMILIES = [
+  {
+    token: "eb-garamond",
+    css: "EB Garamond",
+    fallback: "Georgia, serif",
+    faces: [
+      { src: "EBGaramond.ttf", style: "normal" },
+      { src: "EBGaramond-Italic.ttf", style: "italic" },
+    ],
+  },
+  {
+    token: "literata",
+    css: "Literata",
+    fallback: "Georgia, serif",
+    faces: [
+      { src: "Literata.ttf", style: "normal" },
+      { src: "Literata-Italic.ttf", style: "italic" },
+    ],
+  },
+  {
+    token: "inter",
+    css: "Inter",
+    fallback: "system-ui, sans-serif",
+    faces: [
+      { src: "Inter.ttf", style: "normal" },
+      { src: "Inter-Italic.ttf", style: "italic" },
+    ],
+  },
+  {
+    token: "fira-code",
+    css: "Fira Code",
+    fallback: "ui-monospace, monospace",
+    faces: [{ src: "FiraCode.ttf", style: "normal" }],
+  },
 ];
+
+/** The face the app falls back to everywhere — must be a key of FAMILIES. */
+const DEFAULT_TOKEN = "eb-garamond";
 
 if (!existsSync(srcDir)) {
   console.error(
@@ -82,39 +130,58 @@ if (!existsSync(srcDir)) {
   process.exit(2);
 }
 
-// Clear previously generated faces so an old hash cannot linger and be served.
-for (const n of readdirSync(outDir)) {
-  if (/^EBGaramond.*\.woff2$/.test(n)) rmSync(join(outDir, n));
-}
+// fontTools ships `pyftsubset` as a console script, but a distro install may
+// expose only the module. Same code either way; take whichever is present so a
+// machine with python3-fonttools and no scripts dir can still build the fonts.
+const SUBSET = (() => {
+  try {
+    execFileSync("pyftsubset", ["--help"], { stdio: "ignore" });
+    return { cmd: "pyftsubset", pre: [] };
+  } catch {
+    return { cmd: "python3", pre: ["-m", "fontTools.subset"] };
+  }
+})();
+
 mkdirSync(outDir, { recursive: true });
 
+// Clear previously generated faces so an old hash cannot linger and be served.
+// Every woff2 in here is ours and is regenerated below, so the sweep is by
+// extension rather than by a per-family name pattern — a family REMOVED from
+// the table above must not leave its last build behind.
+for (const n of readdirSync(outDir)) {
+  if (n.endsWith(".woff2")) rmSync(join(outDir, n));
+}
+
 const built = [];
-for (const face of FACES) {
-  const src = join(srcDir, face.src);
-  if (!existsSync(src)) {
-    console.error(`missing ${src}`);
-    process.exit(2);
+for (const family of FAMILIES) {
+  for (const face of family.faces) {
+    const src = join(srcDir, face.src);
+    if (!existsSync(src)) {
+      console.error(`missing ${src}`);
+      process.exit(2);
+    }
+    const base = basename(face.src, ".ttf");
+    const subTtf = join(outDir, `${base}.subset.tmp.ttf`);
+    execFileSync(SUBSET.cmd, [...SUBSET.pre, src, `--unicodes=${UNICODES}`, `--output-file=${subTtf}`], {
+      stdio: ["ignore", "inherit", "inherit"],
+    });
+    // pyftsubset --flavor=woff2 needs python brotli, which is not reliably
+    // present; woff2_compress is, and produces the same thing. It writes
+    // <name>.woff2 beside its input.
+    execFileSync("woff2_compress", [subTtf], { stdio: ["ignore", "inherit", "inherit"] });
+    const woff2Tmp = subTtf.replace(/\.ttf$/, ".woff2");
+    const bytes = readFileSync(woff2Tmp);
+    // Content-hashed, for two concrete reasons: sw.js treats `/fonts/` as
+    // immutable BY PATH, so a font replaced under the same name would be served
+    // from cache forever; and the cache sweep exempts un-versioned entries, so
+    // an old face could never be reclaimed.
+    const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 8);
+    const name = `${base}-${hash}.woff2`;
+    writeFileSync(join(outDir, name), bytes);
+    rmSync(subTtf, { force: true });
+    rmSync(woff2Tmp, { force: true });
+    built.push({ family, style: face.style, name, bytes: bytes.length, from: readFileSync(src).length });
   }
-  const subTtf = join(outDir, `${face.base}.subset.tmp.ttf`);
-  execFileSync("pyftsubset", [src, `--unicodes=${UNICODES}`, `--output-file=${subTtf}`], {
-    stdio: ["ignore", "inherit", "inherit"],
-  });
-  // pyftsubset --flavor=woff2 needs python brotli, which is not reliably present;
-  // woff2_compress is, and produces the same thing. It writes <name>.woff2
-  // beside its input.
-  execFileSync("woff2_compress", [subTtf], { stdio: ["ignore", "inherit", "inherit"] });
-  const woff2Tmp = subTtf.replace(/\.ttf$/, ".woff2");
-  const bytes = readFileSync(woff2Tmp);
-  // Content-hashed, for two concrete reasons: sw.js treats `/fonts/` as immutable
-  // BY PATH, so a font replaced under the same name would be served from cache
-  // forever; and the cache sweep exempts un-versioned entries, so an old face
-  // could never be reclaimed.
-  const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 8);
-  const name = `${face.base}-${hash}.woff2`;
-  writeFileSync(join(outDir, name), bytes);
-  rmSync(subTtf, { force: true });
-  rmSync(woff2Tmp, { force: true });
-  built.push({ ...face, name, bytes: bytes.length, from: readFileSync(src).length });
 }
 
 // ── the two generated consumers ──────────────────────────────────────────────
@@ -133,14 +200,18 @@ writeFileSync(
 
    font-display: swap, not block. These faces are render-blocking, and with
    "block" the boot splash — whose whole job is to say "we are working on it" —
-   painted nothing until 1.6 MB of font arrived. The splash now asks for a system
+   painted nothing until the font arrived. The splash now asks for a system
    serif outright, so nothing swaps under the reader there; UI chrome swaps once,
    early. The reader itself is a canvas painted after document.fonts.load
-   resolves, so it never renders in a fallback face. */
+   resolves, so it never renders in a fallback face.
+
+   Every bundled family is declared; a browser downloads only the ones a
+   selected face actually names, so the reader who keeps the default pays for
+   one family. */
 ${built
   .map(
     (f) => `@font-face {
-  font-family: "EB Garamond";
+  font-family: "${f.family.css}";
   src: url("./fonts/${f.name}") format("woff2");
   font-weight: 400 700;
   font-style: ${f.style};
@@ -151,29 +222,66 @@ ${built
 `,
 );
 
+const byToken = new Map();
+for (const f of built) {
+  const e = byToken.get(f.family.token) ?? { css: f.family.css, fallback: f.family.fallback, files: {} };
+  e.files[f.style] = `fonts/${f.name}`;
+  byToken.set(f.family.token, e);
+}
+
 const tsPath = join(web, "src/engine/fonts.generated.ts");
 writeFileSync(
   tsPath,
   `// GENERATED by scripts/subset-fonts.mjs — do not edit.
 //
-// The reader face, as paths relative to the app base. The engine worker loads
-// these into its own FontFaceSet to MEASURE layout; public/fonts.css declares
-// the same files for the document to PAINT with. Same bytes in both, which is
-// what keeps measured line breaks and painted line breaks identical.
-export const READER_FONT_FILES = {
-${built.map((f) => `  ${f.style}: "fonts/${f.name}",`).join("\n")}
-} as const;
+// Every bundled family, keyed by its \`core::font::Font\` token. The engine
+// worker loads the SELECTED family's files into its own FontFaceSet to MEASURE
+// layout; public/fonts.css declares the same files for the document to PAINT
+// with. Same bytes in both, which is what keeps measured line breaks and
+// painted line breaks identical.
 
-/** Both faces, for preloading and for the offline shell list. */
-export const READER_FONT_PATHS: readonly string[] = Object.values(READER_FONT_FILES);
+/** A family's woff2 paths, relative to the app base. \`italic\` is absent for a
+ *  face that ships none — see \`core::font::Font::has_italic\`. */
+export type FontFiles = { readonly normal: string; readonly italic?: string };
+
+export const FONT_FILES: Readonly<Record<string, FontFiles>> = {
+${[...byToken]
+  .map(
+    ([token, e]) =>
+      `  "${token}": { normal: "${e.files.normal}"${e.files.italic ? `, italic: "${e.files.italic}"` : ""} },`,
+  )
+  .join("\n")}
+};
+
+/** Token → the family name the @font-face rules declare (what a \`ctx.font\`
+ *  string or a CSS \`font-family\` must name to get this face). */
+export const FONT_CSS_FAMILY: Readonly<Record<string, string>> = {
+${[...byToken].map(([token, e]) => `  "${token}": ${JSON.stringify(e.css)},`).join("\n")}
+};
+
+/** The face every axis falls back to — the shipped default, and the answer for
+ *  a token this build does not know (a config written by a later build). */
+export const DEFAULT_FONT = ${JSON.stringify(DEFAULT_TOKEN)};
+
+/** Token → what to render in until the webfont lands, and for any codepoint the
+ *  family lacks. A sans must not fall back to a serif: the substitution shows
+ *  for one swap, and on a glyph the face is missing it is permanent. */
+export const FONT_FALLBACK: Readonly<Record<string, string>> = {
+${[...byToken].map(([token, e]) => `  "${token}": ${JSON.stringify(e.fallback)},`).join("\n")}
+};
 `,
 );
 
 const kb = (n) => (n / 1024).toFixed(0);
+for (const f of built) console.log(`  ${f.name}  ${kb(f.from)} KB TTF -> ${kb(f.bytes)} KB woff2`);
+for (const [token, e] of byToken) {
+  const fam = built.filter((f) => f.family.token === token);
+  const to = fam.reduce((s, f) => s + f.bytes, 0);
+  console.log(`${token}: ${fam.length} face(s), ${kb(to)} KB woff2 — "${e.css}"`);
+}
 const totalFrom = built.reduce((s, f) => s + f.from, 0);
 const totalTo = built.reduce((s, f) => s + f.bytes, 0);
-for (const f of built) console.log(`  ${f.name}  ${kb(f.from)} KB TTF -> ${kb(f.bytes)} KB woff2`);
 console.log(
   `fonts: ${kb(totalFrom)} KB -> ${kb(totalTo)} KB woff2 ` +
-    `(${(100 - (totalTo / totalFrom) * 100).toFixed(0)}% off, both faces)`,
+    `(${(100 - (totalTo / totalFrom) * 100).toFixed(0)}% off, ${built.length} faces across ${byToken.size} families)`,
 );

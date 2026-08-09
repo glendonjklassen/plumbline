@@ -2,6 +2,8 @@
   // One Settings dialog (Android IA): analysis switches, theme, text size /
   // margin / line-spacing sliders, copy format, bundled stock set.
   import { getSession } from "../state/session.svelte";
+  import { DEFAULT_FONT, FONT_CSS_FAMILY } from "../engine/fonts.generated";
+  import { fontStackFor } from "../reader/measure";
   import { modal } from "../lib/modal";
   import { completeOffline, surveyOffline, type OfflineSurvey } from "../engine/offline";
   import { cleanChurch } from "./church";
@@ -548,6 +550,27 @@
     "rose-pine": "themeRosePine",
     synthwave: "themeSynthwave",
   };
+  // Straight off the generated registry, so a family added to
+  // scripts/subset-fonts.mjs appears in both pickers with no edit here — and a
+  // face can never be offered that has no files behind it. The LABEL is the
+  // typeface's own name (core::font::Font::name): a proper noun, so it is not in
+  // the i18n catalogue and does not change with the language.
+  const fonts = Object.keys(FONT_CSS_FAMILY);
+  const fontName = (token: string): string => FONT_CSS_FAMILY[token] ?? token;
+
+  let fontBusy = $state(false);
+  async function setTextFont(token: string): Promise<void> {
+    // Awaited, and the control is disabled while it runs: the face has to be in
+    // BOTH the worker (which measures) and this thread (which paints) before the
+    // relayout, and on a slow connection that is a real download.
+    fontBusy = true;
+    try {
+      await s.setTextFont(token);
+    } finally {
+      fontBusy = false;
+    }
+  }
+
   const copyOpts = ["verse", "verseRef", "verseMarkdown"] as const;
   const copyLabel = { verse: "copyVerse", verseRef: "copyVerseRef", verseMarkdown: "copyMarkdown" };
 </script>
@@ -670,6 +693,30 @@
       >
         {#each themes as token (token)}
           <option value={token}>{t(`settings.${themeLabel[token]}`)}</option>
+        {/each}
+      </select>
+      <hr />
+      <p class="label">{t("settings.textFont")}</p>
+      <select
+        class="dropdown"
+        aria-label={t("settings.textFont")}
+        disabled={fontBusy}
+        value={s.config.textFont ?? DEFAULT_FONT}
+        onchange={(e) => setTextFont((e.currentTarget as HTMLSelectElement).value)}
+      >
+        {#each fonts as token (token)}
+          <option value={token} style:font-family={fontStackFor(token)}>{fontName(token)}</option>
+        {/each}
+      </select>
+      <p class="label">{t("settings.chromeFont")}</p>
+      <select
+        class="dropdown"
+        aria-label={t("settings.chromeFont")}
+        value={s.config.chromeFont ?? DEFAULT_FONT}
+        onchange={(e) => s.setChromeFont((e.currentTarget as HTMLSelectElement).value)}
+      >
+        {#each fonts as token (token)}
+          <option value={token} style:font-family={fontStackFor(token)}>{fontName(token)}</option>
         {/each}
       </select>
       <hr />

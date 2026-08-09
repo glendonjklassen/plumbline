@@ -97,6 +97,62 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       }
       report(s, s.author("weaveReject", link.index));
       break;
+    // The three whole-item deletes. Each looks up the name first (the wire
+    // carries the library ordinal; the ask should say what dies), confirms
+    // through the shared dialog, then returns to the item's list — ordinals
+    // shift after every write, so the detail card just deleted must not stay
+    // up pointing at whatever slid into its index.
+    case "deleteThread": {
+      const thread = (await s.fetchQ("threads"))?.threads?.[link.index];
+      if (!thread) break;
+      if (
+        !(await s.askConfirm(
+          t("thread.deleteAsk", { thread: thread.name }),
+          t("thread.deleteBody"),
+          t("thread.deleteVerb"),
+        ))
+      ) {
+        break;
+      }
+      const err = await s.author("threadRemove", thread.name);
+      s.showToast(err ?? t("thread.deleted", { thread: thread.name }));
+      if (!err && s.panel?.kind === "thread") s.panel = { kind: "threads" };
+      break;
+    }
+    case "deleteTag": {
+      const tag = (await s.fetchQ("tags"))?.tags?.[link.index];
+      if (!tag) break;
+      if (
+        !(await s.askConfirm(
+          t("tag.deleteAsk", { tag: tag.name }),
+          t("tag.deleteBody"),
+          t("tag.deleteVerb"),
+        ))
+      ) {
+        break;
+      }
+      const err = await s.author("tagDelete", tag.name);
+      s.showToast(err ?? t("tag.deleted", { tag: tag.name }));
+      if (!err && s.panel?.kind === "tag") s.panel = { kind: "tags" };
+      break;
+    }
+    case "deleteWeave": {
+      const weave = (await s.fetchQ("weaves"))?.weaves?.[link.index];
+      if (!weave) break;
+      if (
+        !(await s.askConfirm(
+          t("weave.deleteAsk", { weave: weave.name }),
+          t("weave.deleteBody"),
+          t("weave.deleteVerb"),
+        ))
+      ) {
+        break;
+      }
+      const err = await s.author("weaveDelete", link.index);
+      s.showToast(err ?? t("weave.deleted", { weave: weave.name }));
+      if (!err && s.panel?.kind === "compare") s.panel = { kind: "weaves" };
+      break;
+    }
     case "editThreadNotes": {
       const thread = (await s.fetchQ("threads"))?.threads?.[link.index];
       if (!thread) break;

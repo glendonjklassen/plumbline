@@ -164,13 +164,14 @@ fun Modifier.zoomable(state: ZoomState): Modifier =
  *  popups draw the same Garamond the chapter does, and [readerTypefaces] has
  *  already paid for it once per process (its fallback to the platform serif
  *  covers the missing-asset case). */
-private fun mapTypeface(context: Context): Typeface = readerTypefaces(context).regular
+private fun mapTypeface(context: Context, token: String): Typeface = readerTypefaces(context, token).regular
 
 @Composable
 internal fun rememberMapPaint(): Paint {
     val context = LocalContext.current
-    return remember {
-        Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = mapTypeface(context) }
+    val textFont = LocalTextFont.current
+    return remember(context, textFont) {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = mapTypeface(context, textFont) }
     }
 }
 

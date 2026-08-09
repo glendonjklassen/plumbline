@@ -400,6 +400,10 @@ export class StudyEngine {
   tagRemove(name: string, kind: string, value: string): string | null {
     return this.#author("plumbline_engine_tag_remove", (f, ...p) => f(this.#engine, ...p), [name, kind, value]);
   }
+  /** Delete a whole tag and every member on it. */
+  tagDelete(name: string): string | null {
+    return this.#author("plumbline_engine_tag_delete", (f, ...p) => f(this.#engine, ...p), [name]);
+  }
   weaveAddLink(name: string, aRef: string, bRef: string, added: string): string | null {
     return this.#author("plumbline_engine_weave_add_link", (f, ...p) => f(this.#engine, ...p), [name, aRef, bRef, added]);
   }
@@ -430,6 +434,13 @@ export class StudyEngine {
   }
   weaveReject(index: number): string | null {
     const err = this.#w.takeStr((this.#w.exports.plumbline_engine_weave_reject as Function)(this.#engine, index) as number);
+    if (err === null) this.onAuthored();
+    return err;
+  }
+  /** Delete a weave and every link on it — `index` is the flat-library ordinal
+   *  (the `weave:i` verb), not `weaveReject`'s suggested ordinal. */
+  weaveDelete(index: number): string | null {
+    const err = this.#w.takeStr((this.#w.exports.plumbline_engine_weave_delete as Function)(this.#engine, index) as number);
     if (err === null) this.onAuthored();
     return err;
   }

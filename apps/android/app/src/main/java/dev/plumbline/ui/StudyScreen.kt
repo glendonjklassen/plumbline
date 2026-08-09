@@ -75,6 +75,7 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -98,7 +99,9 @@ import androidx.window.layout.FoldingFeature
 import dev.plumbline.AkjvToken
 import dev.plumbline.ChurchState
 import dev.plumbline.Hit
+import android.widget.Toast
 import dev.plumbline.PaneRef1
+import dev.plumbline.Tags
 import dev.plumbline.Thread1
 import dev.plumbline.Threads
 import dev.plumbline.PanelLinkData
@@ -153,11 +156,13 @@ fun PlumblineApp(
 ) {
     // The reader's theme choice, persisted in the shared config
     // ("system" | "light" | "dark" | "night"); System follows the OS.
-    var themeChoice by remember {
-        mutableStateOf(
-            runCatching { parseWire<ConfigState>(StudyConfig.LoadJson()) }.getOrNull()?.theme ?: "system",
-        )
-    }
+    // Read ONCE, together: three independent axes off one config parse — colour,
+    // the scripture face and the chrome face (core::font). Nothing here derives
+    // one from another; every combination is legal.
+    val bootConfig = remember { runCatching { parseWire<ConfigState>(StudyConfig.LoadJson()) }.getOrNull() }
+    var themeChoice by remember { mutableStateOf(bootConfig?.theme ?: "system") }
+    var textFont by remember { mutableStateOf(fontFor(bootConfig?.textFont).token) }
+    var chromeFont by remember { mutableStateOf(fontFor(bootConfig?.chromeFont).token) }
     val systemDark = isSystemInDarkTheme()
     val resolved = if (themeChoice == "system") (if (systemDark) "dark" else "light") else themeChoice
     val palette = remember(resolved) { ReaderPalette.forTheme(resolved) }
@@ -166,8 +171,11 @@ fun PlumblineApp(
     } else {
         lightColorScheme(background = palette.paper, surface = palette.paper, onSurface = palette.ink)
     }
-    // Garamond for the chrome too, matching the web shell (see ui/Typography.kt).
-    MaterialTheme(colorScheme = scheme, typography = rememberSerifTypography()) {
+    // The CHROME face paints the type scale; the SCRIPTURE face is published to
+    // the reader, Present, Memorize and the maps through LocalTextFont. Two
+    // axes, neither one the other's default (see ui/Fonts.kt).
+    MaterialTheme(colorScheme = scheme, typography = rememberSerifTypography(chromeFont)) {
+      CompositionLocalProvider(LocalTextFont provides textFont) {
         // NAMED, not positional: a defaulted parameter (like `onLanguage`, which
         // carries a `{}` default) is silently dropped if a positional call omits
         // it — the compiler says nothing and the picker calls the no-op. Every
@@ -178,10 +186,15 @@ fun PlumblineApp(
             palette = palette,
             themeChoice = themeChoice,
             onThemeChoice = { themeChoice = it },
+            textFont = textFont,
+            onTextFont = { textFont = it },
+            chromeFont = chromeFont,
+            onChromeFont = { chromeFont = it },
             bundledOn = bundledOn,
             onToggleBundled = onToggleBundled,
             onLanguage = onLanguage,
         )
+      }
     }
 }
 
@@ -192,6 +205,10 @@ fun StudyScreen(
     palette: ReaderPalette,
     themeChoice: String = "system",
     onThemeChoice: (String) -> Unit = {},
+    textFont: String = DEFAULT_FONT.token,
+    onTextFont: (String) -> Unit = {},
+    chromeFont: String = DEFAULT_FONT.token,
+    onChromeFont: (String) -> Unit = {},
     bundledOn: Boolean = true,
     onToggleBundled: () -> Unit = {},
     onLanguage: (String) -> Unit = {},
@@ -200,6 +217,7 @@ fun StudyScreen(
         runCatching { parseWire<Toc>(engine.TocJson()).books }.getOrElse { emptyList() }
     }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     // Who owns the study surface right now — see [StudyTurns] and [engineCall] at
     // the foot of this file. Every engine call the reader's taps make goes through
     // them, so a second tap can never be repainted by the first.
@@ -358,7 +376,8 @@ fun StudyScreen(
         val cfg = (loadedCfg ?: ConfigState()).copy(
             bodySize = bodySize, sideMargin = sideMargin, lineSpacing = lineSpacing, copyStyle = copyStyle,
             openPanes = listOf(PaneRef1(book, chapter, firstVisibleVerse)), activePane = 0, history = history,
-            theme = themeChoice, humanAnalysis = humanAnalysis, machineAnalysis = machineAnalysis,
+            theme = themeChoice, textFont = textFont, chromeFont = chromeFont,
+            humanAnalysis = humanAnalysis, machineAnalysis = machineAnalysis,
             church = church, presentSharesAsNew = presentSharesAsNew, intro = introChoice,
             akjvOverlay = akjvOverlay,
         )
@@ -636,7 +655,101 @@ fun StudyScreen(
                     scope.engineCall(engine, turns, { engine.WeaveReject(idx) }) { openLibrary(Library.Suggested) }
                 }
             }
-            // editThreadNotes / editWeaveNotes / editEntryNote / untag need an
+            // Untag (remove one verse from a tag): the wire carries the tag
+            // ordinal; authoring wants the name — so the lookup rides a
+            // background read first, and the ask can name what it removes.
+            // Success gets a toast: the card the ✕ sits on is a snapshot, so
+            // nothing else would tell the reader the write landed.
+            "untag" -> if (link.tag != null && link.refKey != null) {
+                val at = link.tag!!
+                val ref = link.refKey!!
+                scope.engineCall(
+                    engine, turns,
+                    { engine.TagsJson()?.let { runCatching { parseWire<Tags>(it).tags }.getOrNull() }?.getOrNull(at) },
+                ) { tag ->
+                    if (tag != null) {
+                        confirmAction = ConfirmRequest(
+                            title = t("tag.removeAsk", "passage" to ref, "tag" to tag.name),
+                            body = t("tag.removeBody"),
+                            verb = t("tag.removeVerb"),
+                        ) {
+                            scope.engineCall(engine, null, { engine.TagRemove(tag.name, "verse", ref) }) { err ->
+                                Toast.makeText(
+                                    context,
+                                    if (err.isNullOrBlank()) {
+                                        t("tag.removed", "passage" to ref, "tag" to tag.name)
+                                    } else {
+                                        err
+                                    },
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        }
+                    }
+                }
+            }
+            // The three whole-item deletes (web study/links.ts parity). Each
+            // looks up the name first so the ask says what dies, confirms
+            // through the shared dialog, then re-lists the library — ordinals
+            // shift after every write, so the card just deleted must not stay
+            // up pointing at whatever slid into its index.
+            "deleteThread" -> link.index?.let { at ->
+                scope.engineCall(
+                    engine, turns,
+                    { engine.ThreadsJson()?.let { runCatching { parseWire<Threads>(it).threads }.getOrNull() }?.getOrNull(at) },
+                ) { thread ->
+                    if (thread != null) {
+                        confirmAction = ConfirmRequest(
+                            title = t("thread.deleteAsk", "thread" to thread.name),
+                            body = t("thread.deleteBody"),
+                            verb = t("thread.deleteVerb"),
+                        ) {
+                            scope.engineCall(engine, turns, { engine.ThreadRemove(thread.name) }) {
+                                openLibrary(Library.Threads)
+                            }
+                        }
+                    }
+                }
+            }
+            "deleteTag" -> link.index?.let { at ->
+                scope.engineCall(
+                    engine, turns,
+                    { engine.TagsJson()?.let { runCatching { parseWire<Tags>(it).tags }.getOrNull() }?.getOrNull(at) },
+                ) { tag ->
+                    if (tag != null) {
+                        confirmAction = ConfirmRequest(
+                            title = t("tag.deleteAsk", "tag" to tag.name),
+                            body = t("tag.deleteBody"),
+                            verb = t("tag.deleteVerb"),
+                        ) {
+                            scope.engineCall(engine, turns, { engine.TagDelete(tag.name) }) {
+                                openLibrary(Library.Tags)
+                            }
+                        }
+                    }
+                }
+            }
+            "deleteWeave" -> link.index?.let { at ->
+                scope.engineCall(
+                    engine, turns,
+                    // Matched on the carried `index`, not the list position: the
+                    // library JSON's field is the flat ordinal the verb carries.
+                    { engine.WeavesJson()?.let { runCatching { parseWire<WeaveLib>(it).weaves }.getOrNull() }?.firstOrNull { it.index == at } },
+                ) { weave ->
+                    if (weave != null) {
+                        confirmAction = ConfirmRequest(
+                            title = t("weave.deleteAsk", "weave" to weave.name),
+                            body = t("weave.deleteBody"),
+                            verb = t("weave.deleteVerb"),
+                        ) {
+                            scope.engineCall(engine, turns, { engine.WeaveDelete(at) }) {
+                                openLibrary(Library.Weaves)
+                            }
+                        }
+                    }
+                }
+            }
+            // editThreadNotes / editWeaveNotes / editEntryNote need an
             // index→name lookup — a documented follow-up (rarer authoring).
         }
     }
@@ -957,6 +1070,8 @@ fun StudyScreen(
                 humanAnalysis = humanAnalysis, onToggleHuman = { humanAnalysis = !humanAnalysis },
                 machineAnalysis = machineAnalysis, onToggleMachine = { machineAnalysis = !machineAnalysis },
                 themeChoice = themeChoice, onTheme = onThemeChoice,
+                textFont = textFont, onTextFont = onTextFont,
+                chromeFont = chromeFont, onChromeFont = onChromeFont,
                 bodySize = bodySize, onBodySize = { bodySize = it },
                 sideMargin = sideMargin, onSideMargin = { sideMargin = it },
                 lineSpacing = lineSpacing, onLineSpacing = { lineSpacing = it },
@@ -1648,6 +1763,10 @@ private fun SettingsDialog(
     onToggleAkjv: () -> Unit,
     themeChoice: String,
     onTheme: (String) -> Unit,
+    textFont: String,
+    onTextFont: (String) -> Unit,
+    chromeFont: String,
+    onChromeFont: (String) -> Unit,
     bodySize: Double,
     onBodySize: (Double) -> Unit,
     sideMargin: Double,
@@ -1774,6 +1893,45 @@ private fun SettingsDialog(
                                 text = { Text(label) },
                                 onClick = { onTheme(token); themeMenu = false },
                             )
+                        }
+                    }
+                }
+                HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
+                // The two TYPE axes, offered exactly like the theme above and
+                // independent of it. Each row renders its options IN the face
+                // they select — a font picker that names faces in one face is
+                // asking the reader to imagine the answer.
+                //
+                // Labels come from BUNDLED_FONTS, not the i18n catalogue: a
+                // typeface name is a proper noun. i18n-ignore: typeface names
+                for ((label, axis) in listOf(
+                    t("settings.textFont") to (textFont to onTextFont),
+                    t("settings.chromeFont") to (chromeFont to onChromeFont),
+                )) {
+                    val (selected, onPick) = axis
+                    Text(label, color = palette.faded, fontSize = 12.sp)
+                    var menu by remember { mutableStateOf(false) }
+                    val current = fontFor(selected)
+                    Box {
+                        Row(
+                            Modifier.fillMaxWidth().clickable { menu = true }.padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                current.displayName,
+                                color = palette.ink,
+                                fontFamily = rememberSerifFamily(current.token),
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = palette.faded)
+                        }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            for (spec in BUNDLED_FONTS) {
+                                DropdownMenuItem(
+                                    text = { Text(spec.displayName, fontFamily = rememberSerifFamily(spec.token)) },
+                                    onClick = { onPick(spec.token); menu = false },
+                                )
+                            }
                         }
                     }
                 }

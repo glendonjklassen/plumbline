@@ -25,6 +25,66 @@ with the study panel on "treasures" — Strong's H214, its morphology, every
 KJV rendering, and where the concept concentrates across the
 canon](assets/readme/reader-weaves.png)
 
+## Features
+
+### Reading
+
+- Read passages side-by-side in a browser or on a tablet
+- See parallel passages annotated across side-by-side chapters
+- Saves progress from previous reading and across time
+- Book → chapter → verse tap-grid navigator with an indicator for what you have read recently
+- Theme, text size, alignment, and font customization
+- Optional AKJV Plain-English overlay for easier reading
+- German language support
+- Canon strip "minimap" under the reader to show where you're at in the Bible
+
+### Study
+
+- Add notes to words/verses
+- Tag verses with concepts as you study to accumulate verses for sermons or studies
+- Strong's dictionary, with the ability to see other renderings of the word across scriptures
+- Concordance per code, and filtered to a single rendering.
+- Same root across the testaments — cross-testament bridge partners to see where words show up across the entire Bible
+- The 1769 translators' own margin notes.
+- Advanced search including partial matches and original language word matches
+
+### Your own work
+
+- Personal notes on any verse, marked in the gutter.
+- Tags, with a picker that offers what you already have.
+- Threads: a passage list built over time, with a note per entry and a snapshot
+  of the verse text.
+- Weaves: your own verse↔verse link graph, with notes.
+- Convert a tag into a weave as you study
+- 194 common weaves from Protestant tradition
+- Visualizations of your weaves: a chord diagram across the canon, and a
+  constellation with pinnable lanes.
+- A notes browser over everything you have written.
+
+### Practice
+
+- Spaced repetition memorization (SM-2) for single verses or whole passages, including three drills: first letters, progressive blank-out, typed recall scored word
+  by word.
+- Reading coverage map across the canon, and an activity heatmap with a history log.
+- Reading map: coverage gated both by how far you reached and how long you
+  spent
+- Chapters you have not been in lately glow, ramping from 30 days to a year.
+- Mark a chapter or a whole book read by hand, on a date you pick.
+- Hymnal: public-domain hymns with chords the engine transposes, per-language
+  texts, and a sing mode that scrolls continuously.
+
+### Sharing with others
+
+- Present mode for sharing the Gospel or sermons: a thread as a fullscreen, high-contrast, large-type
+  presentation, with tap-to-focus and an "in context" fade.
+- Share is a QR that puts the passage on the other person's phone.
+- Your church information (time, location, website) in every link you share, and lands as a button in their top bar.
+
+### Application Features
+
+- Free. No account, no sign-in, no Play Store, no telemetry, no paid tier. Works offline.
+- All user data can be backed up and transferred via zip files.
+
 ## Install
 
 ### Web

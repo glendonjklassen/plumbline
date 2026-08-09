@@ -31,23 +31,63 @@ Conventions used everywhere:
   any write the engine reloads study data from disk — re-fetch, never mutate
   shell-side state.
 
-## Type — one face, chrome included
+## Type — two axes, independent of each other and of the theme
 
-Both shells ship the SAME two font files, byte-identical variable TTFs (upright
-851,176 bytes / italic 754,468, `fvar`, wght 400–700; paths in §Constants), and
-use them for scripture AND chrome. The web sets `body { font-family: "EB Garamond" }`
-(`app.css`); Android builds one `FontFamily` at the theme (`ui/Typography.kt`,
-bold off the `wght` axis, not synthetic) and `serifTypography` substitutes it into
-Material's whole type scale, so `MaterialTheme` provides `typography.bodyLarge` as
-`LocalTextStyle` and a bare `Text(…, fontSize = 15.sp)` picks the family up without
-naming it. Garamond's x-height is smaller than Roboto's, so the chrome reads
-slightly smaller at the same `sp` values.
+**Three orthogonal settings: theme (colour) × `textFont` (scripture) ×
+`chromeFont` (the app's own controls).** Every combination is legal and there is
+no pairing table anywhere — Fira Code scripture under Synthwave is a supported
+choice, not an exotic one. Both faces default to EB Garamond, which is what every
+reader had before, so nothing moves under an upgrade.
+
+The VOCABULARY is core data (`crates/core/src/font.rs`): tokens
+(`eb-garamond` · `literata` · `inter` · `fira-code`), each face's own name, and
+`has_italic`. The FILES are shell assets, because delivery is a platform
+concern — the APK bundles TTFs (`assets/fonts/`, byte-identical to the web's
+build inputs in `apps/web/fonts-src/`), the web ships per-family subset woff2.
+All four are SIL OFL and variable-weight; bold is the `wght` axis in both shells,
+never a synthetic smear.
+
+- **Web.** `scripts/subset-fonts.mjs` walks a family table and generates BOTH
+  consumers from one source — `public/fonts.css` (@font-face per family) and
+  `src/engine/fonts.generated.ts` (token → files, CSS family, fallback stack). The
+  scripture face is per-thread state in `reader/measure.ts`: the ENGINE WORKER
+  measures with it and the MAIN THREAD paints with it, so both are told the same
+  token or lines wrap where they are not drawn. A change is `session.setTextFont`,
+  which loads the face into both sides BEFORE bumping `layoutEpoch`. The chrome
+  face is `--chrome-font` on the root, read by `body` in `app.css`.
+- **Android.** `ui/Fonts.kt` is the same table (same tokens); `Typography.kt`
+  builds a `FontFamily` per face and `serifTypography` substitutes it into
+  Material's whole scale, so a bare `Text(…, fontSize = 15.sp)` picks the chrome
+  face up without naming it. The scripture face reaches the reader, Present,
+  Memorize and the maps through `LocalTextFont` rather than a parameter threaded
+  through every call site. Both caches are keyed BY FACE (`Keyed<T>`), since a
+  process can legitimately be asked for two.
+- **Weight is pinned explicitly at 400**, not left to a file's default instance:
+  Fira Code's `wght` axis runs 300–700 and DEFAULTS to 300, so a face taken
+  as-shipped renders Light as body text — in one family only, which reads as
+  "that font just looks thin" rather than as a bug.
+- **A face with no italic does not get one.** Fira Code ships none, and a
+  synthesised italic is a sheared upright. Translator-supplied words
+  (`FLAG_ADDED`) are then marked by the palette's `added` tone alone, which is
+  present in every theme. `Font::has_italic` is the one place that fact lives;
+  both shells ask it rather than deciding.
+- **Delivery.** Web: `@font-face` is lazy, so a reader downloads only the
+  families they select; the boot PRELOAD names the default family only (a
+  preload of four would compete with the data pack for bandwidth), while the
+  offline PRECACHE names all of them (~1 MB once) so "can I read offline" never
+  depends on whether a font fetch happened to be seen by the service worker.
+  Android bundles all four in the APK.
+
+**Provenance of the old rule, so it is not re-canonised:** "one face, chrome
+included" was never a decision. `body { font-family: "EB Garamond" }` arrived in
+the first web-shell scaffold commit (`747bc99`), Android's Roboto chrome was
+later read as drift FROM it and matched to it, and this manifest wrote the result
+up as design. The accommodations it needed — chrome reading small at the same
+`sp`, sizes "to be re-tuned on-device" — were symptoms. It is a setting now.
 
 One deliberate exception stays: the web boot splash asks for Georgia
 (`App.svelte`), a face already on the device, so the very first paint waits on no
-download. Garamond reaches the browser as two subset woff2 files (~112 KB + ~111 KB,
-`font-display: swap`) — small, but still a network round trip the splash must not
-be behind.
+download — a font is still a network round trip the splash must not be behind.
 
 Intro-pane text is enlarged on both shells (older eyes, and the smaller x-height
 compounds it) — sizes and line heights up roughly 2 px / 2.5 sp over the body.
@@ -268,9 +308,9 @@ producer emits*, not shell code.
    `plumbline_engine_verse_sim_save` / `_load` / `_step` with it. It was the last
    feature reading the concept embedding, so `data/concept-vectors.vec` (+
    `.vecb`, `.meta`, `.freq`) left the data pack too: 3.08 MB of a 6.4 MB
-   analysis tier, which now holds morphology and text-witness only. One code
-   path still opens the file — `plumbline_engine_concept_neighbours_json`, which
-   no shell has ever called (see §C ABI surface).
+   analysis tier, which now holds morphology and text-witness only. The last
+   code path that opened the file — `plumbline_engine_concept_neighbours_json`,
+   which no shell ever called — is gone too (see §C ABI surface).
 8. (F) **tags** — tags holding this verse; each is a link + `✕` untag (user
    data, not evidence — no tier mark).
 9. **margin notes** *(Human †)* — the verse's 1769 notes, small.
@@ -381,13 +421,21 @@ vocabulary is **parsed once in the core**: `plumbline_core::panel::parse_link(ur
 PanelLink` — co-located with the producers that *emit* the URIs, so a verb can't
 drift between what the panel bakes and what a shell handles. Both shells route
 through `plumbline_route_link_json(uri)` (`{verb, …}`, tagged) — neither
-re-splits the string. The 19 verbs, all of them in `PanelLink`:
+re-splits the string. The 22 verbs, all of them in `PanelLink`:
 `go:Book:ch[:v]` · `occ:CODE` · `rend:CODE:rendering` · `code:CODE[:word]` ·
 `thread:i` · `tag:i` · `weave:i` · `addtag:refkey` ·
 `addthread:refkey` · `untag:i:refkey` · `makeweave:i` · `approve:i` · `reject:i` ·
+`deletethread:i` · `deletetag:i` · `deleteweave:i` ·
 `editthreadnotes:i` · `editweavenotes:i` · `editentrynote:ti:ei` ·
 `editnote:refkey` · `guide` · `about`. An unknown verb or a malformed payload
 parses to `None` and the shell ignores the click.
+
+The three `delete*:i` verbs carry the **library ordinal** (`deleteweave:` the
+flat `weave:i` ordinal, not `reject:`'s suggested one), are emitted on the
+detail cards (`thread_detail` / `tag_detail` / `compare_card`; the compare card
+omits delete on a suggestion — the review queue's reject is that act), and are
+destructive: both shells confirm before authoring, then return to the item's
+list, because ordinals shift after every write.
 
 `conceptmap:CODE` was a twentieth verb; it left the vocabulary with
 the popup it opened (see §Concept map popup).
@@ -403,19 +451,25 @@ reload → refetch) stay shell-side. `parse_link` handles multi-word books
 Code + lemma large + count; verse links capped at 300, "… N more".
 *Data*: `plumbline_engine_strongs_occurrences_json` (cap 500 engine-side).
 
-## Thread picker + delete (both shells)
+## Thread/tag pickers + delete (both shells)
 
-`Add to thread…` is the same picker idiom tags have: existing threads are a list
-you tap (with entry counts), freetext only for a genuinely new one, and `✕`
-deletes a thread and everything on it (the verses are untouched). A bare freetext
-prompt would make the common case — adding a passage to a thread built up over a
-week — retype the name exactly, and a typo would silently FORK a second thread
-instead of failing. `addTag`'s study-panel route uses the tag picker for the same
-reason.
+`Add to thread…` and `Tag verse…` share one picker idiom: what exists is a list
+you tap (with entry/member counts), freetext only for a genuinely new one, and
+`✕` deletes the thread/tag and everything on it (the verses are untouched). A
+bare freetext prompt would make the common case — adding a passage to a thread
+built up over a week — retype the name exactly, and a typo would silently FORK
+a second thread instead of failing.
 
-Core: `thread::remove_thread` (case-insensitive, like `add_to_thread`; an absent
-name is a no-op, not an error). **C ABI**: `plumbline_engine_thread_remove`.
-Shells: `ThreadPickerSheet` (`ui/VerseActions.kt`) / `ThreadPicker.svelte`.
+Core: `thread::remove_thread` / `tag::remove_tag` (case-insensitive, like their
+add twins; an absent name is a no-op, not an error). **C ABI**:
+`plumbline_engine_thread_remove` / `plumbline_engine_tag_delete` (`tag_delete`,
+because `tag_remove` was already taken by the member-level untag). Shells:
+`ThreadPickerSheet` + `TagPickerSheet` (`ui/VerseActions.kt`) /
+`ThreadPicker.svelte` + `TagPicker.svelte`. The same deletes are reachable from
+the library detail cards via the `deletethread:i` / `deletetag:i` verbs, and
+weaves — which have no picker — delete from the compare card via
+`deleteweave:i` → `plumbline_engine_weave_delete(index)` (flat-library ordinal;
+`weave::reject_weave` does the file removal in core).
 
 ## Ask before destroying anything (both shells)
 
@@ -432,13 +486,15 @@ rots:
 
 | destructive act | web | Android |
 |---|---|---|
-| delete a thread | asks (`ThreadPicker.svelte`) | asks (`VerseActions.kt`) |
+| delete a thread | asks (`ThreadPicker.svelte`, `study/links.ts`) | asks (`VerseActions.kt`, `StudyScreen.kt`) |
+| delete a tag | asks (`TagPicker.svelte`, `study/links.ts`) | asks (`VerseActions.kt`, `StudyScreen.kt`) |
+| delete a weave | asks (`study/links.ts`) | asks (`StudyScreen.kt`) |
 | reject a suggested weave | asks (`study/links.ts`) | asks (`StudyScreen.kt`) |
-| untag a verse | asks (`study/links.ts`) | **the `untag` verb is unhandled** — see Android notes |
+| untag a verse | asks (`study/links.ts`) | asks (`StudyScreen.kt`) |
 | remove a memorization card | asks (`MemorizeHost.svelte`) | **no remove affordance at all**; `MemoryRemove` is an uncalled wrapper |
 | clear a chapter's reading record | asks (`MarkReadDialog.svelte`) | **does not ask** — `onClear` calls `ReadingForget` and toasts |
 
-The last three are live Android gaps, not design.
+The last two are live Android gaps, not design.
 
 ## Threads / Tags browsers (M:3380–3471)
 
@@ -449,9 +505,12 @@ detail analogous; members: verse → go link, concept → concordance link; note
 trailing. Authoring: `＋ tag verse` prompts a name (find-or-create,
 case-insensitive) → `tag_add(name, "verse", refkey, null, now)`;
 `＋ add to thread` snapshots the whole verse (span 0..last token, words
-vector) → `thread_add`; `untag` → `tag_remove`. Note edits: `thread_set_notes`
-/ `thread_entry_set_note` / `weave_set_notes` via a pre-filled text prompt
-(empty submission clears). *Data*: `threads_json`, `tags_json` + the above.
+vector) → `thread_add`; `untag` → `tag_remove`. Both detail cards carry a
+faded `✕ delete thread` / `✕ delete tag` header link (`deletethread:i` /
+`deletetag:i` — confirmed, then back to the list; §Link routing). Note edits:
+`thread_set_notes` / `thread_entry_set_note` / `weave_set_notes` via a
+pre-filled text prompt (empty submission clears). *Data*: `threads_json`,
+`tags_json` + the above.
 
 ## Suggested-weave review (M:2631, 3477)
 
@@ -880,14 +939,16 @@ Pre-existing: `open`/`open_from_bytes`/`free`, `toc_json`, `chapter_count`,
 `tags_json`, `verse_xrefs_json`, `suggested_weaves_json`, authoring
 (`thread_add`, `tag_add`, `tag_remove`, `weave_add_link`, `weave_approve`,
 `weave_reject`, `thread_set_notes`, `thread_entry_set_note`,
-`weave_set_notes`), R&D (`concept_neighbours_json`, `bridge_partners_json`,
-`morph_json`). `similar_verses_json` was here too, before its removal.
+`weave_set_notes`), R&D (`bridge_partners_json`, `morph_json`).
+`similar_verses_json` and `concept_neighbours_json` were here too, before their
+removal.
 
-**`concept_neighbours_json` is a dead endpoint**: both
-shells carry a wrapper (the binding covers the whole ABI automatically) and
-neither has a call site. It is also the only code left that
-opens `data/concept-vectors.vec`, which the pack no longer ships, so it can only
-answer empty. A candidate for deletion.
+**`concept_neighbours_json` is REMOVED**: it outlived every shell caller (it
+never had one) and the embedding it read — the pack stopped shipping
+`data/concept-vectors.vec`, so it could only answer empty. It left the extern
+surface, the header and both bindings in the same change set that took the
+other embedding readers; no `plumbline_*` symbol or wrapper remains (a grep
+for `concept_neighbours` finds only this paragraph).
 
 Added for shell parity:
 
@@ -1265,6 +1326,24 @@ ON_PAUSE twin), PWA (installable, offline after first visit; every pack file
 content-addressed per file as `?h=<hash of its raw bytes>` — see the depot + pin
 rules in CLAUDE.md, which this section does NOT restate).
 
+**Installed-app chrome — launcher shortcuts + the icon badge (web only, by
+nature).** The webmanifest declares three `shortcuts` (the long-press menu on
+the installed icon): Review due → `./?open=review`, Memorize →
+`./?open=memorize`, Hymnal → `./?open=hymnal`. The query is the whole contract:
+`launchDestination` (`shell/church.ts`) whitelists the three values, App.svelte
+opens the destination on top of the restored reader (the same states the bottom
+nav sets, so the Read tab and Back dismiss it identically) and strips the query
+from the address bar; anything unrecognized boots the reader as if no query
+came. `manifest.spec.ts` holds the manifest's URLs to the whitelist and
+`launch-shortcuts.spec.ts` holds the whitelist to the actual boot. The
+**Badging API** mirrors the due-card count onto the installed icon:
+`session.refreshAppBadge()` (feature-detected, fire-and-forget) runs at boot
+idle, on resume, and on every authoring write (`rpc.onAuthored`) — the count
+can only move while the app is running, since there is no server to push from.
+**Delta:** Android has neither — a static `<shortcuts>` resource and a
+notification badge are possible there but not built, and the APK's launcher
+menu is empty today.
+
 **The engine lives in ONE worker thread**, not on the main thread
 (`engine/engine.worker.ts` behind the promise RPC in `engine/worker-client.ts`).
 That is load-bearing rather than incidental: a single long synchronous engine call
@@ -1383,7 +1462,7 @@ lines would wrap where they are not drawn.)
 > dot** (§Ambient weave connectors) · **no hover gloss** (§Hover gloss) · **no
 > keyboard map, shortcuts sheet, or per-pane back/forward** (§Keyboard + wheel,
 > Tier 0 #2) · **one pane, or two on an opened fold** (§Multi-pane) · **no
-> machine-tier artifacts** (below) · **four unhandled link verbs** (below) ·
+> machine-tier artifacts** (below) · **three unhandled link verbs** (below) ·
 > **no way to remove a memorization card, and Clear-reading-record does not ask**
 > (§Ask before destroying anything) · **first-run verse text is fetched, not
 > written into the source** (§First run) · **maps follow the theme** where the
@@ -1475,7 +1554,7 @@ lines would wrap where they are not drawn.)
   `ui/StudyPane.kt` into `AnnotatedString` runs with the palette colour-role map,
   which is how the **RENDERINGS tier and the authority-tier marks (✝ † ≈ ⚗) and
   legend** arrive without Android owning any tier code; **link routing** through
-  `plumbline_route_link_json` for 15 of the 19 verbs; the **verse-action sheet**
+  `plumbline_route_link_json` for 19 of the 22 verbs; the **verse-action sheet**
   (`ui/VerseActions.kt`: copy · copy chapter · share · tag · note · thread ·
   memorize · mark-chapter-read, plus the tag and thread pickers and
   `PassageEndPicker`); **Explore** (notes · threads · tags · weaves+suggested ·
@@ -1485,11 +1564,12 @@ lines would wrap where they are not drawn.)
   off `plumbline_theme_palette_json` (`ui/Palette.kt`); the two analysis gates in
   Settings; `WarmIndexes` on a coroutine at startup.
 
-  **Live authoring gap:** `editThreadNotes` / `editWeaveNotes` / `editEntryNote` /
-  `untag` are the four verbs `StudyScreen.onLink` does not handle — they need an
+  **Live authoring gap:** `editThreadNotes` / `editWeaveNotes` / `editEntryNote`
+  are the three verbs `StudyScreen.onLink` does not handle — they need an
   index→name lookup, and the comment saying so is in the code beside the `when`.
-  The web routes all nineteen (`study/links.ts`). Also still untested on hardware:
-  posture-driven fold-mode switching.
+  (`untag` and the three `delete*` verbs do that lookup now and route in both
+  shells.) The web routes all twenty-two (`study/links.ts`). Also still untested
+  on hardware: posture-driven fold-mode switching.
 - The Kotlin/JNA binding (`crates/ffi/bindings/kotlin/Plumbline.kt`, package
   `dev.plumbline.core`) is the low-level `PlumblineNative` interface +
   JNA types (`PlumblineLayoutConfig`, `MeasureCallback`) **only**; the single

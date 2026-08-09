@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::font::Font;
 use crate::theme::ThemeChoice;
 use crate::Error;
 
@@ -98,6 +99,16 @@ pub struct Config {
     pub verse_per_line: bool,
     /// The reader's colour theme (Tier 0 #5). `System` follows the OS.
     pub theme: ThemeChoice,
+    /// The face scripture is painted in — the reader canvas, Present, the
+    /// memorize drills, the hymnal's stanzas.
+    ///
+    /// Independent of [`theme`](Config::theme) and of
+    /// [`chrome_font`](Config::chrome_font): colour and the two type axes are
+    /// orthogonal, and every combination is a legal thing to want.
+    pub text_font: Font,
+    /// The face the app's own chrome is painted in — controls, labels,
+    /// navigation, dialogs. See [`crate::font`].
+    pub chrome_font: Font,
     /// Default one-tap copy shape, for shells whose copy is a single action
     /// (e.g. the Android long-press). A verse `CopyKind` token:
     /// `"verse"` / `"verseRef"` / `"verseMarkdown"`.
@@ -161,6 +172,8 @@ impl Default for Config {
             active: 0,
             verse_per_line: false,
             theme: ThemeChoice::default(),
+            text_font: Font::default(),
+            chrome_font: Font::default(),
             copy_style: "verseRef".to_string(),
             side_margin: 28.0,
             line_spacing: 1.35,
@@ -207,6 +220,13 @@ struct ConfigWire {
     verse_per_line: bool,
     #[serde(default = "default_theme_token")]
     theme: String,
+    /// The two type axes (additive). Absent in an older file → the shipped
+    /// default face, which is what that reader has been looking at, so nothing
+    /// changes under them on the upgrade.
+    #[serde(default = "default_font_token")]
+    text_font: String,
+    #[serde(default = "default_font_token")]
+    chrome_font: String,
     #[serde(default = "default_copy_style")]
     copy_style: String,
     #[serde(default = "default_side_margin")]
@@ -276,6 +296,9 @@ fn default_body_size() -> f64 {
 fn default_theme_token() -> String {
     ThemeChoice::default().token().to_string()
 }
+fn default_font_token() -> String {
+    Font::default().token().to_string()
+}
 fn default_copy_style() -> String {
     Config::default().copy_style
 }
@@ -324,6 +347,12 @@ impl Config {
             active: if n_panes == 0 { 0 } else { w.active_pane.min(n_panes - 1) },
             verse_per_line: w.verse_per_line,
             theme: ThemeChoice::parse(&w.theme).unwrap_or_default(),
+            // A face this build does not ship falls back to the default rather
+            // than to nothing: the reader is owed type they can read, and an
+            // unknown token here is either a hand-edited file or a config
+            // written by a LATER build that shipped a face we do not have.
+            text_font: Font::parse(&w.text_font).unwrap_or_default(),
+            chrome_font: Font::parse(&w.chrome_font).unwrap_or_default(),
             copy_style: normalize_copy_style(&w.copy_style),
             side_margin: clamp_or(w.side_margin, 0.0, 160.0, Config::default().side_margin),
             line_spacing: clamp_or(w.line_spacing, 1.0, 3.0, Config::default().line_spacing),
@@ -383,6 +412,8 @@ impl Config {
             active_pane: self.active,
             verse_per_line: self.verse_per_line,
             theme: self.theme.token().to_string(),
+            text_font: self.text_font.token().to_string(),
+            chrome_font: self.chrome_font.token().to_string(),
             copy_style: self.copy_style.clone(),
             side_margin: self.side_margin,
             line_spacing: self.line_spacing,
@@ -545,6 +576,11 @@ mod tests {
             active: 1,
             verse_per_line: true,
             theme: ThemeChoice::Night,
+            // Two DIFFERENT non-default faces: an axis that silently carried
+            // the other one's value would still round-trip if both were set the
+            // same, and the whole point of the pair is that they are independent.
+            text_font: Font::FiraCode,
+            chrome_font: Font::Inter,
             copy_style: "verseMarkdown".to_string(),
             side_margin: 40.0,
             line_spacing: 1.6,
@@ -752,6 +788,8 @@ mod tests {
   "activePane": 0,
   "versePerLine": false,
   "theme": "system",
+  "textFont": "eb-garamond",
+  "chromeFont": "eb-garamond",
   "copyStyle": "verseRef",
   "sideMargin": 28.0,
   "lineSpacing": 1.35,

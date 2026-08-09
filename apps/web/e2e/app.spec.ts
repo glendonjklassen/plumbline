@@ -282,7 +282,7 @@ test("a study that cannot answer yet says so, and never looks frozen", async ({ 
 //   - and the SAME ANSWER as the settled engine gave, because an engine that
 //     replies before Strong's / the occurrence index / the concept model are in
 //     returns a thinner study, and "instant but hollow" must not read as warm.
-test("after a relaunch, the first word study is already warm", async ({ page }) => {
+test("after a relaunch, the first word study is already warm", { tag: "@perf" }, async ({ page }) => {
   // KNOWN FAILING, DELIBERATELY, as of 2026-07-28. Read this before "fixing" it.
   //
   // `test.fail()` means "this MUST fail" — Playwright reports it as an expected
@@ -455,7 +455,7 @@ test("flipping the overlay re-lays the page immediately", async ({ page }) => {
     .toBeGreaterThan(0);
 });
 
-test("menus open promptly after boot (freeze regression)", async ({ page }) => {
+test("menus open promptly after boot (freeze regression)", { tag: "@perf" }, async ({ page }) => {
   await boot(page);
   // The analytics warm-up must happen behind the splash — if it leaks past
   // boot, this click stalls for seconds and the assertion times out.
@@ -566,7 +566,7 @@ test("passage navigator is two taps, book then chapter, with no waiting", async 
   await expect(page.locator(".subtitle")).toContainText("Joel 3");
 });
 
-test("opening a weave splits to its passages; verse clicks stay responsive (freeze regression)", async ({
+test("opening a weave splits to its passages; verse clicks stay responsive (freeze regression)", { tag: "@perf" }, async ({
   page,
 }) => {
   await boot(page);
@@ -967,7 +967,7 @@ test("a first visit never parses the corpus — the pack ships the cache", async
   expect(label).toBe("engine open (idxcache fast path)");
 });
 
-test("background loading never starves the reader (worker-thread scheduling)", async ({ page }) => {
+test("background loading never starves the reader (worker-thread scheduling)", { tag: "@perf" }, async ({ page }) => {
   // Stage-2 data and the analytics warm-up run on the ONE thread that also
   // answers layout, so they must stay chunked with yields. When they didn't, a
   // pane re-layout queued behind seconds of work and the reader was left
@@ -1018,7 +1018,7 @@ test("background loading never starves the reader (worker-thread scheduling)", a
 // now the only thing watching for an unsliced background phase — which is the
 // case it was written for: it catches the next one on whatever hardware runs it,
 // without needing a slow device to notice.
-test("no single background chunk may monopolise the engine worker", async ({ page }) => {
+test("no single background chunk may monopolise the engine worker", { tag: "@perf" }, async ({ page }) => {
   await boot(page);
   await settleBackground(page);
 

@@ -22,6 +22,7 @@ use plumbline_core::church;
 use plumbline_core::config::{Config, PaneRef, StudyMode};
 use plumbline_core::corpus::{Corpus, Token, Verse};
 use plumbline_core::crossref::CrossRef;
+use plumbline_core::font::Font;
 use plumbline_core::hymnal;
 use plumbline_core::i18n;
 use plumbline_core::memory;
@@ -1053,6 +1054,9 @@ pub enum WirePanelLink {
     MakeWeave { tag: usize },
     Approve { index: usize },
     Reject { index: usize },
+    DeleteThread { index: usize },
+    DeleteTag { index: usize },
+    DeleteWeave { index: usize },
     EditThreadNotes { index: usize },
     EditWeaveNotes { index: usize },
     EditEntryNote { thread: usize, entry: usize },
@@ -1076,6 +1080,9 @@ pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
         PanelLink::MakeWeave { tag } => WirePanelLink::MakeWeave { tag },
         PanelLink::Approve { index } => WirePanelLink::Approve { index },
         PanelLink::Reject { index } => WirePanelLink::Reject { index },
+        PanelLink::DeleteThread { index } => WirePanelLink::DeleteThread { index },
+        PanelLink::DeleteTag { index } => WirePanelLink::DeleteTag { index },
+        PanelLink::DeleteWeave { index } => WirePanelLink::DeleteWeave { index },
         PanelLink::EditThreadNotes { index } => WirePanelLink::EditThreadNotes { index },
         PanelLink::EditWeaveNotes { index } => WirePanelLink::EditWeaveNotes { index },
         PanelLink::EditEntryNote { thread, entry } => WirePanelLink::EditEntryNote { thread, entry },
@@ -1123,6 +1130,13 @@ pub struct WireConfigState {
     /// Colour theme choice (`system`/`light`/`dark`/`night`).
     #[serde(default)]
     pub theme: String,
+    /// The face scripture is painted in, and the face the chrome is painted in
+    /// (additive; `plumbline_core::font::Font` tokens). Two axes, independent of
+    /// each other and of `theme`. Absent → the shipped default face.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_font: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chrome_font: Option<String>,
     /// Default one-tap copy shape (`verse`/`verseRef`/`verseMarkdown`).
     #[serde(default)]
     pub copy_style: String,
@@ -1254,6 +1268,8 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         active_pane: cfg.active,
         verse_per_line: cfg.verse_per_line,
         theme: cfg.theme.token().to_string(),
+        text_font: Some(cfg.text_font.token().to_string()),
+        chrome_font: Some(cfg.chrome_font.token().to_string()),
         copy_style: cfg.copy_style.clone(),
         side_margin: cfg.side_margin,
         line_spacing: cfg.line_spacing,
@@ -1290,6 +1306,10 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         active: w.active_pane,
         verse_per_line: w.verse_per_line,
         theme: ThemeChoice::parse(&w.theme).unwrap_or_default(),
+        // Absent, or a face this build does not ship → the default face. Same
+        // stance as `core::config::from_wire`, and for the same reason.
+        text_font: w.text_font.as_deref().and_then(Font::parse).unwrap_or_default(),
+        chrome_font: w.chrome_font.as_deref().and_then(Font::parse).unwrap_or_default(),
         copy_style: match w.copy_style.as_str() {
             "verse" | "verseRef" | "verseMarkdown" => w.copy_style.clone(),
             _ => Config::default().copy_style,

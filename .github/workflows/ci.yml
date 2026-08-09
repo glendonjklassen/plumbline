@@ -234,8 +234,13 @@ jobs:
       - name: Install Playwright browsers (chromium, and webkit for the offline project)
         run: npx playwright install --with-deps chromium webkit
         working-directory: apps/web
+      # Two invocations on purpose (see playwright.config.ts): the bulk of the
+      # suite runs on 3 workers, then the @perf-tagged tests — the ones that
+      # assert wall-clock budgets — rerun serialised so CPU contention from a
+      # neighbouring engine boot cannot fail a timing they were written to
+      # measure alone.
       - name: Playwright e2e
-        run: npx playwright test
+        run: npm run test:e2e
         working-directory: apps/web
 
   # Build the Android APK (debug) on every push/PR. Like the WinUI job that

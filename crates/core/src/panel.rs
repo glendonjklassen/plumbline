@@ -478,6 +478,18 @@ pub enum PanelLink {
     Reject {
         index: usize,
     },
+    /// `deletethread:I` / `deletetag:I` / `deleteweave:I` — delete the whole
+    /// item (library ordinal). Destructive: the shell confirms before it
+    /// authors, like `reject:`.
+    DeleteThread {
+        index: usize,
+    },
+    DeleteTag {
+        index: usize,
+    },
+    DeleteWeave {
+        index: usize,
+    },
     /// `editthreadnotes:I` / `editweavenotes:I` — prompt, then set notes.
     EditThreadNotes {
         index: usize,
@@ -537,6 +549,9 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
         "makeweave" => PanelLink::MakeWeave { tag: rest.parse().ok()? },
         "approve" => PanelLink::Approve { index: rest.parse().ok()? },
         "reject" => PanelLink::Reject { index: rest.parse().ok()? },
+        "deletethread" => PanelLink::DeleteThread { index: rest.parse().ok()? },
+        "deletetag" => PanelLink::DeleteTag { index: rest.parse().ok()? },
+        "deleteweave" => PanelLink::DeleteWeave { index: rest.parse().ok()? },
         "editthreadnotes" => PanelLink::EditThreadNotes { index: rest.parse().ok()? },
         "editweavenotes" => PanelLink::EditWeaveNotes { index: rest.parse().ok()? },
         "editentrynote" => {
@@ -1085,6 +1100,8 @@ pub fn thread_detail(src: &dyn PanelSource, index: usize) -> Vec<Block> {
             Run::new(sp("panel.passages", t.entries.len()), sz::SMALL, Color::Faded),
             Run::new("   ", sz::SMALL, Color::Ink),
             Run::new(s("panel.notes"), sz::CAPTION, Color::Faded).link(format!("editthreadnotes:{index}")),
+            Run::new("   ", sz::SMALL, Color::Ink),
+            Run::new(s("panel.deleteThread"), sz::CAPTION, Color::Faded).link(format!("deletethread:{index}")),
         ]),
     ];
     if !t.notes.is_empty() {
@@ -1138,7 +1155,16 @@ pub fn tags_list(src: &dyn PanelSource) -> Vec<Block> {
 pub fn tag_detail(src: &dyn PanelSource, index: usize) -> Vec<Block> {
     let tags = src.tags();
     let Some(t) = tags.get(index) else { return tags_list(src) };
-    let mut out = vec![Block::para(vec![Run::new(&t.name, sz::TITLE, Color::Ink).bold()])];
+    let mut out = vec![
+        Block::para(vec![Run::new(&t.name, sz::TITLE, Color::Ink).bold()]),
+        // Same shape as a thread's header line: the count, then the quiet
+        // destructive action (the shell confirms before it authors).
+        Block::para(vec![
+            Run::new(sp("panel.members", t.members.len()), sz::SMALL, Color::Faded),
+            Run::new("   ", sz::SMALL, Color::Ink),
+            Run::new(s("panel.deleteTag"), sz::CAPTION, Color::Faded).link(format!("deletetag:{index}")),
+        ]),
+    ];
     // Tags accumulate over time; the weave comes later — offer the conversion
     // whenever a chain is possible (≥2 verse members).
     let verse_members = t.members.iter().filter(|m| m.kind == "verse").count();
@@ -1260,6 +1286,12 @@ pub fn compare_card(src: &dyn PanelSource, full: bool, index: usize) -> Vec<Bloc
     let mut head = vec![Run::new(sp("panel.links", w.links.len()), sz::SMALL, Color::Faded)];
     head.push(Run::new("   ", sz::SMALL, Color::Ink));
     head.push(Run::new(s("panel.note"), sz::CAPTION, Color::Faded).link(format!("editweavenotes:{index}")));
+    // A suggestion is deleted through the review queue's reject; the delete
+    // link is for the weaves the reader owns.
+    if !w.suggested {
+        head.push(Run::new("   ", sz::SMALL, Color::Ink));
+        head.push(Run::new(s("panel.deleteWeave"), sz::CAPTION, Color::Faded).link(format!("deleteweave:{index}")));
+    }
     out.push(Block::para(head));
     if !w.notes.is_empty() {
         out.push(Block::para(vec![Run::new(&w.notes, sz::NOTE, Color::Faded)]));

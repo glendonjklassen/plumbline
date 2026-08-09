@@ -128,22 +128,27 @@ internal data class ReaderTypefaces(val regular: Typeface, val italic: Typeface,
  *
  *  Holding these forever is the point and costs nothing extra: they are the
  *  faces the reader is always looking at, and a [Typeface] holds no Context. */
-private val TYPEFACES = Once<ReaderTypefaces>()
+private val TYPEFACES = Keyed<ReaderTypefaces>()
 
-internal fun readerTypefaces(context: Context): ReaderTypefaces = TYPEFACES.get { loadTypefaces(context) }
+internal fun readerTypefaces(context: Context, token: String? = null): ReaderTypefaces {
+    val spec = fontFor(token)
+    return TYPEFACES.get(spec.token) { loadTypefaces(context, spec) }
+}
 
-private fun loadTypefaces(context: Context): ReaderTypefaces {
-    fun asset(path: String): Typeface? =
-        runCatching { Typeface.createFromAsset(context.assets, path) }.getOrNull()
-    // Bundled EB Garamond (a variable font, weight 400–700 — the same files
-    // the web ships); fall back to the platform serif.
-    val regular = asset("fonts/EBGaramond-Regular.ttf") ?: Typeface.SERIF
-    val italic = asset("fonts/EBGaramond-Italic.ttf")
-        ?: Typeface.create(Typeface.SERIF, Typeface.ITALIC)
-    val bold = runCatching {
-        Typeface.Builder(context.assets, "fonts/EBGaramond-Regular.ttf")
-            .setFontVariationSettings("'wght' 700").build()
-    }.getOrNull() ?: Typeface.create(regular, Typeface.BOLD)
+private fun loadTypefaces(context: Context, spec: FontSpec): ReaderTypefaces {
+    // Weight pinned EXPLICITLY, not taken from the file's default instance:
+    // Fira Code's `wght` axis defaults to 300, so its regular would paint as
+    // Light. Same reason as buildSerifFamily in Typography.kt.
+    fun at(path: String, weight: Int): Typeface? = runCatching {
+        Typeface.Builder(context.assets, path).setFontVariationSettings("'wght' $weight").build()
+    }.getOrNull() ?: runCatching { Typeface.createFromAsset(context.assets, path) }.getOrNull()
+
+    val regular = at(spec.regular, 400) ?: Typeface.SERIF
+    // A family with no italic file paints added words UPRIGHT — the palette's
+    // `added` tone is what marks them (see FontSpec). Synthesising a slant here
+    // is exactly what we are refusing to do.
+    val italic = spec.italic?.let { at(it, 400) } ?: regular
+    val bold = at(spec.regular, 700) ?: Typeface.create(regular, Typeface.BOLD)
     return ReaderTypefaces(regular, italic, bold)
 }
 
@@ -206,7 +211,8 @@ fun ReaderPane(
     val fontPx = with(density) { fontSizeSp.sp.toPx() }
     val marginPx = with(density) { MARGIN_DP.dp.toPx() }
 
-    val typefaces = remember(context) { readerTypefaces(context) }
+    val textFont = LocalTextFont.current
+    val typefaces = remember(context, textFont) { readerTypefaces(context, textFont) }
     val paints = remember(fontPx) {
         fun p(tf: Typeface) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = tf; textSize = fontPx
