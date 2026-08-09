@@ -207,6 +207,10 @@ fn parse_link_round_trips_the_producer_uris() {
     assert_eq!(parse_link("makeweave:x"), None);
     assert_eq!(parse_link("approve:3"), Some(PanelLink::Approve { index: 3 }));
     assert_eq!(parse_link("reject:3"), Some(PanelLink::Reject { index: 3 }));
+    assert_eq!(parse_link("deletethread:2"), Some(PanelLink::DeleteThread { index: 2 }));
+    assert_eq!(parse_link("deletetag:0"), Some(PanelLink::DeleteTag { index: 0 }));
+    assert_eq!(parse_link("deleteweave:4"), Some(PanelLink::DeleteWeave { index: 4 }));
+    assert_eq!(parse_link("deleteweave:x"), None);
     assert_eq!(parse_link("editthreadnotes:2"), Some(PanelLink::EditThreadNotes { index: 2 }));
     assert_eq!(parse_link("editweavenotes:5"), Some(PanelLink::EditWeaveNotes { index: 5 }));
     assert_eq!(parse_link("editentrynote:2:4"), Some(PanelLink::EditEntryNote { thread: 2, entry: 4 }));

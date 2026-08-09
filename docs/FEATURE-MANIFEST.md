@@ -381,13 +381,21 @@ vocabulary is **parsed once in the core**: `plumbline_core::panel::parse_link(ur
 PanelLink` — co-located with the producers that *emit* the URIs, so a verb can't
 drift between what the panel bakes and what a shell handles. Both shells route
 through `plumbline_route_link_json(uri)` (`{verb, …}`, tagged) — neither
-re-splits the string. The 19 verbs, all of them in `PanelLink`:
+re-splits the string. The 22 verbs, all of them in `PanelLink`:
 `go:Book:ch[:v]` · `occ:CODE` · `rend:CODE:rendering` · `code:CODE[:word]` ·
 `thread:i` · `tag:i` · `weave:i` · `addtag:refkey` ·
 `addthread:refkey` · `untag:i:refkey` · `makeweave:i` · `approve:i` · `reject:i` ·
+`deletethread:i` · `deletetag:i` · `deleteweave:i` ·
 `editthreadnotes:i` · `editweavenotes:i` · `editentrynote:ti:ei` ·
 `editnote:refkey` · `guide` · `about`. An unknown verb or a malformed payload
 parses to `None` and the shell ignores the click.
+
+The three `delete*:i` verbs carry the **library ordinal** (`deleteweave:` the
+flat `weave:i` ordinal, not `reject:`'s suggested one), are emitted on the
+detail cards (`thread_detail` / `tag_detail` / `compare_card`; the compare card
+omits delete on a suggestion — the review queue's reject is that act), and are
+destructive: both shells confirm before authoring, then return to the item's
+list, because ordinals shift after every write.
 
 `conceptmap:CODE` was a twentieth verb; it left the vocabulary with
 the popup it opened (see §Concept map popup).
@@ -403,19 +411,25 @@ reload → refetch) stay shell-side. `parse_link` handles multi-word books
 Code + lemma large + count; verse links capped at 300, "… N more".
 *Data*: `plumbline_engine_strongs_occurrences_json` (cap 500 engine-side).
 
-## Thread picker + delete (both shells)
+## Thread/tag pickers + delete (both shells)
 
-`Add to thread…` is the same picker idiom tags have: existing threads are a list
-you tap (with entry counts), freetext only for a genuinely new one, and `✕`
-deletes a thread and everything on it (the verses are untouched). A bare freetext
-prompt would make the common case — adding a passage to a thread built up over a
-week — retype the name exactly, and a typo would silently FORK a second thread
-instead of failing. `addTag`'s study-panel route uses the tag picker for the same
-reason.
+`Add to thread…` and `Tag verse…` share one picker idiom: what exists is a list
+you tap (with entry/member counts), freetext only for a genuinely new one, and
+`✕` deletes the thread/tag and everything on it (the verses are untouched). A
+bare freetext prompt would make the common case — adding a passage to a thread
+built up over a week — retype the name exactly, and a typo would silently FORK
+a second thread instead of failing.
 
-Core: `thread::remove_thread` (case-insensitive, like `add_to_thread`; an absent
-name is a no-op, not an error). **C ABI**: `plumbline_engine_thread_remove`.
-Shells: `ThreadPickerSheet` (`ui/VerseActions.kt`) / `ThreadPicker.svelte`.
+Core: `thread::remove_thread` / `tag::remove_tag` (case-insensitive, like their
+add twins; an absent name is a no-op, not an error). **C ABI**:
+`plumbline_engine_thread_remove` / `plumbline_engine_tag_delete` (`tag_delete`,
+because `tag_remove` was already taken by the member-level untag). Shells:
+`ThreadPickerSheet` + `TagPickerSheet` (`ui/VerseActions.kt`) /
+`ThreadPicker.svelte` + `TagPicker.svelte`. The same deletes are reachable from
+the library detail cards via the `deletethread:i` / `deletetag:i` verbs, and
+weaves — which have no picker — delete from the compare card via
+`deleteweave:i` → `plumbline_engine_weave_delete(index)` (flat-library ordinal;
+`weave::reject_weave` does the file removal in core).
 
 ## Ask before destroying anything (both shells)
 
@@ -432,13 +446,15 @@ rots:
 
 | destructive act | web | Android |
 |---|---|---|
-| delete a thread | asks (`ThreadPicker.svelte`) | asks (`VerseActions.kt`) |
+| delete a thread | asks (`ThreadPicker.svelte`, `study/links.ts`) | asks (`VerseActions.kt`, `StudyScreen.kt`) |
+| delete a tag | asks (`TagPicker.svelte`, `study/links.ts`) | asks (`VerseActions.kt`, `StudyScreen.kt`) |
+| delete a weave | asks (`study/links.ts`) | asks (`StudyScreen.kt`) |
 | reject a suggested weave | asks (`study/links.ts`) | asks (`StudyScreen.kt`) |
-| untag a verse | asks (`study/links.ts`) | **the `untag` verb is unhandled** — see Android notes |
+| untag a verse | asks (`study/links.ts`) | asks (`StudyScreen.kt`) |
 | remove a memorization card | asks (`MemorizeHost.svelte`) | **no remove affordance at all**; `MemoryRemove` is an uncalled wrapper |
 | clear a chapter's reading record | asks (`MarkReadDialog.svelte`) | **does not ask** — `onClear` calls `ReadingForget` and toasts |
 
-The last three are live Android gaps, not design.
+The last two are live Android gaps, not design.
 
 ## Threads / Tags browsers (M:3380–3471)
 
@@ -449,9 +465,12 @@ detail analogous; members: verse → go link, concept → concordance link; note
 trailing. Authoring: `＋ tag verse` prompts a name (find-or-create,
 case-insensitive) → `tag_add(name, "verse", refkey, null, now)`;
 `＋ add to thread` snapshots the whole verse (span 0..last token, words
-vector) → `thread_add`; `untag` → `tag_remove`. Note edits: `thread_set_notes`
-/ `thread_entry_set_note` / `weave_set_notes` via a pre-filled text prompt
-(empty submission clears). *Data*: `threads_json`, `tags_json` + the above.
+vector) → `thread_add`; `untag` → `tag_remove`. Both detail cards carry a
+faded `✕ delete thread` / `✕ delete tag` header link (`deletethread:i` /
+`deletetag:i` — confirmed, then back to the list; §Link routing). Note edits:
+`thread_set_notes` / `thread_entry_set_note` / `weave_set_notes` via a
+pre-filled text prompt (empty submission clears). *Data*: `threads_json`,
+`tags_json` + the above.
 
 ## Suggested-weave review (M:2631, 3477)
 
@@ -1383,7 +1402,7 @@ lines would wrap where they are not drawn.)
 > dot** (§Ambient weave connectors) · **no hover gloss** (§Hover gloss) · **no
 > keyboard map, shortcuts sheet, or per-pane back/forward** (§Keyboard + wheel,
 > Tier 0 #2) · **one pane, or two on an opened fold** (§Multi-pane) · **no
-> machine-tier artifacts** (below) · **four unhandled link verbs** (below) ·
+> machine-tier artifacts** (below) · **three unhandled link verbs** (below) ·
 > **no way to remove a memorization card, and Clear-reading-record does not ask**
 > (§Ask before destroying anything) · **first-run verse text is fetched, not
 > written into the source** (§First run) · **maps follow the theme** where the
@@ -1475,7 +1494,7 @@ lines would wrap where they are not drawn.)
   `ui/StudyPane.kt` into `AnnotatedString` runs with the palette colour-role map,
   which is how the **RENDERINGS tier and the authority-tier marks (✝ † ≈ ⚗) and
   legend** arrive without Android owning any tier code; **link routing** through
-  `plumbline_route_link_json` for 15 of the 19 verbs; the **verse-action sheet**
+  `plumbline_route_link_json` for 19 of the 22 verbs; the **verse-action sheet**
   (`ui/VerseActions.kt`: copy · copy chapter · share · tag · note · thread ·
   memorize · mark-chapter-read, plus the tag and thread pickers and
   `PassageEndPicker`); **Explore** (notes · threads · tags · weaves+suggested ·
@@ -1485,11 +1504,12 @@ lines would wrap where they are not drawn.)
   off `plumbline_theme_palette_json` (`ui/Palette.kt`); the two analysis gates in
   Settings; `WarmIndexes` on a coroutine at startup.
 
-  **Live authoring gap:** `editThreadNotes` / `editWeaveNotes` / `editEntryNote` /
-  `untag` are the four verbs `StudyScreen.onLink` does not handle — they need an
+  **Live authoring gap:** `editThreadNotes` / `editWeaveNotes` / `editEntryNote`
+  are the three verbs `StudyScreen.onLink` does not handle — they need an
   index→name lookup, and the comment saying so is in the code beside the `when`.
-  The web routes all nineteen (`study/links.ts`). Also still untested on hardware:
-  posture-driven fold-mode switching.
+  (`untag` and the three `delete*` verbs do that lookup now and route in both
+  shells.) The web routes all twenty-two (`study/links.ts`). Also still untested
+  on hardware: posture-driven fold-mode switching.
 - The Kotlin/JNA binding (`crates/ffi/bindings/kotlin/Plumbline.kt`, package
   `dev.plumbline.core`) is the low-level `PlumblineNative` interface +
   JNA types (`PlumblineLayoutConfig`, `MeasureCallback`) **only**; the single

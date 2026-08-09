@@ -561,6 +561,9 @@ private fun ActionRow(label: String, color: Color, onClick: () -> Unit) {
  * and "New tag…" is the secondary, freetext path. New tags are created colourless
  * (colour stays an explicit, optional choice; core never assigns one).
  * Opened by the study panel's `addtag:REF` link.
+ *
+ * Deleting lives here too, mirroring [ThreadPickerSheet]: a tag started by typo
+ * needs a way out, and it asks first like every other destructive action.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -575,8 +578,10 @@ fun TagPickerSheet(
     var tags by remember { mutableStateOf<List<Tag1>?>(null) }
     var newMode by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
+    var confirmDelete by remember { mutableStateOf<ConfirmRequest?>(null) }
+    var reloadEpoch by remember { mutableStateOf(0) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(reloadEpoch) {
         tags = withContext(Dispatchers.Default) {
             runCatching { synchronized(engine) { engine.TagsJson() } }.getOrNull()
                 ?.let { runCatching { parseWire<Tags>(it).tags }.getOrNull() }
@@ -599,6 +604,30 @@ fun TagPickerSheet(
             ).show()
             onDismiss()
         }
+    }
+
+    fun delete(name: String) {
+        scope.launch {
+            val err = withContext(Dispatchers.Default) {
+                runCatching { synchronized(engine) { engine.TagDelete(name) } }.getOrNull()
+            }
+            if (err.isNullOrBlank()) {
+                reloadEpoch++
+                Toast.makeText(context, t("tag.deleted", "tag" to name), Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /** Ask before deleting, through the shared confirmation (ui/Confirm.kt) —
+     *  same reasoning as [ThreadPickerSheet]'s askDelete. */
+    fun askDelete(name: String) {
+        confirmDelete = ConfirmRequest(
+            title = t("tag.deleteAsk", "tag" to name),
+            body = t("tag.deleteBody"),
+            verb = t("tag.deleteVerb"),
+        ) { delete(name) }
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = palette.panelBg) {
@@ -629,6 +658,13 @@ fun TagPickerSheet(
                         Text(
                             Strings.plural("memorize.verses.one", "memorize.verses.other", t.members.size),
                             color = palette.faded, fontSize = 12.sp,
+                        )
+                        Text(
+                            t("common.delete"),
+                            color = palette.disputed, fontSize = 12.sp,
+                            modifier = Modifier
+                                .clickable { askDelete(t.name) }
+                                .padding(start = 14.dp, top = 4.dp, bottom = 4.dp),
                         )
                     }
                 }
@@ -663,6 +699,8 @@ fun TagPickerSheet(
             Spacer(Modifier.height(12.dp))
         }
     }
+
+    ConfirmDialog(confirmDelete, palette) { confirmDelete = null }
 }
 
 /** The personal-note editor. Empty text clears the note (UserNoteSet contract).

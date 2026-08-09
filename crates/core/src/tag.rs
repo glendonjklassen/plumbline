@@ -325,6 +325,23 @@ pub fn remove_member(lt: &LoadedTag, target: &TagTarget, now: &str) -> Result<()
     write_tag(&lt.file, &tag, now)
 }
 
+/// Delete a whole tag — its file and every member on it. Matched
+/// case-insensitively among `loaded`, the same way [`add_member`] matches, so
+/// "Messianic" and "messianic" are the same tag here as they are there. A name
+/// that isn't loaded is a no-op rather than an error: the tag the caller wanted
+/// gone is gone either way. (The twin of [`crate::thread::remove_thread`].)
+pub fn remove_tag(loaded: &[LoadedTag], name: &str) -> Result<bool, Error> {
+    let wanted = name.trim().to_lowercase();
+    let Some(lt) = loaded.iter().find(|lt| lt.tag.name.to_lowercase() == wanted) else {
+        return Ok(false);
+    };
+    match std::fs::remove_file(&lt.file) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(Error::Io { path: lt.file.display().to_string(), source: e }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -398,6 +415,28 @@ mod tests {
         let (loaded, _) = load_tags(&home);
         assert_eq!(loaded[0].tag.members.len(), 1);
         assert_eq!(loaded[0].tag.members[0].target, concept);
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn remove_tag_deletes_the_file_and_misses_are_no_ops() {
+        let home = std::env::temp_dir().join(format!("plumbline-tag-rm-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let isa = TagTarget::Verse(VRef::new("Isa", 53, 5));
+
+        let (loaded, _) = load_tags(&home);
+        add_member(&home, &loaded, "Messianic", "kjv1769-tok2", isa, None, "2026-01-01T00:00:00Z").unwrap();
+
+        // Case-insensitive, like add_member: "messianic" deletes "Messianic".
+        let (loaded, _) = load_tags(&home);
+        assert!(remove_tag(&loaded, "messianic").unwrap());
+        let (loaded, errs) = load_tags(&home);
+        assert!(errs.is_empty());
+        assert!(loaded.is_empty(), "the tag file is gone");
+
+        // A name that isn't loaded is Ok(false), not an error.
+        assert!(!remove_tag(&loaded, "Messianic").unwrap());
 
         let _ = std::fs::remove_dir_all(&home);
     }

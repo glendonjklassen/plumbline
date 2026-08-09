@@ -57,6 +57,69 @@ test("deleting a thread asks, and Cancel keeps it", async ({ page }) => {
   await expect.poll(names, { timeout: 15_000 }).not.toContain("Doomed");
 });
 
+test("deleting a tag asks, and Cancel keeps it", async ({ page }) => {
+  await boot(page);
+
+  await page.evaluate(() =>
+    (window as any).__plumbline.author("tagAdd", "DoomedTag", "verse", "John 3:16", null, new Date().toISOString()),
+  );
+  const names = async () =>
+    ((await page.evaluate(() => (window as any).__plumbline.rpc.call("tags"))) as any).tags.map(
+      (t: any) => t.name,
+    );
+  expect(await names()).toContain("DoomedTag");
+
+  await page.evaluate(() => ((window as any).__plumbline.tagPickFor = "John 3:16"));
+  await page.locator(".row", { hasText: "DoomedTag" }).locator("button.del").click();
+
+  await expect(confirm(page)).toBeVisible();
+  await expect(confirm(page)).toContainText("DoomedTag");
+  await confirm(page).getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm(page)).toBeHidden();
+  expect(await names(), "Cancel must not delete").toContain("DoomedTag");
+
+  // Now mean it.
+  await page.locator(".row", { hasText: "DoomedTag" }).locator("button.del").click();
+  await confirm(page).getByRole("button", { name: "Delete tag" }).click();
+  await expect.poll(names, { timeout: 15_000 }).not.toContain("DoomedTag");
+});
+
+test("deleting a weave from its compare card asks, and Cancel keeps it", async ({ page }) => {
+  await boot(page);
+
+  // A weave of this test's own — the stock set stays untouched.
+  await page.evaluate(() =>
+    (window as any).__plumbline.author("weaveAddLink", "DoomedWeave", "John 3:16", "Rom 5:8", new Date().toISOString()),
+  );
+  const weaves = async () =>
+    ((await page.evaluate(() => (window as any).__plumbline.rpc.call("weaves"))) as any).weaves;
+  const index = (await weaves()).find((w: any) => w.name === "DoomedWeave")?.index;
+  expect(index).not.toBeUndefined();
+
+  // Straight to the compare card — the delete link lives on its header line.
+  await page.evaluate((i) => ((window as any).__plumbline.panel = { kind: "compare", index: i }), index);
+  const del = page.getByRole("button", { name: "✕ delete weave" });
+  await expect(del).toBeVisible({ timeout: 15_000 });
+
+  await del.click();
+  await expect(confirm(page)).toBeVisible();
+  await expect(confirm(page)).toContainText("DoomedWeave");
+  await confirm(page).getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm(page)).toBeHidden();
+  expect(
+    (await weaves()).map((w: any) => w.name),
+    "Cancel must not delete",
+  ).toContain("DoomedWeave");
+
+  // Now mean it. The panel must also leave the dead card — ordinals shift.
+  await del.click();
+  await confirm(page).getByRole("button", { name: "Delete weave" }).click();
+  await expect
+    .poll(async () => (await weaves()).map((w: any) => w.name), { timeout: 15_000 })
+    .not.toContain("DoomedWeave");
+  expect(await page.evaluate(() => (window as any).__plumbline.panel?.kind)).toBe("weaves");
+});
+
 test("removing a memorize card asks, and Cancel keeps it", async ({ page }) => {
   await boot(page);
 

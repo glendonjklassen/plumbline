@@ -98,7 +98,9 @@ import androidx.window.layout.FoldingFeature
 import dev.plumbline.AkjvToken
 import dev.plumbline.ChurchState
 import dev.plumbline.Hit
+import android.widget.Toast
 import dev.plumbline.PaneRef1
+import dev.plumbline.Tags
 import dev.plumbline.Thread1
 import dev.plumbline.Threads
 import dev.plumbline.PanelLinkData
@@ -200,6 +202,7 @@ fun StudyScreen(
         runCatching { parseWire<Toc>(engine.TocJson()).books }.getOrElse { emptyList() }
     }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     // Who owns the study surface right now — see [StudyTurns] and [engineCall] at
     // the foot of this file. Every engine call the reader's taps make goes through
     // them, so a second tap can never be repainted by the first.
@@ -636,7 +639,101 @@ fun StudyScreen(
                     scope.engineCall(engine, turns, { engine.WeaveReject(idx) }) { openLibrary(Library.Suggested) }
                 }
             }
-            // editThreadNotes / editWeaveNotes / editEntryNote / untag need an
+            // Untag (remove one verse from a tag): the wire carries the tag
+            // ordinal; authoring wants the name — so the lookup rides a
+            // background read first, and the ask can name what it removes.
+            // Success gets a toast: the card the ✕ sits on is a snapshot, so
+            // nothing else would tell the reader the write landed.
+            "untag" -> if (link.tag != null && link.refKey != null) {
+                val at = link.tag!!
+                val ref = link.refKey!!
+                scope.engineCall(
+                    engine, turns,
+                    { engine.TagsJson()?.let { runCatching { parseWire<Tags>(it).tags }.getOrNull() }?.getOrNull(at) },
+                ) { tag ->
+                    if (tag != null) {
+                        confirmAction = ConfirmRequest(
+                            title = t("tag.removeAsk", "passage" to ref, "tag" to tag.name),
+                            body = t("tag.removeBody"),
+                            verb = t("tag.removeVerb"),
+                        ) {
+                            scope.engineCall(engine, null, { engine.TagRemove(tag.name, "verse", ref) }) { err ->
+                                Toast.makeText(
+                                    context,
+                                    if (err.isNullOrBlank()) {
+                                        t("tag.removed", "passage" to ref, "tag" to tag.name)
+                                    } else {
+                                        err
+                                    },
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        }
+                    }
+                }
+            }
+            // The three whole-item deletes (web study/links.ts parity). Each
+            // looks up the name first so the ask says what dies, confirms
+            // through the shared dialog, then re-lists the library — ordinals
+            // shift after every write, so the card just deleted must not stay
+            // up pointing at whatever slid into its index.
+            "deleteThread" -> link.index?.let { at ->
+                scope.engineCall(
+                    engine, turns,
+                    { engine.ThreadsJson()?.let { runCatching { parseWire<Threads>(it).threads }.getOrNull() }?.getOrNull(at) },
+                ) { thread ->
+                    if (thread != null) {
+                        confirmAction = ConfirmRequest(
+                            title = t("thread.deleteAsk", "thread" to thread.name),
+                            body = t("thread.deleteBody"),
+                            verb = t("thread.deleteVerb"),
+                        ) {
+                            scope.engineCall(engine, turns, { engine.ThreadRemove(thread.name) }) {
+                                openLibrary(Library.Threads)
+                            }
+                        }
+                    }
+                }
+            }
+            "deleteTag" -> link.index?.let { at ->
+                scope.engineCall(
+                    engine, turns,
+                    { engine.TagsJson()?.let { runCatching { parseWire<Tags>(it).tags }.getOrNull() }?.getOrNull(at) },
+                ) { tag ->
+                    if (tag != null) {
+                        confirmAction = ConfirmRequest(
+                            title = t("tag.deleteAsk", "tag" to tag.name),
+                            body = t("tag.deleteBody"),
+                            verb = t("tag.deleteVerb"),
+                        ) {
+                            scope.engineCall(engine, turns, { engine.TagDelete(tag.name) }) {
+                                openLibrary(Library.Tags)
+                            }
+                        }
+                    }
+                }
+            }
+            "deleteWeave" -> link.index?.let { at ->
+                scope.engineCall(
+                    engine, turns,
+                    // Matched on the carried `index`, not the list position: the
+                    // library JSON's field is the flat ordinal the verb carries.
+                    { engine.WeavesJson()?.let { runCatching { parseWire<WeaveLib>(it).weaves }.getOrNull() }?.firstOrNull { it.index == at } },
+                ) { weave ->
+                    if (weave != null) {
+                        confirmAction = ConfirmRequest(
+                            title = t("weave.deleteAsk", "weave" to weave.name),
+                            body = t("weave.deleteBody"),
+                            verb = t("weave.deleteVerb"),
+                        ) {
+                            scope.engineCall(engine, turns, { engine.WeaveDelete(at) }) {
+                                openLibrary(Library.Weaves)
+                            }
+                        }
+                    }
+                }
+            }
+            // editThreadNotes / editWeaveNotes / editEntryNote need an
             // index→name lookup — a documented follow-up (rarer authoring).
         }
     }

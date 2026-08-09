@@ -38,6 +38,19 @@
     );
     close();
   }
+
+  async function remove(name: string): Promise<void> {
+    // The shared confirmation (s.askConfirm), like ThreadPicker: every
+    // destructive action in the app asks the same way.
+    const ok = await s.askConfirm(
+      t("tag.deleteAsk", { tag: name }),
+      t("tag.deleteBody"),
+      t("tag.deleteVerb"),
+    );
+    if (!ok) return;
+    const err = await s.author("tagDelete", name);
+    s.showToast(err ?? t("tag.deleted", { tag: name }));
+  }
 </script>
 
 {#if s.tagPickFor}
@@ -56,10 +69,13 @@
       <!-- `tg`, not `t` — see ThreadPicker: an each-block `t` shadows the
            catalogue lookup and `t` is `any`, so it fails only at runtime. -->
       {#each tags as tg (tg.name)}
-        <button class="tag" onclick={() => pick(tg.name)}>
-          {tg.name}
-          <span class="count">{tg.members?.length ?? 0}</span>
-        </button>
+        <div class="row">
+          <button class="tag" onclick={() => pick(tg.name)}>
+            {tg.name}
+            <span class="count">{tg.members?.length ?? 0}</span>
+          </button>
+          <button class="del" title={t("tag.delete")} onclick={() => void remove(tg.name)}>✕</button>
+        </div>
       {:else}
         <p class="empty">{t("tag.empty")}</p>
       {/each}
@@ -127,7 +143,13 @@
     flex-direction: column;
     gap: 2px;
   }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
   .tag {
+    flex: 1;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -137,6 +159,15 @@
   }
   .tag:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
+  }
+  .del {
+    padding: 6px 10px;
+    color: var(--faded, #8a8276);
+    border-radius: 6px;
+    font-size: calc(13px * var(--uiScale, 1));
+  }
+  .del:hover {
+    color: var(--tierResearch, #b04a3a);
   }
   .count {
     margin-left: auto;

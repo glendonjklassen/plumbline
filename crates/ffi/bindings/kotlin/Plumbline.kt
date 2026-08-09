@@ -91,6 +91,7 @@ internal interface PlumblineNative : Library {
         engine: Pointer, name: String, kind: String, value: String, note: String?, added: String,
     ): Pointer?
     fun plumbline_engine_tag_remove(engine: Pointer, name: String, kind: String, value: String): Pointer?
+    fun plumbline_engine_tag_delete(engine: Pointer, name: String): Pointer?
     fun plumbline_engine_weave_add_link(
         engine: Pointer, name: String, aRef: String, bRef: String, added: String,
     ): Pointer?
@@ -99,6 +100,7 @@ internal interface PlumblineNative : Library {
     ): Pointer?
     fun plumbline_engine_weave_approve(engine: Pointer, index: Int): Pointer?
     fun plumbline_engine_weave_reject(engine: Pointer, index: Int): Pointer?
+    fun plumbline_engine_weave_delete(engine: Pointer, index: Int): Pointer?
     fun plumbline_engine_thread_set_notes(engine: Pointer, name: String, notes: String): Pointer?
     fun plumbline_engine_thread_entry_set_note(
         engine: Pointer, name: String, index: Int, note: String?,

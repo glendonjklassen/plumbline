@@ -416,6 +416,16 @@ char *plumbline_engine_tag_remove(struct PlumblineEngine *engine,
                                   const char *kind,
                                   const char *value);
 
+// Delete the whole tag named `name` — its file and every member on it. Matched
+// case-insensitively, like `plumbline_engine_tag_add`. A name with no tag is a
+// success (the caller wanted it gone; it is gone). The members' verses are the
+// canon's, not the tag's — nothing else is touched. Null on success, else an
+// owned error string.
+//
+// # Safety
+// `engine` is valid; `name` is null or valid NUL-terminated UTF-8.
+char *plumbline_engine_tag_delete(struct PlumblineEngine *engine, const char *name);
+
 // Weave the two whole verses `a_ref` / `b_ref` into the weave named `name`
 // (created on first use). `added` is a caller-supplied UTC timestamp.
 //
@@ -463,6 +473,16 @@ char *plumbline_engine_weave_approve(struct PlumblineEngine *engine, uint32_t in
 // # Safety
 // `engine` is a valid engine pointer.
 char *plumbline_engine_weave_reject(struct PlumblineEngine *engine, uint32_t index);
+
+// **Delete** the `index`-th weave in the library — its file and every link on
+// it. `index` is the flat-library ordinal (`plumbline_engine_weaves_json`, the
+// `weave:i` link verb) — NOT the suggested ordinal `plumbline_engine_weave_reject`
+// takes. It reaches a suggestion too: deleting one is the same act as
+// rejecting it. Null on success, else an owned error.
+//
+// # Safety
+// `engine` is a valid engine pointer.
+char *plumbline_engine_weave_delete(struct PlumblineEngine *engine, uint32_t index);
 
 // Replace the running notes document of the thread named `name`. Null on
 // success, else an owned error. The thread must already exist.

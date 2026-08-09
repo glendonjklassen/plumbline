@@ -253,6 +253,10 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
     fun TagRemove(name: String, kind: String, value: String): String? =
         take(ffi.plumbline_engine_tag_remove(h, name, kind, value))
 
+    /** Delete a whole tag and every member on it. Null = success. */
+    fun TagDelete(name: String): String? =
+        take(ffi.plumbline_engine_tag_delete(h, name))
+
     fun WeaveAddLink(name: String, aRef: String, bRef: String, addedUtc: String): String? =
         take(ffi.plumbline_engine_weave_add_link(h, name, aRef, bRef, addedUtc))
 
@@ -277,6 +281,10 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
 
     fun WeaveApprove(index: Int): String? = take(ffi.plumbline_engine_weave_approve(h, index))
     fun WeaveReject(index: Int): String? = take(ffi.plumbline_engine_weave_reject(h, index))
+
+    /** Delete a weave and every link on it — [index] is the flat-library ordinal
+     *  (the `weave:i` verb), not [WeaveReject]'s suggested ordinal. Null = success. */
+    fun WeaveDelete(index: Int): String? = take(ffi.plumbline_engine_weave_delete(h, index))
 
     fun ThreadSetNotes(name: String, notes: String): String? =
         take(ffi.plumbline_engine_thread_set_notes(h, name, notes))

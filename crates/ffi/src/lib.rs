@@ -1932,6 +1932,40 @@ pub unsafe extern "C" fn plumbline_engine_tag_remove(
     })
 }
 
+/// Delete the whole tag named `name` — its file and every member on it. Matched
+/// case-insensitively, like `plumbline_engine_tag_add`. A name with no tag is a
+/// success (the caller wanted it gone; it is gone). The members' verses are the
+/// canon's, not the tag's — nothing else is touched. Null on success, else an
+/// owned error string.
+///
+/// # Safety
+/// `engine` is valid; `name` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_tag_delete(
+    engine: *mut PlumblineEngine,
+    name: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        if engine.home.is_none() {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        }
+        let Some(name) = opt_str(name) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let mut study = engine.study_write();
+        match tag::remove_tag(&study.tags, name) {
+            Ok(_) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
 /// Weave the two whole verses `a_ref` / `b_ref` into the weave named `name`
 /// (created on first use). `added` is a caller-supplied UTC timestamp.
 ///
@@ -2109,6 +2143,37 @@ pub unsafe extern "C" fn plumbline_engine_weave_reject(engine: *mut PlumblineEng
             return out_string(format!("no suggested weave at index {index}"));
         };
         match weave::reject_weave(&study.weaves[i]) {
+            Ok(()) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// **Delete** the `index`-th weave in the library — its file and every link on
+/// it. `index` is the flat-library ordinal (`plumbline_engine_weaves_json`, the
+/// `weave:i` link verb) — NOT the suggested ordinal `plumbline_engine_weave_reject`
+/// takes. It reaches a suggestion too: deleting one is the same act as
+/// rejecting it. Null on success, else an owned error.
+///
+/// # Safety
+/// `engine` is a valid engine pointer.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_weave_delete(engine: *mut PlumblineEngine, index: u32) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        if engine.home.is_none() {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        }
+        let mut study = engine.study_write();
+        let Some(lw) = study.weaves.get(index as usize) else {
+            return out_string(format!("no weave at index {index}"));
+        };
+        match weave::reject_weave(lw) {
             Ok(()) => {
                 *study = load_study(&engine.home);
                 ptr::null_mut()
