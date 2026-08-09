@@ -11,9 +11,9 @@ import { existsSync } from "node:fs";
 // Cache API, eviction and the storage budget actually differ, and on iOS it is
 // the only engine there is — so the invariant the depot exists to protect was
 // least proven exactly where it was most likely to break. It is not the whole
-// suite twice: the run is serialised (workers: 1) and every one of these tests
-// boots the engine and downloads the pack, so a second full pass would cost
-// minutes to re-assert things that have nothing to do with the engine.
+// suite twice: every one of these tests boots the engine and downloads the
+// pack, so a second full pass would cost minutes to re-assert things that
+// have nothing to do with the engine.
 
 /** The offline promise, on the engine most likely to break it.
  *
@@ -114,7 +114,23 @@ export default defineConfig({
   testDir: "./e2e",
   timeout: 120_000,
   retries: process.env.CI ? 1 : 0,
-  workers: 1, // one preview server, engine boots are memory-heavy
+  // PARALLEL, WITH A SERIAL SECOND PASS FOR THE CLOCK-WATCHERS (2026-08-08).
+  // The old `workers: 1` was justified as "one preview server" — but playwright
+  // starts ONE webServer and shares it across every worker, so the server was
+  // never a reason. The real limits are memory (each worker is a browser
+  // booting the wasm engine) and CPU contention skewing the handful of tests
+  // that assert wall-clock budgets. So: memory bounds the worker count below,
+  // and the wall-clock tests are tagged @perf and run in a second, serialised
+  // invocation (`npm run test:e2e`) so they measure an uncontended machine.
+  // Everything else — counts, ratios, orderings, presence — parallelises
+  // safely: every test boots from a fresh profile, and the specs that spin
+  // their own origins all listen(0) on ephemeral ports.
+  //
+  // fullyParallel matters as much as the count: without it a FILE is the unit
+  // of distribution, and app.spec.ts alone holds ~50 of ~230 tests — one
+  // worker grinding it serially would stay the long pole regardless.
+  fullyParallel: true,
+  workers: process.env.CI ? 3 : 2,
   use: {
     baseURL: "http://localhost:4173",
   },

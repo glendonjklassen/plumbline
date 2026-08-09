@@ -159,7 +159,7 @@ async function firstVisit(page: Page, url: string): Promise<void> {
  *  answer, which is every phone. */
 const CORPUS_HOLD_MS = 3_000;
 
-test("the engine binary is fetched beside the text, not after it", async ({ page, baseURL }) => {
+test("the engine binary is fetched beside the text, not after it", { tag: "@perf" }, async ({ page, baseURL }) => {
   const origin = await recordingOrigin(baseURL!);
   try {
     origin.delay("kjv.jsonl.idxcache", CORPUS_HOLD_MS);
@@ -212,7 +212,7 @@ test("the engine binary is fetched beside the text, not after it", async ({ page
  *  finished — a margin thin enough to be luck. */
 const FONT_HOLD_MS = 8_000;
 
-test("the reader faces load beside the boot, not in front of it", async ({ page, baseURL }) => {
+test("the reader faces load beside the boot, not in front of it", { tag: "@perf" }, async ({ page, baseURL }) => {
   const origin = await recordingOrigin(baseURL!);
   try {
     // Set before the first byte: the worker asks for these the moment it gets the
