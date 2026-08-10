@@ -70,6 +70,7 @@ use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure, Measu
 use plumbline_rnd::{bridge, burst, concept, morph};
 
 pub mod dwell;
+pub mod plans;
 pub mod reading_map;
 pub mod share;
 mod wire;

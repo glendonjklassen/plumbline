@@ -41,7 +41,10 @@
   $effect(() =>
     startReadingTracker({
       target: () => {
-        if (s.showPresent || s.screen !== "read" || s.mapPopup) return null;
+        // Concept-study skimming is not reading (docs/READING-PLANS.md §Concept Study):
+        // the mode suspends the tracker so a sweep credits no dwell to the
+        // reading map or any schedule plan derived from it.
+        if (s.showPresent || s.screen !== "read" || s.mapPopup || s.inConceptStudy) return null;
         const p = s.panes[0];
         return p ? { book: p.book, chapter: p.chapter } : null;
       },
@@ -466,6 +469,14 @@
       <HymnalScreen />
     {:else}
       <div class="reading">
+        {#if s.inConceptStudy}
+          <!-- Concept-study mode: a persistent banner so the reader always knows a
+               tap tags rather than opens study, and can leave with one press. -->
+          <div class="concept-study-banner" role="status">
+            <span class="tag">{t("conceptStudy.banner", { tag: s.conceptStudyTag ?? "" })}</span>
+            <button class="exit" onclick={() => s.exitConceptStudy()}>{t("conceptStudy.exit")}</button>
+          </div>
+        {/if}
         <div class="panes">
           {#each s.panes as _, i (i)}
             <ReaderPane paneIdx={i} onWordStudy={openWordStudy} />
@@ -930,6 +941,30 @@
     min-height: 0;
     display: flex;
     position: relative;
+  }
+  /* Concept-study banner: the app's one alarm colour (tierResearch) tints it, so a
+     reader glances down and knows they are in a mode where a tap tags. */
+  .concept-study-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.35rem 0.9rem;
+    background: color-mix(in srgb, var(--tier-research, #b04a3a) 14%, var(--paper, #fcf9f4));
+    border-bottom: 1px solid var(--tier-research, #b04a3a);
+    color: var(--ink, #211f1a);
+    font-size: 0.95rem;
+  }
+  .concept-study-banner .tag {
+    font-weight: 600;
+  }
+  .concept-study-banner .exit {
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 4px;
+    padding: 0.2rem 0.6rem;
+    background: var(--paper, #fcf9f4);
+    color: var(--ink, #211f1a);
+    cursor: pointer;
   }
   .panes > :global(.pane + .pane) {
     border-left: 1px solid var(--rule, #d8cba8);

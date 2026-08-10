@@ -579,6 +579,38 @@ export class StudyEngine {
   readingForget(book: string, chapter: number): string | null {
     return this.#author("plumbline_engine_reading_forget", (f, b) => f(this.#engine, b, chapter), [book]);
   }
+
+  // ── reading plans + the concept study ──────────────────────────────────────────
+  /** `{running:[…], builtins:[…]}` — the reader's plans with derived state,
+   *  and the catalogue the picker offers. */
+  plans(now: string): any {
+    return this.#json("plumbline_engine_plans_json", now);
+  }
+  /** Start a built-in schedule by id (replaces its class occupant). */
+  planStart(id: string, now: string): string | null {
+    return this.#author("plumbline_engine_plan_start", (f, i, n) => f(this.#engine, i, n), [id, now]);
+  }
+  /** Stop a plan (removes its file; a concept study's tag is untouched). */
+  planStop(id: string): string | null {
+    return this.#author("plumbline_engine_plan_stop", (f, i) => f(this.#engine, i), [id]);
+  }
+  /** Start or resume a concept study for `tag`; returns the run's id — what the
+   *  shell writes into `config.conceptStudy` to enter the mode. An error comes
+   *  back prefixed with `!` (no plan id can start with one). Null only if the
+   *  engine itself returned nothing. */
+  conceptStudyStart(tag: string, now: string): string | null {
+    const id = this.#text("plumbline_engine_concept_study_start", tag, now);
+    if (id !== null && !id.startsWith("!")) this.onAuthored();
+    return id;
+  }
+  /** Mark a chapter swept in a concept study (generous, any order). */
+  conceptStudySweep(id: string, book: string, chapter: number): string | null {
+    return this.#author(
+      "plumbline_engine_concept_study_sweep",
+      (f, i, b) => f(this.#engine, i, b, chapter),
+      [id, book],
+    );
+  }
 }
 
 // ── engine-independent calls ──────────────────────────────────────────────────

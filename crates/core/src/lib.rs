@@ -26,6 +26,7 @@ pub mod i18n;
 pub mod memory;
 pub mod notes;
 pub mod panel;
+pub mod plan;
 pub mod reading;
 pub mod reference;
 pub mod renderings;

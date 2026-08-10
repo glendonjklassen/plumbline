@@ -38,7 +38,7 @@ import java.util.zip.ZipOutputStream
 /** Authored dirs, home-relative — what a backup carries. Must stay in step with
  *  the web shell's USER_DIRS (apps/web/src/engine/home.ts): the archive layout is
  *  shared, so a dir missing here is a dir that silently doesn't cross devices. */
-private val BACKUP_DIRS = listOf("tags", "threads", "weaves", "notes", "memory", "reading")
+private val BACKUP_DIRS = listOf("tags", "threads", "weaves", "notes", "memory", "reading", "plans")
 
 /** Where a restore unpacks before anything touches the live tree. Inside the
  *  home on purpose: the move-in is a rename, and a rename is only atomic within

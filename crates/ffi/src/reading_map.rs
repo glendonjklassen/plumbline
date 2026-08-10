@@ -17,8 +17,9 @@ use plumbline_core::{canon, reading};
 use crate::{guard, guard_err, opt_str, out_json, out_string, wire, PlumblineEngine};
 
 impl PlumblineEngine {
-    /// Chapter word counts, built once.
-    fn reading_words(&self) -> &reading::ChapterWords {
+    /// Chapter word counts, built once. `pub(crate)` because the plans module
+    /// derives day chapters against the same table.
+    pub(crate) fn reading_words(&self) -> &reading::ChapterWords {
         self.reading_words.get_or_init(|| reading::ChapterWords::build(&self.corpus))
     }
 

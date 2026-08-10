@@ -1177,6 +1177,11 @@ pub struct WireConfigState {
     /// phone opens in German without anyone visiting Settings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
+    /// The active concept study's plan id (additive). ABSENT means normal
+    /// reading mode; the shell suspends its reading tracker and turns verse
+    /// taps into tag-with-confirm while this is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub concept_study: Option<String>,
     /// Load-only: true when no config file existed yet (guided first run).
     #[serde(default)]
     pub first_run: bool,
@@ -1284,6 +1289,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         akjv_overlay: Some(cfg.akjv_overlay),
         intro: (!cfg.intro.is_empty()).then(|| cfg.intro.clone()),
         language: (!cfg.language.is_empty()).then(|| cfg.language.clone()),
+        concept_study: (!cfg.concept_study.is_empty()).then(|| cfg.concept_study.clone()),
         church: (!cfg.church.is_empty()).then(|| WireChurch {
             name: cfg.church.name.clone(),
             info: cfg.church.info.clone(),
@@ -1347,6 +1353,9 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
             Some(code) if i18n::Lang::ALL.iter().any(|l| l.code() == code) => code.to_string(),
             _ => String::new(),
         },
+        // An id the plan store answers for at use — a stale one reads as
+        // normal mode there, so nothing validates it away here.
+        concept_study: w.concept_study.as_deref().map(|s| s.trim().to_string()).unwrap_or_default(),
         // Through the core's clamps, not a local trim: this is the one place a
         // shell's church becomes the core's, so it is where the caps stop being
         // something each shell has to remember.

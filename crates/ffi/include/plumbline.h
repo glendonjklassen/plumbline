@@ -1035,6 +1035,56 @@ char *plumbline_engine_reading_tick_json(struct PlumblineEngine *engine,
                                          bool interacted,
                                          const char *now);
 
+// Every running plan with derived state, plus the builtin catalogue for the
+// picker, as `{running:[…], builtins:[…]}`. Never null on a live engine.
+//
+// # Safety
+// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
+char *plumbline_engine_plans_json(const struct PlumblineEngine *engine, const char *_now);
+
+// Start a built-in schedule plan by its `id` (see `plumbline_engine_plans_json`
+// `builtins`). Starting a plan whose class is already occupied REPLACES the
+// running one — the shell confirms first, and passing an already-running id
+// re-seeds it from scratch. Null on success, else an owned error string.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_plan_start(struct PlumblineEngine *engine, const char *id, const char *now);
+
+// Start (or RESUME) a concept study for `tag`, returning the run's plan id —
+// the id the shell writes into `config.conceptStudy` to enter the mode. The id is derived
+// from the tag (`run-<slug>`), so re-starting a concept the reader is already
+// sweeping resumes it, coverage intact, rather than forking a second run. The
+// tag itself need not exist yet; the first tap-to-tag creates it.
+//
+// Returns the id on success, or an error string PREFIXED with `!` (which no
+// plan id can start with) so the one out-parameter carries both.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_concept_study_start(struct PlumblineEngine *engine,
+                                           const char *tag,
+                                           const char *now);
+
+// Mark a chapter swept in a concept study (generous: no dwell, any order), and
+// persist. A non-concept-study id, or a chapter already swept, is a harmless no-op.
+// Null on success, else an owned error string.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_concept_study_sweep(struct PlumblineEngine *engine,
+                                           const char *id,
+                                           const char *book,
+                                           uint32_t chapter);
+
+// Stop a plan — remove its file. Ending a concept study leaves its tag and every
+// verse gathered untouched (the point of the sweep). An absent id is a no-op.
+// Null on success, else an owned error string.
+//
+// # Safety
+// `engine` is valid; `id` is null or valid NUL-terminated UTF-8.
+char *plumbline_engine_plan_stop(struct PlumblineEngine *engine, const char *id);
+
 // Every book's reading standing at `now` (RFC3339), canon order, as
 // `{books:[…],since,spec}`. Never null on a live engine.
 //

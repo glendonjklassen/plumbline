@@ -12,6 +12,7 @@
   const s = getSession();
 
   const cards = [
+    { id: "plans", go: () => (s.panel = { kind: "plans" }) },
     { id: "notes", go: () => (s.panel = { kind: "notesBrowser" }) },
     { id: "threads", go: () => (s.panel = { kind: "threads" }) },
     { id: "tags", go: () => (s.panel = { kind: "tags" }) },

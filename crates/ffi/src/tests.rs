@@ -6,6 +6,7 @@
 use super::*;
 // The reading-map endpoints live in their own module (see reading_map.rs — lib.rs
 // was already past the no-3k-line rule); `use super::*` does not reach into it.
+use crate::plans::*;
 use crate::reading_map::*;
 use serde_json::Value;
 use std::ffi::{CStr, CString};
@@ -437,6 +438,77 @@ fn authoring_round_trip_via_abi() {
         .unwrap()
         .contains("home"));
         plumbline_engine_free(bytes_engine);
+
+        plumbline_engine_free(e);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
+#[test]
+fn plans_and_concept_study_via_abi() {
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-plans-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let e = plumbline_engine_open(home_c.as_ptr(), ptr::null_mut());
+        assert!(!e.is_null());
+        let c = |s: &str| CString::new(s).unwrap();
+        let now = c("2026-08-08T12:00:00Z");
+
+        // Fresh home: nothing running, but the picker's catalogue is there.
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        assert_eq!(v["running"].as_array().unwrap().len(), 0);
+        assert!(v["builtins"].as_array().unwrap().iter().any(|b| b["id"] == "nt-90"));
+
+        // Start a schedule; it appears running with a day-1 card. (This toy
+        // corpus is only John 3, so the whole NT scope is one chapter.)
+        assert!(plumbline_engine_plan_start(e, c("nt-90").as_ptr(), now.as_ptr()).is_null());
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        let run = &v["running"][0];
+        assert_eq!(run["id"], "nt-90");
+        assert_eq!(run["kind"], "schedule");
+        assert_eq!(run["today"]["day"], 1);
+        assert_eq!(run["today"]["chapters"][0]["read"], false, "unread until the tracker says so");
+
+        // An unknown plan id is an error, not a silent no-op.
+        assert!(take(plumbline_engine_plan_start(e, c("no-such-plan").as_ptr(), now.as_ptr()))
+            .unwrap()
+            .contains("unknown plan"));
+
+        // Start a concept study; the returned id is what the shell writes into
+        // config.conceptStudy. Starting the same tag again RESUMES (same id).
+        let id = take(plumbline_engine_concept_study_start(e, c("grace").as_ptr(), now.as_ptr())).unwrap();
+        assert_eq!(id, "run-grace");
+        assert!(!id.starts_with('!'), "a '!' prefix would mean an error");
+        let again = take(plumbline_engine_concept_study_start(e, c("grace").as_ptr(), now.as_ptr())).unwrap();
+        assert_eq!(again, "run-grace", "a second start resumes, does not fork");
+
+        // Sweep the one chapter; progress is 1 of the corpus's chapter total.
+        assert!(plumbline_engine_concept_study_sweep(e, c(&id).as_ptr(), c("John").as_ptr(), 3).is_null());
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        let sr = v["running"].as_array().unwrap().iter().find(|p| p["id"] == "run-grace").unwrap();
+        assert_eq!(sr["kind"], "conceptStudy");
+        assert_eq!(sr["tag"], "grace");
+        // The toy corpus's only book is John, whose highest chapter number is 3,
+        // so the canon chapter total (the sweep denominator) is 3; one swept.
+        assert_eq!(sr["sweepProgress"], serde_json::json!([1, 3]));
+
+        // Two plans run in parallel (a schedule and a concept study).
+        assert_eq!(v["running"].as_array().unwrap().len(), 2);
+
+        // Stop the concept study; it goes, the schedule stays. (The tag it filed
+        // under is untouched — not asserted here, that is core::tag's contract.)
+        assert!(plumbline_engine_plan_stop(e, c("run-grace").as_ptr()).is_null());
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        assert_eq!(v["running"].as_array().unwrap().len(), 1);
+        assert_eq!(v["running"][0]["id"], "nt-90");
+
+        // Stopping an absent plan is a no-op, not an error.
+        assert!(plumbline_engine_plan_stop(e, c("run-grace").as_ptr()).is_null());
 
         plumbline_engine_free(e);
         let _ = std::fs::remove_dir_all(&home);
@@ -1758,7 +1830,7 @@ fn reading_map_round_trip_via_abi() {
         assert_eq!(books["books"].as_array().unwrap().len(), 66);
         assert_eq!(books["since"], "2026-07-28");
         assert_eq!(books["spec"]["staleDays"], 365);
-        assert_eq!(books["spec"]["completeAt"], 0.9);
+        assert_eq!(books["spec"]["completeAt"], 0.85);
         let john = books["books"].as_array().unwrap().iter().find(|b| b["book"] == "John").unwrap();
         assert_eq!(john["standing"], "unread");
         // Unread glows from the FIRST launch: the map's job on day one is to show

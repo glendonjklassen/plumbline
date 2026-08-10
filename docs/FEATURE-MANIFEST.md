@@ -946,7 +946,7 @@ left the data pack. See item 7 of §Word study panel.
 
 ## C ABI surface (crates/ffi) — endpoint ↔ feature map
 
-**99 native fns**, plus 6 wasm-only shims in
+**108 native fns**, plus 6 wasm-only shims in
 `crates/ffi/src/wasm.rs` that cbindgen excludes by name. Don't trust a count in
 prose — the guarantee is mechanical: `plumbline-bindgen`'s `verify_surface`
 requires every `plumbline_*` symbol in `include/plumbline.h` to appear in
@@ -1210,7 +1210,7 @@ scroll-verse restore.
 ## Backup / restore (both shells)
 
 Settings exports the authored home — `tags/ threads/ weaves/ notes/ memory/
-reading/` + the config as `.config/plumbline/config.json` + a `plumbline-backup.json`
+reading/ plans/` + the config as `.config/plumbline/config.json` + a `plumbline-backup.json`
 marker — as a **zip with a shared layout**, so one archive restores across
 devices (phone ↔ browser). Restore is merge-by-overwrite (same-name items
 replaced), path-filtered to the authored dirs (no traversal), then the engine
@@ -1225,16 +1225,19 @@ Create/OpenDocument + java.util.zip; restore recreates the activity.
 `plumbline_core::reading` (`plumbline-reading-v1`, one file per book under
 `home/reading/`, plus `_since.json` for the reader's start date). Coverage of a
 chapter is a **percentage**, gated two ways at once:
-`min(words above the furthest verse reached, dwell × 300 wpm) ÷ chapter words`.
+`min(words above the furthest verse reached, dwell × 500 wpm) ÷ chapter words`.
 Scrolling to the bottom instantly credits nothing; sitting on verse 1 credits only
 verse 1. Dwell is **aggregate, not per-verse** — time over verse 3 pays for verse
-30 once you get there — and a pass completes at **90%** and snaps to 1.0, so there
+30 once you get there — and a pass completes at **85%** and snaps to 1.0, so there
 is never a trailing verse to chase. Stored per chapter: `reached`, `dwell`
 (both belong to the pass under way, cleared when it completes), `lastRead` and
-`touched`. The reading rate is 300 wpm, not a slower one: at 220, Jude's 613
-words wanted 2.8 minutes of dwell, which a brisk reader beats, so a real read came
-out `Partial`. The grace period and the high-water mark are what refuse a
-flip-through; the rate does not need to be slow as well.
+`touched`. The reading rate is 500 wpm, tuned twice and both times upward: at
+220, Jude's 613 words wanted 2.8 minutes of dwell, which a brisk reader beats;
+at 300 × 90%, 1 Thess 3's 295 words wanted 53s and a real ~450 wpm read banked
+~36s after grace — reached the end, called `Partial` (street use, 2026-08-08).
+The grace period and the high-water mark are what refuse a flip-through (a
+flipper banks seconds, not half-minutes); the rate does not need to be slow
+as well.
 
 Two signals in the navigator's grids: **hue** = `Standing` (unread gold
 `readUnread` / partial copper `readPartial` / read sage `readDone`, all three in
@@ -1279,6 +1282,47 @@ every 30 s.
 
 **C ABI** (`plumbline_engine_reading_*`, 5 fns): `books_json` / `chapters_json` /
 `record_json` / `mark_read` / `forget`.
+
+## Reading plans + the Concept Study (docs/READING-PLANS.md is the design contract)
+
+`plumbline_core::plan`: one JSON file per running plan under `home/plans/`
+(`plumbline-plan-v1`, in the backup zip — `plans/` is in both shells' backup
+filters and every zip-layout enumeration). Two kinds, frozen as `"schedule"` /
+`"conceptStudy"`:
+
+- **Schedule plans** are word-weighted walks generated in core from
+  `ChapterWords` (never stored materialized), sequence-anchored (no backlog,
+  no streaks), with completion **derived from the reading tracker** and cached
+  in the plan file's `done`. One plan per class (`wholeBible` /
+  `newTestament` / `devotional`); replacement is shell-confirmed. The
+  chronological curated table is DEFERRED — `plan::chronological_pending()`
+  holds its picker row until the table ships.
+- **The Concept Study** (built as "speedrun", renamed through every layer
+  before shipping) is a class-free, non-linear concept sweep with a preset
+  tag and its own reader mode. The mode is `config.conceptStudy` (the active
+  run's id; empty = normal reading) so every pane and both shells agree what
+  a tap means. In the mode: verse tap = tag-with-confirm (the confirm button
+  names the act, "Tag “{tag}”"), the shell's reading tracker is SUSPENDED,
+  chapters are swept generously (high-water/navigation, no dwell). Exiting
+  restores word-study taps and the tracker; stopping the run never touches
+  the tag or its members.
+
+**Web** (`study/StudyPanel.svelte` plans panel, `shell/Shell.svelte` banner,
+`state/session.svelte.ts` mode + sweep): Explore ▸ Plans panel — running-plan
+cards (day card, progress, stop-with-confirm), the builtin picker, the
+Concept Study launcher; a persistent mode banner with Exit;
+tap-to-tag through `ReaderPane`. E2e: `e2e/concept-study.spec.ts` (tap-to-tag,
+tracker suspension, tag survival, the Plans-panel launch path).
+
+**C ABI** (5 fns): `plumbline_engine_plans_json` / `plan_start` / `plan_stop` /
+`concept_study_start` (returns the run id, `!`-prefixed error otherwise) /
+`concept_study_sweep`.
+
+**Deltas**: **Android has none of this feature yet** — no `PlansScreen`, no
+concept-study mode, no banner, no tap-to-tag; the Kotlin binding carries the
+endpoints but nothing calls them. Also missing on BOTH shells (spec decision
+#5, still owed): the passage navigator's "today" card and the nav-strip plan
+chip ("Day 12 · Gen 30–31", "+1 more").
 
 ## Memorization — spaced repetition (Tier 2 #15)
 

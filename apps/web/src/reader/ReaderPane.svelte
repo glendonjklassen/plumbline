@@ -531,22 +531,28 @@
         touchDx = 0;
         return;
       }
-      if (!moved) {
-        const hit = hitAt(e);
-        if (hit?.tokenIndex != null) onWordStudy?.(hit.verse, hit.tokenIndex);
-      }
+      if (!moved) onTapWord(e);
       return;
     }
   }
-  // Single click a word → word study (Compose tap parity; touch taps already
-  // do this in onPointerUp).
+  // A word tap: in concept-study mode it tags the verse (fast concept sweep); the
+  // rest of the time it opens word study (Compose tap parity).
+  function onTapWord(e: MouseEvent | PointerEvent): void {
+    if (s.inConceptStudy) {
+      const refKey = verseAt(e);
+      if (refKey) void s.conceptStudyTagVerse(refKey);
+      return;
+    }
+    const hit = hitAt(e);
+    if (hit?.tokenIndex != null) onWordStudy?.(hit.verse, hit.tokenIndex);
+  }
+  // Single click a word (touch taps go through onPointerUp).
   function onClick(e: MouseEvent): void {
     if (suppressClick) {
       suppressClick = false;
       return;
     }
-    const hit = hitAt(e);
-    if (hit?.tokenIndex != null) onWordStudy?.(hit.verse, hit.tokenIndex);
+    onTapWord(e);
   }
   function onContextMenu(e: MouseEvent): void {
     e.preventDefault();

@@ -13,7 +13,7 @@ exhaustive and closed, and the implementation must not improvise beyond it.
 
 | | Web (PWA) | Android |
 |---|---|---|
-| Authored files | IndexedDB `user` store — **every key** (tags/, threads/, weaves/, notes/, memory/, reading/, .config/) | `tags/ threads/ weaves/ notes/ memory/ reading/` under the app home, recursively |
+| Authored files | IndexedDB `user` store — **every key** (tags/, threads/, weaves/, notes/, memory/, reading/, plans/, .config/) | `tags/ threads/ weaves/ notes/ memory/ reading/ plans/` under the app home, recursively |
 | Settings & first-run state | (inside `.config/` above) | `.config/plumbline/` |
 | Seed-once decisions | IndexedDB `cache` store: `meta:stockSeeded` and `meta:bundled`, **deleted BY KEY** — never `clear()` on that store (home.ts's rule; the store may hold other rebuildables) | the `.stock-seeded` marker file |
 | Shell-local traces | every `localStorage` key with the `plumbline:` prefix | — |

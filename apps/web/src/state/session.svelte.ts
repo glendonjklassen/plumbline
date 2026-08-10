@@ -47,7 +47,8 @@ export type PanelView =
   | { kind: "search" }
   | { kind: "guide" }
   | { kind: "about" }
-  | { kind: "notesBrowser" };
+  | { kind: "notesBrowser" }
+  | { kind: "plans" };
 
 /** The analytical map popups. Both are weave visualisations, not
  *  embedding-derived. */
@@ -1130,7 +1131,118 @@ export class Session {
     this.screen = "read";
     this.activePane = paneIdx;
     this.#pushHistory(book, chapter);
+    // Concept-study sweeps are generous by design (docs/READING-PLANS.md §Concept Study):
+    // opening a chapter in the mode marks it swept — no dwell, any order — so
+    // progress is breadth of the sweep, not time in it. Pane 0 only, the one
+    // the reader is actually paging through.
+    if (paneIdx === 0 && this.inConceptStudy) this.#sweepCurrent(book, chapter);
     this.saveConfig();
+  }
+
+  // ── the concept study (a concept sweep with its own reader mode) ────────────────
+  /** Whether the reader is in concept-study mode — verse taps tag, the reading
+   *  tracker is suspended (Shell.svelte's `target` guards on this). */
+  get inConceptStudy(): boolean {
+    return !!this.config.conceptStudy;
+  }
+  get conceptStudyId(): string {
+    return this.config.conceptStudy ?? "";
+  }
+  /** The active concept study's preset tag, from the plans view-model — null when
+   *  not in the mode, or before the plans read has landed. */
+  get conceptStudyTag(): string | null {
+    const id = this.conceptStudyId;
+    if (!id) return null;
+    const run = (this.q("plans", "")?.running ?? []).find((p: any) => p.id === id);
+    return run?.tag ?? null;
+  }
+
+  #sweepCurrent(book: string, chapter: number): void {
+    void this.rpc.call("conceptStudySweep", this.conceptStudyId, book, chapter).catch(() => {});
+  }
+
+  /** Start (or resume) a concept study for `tag` and enter the mode. */
+  async startConceptStudy(tag: string): Promise<void> {
+    const id = await this.rpc.call("conceptStudyStart", tag, nowStamp());
+    if (typeof id !== "string" || id.startsWith("!")) {
+      this.showToast(t("conceptStudy.startFailed"));
+      return;
+    }
+    this.config.conceptStudy = id;
+    this.saveConfig();
+    this.invalidate();
+    this.studyEpoch++;
+    // Into the text, where the sweep happens; the current chapter counts.
+    this.goRead();
+    if (this.panes[0]) this.#sweepCurrent(this.panes[0].book, this.panes[0].chapter);
+    this.showToast(t("conceptStudy.entered", { tag }));
+  }
+
+  /** Re-enter an existing concept study (from the Plans screen) without re-seeding. */
+  enterConceptStudy(id: string): void {
+    this.config.conceptStudy = id;
+    this.saveConfig();
+    this.studyEpoch++;
+    this.goRead();
+    if (this.panes[0]) this.#sweepCurrent(this.panes[0].book, this.panes[0].chapter);
+  }
+
+  /** Leave concept-study mode — the run and its gathered tag stay; taps go back to
+   *  word study and the reading tracker resumes. */
+  exitConceptStudy(): void {
+    this.config.conceptStudy = "";
+    this.saveConfig();
+  }
+
+  /** The active run's preset tag, awaited past a cold cache. A relaunch lands
+   *  straight in the mode with the plans query unfetched, and a tap that
+   *  silently did nothing until it warmed would swallow the reader's first
+   *  gather — so this asks the engine rather than trusting the cache. */
+  async #conceptStudyTagAwaited(): Promise<string | null> {
+    const cached = this.conceptStudyTag;
+    if (cached) return cached;
+    const id = this.conceptStudyId;
+    if (!id) return null;
+    const plans = await this.rpc.call("plans", "").catch(() => null);
+    return (plans as any)?.running?.find((p: any) => p.id === id)?.tag ?? null;
+  }
+
+  /** A verse tapped in concept-study mode: confirm, then tag it with the preset tag
+   *  (creating the tag on the first one). The chapter is already swept by
+   *  navigation; this is the gather. */
+  async conceptStudyTagVerse(refKey: string): Promise<void> {
+    if (!refKey) return;
+    const tag = await this.#conceptStudyTagAwaited();
+    if (!tag) return;
+    const ok = await this.askConfirm(t("conceptStudy.tagAsk", { tag, verse: refKey }), "", t("conceptStudy.tagVerb", { tag }));
+    if (!ok) return;
+    const err = await this.author("tagAdd", tag, "verse", refKey, null, nowStamp());
+    this.showToast(err ?? t("conceptStudy.tagged", { tag, verse: refKey }));
+  }
+
+  /** Start a built-in schedule. Its class holds one plan at a time, so a
+   *  conflicting one is confirmed-then-replaced (the FFI replaces; the ask is
+   *  the shell's, per the house rule about destroying a running plan). */
+  async startPlan(b: { id: string; class: string; name: string }): Promise<void> {
+    const running = (this.q("plans", "")?.running ?? []) as any[];
+    const conflict = running.find((p) => p.class === b.class && p.id !== b.id);
+    if (conflict) {
+      const ok = await this.askConfirm(t("plans.replaceAsk", { name: b.name }), t("plans.replaceBody"), t("plans.replaceVerb"));
+      if (!ok) return;
+    }
+    const err = await this.author("planStart", b.id, nowStamp());
+    this.showToast(err ?? t("plans.started", { name: b.name }));
+  }
+
+  /** Stop a plan (schedule or concept study) — confirmed, since it removes the
+   *  plan's record. A concept study's gathered tag is untouched. */
+  async stopPlan(id: string, name: string): Promise<void> {
+    const ok = await this.askConfirm(t("plans.stopAsk", { name }), t("plans.stopBody"), t("plans.stopVerb"));
+    if (!ok) return;
+    // Leaving the mode too, if this is the concept study we are in.
+    if (this.conceptStudyId === id) this.exitConceptStudy();
+    const err = await this.author("planStop", id);
+    this.showToast(err ?? t("plans.stopped", { name }));
   }
 
   historyStep(paneIdx: number, dir: -1 | 1): void {
