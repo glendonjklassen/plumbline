@@ -130,6 +130,7 @@
     title={open && text ? text.title : t("hymnal.title")}
     onBack={() => (open ? (s.hymn = null) : s.goRead())}
     backLabel={open ? t("hymnal.backToList") : t("bar.backToReading")}
+    onMenu={() => (s.menuOpen = true)}
   >
     {#snippet actions()}
       {#if open && hymn}

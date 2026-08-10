@@ -23,9 +23,7 @@
   import TagPicker from "../study/TagPicker.svelte";
   import ThreadPicker from "../study/ThreadPicker.svelte";
   import TagWeave from "../study/TagWeave.svelte";
-  import QrCode from "./QrCode.svelte";
-  import { churchTitle as churchLabel, hasChurch, visitChurch as openChurchSite } from "./church";
-  import { modal } from "../lib/modal";
+  import ShareScreen from "./ShareScreen.svelte";
   import { t } from "../lib/i18n.svelte";
   import { uiScale } from "../lib/uiScale";
   import { DEFAULT_FONT, FONT_SCALE } from "../engine/fonts.generated";
@@ -82,10 +80,9 @@
     else if (s.panel?.kind === "search") s.panel = null;
   }
 
-  let menuOpen = $state(false);
-  // With Welcome, Church and Share beside it a permanent search field wrapped
-  // the bar onto a second row on a phone, so on narrow screens it collapses to a
-  // magnifying glass and takes the row only while it is being used.
+  // A permanent search field wrapped the bar onto a second row on a phone, so
+  // on narrow screens it collapses to a magnifying glass and takes the row only
+  // while it is being used.
   let searchOpen = $state(false);
   let searchEl = $state<HTMLInputElement | null>(null);
   function openSearch(): void {
@@ -97,25 +94,6 @@
     s.clearSearch();
     if (s.panel?.kind === "search") s.panel = null;
   }
-  // Share the app: the PWA QR + link (Compose ShareAppDialog parity) — a
-  // first-class header button, not a menu trip.
-  let shareApp = $state(false);
-  // What we actually hand over: the app, plus this reader's church when they
-  // have set one (Settings → Your church). One QR, both things.
-  const link = $derived(s.shareLink);
-  async function shareLink(): Promise<void> {
-    const title = hasChurch(s.church) ? t("share.fromChurch", { church: s.church.name }) : "Plumbline";
-    if (navigator.share) {
-      try {
-        await navigator.share({ title, url: link });
-        return;
-      } catch {
-        /* fall through to clipboard */
-      }
-    }
-    await navigator.clipboard.writeText(link);
-    s.showToast(t("share.copied"));
-  }
   // Surfaces are exclusive: picking a destination closes the others
   // (Memorize left open over Explore was disorienting). Shared by the
   // header's destination buttons and the ≡ utilities.
@@ -125,15 +103,18 @@
   // tapping a destination.
   function go(action: () => void): () => void {
     return () => {
-      menuOpen = false;
+      // `dismissTransient` closes the ≡ menu too (it is in the TRANSIENT table).
       s.dismissTransient();
       action();
     };
   }
 
-  // The bottom bar's four destinations. Icon paths are copied verbatim from the
-  // Compose shell's NavIcons.kt (standard Material Symbols: book, explore,
-  // present_to_all, school) so both shells draw the same glyphs.
+  // The bottom bar's five ROLES — Read · Study · Preach · Share · Sing. Not a
+  // list of features but of the hats a reader wears; the tools live one layer
+  // down (Memorize is a card inside Study, the church rides Share). Icon paths
+  // are copied verbatim from the Compose shell's NavIcons.kt (standard Material
+  // Symbols: book, school, present_to_all, share, music_note) so both shells
+  // draw the same glyphs.
   // Ids, not labels. This array is built ONCE, so a label in it would be a
   // snapshot of whatever language the app booted in; storing ids and rendering
   // them through `t()` below keeps the nav live across a language change.
@@ -148,31 +129,30 @@
       go: () => {},
     },
     {
-      key: "explore",
-      path:
-        "M12 10.9c-.61 0-1.1.49-1.1 1.1s.49 1.1 1.1 1.1c.61 0 1.1-.49 1.1-1.1s-.49-1.1-1.1-1.1z" +
-        "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" +
-        "m2.19 12.19L6 18l3.81-8.19L18 6l-3.81 8.19z",
+      key: "study",
+      // Material Symbols "school" — the study role's glyph.
+      path: "M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 11-6-11-6z",
       go: () => (s.screen = "explore"),
     },
     {
-      key: "present",
+      key: "preach",
       path:
         "M21 3H3c-1.11 0-2 .89-2 2v14c0 1.11.89 2 2 2h18c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2z" +
         "m0 16.02H3V4.98h18v14.04zM10 12H8l4-4 4 4h-2v4h-4v-4z",
       go: () => (s.showPresent = true),
     },
     {
-      key: "memorize",
-      path: "M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 11-6-11-6z",
-      // `dismissTransient` resets the screen first, so these set it after.
-      go: () => {
-        s.screen = "memorize";
-        s.memorize = { view: "hub" };
-      },
+      key: "share",
+      // Material Symbols "share".
+      path:
+        "M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11" +
+        "c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81" +
+        "C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16" +
+        "c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z",
+      go: () => (s.screen = "share"),
     },
     {
-      key: "hymnal",
+      key: "sing",
       // Material Symbols "music_note".
       path: "M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z",
       go: () => (s.screen = "hymnal"),
@@ -208,9 +188,20 @@
     };
   });
 
-  // Which tab reads as current. Present wins because it covers everything; below
-  // it, `s.screen` IS the destination now that Explore and Memorize are screens.
-  const dest = $derived(s.showPresent ? "present" : s.screen);
+  // Which ROLE reads as current. Preach wins because Present covers everything;
+  // below it the screen decides — Memorize lights Study, because that is the
+  // role it belongs to now that it is a card inside the Study hub.
+  const dest = $derived(
+    s.showPresent
+      ? "preach"
+      : s.screen === "explore" || s.screen === "memorize"
+        ? "study"
+        : s.screen === "hymnal"
+          ? "sing"
+          : s.screen === "share"
+            ? "share"
+            : "read",
+  );
 
   // The reader's text size as a factor of the 18px the chrome was drawn at,
   // TIMES the chrome face's optical scale (FONT_SCALE — faces differ in
@@ -223,14 +214,6 @@
   const readerScale = $derived(
     (Number(s.config.bodySize ?? 18) / 18) * (FONT_SCALE[s.config.chromeFont ?? DEFAULT_FONT] ?? 1),
   );
-
-  // The church button opens their site; with no site to open it at least
-  // tells the reader who and when, which is all we were given.
-  // Both of these live in church.ts now, which is pinned to `core::church` by a
-  // shared vector table (H-10). The local copies here were the seventh and eighth
-  // implementations of the same two lines.
-  const churchTitle = $derived(churchLabel(s.church, t("shell.churchFallback")));
-  const visitChurch = (): void => openChurchSite(s.church, s.showToast, t("shell.churchFallback"));
 
   // ── global keys (manifest §Keyboard + wheel) ──
   function isEditable(t: EventTarget | null): boolean {
@@ -322,7 +305,7 @@
       // that came from a field, so Escape pressed while the reader is typing in
       // one never reaches this ladder.
       case "Escape":
-        if (shareApp) shareApp = false;
+        if (s.menuOpen) s.menuOpen = false;
         else if (s.promptReq) s.cancelPrompt();
         else if (s.mapPopup) s.mapPopup = null;
         else if (s.bookNavFor !== null) s.bookNavFor = null;
@@ -374,20 +357,15 @@
          says it already. Kept in the DOM at every width on purpose: 21 e2e
          files use it as the "text is on screen" boot signal. -->
     <span class="subtitle">{subtitle}</span>
-    <!-- Destinations are first-class in the top bar (Compose bottom-nav
-         parity: Read is the base layer, then Explore · Present · Memorize);
-         the ≡ menu holds utilities only. Threads/Tags/Weaves live inside
-         Explore, as on Android. -->
+    <!-- The ROLES are first-class in the top bar (Compose bottom-nav parity:
+         Read is the base layer, then Study · Preach · Share · Sing); the ≡ menu
+         holds utilities only. The tools live one layer down — Threads/Tags/
+         Weaves/Memorize inside Study, the church and the QR on Share. -->
     <nav class="browse">
-        <button onclick={go(() => (s.screen = "explore"))}>{t("nav.explore")}</button>
-        <button onclick={go(() => (s.showPresent = true))}>{t("nav.present")}</button>
-        <button
-          onclick={go(() => {
-            s.screen = "memorize";
-            s.memorize = { view: "hub" };
-          })}>{t("nav.memorize")}</button
-        >
-        <button onclick={go(() => (s.screen = "hymnal"))}>{t("nav.hymnal")}</button>
+        <button onclick={go(() => (s.screen = "explore"))}>{t("nav.study")}</button>
+        <button onclick={go(() => (s.showPresent = true))}>{t("nav.preach")}</button>
+        <button onclick={go(() => (s.screen = "share"))}>{t("nav.share")}</button>
+        <button onclick={go(() => (s.screen = "hymnal"))}>{t("nav.sing")}</button>
       </nav>
     <span class="spacer"></span>
     <button class="glass" class:searching={searchOpen} onclick={openSearch} aria-label={t("common.openSearch")}>⌕</button>
@@ -405,56 +383,7 @@
     {#if searchOpen}
       <button class="glass narrow-close" onclick={closeSearch} aria-label={t("common.closeSearch")}>✕</button>
     {/if}
-    {#if s.intro}
-      <!-- The welcome a reader was given, on demand: they should not have to
-           reinstall to read it twice. -->
-      <button class="church-btn" onclick={go(() => (s.reopenIntro = s.intro))}>{t("shell.welcome")}</button>
-    {/if}
-    {#if hasChurch(s.church)}
-      <!-- Front and centre, not in Settings: someone handed this to a reader
-           along with their church, and the reader should be able to find them
-           without going hunting. -->
-      <button class="church-btn" onclick={visitChurch} title={churchTitle}>{t("shell.church")}</button>
-    {/if}
-    <!-- An ICON, as on Android, and for the reason a phone bar teaches: a
-         bordered word cost more width than the glyph plus its whole tap target,
-         and it was the control that tipped the row over. -->
-    <button class="share-first" onclick={go(() => (shareApp = true))} aria-label={t("common.shareApp")} title={t("common.shareApp")}>
-      <svg viewBox="0 0 24 24" aria-hidden="true"
-        ><path
-          fill="currentColor"
-          d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"
-        /></svg
-      >
-    </button>
-    <div class="menu-host">
-      <button class="menu-btn" onclick={() => (menuOpen = !menuOpen)} aria-label={t("common.menu")}>≡</button>
-      {#if menuOpen}
-        <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-        <div class="backdrop" onclick={() => (menuOpen = false)}></div>
-        <div class="menu">
-          <!-- UTILITIES ONLY, at every width. The destinations live in the
-               bottom bar, in thumb reach, which is where Android has always had
-               them.
-
-               Church and Welcome are the exception, and only on a phone: they
-               are conditional buttons in the bar on a wide screen (there is
-               room, and someone handed this reader a church — they should not
-               hunt for it), and ⋮ items on a phone, which is exactly where
-               Android keeps them. `.phone-only` hides them above 700px. -->
-          {#if hasChurch(s.church)}
-            <button class="phone-only" onclick={go(visitChurch)}>{t("shell.church")}</button>
-          {/if}
-          {#if s.intro}
-            <button class="phone-only" onclick={go(() => (s.reopenIntro = s.intro))}>{t("shell.welcome")}</button>
-          {/if}
-          <button onclick={go(() => (s.showHistory = true))}>{t("shell.history")}</button>
-          <button onclick={go(() => (s.panel = { kind: "guide" }))}>{t("shell.guideAndAbout")}</button>
-          <button onclick={go(() => (s.showShortcuts = true))}>{t("shell.shortcuts")}</button>
-          <button onclick={go(() => (s.showSettings = true))}>{t("shell.settings")}</button>
-        </div>
-      {/if}
-    </div>
+    <button class="menu-btn" onclick={() => (s.menuOpen = !s.menuOpen)} aria-label={t("common.menu")}>≡</button>
   </header>
 
   <!-- One destination at a time, Android's model: a screen REPLACES the reader
@@ -467,6 +396,8 @@
       <MemorizeHost />
     {:else if s.screen === "hymnal"}
       <HymnalScreen />
+    {:else if s.screen === "share"}
+      <ShareScreen />
     {:else}
       <div class="reading">
         {#if s.inConceptStudy}
@@ -496,8 +427,8 @@
     <StudyPanel />
   </div>
 
-  <!-- THE BOTTOM BAR (narrow only) — Android's IA, in thumb reach: Read ·
-       Explore · Present · Memorize. The icons are the very same Material paths
+  <!-- THE BOTTOM BAR (narrow only) — the five roles, in thumb reach: Read ·
+       Study · Preach · Share · Sing. The icons are the very same Material paths
        the Compose shell draws (apps/android/.../NavIcons.kt), so the two shells
        look like one product rather than two interpretations.
 
@@ -518,35 +449,21 @@
   </nav>
 </div>
 
-{#if shareApp}
+{#if s.menuOpen}
+  <!-- The ≡ utilities, raised from the header OR any destination's ScreenBar —
+       fixed to the top-right so it works over every screen, not just Read.
+       UTILITIES ONLY: the roles live in the bottom bar / browse row. Welcome is
+       here for EVERY reader (an established believer never had `intro` set, so
+       a conditional entry hid it from them — it falls back to the new-believer
+       welcome). The church is no longer a menu trip: it rides the Share screen. -->
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-  <div class="share-backdrop" onclick={() => (shareApp = false)}></div>
-  <div
-    class="share-dialog"
-    role="dialog"
-    aria-modal="true"
-    aria-label={t("share.title")}
-    data-surface="share app"
-    use:modal={{ close: () => (shareApp = false) }}
-  >
-    <h2>{t("share.title")}</h2>
-    <p class="share-sub">
-      {hasChurch(s.church) ? t("share.subChurch") : t("share.sub")}
-    </p>
-    <QrCode size={220} text={link} />
-    <p class="share-url">plumblinebible.org</p>
-    {#if s.intro}
-      <!-- The welcome a reader was given, on demand: they should not have to
-           reinstall to read it twice. -->
-      <button class="church-btn" onclick={go(() => (s.reopenIntro = s.intro))}>{t("shell.welcome")}</button>
-    {/if}
-    {#if hasChurch(s.church)}
-      <p class="share-with">{t("share.with", { church: s.church.name })}</p>
-    {/if}
-    <div class="share-actions">
-      <button class="share-primary" onclick={shareLink}>{t("share.action")}</button>
-      <button onclick={() => (shareApp = false)}>{t("common.close")}</button>
-    </div>
+  <div class="backdrop" onclick={() => (s.menuOpen = false)}></div>
+  <div class="menu" role="menu" aria-label={t("common.menu")}>
+    <button onclick={go(() => (s.reopenIntro = s.intro ?? "new"))}>{t("shell.welcome")}</button>
+    <button onclick={go(() => (s.showHistory = true))}>{t("shell.history")}</button>
+    <button onclick={go(() => (s.panel = { kind: "guide" }))}>{t("shell.guideAndAbout")}</button>
+    <button onclick={go(() => (s.showShortcuts = true))}>{t("shell.shortcuts")}</button>
+    <button onclick={go(() => (s.showSettings = true))}>{t("shell.settings")}</button>
   </div>
 {/if}
 
@@ -672,9 +589,6 @@
     color: var(--ink, #211f1a);
     white-space: nowrap;
   }
-  .phone-only {
-    display: none;
-  }
   .subtitle {
     color: var(--faded, #8a8276);
     font-size: calc(16px * var(--uiScale, 1));
@@ -702,28 +616,6 @@
     color: var(--gold, #9e7d38);
   }
   .browse button:hover {
-    background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
-  }
-  .share-first {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 8px;
-    border-radius: 6px;
-    color: var(--gold, #9e7d38);
-    /* Sized in font-size even though it draws no text, and the glyph below is
-       in `em`. An icon has to grow with the reader's text setting like every
-       other piece of chrome, and expressing that as a font-size is what lets
-       `e2e/text-scale.spec.ts` hold it to that with the same measurement it
-       uses for everything else. */
-    font-size: calc(20px * var(--uiScale, 1));
-  }
-  .share-first svg {
-    width: 1.05em;
-    height: 1.05em;
-    display: block;
-  }
-  .share-first:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
   }
   /* The bottom bar is a PHONE affordance: on a wide screen the destinations are
@@ -810,14 +702,6 @@
     .reading :global(.pane > .nav) {
       display: none;
     }
-    /* Church and Welcome are ⋮ items here, not buttons — Android's arrangement,
-       and what keeps this a single row when a reader has both. */
-    header .church-btn {
-      display: none;
-    }
-    .menu .phone-only {
-      display: block;
-    }
     /* One row where it fits, a second row where it does not.
        The glass stands in for the field until it's wanted, and while searching
        the field owns the row, so at the default text size this is one row.
@@ -829,11 +713,11 @@
        a header two rows tall. Wrapping is the graceful version of the same
        overflow. */
     header {
-      /* The air between controls gives before the controls do. With the app's
-         name, Welcome, Church, Share, the glass and the ≡ all in one nowrap row,
-         the 44px tap floor (app.css) costs 40px that a 360px phone has not got —
-         and what runs off the end is the ≡, which is the way to Settings. At
-         44px each they are their own separation and do not need 10px of it. */
+      /* The air between controls gives before the controls do: with the chapter
+         nav, the glass and the ≡ in one nowrap row, the 44px tap floor (app.css)
+         costs width a 360px phone has not got — and what runs off the end is the
+         ≡, which is the way to Settings. At 44px each they are their own
+         separation and do not need 10px of it. */
       gap: 6px;
     }
     /* `header` prefix so these beat the base rules further down the file. */
@@ -855,9 +739,7 @@
     /* Searching, the field owns the row: everything that is not the field or
        the way out of it stands down, so the row never has to wrap to hold a
        query. The chapter nav is the widest of them and goes first. */
-    header:has(.search.open) .chapter-nav,
-    header:has(.search.open) .church-btn,
-    header:has(.search.open) .share-first {
+    header:has(.search.open) .chapter-nav {
       display: none;
     }
   }
@@ -885,9 +767,6 @@
     flex-shrink: 1;
     min-width: 110px;
   }
-  .menu-host {
-    position: relative;
-  }
   .menu-btn {
     font-size: calc(20px * var(--uiScale, 1));
     padding: 0 8px;
@@ -897,10 +776,13 @@
     inset: 0;
     z-index: 47;
   }
+  /* FIXED to the top-right, not anchored to the header: the ≡ can be raised
+     from any destination's ScreenBar, and on a phone the header is not even
+     mounted there. One position serves every caller. */
   .menu {
-    position: absolute;
-    right: 0;
-    top: 100%;
+    position: fixed;
+    right: 8px;
+    top: calc(var(--safeTop, 0px) + 52px);
     z-index: 48;
     min-width: 190px;
     background: var(--popupPaper, #f2eee6);
@@ -968,69 +850,6 @@
   }
   .panes > :global(.pane + .pane) {
     border-left: 1px solid var(--rule, #d8cba8);
-  }
-  .share-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(20, 16, 8, 0.35);
-    z-index: 49;
-  }
-  .share-dialog {
-    position: fixed;
-    z-index: 50;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    background: #ffffff; /* fixed light — the QR needs its white field */
-    color: #101010;
-    border-radius: 14px;
-    padding: 22px 26px;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.3);
-  }
-  .share-dialog h2 {
-    font-size: calc(18px * var(--uiScale, 1));
-    font-weight: 600;
-  }
-  .share-sub,
-  .share-url {
-    color: #5a564e;
-    font-size: calc(13px * var(--uiScale, 1));
-  }
-  .share-with {
-    font-size: calc(13px * var(--uiScale, 1));
-    font-weight: 600;
-    color: #9e7d38;
-  }
-  .church-btn {
-    font-size: calc(13.5px * var(--uiScale, 1));
-    padding: 4px 12px;
-    border: 1px solid var(--rule, #d8cba8);
-    border-radius: 6px;
-    color: var(--gold, #9e7d38);
-    white-space: nowrap;
-  }
-  .church-btn:hover {
-    border-color: var(--gold, #9e7d38);
-    background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
-  }
-  .share-actions {
-    display: flex;
-    gap: 10px;
-    margin-top: 6px;
-  }
-  .share-actions button {
-    padding: 5px 14px;
-    border: 1px solid #d8cba8;
-    border-radius: 6px;
-  }
-  .share-actions .share-primary {
-    background: #9e7d38;
-    color: #ffffff;
-    border-color: #9e7d38;
   }
   .toast {
     /* Stated once so the stacked notice below can be expressed in terms of it. */

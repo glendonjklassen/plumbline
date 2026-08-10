@@ -72,10 +72,6 @@ test("the reader's text size is published on :root", async ({ page }) => {
  */
 const CHROME: { name: string; open?: string; sel: string; drawnAt: number }[] = [
   { name: "the passage in the header", sel: "header .subtitle", drawnAt: 16 },
-  // The Share ICON (2026-08-02). It draws no text, but it is sized in
-  // font-size with the glyph in `em` precisely so this sweep still governs it —
-  // an icon has to follow the reader's text setting like everything else.
-  { name: "the header's Share icon", sel: "header .share-first", drawnAt: 20 },
   { name: "the header's menu button", sel: "header .menu-btn", drawnAt: 20 },
   { name: "a destination in the top bar", sel: "header .browse button", drawnAt: 16 },
   { name: "the settings dialog's heading", open: `s.showSettings = true`, sel: '[data-surface="settings"] h2', drawnAt: 17 },
@@ -197,12 +193,12 @@ test("the chrome follows the browser's own text size", async ({ page }) => {
 //   screen  expect(received).toBeLessThanOrEqual(expected)  Expected: <= 321
 //   Received: <the row's min-content width, comfortably past 400>'.
 // AN OPEN FOLD IS NOT A NARROW PHONE: at ~840px the full bar — subtitle,
-// destinations, search, Share, ≡ — fits on one row, but only if the flexible
+// destinations, search, ≡ — fits on one row, but only if the flexible
 // members actually flex. The subtitle is the active pane's passage name and
 // changes LENGTH on every pane switch; when it could not shrink (and the search
 // field held its full 240px), a longer name tipped the row over and
-// Welcome/Church/Share fell to a wrapped second row — the bar jostled on a tap
-// that navigated nothing.
+// the ≡ fell to a wrapped second row — the bar jostled on a tap that
+// navigated nothing.
 //
 // Mutation: drop `min-width: 0; overflow: hidden; text-overflow: ellipsis;`
 //   from `.subtitle` in Shell.svelte → 'Error: the header wrapped — the row
@@ -210,7 +206,8 @@ test("the chrome follows the browser's own text size", async ({ page }) => {
 //   expected)  Expected: <top of Share at boot>  Received: <a row lower>'.
 test("a longer passage name shrinks rather than wrapping the top bar", async ({ page }) => {
   await boot(page, { width: 840, height: 700 }); // an open fold
-  const share = page.locator("header .share-first");
+  // The ≡ is the row's last control — if anything wraps, it drops a row.
+  const share = page.locator("header .menu-btn");
   await expect(share).toBeVisible();
   const before = await share.evaluate((el) => Math.round(el.getBoundingClientRect().top));
 

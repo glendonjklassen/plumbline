@@ -271,7 +271,7 @@ async function pointAt(page: Page, x: number, y: number, W: number, H: number): 
 /** Explore → one of its cards. The real route a reader takes to the two
  *  library-wide maps. */
 async function openFromExplore(page: Page, card: RegExp): Promise<void> {
-  await page.locator("nav.browse").getByRole("button", { name: "Explore" }).click();
+  await page.locator("nav.browse").getByRole("button", { name: "Study" }).click();
   await page.getByRole("button", { name: card }).click();
 }
 

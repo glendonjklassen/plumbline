@@ -1,7 +1,8 @@
-// The bottom navigation bar's four icons as hand-built ImageVectors (standard
-// Material Symbols path data). material-icons-core doesn't carry these glyphs
-// and material-icons-extended would bloat the unminified release APK, so the
-// four paths live here instead.
+// The bottom navigation bar's five role icons as hand-built ImageVectors
+// (standard Material Symbols path data). material-icons-core doesn't carry
+// these glyphs and material-icons-extended would bloat the unminified release
+// APK, so the paths live here instead. The web's NAV table carries the same
+// paths — parity is glyph-for-glyph, not just label-for-label.
 //
 // Author D (Compose UI).
 
@@ -29,17 +30,18 @@ val NavIconRead: ImageVector by lazy {
     )
 }
 
-/** Material "explore" (compass) — the Explore tab. */
-val NavIconExplore: ImageVector by lazy {
+/** Material "share" — the Share tab. */
+val NavIconShare: ImageVector by lazy {
     navIcon(
-        "nav-explore",
-        "M12 10.9c-.61 0-1.1.49-1.1 1.1s.49 1.1 1.1 1.1c.61 0 1.1-.49 1.1-1.1s-.49-1.1-1.1-1.1z" +
-            "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" +
-            "m2.19 12.19L6 18l3.81-8.19L18 6l-3.81 8.19z",
+        "nav-share",
+        "M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11" +
+            "c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81" +
+            "C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16" +
+            "c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z",
     )
 }
 
-/** Material "present_to_all" — the Present tab. */
+/** Material "present_to_all" — the Preach tab. */
 val NavIconPresent: ImageVector by lazy {
     navIcon(
         "nav-present",
@@ -48,16 +50,15 @@ val NavIconPresent: ImageVector by lazy {
     )
 }
 
-/** Material "school" — the Memorize tab. */
-val NavIconMemorize: ImageVector by lazy {
+/** Material "school" — the Study tab. */
+val NavIconStudy: ImageVector by lazy {
     navIcon(
-        "nav-memorize",
+        "nav-study",
         "M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 11-6-11-6z",
     )
 }
 
-/** Material "music_note" — the Hymnal tab. The web's NAV table carries the
- *  same path (parity is glyph-for-glyph, not just label-for-label). */
+/** Material "music_note" — the Sing tab. */
 val NavIconHymnal: ImageVector by lazy {
     navIcon(
         "nav-hymnal",

@@ -156,7 +156,7 @@ test("a reader tags two verses from the verse menu and turns the tag into a weav
   await expect(picker).toBeHidden();
 
   // ── Explore ▸ Tags: two members, and the conversion on offer ──
-  await page.locator("nav.browse").getByRole("button", { name: "Explore" }).click();
+  await page.locator("nav.browse").getByRole("button", { name: "Study" }).click();
   await page.locator(".ex-card", { hasText: /^Tags/ }).click();
   await expect(panel.locator("p", { hasText: TAG }), "both verses are in the tag").toContainText("2 members", {
     timeout: 30_000,
@@ -176,7 +176,7 @@ test("a reader tags two verses from the verse menu and turns the tag into a weav
   await expect(page.locator(".toast", { hasText: "2 passages chained" })).toBeVisible({ timeout: 30_000 });
 
   // ── the weave is in the library the reader browses ──
-  await page.locator("nav.browse").getByRole("button", { name: "Explore" }).click();
+  await page.locator("nav.browse").getByRole("button", { name: "Study" }).click();
   await page.locator(".ex-card", { hasText: /^Weaves/ }).click();
   await expect(
     panel.locator("p", { hasText: TAG }),

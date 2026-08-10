@@ -203,6 +203,10 @@ export class Session {
   showHistory = $state(false);
   /** The one Settings dialog (Android IA). */
   showSettings = $state(false);
+  /** The ≡ utilities menu (History · Guide & about · shortcuts · Settings).
+   *  Session state, not Shell-local, so every destination's ScreenBar can
+   *  raise the same menu — Settings must not cost a trip back to Read. */
+  menuOpen = $state(false);
   /**
    * Which DESTINATION is on screen — the web twin of Android's `Dest`.
    *
@@ -211,7 +215,7 @@ export class Session {
    * were reading. `"read"` is the absence of a destination rather than one of
    * its own.
    */
-  screen = $state<"read" | "explore" | "memorize" | "hymnal">("read");
+  screen = $state<"read" | "explore" | "memorize" | "hymnal" | "share">("read");
 
   // ── the hymnal ──────────────────────────────────────────────────────────────
 
@@ -342,6 +346,7 @@ export class Session {
     ["showSettings", false],
     ["showShortcuts", false],
     ["showPresent", false],
+    ["menuOpen", false],
   ] as const satisfies readonly (readonly [keyof Session, unknown])[];
 
   /**

@@ -1,0 +1,171 @@
+<script lang="ts">
+  // SHARE, as a destination — the evangelism role's home. What was a header
+  // QR dialog plus three church fields buried at the bottom of Settings is one
+  // screen: the QR and link that hand the app over, and the church that a
+  // shared link carries — set where its effect is visible, not in Settings.
+  // The Android twin is ui/ShareScreen.kt.
+  import { getSession } from "../state/session.svelte";
+  import ScreenBar from "../lib/ScreenBar.svelte";
+  import QrCode from "./QrCode.svelte";
+  import { cleanChurch, churchTitle, hasChurch, visitChurch } from "./church";
+  import { t } from "../lib/i18n.svelte";
+
+  const s = getSession();
+
+  // What we actually hand over: the app, plus this reader's church when they
+  // have set one below. One QR, both things.
+  const link = $derived(s.shareLink);
+  async function shareLink(): Promise<void> {
+    const title = hasChurch(s.church) ? t("share.fromChurch", { church: s.church.name }) : "Plumbline";
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, url: link });
+        return;
+      } catch {
+        /* fall through to clipboard */
+      }
+    }
+    await navigator.clipboard.writeText(link);
+    s.showToast(t("share.copied"));
+  }
+
+  // The reader's home church. Loaded once per visit to the screen; every field
+  // saves on change, exactly as Settings did.
+  let churchName = $state("");
+  let churchInfo = $state("");
+  let churchUrl = $state("");
+  let churchLoaded = false;
+  $effect(() => {
+    if (s.screen !== "share" || churchLoaded) return;
+    churchLoaded = true;
+    const c = s.church;
+    churchName = c.name;
+    churchInfo = c.info;
+    churchUrl = c.url;
+  });
+  function saveChurch(): void {
+    s.setChurch(cleanChurch({ name: churchName, info: churchInfo, url: churchUrl }));
+  }
+</script>
+
+<section class="screen" aria-label={t("nav.share")}>
+  <ScreenBar title={t("nav.share")} onBack={() => s.goRead()} onMenu={() => (s.menuOpen = true)} />
+  <div class="content">
+    <div class="card qr-card" data-surface="share app">
+      <h3>{t("share.title")}</h3>
+      <p class="sub">{hasChurch(s.church) ? t("share.subChurch") : t("share.sub")}</p>
+      <QrCode size={220} text={link} />
+      <p class="sub">plumblinebible.org</p>
+      {#if hasChurch(s.church)}
+        <p class="with">{t("share.with", { church: s.church.name })}</p>
+      {/if}
+      <button class="primary" onclick={shareLink}>{t("share.action")}</button>
+    </div>
+    <div class="card">
+      <h3>{t("settings.church")}</h3>
+      <p class="desc">{t("settings.churchDesc")}</p>
+      <input class="field" placeholder={t("settings.churchName")} bind:value={churchName} onchange={saveChurch} />
+      <input class="field" placeholder={t("settings.churchInfo")} bind:value={churchInfo} onchange={saveChurch} />
+      <input class="field" placeholder={t("settings.churchUrl")} bind:value={churchUrl} onchange={saveChurch} />
+      {#if hasChurch(s.church)}
+        <!-- The recipient's path to the congregation a shared link named —
+             this button was the header's Church chip before Share was a role. -->
+        <button
+          class="visit"
+          title={churchTitle(s.church, t("shell.churchFallback"))}
+          onclick={() => visitChurch(s.church, s.showToast, t("shell.churchFallback"))}
+        >
+          {t("shell.church")}
+        </button>
+      {/if}
+    </div>
+  </div>
+</section>
+
+<style>
+  .screen {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--paper, #fcf9f4);
+  }
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 380px));
+    align-content: start;
+    justify-content: center;
+  }
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 18px 20px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 10px;
+    background: var(--popupPaper, #f2eee6);
+  }
+  /* The QR needs its white field whatever the theme, as the dialog always had. */
+  .qr-card {
+    align-items: center;
+    background: #ffffff;
+    color: #101010;
+  }
+  h3 {
+    margin: 0;
+    font-size: calc(17px * var(--uiScale, 1));
+    font-weight: 600;
+  }
+  .card:not(.qr-card) h3 {
+    color: var(--ink, #211f1a);
+  }
+  .sub {
+    margin: 0;
+    color: #5a564e;
+    font-size: calc(13px * var(--uiScale, 1));
+  }
+  .with {
+    margin: 0;
+    font-size: calc(13px * var(--uiScale, 1));
+    font-weight: 600;
+    color: #9e7d38;
+  }
+  .desc {
+    margin: 0;
+    font-size: calc(13.5px * var(--uiScale, 1));
+    line-height: 1.4;
+    color: var(--faded, #8a8276);
+  }
+  .primary {
+    margin-top: 6px;
+    padding: 6px 16px;
+    border: 1px solid #9e7d38;
+    border-radius: 6px;
+    background: #9e7d38;
+    color: #ffffff;
+  }
+  .visit {
+    align-self: flex-start;
+    margin-top: 4px;
+    padding: 5px 14px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 6px;
+    color: var(--gold, #9e7d38);
+  }
+  .visit:hover {
+    border-color: var(--gold, #9e7d38);
+  }
+  .field {
+    padding: 7px 10px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 6px;
+    background: var(--paper, #fcf9f4);
+    color: var(--ink, #211f1a);
+    font-size: calc(14.5px * var(--uiScale, 1));
+  }
+</style>
