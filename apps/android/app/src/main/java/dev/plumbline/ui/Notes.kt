@@ -63,8 +63,21 @@ fun NotesScreen(
     var notes by remember { mutableStateOf<List<UserNote>?>(null) }
     var reload by remember { mutableStateOf(0) }
     var editing by remember { mutableStateOf<UserNote?>(null) }
+    var confirmDelete by remember { mutableStateOf<ConfirmRequest?>(null) }
     val scope = rememberCoroutineScope()
     BackHandler(onBack = onClose)
+
+    // Delete = write empty text (usernote.rs's contract: set_note removes the
+    // file). Nothing else about the verse — tags, threads, reading — keys off
+    // the note; the gutter mark follows the re-read.
+    fun deleteNote(n: UserNote) {
+        scope.launch {
+            withContext(Dispatchers.Default) {
+                runCatching { synchronized(engine) { engine.UserNoteSet(n.verse, "", nowUtc()) } }
+            }
+            notes = null; reload++
+        }
+    }
 
     LaunchedEffect(reload) {
         notes = withContext(Dispatchers.Default) {
@@ -115,6 +128,17 @@ fun NotesScreen(
                             )
                         }
                         TextButton(onClick = { editing = n }) { Text(t("notes.edit"), color = palette.gold) }
+                        // Delete without opening: emptying the editor also
+                        // deletes (and also asks), but a row you can only
+                        // remove by editing it is an affordance gap — manifest
+                        // §Ask before destroying anything.
+                        TextButton(onClick = {
+                            confirmDelete = ConfirmRequest(
+                                title = t("notes.deleteAsk", "passage" to n.display),
+                                body = t("notes.deleteBody"),
+                                verb = t("notes.deleteVerb"),
+                            ) { deleteNote(n) }
+                        }) { Text("✕", color = palette.faded) }
                     }
                     HorizontalDivider(color = palette.rule)
                 }
@@ -152,19 +176,32 @@ fun NotesScreen(
                 TextButton(onClick = {
                     val ref = n.verse
                     val written = text
-                    error = null
-                    scope.launch {
-                        val outcome = withContext(Dispatchers.Default) {
-                            saveOutcome(
-                                runCatching { synchronized(engine) { engine.UserNoteSet(ref, written, nowUtc()) } },
-                            )
+                    fun save() {
+                        error = null
+                        scope.launch {
+                            val outcome = withContext(Dispatchers.Default) {
+                                saveOutcome(
+                                    runCatching { synchronized(engine) { engine.UserNoteSet(ref, written, nowUtc()) } },
+                                )
+                            }
+                            when (outcome) {
+                                // Only a write the engine took closes the editor and
+                                // re-reads the list.
+                                is SaveOutcome.Saved -> { editing = null; notes = null; reload++ }
+                                is SaveOutcome.Failed -> error = noteSaveFailedLine(outcome.message)
+                            }
                         }
-                        when (outcome) {
-                            // Only a write the engine took closes the editor and
-                            // re-reads the list.
-                            is SaveOutcome.Saved -> { editing = null; notes = null; reload++ }
-                            is SaveOutcome.Failed -> error = noteSaveFailedLine(outcome.message)
-                        }
+                    }
+                    // Saving an EMPTIED editor deletes the note, so it asks
+                    // exactly like the row's ✕ — same wording, same dialog.
+                    if (written.isBlank() && n.text.isNotBlank()) {
+                        confirmDelete = ConfirmRequest(
+                            title = t("notes.deleteAsk", "passage" to n.display),
+                            body = t("notes.deleteBody"),
+                            verb = t("notes.deleteVerb"),
+                        ) { save() }
+                    } else {
+                        save()
                     }
                 }) { Text(t("common.save")) }
             },
@@ -172,4 +209,6 @@ fun NotesScreen(
             containerColor = palette.panelBg,
         )
     }
+
+    ConfirmDialog(confirmDelete, palette) { confirmDelete = null }
 }

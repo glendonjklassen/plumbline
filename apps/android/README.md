@@ -30,12 +30,12 @@ The C ABI is cross-compiled with `cargo-ndk` into `app/src/main/jniLibs/<abi>/`
 
 ```bash
 export ANDROID_NDK_HOME=/opt/android-ndk
-cargo ndk -t arm64-v8a -t x86_64 -p 24 \
+cargo ndk -t arm64-v8a -p 24 \
   -o apps/android/app/src/main/jniLibs build -p plumbline-ffi --release
 ```
 
-- `arm64-v8a` is the physical device (the target foldable); `x86_64` is the AOSP
-  emulator. These match the `ndk.abiFilters` in `app/build.gradle.kts`.
+- `arm64-v8a` is the only ABI — every device this installs on is a 64-bit ARM
+  phone. It matches the `ndk.abiFilters` in `app/build.gradle.kts`.
 - The library loads via `System.loadLibrary("plumbline_ffi")` (JNA `Native.load`).
 - JNA's own `libjnidispatch.so` comes from the `net.java.dev.jna:jna:5.17.0@aar`
   dependency — the `@aar` classifier is required (5.17+ also fixes a 16 KB
@@ -76,8 +76,7 @@ surface, so a call added for one shell has an obvious twin in the other.
   ≥ 35.2.10). `./gradlew installDebug` or Run in Android Studio. Fold/unfold with
   Ctrl+F / Ctrl+U to make `FoldingFeature` fire.
 - **On the phone (GrapheneOS, no cable):** `./gradlew assembleDebug` →
-  `app/build/outputs/apk/debug/app-arm64-v8a-debug.apk` (ABI splits, 2026-07-30 —
-  `app-x86_64-debug.apk` beside it is for an emulator), move it over via Syncthing / a
+  `app/build/outputs/apk/debug/app-debug.apk`, move it over via Syncthing / a
   cloud drive / `python -m http.server`, then tap to install; or use wireless
   adb (`adb pair` → `adb connect` → `adb install`). Sign with a consistent key
   (the debug key is fine) — switching keys forces an uninstall on update.

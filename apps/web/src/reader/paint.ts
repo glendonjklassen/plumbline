@@ -3,7 +3,7 @@
 // FLAG_DIVINE / FLAG_TITLE inks; Strong's underline; search/goto bands,
 // word-precise runs, pinned spans, and the weave/note gutter marks.
 
-import { readerFontFamily, readerFontHasItalic } from "./measure";
+import { readerFontFamily, readerFontHasItalic, readerFontPx } from "./measure";
 
 export const MARGIN = 28; // top/bottom text margin (manifest constant)
 
@@ -133,6 +133,11 @@ export interface PaintProbe {
    *  so a test can re-derive the extents and catch a memo gone stale. */
   items: WeakRef<readonly LayoutItem[]> | null;
   extents: VerseExtents | null;
+  /** The body font string the last frame set on the canvas — what a test
+   *  measures with to check that painted advance widths still agree with the
+   *  worker-measured item rects (e2e/font-face.spec.ts). Carries the face's
+   *  optical scale, because it is built on `readerFontPx`. */
+  bodyFont: string | null;
   /** Zero the counters. Deliberately keeps `items`/`extents` and the
    *  last-painted identity, so `layouts` after a reset counts the layouts that
    *  arrived AFTER it — which is the budget a scroll test compares against. */
@@ -146,6 +151,7 @@ export const paintProbe: PaintProbe = {
   extentsComputed: 0,
   items: null,
   extents: null,
+  bodyFont: null,
   reset(): void {
     this.paints = 0;
     this.layouts = 0;
@@ -213,7 +219,13 @@ export function paintChapter(
   o: PaintOpts,
   ov: PaintOverlays,
 ): void {
-  const { palette: p, fontPx, marginX, columnWidth, scrollY, viewportW, viewportH } = o;
+  const { palette: p, marginX, columnWidth, scrollY, viewportW, viewportH } = o;
+  // The px the glyphs are actually drawn at: the reader's size under the face's
+  // optical scale — the SAME number the engine worker measured with, because
+  // both come from readerFontPx (see reader/measure.ts). Everything below that
+  // is glyph-relative (font strings, gutter-mark baselines, underline depth)
+  // uses this, not the raw setting.
+  const fontPx = readerFontPx(o.fontPx);
   ctx.fillStyle = p.paper ?? "#fcf9f4";
   ctx.fillRect(0, 0, viewportW, viewportH);
 
@@ -264,6 +276,7 @@ export function paintChapter(
   ctx.textBaseline = "top";
   const family = readerFontFamily();
   const bodyFont = `${fontPx}px ${family}`;
+  paintProbe.bodyFont = bodyFont;
   // A face with no italic (Fira Code) must not be ASKED for one: the browser
   // would shear the upright, and a fake italic on every translator-supplied word
   // is worse than none. Those words still read as supplied — the palette's

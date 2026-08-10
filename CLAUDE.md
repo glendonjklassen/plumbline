@@ -41,7 +41,7 @@ The five portable crates are dependency-light pure Rust and build anywhere,
 including `wasm32-wasip1` (the web shell) and the Android NDK targets. CI runs
 the portable tests, the R&D-feature tests, an MSRV check, an FFI
 binding-drift guard, the web shell's Playwright suite, and the Android APK
-build — engine cross-compiled for both shipped ABIs — on every push. The
+build — engine cross-compiled for the shipped ABI — on every push. The
 offline pipeline that produced the data pack is documented in
 [data-prep/README.md](data-prep/README.md).
 
@@ -217,7 +217,7 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
   over runs the engine from whenever you last cross-compiled. A stale `.so` means
   an on-device UAT tests an engine that predates your changes. Before building an
   APK for anyone to run:
-  `ANDROID_NDK_HOME=/opt/android-ndk cargo ndk -t arm64-v8a -t x86_64 --platform 26
+  `ANDROID_NDK_HOME=/opt/android-ndk cargo ndk -t arm64-v8a --platform 26
   -o apps/android/app/src/main/jniLibs build -p plumbline-ffi --release`. To check
   an APK really has it, `unzip -l` it and compare the `.so`'s size with the one on
   disk.
@@ -226,7 +226,7 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
 ## Releases
 
 - Tag `v*` → `.github/workflows/release.yml` builds a signed Android APK
-  (arm64-v8a + x86_64) and attaches it to a GitHub Release — the repo is the
+  (arm64-v8a) and attaches it to a GitHub Release — the repo is the
   download page — and deploys the PWA to GitHub Pages at
   <https://plumblinebible.org/> (custom domain; the old
   glendonjklassen.github.io/plumbline URL 301s there).
@@ -237,4 +237,4 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
   up; losing it forces users to uninstall to upgrade. Local APK build:
   `apps/android/gradlew -p apps/android :app:assembleDebug` with
   `JAVA_HOME=java-21-openjdk` (the .so comes from `cargo ndk -t arm64-v8a
-  -t x86_64 -o apps/android/app/src/main/jniLibs build -p plumbline-ffi --release`).
+  -o apps/android/app/src/main/jniLibs build -p plumbline-ffi --release`).

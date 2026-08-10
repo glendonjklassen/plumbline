@@ -57,7 +57,7 @@ import {
 } from "./pack";
 import { depotBytes, depotDelete, depotHas, depotKeys } from "./depot";
 import { PERF } from "./perf";
-import { measureFor, readerFont, fontExtent, setReaderFont } from "../reader/measure";
+import { measureFor, readerFont, fontExtent, readerFontToken, setReaderFont } from "../reader/measure";
 import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FILES } from "./fonts.generated";
 import {
   aboutBlocks,
@@ -186,7 +186,11 @@ interface LayoutReq {
 }
 
 function layoutChapter(m: LayoutReq): LaidOut | null {
-  const key = `${m.book} ${m.chapter}|${m.font}|${m.width}|${m.lineSpacing}|${m.versePerLine}|${akjvOn}`;
+  // The face token is part of the key: a cached layout was measured under one
+  // face's metrics AND its optical scale (readerFont applies both), so a face
+  // switch must miss here rather than serve geometry the new face will not
+  // paint at.
+  const key = `${m.book} ${m.chapter}|${readerFontToken()}|${m.font}|${m.width}|${m.lineSpacing}|${m.versePerLine}|${akjvOn}`;
   const hit = turnCache.get(key);
   if (hit) {
     turnCache.delete(key); // re-insert to keep LRU order

@@ -635,7 +635,20 @@ fun StudyScreen(
                             ?.let { runCatching { parseWire<UserNote>(it).text }.getOrNull() } ?: ""
                     },
                 ) { cur ->
-                    prompt = AuthorPrompt(t("notes.on", "passage" to ref), cur ?: "") { text -> saveNote(ref, text) }
+                    prompt = AuthorPrompt(t("notes.on", "passage" to ref), cur ?: "") { text ->
+                        // Saving an EMPTIED editor deletes the note (UserNoteSet's
+                        // empty-clears contract), so it asks first — same wording
+                        // as the notes browser's ✕ and the verse sheet's editor.
+                        if (text.isBlank() && !(cur ?: "").isBlank()) {
+                            confirmAction = ConfirmRequest(
+                                title = t("notes.deleteAsk", "passage" to ref),
+                                body = t("notes.deleteBody"),
+                                verb = t("notes.deleteVerb"),
+                            ) { saveNote(ref, text) }
+                        } else {
+                            saveNote(ref, text)
+                        }
+                    }
                 }
             }
             // The write, then the list it changed. Turn-guarded unlike [saveNote],

@@ -4,7 +4,7 @@
 
 // Works on the main thread AND in the engine worker (TODO #28): the layout
 // measure callback runs where the engine runs, over an OffscreenCanvas there.
-import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FALLBACK, FONT_FILES } from "../engine/fonts.generated";
+import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FALLBACK, FONT_FILES, FONT_SCALE } from "../engine/fonts.generated";
 
 const ctx = (typeof document !== "undefined"
   ? document.createElement("canvas").getContext("2d")
@@ -21,6 +21,7 @@ const caches = new Map<string, Map<string, number>>();
 // shell, from the one config value.
 let fontToken: string = DEFAULT_FONT;
 let fontStack: string = fontStackFor(DEFAULT_FONT);
+let fontScale: number = FONT_SCALE[DEFAULT_FONT] ?? 1;
 
 /** The CSS family stack for a token — `"Family", fallback`. Exported so the
  *  DOCUMENT (chrome) and the CANVAS (scripture) build the same string from the
@@ -37,6 +38,7 @@ export function fontStackFor(token: string): string {
 export function setReaderFont(token: string): string {
   fontToken = FONT_FILES[token] ? token : DEFAULT_FONT;
   fontStack = fontStackFor(fontToken);
+  fontScale = FONT_SCALE[fontToken] ?? 1;
   return fontToken;
 }
 
@@ -57,8 +59,27 @@ export function readerFontFamily(): string {
   return fontStack;
 }
 
+/** The px the current face actually renders at for a requested size — the
+ *  face's optical scale (`FONT_SCALE`, mirroring `core::font::Font::scale`)
+ *  applied to the reader's setting, so switching faces changes the voice of the
+ *  text without changing its apparent size.
+ *
+ *  THIS IS THE ONE PLACE THE SCALE IS APPLIED, and both threads must go through
+ *  it: the engine worker measures with [readerFont]/[fontExtent] and the main
+ *  thread paints with fonts built on this number (reader/paint.ts). Apply it on
+ *  one side only and the engine measures one size while the shell paints
+ *  another — lines wrap where they are not drawn.
+ *
+ *  Render-time only: `config.bodySize` keeps the number the reader chose, or
+ *  their size would drift every time they switch faces. */
+export function readerFontPx(px: number): number {
+  // Two decimals, so the string in a font-cache key is stable rather than
+  // carrying float noise.
+  return Math.round(px * fontScale * 100) / 100;
+}
+
 export function readerFont(px: number): string {
-  return `${px}px ${fontStack}`;
+  return `${readerFontPx(px)}px ${fontStack}`;
 }
 
 /** A measure function for `font`, cached per unique string. */
