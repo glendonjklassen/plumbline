@@ -496,6 +496,8 @@ fn plans_and_concept_study_via_abi() {
         // The toy corpus's only book is John, whose highest chapter number is 3,
         // so the canon chapter total (the sweep denominator) is 3; one swept.
         assert_eq!(sr["sweepProgress"], serde_json::json!([1, 3]));
+        // The coverage itself is on the wire — the navigator paints from it.
+        assert_eq!(sr["swept"], serde_json::json!({ "John": [3] }));
 
         // Two plans run in parallel (a schedule and a concept study).
         assert_eq!(v["running"].as_array().unwrap().len(), 2);

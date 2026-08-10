@@ -1310,17 +1310,27 @@ filters and every zip-layout enumeration). Two kinds, frozen as `"schedule"` /
 **Web** (`study/StudyPanel.svelte` plans panel, `shell/Shell.svelte` banner,
 `state/session.svelte.ts` mode + sweep): Explore ▸ Plans panel — running-plan
 cards (day card, progress, stop-with-confirm), the builtin picker, the
-Concept Study launcher; a persistent mode banner with Exit;
-tap-to-tag through `ReaderPane`. E2e: `e2e/concept-study.spec.ts` (tap-to-tag,
-tracker suspension, tag survival, the Plans-panel launch path).
+Concept Study launcher; a persistent mode banner with Exit and a live
+`{done} / {total}` sweep count; tap-to-tag through `ReaderPane`. In the mode
+the passage navigator (`shell/BookNav.svelte`) paints the RUN's coverage
+instead of the (deliberately frozen) reading map — swept chapters tint as
+done, part-swept books as partial — and its long-press menu / whole-book
+button become "Mark swept" / "Sweep whole book" (the spec's mark-swept-by-hand),
+writing the run via `concept_study_sweep`, never the reading record. E2e:
+`e2e/concept-study.spec.ts` (tap-to-tag, tracker suspension, tag survival,
+the Plans-panel launch path, the touch-tap ghost-click regression, the
+progress surfaces).
 
-**C ABI** (5 fns): `plumbline_engine_plans_json` / `plan_start` / `plan_stop` /
+**C ABI** (5 fns): `plumbline_engine_plans_json` (concept-study entries carry
+`sweepProgress` AND the per-chapter `swept` map the navigator paints from) /
+`plan_start` / `plan_stop` /
 `concept_study_start` (returns the run id, `!`-prefixed error otherwise) /
 `concept_study_sweep`.
 
 **Deltas**: **Android has none of this feature yet** — no `PlansScreen`, no
-concept-study mode, no banner, no tap-to-tag; the Kotlin binding carries the
-endpoints but nothing calls them. Also missing on BOTH shells (spec decision
+concept-study mode, no banner, no tap-to-tag, no sweep-coverage navigator
+paint or mark-swept; the Kotlin binding carries the endpoints but nothing
+calls them. Also missing on BOTH shells (spec decision
 #5, still owed): the passage navigator's "today" card and the nav-strip plan
 chip ("Day 12 · Gen 30–31", "+1 more").
 

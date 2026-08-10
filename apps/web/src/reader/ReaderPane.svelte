@@ -454,16 +454,34 @@
     return hitTest(items, e.clientX - rect.left - marginX, e.clientY - rect.top - MARGIN + pane.scrollY);
   }
 
-  // ── verse under a point: hit word's verse, else nearest verse-number by y ──
+  // ── verse under a point: hit word's verse, else the nearest item on (or one
+  //    line from) the tapped line. The old fallback took the nearest verse
+  //    NUMBER anywhere in the chapter, by y alone — a tap mid-way through a
+  //    long verse sat lines from its own number and next to the following
+  //    verse's, so it named a verse the reader never touched; and a tap in the
+  //    dead space after the last line named one too. Words carry their verse,
+  //    so the word beside the tap is both closer and always right; beyond a
+  //    line's height from everything is padding, and padding is not a verse. ──
   function verseAt(e: MouseEvent | PointerEvent): string | null {
     const hit = hitAt(e);
     if (hit?.verse) return hit.verse;
     const rect = canvas.getBoundingClientRect();
+    const lx = e.clientX - rect.left - marginX;
     const ly = e.clientY - rect.top - MARGIN + pane.scrollY;
     let best: LayoutItem | null = null;
-    for (const it of items)
-      if (it.kind === "verseNumber" && (!best || Math.abs(it.y + it.h / 2 - ly) < Math.abs(best.y + best.h / 2 - ly)))
+    let bestKey = Infinity;
+    for (const it of items) {
+      const dy = ly < it.y ? it.y - ly : ly > it.y + it.h ? ly - (it.y + it.h) : 0;
+      if (dy > it.h) continue; // more than a line away vertically: dead space
+      const dx = lx < it.x ? it.x - lx : lx > it.x + it.w ? lx - (it.x + it.w) : 0;
+      // Anything on the tapped line beats everything off it; ties by x.
+      const key = dy * 10000 + dx;
+      if (key < bestKey) {
+        bestKey = key;
         best = it;
+      }
+    }
+    if (best?.verse) return best.verse;
     return best?.verseNumber != null ? `${pane.book} ${pane.chapter}:${best.verseNumber}` : null;
   }
 
@@ -486,6 +504,10 @@
   function onPointerDown(e: PointerEvent): void {
     s.activePane = paneIdx;
     moved = false;
+    // A fresh press always clears the swallow: if the tap that set it never
+    // produced a click (it landed elsewhere, or the browser dropped it), the
+    // stale flag must not eat this genuinely new one.
+    suppressClick = false;
     if (e.pointerType === "touch") {
       touchCancelled = false;
       touchStartX = e.clientX;
@@ -531,9 +553,35 @@
         touchDx = 0;
         return;
       }
-      if (!moved) onTapWord(e);
+      if (!moved) {
+        // The browser will re-deliver this same tap as a synthesized `click`,
+        // hit-tested against the page AS IT IS THEN. When it still targets the
+        // canvas, `suppressClick` stops the tap running twice; but when the tap
+        // has already opened the concept-study confirm, the page under the
+        // finger IS that dialog, and the ghost click presses whatever control
+        // sits there — measured live: the Cancel button, answering "no" to a
+        // question the reader never saw ("tapping a verse does nothing"); a
+        // finger's width away it would have been "Tag", a silent yes. So the
+        // ghost is swallowed at the document, wherever it lands.
+        suppressClick = true;
+        swallowGhostClick();
+        onTapWord(e);
+      }
       return;
     }
+  }
+  /** Eat the synthesized `click` this touch tap is about to produce, whatever
+   *  it targets. Capture-phase so it runs before any handler; `once` plus a
+   *  short fuse so a tap whose ghost never arrives cannot cost a later, real
+   *  click (the ghost is dispatched with the tap's own input sequence — if it
+   *  has not come inside 200 ms, it is not coming). */
+  function swallowGhostClick(): void {
+    const swallow = (e: MouseEvent): void => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    document.addEventListener("click", swallow, { capture: true, once: true });
+    setTimeout(() => document.removeEventListener("click", swallow, true), 200);
   }
   // A word tap: in concept-study mode it tags the verse (fast concept sweep); the
   // rest of the time it opens word study (Compose tap parity).

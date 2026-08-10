@@ -87,6 +87,101 @@ test("a concept study tags on tap, suspends the tracker, and its tag outlives th
   expect(await tagCount(page, "grace")).toBeGreaterThan(0);
 });
 
+// The mode on TOUCH — the input the sweep was built for and the one the mouse
+// tests above cannot exercise. A touch tap is delivered TWICE: pointerup, then
+// a synthesized `click` a few milliseconds later. Unswallowed, the second
+// delivery either ran the tap again (two confirmations for one tap) or — once
+// the confirm had rendered — landed on the dialog's backdrop and answered "no"
+// to a question the reader never saw, which on a phone read as "tapping a
+// verse does nothing". Dies if ReaderPane stops setting `suppressClick` on the
+// touch-tap path, or if the confirm backdrop goes back to dismissing on click.
+test.describe("touch", () => {
+  test.use({ hasTouch: true });
+
+  test("a touch tap asks exactly once, and the confirm survives its ghost click", async ({ page }) => {
+    await boot(page);
+    await page.evaluate(async () => {
+      await (window as any).__plumbline.startConceptStudy("mercy");
+    });
+    // Warm the plans read: the bug lived on the WARM path, where the tag is
+    // cached and the confirm opens fast enough for the synthesized click to
+    // land on its backdrop. (Cold, the RPC outran the ghost click and hid it.)
+    await page.evaluate(() => (window as any).__plumbline.fetchQ("plans", ""));
+    // Count the tap handler's invocations — a double-delivered tap calls it
+    // twice whichever element the ghost click lands on.
+    await page.evaluate(() => {
+      const s = (window as any).__plumbline;
+      (window as any).__tagCalls = 0;
+      const orig = s.conceptStudyTagVerse.bind(s);
+      s.conceptStudyTagVerse = (r: string) => {
+        (window as any).__tagCalls++;
+        return orig(r);
+      };
+    });
+
+    const canvas = page.locator(".pane canvas").first();
+    const box = (await canvas.boundingBox())!;
+    await canvas.tap({ position: { x: box.width / 2, y: 40 } });
+
+    // The confirm appears — and STAYS: past any ghost-click window.
+    const confirm = page.getByRole("button", { name: /^Tag / });
+    await expect(confirm).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(400);
+    await expect(confirm).toBeVisible();
+
+    // One tap, one ask.
+    expect(await page.evaluate(() => (window as any).__tagCalls)).toBe(1);
+
+    // Accepting it files the verse and no second confirmation surfaces.
+    await confirm.click();
+    await expect(page.locator('[data-surface="confirm"]')).toHaveCount(0);
+    await expect
+      .poll(() => tagCount(page, "mercy"), { message: "the touch tap did not file the verse", timeout: 10_000 })
+      .toBe(1);
+    await page.waitForTimeout(300);
+    await expect(page.locator('[data-surface="confirm"]')).toHaveCount(0);
+  });
+});
+
+// The sweep's progress is VISIBLE in the mode: the banner counts chapters, and
+// the navigator paints swept coverage instead of the frozen reading map (whose
+// glow cannot move while the tracker is suspended, and so said nothing about
+// the study). Dies if the banner loses its count, if `swept` falls off the
+// plans wire, or if BookNav goes back to painting the reading map in the mode.
+test("the mode shows sweep progress — the banner counts and the navigator paints coverage", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    await (window as any).__plumbline.startConceptStudy("hope");
+  });
+
+  // Entering the mode swept the chapter on screen; the banner says so.
+  await expect(page.locator(".concept-study-banner .prog")).toHaveText(/^1 \/ \d+/, { timeout: 10_000 });
+
+  // The navigator's chapter grid paints the SWEEP: the swept chapter's tile is
+  // tinted, its neighbour is not, and the tooltip names the state.
+  await page.locator(".pane .nav .passage").first().click();
+  const current = page.locator(".grid.books button.current");
+  await expect(current).toBeVisible();
+  await expect(current).toHaveAttribute("title", / chapters swept$/);
+  await current.click();
+  // The swept tile is the chapter the reader was IN when the mode started.
+  const chapter = await page.evaluate(() => (window as any).__plumbline.panes[0].chapter as number);
+  const tiles = page.locator(".grid.nums button");
+  const sweptTile = tiles.nth(chapter - 1);
+  const neighbour = tiles.nth(chapter); // chapter + 1, never swept yet
+  await expect(sweptTile).toHaveAttribute("title", / — swept$/);
+  await expect(sweptTile).toHaveAttribute("style", /background/);
+  await expect(neighbour).not.toHaveAttribute("style", /background/);
+
+  // Long-press's menu marks by hand in the mode: the neighbour sweeps without
+  // being opened, and the banner's count moves with it.
+  await neighbour.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Mark swept" }).click();
+  await expect(neighbour).toHaveAttribute("style", /background/, { timeout: 10_000 });
+  await page.locator(".dialog .close").click();
+  await expect(page.locator(".concept-study-banner .prog")).toHaveText(/^2 \/ \d+/);
+});
+
 // The Plans-panel path the reader actually walks: type a tag, press Start, and
 // the mode is entered; the run then shows as a card that can re-enter the mode.
 // Dies if the launcher stops wiring the input through startConceptStudy, or if

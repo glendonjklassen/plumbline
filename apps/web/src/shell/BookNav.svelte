@@ -27,15 +27,52 @@
   // without moving anything on screen.
   const nowStamp = () => new Date().toISOString();
   const bookHeat = $derived.by(() => {
-    if (!open) return new Map<string, ReadingHeat>();
+    if (!open || sweeping) return new Map<string, ReadingHeat>();
     const r = s.q("readingBooks", nowStamp().slice(0, 10) + "T12:00:00Z");
     return new Map<string, ReadingHeat>((r?.books ?? []).map((b: any) => [b.book, b as ReadingHeat]));
   });
   const chapterHeat = $derived.by(() => {
-    if (!book) return new Map<number, ReadingHeat>();
+    if (!book || sweeping) return new Map<number, ReadingHeat>();
     const r = s.q("readingChapters", book, nowStamp().slice(0, 10) + "T12:00:00Z");
     return new Map<number, ReadingHeat>((r?.chapters ?? []).map((c: any) => [c.chapter, c as ReadingHeat]));
   });
+
+  // ── concept-study mode: the navigator is the SWEEP's map ────────────────────
+  //
+  // In the mode the reading map is deliberately frozen (the tracker is
+  // suspended), so painting its glow here showed standing that could not move —
+  // and the sweep, which IS moving, had no map at all. So the mode swaps what
+  // the tiles say: a swept chapter paints as done, a part-swept book as
+  // partial, everything untouched stays plain (an unswept chapter is the
+  // default state of a sweep, not treasure to advertise). The reading map is
+  // untouched underneath and comes back on exit.
+  const sweeping = $derived(s.inConceptStudy);
+  const sweptMap = $derived.by(() => {
+    const m = new Map<string, ReadonlySet<number>>();
+    if (!sweeping) return m;
+    const run = ((s.q("plans", "")?.running ?? []) as any[]).find((p) => p.id === s.conceptStudyId);
+    for (const [b, cs] of Object.entries((run?.swept ?? {}) as Record<string, number[]>)) m.set(b, new Set(cs));
+    return m;
+  });
+  function sweepBookHeat(id: string): ReadingHeat | null {
+    const done = sweptMap.get(id)?.size ?? 0;
+    if (done === 0) return null;
+    const total = s.chapterCount(id) || 1;
+    return { standing: done >= total ? "read" : "partial", pct: done / total, glow: 0 };
+  }
+  function sweepChapterHeat(c: number): ReadingHeat | null {
+    return book !== null && sweptMap.get(book)?.has(c) ? { standing: "read", pct: 1, glow: 0 } : null;
+  }
+  function bookTitle(id: string, name: string): string {
+    if (!sweeping) return tintTitle(name, bookHeat.get(id));
+    const done = sweptMap.get(id)?.size ?? 0;
+    return done ? t("booknav.sweptBook", { name, done, total: s.chapterCount(id) || 1 }) : name;
+  }
+  function chapterTitle(c: number): string {
+    const name = `${s.bookName(book!)} ${c}`;
+    if (!sweeping) return tintTitle(name, chapterHeat.get(c));
+    return sweptMap.get(book!)?.has(c) ? t("booknav.swept", { name }) : name;
+  }
 
   let book = $state<string | null>(null);
   /** Which testament's books the grid lists — Android's `newTestament`. */
@@ -139,6 +176,37 @@
     s.showToast(t("booknav.markedBook", { book: s.bookName(b), n }));
   }
 
+  // ── mark-swept by hand (docs/READING-PLANS.md §Concept Study) ──────────────
+  // The sweep's twin of mark-read: in the mode, the long-press action and the
+  // whole-book button write the RUN's coverage, never the reading record — the
+  // record the mode exists to leave alone. The tile tints on the spot: a sweep
+  // is an authoring write, and authored refreshes the plans read.
+  async function markSwept(c: number): Promise<void> {
+    const b = book;
+    tileMenu = null;
+    if (!b) return;
+    const err = await s.author("conceptStudySweep", s.conceptStudyId, b, c);
+    if (err) s.showToast(err);
+  }
+  async function sweepWholeBook(): Promise<void> {
+    const b = book;
+    if (!b) return;
+    const n = chapterCount;
+    const ok = await s.askConfirm(
+      t("booknav.sweepBookAsk", { book: s.bookName(b) }),
+      t("booknav.sweepBookBody", { n }),
+      t("booknav.sweepBook"),
+    );
+    if (!ok) return;
+    for (let c = 1; c <= n; c++) {
+      const err = await s.author("conceptStudySweep", s.conceptStudyId, b, c);
+      if (err) {
+        s.showToast(err);
+        return;
+      }
+    }
+  }
+
   const books = $derived.by(() => {
     const all = toc?.books ?? [];
     return newTestament ? all.slice(divide) : all.slice(0, divide);
@@ -150,7 +218,7 @@
    *  they ARE matters more than where they have been, and the tile still says
    *  how long it has been. */
   function bookStyle(id: string): string {
-    const heat = bookHeat.get(id);
+    const heat = sweeping ? sweepBookHeat(id) : bookHeat.get(id);
     if (id !== currentBook) return tintStyle(heat);
     const shadow = readingTint(heat)?.shadow;
     return shadow ? `box-shadow:${shadow};` : "";
@@ -206,7 +274,7 @@
               aria-current={b.id === currentBook ? "page" : undefined}
               onclick={() => (book = b.id)}
               style={bookStyle(b.id)}
-              title={tintTitle(b.name ?? b.id, bookHeat.get(b.id))}
+              title={bookTitle(b.id, b.name ?? b.id)}
             >{b.name ?? b.id}</button>
           {/each}
         </div>
@@ -216,9 +284,11 @@
         <p class="sect">
           {s.bookName(book)} — {t("booknav.chapter")}
           <span class="spacer"></span>
-          <button class="markbook" onclick={markWholeBook}>{t("booknav.markBook")}</button>
+          <button class="markbook" onclick={sweeping ? sweepWholeBook : markWholeBook}
+            >{sweeping ? t("booknav.sweepBook") : t("booknav.markBook")}</button
+          >
         </p>
-        <p class="hint">{t("booknav.markHint")}</p>
+        <p class="hint">{sweeping ? t("booknav.sweepHint") : t("booknav.markHint")}</p>
         <div class="grid nums">
           {#each Array.from({ length: chapterCount }, (_, i) => i + 1) as c (c)}
             <button
@@ -231,8 +301,8 @@
                 e.preventDefault();
                 openTileMenu(c, e.clientX, e.clientY);
               }}
-              style={tintStyle(chapterHeat.get(c))}
-              title={tintTitle(`${s.bookName(book)} ${c}`, chapterHeat.get(c))}
+              style={tintStyle(sweeping ? sweepChapterHeat(c) : chapterHeat.get(c))}
+              title={chapterTitle(c)}
             >{c}</button>
           {/each}
         </div>
@@ -245,8 +315,12 @@
     <div class="tilemenu-backdrop" onclick={() => (tileMenu = null)}></div>
     <div class="tilemenu" role="menu" style={`left:${tileMenu.x}px; top:${tileMenu.y}px`}>
       <p class="tm-title">{s.bookName(book)} {tileMenu.chapter}</p>
-      <button role="menuitem" onclick={() => markToday(tileMenu!.chapter)}>{t("booknav.markRead")}</button>
-      <button role="menuitem" onclick={() => markOnDate(tileMenu!.chapter)}>{t("booknav.markReadOn")}</button>
+      {#if sweeping}
+        <button role="menuitem" onclick={() => markSwept(tileMenu!.chapter)}>{t("booknav.markSwept")}</button>
+      {:else}
+        <button role="menuitem" onclick={() => markToday(tileMenu!.chapter)}>{t("booknav.markRead")}</button>
+        <button role="menuitem" onclick={() => markOnDate(tileMenu!.chapter)}>{t("booknav.markReadOn")}</button>
+      {/if}
     </div>
   {/if}
 {/if}

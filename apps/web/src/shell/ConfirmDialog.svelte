@@ -24,7 +24,13 @@
 
 {#if req}
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-  <div class="backdrop" onclick={no}></div>
+  <!-- Dismissed on POINTERDOWN, not click: a touch tap that OPENED this dialog
+       (a verse tap in concept-study mode) is re-delivered by the browser as a
+       synthesized click a few milliseconds later, hit-tested against the page
+       as it is then — this backdrop. A click handler answered "no" to a
+       question the reader never saw. A pointerdown can only come from a NEW
+       press, which really is the reader dismissing it. -->
+  <div class="backdrop" onpointerdown={no}></div>
   <!-- Escape comes from `use:modal` rather than a `svelte:window` listener, so
        it answers from inside a field too, and — since a confirmation is asked
        FROM another surface — it closes this and not the surface underneath.
