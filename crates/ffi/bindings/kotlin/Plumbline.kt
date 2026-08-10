@@ -243,13 +243,13 @@ internal interface PlumblineNative : Library {
         stepSeconds: Float, interacted: Boolean, now: String,
     ): Pointer?
 
-    // ── reading plans + the speedrun ────────────────────────────────────────
+    // ── reading plans + the concept study ───────────────────────────────────
     fun plumbline_engine_plans_json(engine: Pointer, now: String): Pointer?
     fun plumbline_engine_plan_start(engine: Pointer, id: String, now: String): Pointer?
     fun plumbline_engine_plan_stop(engine: Pointer, id: String): Pointer?
     /** Returns the run's id, or an error string prefixed with '!'. */
-    fun plumbline_engine_speedrun_start(engine: Pointer, tag: String, now: String): Pointer?
-    fun plumbline_engine_speedrun_sweep(engine: Pointer, id: String, book: String, chapter: Int): Pointer?
+    fun plumbline_engine_concept_study_start(engine: Pointer, tag: String, now: String): Pointer?
+    fun plumbline_engine_concept_study_sweep(engine: Pointer, id: String, book: String, chapter: Int): Pointer?
 
     // ── static panel content: guide / about ─────────────────────────────────
     fun plumbline_panel_guide_blocks_json(): Pointer?

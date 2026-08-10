@@ -23,18 +23,18 @@
   });
 
   // Reading plans (Explore ▸ Plans): running plans with derived progress, plus
-  // the catalogue to start from and a speedrun launcher. Bespoke, not blocks —
+  // the catalogue to start from and a concept study launcher. Bespoke, not blocks —
   // it is interactive (start/stop/enter), which a block list is not.
   const plans = $derived.by(() => {
     void s.studyEpoch;
     return s.panel?.kind === "plans" ? s.q("plans", "") : null;
   });
-  let speedrunTag = $state("");
-  async function launchSpeedrun(): Promise<void> {
-    const tag = speedrunTag.trim();
+  let conceptStudyTag = $state("");
+  async function launchConceptStudy(): Promise<void> {
+    const tag = conceptStudyTag.trim();
     if (!tag) return;
-    speedrunTag = "";
-    await s.startSpeedrun(tag);
+    conceptStudyTag = "";
+    await s.startConceptStudy(tag);
   }
   /** A schedule plan's display name, from the builtin catalogue (its `nameKey`
    *  is a catalogue id); falls back to the raw id for an unknown plan. */
@@ -160,17 +160,17 @@
           <p class="nb-empty">{t("plans.empty")}</p>
         {/if}
         {#each plans?.running ?? [] as p (p.id)}
-          <div class="plan-card" class:speedrun={p.kind === "speedrun"}>
-            {#if p.kind === "speedrun"}
+          <div class="plan-card" class:concept-study={p.kind === "conceptStudy"}>
+            {#if p.kind === "conceptStudy"}
               <div class="plan-head">
-                <span class="plan-name">{t("plans.speedrunTag", { tag: p.tag })}</span>
+                <span class="plan-name">{t("plans.conceptStudyTag", { tag: p.tag })}</span>
                 <span class="plan-prog">{t("plans.sweepProgress", { done: p.sweepProgress[0], total: p.sweepProgress[1] })}</span>
               </div>
               <div class="plan-actions">
-                {#if s.speedrunId !== p.id}
-                  <button onclick={() => s.enterSpeedrun(p.id)}>{t("plans.enter")}</button>
+                {#if s.conceptStudyId !== p.id}
+                  <button onclick={() => s.enterConceptStudy(p.id)}>{t("plans.enter")}</button>
                 {:else}
-                  <button onclick={() => s.exitSpeedrun()}>{t("speedrun.exit")}</button>
+                  <button onclick={() => s.exitConceptStudy()}>{t("conceptStudy.exit")}</button>
                 {/if}
                 <button class="danger" onclick={() => s.stopPlan(p.id, p.tag)}>{t("plans.stop")}</button>
               </div>
@@ -193,16 +193,16 @@
           </div>
         {/each}
 
-        <h3 class="plans-sub">{t("plans.speedrunHeading")}</h3>
-        <p class="plans-hint">{t("plans.speedrunHint")}</p>
-        <div class="speedrun-launch">
+        <h3 class="plans-sub">{t("plans.conceptStudyHeading")}</h3>
+        <p class="plans-hint">{t("plans.conceptStudyHint")}</p>
+        <div class="concept-study-launch">
           <input
             type="text"
-            bind:value={speedrunTag}
-            placeholder={t("plans.speedrunPlaceholder")}
-            onkeydown={(e) => e.key === "Enter" && launchSpeedrun()}
+            bind:value={conceptStudyTag}
+            placeholder={t("plans.conceptStudyPlaceholder")}
+            onkeydown={(e) => e.key === "Enter" && launchConceptStudy()}
           />
-          <button disabled={!speedrunTag.trim()} onclick={launchSpeedrun}>{t("plans.speedrunStart")}</button>
+          <button disabled={!conceptStudyTag.trim()} onclick={launchConceptStudy}>{t("plans.conceptStudyStart")}</button>
         </div>
 
         <h3 class="plans-sub">{t("plans.available")}</h3>
@@ -363,7 +363,7 @@
     flex-direction: column;
     gap: 6px;
   }
-  .plan-card.speedrun {
+  .plan-card.concept-study {
     border-color: var(--tier-research, #b04a3a);
     background: color-mix(in srgb, var(--tier-research, #b04a3a) 8%, transparent);
   }
@@ -400,7 +400,7 @@
     gap: 8px;
   }
   .plan-actions button,
-  .speedrun-launch button,
+  .concept-study-launch button,
   .plan-builtin {
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 5px;
@@ -426,12 +426,12 @@
     font-size: calc(12.5px * var(--uiScale, 1));
     margin-bottom: 8px;
   }
-  .speedrun-launch {
+  .concept-study-launch {
     display: flex;
     gap: 8px;
     margin-bottom: 6px;
   }
-  .speedrun-launch input {
+  .concept-study-launch input {
     flex: 1;
     min-width: 0;
     border: 1px solid var(--rule, #d8cba8);
@@ -461,7 +461,7 @@
     white-space: nowrap;
   }
   .plan-actions button:disabled,
-  .speedrun-launch button:disabled {
+  .concept-study-launch button:disabled {
     opacity: 0.5;
     cursor: default;
   }

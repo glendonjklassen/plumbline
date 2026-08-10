@@ -165,7 +165,7 @@ on macOS). The window title's tooltip and the first line of `plumbline-hydrate
 check` both print the resolved home.
 
 Inside it, **yours** (back these up): `weaves/`, `threads/`, `tags/`, `notes/`,
-`memory/`, `reading/`. Shipped/regenerable: `data/`, `bridge/`, and the `*.idxcache`
+`memory/`, `reading/`, `plans/`. Shipped/regenerable: `data/`, `bridge/`, and the `*.idxcache`
 startup cache. Config (mode, text size, open panes) is separate, in the
 platform config dir (`~/.config/plumbline/config.json` on Linux). Every write
 is atomic; a corrupt or missing optional file degrades its feature, never the

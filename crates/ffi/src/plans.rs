@@ -1,4 +1,4 @@
-//! Reading plans + the speedrun — the C ABI. A sibling of `reading_map.rs` for
+//! Reading plans + the concept study — the C ABI. A sibling of `reading_map.rs` for
 //! the same reason: `lib.rs` is past the no-3k-line rule, and cbindgen walks the
 //! whole crate, so the header is unchanged by the split.
 //!
@@ -41,7 +41,7 @@ struct WireRunning {
     kind: plan::Kind,
     #[serde(skip_serializing_if = "Option::is_none")]
     class: Option<String>,
-    /// Speedrun only: the preset tag a tap files under.
+    /// Concept study only: the preset tag a tap files under.
     #[serde(skip_serializing_if = "Option::is_none")]
     tag: Option<String>,
     /// Schedule only: today's card (null once the plan is finished).
@@ -50,7 +50,7 @@ struct WireRunning {
     /// Schedule only: whole-plan progress in days.
     #[serde(skip_serializing_if = "Option::is_none")]
     schedule_progress: Option<[u32; 2]>,
-    /// Speedrun only: chapters swept over the scope total.
+    /// Concept study only: chapters swept over the scope total.
     #[serde(skip_serializing_if = "Option::is_none")]
     sweep_progress: Option<[u32; 2]>,
 }
@@ -133,7 +133,7 @@ fn running_state(plan: &Plan, words: &ChapterWords, store: &reading::Store) -> W
                     .collect(),
             });
         }
-        plan::Kind::Speedrun => {
+        plan::Kind::ConceptStudy => {
             let (swept, total) = plan::sweep_progress(plan, canon_chapter_total(words));
             w.sweep_progress = Some([swept as u32, total as u32]);
         }
@@ -141,7 +141,7 @@ fn running_state(plan: &Plan, words: &ChapterWords, store: &reading::Store) -> W
     w
 }
 
-/// Total chapters in the corpus — the speedrun's scope denominator (whole canon).
+/// Total chapters in the corpus — the concept study's scope denominator (whole canon).
 fn canon_chapter_total(words: &ChapterWords) -> usize {
     canon::book_ids().map(|b| words.chapters(b) as usize).sum()
 }
@@ -228,8 +228,8 @@ pub unsafe extern "C" fn plumbline_engine_plan_start(
     })
 }
 
-/// Start (or RESUME) a speedrun for `tag`, returning the run's plan id — the id
-/// the shell writes into `config.speedrun` to enter the mode. The id is derived
+/// Start (or RESUME) a concept study for `tag`, returning the run's plan id —
+/// the id the shell writes into `config.conceptStudy` to enter the mode. The id is derived
 /// from the tag (`run-<slug>`), so re-starting a concept the reader is already
 /// sweeping resumes it, coverage intact, rather than forking a second run. The
 /// tag itself need not exist yet; the first tap-to-tag creates it.
@@ -240,7 +240,7 @@ pub unsafe extern "C" fn plumbline_engine_plan_start(
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_speedrun_start(
+pub unsafe extern "C" fn plumbline_engine_concept_study_start(
     engine: *mut PlumblineEngine,
     tag: *const c_char,
     now: *const c_char,
@@ -254,7 +254,7 @@ pub unsafe extern "C" fn plumbline_engine_speedrun_start(
             return out_string("!null or invalid argument".into());
         };
         if tag.trim().is_empty() {
-            return out_string("!a speedrun needs a tag to file under".into());
+            return out_string("!a concept study needs a tag to file under".into());
         }
         let id = format!("run-{}", store::slug(tag, "run"));
         // Resume an existing run for this tag rather than clobber its coverage.
@@ -264,7 +264,7 @@ pub unsafe extern "C" fn plumbline_engine_speedrun_start(
         let run = plan::Plan {
             format: plan::FORMAT.to_string(),
             id: id.clone(),
-            kind: plan::Kind::Speedrun,
+            kind: plan::Kind::ConceptStudy,
             class: None,
             generator: None,
             table: None,
@@ -281,14 +281,14 @@ pub unsafe extern "C" fn plumbline_engine_speedrun_start(
     })
 }
 
-/// Mark a chapter swept in a speedrun (generous: no dwell, any order), and
-/// persist. A non-speedrun id, or a chapter already swept, is a harmless no-op.
+/// Mark a chapter swept in a concept study (generous: no dwell, any order), and
+/// persist. A non-concept-study id, or a chapter already swept, is a harmless no-op.
 /// Null on success, else an owned error string.
 ///
 /// # Safety
 /// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn plumbline_engine_speedrun_sweep(
+pub unsafe extern "C" fn plumbline_engine_concept_study_sweep(
     engine: *mut PlumblineEngine,
     id: *const c_char,
     book: *const c_char,
@@ -308,7 +308,7 @@ pub unsafe extern "C" fn plumbline_engine_speedrun_sweep(
         let Some(mut run) = plan::load_plans(&home).0.into_iter().find(|p| p.id == id) else {
             return ptr::null_mut(); // no such run: nothing to sweep, not an error
         };
-        if run.kind != plan::Kind::Speedrun {
+        if run.kind != plan::Kind::ConceptStudy {
             return ptr::null_mut();
         }
         if plan::sweep(&mut run, book, chapter as u16) {
@@ -320,7 +320,7 @@ pub unsafe extern "C" fn plumbline_engine_speedrun_sweep(
     })
 }
 
-/// Stop a plan — remove its file. Ending a speedrun leaves its tag and every
+/// Stop a plan — remove its file. Ending a concept study leaves its tag and every
 /// verse gathered untouched (the point of the sweep). An absent id is a no-op.
 /// Null on success, else an owned error string.
 ///

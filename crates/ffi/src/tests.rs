@@ -445,7 +445,7 @@ fn authoring_round_trip_via_abi() {
 }
 
 #[test]
-fn plans_and_speedrun_via_abi() {
+fn plans_and_concept_study_via_abi() {
     unsafe {
         let home = std::env::temp_dir().join(format!("plumbline-ffi-plans-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
@@ -479,28 +479,28 @@ fn plans_and_speedrun_via_abi() {
             .unwrap()
             .contains("unknown plan"));
 
-        // Start a speedrun; the returned id is what the shell writes into
-        // config.speedrun. Starting the same tag again RESUMES (same id).
-        let id = take(plumbline_engine_speedrun_start(e, c("grace").as_ptr(), now.as_ptr())).unwrap();
+        // Start a concept study; the returned id is what the shell writes into
+        // config.conceptStudy. Starting the same tag again RESUMES (same id).
+        let id = take(plumbline_engine_concept_study_start(e, c("grace").as_ptr(), now.as_ptr())).unwrap();
         assert_eq!(id, "run-grace");
         assert!(!id.starts_with('!'), "a '!' prefix would mean an error");
-        let again = take(plumbline_engine_speedrun_start(e, c("grace").as_ptr(), now.as_ptr())).unwrap();
+        let again = take(plumbline_engine_concept_study_start(e, c("grace").as_ptr(), now.as_ptr())).unwrap();
         assert_eq!(again, "run-grace", "a second start resumes, does not fork");
 
         // Sweep the one chapter; progress is 1 of the corpus's chapter total.
-        assert!(plumbline_engine_speedrun_sweep(e, c(&id).as_ptr(), c("John").as_ptr(), 3).is_null());
+        assert!(plumbline_engine_concept_study_sweep(e, c(&id).as_ptr(), c("John").as_ptr(), 3).is_null());
         let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
         let sr = v["running"].as_array().unwrap().iter().find(|p| p["id"] == "run-grace").unwrap();
-        assert_eq!(sr["kind"], "speedrun");
+        assert_eq!(sr["kind"], "conceptStudy");
         assert_eq!(sr["tag"], "grace");
         // The toy corpus's only book is John, whose highest chapter number is 3,
         // so the canon chapter total (the sweep denominator) is 3; one swept.
         assert_eq!(sr["sweepProgress"], serde_json::json!([1, 3]));
 
-        // Two plans run in parallel (a schedule and a speedrun).
+        // Two plans run in parallel (a schedule and a concept study).
         assert_eq!(v["running"].as_array().unwrap().len(), 2);
 
-        // Stop the speedrun; it goes, the schedule stays. (The tag it filed
+        // Stop the concept study; it goes, the schedule stays. (The tag it filed
         // under is untouched — not asserted here, that is core::tag's contract.)
         assert!(plumbline_engine_plan_stop(e, c("run-grace").as_ptr()).is_null());
         let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();

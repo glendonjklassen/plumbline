@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// The speedrun: a non-linear concept sweep with its own reader mode
-// (docs/READING-PLANS.md §Speedrun). Three properties, and each is a way the
+// The concept study: a non-linear concept sweep with its own reader mode
+// (docs/READING-PLANS.md §Concept Study). Three properties, and each is a way the
 // feature would quietly fail:
 //
 //   1. A verse tap in the mode TAGS (with a confirm) instead of opening word
@@ -15,8 +15,9 @@ import { expect, test, type Page } from "@playwright/test";
 //
 // No mutation recipes run here (shared dist/, one preview port) — but each
 // assertion is written to go red on the obvious break: (1) dies if the tap
-// path ignores `inSpeedrun`; (2) dies if Shell's tracker `target` drops the
-// `inSpeedrun` guard; (3) dies if exitSpeedrun does not clear config.speedrun.
+// path ignores `inConceptStudy`; (2) dies if Shell's tracker `target` drops the
+// `inConceptStudy` guard; (3) dies if exitConceptStudy does not clear
+// config.conceptStudy.
 
 async function boot(page: Page): Promise<void> {
   await page.goto("/");
@@ -30,10 +31,10 @@ async function boot(page: Page): Promise<void> {
 }
 
 /** Session state the reader can't see but the test needs to pin. */
-const st = (page: Page): Promise<{ speedrun: string; panelKind: string | null }> =>
+const st = (page: Page): Promise<{ conceptStudy: string; panelKind: string | null }> =>
   page.evaluate(() => {
     const s = (window as any).__plumbline;
-    return { speedrun: s?.config?.speedrun ?? "", panelKind: s?.panel?.kind ?? null };
+    return { conceptStudy: s?.config?.conceptStudy ?? "", panelKind: s?.panel?.kind ?? null };
   });
 
 /** How many verses the tag holds, straight from the engine — the sweep's yield. */
@@ -43,20 +44,20 @@ const tagCount = (page: Page, tag: string): Promise<number> =>
     return tags?.tags?.find((x: any) => x.name === t)?.members?.length ?? 0;
   }, tag);
 
-test("a speedrun tags on tap, suspends the tracker, and its tag outlives the run", async ({ page }) => {
+test("a concept study tags on tap, suspends the tracker, and its tag outlives the run", async ({ page }) => {
   await boot(page);
 
-  // Start a speedrun straight through the engine (the Plans-panel UI is driven
+  // Start a concept study straight through the engine (the Plans-panel UI is driven
   // in its own test; here the mode is the subject). The session method does the
   // config write + mode entry the panel button would.
   await page.evaluate(async () => {
-    await (window as any).__plumbline.startSpeedrun("grace");
+    await (window as any).__plumbline.startConceptStudy("grace");
   });
 
   // (2) In the mode, the reading tracker reports nothing: its target is null.
   //     Shell's `target()` is the source of truth the tracker samples.
-  expect(await st(page)).toMatchObject({ speedrun: "run-grace" });
-  await expect(page.locator(".speedrun-banner")).toBeVisible();
+  expect(await st(page)).toMatchObject({ conceptStudy: "run-grace" });
+  await expect(page.locator(".concept-study-banner")).toBeVisible();
 
   // (1) A verse tap opens the confirm, not word study. Auto-accept the confirm
   //     dialog by clicking its named button (the app's own ConfirmDialog, whose
@@ -80,8 +81,34 @@ test("a speedrun tags on tap, suspends the tracker, and its tag outlives the run
 
   // (3) Leave the mode: config clears, the banner goes, taps are word study
   //     again — and the tag stays.
-  await page.getByRole("button", { name: "Exit speedrun" }).click();
-  expect((await st(page)).speedrun).toBe("");
-  await expect(page.locator(".speedrun-banner")).toHaveCount(0);
+  await page.getByRole("button", { name: "Exit Concept Study" }).click();
+  expect((await st(page)).conceptStudy).toBe("");
+  await expect(page.locator(".concept-study-banner")).toHaveCount(0);
   expect(await tagCount(page, "grace")).toBeGreaterThan(0);
+});
+
+// The Plans-panel path the reader actually walks: type a tag, press Start, and
+// the mode is entered; the run then shows as a card that can re-enter the mode.
+// Dies if the launcher stops wiring the input through startConceptStudy, or if
+// the running card loses its Resume button.
+test("the Plans panel launches a concept study and re-enters it from its card", async ({ page }) => {
+  await boot(page);
+
+  await page.evaluate(() => ((window as any).__plumbline.panel = { kind: "plans" }));
+  await page.getByPlaceholder("Tag to gather into (e.g. grace)").fill("faith");
+  await page.getByRole("button", { name: "Start Concept Study" }).click();
+
+  // Launch enters the mode and records the run.
+  await expect(page.locator(".concept-study-banner")).toBeVisible();
+  expect(await st(page)).toMatchObject({ conceptStudy: "run-faith" });
+
+  // Leave, then re-enter from the run's card — coverage (the run) persists.
+  await page.getByRole("button", { name: "Exit Concept Study" }).click();
+  await expect(page.locator(".concept-study-banner")).toHaveCount(0);
+  await page.evaluate(() => ((window as any).__plumbline.panel = { kind: "plans" }));
+  const card = page.locator(".plan-card.concept-study", { hasText: "faith" });
+  await expect(card).toBeVisible();
+  await card.getByRole("button", { name: "Resume" }).click();
+  await expect(page.locator(".concept-study-banner")).toBeVisible();
+  expect(await st(page)).toMatchObject({ conceptStudy: "run-faith" });
 });

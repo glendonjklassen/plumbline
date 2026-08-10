@@ -1,4 +1,4 @@
-//! Reading plans + the speedrun. [docs/READING-PLANS.md] is the contract; the
+//! Reading plans + the concept study. [docs/READING-PLANS.md] is the contract; the
 //! decisions live there, this header only orients.
 //!
 //! A **schedule plan** is a word-weighted walk of a scope (whole canon, NT, a
@@ -10,11 +10,11 @@
 //! honoured once stays honoured even if the reading record underneath it is
 //! later cleared.
 //!
-//! A **speedrun** is not a schedule at all: a non-linear concept sweep with a
-//! preset tag. It records which chapters have been swept (no dwell gate — the
-//! reading tracker is OFF in speedrun mode, shell-side) and its progress is
-//! swept-over-scope. Ending a speedrun never touches the tag or its members —
-//! what was gathered is the point.
+//! A **concept study** is not a schedule at all: a non-linear concept sweep
+//! with a preset tag. It records which chapters have been swept (no dwell gate
+//! — the reading tracker is OFF in concept-study mode, shell-side) and its
+//! progress is swept-over-scope. Ending a concept study never touches the tag
+//! or its members — what was gathered is the point.
 //!
 //! Schedules are **generated, not stored**: the plan file keeps the generator's
 //! parameters (or a curated table's id) and the walk is deterministic given the
@@ -47,12 +47,13 @@ pub const CLASS_WHOLE_BIBLE: &str = "wholeBible";
 pub const CLASS_NEW_TESTAMENT: &str = "newTestament";
 pub const CLASS_DEVOTIONAL: &str = "devotional";
 
-/// What kind of plan a file describes.
+/// What kind of plan a file describes. The serialized names are frozen with
+/// the rest of the format: `"schedule"` and `"conceptStudy"`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum Kind {
     Schedule,
-    Speedrun,
+    ConceptStudy,
 }
 
 /// What a generated schedule walks. Serialized flat into the generator object:
@@ -78,7 +79,7 @@ pub struct Generator {
 /// Additive evolution only: unknown fields are read past (serde default) and
 /// dropped on the next write, the `overlay-tag-v1` stance. `done` holds
 /// **1-based day numbers**, sorted, deduped; days complete out of order and
-/// stay recorded. `swept` is the speedrun's coverage, chapters sorted per book.
+/// stay recorded. `swept` is the concept study's coverage, chapters sorted per book.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Plan {
@@ -99,10 +100,10 @@ pub struct Plan {
     pub lang: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub done: Vec<u32>,
-    /// Speedrun only: the preset tag a tapped verse is filed under.
+    /// Concept study only: the preset tag a tapped verse is filed under.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
-    /// Speedrun only: swept chapters, `book id → sorted chapter numbers`.
+    /// Concept study only: swept chapters, `book id → sorted chapter numbers`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub swept: BTreeMap<String, Vec<u16>>,
 }
@@ -300,10 +301,10 @@ pub fn mark_done(plan: &mut Plan, day: u32) -> bool {
     }
 }
 
-// ── the speedrun's coverage ───────────────────────────────────────────────────
+// ── the concept study's coverage ──────────────────────────────────────────────
 
 /// Mark a chapter swept. Returns whether it was new. No dwell, no order — the
-/// generosity is the design (docs/READING-PLANS.md §Speedrun).
+/// generosity is the design (docs/READING-PLANS.md §Concept Study).
 pub fn sweep(plan: &mut Plan, book: &str, chapter: u16) -> bool {
     let chs = plan.swept.entry(book.to_string()).or_default();
     match chs.binary_search(&chapter) {
@@ -319,7 +320,7 @@ pub fn is_swept(plan: &Plan, book: &str, chapter: u16) -> bool {
     plan.swept.get(book).is_some_and(|chs| chs.binary_search(&chapter).is_ok())
 }
 
-/// Swept chapters over the scope's total — the speedrun's progress pair.
+/// Swept chapters over the scope's total — the concept study's progress pair.
 pub fn sweep_progress(plan: &Plan, scope_total: usize) -> (usize, usize) {
     (plan.swept.values().map(Vec::len).sum(), scope_total)
 }
@@ -516,7 +517,7 @@ mod tests {
     #[test]
     fn sweep_records_once_and_progress_counts_the_scope() {
         let mut p = plan("run-grace", None);
-        p.kind = Kind::Speedrun;
+        p.kind = Kind::ConceptStudy;
         p.tag = Some("grace".into());
         assert!(sweep(&mut p, "Gen", 2));
         assert!(!sweep(&mut p, "Gen", 2), "sweeping twice is a no-op");
@@ -533,9 +534,9 @@ mod tests {
         mark_done(&mut p, 4);
         write_plan(&home, &p).unwrap();
 
-        // A second, classless speedrun beside it.
+        // A second, classless concept study beside it.
         let mut run = plan("run-grace", None);
-        run.kind = Kind::Speedrun;
+        run.kind = Kind::ConceptStudy;
         run.tag = Some("grace".into());
         write_plan(&home, &run).unwrap();
 

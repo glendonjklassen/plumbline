@@ -535,12 +535,12 @@
       return;
     }
   }
-  // A word tap: in speedrun mode it tags the verse (fast concept sweep); the
+  // A word tap: in concept-study mode it tags the verse (fast concept sweep); the
   // rest of the time it opens word study (Compose tap parity).
   function onTapWord(e: MouseEvent | PointerEvent): void {
-    if (s.inSpeedrun) {
+    if (s.inConceptStudy) {
       const refKey = verseAt(e);
-      if (refKey) void s.speedrunTagVerse(refKey);
+      if (refKey) void s.conceptStudyTagVerse(refKey);
       return;
     }
     const hit = hitAt(e);
