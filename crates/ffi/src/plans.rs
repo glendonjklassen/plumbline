@@ -187,7 +187,7 @@ pub unsafe extern "C" fn plumbline_engine_plans_json(
             // every offered row must be startable into a non-empty schedule
             // today (plan::builtins' contract), and a home without the file
             // would start one that reads instantly "finished".
-            .filter(|b| b.table.map_or(true, |id| home.is_some_and(|h| plan::load_table(h, id).is_some())))
+            .filter(|b| b.table.is_none_or(|id| home.is_some_and(|h| plan::load_table(h, id).is_some())))
             .map(|b| WireBuiltin {
                 id: b.id.to_string(),
                 name_key: b.name_key.to_string(),
