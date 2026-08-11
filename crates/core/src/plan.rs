@@ -652,13 +652,12 @@ mod tests {
         assert!(load_table(&home, "chronological").is_none());
 
         // Well-formed: segments expand in order, days carried through.
-        write(r#"{"format":"plumbline-plan-table-v1","id":"chronological","days":3,"segments":[["Gen",1,2],["Job",1,1],["Gen",3,3]]}"#);
+        write(
+            r#"{"format":"plumbline-plan-table-v1","id":"chronological","days":3,"segments":[["Gen",1,2],["Job",1,1],["Gen",3,3]]}"#,
+        );
         let t = load_table(&home, "chronological").unwrap();
         assert_eq!(t.days, 3);
-        assert_eq!(
-            t.order,
-            vec![("Gen".into(), 1), ("Gen".into(), 2), ("Job".into(), 1), ("Gen".into(), 3)]
-        );
+        assert_eq!(t.order, vec![("Gen".into(), 1), ("Gen".into(), 2), ("Job".into(), 1), ("Gen".into(), 3)]);
 
         // Damage hides the plan rather than shipping a hole: wrong format tag,
         // an unknown book, an inverted span, an empty table.

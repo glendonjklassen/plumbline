@@ -112,7 +112,12 @@ fn schedule_of(plan: &Plan, words: &ChapterWords, home: Option<&std::path::Path>
     }
 }
 
-fn running_state(plan: &Plan, words: &ChapterWords, store: &reading::Store, home: Option<&std::path::Path>) -> WireRunning {
+fn running_state(
+    plan: &Plan,
+    words: &ChapterWords,
+    store: &reading::Store,
+    home: Option<&std::path::Path>,
+) -> WireRunning {
     let mut w = WireRunning {
         id: plan.id.clone(),
         kind: plan.kind,
