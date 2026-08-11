@@ -392,6 +392,10 @@ export class Session {
    * still knows what the button does.
    */
   askConfirm(title: string, body: string, verb?: string): Promise<boolean> {
+    // One question at a time: a second ask while one is open answers the first
+    // with "no". Overwriting it silently left the first caller awaiting a
+    // promise nothing could ever settle.
+    this.confirmReq?.resolve(false);
     return new Promise((resolve) => {
       this.confirmReq = { title, body, verb: verb ?? t("common.delete"), resolve };
     });
@@ -1182,6 +1186,10 @@ export class Session {
   enterConceptStudy(id: string): void {
     this.config.conceptStudy = id;
     this.saveConfig();
+    // Drop the cached plans read like startConceptStudy does: the epoch alone
+    // re-ran deriveds into the SAME cached object, so a resume could show the
+    // run's stale tag and swept count until some other write invalidated.
+    this.invalidate();
     this.studyEpoch++;
     this.goRead();
     if (this.panes[0]) this.#sweepCurrent(this.panes[0].book, this.panes[0].chapter);
@@ -1213,7 +1221,13 @@ export class Session {
   async conceptStudyTagVerse(refKey: string): Promise<void> {
     if (!refKey) return;
     const tag = await this.#conceptStudyTagAwaited();
-    if (!tag) return;
+    if (!tag) {
+      // A tap that silently does nothing reads as a broken mode. This happens
+      // when the run behind config.conceptStudy has no record (removed
+      // out-of-band, or the plans read failed) — say so and point at the fix.
+      this.showToast(t("conceptStudy.noTag"));
+      return;
+    }
     const ok = await this.askConfirm(t("conceptStudy.tagAsk", { tag, verse: refKey }), "", t("conceptStudy.tagVerb", { tag }));
     if (!ok) return;
     const err = await this.author("tagAdd", tag, "verse", refKey, null, nowStamp());
@@ -1259,6 +1273,10 @@ export class Session {
     pane.pendingScroll = false;
     pane.scrollY = 0;
     this.activePane = paneIdx;
+    // History is navigation too: arriving at a chapter sweeps it, same as
+    // navigate() — mouse-button 4/5 steps were the one route into a chapter
+    // that left no mark on a concept study's coverage.
+    if (paneIdx === 0 && this.inConceptStudy) this.#sweepCurrent(pane.book, pane.chapter);
     this.saveConfig();
   }
 

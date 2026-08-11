@@ -66,6 +66,16 @@
     return p ? `${s.bookName(p.book)} ${p.chapter}` : "";
   });
 
+  // The sweep's progress, on the banner. The reading map's glow is deliberately
+  // frozen in the mode (the tracker is suspended), so without this the mode had
+  // no visible progress at all outside the Plans panel. Live: every sweep is an
+  // authoring write, and authored invalidates the plans read this derives from.
+  const sweepProgress = $derived.by(() => {
+    if (!s.inConceptStudy) return null;
+    const run = ((s.q("plans", "")?.running ?? []) as any[]).find((p) => p.id === s.conceptStudyId);
+    return (run?.sweepProgress as [number, number] | undefined) ?? null;
+  });
+
   function openWordStudy(refKey: string, tokenIndex: number): void {
     s.panel = { kind: "wordStudy", refKey, tokenIndex };
   }
@@ -474,6 +484,9 @@
                tap tags rather than opens study, and can leave with one press. -->
           <div class="concept-study-banner" role="status">
             <span class="tag">{t("conceptStudy.banner", { tag: s.conceptStudyTag ?? "" })}</span>
+            {#if sweepProgress}
+              <span class="prog">{t("plans.sweepProgress", { done: sweepProgress[0], total: sweepProgress[1] })}</span>
+            {/if}
             <button class="exit" onclick={() => s.exitConceptStudy()}>{t("conceptStudy.exit")}</button>
           </div>
         {/if}
@@ -950,13 +963,23 @@
     justify-content: space-between;
     gap: 0.75rem;
     padding: 0.35rem 0.9rem;
-    background: color-mix(in srgb, var(--tier-research, #b04a3a) 14%, var(--paper, #fcf9f4));
-    border-bottom: 1px solid var(--tier-research, #b04a3a);
+    /* --tierResearch, not --tier-research: the token every other surface uses
+       (ConfirmDialog); the misspelt name silently fell back to the hard-coded
+       colour on every theme. */
+    background: color-mix(in srgb, var(--tierResearch, #b04a3a) 14%, var(--paper, #fcf9f4));
+    border-bottom: 1px solid var(--tierResearch, #b04a3a);
     color: var(--ink, #211f1a);
     font-size: 0.95rem;
   }
   .concept-study-banner .tag {
     font-weight: 600;
+    flex: 1;
+    min-width: 0;
+  }
+  .concept-study-banner .prog {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    color: var(--faded, #8a8276);
   }
   .concept-study-banner .exit {
     border: 1px solid var(--rule, #d8cba8);

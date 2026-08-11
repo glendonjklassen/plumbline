@@ -53,6 +53,12 @@ struct WireRunning {
     /// Concept study only: chapters swept over the scope total.
     #[serde(skip_serializing_if = "Option::is_none")]
     sweep_progress: Option<[u32; 2]>,
+    /// Concept study only: the swept chapters themselves, `book id → sorted
+    /// chapter numbers` — what a navigator paints coverage from. Present (even
+    /// when empty) whenever `sweep_progress` is, so a shell can tell "nothing
+    /// swept" from "not a concept study".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    swept: Option<std::collections::BTreeMap<String, Vec<u16>>>,
 }
 
 #[derive(Serialize)]
@@ -110,6 +116,7 @@ fn running_state(plan: &Plan, words: &ChapterWords, store: &reading::Store) -> W
         today: None,
         schedule_progress: None,
         sweep_progress: None,
+        swept: None,
     };
     match plan.kind {
         plan::Kind::Schedule => {
@@ -136,6 +143,7 @@ fn running_state(plan: &Plan, words: &ChapterWords, store: &reading::Store) -> W
         plan::Kind::ConceptStudy => {
             let (swept, total) = plan::sweep_progress(plan, canon_chapter_total(words));
             w.sweep_progress = Some([swept as u32, total as u32]);
+            w.swept = Some(plan.swept.clone());
         }
     }
     w
