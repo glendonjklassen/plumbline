@@ -27,6 +27,7 @@ All under the resolved data home (`core::home`) at `<home>/data/`:
 | `cross-references.tsv` | TSK topical tier | `core::crossref` | download (no ML) |
 | `concept-vectors.vec` (+ `.meta`, `.freq`) | **no longer shipped** (2026-07-30): its three readers were removed as noise. Still produced here; nothing consumes it | `rnd::embed` | **train once** (CPU) |
 | `morphology.jsonl` | per-token parse | `rnd::morph` | deterministic projection |
+| `chronological.json` | the chronological reading plan's curated order | `core::plan::load_table` | `scripts/build-chronological.mjs` from [chronological/order.json](chronological/order.json) (no ML; exactly-once canon coverage verified against the corpus at build) |
 | `bridge/*.json` (LXX, Abbott-Smith, TIPNR) | fused cross-testament witnesses | `rnd::bridge` | committed / align (no ML) |
 | `source-priors.json` | per-source trust weight | `rnd::bridge` | deterministic calibration |
 

@@ -1,14 +1,15 @@
 {
   "name": "plumbline-web",
   "private": true,
-  "version": "0.45.1",
+  "version": "0.46.0",
   "type": "module",
   "scripts": {
     "dev": "npm run pack:i18n && vite",
     "build": "npm run pack:i18n && vite build",
     "check": "npm run pack:i18n && npm run check:i18n && svelte-check --tsconfig ./tsconfig.json",
     "pack:hymnal": "node ../../scripts/build-hymnal.mjs",
-    "pack:data": "npm run pack:hymnal && node ../../scripts/build-web-pack.mjs && node ../../scripts/check-web-pack.mjs",
+    "pack:chronological": "node ../../scripts/build-chronological.mjs",
+    "pack:data": "npm run pack:hymnal && npm run pack:chronological && node ../../scripts/build-web-pack.mjs && node ../../scripts/check-web-pack.mjs",
     "pack:wasm": "node scripts/copy-wasm.mjs",
     "pack:fonts": "node scripts/subset-fonts.mjs",
     "preview": "vite preview",
