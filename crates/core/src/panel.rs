@@ -789,7 +789,14 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
                 out.push(Block::para(vec![Run::new(d, sz::SMALL, Color::Faded).italic()]));
             }
             if let Some(d) = &e.def {
-                out.push(Block::para(vec![Run::new(d, sz::BODY, Color::Ink)]));
+                let mut runs = vec![Run::new(d, sz::BODY, Color::Ink)];
+                if src.lexicon_de() {
+                    // The at-a-glance mark, right on the definition it
+                    // qualifies; the full caveat + report link close the card.
+                    runs.push(Run::new("  ", sz::NOTE, Color::Faded));
+                    runs.push(Run::new(s("study.aiMark"), sz::NOTE, Color::Faded).italic());
+                }
+                out.push(Block::para(runs));
             }
             if let Some(k) = &e.kjv {
                 // In the German dictionary this slot holds the LUTHER

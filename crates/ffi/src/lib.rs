@@ -1035,7 +1035,10 @@ pub fn corpus_for(home: &str, lang: i18n::Lang) -> PathBuf {
 /// `strongs.json`. Same file shape either way; the bool says which one, so the
 /// panel can label the renderings and carry the machine-translation caveat.
 fn strongs_for(data: &std::path::Path) -> (PathBuf, bool) {
-    if i18n::active() == i18n::Lang::De {
+    // `strongsDeOff` is the reader's escape hatch back to the original English
+    // definitions (Settings ▸ language). Read here, at pick time, because the
+    // toggle reloads the app exactly like a language change does.
+    if i18n::active() == i18n::Lang::De && !config::load().0.strongs_de_off {
         let de = data.join("strongs-de.json");
         if de.exists() {
             return (de, true);

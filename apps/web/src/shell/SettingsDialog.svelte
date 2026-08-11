@@ -240,6 +240,15 @@
     location.reload();
   }
 
+  /** English definitions over the German dictionary: flush, await, reload —
+   *  setLanguage's discipline, because the dictionary is picked at open. */
+  async function setStrongsDeOff(off: boolean): Promise<void> {
+    s.config.strongsDeOff = off;
+    s.flushConfig();
+    await s.rpc.flush();
+    location.reload();
+  }
+
   function setTheme(theme: string): void {
     s.config.theme = theme;
     s.applyTheme();
@@ -616,6 +625,23 @@
           {l.endonym}
         </label>
       {/each}
+      {#if (s.config.language ?? "").startsWith("de")}
+        <!-- The escape hatch from the machine-translated German dictionary
+             back to the English original (the maintainer's ask: the AI
+             translation must be opt-out-able). Reloads like the language
+             itself: the dictionary is picked when the engine opens. -->
+        <label class="toggle">
+          <span class="body">
+            <span class="name">{t("settings.strongsDeOff")}</span>
+            <span class="desc">{t("settings.strongsDeOffDesc")}</span>
+          </span>
+          <input
+            type="checkbox"
+            checked={s.config.strongsDeOff === true}
+            onchange={(e) => void setStrongsDeOff(e.currentTarget.checked)}
+          />
+        </label>
+      {/if}
       <hr />
       {#if s.akjvAvailable}
         <!-- A reading aid over the SAME text, not a version picker: the words

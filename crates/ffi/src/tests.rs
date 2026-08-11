@@ -2880,6 +2880,21 @@ fn german_corpus_lexicon_serves_the_german_dictionary_with_caveat() {
             "a non-https ext: link parsed"
         );
 
+        // THE ESCAPE HATCH: `strongsDeOff` in the config gives a German reader
+        // the original English definitions back — applied at open, like the
+        // language, so a fresh engine sees it.
+        let cfg_dir = home.join("cfg");
+        std::fs::create_dir_all(cfg_dir.join("plumbline")).unwrap();
+        std::fs::write(cfg_dir.join("plumbline").join("config.json"), r#"{"strongsDeOff":true}"#).unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", &cfg_dir);
+        let e2 = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(!e2.is_null(), "open with strongsDeOff failed: {:?}", opt_str(err));
+        let blocks = take(plumbline_engine_word_study_blocks2_json(e2, c"John 3:16".as_ptr(), 1, 3)).unwrap();
+        assert!(blocks.contains("a deity"), "strongsDeOff did not return the English definitions: {blocks}");
+        assert!(!blocks.contains(&caveat), "the caveat rode along with the English dictionary: {blocks}");
+        plumbline_engine_free(e2);
+        std::env::remove_var("XDG_CONFIG_HOME");
+
         plumbline_engine_free(e);
         // English again, so nothing after this test inherits German.
         let _ = take(plumbline_i18n_set_language(c"en".as_ptr(), ptr::null()));
