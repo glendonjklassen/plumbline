@@ -42,6 +42,8 @@ const EXPECTED_ASSETS: &[&str] = &[
     "kjv.jsonl",
     // The v4 addition: the German corpus (re-tagged with Strong's in v5).
     "luther1912.jsonl",
+    // Also v5: the German Strong's dictionary (AI-translated definitions).
+    "strongs-de.json",
     "strongs.json",
 ];
 
