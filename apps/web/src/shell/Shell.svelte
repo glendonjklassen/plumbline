@@ -12,6 +12,7 @@
   import MarkReadDialog from "./MarkReadDialog.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import CanonStrip from "./CanonStrip.svelte";
+  import PlanChip from "./PlanChip.svelte";
   import HistorySheet from "./HistorySheet.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
   import MemorizeHost from "../memorize/MemorizeHost.svelte";
@@ -503,6 +504,7 @@
             <ConnectorsOverlay />
           {/if}
         </div>
+        <PlanChip />
         <CanonStrip />
       </div>
     {/if}

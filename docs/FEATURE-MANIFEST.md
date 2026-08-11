@@ -1316,10 +1316,18 @@ the passage navigator (`shell/BookNav.svelte`) paints the RUN's coverage
 instead of the (deliberately frozen) reading map — swept chapters tint as
 done, part-swept books as partial — and its long-press menu / whole-book
 button become "Mark swept" / "Sweep whole book" (the spec's mark-swept-by-hand),
-writing the run via `concept_study_sweep`, never the reading record. E2e:
+writing the run via `concept_study_sweep`, never the reading record. Decision
+#5's reader-side surfaces (`shell/PlanChip.svelte` + the BookNav today card,
+shaped once in `shell/planToday.ts`): a nav-strip chip above the canon strip
+("Day 12 · Gen 30–31", "+{n} more" opening the Plans panel) rides the reader
+while a schedule runs — tap → today's first unread chapter — and the passage
+navigator leads with a today card whose chapters are the buttons, read ones
+marked. Both stand down in concept-study mode (the tracker is suspended, so
+schedule reading there earns no credit). E2e:
 `e2e/concept-study.spec.ts` (tap-to-tag, tracker suspension, tag survival,
 the Plans-panel launch path, the touch-tap ghost-click regression, the
-progress surfaces).
+progress surfaces) and `e2e/plans-today.spec.ts` (chip → today, the navigator
+card, the mode standing both down).
 
 **C ABI** (5 fns): `plumbline_engine_plans_json` (concept-study entries carry
 `sweepProgress` AND the per-chapter `swept` map the navigator paints from) /
@@ -1329,10 +1337,9 @@ progress surfaces).
 
 **Deltas**: **Android has none of this feature yet** — no `PlansScreen`, no
 concept-study mode, no banner, no tap-to-tag, no sweep-coverage navigator
-paint or mark-swept; the Kotlin binding carries the endpoints but nothing
-calls them. Also missing on BOTH shells (spec decision
-#5, still owed): the passage navigator's "today" card and the nav-strip plan
-chip ("Day 12 · Gen 30–31", "+1 more").
+paint or mark-swept, no today card or plan chip; the Kotlin binding carries
+the endpoints but nothing calls them. (Decision #5's today card + nav-strip
+chip shipped on the web — Android owes them with the rest of the feature.)
 
 ## Memorization — spaced repetition (Tier 2 #15)
 

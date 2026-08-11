@@ -14,6 +14,7 @@
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
   import { readingTint, tintStyle, tintTitle, type ReadingHeat } from "./readingTint";
+  import { todayPlans, type TodayPlan } from "./planToday";
   import { lang, t } from "../lib/i18n.svelte";
 
   const s = getSession();
@@ -72,6 +73,23 @@
     const name = `${s.bookName(book!)} ${c}`;
     if (!sweeping) return tintTitle(name, chapterHeat.get(c));
     return sweptMap.get(book!)?.has(c) ? t("booknav.swept", { name }) : name;
+  }
+
+  // ── the active plans' today (decision #5) ───────────────────────────────────
+  // The navigator is where a reader asks "where do I go?" — when a schedule
+  // plan is running, the plan's answer belongs at the top: its day and today's
+  // chapters, read ones marked, a tap going straight there. Hidden in
+  // concept-study mode for the chip's reason: the tracker is suspended, so
+  // schedule reading in the mode earns no credit.
+  const today = $derived.by(() => {
+    if (!open || sweeping) return [] as TodayPlan[];
+    void s.studyEpoch;
+    return todayPlans(s.q("plans", ""));
+  });
+  function goToday(bookId: string, chapter: number): void {
+    if (s.bookNavFor === null) return;
+    s.navigate(s.bookNavFor, bookId, chapter);
+    close();
   }
 
   let book = $state<string | null>(null);
@@ -264,6 +282,22 @@
          prose. -->
     <div class="content">
       {#if !book}
+        {#if today.length > 0}
+          <!-- Today's reading, per running plan. Chapters are the buttons — the
+               card answers "where do I go?" with places to go, not a summary. -->
+          <div class="today-card" data-surface="plan-today">
+            {#each today as p (p.id)}
+              <p class="today-head">{t("plans.todayCard", { name: p.name, day: p.day })}</p>
+              <div class="today-chs">
+                {#each p.chapters as c (`${c.book} ${c.chapter}`)}
+                  <button class:read={c.read} onclick={() => goToday(c.book, c.chapter)}>
+                    {c.display}{c.read ? " ✓" : ""}
+                  </button>
+                {/each}
+              </div>
+            {/each}
+          </div>
+        {/if}
         <!-- `lang`: `hyphens: auto` above needs to know the language to break a
              word where a reader of it expects. -->
         <div class="grid books" lang={lang()}>
@@ -420,6 +454,44 @@
     font-size: calc(11.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     margin: 0 0 8px;
+  }
+  /* Today's reading: one quiet card above the book grid, gold like the plan
+     chip — the same voice in both places. */
+  .today-card {
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin: 2px 0 12px;
+    background: color-mix(in srgb, var(--gold, #9e7d38) 6%, var(--paper, #fcf9f4));
+  }
+  .today-head {
+    margin: 0 0 6px;
+    font-size: calc(12.5px * var(--uiScale, 1));
+    font-weight: 600;
+    color: var(--gold, #9e7d38);
+  }
+  .today-chs:not(:last-child) {
+    margin-bottom: 8px;
+  }
+  .today-chs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .today-chs button {
+    padding: 6px 12px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 999px;
+    background: var(--paper, #fcf9f4);
+    font-size: calc(13.5px * var(--uiScale, 1));
+    color: var(--ink, #211f1a);
+  }
+  .today-chs button:hover {
+    border-color: var(--gold, #9e7d38);
+    color: var(--gold, #9e7d38);
+  }
+  .today-chs button.read {
+    color: var(--faded, #8a8276);
   }
   .tilemenu-backdrop {
     position: fixed;
