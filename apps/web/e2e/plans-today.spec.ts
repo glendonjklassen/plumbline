@@ -68,3 +68,32 @@ test("a running plan rides the reader: the chip goes to today, the navigator lea
   await page.getByRole("button", { name: "Exit Concept Study" }).click();
   await expect(chip).toBeVisible();
 });
+
+// The chronological plan rides its curated table (decision #4) through the
+// whole stack: the table ships in the pack, the engine offers the row only
+// because it loads, and day 1 of the walk starts at Genesis 1. Dies if the
+// table falls out of the pack (the row disappears), if the loader breaks (a
+// start errors), or if the walk's head stops being Gen 1 (a scrambled table).
+test("the chronological plan is offered, starts, and day 1 begins at Genesis 1", async ({ page }) => {
+  await boot(page);
+
+  // The picker OFFERS the row — which it only does when the shipped pack's
+  // table actually loads (the engine filters unbuildable table plans out).
+  await page.evaluate(() => ((window as any).__plumbline.panel = { kind: "plans" }));
+  const row = page.getByRole("button", { name: /The Bible in chronological order/ });
+  await expect(row).toBeVisible();
+  await row.click();
+
+  const readToday = () =>
+    page.evaluate(async () => {
+      const s = (window as any).__plumbline;
+      const plans = await s.fetchQ("plans", "");
+      return plans.running.find((p: any) => p.id === "chronological")?.today ?? null;
+    });
+  // The click's start is async; poll until the run reports its day-1 card.
+  await expect.poll(async () => (await readToday())?.day ?? 0, { timeout: 10_000 }).toBe(1);
+  expect((await readToday()).chapters[0]).toMatchObject({ book: "Gen", chapter: 1 });
+
+  // And it rides the reader like any schedule: the chip names day 1.
+  await expect(page.locator(".plan-chip-row .plan-chip").first()).toHaveText(/Day 1 · /);
+});

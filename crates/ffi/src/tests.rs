@@ -464,6 +464,31 @@ fn plans_and_concept_study_via_abi() {
         assert_eq!(v["running"].as_array().unwrap().len(), 0);
         assert!(v["builtins"].as_array().unwrap().iter().any(|b| b["id"] == "nt-90"));
 
+        // A curated-table plan is offered only where its table loads: this toy
+        // home ships no chronological.json, so the row is hidden and a direct
+        // start REFUSES rather than starting a plan that reads "finished".
+        assert!(!v["builtins"].as_array().unwrap().iter().any(|b| b["id"] == "chronological"));
+        assert!(take(plumbline_engine_plan_start(e, c("chronological").as_ptr(), now.as_ptr()))
+            .unwrap()
+            .contains("plan table missing"));
+        // With the table present the row appears, and the plan starts into a
+        // real day-1 card cut from the table's walk.
+        std::fs::write(
+            home.join("data").join("chronological.json"),
+            r#"{"format":"plumbline-plan-table-v1","id":"chronological","days":1,"segments":[["John",3,3]]}"#,
+        )
+        .unwrap();
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        assert!(v["builtins"].as_array().unwrap().iter().any(|b| b["id"] == "chronological"));
+        assert!(plumbline_engine_plan_start(e, c("chronological").as_ptr(), now.as_ptr()).is_null());
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        let run = v["running"].as_array().unwrap().iter().find(|p| p["id"] == "chronological").unwrap();
+        assert_eq!(run["today"]["day"], 1);
+        assert_eq!(run["today"]["chapters"][0]["book"], "John");
+        assert_eq!(run["today"]["chapters"][0]["chapter"], 3);
+        // Stopped again so the running-count assertions below stay exact.
+        assert!(plumbline_engine_plan_stop(e, c("chronological").as_ptr()).is_null());
+
         // Start a schedule; it appears running with a day-1 card. (This toy
         // corpus is only John 3, so the whole NT scope is one chapter.)
         assert!(plumbline_engine_plan_start(e, c("nt-90").as_ptr(), now.as_ptr()).is_null());

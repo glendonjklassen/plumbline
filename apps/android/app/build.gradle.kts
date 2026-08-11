@@ -276,6 +276,9 @@ tasks.register<Copy>("syncData") {
             "cross-references.tsv",
             "akjv.akjvb",
             "hymnal.json",
+            // The chronological plan's curated table (~1 KB) — bundled ahead of
+            // the Android plans surfaces so the data is on-device when they land.
+            "chronological.json",
         )
     }
     into(layout.projectDirectory.dir("src/main/assets/data"))

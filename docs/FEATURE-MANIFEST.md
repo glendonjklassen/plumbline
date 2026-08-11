@@ -1295,8 +1295,14 @@ filters and every zip-layout enumeration). Two kinds, frozen as `"schedule"` /
   no streaks), with completion **derived from the reading tracker** and cached
   in the plan file's `done`. One plan per class (`wholeBible` /
   `newTestament` / `devotional`); replacement is shell-confirmed. The
-  chronological curated table is DEFERRED — `plan::chronological_pending()`
-  holds its picker row until the table ships.
+  chronological plan rides a curated table (`data/chronological.json`,
+  `plumbline-plan-table-v1`: era-ordered segments compiled by
+  `scripts/build-chronological.mjs` from `data-prep/chronological/order.json`,
+  exactly-once canon coverage verified at build). `plan::load_table` reads it;
+  the FFI offers the picker row — and lets a start proceed — only where the
+  table actually loads, so a home without the file hides the plan instead of
+  starting one that reads instantly "finished". Android bundles the table via
+  `syncData`; the web pack stages it as `study`.
 - **The Concept Study** (built as "speedrun", renamed through every layer
   before shipping) is a class-free, non-linear concept sweep with a preset
   tag and its own reader mode. The mode is `config.conceptStudy` (the active

@@ -94,20 +94,25 @@ fn chapter_read(store: &reading::Store, book: &str, chapter: u16) -> bool {
     store.get(book).is_some_and(|recs| recs.iter().any(|r| r.chapter == chapter && r.last_read.is_some()))
 }
 
-/// The schedule a plan describes, or empty when it cannot be built yet (a
-/// curated-table plan whose table has not shipped — the table loader lands with
-/// the chronological data). A generator plan is always buildable.
-fn schedule_of(plan: &Plan, words: &ChapterWords) -> Vec<Vec<(String, u16)>> {
+/// The schedule a plan describes, or empty when it cannot be built (a
+/// curated-table plan whose table file is absent or damaged — the same signal
+/// that hides its picker row below). A generator plan is always buildable.
+fn schedule_of(plan: &Plan, words: &ChapterWords, home: Option<&std::path::Path>) -> Vec<Vec<(String, u16)>> {
     match (&plan.generator, &plan.table) {
         (Some(g), _) => plan::schedule(&plan::scope_chapters(&g.scope, words), words, g.days),
-        // Curated tables are not loaded yet (chronological ships next); a
-        // table plan reads as "no days yet" rather than erroring.
-        (None, Some(_)) => Vec::new(),
+        (None, Some(id)) => {
+            let Some(t) = home.and_then(|h| plan::load_table(h, id)) else { return Vec::new() };
+            // Chapters the corpus does not carry are skipped, `scope_chapters`'
+            // stance — the German corpus shares addresses, so nothing skips in
+            // practice.
+            let order: Vec<_> = t.order.into_iter().filter(|(b, c)| *c <= words.chapters(b)).collect();
+            plan::schedule(&order, words, t.days)
+        }
         (None, None) => Vec::new(),
     }
 }
 
-fn running_state(plan: &Plan, words: &ChapterWords, store: &reading::Store) -> WireRunning {
+fn running_state(plan: &Plan, words: &ChapterWords, store: &reading::Store, home: Option<&std::path::Path>) -> WireRunning {
     let mut w = WireRunning {
         id: plan.id.clone(),
         kind: plan.kind,
@@ -120,7 +125,7 @@ fn running_state(plan: &Plan, words: &ChapterWords, store: &reading::Store) -> W
     };
     match plan.kind {
         plan::Kind::Schedule => {
-            let sched = schedule_of(plan, words);
+            let sched = schedule_of(plan, words, home);
             let is_read = |b: &str, c: u16| chapter_read(store, b, c);
             let today = plan::next_day(plan, &sched, is_read);
             let days_total = sched.len() as u32;
@@ -169,9 +174,15 @@ pub unsafe extern "C" fn plumbline_engine_plans_json(
         let plans = e.home.as_ref().map(|h| plan::load_plans(h).0).unwrap_or_default();
         let words = e.reading_words();
         let store = e.home.as_ref().map(|h| reading::load(h).0).unwrap_or_default();
-        let running = plans.iter().map(|p| running_state(p, words, &store)).collect();
+        let home = e.home.as_deref();
+        let running = plans.iter().map(|p| running_state(p, words, &store, home)).collect();
         let builtins = plan::builtins()
             .into_iter()
+            // A table plan is offered only where its table actually loads —
+            // every offered row must be startable into a non-empty schedule
+            // today (plan::builtins' contract), and a home without the file
+            // would start one that reads instantly "finished".
+            .filter(|b| b.table.map_or(true, |id| home.is_some_and(|h| plan::load_table(h, id).is_some())))
             .map(|b| WireBuiltin {
                 id: b.id.to_string(),
                 name_key: b.name_key.to_string(),
@@ -207,6 +218,14 @@ pub unsafe extern "C" fn plumbline_engine_plan_start(
         let Some(b) = plan::builtins().into_iter().find(|b| b.id == id) else {
             return out_string(format!("unknown plan: {id}"));
         };
+        // A table plan without its table must refuse to start, not start
+        // "finished" — the picker hides it for the same reason, but a stale
+        // shell could still ask.
+        if let Some(table) = b.table {
+            if plan::load_table(&home, table).is_none() {
+                return out_string(format!("plan table missing: {table}"));
+            }
+        }
         // Replace the class occupant, if any and not this same id.
         let existing = plan::load_plans(&home).0;
         if let Some(conflict) = plan::class_conflict(&existing, b.class) {
