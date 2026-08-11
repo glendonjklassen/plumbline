@@ -152,6 +152,25 @@ test.describe("an English device", () => {
       return (await s.rpc.call("verse", "John 3:16"))?.body ?? "";
     });
     expect(again, "the German text did not survive a relaunch").toContain("Gott");
+
+    // WORD STUDY WORKS ON THE GERMAN TEXT: the corpus ships its own Strong's
+    // tags (merge-strongs.py), and they must survive the idxcache the web
+    // actually reads — the Rust tests read the JSONL, so a web-cache builder
+    // that dropped the tags would fail nowhere but here. A token of John 3:16
+    // carries a code, and its study card has a concordance link.
+    const study = await page.evaluate(async () => {
+      const s = (window as any).__plumbline;
+      for (let i = 0; i < 8; i++) {
+        const tok = await s.rpc.call("token", "John 3:16", i);
+        if (tok?.strongs?.length) {
+          const blocks = await s.rpc.call("wordStudyBlocks", "John 3:16", i, s.gates);
+          return { code: tok.strongs[0], json: JSON.stringify(blocks) };
+        }
+      }
+      return null;
+    });
+    expect(study, "no tagged token in German John 3:16 — the idxcache lost the tags").not.toBeNull();
+    expect(study!.json, "the German study card has no concordance link").toContain("occ:");
   });
 });
 

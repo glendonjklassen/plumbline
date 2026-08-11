@@ -58,8 +58,10 @@ jobs:
       # here it is the only thing proving `data/luther1912.jsonl` sits at the
       # KJV's verse addresses, comes back as German, and does not get handed the
       # KJV's Strong's or plain-English overlay.
+      # --test-threads=1: these tests flip the process-global language and
+      # would race each other's resets in parallel.
       - name: Test the German corpus
-        run: cargo test --locked -p plumbline-ffi --lib -- --ignored german_corpus
+        run: cargo test --locked -p plumbline-ffi --lib -- --ignored german_corpus --test-threads=1
       # The corpus idxcache must be REPRODUCIBLE. It is the biggest file in the
       # web pack and the pack manifest hashes it, so a cache that differs run to
       # run re-mints every `?v=` URL and makes every reader re-download the whole

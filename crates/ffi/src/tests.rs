@@ -2042,6 +2042,7 @@ fn link_verb(l: &crate::wire::WirePanelLink) -> &'static str {
     use crate::wire::WirePanelLink as L;
     match l {
         L::Go { .. } => "go",
+        L::External { .. } => "external",
         L::Occurrences { .. } => "occurrences",
         L::Rendering { .. } => "rendering",
         L::CodeStudy { .. } => "codeStudy",
@@ -2705,27 +2706,29 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
         // gate left it green.)
         let _ = take(plumbline_engine_load_core_data(e));
         assert!(!plumbline_engine_akjv_available(e), "the KJV overlay was offered over German text");
-        // And Strong's is withheld for the same reason: its codes are attached to
-        // KJV tokens, so a German word study would be looking up whatever code
-        // sat at that index in the other text.
-        let w: Value =
-            serde_json::from_str(&take(plumbline_engine_token_json(e, c"John 3:16".as_ptr(), 0)).unwrap()).unwrap();
-        assert!(w["strongs"].as_array().is_none_or(|a| a.is_empty()), "a German token carries Strong's codes: {w}");
+        // The German corpus carries its OWN Strong's tags (merge-strongs.py),
+        // so a German word study is real study now: the codes on the shipped
+        // tokens are the German words', not indices into the other text.
+        let verse: Value =
+            serde_json::from_str(&take(plumbline_engine_verse_json(e, c"John 3:16".as_ptr())).unwrap()).unwrap();
+        assert!(verse["body"].as_str().unwrap().contains("Gott"));
+        let tagged = (0..8).find(|i| {
+            let w: Value =
+                serde_json::from_str(&take(plumbline_engine_token_json(e, c"John 3:16".as_ptr(), *i)).unwrap())
+                    .unwrap();
+            w["strongs"].as_array().is_some_and(|a| !a.is_empty())
+        });
+        let tagged = tagged.expect("no tagged token in the first 8 of German John 3:16 — did the merge run?");
 
-        // THE STUDY CARD SAYS WHY IT IS EMPTY, in German, rather than showing
-        // English evidence about the KJV's words. Everything in
-        // it — Strong's, morphology, renderings, cross-references — is keyed to
-        // KJV token indices, so on this text it would describe different words.
-        let blocks = take(plumbline_engine_word_study_blocks2_json(e, c"John 3:16".as_ptr(), 1, 3)).unwrap();
-        let de_notice = plumbline_core::i18n::t(plumbline_core::i18n::Lang::De, "study.onlyKjv", &[]);
-        assert!(
-            blocks.contains(de_notice.split(" — ").next().unwrap()),
-            "the German study card does not say why it is empty: {blocks}"
-        );
-        // And none of the token-keyed English evidence leaked in beside it.
-        for english in ["no Strong's tag", "Renderings", "same root"] {
-            assert!(!blocks.contains(english), "English study prose {english:?} reached a German reader: {blocks}");
+        // THE STUDY CARD STUDIES, in German: the tapped code's dictionary entry
+        // and concordance serve, while the KJV-token-anchored tiers (renderings,
+        // same-root, morphology) stay off — they are evidence about the other
+        // text's words.
+        let blocks = take(plumbline_engine_word_study_blocks2_json(e, c"John 3:16".as_ptr(), tagged, 3)).unwrap();
+        for english in ["Renderings", "same root"] {
+            assert!(!blocks.contains(english), "KJV-token evidence {english:?} reached a German reader: {blocks}");
         }
+        assert!(blocks.contains("occ:"), "the German study card has no concordance link: {blocks}");
         // Nor any of the PANEL'S OWN LABELS — they are catalogue strings, not
         // English literals, so they localize with the rest.
         for label in ["＋ tag verse", "＋ add to thread", "your note", "cross-references ("] {
@@ -2806,4 +2809,80 @@ fn the_deferred_load_still_brings_the_morphology_to_an_english_reader() {
         assert!(e.as_ref().unwrap().morph.get().is_some(), "the KJV reader lost their morphology");
         plumbline_engine_free(e);
     }
+}
+
+/// The German dictionary: with `strongs-de.json` in the home, a German
+/// reader's word study serves the GERMAN entry — renderings labelled for
+/// Luther, the machine-translation caveat and its report link attached —
+/// and the English dictionary demonstrably did not win the pick.
+///
+/// Named into the `german_corpus` CI filter and `#[ignore]`d with its
+/// siblings: it flips the process-global language, which must not race the
+/// parallel default suite.
+#[test]
+#[ignore]
+fn german_corpus_lexicon_serves_the_german_dictionary_with_caveat() {
+    let home = std::env::temp_dir().join(format!("plumbline-ffi-de-lex-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&home);
+    std::fs::create_dir_all(home.join("data")).unwrap();
+    // A one-verse German corpus at the KJV address, with a tagged token.
+    std::fs::write(
+        home.join("data").join("luther1912.jsonl"),
+        concat!(
+            r#"{"format":"overlay-kjv-canonical","source":"toy","tokenization":"luther1912-tok1","verses":1}"#,
+            "\n",
+            r#"{"b":"John","c":3,"v":16,"t":[["","Also","",[],0],["","Gott","",["G2316"],0]]}"#,
+            "\n",
+        ),
+    )
+    .unwrap();
+    std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+    // BOTH dictionaries, so the assertion proves the pick rather than a fallback.
+    std::fs::write(
+        home.join("data").join("strongs-de.json"),
+        r#"{"G2316":{"lemma":"θεός","strongs_def":"Gott, Gottheit","kjv_def":"Gott, Gottes"}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        home.join("data").join("strongs.json"),
+        r#"{"G2316":{"lemma":"θεός","strongs_def":"a deity","kjv_def":"God"}}"#,
+    )
+    .unwrap();
+
+    let home_c = CString::new(home.to_str().unwrap()).unwrap();
+    unsafe {
+        let _ = take(plumbline_i18n_set_language(c"de".as_ptr(), ptr::null()));
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(!e.is_null(), "German open failed: {:?}", opt_str(err));
+
+        let blocks = take(plumbline_engine_word_study_blocks2_json(e, c"John 3:16".as_ptr(), 1, 3)).unwrap();
+        assert!(blocks.contains("Gott, Gottheit"), "the German definition did not serve: {blocks}");
+        assert!(!blocks.contains("a deity"), "the English definition leaked past the German dictionary: {blocks}");
+        assert!(blocks.contains("Luther:"), "the renderings are not labelled for the reader's Bible: {blocks}");
+        let caveat = plumbline_core::i18n::t(plumbline_core::i18n::Lang::De, "study.deCaveat", &[]);
+        assert!(blocks.contains(&caveat), "the machine-translation caveat is missing: {blocks}");
+        assert!(
+            blocks.contains("ext:https://github.com/glendonjklassen/plumbline/issues"),
+            "the report link is missing: {blocks}"
+        );
+
+        // The `ext:` verb routes as an external link — and only for https.
+        let link: Value = serde_json::from_str(
+            &take(plumbline_route_link_json(c"ext:https://github.com/glendonjklassen/plumbline/issues".as_ptr()))
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(link["verb"], "external");
+        assert_eq!(link["url"], "https://github.com/glendonjklassen/plumbline/issues");
+        assert!(
+            take(plumbline_route_link_json(c"ext:javascript:alert(1)".as_ptr())).is_none(),
+            "a non-https ext: link parsed"
+        );
+
+        plumbline_engine_free(e);
+        // English again, so nothing after this test inherits German.
+        let _ = take(plumbline_i18n_set_language(c"en".as_ptr(), ptr::null()));
+    }
+    let _ = std::fs::remove_dir_all(&home);
 }

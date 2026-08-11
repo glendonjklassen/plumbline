@@ -48,6 +48,7 @@ import {
   fetchStage2Pack,
   fetchSuggestedWeaves,
   fetchGermanCorpus,
+  fetchGermanLexicon,
   germanCorpusEntry,
   packFileUrl,
   setAssetBase,
@@ -481,7 +482,7 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
     }
 
     const t0 = performance.now();
-    const files = await fetchStage2Pack(booted!.manifest);
+    const files = await fetchStage2Pack(booted!.manifest, undefined, booted!.home.germanInstalled);
     booted!.trace.push(["stage2 fetch+gunzip", Math.round(performance.now() - t0)]);
     await yieldTask();
     timedChunk("stage2 load (Strong's + notes)", () => {
@@ -492,7 +493,7 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
     // the engine from here on. NOT the margin notes, which load_study re-reads on
     // every authoring write, and NOT cross-references.tsv, whose lazy index can
     // still be built on an arbitrary later tap.
-    const freedCore = booted!.home.evict(["data/strongs.json", "data/akjv.akjvb"]);
+    const freedCore = booted!.home.evict(["data/strongs.json", "data/strongs-de.json", "data/akjv.akjvb"]);
     if (freedCore) booted!.trace.push(["home evict after stage 2 (KB)", Math.round(freedCore / 1024)]);
     self.postMessage({ type: "coreReady" });
     await warmChunked();
@@ -1019,6 +1020,10 @@ self.onmessage = async (ev: MessageEvent) => {
           fail("this build has no German corpus");
           break;
         }
+        // The German lexicon rides the same ask, into the depot — the reload
+        // that follows reads it back through stage 2. A pack without one is
+        // fine: study serves the English dictionary until it ships.
+        await fetchGermanLexicon(booted!.manifest);
         await booted!.home.installGermanCorpus(cache);
         // RE-PIN, for `installSuggested`'s reason: the corpus is part of this
         // device's pack now, and prune keeps only what the pin names — without

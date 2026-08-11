@@ -63,7 +63,7 @@ for (const f of manifest.files) {
   if (f.seedOnce && !SEED_DIRS.has(f.path.split("/")[0])) {
     fail(`${at}: seedOnce outside the stock dirs {${[...SEED_DIRS]}} — it would be treated as user-authored`);
   }
-  if (f.role !== undefined && !["corpusCache", "suggestedWeaves", "germanCorpus"].includes(f.role)) {
+  if (f.role !== undefined && !["corpusCache", "suggestedWeaves", "germanCorpus", "germanLexicon"].includes(f.role)) {
     fail(`${at}: unknown role ${JSON.stringify(f.role)}`);
   }
   // The retired v1 tier flags. Loud, because a half-migrated producer is worse
@@ -98,6 +98,16 @@ if (german.length > 1) {
   if (german[0].role === "corpusCache") {
     fail("the German corpus claims the corpusCache role, which decides what opens at boot");
   }
+}
+
+// The GERMAN LEXICON rides the German install, so it has the German corpus's
+// constraint: optional, or every English reader downloads a dictionary in a
+// language they are not reading.
+const germanLex = manifest.files.filter((f) => f.role === "germanLexicon");
+if (germanLex.length > 1) {
+  fail(`expected at most one role:"germanLexicon" entry, found ${germanLex.length}`);
+} else if (germanLex.length === 1 && germanLex[0].stage !== "optional") {
+  fail(`the German lexicon is stage ${germanLex[0].stage}; it must be "optional" (it installs with the German corpus)`);
 }
 
 // The suggested-weave bundle is found by role, like the corpus cache, and it

@@ -111,6 +111,7 @@ const SOURCES = [
       !n.endsWith(".idxcache") &&
       n !== KJV_TEXT &&
       n !== GERMAN_TEXT &&
+      n !== "strongs-de.json" && // German lexicon: optional, emitted with its role below
       !n.startsWith(VEC_PREFIX) &&
       n !== MORPH_TEXT &&
       n !== MORPH_PACKED &&
@@ -217,6 +218,16 @@ emit("data", "kjv.jsonl.idxcache", cacheRaw, { stage: "text", role: "corpusCache
 // has to be able to FIND it. Its own role, not `corpusCache`, because the stage-1
 // boot must keep taking the English one — a second file claiming that role would
 // make which text opens depend on manifest order.
+// The German Strong's dictionary travels the same way: optional, found by its
+// own role, installed with the corpus (one ask covers both). Excluded from the
+// generic data/ walk above so no English reader ever fetches it; conditional
+// on existing because it is built by data-prep/strongs-de/ only after the
+// translation batch has run.
+const germanLexiconSrc = join(repo, "data/strongs-de.json");
+if (existsSync(germanLexiconSrc)) {
+  emit("data", "strongs-de.json", readFileSync(germanLexiconSrc), { stage: "optional", role: "germanLexicon" });
+}
+
 const germanSrc = join(repo, "data/luther1912.jsonl");
 if (existsSync(germanSrc)) {
   const germanTmp = join(tmpdir(), `plumbline-idxcache-de-${process.pid}`);

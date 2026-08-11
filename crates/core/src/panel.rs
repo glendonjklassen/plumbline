@@ -352,10 +352,18 @@ pub trait PanelSource {
     fn token_word(&self, verse: &str, token: u32) -> Option<String>;
     /// Whether the open corpus is the KJV — the text every analytic in this
     /// module is tagged against. False for a translation with its own
-    /// tokenization (the German Luther 1912), where the study card says so
-    /// instead of showing evidence about a different set of words.
+    /// tokenization (the German Luther 1912): its tokens carry Strong's tags
+    /// too, so the dictionary and the concordance work there, but the
+    /// KJV-token-anchored tiers (morphology, the rendering lens) stay off.
     fn is_kjv_text(&self) -> bool {
         true
+    }
+    /// Whether the loaded Strong's dictionary is the German one
+    /// (`strongs-de.json`) — machine-translated definitions plus corpus-derived
+    /// Luther renderings. The study card labels the renderings for the right
+    /// Bible and carries the machine-translation caveat when this is true.
+    fn lexicon_de(&self) -> bool {
+        false
     }
     /// A verse's display form (`"John 3:16"`), if it resolves.
     fn verse_display(&self, refkey: &str) -> Option<String>;
@@ -429,6 +437,11 @@ pub enum PanelLink {
         book: String,
         chapter: u32,
         verse: Option<u32>,
+    },
+    /// `ext:https://…` — open an external link in the platform browser. Only
+    /// https survives the parse; the shells decide how to open it.
+    External {
+        url: String,
     },
     /// `occ:CODE` — the code's full concordance.
     Occurrences {
@@ -527,6 +540,12 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
                 }
                 _ => return None,
             }
+        }
+        "ext" => {
+            if !rest.starts_with("https://") {
+                return None;
+            }
+            PanelLink::External { url: rest.to_string() }
         }
         "occ" => PanelLink::Occurrences { code: rest.to_string() },
         "rend" => {
@@ -711,28 +730,22 @@ pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token:
     // evidence to scroll for.
     user_note_block(src, verse, &mut out);
 
-    if !kjv {
-        // Said once, plainly, in the reader's language. Showing the English
-        // evidence instead read as an app that had half-forgotten which language
-        // it was in.
+    // The German corpus carries Strong's tags of its own now, so the dictionary
+    // and the concordance serve there like on the KJV; only the
+    // KJV-token-anchored tiers stay gated (inside `code_study`). A word without
+    // tags reads the same in both languages.
+    if codes.is_empty() {
         out.push(Block::para(vec![Run::new(
-            crate::i18n::t(crate::i18n::active(), "study.onlyKjv", &[]),
-            sz::NOTE,
+            crate::i18n::t(crate::i18n::active(), "study.noStrongs", &[]),
+            sz::BODY,
             Color::Faded,
         )
         .italic()]));
     } else {
-        if codes.is_empty() {
-            out.push(Block::para(vec![Run::new(
-                crate::i18n::t(crate::i18n::active(), "study.noStrongs", &[]),
-                sz::BODY,
-                Color::Faded,
-            )
-            .italic()]));
-        }
         for code in codes {
             code_study(src, code, &word, gates, &mut out);
         }
+        de_caveat(src, &mut out);
     }
     verse_extras(src, verse, gates, &mut out);
     if kjv && gates.any() && !codes.is_empty() {
@@ -779,13 +792,20 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
                 out.push(Block::para(vec![Run::new(d, sz::BODY, Color::Ink)]));
             }
             if let Some(k) = &e.kjv {
-                out.push(Block::para(vec![Run::new(format!("KJV: {k}"), sz::NOTE, Color::Faded)]));
+                // In the German dictionary this slot holds the LUTHER
+                // renderings (derived from the tagged corpus); label it for
+                // the Bible it describes.
+                let label = if src.lexicon_de() { "Luther" } else { "KJV" };
+                out.push(Block::para(vec![Run::new(format!("{label}: {k}"), sz::NOTE, Color::Faded)]));
             }
         }
         None => out.push(Block::para(vec![Run::new(s("panel.notInDictionary"), sz::BODY, Color::Faded).italic()])),
     }
 
-    if !gates.any() {
+    // The tiers below are all evidence about KJV tokens (renderings lens,
+    // same-root, morphology, the machine analytics) — off for the German text,
+    // whose card is the dictionary + concordance above.
+    if !gates.any() || !src.is_kjv_text() {
         return;
     }
 
@@ -976,6 +996,22 @@ fn user_note_block(src: &dyn PanelSource, verse: &str, out: &mut Vec<Block>) {
     }
 }
 
+/// The machine-translation caveat, once per card, when the German dictionary
+/// is serving: what the definitions are, and where to report a bad one (the
+/// maintainer's ask, 2026-08-11 — an AI-generated lexicon must say so, and a
+/// reader who spots an error should have somewhere to send it).
+fn de_caveat(src: &dyn PanelSource, out: &mut Vec<Block>) {
+    if !src.lexicon_de() {
+        return;
+    }
+    out.push(Block::para(vec![
+        Run::new(s("study.deCaveat"), sz::NOTE, Color::Faded).italic(),
+        Run::new("  ", sz::NOTE, Color::Faded),
+        Run::new(s("study.deCaveatLink"), sz::NOTE, Color::Gold)
+            .link("ext:https://github.com/glendonjklassen/plumbline/issues"),
+    ]));
+}
+
 /// The standalone `code:CODE[:word]` study card (the reverse rendering-lens
 /// target): the code's own entry, so "'love' also translates G5368" lands on
 /// G5368 rather than a bare concordance. `word` is the surface that led here.
@@ -987,7 +1023,8 @@ pub fn code_study_card(src: &dyn PanelSource, full: bool, code: &str, word: &str
 pub fn code_study_card_gated(src: &dyn PanelSource, gates: Gates, code: &str, word: &str) -> Vec<Block> {
     let mut out = Vec::new();
     code_study(src, code, word, gates, &mut out);
-    if gates.any() {
+    de_caveat(src, &mut out);
+    if gates.any() && src.is_kjv_text() {
         out.push(legend());
     }
     out

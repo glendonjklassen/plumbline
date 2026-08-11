@@ -1042,6 +1042,7 @@ fn run_to_wire(r: Run) -> WireRun {
 #[serde(tag = "verb", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum WirePanelLink {
     Go { book: String, chapter: u32, verse: Option<u32> },
+    External { url: String },
     Occurrences { code: String },
     Rendering { code: String, rendering: String },
     CodeStudy { code: String, word: String },
@@ -1068,6 +1069,7 @@ pub enum WirePanelLink {
 pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
     match l {
         PanelLink::Go { book, chapter, verse } => WirePanelLink::Go { book, chapter, verse },
+        PanelLink::External { url } => WirePanelLink::External { url },
         PanelLink::Occurrences { code } => WirePanelLink::Occurrences { code },
         PanelLink::Rendering { code, rendering } => WirePanelLink::Rendering { code, rendering },
         PanelLink::CodeStudy { code, word } => WirePanelLink::CodeStudy { code, word },
