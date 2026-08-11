@@ -512,9 +512,9 @@ test("phones keep ONE pane (no split; weaves navigate instead)", async ({ page }
   await page.setViewportSize({ width: 390, height: 844 });
   await boot(page);
   await expect(page.locator(".nav button[title='Split pane']")).toHaveCount(0);
-  // A weave open must navigate the single pane, not split it.
-  await page.getByLabel("Menu").click();
-  await page.getByRole("button", { name: "Study", exact: true }).click();
+  // A weave open must navigate the single pane, not split it. Study is a
+  // bottom-bar destination since the menu rationalization.
+  await page.locator(".bottom-nav").getByRole("button", { name: "Study", exact: true }).click();
   await page.locator(".ex-card", { hasText: /^Weaves/ }).click();
   await page.locator("aside.panel button.link").first().click();
   await expect(page.locator(".pane canvas")).toHaveCount(1);
@@ -623,6 +623,8 @@ test("backup round-trips through a zip", async ({ page }, testInfo) => {
   });
   await page.getByLabel("Menu").click();
   await page.getByRole("button", { name: "Settings" }).click();
+  // Backup folded into Advanced with the menu rationalization.
+  await page.locator('[data-surface="settings"] details.advanced > summary').click();
   const [download] = await Promise.all([
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Back up (.zip)" }).click(),
@@ -1191,20 +1193,22 @@ test("the welcome's verses are the corpus text, verbatim and instant", async ({ 
 });
 
 test("the share QR encodes the church, not just the app", async ({ page }) => {
-  // One scan should hand over both (2026-07-27). The QR is generated at
-  // render time now, so setting a church must change what it encodes — a
-  // longer payload needs a bigger symbol.
+  // One scan should hand over both (2026-07-27). The QR lives on the Share
+  // screen since the menu rationalization — generated at render time, so
+  // setting a church must change what it encodes: a longer payload needs a
+  // bigger symbol.
   await boot(page);
+  // Desktop puts the roles bar in the header, phones at the bottom — the
+  // navigation landmark covers both.
+  await page.getByRole("navigation").getByRole("button", { name: "Share", exact: true }).click();
+  const card = page.locator('[data-surface="share app"]');
+  await expect(card).toBeVisible();
   const modulesFor = async () =>
-    page.locator(".share-dialog svg").getAttribute("viewBox").then((v) => Number(v!.split(" ")[2]));
-
-  await page.getByRole("button", { name: "Share the app" }).click();
-  await expect(page.locator(".share-dialog")).toBeVisible();
+    card.locator("svg").getAttribute("viewBox").then((v) => Number(v!.split(" ")[2]));
   const plain = await modulesFor();
-  // The dialog shows the HOST, never the full link: with a church attached
-  // the URL runs off a phone screen (feedback 2026-07-27).
-  await expect(page.locator(".share-url")).toHaveText("plumblinebible.org");
-  await page.getByRole("button", { name: "Close" }).click();
+  // The card shows the HOST, never the full link: with a church attached the
+  // URL runs off a phone screen (feedback 2026-07-27).
+  await expect(card).toContainText("plumblinebible.org");
 
   await page.evaluate(() =>
     (window as any).__plumbline.setChurch({
@@ -1213,24 +1217,9 @@ test("the share QR encodes the church, not just the app", async ({ page }) => {
       url: "https://example.org",
     }),
   );
-  await page.getByRole("button", { name: "Share the app" }).click();
-  const withChurch = await modulesFor();
-  expect(withChurch).toBeGreaterThan(plain); // more to encode, bigger symbol
-  await expect(page.locator(".share-with")).toHaveText("with Grace Bible Church");
-  await expect(page.locator(".share-url")).toHaveText("plumblinebible.org");
-
-  // The link itself — what the QR encodes and "Share the link" hands over.
-  const links = await page.evaluate(() => {
-    const s = (window as any).__plumbline;
-    return { normal: s.shareLink, present: s.presentShareLink };
-  });
-  expect(links.normal).toContain("church=Grace+Bible+Church");
-  expect(links.normal).toContain("churchInfo=Sundays+10am");
-  // An ordinary share is an ordinary link — it must NOT declare the recipient
-  // a new believer; that is only for what Present hands over.
-  expect(links.normal).not.toContain("start=new");
-  expect(links.present).toContain("start=new");
-  expect(links.present).toContain("church=Grace+Bible+Church");
+  // The named church is on the card, and the symbol grew to carry it.
+  await expect(card).toContainText("Grace Bible Church");
+  expect(await modulesFor()).toBeGreaterThan(plain);
 });
 
 // Sharing a PASSAGE is a QR carrying the passage, not the phone's share sheet

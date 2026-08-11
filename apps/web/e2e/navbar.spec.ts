@@ -214,7 +214,8 @@ test("phone: a destination shows its own bar and not the reader's", async ({ pag
   await expect(page.locator("header")).toBeVisible();
   await expect(page.locator("header .chapter-nav")).toBeVisible();
 
-  for (const label of ["Study", "Share", "Sing"]) {
+  // Sing's screen is the hymnal, whose bar carries the book's own name.
+  for (const [label, barTitle] of [["Study", "Study"], ["Share", "Share"], ["Sing", "Hymnal"]] as const) {
     await page.locator(".bottom-nav").getByRole("button", { name: label }).click();
 
     // The reader's bar is gone: no chapter nav, no search, no share.
@@ -223,7 +224,7 @@ test("phone: a destination shows its own bar and not the reader's", async ({ pag
     // Exactly ONE bar of chrome, and it names this destination.
     const bar = page.locator(".screen .bar, section .bar").first();
     await expect(bar).toBeVisible();
-    await expect(bar.locator("h2")).toHaveText(label);
+    await expect(bar.locator("h2")).toHaveText(barTitle);
 
     // It clears the status bar, which the header used to be carrying.
     const top = await bar.evaluate((el) => parseFloat(getComputedStyle(el).paddingTop));

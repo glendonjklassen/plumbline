@@ -126,7 +126,7 @@ const SURFACES: { name: string; open?: string; clicks?: string[]; settle: string
     clicks: [".present .pick", ".present .entry"],
     settle: ".present .stepbar button",
   },
-  { name: "the ≡ menu", clicks: ['header [aria-label="Menu"]'], settle: ".menu-host .menu button" },
+  { name: "the ≡ menu", clicks: ['header [aria-label="Menu"]'], settle: '.menu[role="menu"] button' },
 ];
 
 // Mutation: deleting `min-height`/`min-width` from the `button, summary` rule in

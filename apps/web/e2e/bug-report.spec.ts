@@ -40,6 +40,12 @@ async function openSettings(page: Page): Promise<void> {
   await page.getByLabel("Menu").click();
   await page.getByRole("button", { name: "Settings" }).click();
   await expect(settings(page)).toBeVisible();
+  // The report moved behind the Advanced disclosure with the menu
+  // rationalization; every path to it in this file goes through here.
+  const adv = settings(page).locator("details.advanced");
+  if (!(await adv.evaluate((d) => (d as HTMLDetailsElement).open))) {
+    await adv.locator("> summary").click();
+  }
 }
 
 /** The report as the reader sees it, once the async device survey has landed.
@@ -56,7 +62,9 @@ async function reportText(page: Page): Promise<string> {
   await expect(report, "there should be exactly one bug report on screen").toHaveCount(1);
   // Idempotent: a blind click on the summary would CLOSE the disclosure on a
   // second call and then read an element that is only in the DOM by luck.
-  const disclosure = settings(page).locator("details:has(pre.report)");
+  // `.diag`, not bare `details:has(...)`: the report nests inside the
+  // Advanced disclosure, which that selector would also match.
+  const disclosure = settings(page).locator("details.diag:has(pre.report)");
   if (!(await disclosure.evaluate((d) => (d as HTMLDetailsElement).open))) {
     await disclosure.locator("summary").click();
   }
