@@ -42,7 +42,7 @@ export interface PackFile {
    *  the suggested-weave bundle, which the reader downloads from Settings.
    *  Both are found by role rather than by filename, so a rename cannot quietly
    *  unhook them. */
-  role?: "corpusCache" | "suggestedWeaves" | "germanCorpus";
+  role?: "corpusCache" | "suggestedWeaves" | "germanCorpus" | "germanLexicon";
   /** Where these bytes live, relative to the app base. Present on files that came
    *  from a PIN, absent on a manifest straight off the network (where it is
    *  derived). Storing it lets two pack generations coexist in the depot: an
@@ -307,12 +307,19 @@ export function fetchPack(
 }
 
 /** Stage 2 — Strong's, cross-references, margin notes, the overlay and the
- *  bridge witnesses, fetched right after the reader hands over. */
+ *  bridge witnesses, fetched right after the reader hands over. A device with
+ *  the German corpus installed also gets the German lexicon here, so the
+ *  engine's `strongs_for` pick finds it in the home before `loadCoreData`. */
 export function fetchStage2Pack(
   manifest: PackManifest,
   onProgress?: (p: PackProgress) => void,
+  germanInstalled = false,
 ): Promise<Map<string, Uint8Array>> {
-  return fetchFiles(manifest.version, manifest.files.filter((f) => f.stage === "study"), onProgress);
+  return fetchFiles(
+    manifest.version,
+    manifest.files.filter((f) => f.stage === "study" || (f.role === "germanLexicon" && germanInstalled)),
+    onProgress,
+  );
 }
 
 /** The machine tier — background after first paint, never on the boot path. */
@@ -367,6 +374,8 @@ export function hasOptional(
 ): boolean {
   if (f.role === "suggestedWeaves") return home.suggestedInstalled;
   if (f.role === "germanCorpus") return home.germanInstalled;
+  // The lexicon rides with the corpus: one install, one answer.
+  if (f.role === "germanLexicon") return home.germanInstalled;
   return false;
 }
 
@@ -419,6 +428,22 @@ export function suggestedWeavesEntry(manifest: PackManifest): PackFile | null {
  *  `corpus_for` in crates/ffi falls back rather than failing. */
 export function germanCorpusEntry(manifest: PackManifest): PackFile | null {
   return manifest.files.find((f) => f.role === "germanCorpus") ?? null;
+}
+
+/** The German Strong's dictionary, when this pack ships one — installed with
+ *  the corpus (one ask covers both), read by the engine's `strongs_for`. */
+export function germanLexiconEntry(manifest: PackManifest): PackFile | null {
+  return manifest.files.find((f) => f.role === "germanLexicon") ?? null;
+}
+
+/** Fetch the German lexicon into the depot (read-through: boot finds it there).
+ *  Null when the pack ships none — German study then serves the English
+ *  dictionary, which the engine falls back to by itself. */
+export async function fetchGermanLexicon(manifest: PackManifest): Promise<Uint8Array | null> {
+  const entry = germanLexiconEntry(manifest);
+  if (!entry) return null;
+  const got = await fetchFiles(manifest.version, [entry]);
+  return got.get(entry.path) ?? null;
 }
 
 export async function fetchGermanCorpus(

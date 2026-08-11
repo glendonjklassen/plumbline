@@ -76,6 +76,8 @@ async function settle(page: Page): Promise<void> {
 
 async function openSettings(page: Page): Promise<void> {
   await page.evaluate(() => ((window as any).__plumbline.showSettings = true));
+  // The pack rows live behind the Advanced disclosure now.
+  await page.locator('[data-surface="settings"] details.advanced > summary').click();
   await expect(page.getByText("Suggested weaves")).toBeVisible({ timeout: 30_000 });
 }
 

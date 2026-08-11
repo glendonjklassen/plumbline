@@ -272,6 +272,11 @@ tasks.register<Copy>("syncData") {
             "kjv.jsonl",
             "luther1912.jsonl",
             "strongs.json",
+            // The German Strong's dictionary — AI-translated definitions plus
+            // Luther renderings (data-prep/strongs-de/README). Bundled for the
+            // same reason as the corpus: a German reader gets word study the
+            // moment the app opens. ~3 MB compressed.
+            "strongs-de.json",
             "kjv-notes.jsonl",
             "cross-references.tsv",
             "akjv.akjvb",

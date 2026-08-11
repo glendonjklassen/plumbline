@@ -33,6 +33,14 @@ eBible.org's catalogue lists that KJV today as **`ENGKJV` / `eng-kjv2006`**
 module id `engKJV2006eb` itself no longer resolves there (checked 2026-07-29).
 `data/` and `bridge/` are committed to this repo, so nothing re-fetches it.
 
+## The German text and its apparatus
+
+| Shipped file | Contents | Source | License |
+|---|---|---|---|
+| `data/luther1912.jsonl` (text) | Luther 1912 at KJV addresses, tokenized (`luther1912-tok1`) | The Unbound Bible (Biola University) `luther_1912` module, via [kesaranb/luther1912](https://github.com/kesaranb/luther1912); built by `data-prep/luther/build-luther.py` | public domain (module metadata: "This Bible is in the Public Domain") |
+| `data/luther1912.jsonl` (Strong's tags) | ~344k Strong's tags merged onto the tokens | Zefania XML *Luther 1912 mit Strongs* (`SF_2022-02-27_GER_LUTH1912_Strongs_xml_220227.zip`, [zefania-sharp on SourceForge](https://sourceforge.net/projects/zefania-sharp/files/Bibles/GER/Lutherbibel/Luther%201912/)), creator/publisher www.toledot.info; merged by `data-prep/luther/merge-strongs.py` (book-level token alignment, ~98.3% of the source's tags; unmatched words stay untagged) | public domain (the file's own header: "This Text is in the Public Domain") |
+| `data/strongs-de.json` | German Strong's dictionary: machine-translated definitions + Luther renderings derived from the tagged corpus | translation of `data/strongs.json` by `data-prep/strongs-de/translate.py` (Claude, Batch API; labelled as machine-translated in the app) + renderings computed by `build-strongs-de.py` | **CC-BY-SA** — a derivative of openscriptures/strongs, share-alike carries over |
+
 ## Morphology
 
 | Shipped file | Contents | Source | License |

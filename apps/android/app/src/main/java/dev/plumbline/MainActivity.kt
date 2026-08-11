@@ -129,10 +129,14 @@ class MainActivity : ComponentActivity() {
                     // overlay).
                     // v3: hymnal.json.
                     // v4: luther1912.jsonl, the German corpus.
+                    // v5: chronological.json (the reading plan's table — its
+                    // v0.46.0 addition shipped WITHOUT this bump, so existing
+                    // installs never re-extracted it), and the German corpus
+                    // re-tagged with Strong's.
                     // `bundledDataMarkerIsBumpedForTheCurrentAssetSet` in
                     // MainActivityTest fails the build if this marker lags the
                     // bundled asset set.
-                    val corpus = File(home, ".data-v4")
+                    val corpus = File(home, ".data-v5")
                     if (!corpus.exists()) {
                         copyAsset("data", File(home, "data"), buf = buf)
                         if ((assets.list("bridge")?.size ?: 0) > 0) {

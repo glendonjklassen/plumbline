@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -103,6 +104,7 @@ fun HymnalScreen(
     palette: ReaderPalette,
     onClose: () -> Unit,
     onSing: (HymnSing) -> Unit,
+    barActions: @Composable RowScope.() -> Unit = {},
 ) {
     var index by remember { mutableStateOf<List<HymnalEntry>?>(null) }
     var filter by remember { mutableStateOf("") }
@@ -157,6 +159,7 @@ fun HymnalScreen(
             onBack = { if (openId != null) { openId = null; semis = 0 } else onClose() },
             backLabel = if (openId != null) t("hymnal.backToList") else t("bar.backToReading"),
         ) {
+            if (openId == null) barActions()
             if (openId != null && open != null) {
                 // One hymn, two texts: the same tune sung in either language.
                 // This is the toggle the German release grows out of.

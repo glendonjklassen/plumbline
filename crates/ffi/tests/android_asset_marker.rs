@@ -30,18 +30,25 @@ fn repo() -> PathBuf {
 /// The data files the APK bundles, as `build.gradle.kts` lists them. Sorted.
 const EXPECTED_ASSETS: &[&str] = &[
     "akjv.akjvb",
+    // The v5 addition — it entered gradle in v0.46.0 WITHOUT a marker bump
+    // (and without this list noticing: a `)` inside a comment truncated the
+    // parser's view of the include list — fixed below), so existing installs
+    // never re-extracted it.
+    "chronological.json",
     "cross-references.tsv",
     // The v3 addition.
     "hymnal.json",
     "kjv-notes.jsonl",
     "kjv.jsonl",
-    // The v4 addition: the German corpus.
+    // The v4 addition: the German corpus (re-tagged with Strong's in v5).
     "luther1912.jsonl",
+    // Also v5: the German Strong's dictionary (AI-translated definitions).
+    "strongs-de.json",
     "strongs.json",
 ];
 
 /// The marker the CURRENT asset set is paired with.
-const EXPECTED_MARKER: &str = ".data-v4";
+const EXPECTED_MARKER: &str = ".data-v5";
 
 #[test]
 fn bundled_data_marker_is_bumped_for_the_current_asset_set() {
@@ -53,7 +60,17 @@ fn bundled_data_marker_is_bumped_for_the_current_asset_set() {
     // The `syncData` block's include(...), which may span lines — it grew a file
     // per line when the German corpus was added, and this test used to look at a
     // single line and simply stop finding it.
-    let sync = gradle.split("syncData").nth(1).expect("build.gradle.kts still has a syncData task");
+    // Comments come out BEFORE the parse: a `)` inside an include-list comment
+    // truncated the old view of the list, which is how chronological.json
+    // slipped past this test unbumped in v0.46.0.
+    let sync: String = gradle
+        .split("syncData")
+        .nth(1)
+        .expect("build.gradle.kts still has a syncData task")
+        .lines()
+        .map(|l| l.split("//").next().unwrap_or(l))
+        .collect::<Vec<_>>()
+        .join("\n");
     let open = sync.find("include(").expect("syncData still has an include() naming the bundled data");
     let close = sync[open..].find(')').map(|i| open + i).expect("the include( is closed");
     let listing = &sync[open..close];

@@ -26,8 +26,10 @@ them.
 
 The output is `kjv.jsonl`'s frozen shape (CLAUDE.md §Data formats): a header
 line, then one verse per line with positional tokens
-`[pre, word, post, [strongs], flags]`. Strong's is always empty here. Of the
-flag bits only DIVINE NAME (2) is set — see `divine_name` below.
+`[pre, word, post, [strongs], flags]`. Strong's is always empty here — a
+SEPARATE later pass, `merge-strongs.py`, fills the slots from the Zefania
+tagged edition, so a rebuild from this source must be followed by a re-merge.
+Of the flag bits only DIVINE NAME (2) is set — see `divine_name` below.
 """
 
 import json

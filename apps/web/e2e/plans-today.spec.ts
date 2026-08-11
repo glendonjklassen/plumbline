@@ -97,3 +97,98 @@ test("the chronological plan is offered, starts, and day 1 begins at Genesis 1",
   // And it rides the reader like any schedule: the chip names day 1.
   await expect(page.locator(".plan-chip-row .plan-chip").first()).toHaveText(/Day 1 · /);
 });
+
+// The UAT round (2026-08-11). Three separate ways the plans surfaces misled a
+// reader, each with its own cause:
+//
+//   1. The picker kept offering the other whole-Bible plans while one ran, so
+//      the only thing a tap could mean was "throw away the plan I'm on".
+//   2. The chip's label named the day's WHOLE span all evening ("Gen 1–4"
+//      after Genesis 1 was finished), so it looked like nothing had counted —
+//      the label now names what is left (`remaining()` in planToday.ts).
+//   3. Explore's cards spilled their second line past the border at every text
+//      scale, because the global 44px tap floor replaces the automatic minimum
+//      size that stops a grid item being shorter than its own text.
+test("a running plan takes its class off the picker", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.author("planStart", "bible-365", new Date().toISOString());
+  });
+  await page.evaluate(() => ((window as any).__plumbline.panel = { kind: "plans" }));
+
+  // The running plan's own card is there…
+  await expect(page.locator(".plan-card", { hasText: "The whole Bible in a year" })).toBeVisible();
+  // …and its rivals are gone from the picker entirely, not merely disabled.
+  for (const rival of ["The whole Bible in 180 days", "The whole Bible in 90 days", "The Bible in chronological order"]) {
+    await expect(page.locator(".plan-builtin", { hasText: rival })).toHaveCount(0);
+  }
+  // Another class is still on offer — this is a class filter, not a blanket one.
+  await expect(page.locator(".plan-builtin", { hasText: "The New Testament in 90 days" })).toBeVisible();
+});
+
+test("finishing a chapter advances the chip and its label", async ({ page }) => {
+  await boot(page);
+  const first = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.author("planStart", "bible-365", new Date().toISOString());
+    const plans = await s.fetchQ("plans", "");
+    return plans.running.find((p: any) => p.id === "bible-365").today.chapters[0];
+  });
+  const chip = page.locator(".plan-chip-row .plan-chip").first();
+  await expect(chip).toContainText(first.display);
+  const labelBefore = await chip.textContent();
+
+  // Read the chapter the way a phone does: dwell ticks into the core's tracker,
+  // whose banked report lands as `readingWrote` — NOT an authoring write. The
+  // authoring path always invalidated the plans cache; the dwell path is the
+  // one the UAT caught stale, so it is the one this test must travel.
+  await page.evaluate(async (c) => {
+    const s = (window as any).__plumbline;
+    const t0 = Date.now();
+    for (let i = 0; i < 1200; i++) {
+      const out = await s.rpc.call(
+        "readingTick", c.book, c.chapter, 31, 1, true, new Date(t0 + i * 1000).toISOString());
+      if (out?.completed) { await s.rpc.call("readingTick", null, 0, 0, 0, false, new Date(t0 + (i + 1) * 1000).toISOString()); return; }
+    }
+    throw new Error("dwell never completed the chapter");
+  }, first);
+
+  // The chip now names what is LEFT — a label that never moves all evening is
+  // the UAT bug — and sends the reader to the next chapter.
+  await expect(chip).not.toHaveText(labelBefore!);
+  const landed = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    document.querySelector<HTMLButtonElement>(".plan-chip-row .plan-chip")!.click();
+    await new Promise((r) => setTimeout(r, 300));
+    const p = s.panes[0];
+    return { book: p.book, chapter: p.chapter };
+  });
+  expect(landed, "the chip still sent the reader back to the chapter they finished").not.toEqual({
+    book: first.book,
+    chapter: first.chapter,
+  });
+});
+
+test("no Explore card spills its text past its border, at any text scale", async ({ page }) => {
+  // A phone's width is where the UAT saw it — desktop is wide enough for the
+  // card text to fit even squashed, which would let the test pass over the bug.
+  await page.setViewportSize({ width: 360, height: 740 });
+  await boot(page);
+  for (const scale of [1, 1.4]) {
+    await page.evaluate((z) => {
+      (window as any).__plumbline.config.uiScale = z;
+      document.documentElement.style.setProperty("--uiScale", String(z));
+    }, scale);
+    // Mount the Explore screen the way Shell's Study destination does — the
+    // navigation path has its own coverage; the subject here is the cards.
+    await page.evaluate(() => (((window as any).__plumbline as any).screen = "explore"));
+    await expect(page.locator(".ex-card").first()).toBeVisible();
+    const spills = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLButtonElement>(".ex-card")]
+        .filter((b) => b.scrollHeight > b.clientHeight + 1)
+        .map((b) => ({ text: (b.textContent || "").replace(/\s+/g, " ").slice(0, 40), client: b.clientHeight, scroll: b.scrollHeight })),
+    );
+    expect(spills, `cards overflow at uiScale ${scale}`).toEqual([]);
+  }
+});

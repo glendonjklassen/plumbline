@@ -10,7 +10,7 @@
   // the mode cannot advance a schedule — a chip inviting schedule reading would
   // promise credit the mode deliberately withholds.
   import { getSession } from "../state/session.svelte";
-  import { chapterSpan, firstUnread, todayPlans } from "./planToday";
+  import { chapterSpan, firstUnread, remaining, todayPlans } from "./planToday";
   import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
@@ -30,7 +30,7 @@
 {#if lead && !s.inConceptStudy}
   <div class="plan-chip-row">
     <button class="plan-chip" onclick={go} title={t("plans.chipGo")}>
-      {t("plans.chip", { day: lead.day, chapters: chapterSpan(lead.chapters) })}
+      {t("plans.chip", { day: lead.day, chapters: chapterSpan(remaining(lead)) })}
     </button>
     {#if plans.length > 1}
       <button class="plan-chip more" onclick={() => (s.panel = { kind: "plans" })}>

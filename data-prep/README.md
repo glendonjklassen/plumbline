@@ -188,3 +188,43 @@ python3 data-prep/luther/check-luther.py luther_1912.json
 The fourth claim is there because mutation-testing the checker found it missing:
 a tokenizer that peels a letter off the end of a word reassembles perfectly, has
 identical letters, and silently breaks every tap target.
+
+### Strong's tags for the German corpus
+
+`data-prep/luther/merge-strongs.py` fills the tokens' empty Strong's slots from
+the Zefania XML *Luther 1912 mit Strongs* (toledot.info; its header declares the
+text public domain — see BIBLIOGRAPHY.md). The tokens themselves never change:
+`luther1912-tok1` is frozen the way `kjv1769-tok2` is.
+
+Verse addressing cannot bridge the two editions (the Zefania file's German
+versification shifts in more places than `german-numbering.tsv` records, and its
+orthography is modernized — `dass` for `daß`), so the merge aligns **each book
+as one token stream** in reading order, with an orthography fold and handling
+for joined words and contractions. ~98.3% of the source's ~350k tags transfer;
+words the alignment cannot confidently pair stay untagged — a missing tag is
+honest, a guessed one is not. `check-luther.py`'s seventh claim guards the
+result: every code resolves in `data/strongs.json`, Hebrew only in the OT and
+Greek only in the NT, and the count is high enough to prove the merge ran.
+
+A corpus rebuild loses the tags, so the full sequence is:
+
+```sh
+python3 data-prep/luther/build-luther.py luther_1912.json
+python3 data-prep/luther/merge-strongs.py "SF_2022-02-27_GER_LUTH1912_(LUTHER_1912_mit_Strongs).xml"
+python3 data-prep/luther/check-luther.py
+```
+
+## German Strong's dictionary (`data/strongs-de.json`)
+
+Two scripts in `data-prep/strongs-de/`:
+
+- `translate.py` — machine-translates `strongs_def` and `derivation` of every
+  `data/strongs.json` entry into German over the Batch API (needs
+  `ANTHROPIC_API_KEY`; idempotent and resumable; writes the committed
+  intermediate `translations.json`). The app labels these definitions as
+  machine-translated and points readers at the repo's issues for corrections.
+- `build-strongs-de.py` — assembles the shipped file: language-neutral fields
+  copied, translated prose folded in (English fallback where a translation is
+  missing), and the `kjv_def` slot filled with **Luther renderings** derived
+  from the tagged corpus — the German words that actually stand under each
+  code, most frequent first. Derived data, not AI output.

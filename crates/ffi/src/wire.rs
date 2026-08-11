@@ -1042,6 +1042,7 @@ fn run_to_wire(r: Run) -> WireRun {
 #[serde(tag = "verb", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum WirePanelLink {
     Go { book: String, chapter: u32, verse: Option<u32> },
+    External { url: String },
     Occurrences { code: String },
     Rendering { code: String, rendering: String },
     CodeStudy { code: String, word: String },
@@ -1068,6 +1069,7 @@ pub enum WirePanelLink {
 pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
     match l {
         PanelLink::Go { book, chapter, verse } => WirePanelLink::Go { book, chapter, verse },
+        PanelLink::External { url } => WirePanelLink::External { url },
         PanelLink::Occurrences { code } => WirePanelLink::Occurrences { code },
         PanelLink::Rendering { code, rendering } => WirePanelLink::Rendering { code, rendering },
         PanelLink::CodeStudy { code, word } => WirePanelLink::CodeStudy { code, word },
@@ -1182,6 +1184,10 @@ pub struct WireConfigState {
     /// taps into tag-with-confirm while this is set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub concept_study: Option<String>,
+    /// English definitions preferred over the German Strong's dictionary
+    /// (additive). Absent = off: German serves when the pack ships it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strongs_de_off: Option<bool>,
     /// Load-only: true when no config file existed yet (guided first run).
     #[serde(default)]
     pub first_run: bool,
@@ -1290,6 +1296,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         intro: (!cfg.intro.is_empty()).then(|| cfg.intro.clone()),
         language: (!cfg.language.is_empty()).then(|| cfg.language.clone()),
         concept_study: (!cfg.concept_study.is_empty()).then(|| cfg.concept_study.clone()),
+        strongs_de_off: Some(cfg.strongs_de_off),
         church: (!cfg.church.is_empty()).then(|| WireChurch {
             name: cfg.church.name.clone(),
             info: cfg.church.info.clone(),
@@ -1356,6 +1363,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         // An id the plan store answers for at use — a stale one reads as
         // normal mode there, so nothing validates it away here.
         concept_study: w.concept_study.as_deref().map(|s| s.trim().to_string()).unwrap_or_default(),
+        strongs_de_off: w.strongs_de_off.unwrap_or(false),
         // Through the core's clamps, not a local trim: this is the one place a
         // shell's church becomes the core's, so it is where the caps stop being
         // something each shell has to remember.

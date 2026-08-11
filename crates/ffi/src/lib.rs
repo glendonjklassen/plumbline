@@ -146,6 +146,10 @@ pub struct PlumblineEngine {
     /// the core pack arrives moments later via `load_core_data`. Unset means
     /// "not here yet": lookups answer empty and fill on the shell's re-fetch.
     strongs: OnceLock<StrongsDict>,
+    /// Whether `strongs` holds the German dictionary (`strongs_for`) — the
+    /// panel labels renderings and carries the machine-translation caveat
+    /// from this.
+    strongs_de: std::sync::atomic::AtomicBool,
     /// The corpus-derived indexes are built LAZILY (TODO #28: boot cost —
     /// the app opens like Instagram, many times a day; every millisecond of
     /// open is paid every time). First access builds; `warm_indexes` forces
@@ -289,6 +293,7 @@ impl PlumblineEngine {
         PlumblineEngine {
             corpus,
             strongs: strongs_cell,
+            strongs_de: std::sync::atomic::AtomicBool::new(false),
             search_ix: OnceLock::new(),
             search_partial: std::sync::Mutex::new(None),
             occ_partial: std::sync::Mutex::new(None),
@@ -387,22 +392,26 @@ impl PlumblineEngine {
     fn load_core_data(&self) {
         let Some(h) = &self.home else { return };
         // The study data (the 1769 margin notes among it) reloads whatever text
-        // is open; Strong's and the overlay are the KJV's — see the gate in
-        // `new`. On the German corpus both stay unset, which is what makes
-        // `AkjvAvailable()` false and hides the toggle rather than offering a
-        // reader an English overlay for a German verse.
-        if self.corpus.tokenization_version() == canon::TOKENIZATION_VERSION {
-            if self.strongs.get().is_none() {
-                if let Ok(sd) = strongs::load_strongs(h.join("data").join("strongs.json")) {
-                    let _ = self.strongs.set(sd);
-                }
+        // is open. Strong's loads for EITHER corpus — the dictionary is keyed
+        // by code and each corpus carries its own token tags now (the German
+        // corpus since merge-strongs.py), so nothing here is anchored to KJV
+        // token indices. The overlay stays KJV-only — see the gate in `new`:
+        // it is a delta over KJV token runs, and on the German corpus it stays
+        // unset, which is what makes `AkjvAvailable()` false and hides the
+        // toggle rather than offering a reader an English overlay for a German
+        // verse.
+        if self.strongs.get().is_none() {
+            let (path, is_de) = strongs_for(&h.join("data"));
+            if let Ok(sd) = strongs::load_strongs(path) {
+                let _ = self.strongs.set(sd);
+                self.strongs_de.store(is_de, std::sync::atomic::Ordering::Relaxed);
             }
-            if self.akjv.get().is_none() {
-                // Stage 2, beside Strong's: small, and wanted the moment the reader
-                // flips the toggle rather than after a download they must approve.
-                if let Some(a) = akjv::load_akjv(canon::TOKENIZATION_VERSION, h.join("data").join("akjv.jsonl")) {
-                    let _ = self.akjv.set(a);
-                }
+        }
+        if self.corpus.tokenization_version() == canon::TOKENIZATION_VERSION && self.akjv.get().is_none() {
+            // Stage 2, beside Strong's: small, and wanted the moment the reader
+            // flips the toggle rather than after a download they must approve.
+            if let Some(a) = akjv::load_akjv(canon::TOKENIZATION_VERSION, h.join("data").join("akjv.jsonl")) {
+                let _ = self.akjv.set(a);
             }
         }
         *self.study_write() = load_study(&self.home);
@@ -1020,6 +1029,24 @@ pub fn corpus_for(home: &str, lang: i18n::Lang) -> PathBuf {
     }
 }
 
+/// The Strong's dictionary for the active language: `strongs-de.json` for a
+/// German reader when the pack ships it (machine-translated definitions +
+/// corpus-derived Luther renderings — BIBLIOGRAPHY.md), else the English
+/// `strongs.json`. Same file shape either way; the bool says which one, so the
+/// panel can label the renderings and carry the machine-translation caveat.
+fn strongs_for(data: &std::path::Path) -> (PathBuf, bool) {
+    // `strongsDeOff` is the reader's escape hatch back to the original English
+    // definitions (Settings ▸ language). Read here, at pick time, because the
+    // toggle reloads the app exactly like a language change does.
+    if i18n::active() == i18n::Lang::De && !config::load().0.strongs_de_off {
+        let de = data.join("strongs-de.json");
+        if de.exists() {
+            return (de, true);
+        }
+    }
+    (data.join("strongs.json"), false)
+}
+
 /// The corpus for `lang`, falling back to the KJV when it will not open.
 ///
 /// BY TRYING, not by testing for the file, and the difference is not academic:
@@ -1083,9 +1110,10 @@ pub unsafe extern "C" fn plumbline_engine_open(home: *const c_char, out_err: *mu
         };
         // Stage-1 boots (web) may not have strongs.json yet — open on the
         // corpus alone; load_core_data brings the dictionary in later. A file
-        // that EXISTS but fails to parse stays a hard error.
-        let strongs_path = format!("{home}/data/strongs.json");
-        let strongs = if std::path::Path::new(&strongs_path).exists() {
+        // that EXISTS but fails to parse stays a hard error. A German reader
+        // gets strongs-de.json when the pack ships it (`strongs_for`).
+        let (strongs_path, strongs_is_de) = strongs_for(&PathBuf::from(home).join("data"));
+        let strongs = if strongs_path.exists() {
             match strongs::load_strongs(&strongs_path) {
                 Ok(s) => Some(s),
                 Err(e) => {
@@ -1096,7 +1124,9 @@ pub unsafe extern "C" fn plumbline_engine_open(home: *const c_char, out_err: *mu
         } else {
             None
         };
-        Box::into_raw(Box::new(PlumblineEngine::new(corpus, strongs, Some(PathBuf::from(home)))))
+        let engine = PlumblineEngine::new(corpus, strongs, Some(PathBuf::from(home)));
+        engine.strongs_de.store(strongs_is_de, std::sync::atomic::Ordering::Relaxed);
+        Box::into_raw(Box::new(engine))
     })
 }
 
@@ -2563,9 +2593,12 @@ const PANEL_OCC_CAP: usize = 300;
 
 impl PanelSource for PlumblineEngine {
     /// Whether the open text is the KJV — the same question `new` asks before it
-    /// wires Strong's, morphology and the overlay, and for the same reason.
+    /// wires morphology and the overlay, and for the same reason.
     fn is_kjv_text(&self) -> bool {
         self.corpus.tokenization_version() == canon::TOKENIZATION_VERSION
+    }
+    fn lexicon_de(&self) -> bool {
+        self.strongs_de.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     fn token_word(&self, verse: &str, token: u32) -> Option<String> {

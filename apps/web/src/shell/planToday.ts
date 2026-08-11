@@ -63,3 +63,13 @@ export function chapterSpan(chapters: TodayChapter[]): string {
 export function firstUnread(plan: TodayPlan): TodayChapter | null {
   return plan.chapters.find((c) => !c.read) ?? plan.chapters[0] ?? null;
 }
+
+/** What is LEFT of today, for the chip's label — so a reader who finished
+ *  Genesis 1 of a Gen 1–4 day sees "Gen 2–4" and knows the tap will take them
+ *  to Genesis 2, rather than a label that never moves all evening (the
+ *  maintainer's UAT call, 2026-08-11). Falls back to the whole day once every
+ *  chapter is read, which is the moment the day is about to roll over. */
+export function remaining(plan: TodayPlan): TodayChapter[] {
+  const left = plan.chapters.filter((c) => !c.read);
+  return left.length > 0 ? left : plan.chapters;
+}

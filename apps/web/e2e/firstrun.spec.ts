@@ -84,47 +84,46 @@ test("however first run ends, the welcome stays reachable", async ({ page }) => 
     await page.evaluate(() => (window as any).__plumbline?.intro ?? null),
     "first run ended without recording which welcome was read, so the Welcome button will never appear",
   ).toBe("new");
+  await page.getByLabel("Menu").click();
   await expect(
     page.getByRole("button", { name: "Welcome" }).first(),
-    "the Welcome button is gone for good — there is no way back to the intro",
+    "the Welcome entry is gone for good — there is no way back to the intro",
   ).toBeVisible();
 
-  // And it survives the relaunch, which is where "permanently" was decided.
+  // And the RECORDED intro survives the relaunch, which is where "permanently"
+  // was decided.
   await page.reload({ timeout: 45_000 });
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
-  await expect(
-    page.getByRole("button", { name: "Welcome" }).first(),
-    "the intro was not persisted — the button is there this launch and gone the next",
-  ).toBeVisible();
+  expect(
+    await page.evaluate(() => (window as any).__plumbline?.intro ?? null),
+    "the intro was not persisted — recorded this launch and gone the next",
+  ).toBe("new");
 });
 
-// A reader whose path never recorded an `intro` — the established believer — has
-// no top-bar Welcome button (the previous test is the new-believer twin). Their
-// way back is the Settings entry, and it must reopen the welcome without
-// touching data (UAT, 2026-08-06). Drives the established path, confirms no
-// top-bar button, then reopens from Settings.
+// A reader whose path never recorded an `intro` — the established believer —
+// still finds Welcome in the ≡ utilities (it shows for EVERY reader now, and
+// falls back to the new-believer welcome; the old conditional entry hid it from
+// exactly the reader who never had one, UAT 2026-08-06). It must reopen the
+// welcome without touching data.
 //
-// MUTATION: make the Settings button's onclick a no-op in SettingsDialog.svelte.
-// Red: `reopenIntro` stays null and the poll below times out.
-test("the intro is reachable from Settings when no top-bar Welcome exists", async ({ page }) => {
+// MUTATION: drop the `?? "new"` fallback on the ≡ Welcome entry in
+// Shell.svelte. Red: `reopenIntro` stays null and the poll below times out.
+test("the intro is reachable from the ≡ menu when no intro was recorded", async ({ page }) => {
   await firstRun(page);
   await page.getByRole("button", { name: "Established believer" }).click();
   await page.getByRole("button", { name: "Start reading" }).click();
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
 
-  // The established path records no `intro`, so the top-bar Welcome button never
-  // appears — this reader's only route back is Settings.
+  // The established path records no `intro` — the entry still shows, and falls
+  // back to the new-believer welcome.
   expect(await page.evaluate(() => (window as any).__plumbline?.intro ?? null)).toBeNull();
-  await expect(page.getByRole("button", { name: "Welcome" })).toHaveCount(0);
+  await page.getByLabel("Menu").click();
+  await page.getByRole("button", { name: "Welcome" }).click();
 
-  // Reopen the welcome from Settings.
-  await page.evaluate(() => ((window as any).__plumbline.showSettings = true));
-  await page.getByRole("button", { name: "Show the welcome" }).click();
-
-  // The welcome is back, and Settings closed. Non-destructive: reopenIntro is
-  // shell state, no config path fired.
+  // The welcome is up. Non-destructive: reopenIntro is shell state, no config
+  // path fired — `intro` stays null underneath it.
   await expect
     .poll(() => page.evaluate(() => (window as any).__plumbline?.reopenIntro ?? null))
     .not.toBeNull();
-  expect(await page.evaluate(() => (window as any).__plumbline?.showSettings)).toBe(false);
+  expect(await page.evaluate(() => (window as any).__plumbline?.intro ?? null)).toBeNull();
 });

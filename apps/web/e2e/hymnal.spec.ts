@@ -49,7 +49,7 @@ test("phone: the fifth tab reaches it, and Read comes back", async ({ page }) =>
   await expect(bar).toBeVisible();
   await expect(bar.locator("button")).toHaveCount(5);
 
-  await bar.getByRole("button", { name: "Hymnal" }).click();
+  await bar.getByRole("button", { name: "Sing" }).click();
   await expect(page.locator('section[aria-label="Hymnal"]')).toBeVisible();
   await bar.getByRole("button", { name: "Read" }).click();
   await expect(page.locator('section[aria-label="Hymnal"]')).toHaveCount(0);
@@ -197,7 +197,7 @@ test("sing mode is a fullscreen sunlight surface that Escape leaves", async ({ p
   await page.locator(".row").first().click();
   await expect(page.locator(".stanza").first()).toBeVisible({ timeout: 60_000 });
 
-  await page.getByRole("button", { name: "Sing" }).click();
+  await page.locator("button.sing").click(); // "Sing" also names the bottom-bar destination
   const host = page.locator(".sing-host");
   await expect(host).toBeVisible();
 
@@ -225,7 +225,7 @@ test("sing mode scrolls itself, and holds still when told to", async ({ page }) 
   await openHymnal(page);
   await page.locator(".row").first().click();
   await expect(page.locator(".stanza").first()).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: "Sing" }).click();
+  await page.locator("button.sing").click(); // "Sing" also names the bottom-bar destination
   await expect(page.locator(".sing-host")).toBeVisible();
 
   const top = () => page.locator(".sbody").evaluate((el) => el.scrollTop);

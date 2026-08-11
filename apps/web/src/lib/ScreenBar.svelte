@@ -17,8 +17,11 @@
     backLabel?: string;
     /** Controls on the right of the bar (language, chords, Sing…). */
     actions?: import("svelte").Snippet;
+    /** Raise the ≡ utilities menu. Every DESTINATION passes this (Settings
+     *  must not cost a trip back to Read); transient overlays leave it unset. */
+    onMenu?: () => void;
   }
-  const { title, onBack, backLabel, actions }: Props = $props();
+  const { title, onBack, backLabel, actions, onMenu }: Props = $props();
 </script>
 
 <div class="bar">
@@ -26,6 +29,9 @@
   <h2>{title}</h2>
   <span class="spacer"></span>
   {#if actions}{@render actions()}{/if}
+  {#if onMenu}
+    <button class="menu" onclick={onMenu} aria-label={t("common.menu")}>≡</button>
+  {/if}
 </div>
 
 <style>
@@ -55,6 +61,16 @@
     color: var(--gold, #9e7d38);
   }
   .back:hover {
+    background: color-mix(in srgb, var(--gold, #9e7d38) 14%, transparent);
+  }
+  .menu {
+    font-size: calc(20px * var(--uiScale, 1));
+    line-height: 1;
+    padding: 8px 12px;
+    border-radius: 6px;
+    color: var(--gold, #9e7d38);
+  }
+  .menu:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 14%, transparent);
   }
   h2 {

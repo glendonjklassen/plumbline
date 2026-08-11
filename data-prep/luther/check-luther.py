@@ -23,6 +23,11 @@ of scripture was lost on the way through.
      HERR/HERRN/HERRE, never on the ordinary word "Herr".
   6. NOTHING WAS LOST (needs the source file). Every verse's letters and digits,
      ignoring whitespace and the stripped artifacts, are the source's.
+  7. THE STRONG'S TAGS ARE SOUND (merge-strongs.py's claims): every code
+     resolves in data/strongs.json, Hebrew codes only in the OT and Greek only
+     in the NT, and there are enough of them that the merge visibly ran — the
+     source carries ~350k tags, so a corpus with under 300k means a broken or
+     skipped merge, not a smaller edition.
 """
 
 import json
@@ -114,6 +119,28 @@ def main() -> int:
     if divine_hits < 5000:
         fail(f"only {divine_hits} divine-name marks — the rule looks broken")
 
+    # ── 7. the Strong's tags are sound ───────────────────────────────────────
+    known = set(json.loads((ROOT / "data" / "strongs.json").read_text(encoding="utf-8")))
+    ot_books = []
+    for r in kj:
+        if not ot_books or ot_books[-1] != r["b"]:
+            if r["b"] not in ot_books:
+                ot_books.append(r["b"])
+    ot = set(ot_books[:39])
+    tag_count = 0
+    for r in lu:
+        where = f'{r["b"]} {r["c"]}:{r["v"]}'
+        want_prefix = "H" if r["b"] in ot else "G"
+        for t in r["t"]:
+            for code in t[3]:
+                tag_count += 1
+                if code not in known:
+                    fail(f"{where}: Strong's code {code!r} not in data/strongs.json")
+                elif not code.startswith(want_prefix):
+                    fail(f"{where}: {code} is the wrong testament for this book")
+    if tag_count < 300_000:
+        fail(f"only {tag_count} Strong's tags — the merge looks broken or skipped")
+
     # ── 6. nothing was lost ─────────────────────────────────────────────────
     if len(sys.argv) > 1:
         src = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["verses"]
@@ -149,7 +176,10 @@ def main() -> int:
         for f in fails[:40]:
             print(f"  {f}", file=sys.stderr)
         return 1
-    print(f"luther: {len(lu)} verses at the KJV's addresses, {divine_hits} divine-name marks, no artifacts.")
+    print(
+        f"luther: {len(lu)} verses at the KJV's addresses, {divine_hits} divine-name marks, "
+        f"{tag_count} Strong's tags, no artifacts."
+    )
     return 0
 
 

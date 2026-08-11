@@ -22,6 +22,11 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       s.navigate(idx, link.book, link.chapter, link.verse ?? null);
       break;
     }
+    case "external":
+      // The core only parses https ext: links (panel::parse_link), so this is
+      // never a javascript: or data: URI. Same open shape as the church QR.
+      window.open(link.url, "_blank", "noopener,noreferrer");
+      break;
     case "occurrences":
       s.panel = { kind: "concordance", code: link.code };
       break;

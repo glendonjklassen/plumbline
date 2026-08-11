@@ -116,35 +116,6 @@ steps, all on the phone.
    open **Plumbline** from your app drawer: the whole Bible is inside the file
    you just installed, so it opens with the network off.
 
-Needs Android 8.0 or newer and a 64-bit phone (`arm64-v8a`). It declares **no
-INTERNET permission at all**, so it cannot phone home even by accident. One study layer rides in the
-web version only, because the APK doesn't carry its data file: the word-grammar
-gloss. Everything else is in the APK — the
-text, Strong's, the margin notes, the Treasury's cross-references, the
-cross-testament bridge, the plain-English overlay, and all of your own work.
-
-**What sideloading means.** You are the one deciding to trust this file, which
-is why Android keeps asking. Two things follow. There is no auto-update — when
-a new version ships you come back to Releases and repeat the four steps; it
-installs over the old one and your notes, tags and threads stay where they are,
-because every release is signed with the same key. And take the APK only from
-that Releases page: a file called `plumbline-….apk` from anywhere else is not
-something I built. If any of this stalls on your phone, the web version above
-needs none of it.
-
-**Checking what you downloaded** (optional). GitHub records a SHA-256 for every
-file attached to a release. Ask it for the APK's, hash your own copy, and
-compare:
-
-```sh
-curl -s https://api.github.com/repos/glendonjklassen/plumbline/releases/latest \
-  | grep -o 'sha256:[0-9a-f]\{64\}'
-sha256sum plumbline-v*-android.apk
-```
-
-(`shasum -a 256` on macOS, `Get-FileHash` in Windows PowerShell.) The two hex
-strings have to match character for character.
-
 ## Getting started (60 seconds)
 
 First launch asks who's opening the Book — **new in the faith** (a welcome
@@ -198,21 +169,6 @@ ordinary share.
 
 See **[docs/GUIDE.md](docs/GUIDE.md)** for the full tour — search syntax, the
 study panel tier by tier, weaves, the constellation, threads and tags.
-
-## Shortcuts
-
-The reading pane holds focus (click it if a dropdown steals it):
-
-| Key | Action |
-|-----|--------|
-| `Up` / `Down` | scroll a few lines |
-| `PageUp` / `PageDown` / `Space` | scroll nearly a page |
-| `Home` / `End` | chapter start / end |
-| `Left` / `Right` (or `[` / `]`) | step chapters, rolling across book boundaries |
-| **`Shift`** + wheel / `Up` / `Down` / `PageUp` / `PageDown` / `Space` | **lock every pane together** (parallel reading) |
-| `Ctrl` + wheel, `Ctrl` `+` / `-` | zoom the body text · `Ctrl 0` resets |
-| `Ctrl`+click a word (or double-click) | open its Strong's study panel |
-| `Esc` | close the study panel / any popup (clicking outside a popup also closes it) |
 
 ## Threads and weaves
 

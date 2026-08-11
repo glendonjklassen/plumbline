@@ -36,6 +36,17 @@
     conceptStudyTag = "";
     await s.startConceptStudy(tag);
   }
+  /** The plans still worth offering: a builtin whose CLASS is already occupied
+   *  is not one of them. Running "the whole Bible in a year" and being shown
+   *  the 180- and 90-day plans beside it invites a tap that can only mean
+   *  "throw away the plan I am on" — the reader stops the running plan first
+   *  (the maintainer's UAT call, 2026-08-11). The engine already enforces one
+   *  plan per class with a replace-confirm; this stops the picker from asking. */
+  function offerable(p: any): any[] {
+    const runningClasses = new Set(((p?.running ?? []) as any[]).map((r) => r.class).filter(Boolean));
+    return ((p?.builtins ?? []) as any[]).filter((b) => !runningClasses.has(b.class));
+  }
+
   /** A schedule plan's display name, from the builtin catalogue (its `nameKey`
    *  is a catalogue id); falls back to the raw id for an unknown plan. */
   function planName(id: string): string {
@@ -214,17 +225,15 @@
         </div>
 
         <h3 class="plans-sub">{t("plans.available")}</h3>
-        {#each plans?.builtins ?? [] as b (b.id)}
-          {@const active = ((plans?.running ?? []) as any[]).some((p) => p.id === b.id)}
-          <button
-            class="plan-builtin"
-            disabled={active}
-            onclick={() => s.startPlan({ id: b.id, class: b.class, name: t(b.nameKey) })}
-          >
+        {#each offerable(plans) as b (b.id)}
+          <button class="plan-builtin" onclick={() => s.startPlan({ id: b.id, class: b.class, name: t(b.nameKey) })}>
             <span class="plan-name">{t(b.nameKey)}</span>
-            <span class="plan-add">{active ? t("plans.running") : t("plans.start")}</span>
+            <span class="plan-add">{t("plans.start")}</span>
           </button>
         {/each}
+        {#if offerable(plans).length === 0}
+          <p class="plans-hint">{t("plans.classFull")}</p>
+        {/if}
       {:else}
         {#if rndOffer}
           <div class="rnd-offer">
