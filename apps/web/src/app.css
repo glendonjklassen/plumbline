@@ -132,3 +132,15 @@ summary {
   min-width: 44px;
   align-content: center;
 }
+
+/* THE ONE HAZARD OF THE FLOOR ABOVE, written down so the next component does
+   not have to rediscover it on a phone. A `min-height` REPLACES a grid or flex
+   item's *automatic minimum size* — the rule that otherwise refuses to lay an
+   item out shorter than its own content. So a button that stacks its own
+   wrapping text (a card with a name and a description) can be sized BELOW that
+   text and spill it past the border, at every text scale, purely because the
+   floor is stated. Explore's cards shipped that way.
+
+   A component whose button lays out multi-line content of its own therefore
+   declares `min-height: auto` and lets padding carry the thumb target — which
+   any two-line card clears several times over. */

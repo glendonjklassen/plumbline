@@ -89,9 +89,13 @@ test.describe("a German device", () => {
 
     await expect(destinations(page)).toContainText(DE["nav.read"]);
     await expect(destinations(page)).toContainText(DE["nav.sing"]);
-    // Not a coincidence of similar words: these differ from the English.
-    expect(DE["nav.sing"]).not.toBe(EN["nav.sing"]);
-    await expect(destinations(page)).not.toContainText(EN["nav.sing"]);
+    // Not a coincidence of similar words: these differ from the English — and
+    // the English probe must not be a SUBSTRING of any German label either
+    // ("Singen" contains "Sing", so nav.sing cannot carry the negative half).
+    expect(DE["nav.read"]).not.toBe(EN["nav.read"]);
+    for (const v of Object.entries(DE).filter(([k]) => k.startsWith("nav.")).map(([, v]) => v))
+      expect(v).not.toContain(EN["nav.read"]);
+    await expect(destinations(page)).not.toContainText(EN["nav.read"]);
   });
 
   // MUTATION: `i18n::resolve` — drop the `chosen` arm so it only ever reads the

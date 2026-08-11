@@ -64,10 +64,20 @@
     align-content: start;
   }
   .ex-card {
+    min-height: auto;
     display: flex;
     flex-direction: column;
     gap: 4px;
     text-align: left;
+    /* THE TAP FLOOR MUST NOT SQUASH THE TEXT. `min-height: 44px` (app.css,
+       every button) REPLACES the automatic minimum size — the thing that
+       otherwise stops a grid or flex item from being laid out shorter than its
+       own content. With it in force the grid sized these rows below the
+       two-line descriptions and the second line spilled out under the border,
+       at every text scale. `auto` restores the content-driven minimum; the
+       floor is still met by geometry (one 17px line + 32px of padding is 56px),
+       so nothing here can be smaller than a thumb. */
+    
     padding: 16px 18px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 10px;

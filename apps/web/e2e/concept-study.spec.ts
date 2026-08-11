@@ -162,21 +162,21 @@ test("the mode shows sweep progress — the banner counts and the navigator pain
   await page.locator(".pane .nav .passage").first().click();
   const current = page.locator(".grid.books button.current");
   await expect(current).toBeVisible();
-  await expect(current).toHaveAttribute("title", / chapters swept$/);
+  await expect(current).toHaveAttribute("title", / chapters studied$/);
   await current.click();
   // The swept tile is the chapter the reader was IN when the mode started.
   const chapter = await page.evaluate(() => (window as any).__plumbline.panes[0].chapter as number);
   const tiles = page.locator(".grid.nums button");
   const sweptTile = tiles.nth(chapter - 1);
   const neighbour = tiles.nth(chapter); // chapter + 1, never swept yet
-  await expect(sweptTile).toHaveAttribute("title", / — swept$/);
+  await expect(sweptTile).toHaveAttribute("title", / — studied$/);
   await expect(sweptTile).toHaveAttribute("style", /background/);
   await expect(neighbour).not.toHaveAttribute("style", /background/);
 
   // Long-press's menu marks by hand in the mode: the neighbour sweeps without
   // being opened, and the banner's count moves with it.
   await neighbour.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Mark swept" }).click();
+  await page.getByRole("menuitem", { name: "Mark chapter studied" }).click();
   await expect(neighbour).toHaveAttribute("style", /background/, { timeout: 10_000 });
   await page.locator(".dialog .close").click();
   await expect(page.locator(".concept-study-banner .prog")).toHaveText(/^2 \/ \d+/);

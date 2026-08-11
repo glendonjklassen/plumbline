@@ -852,7 +852,13 @@ export class Session {
     // navigator kept showing the map from whenever it was first asked — the
     // per-day cache key meant a chapter finished mid-session did not appear until
     // the next launch.
-    rpc.onReadingWrote = () => this.invalidateOnly("readingBooks", "readingChapters");
+    // "plans" rides along because PLAN COMPLETION IS DERIVED FROM THE READING
+    // STORE (READING-PLANS.md decision #2): a chapter finishing is exactly the
+    // event that moves a plan's day on. Without it the cached plans answer kept
+    // its stale `read` flags, so the chip and the today card still pointed at
+    // the chapter you had just finished — tap it and you were sent back to
+    // Genesis 1 all evening (the maintainer's UAT report, 2026-08-11).
+    rpc.onReadingWrote = () => this.invalidateOnly("readingBooks", "readingChapters", "plans");
     rpc.onCoreReady = () => {
       // Strong's + margin notes just arrived — panels re-fetch.
       this.invalidate();

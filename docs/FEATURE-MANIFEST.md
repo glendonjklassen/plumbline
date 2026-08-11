@@ -1340,7 +1340,9 @@ Concept Study launcher; a persistent mode banner with Exit and a live
 the passage navigator (`shell/BookNav.svelte`) paints the RUN's coverage
 instead of the (deliberately frozen) reading map — swept chapters tint as
 done, part-swept books as partial — and its long-press menu / whole-book
-button become "Mark swept" / "Sweep whole book" (the spec's mark-swept-by-hand),
+button become "Mark chapter studied" / "Mark whole book studied" (the spec's
+mark-swept-by-hand; the UI says "studied" — "sweep" survives only as the
+mechanism's internal name),
 writing the run via `concept_study_sweep`, never the reading record. Decision
 #5's reader-side surfaces (`shell/PlanChip.svelte` + the BookNav today card,
 shaped once in `shell/planToday.ts`): a nav-strip chip above the canon strip
