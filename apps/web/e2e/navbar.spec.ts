@@ -17,7 +17,7 @@ test("phone: the five destinations are in the bottom bar, not the menu", async (
   const nav = page.locator(".bottom-nav");
   await expect(nav).toBeVisible();
   await expect(nav.locator("button")).toHaveCount(5);
-  for (const label of ["Read", "Explore", "Present", "Memorize", "Hymnal"]) {
+  for (const label of ["Read", "Study", "Preach", "Share", "Sing"]) {
     await expect(nav.getByRole("button", { name: label })).toBeVisible();
   }
   // Read is current on arrival, and the icons really are icons.
@@ -28,7 +28,7 @@ test("phone: the five destinations are in the bottom bar, not the menu", async (
   await page.getByLabel("Menu").click();
   const menu = page.locator(".menu");
   await expect(menu.getByRole("button", { name: "Settings" })).toBeVisible();
-  for (const gone of ["Explore", "Present", "Memorize", "Hymnal"]) {
+  for (const gone of ["Study", "Preach", "Share", "Sing"]) {
     await expect(menu.getByRole("button", { name: gone })).toHaveCount(0);
   }
 });
@@ -67,35 +67,34 @@ test("phone: one bar of chrome above the text, with no app title", async ({ page
     "there is a second strip of chrome between the header and the text",
   ).toBeLessThan(12);
 
-  // Share is an icon, as on Android — a labelled glyph, not a bordered word.
-  const share = page.getByRole("button", { name: "Share the app" });
-  await expect(share).toBeVisible();
-  await expect(share.locator("svg")).toHaveCount(1);
-  await expect(share).not.toHaveText(/Share/);
-
-  // It still opens the sheet it always did.
-  await share.click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  // Share is a DESTINATION now (the bar role), not a header icon — the QR
+  // and link live on its screen.
+  await page.locator(".bottom-nav").getByRole("button", { name: "Share" }).click();
+  await expect(page.getByText("Share Plumbline")).toBeVisible();
 });
 
-test("phone: Church and Welcome are menu items, the way Android has them", async ({ page }) => {
+test("phone: the church rides the Share destination and Welcome the ≡ menu", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  // Arrive by a shared link carrying a church, so both conditional controls
-  // exist — the case that used to push the row over.
   await page.evaluate(() => localStorage.setItem("plumbline:intro", "new"));
   await boot(page);
   await page.evaluate(() =>
     (window as any).__plumbline.setChurch({ name: "Grace Chapel", info: "Sundays 10am", url: "" }),
   );
 
-  // Not in the bar — that is what keeps it one row.
-  await expect(page.locator("header .church-btn")).toBeHidden();
-
+  // The ≡ holds UTILITIES: Welcome yes (for every reader), Church no — the
+  // church lives on the Share screen, beside the QR its setting feeds.
   await page.getByLabel("Menu").click();
-  await expect(page.locator(".menu").getByRole("button", { name: "Church" })).toBeVisible();
+  await expect(page.locator(".menu").getByRole("button", { name: "Welcome" })).toBeVisible();
+  await expect(page.locator(".menu").getByRole("button", { name: "Church" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
 
-  // And the bar is still one row high with both of them set.
+  await page.locator(".bottom-nav").getByRole("button", { name: "Share" }).click();
+  await expect(page.getByText("with Grace Chapel")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Church" })).toBeVisible();
+
+  // And the header is still one row high with everything set.
+  await page.locator(".bottom-nav").getByRole("button", { name: "Read" }).click();
   const header = (await page.locator("header").boundingBox())!;
   expect(header.height).toBeLessThan(90);
 });
@@ -111,10 +110,10 @@ test("phone: Present keeps the four destinations, picking and presenting alike",
   await boot(page);
   const nav = page.locator(".bottom-nav");
 
-  await nav.getByRole("button", { name: "Present" }).click();
+  await nav.getByRole("button", { name: "Preach" }).click();
   await expect(page.locator(".present")).toBeVisible();
   await expect(nav, "the picker covered the bottom bar").toBeVisible();
-  await expect(nav.locator("button.on")).toHaveText(/Present/);
+  await expect(nav.locator("button.on")).toHaveText(/Preach/);
 
   // ...and with something actually being presented. UNCONDITIONALLY: the stock
   // set seeds the Romans Road thread, so the picker always has one to choose, and
@@ -153,11 +152,12 @@ test("phone: the bottom bar switches destinations and tracks which is current", 
   await boot(page);
   const nav = page.locator(".bottom-nav");
 
-  await nav.getByRole("button", { name: "Explore" }).click();
-  await expect(nav.locator("button.on")).toHaveText(/Explore/);
+  await nav.getByRole("button", { name: "Study" }).click();
+  await expect(nav.locator("button.on")).toHaveText(/Study/);
 
-  await nav.getByRole("button", { name: "Memorize" }).click();
-  await expect(nav.locator("button.on")).toHaveText(/Memorize/);
+  // Memorize is a Study-hub card, and its screen lights the Study tab.
+  await page.locator(".ex-card", { hasText: /^Memorize/ }).click();
+  await expect(nav.locator("button.on")).toHaveText(/Study/);
   // NOT asserting that Memorize discards the Explore panel. Android's four
   // destinations are exclusive because it shows one screen at a time; the web
   // layers, and on a DESKTOP the study panel is a sidebar — keeping Explore
@@ -191,7 +191,7 @@ test("the bottom bar does not cover the reader, and is absent on a desktop width
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect(page.locator(".bottom-nav")).toBeHidden();
   // …because at that width the destinations are first-class in the top bar.
-  await expect(page.locator("nav.browse").getByRole("button", { name: "Explore" })).toBeVisible();
+  await expect(page.locator("nav.browse").getByRole("button", { name: "Study" })).toBeVisible();
 });
 
 // A DESTINATION REPLACES THE TOP BAR — it does not stack under the reader's.
@@ -214,7 +214,7 @@ test("phone: a destination shows its own bar and not the reader's", async ({ pag
   await expect(page.locator("header")).toBeVisible();
   await expect(page.locator("header .chapter-nav")).toBeVisible();
 
-  for (const label of ["Explore", "Memorize", "Hymnal"]) {
+  for (const label of ["Study", "Share", "Sing"]) {
     await page.locator(".bottom-nav").getByRole("button", { name: label }).click();
 
     // The reader's bar is gone: no chapter nav, no search, no share.

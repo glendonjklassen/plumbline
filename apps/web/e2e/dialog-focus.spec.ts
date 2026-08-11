@@ -237,29 +237,29 @@ test("Escape closes a dialog from inside a text field", async ({ page }) => {
 // Mutation: comment out the restore in modal.ts's `destroy`
 //   (`if (stranded && returnTo?.isConnected) returnTo.focus();`) →
 //   'Error: closing the dialog dropped focus onto body instead of returning it
-//    to the control that opened it  expect(received).toBe(expected)
-//    Expected: "Share"  Received: ""'.
+//    to the control that opened it'.
 test("closing a dialog gives focus back to the control that opened it", async ({ page }) => {
+  // A phone, because the opener has to be a PERSISTENT control: the old Share
+  // dialog moved onto the Share destination, and every remaining dialog opens
+  // from the ≡ menu — which unmounts on the click, leaving nothing to restore
+  // to. The phone header's passage button opens the BookNav dialog and is
+  // still standing when it closes.
+  await page.setViewportSize({ width: 390, height: 844 });
   await boot(page);
 
-  // The header's Share button, because it is still there after the dialog opens
-  // — a menu item would be a poor test of restoration, since the menu it lives
-  // in unmounts and there is nothing left to restore to.
-  const share = page.locator("header .share-first");
-  await share.focus();
-  await share.press("Enter");
-  const dialog = page.locator('[data-surface="share app"]');
+  const passage = page.locator("header .chapter-nav .passage");
+  await passage.focus();
+  await passage.press("Enter");
+  const dialog = page.locator('[role="dialog"][aria-label="Go to a passage"]');
   await expect(dialog).toBeVisible({ timeout: 20_000 });
-  expect(await focusInside(page, '[data-surface="share app"]')).toBe(true);
+  expect(await focusInside(page, '[role="dialog"][aria-label="Go to a passage"]')).toBe(true);
 
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0, { timeout: 5_000 });
-  // By LABEL, not text: Share is an icon since 2026-08-02 and has no text node
-  // to compare, but it is still the control that must get focus back.
   expect(
-    await page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? ""),
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.className ?? ""),
     "closing the dialog dropped focus onto body instead of returning it to the control that opened it",
-  ).toBe("Share the app");
+  ).toContain("passage");
 });
 
 // NESTED SURFACES. A confirmation is asked FROM another sheet, so both are on

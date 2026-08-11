@@ -49,7 +49,7 @@ test("phone: the fifth tab reaches it, and Read comes back", async ({ page }) =>
   await expect(bar).toBeVisible();
   await expect(bar.locator("button")).toHaveCount(5);
 
-  await bar.getByRole("button", { name: "Hymnal" }).click();
+  await bar.getByRole("button", { name: "Sing" }).click();
   await expect(page.locator('section[aria-label="Hymnal"]')).toBeVisible();
   await bar.getByRole("button", { name: "Read" }).click();
   await expect(page.locator('section[aria-label="Hymnal"]')).toHaveCount(0);

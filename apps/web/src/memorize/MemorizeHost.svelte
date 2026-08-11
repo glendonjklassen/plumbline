@@ -53,9 +53,11 @@
   }
 
   function close(): void {
-    // A destination closes by going home — leaving `screen` on "memorize" with no
-    // view would render an empty screen with no way out.
-    s.goRead();
+    // Memorize is a card inside the STUDY hub now, so its hub's ‹ returns
+    // there — up one layer, not two. (Leaving `screen` on "memorize" with no
+    // view would render an empty screen with no way out.)
+    s.memorize = null;
+    s.screen = "explore";
   }
   /** refKey → the core's `go:` verb, split on the LAST space, as core `go_uri`
    *  does. Also in App.svelte and StudyPanel — see App.svelte for why. */
@@ -138,7 +140,8 @@
           ? t("memorize.review")
           : t("memorize.stats")}
       onBack={close}
-      backLabel={view.view === "hub" ? t("bar.backToReading") : t("bar.back")}
+      backLabel={t("bar.back")}
+      onMenu={() => (s.menuOpen = true)}
     >
       {#snippet actions()}
         {#if view.view !== "hub"}

@@ -1,10 +1,13 @@
 <script lang="ts">
-  // Explore, as its own SCREEN — the Android twin is ui/ExploreScreen.kt.
+  // The STUDY hub, as its own SCREEN — the Android twin is ui/ExploreScreen.kt.
+  // (File and screen id keep the Explore name; the role the bar sells is Study.)
   //
   // A destination should replace the reader, not hover over it.
   //
-  // The cards themselves are unchanged: each study tool with a sentence saying
-  // what it is, because "Suggested" and "Constellation" mean nothing cold.
+  // Every study tool with a sentence saying what it is, because "Suggested" and
+  // "Constellation" mean nothing cold. Memorize is a card here, not a bar
+  // destination: the bar carries the reader's ROLES (Read · Study · Preach ·
+  // Share · Sing) and memorization is a study discipline.
   import { getSession } from "../state/session.svelte";
   import ScreenBar from "../lib/ScreenBar.svelte";
   import { t } from "../lib/i18n.svelte";
@@ -13,6 +16,13 @@
 
   const cards = [
     { id: "plans", go: () => (s.panel = { kind: "plans" }) },
+    {
+      id: "memorize",
+      go: () => {
+        s.screen = "memorize";
+        s.memorize = { view: "hub" };
+      },
+    },
     { id: "notes", go: () => (s.panel = { kind: "notesBrowser" }) },
     { id: "threads", go: () => (s.panel = { kind: "threads" }) },
     { id: "tags", go: () => (s.panel = { kind: "tags" }) },
@@ -23,8 +33,8 @@
   ];
 </script>
 
-<section class="screen" aria-label={t("nav.explore")}>
-  <ScreenBar title={t("nav.explore")} onBack={() => s.goRead()} />
+<section class="screen" aria-label={t("nav.study")}>
+  <ScreenBar title={t("nav.study")} onBack={() => s.goRead()} onMenu={() => (s.menuOpen = true)} />
   <div class="content">
     {#each cards as c (c.id)}
       <button class="ex-card" onclick={c.go}>

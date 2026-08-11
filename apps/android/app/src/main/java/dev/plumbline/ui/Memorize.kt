@@ -114,10 +114,11 @@ fun MemorizeScreen(
     onSelectView: (MemorizeView) -> Unit = {},
     onDrill: (ref: String) -> Unit = {},
     onClose: () -> Unit,
+    barActions: @Composable RowScope.() -> Unit = {},
 ) {
     when (view) {
         MemorizeView.ReviewDue -> MemorizeReview(engine, palette, onClose)
-        MemorizeView.List -> MemorizeList(engine, books, palette, onSelectView, onDrill, onClose)
+        MemorizeView.List -> MemorizeList(engine, books, palette, onSelectView, onDrill, onClose, barActions)
         MemorizeView.Activity -> MemorizeActivity(engine, palette, onClose)
     }
 }
@@ -134,6 +135,7 @@ fun MemorizeList(
     onSelectView: (MemorizeView) -> Unit,
     onDrill: (ref: String) -> Unit,
     onClose: () -> Unit,
+    barActions: @Composable RowScope.() -> Unit = {},
 ) {
     val coverage = remember {
         runCatching {
@@ -155,7 +157,7 @@ fun MemorizeList(
     val verses = coverage?.verses ?: emptyList()
     val dueCount = cards.count { it.due }
 
-    MemFrame(t("nav.memorize"), palette, onClose) {
+    MemFrame(t("nav.memorize"), palette, onClose, barActions) {
         Column(Modifier.fillMaxSize()) {
             // Actions: Review due (with a count) and Activity.
             Row(
@@ -259,11 +261,12 @@ private fun MemFrame(
     title: String,
     palette: ReaderPalette,
     onClose: () -> Unit,
+    barActions: @Composable RowScope.() -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     BackHandler(onBack = onClose)
     Column(Modifier.fillMaxSize().background(palette.paper)) {
-        ScreenBar(title, palette, onClose)
+        ScreenBar(title, palette, onClose, actions = barActions)
         Box(Modifier.fillMaxWidth().weight(1f)) { content() }
     }
 }

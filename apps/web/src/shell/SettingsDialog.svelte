@@ -6,7 +6,6 @@
   import { fontStackFor } from "../reader/measure";
   import { modal } from "../lib/modal";
   import { completeOffline, surveyOffline, type OfflineSurvey } from "../engine/offline";
-  import { cleanChurch } from "./church";
   import { PERF } from "../engine/perf";
   import type { WorkerDiagnostics } from "../engine/worker-client";
   import { zipRead, zipWrite } from "../engine/zip";
@@ -297,24 +296,8 @@
     }
   }
 
-  // ── the reader's home church ────────────────────────────────────────────
-  // Set it here, and every link this reader shares carries it, so a QR handed
-  // out at a service leads back to that service.
-  let churchName = $state("");
-  let churchInfo = $state("");
-  let churchUrl = $state("");
-  let churchLoaded = false;
-  $effect(() => {
-    if (!s.showSettings || churchLoaded) return;
-    churchLoaded = true;
-    const c = s.church;
-    churchName = c.name;
-    churchInfo = c.info;
-    churchUrl = c.url;
-  });
-  function saveChurch(): void {
-    s.setChurch(cleanChurch({ name: churchName, info: churchInfo, url: churchUrl }));
-  }
+  // The reader's home church left this dialog for the SHARE screen, where a
+  // shared link's payload is set beside the QR that carries it.
 
   // ── offline completeness ────────────────────────────────────────────────
   // The reader's answer to "will this work with no signal?" — and the repair
@@ -643,73 +626,6 @@
         </label>
       {/if}
       <hr />
-      {#if s.akjvAvailable}
-        <!-- A reading aid over the SAME text, not a version picker: the words
-             stay the KJV's everywhere it matters (memorize, Present, copy,
-             share), and every marked word tells you what it replaced. -->
-        <label class="toggle">
-          <span class="body">
-            <span class="name">{t("settings.akjv")}</span>
-            <span class="desc">{t("settings.akjvDesc")}</span>
-          </span>
-          <input
-            type="checkbox"
-            checked={s.config.akjvOverlay === true}
-            onchange={(e) => void s.setAkjvOverlay(e.currentTarget.checked)}
-          />
-        </label>
-      {/if}
-      <label class="toggle">
-        <span class="body">
-          <span class="name">{t("settings.human")}</span>
-          <span class="desc">{t("settings.humanDesc")}</span>
-        </span>
-        <input
-          type="checkbox"
-          checked={s.config.humanAnalysis === true}
-          onchange={() => toggleGate("humanAnalysis")}
-        />
-      </label>
-      <label class="toggle">
-        <span class="body">
-          <span class="name">{t("settings.machine")}</span>
-          <span class="desc">{t("settings.machineDesc")}</span>
-        </span>
-        <input
-          type="checkbox"
-          checked={s.config.machineAnalysis === true}
-          onchange={() => toggleGate("machineAnalysis")}
-        />
-      </label>
-      {#if s.config.machineAnalysis === true && s.rndState !== "ready"}
-        <div class="rnd-status">
-          {#if s.rndState === "loading"}
-            <span>
-              {s.rndPreparing
-                ? t("settings.rndPreparing")
-                : t("settings.rndDownloading", { percent: Math.round(s.rndProgress * 100) })}
-            </span>
-          {:else}
-            <span>{t("settings.rndAbsent")}</span>
-            <button class="rnd-now" onclick={() => void s.ensureRnd()}>{t("settings.rndNow")}</button>
-          {/if}
-        </div>
-      {/if}
-      <label class="toggle">
-        <span class="body">
-          <span class="name">{t("settings.versePerLine")}</span>
-          <span class="desc">{t("settings.versePerLineDesc")}</span>
-        </span>
-        <input
-          type="checkbox"
-          checked={!!s.config.versePerLine}
-          onchange={() => {
-            s.config.versePerLine = !s.config.versePerLine;
-            s.saveConfig();
-          }}
-        />
-      </label>
-      <hr />
       <p class="label">{t("settings.theme")}</p>
       <select
         class="dropdown"
@@ -772,7 +688,77 @@
         value={Number(s.config.lineSpacing ?? 1.35)}
         oninput={(e) => setNum("lineSpacing", Number((e.target as HTMLInputElement).value))}
       />
+      <label class="toggle">
+        <span class="body">
+          <span class="name">{t("settings.versePerLine")}</span>
+          <span class="desc">{t("settings.versePerLineDesc")}</span>
+        </span>
+        <input
+          type="checkbox"
+          checked={!!s.config.versePerLine}
+          onchange={() => {
+            s.config.versePerLine = !s.config.versePerLine;
+            s.saveConfig();
+          }}
+        />
+      </label>
       <hr />
+      <details class="advanced">
+        <summary>{t("settings.advanced")}</summary>
+        <p class="desc-note">{t("settings.advancedDesc")}</p>
+      {#if s.akjvAvailable}
+        <!-- A reading aid over the SAME text, not a version picker: the words
+             stay the KJV's everywhere it matters (memorize, Present, copy,
+             share), and every marked word tells you what it replaced. -->
+        <label class="toggle">
+          <span class="body">
+            <span class="name">{t("settings.akjv")}</span>
+            <span class="desc">{t("settings.akjvDesc")}</span>
+          </span>
+          <input
+            type="checkbox"
+            checked={s.config.akjvOverlay === true}
+            onchange={(e) => void s.setAkjvOverlay(e.currentTarget.checked)}
+          />
+        </label>
+      {/if}
+      <label class="toggle">
+        <span class="body">
+          <span class="name">{t("settings.human")}</span>
+          <span class="desc">{t("settings.humanDesc")}</span>
+        </span>
+        <input
+          type="checkbox"
+          checked={s.config.humanAnalysis === true}
+          onchange={() => toggleGate("humanAnalysis")}
+        />
+      </label>
+      <label class="toggle">
+        <span class="body">
+          <span class="name">{t("settings.machine")}</span>
+          <span class="desc">{t("settings.machineDesc")}</span>
+        </span>
+        <input
+          type="checkbox"
+          checked={s.config.machineAnalysis === true}
+          onchange={() => toggleGate("machineAnalysis")}
+        />
+      </label>
+      {#if s.config.machineAnalysis === true && s.rndState !== "ready"}
+        <div class="rnd-status">
+          {#if s.rndState === "loading"}
+            <span>
+              {s.rndPreparing
+                ? t("settings.rndPreparing")
+                : t("settings.rndDownloading", { percent: Math.round(s.rndProgress * 100) })}
+            </span>
+          {:else}
+            <span>{t("settings.rndAbsent")}</span>
+            <button class="rnd-now" onclick={() => void s.ensureRnd()}>{t("settings.rndNow")}</button>
+          {/if}
+        </div>
+      {/if}
+        <hr />
       <p class="label">{t("settings.copyFormat")}</p>
       {#each copyOpts as token (token)}
         <label class="radio">
@@ -821,16 +807,6 @@
         {/if}
       {/if}
       <hr />
-      <p class="label">{t("settings.church")}</p>
-      <p class="desc-note">{t("settings.churchDesc")}</p>
-      <input class="field" placeholder={t("settings.churchName")} bind:value={churchName} onchange={saveChurch} />
-      <input
-        class="field"
-        placeholder={t("settings.churchInfo")}
-        bind:value={churchInfo}
-        onchange={saveChurch}
-      />
-      <input class="field" placeholder={t("settings.churchUrl")} bind:value={churchUrl} onchange={saveChurch} />
       <label class="toggle">
         <span class="body">
           <span class="name">{t("settings.presentAsNew")}</span>
@@ -845,18 +821,6 @@
           }}
         />
       </label>
-      <hr />
-      <p class="label">{t("settings.welcome")}</p>
-      <p class="desc-note">{t("settings.welcomeDesc")}</p>
-      <div class="row">
-        <!-- Reachable for EVERY reader, not just the ones whose path set `intro`
-             (an established believer never had one set, so the top-bar Welcome
-             button never showed for them). Falls back to the new-believer
-             welcome. Reopening changes no data — it only sets shell state. -->
-        <button class="action" onclick={() => { s.reopenIntro = s.intro ?? "new"; s.showSettings = false; }}>
-          {t("settings.welcomeShow")}
-        </button>
-      </div>
       <hr />
       <p class="label">{t("settings.offline")}</p>
       <div class="offline">
@@ -919,6 +883,7 @@
       <details class="diag">
         <summary>{t("settings.reportShow")}</summary>
         <pre class="report">{reportText}</pre>
+      </details>
       </details>
       <!-- i18n-ignore-start: PERF-only. This whole block renders only in a
            measuring build, so no reader in any language can reach it, and its
@@ -1177,20 +1142,21 @@
     border-radius: 5px;
     padding: 1px 9px;
   }
+  .advanced {
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 8px;
+    padding: 8px 12px;
+  }
+  .advanced > summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--ink, #211f1a);
+    padding: 4px 0;
+  }
   .diag summary {
     font-size: calc(13px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
     cursor: pointer;
-  }
-  .field {
-    width: 100%;
-    background: var(--paper, #fcf9f4);
-    border: 1px solid var(--rule, #d8cba8);
-    border-radius: 6px;
-    padding: 6px 9px;
-    font-size: calc(14px * var(--uiScale, 1));
-    margin-bottom: 6px;
-    box-sizing: border-box;
   }
   .offline {
     display: flex;

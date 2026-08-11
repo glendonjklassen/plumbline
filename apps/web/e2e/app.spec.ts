@@ -467,9 +467,10 @@ test("menus open promptly after boot (freeze regression)", { tag: "@perf" }, asy
 
 test("destinations are exclusive (memorize does not linger)", async ({ page }) => {
   await boot(page);
-  await page.getByRole("button", { name: "Memorize" }).click();
+  await page.getByRole("button", { name: "Study", exact: true }).click();
+  await page.locator(".ex-card", { hasText: /^Memorize/ }).click();
   await expect(page.getByText("Review due")).toBeVisible();
-  await page.getByRole("button", { name: "Explore", exact: true }).click();
+  await page.getByRole("button", { name: "Study", exact: true }).click();
   await expect(page.getByText("Review due")).toBeHidden();
   await expect(page.getByText("Weave map")).toBeVisible();
 });
@@ -513,7 +514,7 @@ test("phones keep ONE pane (no split; weaves navigate instead)", async ({ page }
   await expect(page.locator(".nav button[title='Split pane']")).toHaveCount(0);
   // A weave open must navigate the single pane, not split it.
   await page.getByLabel("Menu").click();
-  await page.getByRole("button", { name: "Explore", exact: true }).click();
+  await page.getByRole("button", { name: "Study", exact: true }).click();
   await page.locator(".ex-card", { hasText: /^Weaves/ }).click();
   await page.locator("aside.panel button.link").first().click();
   await expect(page.locator(".pane canvas")).toHaveCount(1);
@@ -571,7 +572,7 @@ test("opening a weave splits to its passages; verse clicks stay responsive (free
 }) => {
   await boot(page);
   // Weaves lives inside Explore now (Android parity — no header browse row).
-  await page.getByRole("button", { name: "Explore", exact: true }).click();
+  await page.getByRole("button", { name: "Study", exact: true }).click();
   await page.locator(".ex-card", { hasText: /^Weaves/ }).click();
   await expect(page.locator("aside.panel")).toBeVisible();
   // Open the first weave: both endpoint passages must come up on their own.
@@ -1114,6 +1115,8 @@ test("Settings can make the app completely offline, and says when it is", async 
   await boot(page);
   await page.getByLabel("Menu").click();
   await page.getByRole("button", { name: "Settings" }).click();
+  // Offline lives behind the Advanced disclosure now.
+  await page.locator('[data-surface="settings"] details.advanced > summary').click();
   const download = page.getByRole("button", { name: "Download everything" });
   if (await download.isVisible().catch(() => false)) await download.click();
   await expect(page.getByText("Everything is on this device")).toBeVisible({ timeout: 120_000 });
@@ -1443,7 +1446,8 @@ test("first-run: curious about the Bible is its own path, and stays re-readable"
   await page.getByRole("button", { name: "Open the Bible" }).click();
   await expect(page.locator(".subtitle")).toContainText("John 1");
 
-  // Back to it from the top bar, without changing anything.
+  // Back to it from the ≡ utilities, without changing anything.
+  await page.getByLabel("Menu").click();
   await page.getByRole("button", { name: "Welcome" }).click();
   await expect(page.getByText("I'm glad you're curious about the Bible")).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
@@ -1452,6 +1456,7 @@ test("first-run: curious about the Bible is its own path, and stays re-readable"
   // …and it survives a relaunch, since it's the reader's own welcome now.
   await page.reload();
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+  await page.getByLabel("Menu").click();
   await expect(page.getByRole("button", { name: "Welcome" })).toBeVisible();
 });
 
@@ -1537,7 +1542,8 @@ test("checking a typed recall scores it (a perfect copy is 100%)", async ({ page
     const s = (window as any).__plumbline;
     await s.engine.memoryAdd("John 3:16", new Date().toISOString());
   });
-  await page.getByRole("button", { name: "Memorize" }).click();
+  await page.getByRole("button", { name: "Study", exact: true }).click();
+  await page.locator(".ex-card", { hasText: /^Memorize/ }).click();
   await page.getByRole("button", { name: "Review due", exact: false }).click();
   await page.getByRole("button", { name: "Type it" }).click();
 
@@ -1574,7 +1580,8 @@ test("a typed recall survives a pause and a background study refresh", async ({ 
     const s = (window as any).__plumbline;
     await s.engine.memoryAdd("John 3:16", new Date().toISOString());
   });
-  await page.getByRole("button", { name: "Memorize" }).click();
+  await page.getByRole("button", { name: "Study", exact: true }).click();
+  await page.locator(".ex-card", { hasText: /^Memorize/ }).click();
   await page.getByRole("button", { name: "Review due", exact: false }).click();
   await page.getByRole("button", { name: "Type it" }).click();
 
@@ -1636,7 +1643,8 @@ test("a passage is memorized as one card, drilled whole", async ({ page }) => {
     const s = (window as any).__plumbline;
     await s.engine.memoryAddPassage("Ps 23:1", "Ps 23:3", new Date().toISOString());
   });
-  await page.getByRole("button", { name: "Memorize" }).click();
+  await page.getByRole("button", { name: "Study", exact: true }).click();
+  await page.locator(".ex-card", { hasText: /^Memorize/ }).click();
   // ONE row, named as a range — not three verse rows.
   await expect(page.locator(".card .ref", { hasText: "Ps 23:1–3" })).toHaveCount(1);
   const drill = await page.evaluate(async () => {

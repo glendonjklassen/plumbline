@@ -88,10 +88,10 @@ test.describe("a German device", () => {
     await reader(page, DE);
 
     await expect(destinations(page)).toContainText(DE["nav.read"]);
-    await expect(destinations(page)).toContainText(DE["nav.hymnal"]);
+    await expect(destinations(page)).toContainText(DE["nav.sing"]);
     // Not a coincidence of similar words: these differ from the English.
-    expect(DE["nav.hymnal"]).not.toBe(EN["nav.hymnal"]);
-    await expect(destinations(page)).not.toContainText(EN["nav.hymnal"]);
+    expect(DE["nav.sing"]).not.toBe(EN["nav.sing"]);
+    await expect(destinations(page)).not.toContainText(EN["nav.sing"]);
   });
 
   // MUTATION: `i18n::resolve` — drop the `chosen` arm so it only ever reads the
@@ -100,8 +100,8 @@ test.describe("a German device", () => {
     await reader(page, DE);
     await pick(page, DE, "English");
 
-    await expect(destinations(page)).toContainText(EN["nav.hymnal"]);
-    await expect(destinations(page)).not.toContainText(DE["nav.hymnal"]);
+    await expect(destinations(page)).toContainText(EN["nav.sing"]);
+    await expect(destinations(page)).not.toContainText(DE["nav.sing"]);
   });
 });
 
@@ -112,10 +112,10 @@ test.describe("an English device", () => {
   // has to survive the reload the picker itself performs, and then a relaunch.
   test("a reader who picks German gets German, and it survives a relaunch", async ({ page }) => {
     await reader(page, EN);
-    await expect(destinations(page)).toContainText(EN["nav.hymnal"]);
+    await expect(destinations(page)).toContainText(EN["nav.sing"]);
 
     await pick(page, EN, "Deutsch");
-    await expect(destinations(page)).toContainText(DE["nav.hymnal"]);
+    await expect(destinations(page)).toContainText(DE["nav.sing"]);
 
     // BOOK NAMES are the other half, and the half that would have been missed:
     // they are not in the catalogue at all (canon.rs owns the English), so a
@@ -146,7 +146,7 @@ test.describe("an English device", () => {
     // in this page — and neither does the corpus, which is in the depot.
     await page.goto("about:blank");
     await reader(page, DE);
-    await expect(destinations(page)).toContainText(DE["nav.hymnal"]);
+    await expect(destinations(page)).toContainText(DE["nav.sing"]);
     const again = await page.evaluate(async () => {
       const s = (window as any).__plumbline;
       return (await s.rpc.call("verse", "John 3:16"))?.body ?? "";

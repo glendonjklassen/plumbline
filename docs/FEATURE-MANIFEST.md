@@ -712,8 +712,9 @@ first-time reader, and the path that asks least of someone should be seen first.
 A link shared from Present offers only the first two paths — it was handed to
 someone in person, and the rest is setup for a reader who already has a Bible
 habit. Either welcome is re-readable later (the `intro` config field remembers
-which one a reader was given): web a **Welcome** header button, Android an
-overflow (⋮) item.
+which one a reader was given): the **Welcome** entry in the ≡/⋮ utilities —
+its ONE home in both shells, shown for every reader (no recorded intro falls
+back to the new-believer welcome).
 
 **Delta — where the quoted verse text comes from.** The two shells differ, on
 purpose: **Android** asks the engine
@@ -727,44 +728,62 @@ you add a quote to the web welcome you are adding *text*, not a reference.
 The old Simple/Full first-run modal is gone; `studyMode` still round-trips in
 the config for readers of an older file.
 
-## Primary menu (≡)
+## Primary menu (≡) and the role bar
 
-**Destinations vs utilities.** The web header mirrors the Compose IA — Read is the
-base layer; **Explore · Present · Memorize** are first-class header buttons, plus
-search, a first-class **Share** button, and a ≡ menu holding utilities only
-(History · Guide & about · Keyboard shortcuts · Settings).
+**The bar carries ROLES, the tools live one layer down.** Both shells' bar is
+**Read · Study · Preach · Share · Sing** — the hats a reader wears, not a
+feature list. Study opens the hub (internally still the Explore screen); Preach
+raises Present; Share is its own destination (below); Sing is the hymnal.
+Memorize is a CARD inside Study — a study discipline, not a role — and its
+screen lights the Study tab in both shells. On narrow screens the web draws the
+same **bottom nav bar Android has**, using the very same Material paths
+(`ui/NavIcons.kt` → the `NAV` table in `Shell.svelte`: book · school ·
+present_to_all · share · music_note), with gold on the current tab and
+Compose's α0.14 gold pill behind its icon; above 700px the web's header carries
+the four non-Read roles as text buttons instead. Read is not a destination so
+much as the absence of one: the reader is always mounted underneath, so its tap
+clears whatever is layered over it. **Delta:** Android's destinations are
+mutually exclusive because it shows one screen at a time; the web layers, and
+on a desktop the study panel is a sidebar. The highlighted tab always names the
+surface actually in front of the reader. The subtitle is just the passage
+("John 3" — no edition suffix; the e2e boot signal matches `/\w+ \d+/`).
 
-**The bottom nav bar.** On narrow screens the web draws the
-same **bottom nav bar Android has** — Read · Explore · Present · Memorize ·
-Hymnal (five), in thumb reach — using the very same Material paths the Compose shell does
-(`ui/NavIcons.kt` → the `NAV` table in `Shell.svelte`), with gold on the current
-tab and Compose's α0.14 gold pill behind its icon. The ≡ menu is utilities only
-at every width; folding the destinations into it would put the whole information
-architecture two taps away behind a glyph. Read is not a destination so much as the absence of one: the
-reader is always mounted underneath, so its tap clears whatever is layered over
-it. **Delta:** Android's four destinations are mutually exclusive because it
-shows one screen at a time; the web layers, and on a desktop the study panel is
-a sidebar, so switching to Present or Memorize leaves an open Explore panel
-behind it to return to. The highlighted tab always names the surface actually in
-front of the reader. Threads/Tags/Weaves live inside Explore, as on Android. The
-subtitle is just the passage ("John 3" — no edition suffix; the e2e boot
-signal matches `/\w+ \d+/`). **Share the app** (both shells)
-opens a QR of the hosted PWA link + the link itself via system share / copy; the
-same QR closes Present's end card. The matrix is **encoded at render time** in
-both shells — `QrCode.svelte` over qrcode-generator, `QrShare.kt` over
-zxing-core, both forcing UTF-8 byte mode — because the link carries the reader's
-church and there is no one fixed URL to bake in. Two more conditional header buttons appear when there is
-something to point at: **Welcome** (re-read the intro) and **Church** (the link
-the reader was handed, or their own) — front and centre rather than in Settings,
-because someone gave this reader a church and they should not go hunting for it.
-Android carries both as overflow (⋮) items instead; its top bar is deliberately
-tight.
+**The ≡/⋮ utilities — reachable from EVERY destination.** Welcome · History ·
+Guide & about · (web only) Keyboard shortcuts · Settings. The web renders ONE
+fixed-position menu (`s.menuOpen`, session state) raised from the header's ≡ or
+any destination ScreenBar's ≡; Android's `UtilityMenu` composable is the same
+list, on the Read top bar and every destination's `ScreenBar` `actions` slot.
+Before this, Settings from any non-Read destination cost a trip back through
+the Read tab in BOTH shells. Welcome shows for every reader (falls back to the
+new-believer welcome); Church is NOT a menu item — it rides the Share screen.
 
-**Explore's contents** (both shells, a described card list so the tools aren't
-cryptic): Notes · Threads · Tags · Weaves · Constellation · Weave map. *Delta:*
-the web lists **Suggested** as its own seventh card (`ExploreScreen.svelte`);
-Android folds it into one Weaves screen with an All/Suggested filter
-(`WeavesScreen`).
+**Share, the destination** (`ShareScreen.svelte` / `ui/ShareScreen.kt`): the
+"Scan for the app" QR + the link via system share / copy (the matrix is
+**encoded at render time** in both shells — `QrCode.svelte` over
+qrcode-generator, `QrShare.kt` over zxing-core, both forcing UTF-8 byte mode —
+because the link carries the reader's church and there is no one fixed URL to
+bake in; the same QR closes Present's end card), plus **Your church**: the
+three fields that used to sit at the bottom of Settings, edited beside the QR
+their setting feeds, with a visit button when a URL is set (the recipient's
+path to the congregation a shared link named). The old header Share icon and
+`ShareAppDialog` are gone in both shells.
+
+**Settings splits everyday from Advanced.** Everyday, visible: language, theme,
+the two type faces, the three reader sliders (+ web-only verse-per-line).
+Everything else — the analysis tier gates, AKJV overlay, copy format, bundled
+set, present-as-new, (web) suggested pack / offline download / report, and
+Backup/Restore — sits behind ONE collapsed **Advanced** disclosure
+(`<details class="advanced">` on web, an expandable row in
+`SettingsDialog`/`StudyScreen.kt`). Church and Welcome left Settings entirely
+(Share screen and ≡ respectively).
+
+**The Study hub's contents** (both shells, a described card list so the tools
+aren't cryptic): Reading plans (web only until Android's plans ship) ·
+Memorize · Notes · Threads · Tags · Weaves · Constellation · Weave map — every
+card's label from the same `explore.*` keys in both shells (the Android
+weave-map card had drifted onto `map.chordMap`; fixed). *Delta:* the web lists
+**Suggested** as its own card (`ExploreScreen.svelte`); Android folds it into
+one Weaves screen with an All/Suggested filter (`WeavesScreen`).
 
 ## Languages (both shells)
 
@@ -1314,7 +1333,7 @@ filters and every zip-layout enumeration). Two kinds, frozen as `"schedule"` /
   the tag or its members.
 
 **Web** (`study/StudyPanel.svelte` plans panel, `shell/Shell.svelte` banner,
-`state/session.svelte.ts` mode + sweep): Explore ▸ Plans panel — running-plan
+`state/session.svelte.ts` mode + sweep): Study ▸ Plans panel — running-plan
 cards (day card, progress, stop-with-confirm), the builtin picker, the
 Concept Study launcher; a persistent mode banner with Exit and a live
 `{done} / {total}` sweep count; tap-to-tag through `ReaderPane`. In the mode

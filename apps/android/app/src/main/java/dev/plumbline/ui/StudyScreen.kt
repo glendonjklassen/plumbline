@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -49,9 +50,10 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -125,9 +127,11 @@ import kotlinx.serialization.encodeToString
 /** What the second (right) pane shows in fold mode. */
 private enum class SecondPane { Study, Bible }
 
-/** The bottom-nav destinations (one-handed reach).
- *  Present is a launcher on the same bar but renders as a fullscreen overlay. */
-private enum class Dest { Read, Explore, Memorize, Hymnal }
+/** The bottom-nav ROLES (one-handed reach): Read · Study · Preach · Share ·
+ *  Sing. `Explore` is the Study hub's internal name and `Memorize` a screen the
+ *  hub opens (it lights the Study tab); Preach is a launcher on the same bar
+ *  but renders as the fullscreen Present overlay. */
+private enum class Dest { Read, Explore, Memorize, Hymnal, Share }
 
 /** A study "library" the Explore screen loads into the study surface as blocks. */
 enum class Library { Threads, Tags, Weaves, Suggested, Guide, About }
@@ -842,6 +846,19 @@ fun StudyScreen(
     }
 
     // The window background is the chrome colour (paneNavBg) so the status-bar +
+    // The ≡ utilities every destination's bar carries (web ScreenBar parity):
+    // Settings, History, the guide and the welcome must not cost a trip back to
+    // the Read tab — that was a three-tap detour from every other destination.
+    val utilityMenu: @Composable RowScope.() -> Unit = {
+        UtilityMenu(
+            palette = palette,
+            onWelcome = { reopenIntro = introChoice ?: "new" },
+            onHistory = { showHistory = true },
+            onGuide = { openLibrary(Library.Guide) },
+            onSettings = { showSettings = true },
+        )
+    }
+
     // gesture-nav strips read as an extension of the top bar rather than a bare
     // white slice. systemBarsPadding then insets the actual content within the bars.
     Box(Modifier.fillMaxSize().background(palette.paneNavBg)) {
@@ -867,9 +884,7 @@ fun StudyScreen(
                         onHistory = { showHistory = true },
                         onGuide = { openLibrary(Library.Guide) },
                         onSettings = { showSettings = true },
-                        church = church,
-                        intro = introChoice,
-                        onWelcome = { reopenIntro = introChoice },
+                        onWelcome = { reopenIntro = introChoice ?: "new" },
                     )
                     HorizontalDivider(color = palette.rule)
 
@@ -888,6 +903,7 @@ fun StudyScreen(
 
                 Dest.Explore -> ExploreScreen(
                     palette = palette,
+                    onMemorize = { memView = MemorizeView.List; dest = Dest.Memorize },
                     onNotes = { showNotes = true },
                     onThreads = { openLibrary(Library.Threads) },
                     onTags = { openLibrary(Library.Tags) },
@@ -895,24 +911,37 @@ fun StudyScreen(
                     onConstellation = { showConstellation = true },
                     onChord = { showChord = true },
                     onClose = { dest = Dest.Read },
+                    barActions = utilityMenu,
                 )
 
                 Dest.Memorize -> MemorizeScreen(
                     engine, memView, toc, palette,
                     onSelectView = { memView = it },
                     onDrill = { ref -> drillRef = ref },
+                    barActions = utilityMenu,
                     onClose = {
-                        if (memView == MemorizeView.List) dest = Dest.Read
+                        // Memorize is a card inside the STUDY hub, so its
+                        // hub's back goes up one layer — to Study, not Read.
+                        if (memView == MemorizeView.List) dest = Dest.Explore
                         else memView = MemorizeView.List
                     },
                 )
 
                 Dest.Hymnal -> HymnalScreen(
                     engine, palette,
+                    barActions = utilityMenu,
                     onClose = { dest = Dest.Read },
                     // The singing itself goes fullscreen over everything, the
                     // way Present's presentation does — see below the nav bar.
                     onSing = { hymnSing = it },
+                )
+
+                Dest.Share -> ShareScreen(
+                    palette = palette,
+                    church = church,
+                    onChurch = { church = it },
+                    onClose = { dest = Dest.Read },
+                    barActions = utilityMenu,
                 )
             }
 
@@ -968,8 +997,9 @@ fun StudyScreen(
             }
         }
 
-        // The bottom nav bar: the whole IA in thumb reach (Read · Explore ·
-        // Present · Memorize). Present launches its fullscreen overlay.
+        // The bottom nav bar: the five ROLES in thumb reach (Read · Study ·
+        // Preach · Share · Sing). Preach launches the fullscreen Present
+        // overlay; Memorize lives inside Study and lights that tab.
         val navColors = NavigationBarItemDefaults.colors(
             selectedIconColor = palette.gold,
             selectedTextColor = palette.gold,
@@ -986,10 +1016,11 @@ fun StudyScreen(
                 colors = navColors,
             )
             NavigationBarItem(
-                selected = dest == Dest.Explore && !showPresent,
+                // Memorize is a Study-hub card, so its screen lights this tab.
+                selected = (dest == Dest.Explore || dest == Dest.Memorize) && !showPresent,
                 onClick = { dismissTransient(); dest = Dest.Explore },
-                icon = { Icon(NavIconExplore, contentDescription = null) },
-                label = { Text(t("nav.explore")) },
+                icon = { Icon(NavIconStudy, contentDescription = null) },
+                label = { Text(t("nav.study")) },
                 colors = navColors,
             )
             NavigationBarItem(
@@ -998,21 +1029,21 @@ fun StudyScreen(
                 // rest and then raised — the order matters.
                 onClick = { dismissTransient(); showPresent = true },
                 icon = { Icon(NavIconPresent, contentDescription = null) },
-                label = { Text(t("nav.present")) },
+                label = { Text(t("nav.preach")) },
                 colors = navColors,
             )
             NavigationBarItem(
-                selected = dest == Dest.Memorize && !showPresent,
-                onClick = { dismissTransient(); memView = MemorizeView.List; dest = Dest.Memorize },
-                icon = { Icon(NavIconMemorize, contentDescription = null) },
-                label = { Text(t("nav.memorize")) },
+                selected = dest == Dest.Share && !showPresent,
+                onClick = { dismissTransient(); dest = Dest.Share },
+                icon = { Icon(NavIconShare, contentDescription = null) },
+                label = { Text(t("nav.share")) },
                 colors = navColors,
             )
             NavigationBarItem(
                 selected = dest == Dest.Hymnal && !showPresent,
                 onClick = { dismissTransient(); dest = Dest.Hymnal },
                 icon = { Icon(NavIconHymnal, contentDescription = null) },
-                label = { Text(t("nav.hymnal")) },
+                label = { Text(t("nav.sing")) },
                 colors = navColors,
             )
         }
@@ -1090,7 +1121,6 @@ fun StudyScreen(
                 lineSpacing = lineSpacing, onLineSpacing = { lineSpacing = it },
                 copyStyle = copyStyle, onCopyStyle = { copyStyle = it },
                 bundledOn = bundledOn, onToggleBundled = onToggleBundled,
-                church = church, onChurch = { church = it },
                 akjvAvailable = akjvAvailable,
                 akjvOverlay = akjvOverlay,
                 onToggleAkjv = { akjvOverlay = !akjvOverlay },
@@ -1098,9 +1128,6 @@ fun StudyScreen(
                 onPresentSharesAsNew = { presentSharesAsNew = !presentSharesAsNew },
                 language = loadedCfg?.language ?: "",
                 onLanguage = { showSettings = false; onLanguage(it) },
-                // Reachable for every reader (introChoice is null for an
-                // established believer); falls back to the new-believer welcome.
-                onWelcome = { showSettings = false; reopenIntro = introChoice ?: "new" },
                 onDismiss = { showSettings = false; persistCfg() },
             )
         }
@@ -1387,10 +1414,6 @@ private fun TopBar(
     onHistory: () -> Unit,
     onGuide: () -> Unit,
     onSettings: () -> Unit,
-    /** The reader's home church — rides in the share sheet's link and QR. */
-    church: ChurchState?,
-    /** Which welcome this reader was given ("new"/"curious"), or null. */
-    intro: String?,
     onWelcome: () -> Unit,
 ) {
     Surface(color = palette.paneNavBg) {
@@ -1412,20 +1435,8 @@ private fun TopBar(
 
             Spacer(Modifier.weight(1f))
 
-            // Share the app — first-class beside the search icon, not a menu
-            // trip: the QR + link sheet (QrShare.kt).
-            var shareApp by remember { mutableStateOf(false) }
-            IconButton(onClick = { shareApp = true }) {
-                Icon(Icons.Filled.Share, contentDescription = t("common.shareApp"), tint = palette.ink)
-            }
-            if (shareApp) {
-                ShareAppDialog(
-                    church = church,
-                    onDismiss = { shareApp = false },
-                    onWelcome = intro?.let { { shareApp = false; onWelcome() } },
-                )
-            }
-
+            // Share the app lives on the SHARE destination now (the bar role),
+            // not as a header dialog.
             IconButton(onClick = onSearch) {
                 Icon(Icons.Filled.Search, contentDescription = t("common.search"), tint = palette.ink)
             }
@@ -1442,33 +1453,39 @@ private fun TopBar(
                 }
             }
 
-            Box {
-                var menu by remember { mutableStateOf(false) }
-                IconButton(onClick = { menu = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = t("common.menu"), tint = palette.ink)
-                }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    val context = LocalContext.current
-                    if (hasChurch(church)) {
-                        DropdownMenuItem(
-                            text = { Text(t("shell.church")) },
-                            onClick = {
-                                menu = false
-                                visitChurch(context, church) { /* no site: the label said who */ }
-                            },
-                        )
-                    }
-                    if (intro != null) {
-                        DropdownMenuItem(
-                            text = { Text(t("shell.welcome")) },
-                            onClick = { menu = false; onWelcome() },
-                        )
-                    }
-                    DropdownMenuItem(text = { Text(t("shell.history")) }, onClick = { onHistory(); menu = false })
-                    DropdownMenuItem(text = { Text(t("shell.guideAndAbout")) }, onClick = { onGuide(); menu = false })
-                    DropdownMenuItem(text = { Text(t("shell.settings")) }, onClick = { onSettings(); menu = false })
-                }
-            }
+            UtilityMenu(
+                palette = palette,
+                onWelcome = onWelcome,
+                onHistory = onHistory,
+                onGuide = onGuide,
+                onSettings = onSettings,
+            )
+        }
+    }
+}
+
+/** The ≡ utilities (UTILITIES ONLY — the roles live in the nav bar): Welcome ·
+ *  History · Guide & about · Settings. One composable so the Read top bar and
+ *  every destination's ScreenBar raise the same menu. Welcome shows for EVERY
+ *  reader — the church's own entry moved to the Share destination. */
+@Composable
+private fun UtilityMenu(
+    palette: ReaderPalette,
+    onWelcome: () -> Unit,
+    onHistory: () -> Unit,
+    onGuide: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    Box {
+        var menu by remember { mutableStateOf(false) }
+        IconButton(onClick = { menu = true }) {
+            Icon(Icons.Filled.MoreVert, contentDescription = t("common.menu"), tint = palette.ink)
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(text = { Text(t("shell.welcome")) }, onClick = { onWelcome(); menu = false })
+            DropdownMenuItem(text = { Text(t("shell.history")) }, onClick = { onHistory(); menu = false })
+            DropdownMenuItem(text = { Text(t("shell.guideAndAbout")) }, onClick = { onGuide(); menu = false })
+            DropdownMenuItem(text = { Text(t("shell.settings")) }, onClick = { onSettings(); menu = false })
         }
     }
 }
@@ -1628,11 +1645,14 @@ private fun SearchOverlay(
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 }
 
-/** The "Explore" screen: what the study tools ARE, described, before you open
- *  one — so the features aren't cryptic menu words. Each card opens its tool. */
+/** The STUDY hub (internally still Explore): what the study tools ARE,
+ *  described, before you open one — so the features aren't cryptic menu words.
+ *  Each card opens its tool. Memorize is a card here, not a bar destination:
+ *  the bar carries the reader's ROLES and memorization is a study discipline. */
 @Composable
 private fun ExploreScreen(
     palette: ReaderPalette,
+    onMemorize: () -> Unit,
     onNotes: () -> Unit,
     onThreads: () -> Unit,
     onTags: () -> Unit,
@@ -1640,15 +1660,19 @@ private fun ExploreScreen(
     onConstellation: () -> Unit,
     onChord: () -> Unit,
     onClose: () -> Unit,
+    barActions: @Composable RowScope.() -> Unit = {},
 ) {
-    MapOverlay(t("nav.explore"), palette, onClose) {
+    MapOverlay(t("nav.study"), palette, onClose, actions = barActions) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            ExploreCard(t("explore.memorize"), t("explore.memorize.desc"), palette, onMemorize)
             ExploreCard(t("explore.notes"), t("explore.notes.desc"), palette, onNotes)
             ExploreCard(t("explore.threads"), t("explore.threads.desc"), palette, onThreads)
             ExploreCard(t("explore.tags"), t("explore.tags.desc"), palette, onTags)
             ExploreCard(t("explore.weaves"), t("explore.weaves.desc"), palette, onWeaves)
             ExploreCard(t("explore.constellation"), t("explore.constellation.desc"), palette, onConstellation)
-            ExploreCard(t("map.chordMap"), t("explore.weaveMap.desc"), palette, onChord)
+            // The same key the web card renders — the one label that had
+            // drifted onto map.chordMap and risked translating twice.
+            ExploreCard(t("explore.weaveMap"), t("explore.weaveMap.desc"), palette, onChord)
         }
     }
 }
@@ -1790,13 +1814,10 @@ private fun SettingsDialog(
     onCopyStyle: (String) -> Unit,
     bundledOn: Boolean,
     onToggleBundled: () -> Unit,
-    church: ChurchState?,
-    onChurch: (ChurchState) -> Unit,
     presentSharesAsNew: Boolean,
     onPresentSharesAsNew: () -> Unit,
     language: String,
     onLanguage: (String) -> Unit,
-    onWelcome: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     // The three reader-pref sliders are DRAFTED. Text size, margin and line
@@ -1843,31 +1864,6 @@ private fun SettingsDialog(
                     SettingRadio(l.endonym, language == l.code, palette) { onLanguage(l.code) }
                 }
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 10.dp))
-                // The text is always on; each analysis tier switches off on its
-                // own (the old all-or-nothing Full study switch is gone).
-                SettingToggle(
-                    t("settings.human"),
-                    t("settings.humanDesc"),
-                    humanAnalysis, palette, onToggleHuman,
-                )
-                SettingToggle(
-                    t("settings.machine"),
-                    t("settings.machineDesc"),
-                    machineAnalysis, palette, onToggleMachine,
-                )
-                // A reading aid over the SAME text, not a version picker: the
-                // words stay the KJV's everywhere it matters (memorize,
-                // Present, copy, share), and every marked word tells you what
-                // it replaced. Hidden when the home carries no overlay rather
-                // than offering a switch that does nothing.
-                if (akjvAvailable) {
-                    SettingToggle(
-                        t("settings.akjv"),
-                        t("settings.akjvDesc"),
-                        akjvOverlay, palette, onToggleAkjv,
-                    )
-                }
-                HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 Text(t("settings.theme"), color = palette.faded, fontSize = 12.sp)
                 // A dropdown, not a radio column: the theme list outgrew what a
                 // column of radios can show without swamping the dialog. Keep the
@@ -1988,6 +1984,51 @@ private fun SettingsDialog(
                     valueRange = 1.2f..2.0f,
                 )
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
+                // ADVANCED, folded shut (web parity: the <details> disclosure).
+                // Analysis tiers, copy format, data — the rows most readers
+                // never need, kept out of the everyday dialog's way.
+                var advanced by remember { mutableStateOf(false) }
+                Row(
+                    Modifier.fillMaxWidth().clickable { advanced = !advanced }.padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        t("settings.advanced"),
+                        color = palette.ink, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(
+                        if (advanced) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null, tint = palette.faded,
+                    )
+                }
+                if (advanced) {
+                Text(t("settings.advancedDesc"), color = palette.faded, fontSize = 12.sp)
+                // The text is always on; each analysis tier switches off on its
+                // own (the old all-or-nothing Full study switch is gone).
+                SettingToggle(
+                    t("settings.human"),
+                    t("settings.humanDesc"),
+                    humanAnalysis, palette, onToggleHuman,
+                )
+                SettingToggle(
+                    t("settings.machine"),
+                    t("settings.machineDesc"),
+                    machineAnalysis, palette, onToggleMachine,
+                )
+                // A reading aid over the SAME text, not a version picker: the
+                // words stay the KJV's everywhere it matters (memorize,
+                // Present, copy, share), and every marked word tells you what
+                // it replaced. Hidden when the home carries no overlay rather
+                // than offering a switch that does nothing.
+                if (akjvAvailable) {
+                    SettingToggle(
+                        t("settings.akjv"),
+                        t("settings.akjvDesc"),
+                        akjvOverlay, palette, onToggleAkjv,
+                    )
+                }
+                HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 Text(t("settings.copyFormat"), color = palette.faded, fontSize = 12.sp)
                 val copyOpts = listOf(
                     "verse" to t("settings.copyVerse"),
@@ -2004,60 +2045,20 @@ private fun SettingsDialog(
                     }
                 }
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
-                // Your church — what this reader's own shared links carry. Web
-                // twin: SettingsDialog.svelte → "Your church". Held locally in
-                // edit state and pushed up on every change, so the config write
-                // is the same shape as every other setting here.
-                Text(t("settings.church"), color = palette.faded, fontSize = 12.sp)
-                Text(
-                    t("settings.churchDesc"),
-                    color = palette.faded, fontSize = 12.sp,
-                )
-                val cc = remember(church) { cleanChurch(church) }
-                var cName by remember { mutableStateOf(cc.name) }
-                var cInfo by remember { mutableStateOf(cc.info) }
-                var cUrl by remember { mutableStateOf(cc.url) }
-                fun pushChurch() = onChurch(cleanChurch(ChurchState(cName, cInfo, cUrl)))
-                OutlinedTextField(
-                    value = cName,
-                    onValueChange = { cName = it; pushChurch() },
-                    label = { Text(t("settings.churchName")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                )
-                OutlinedTextField(
-                    value = cInfo,
-                    onValueChange = { cInfo = it; pushChurch() },
-                    label = { Text(t("settings.churchInfo")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                )
-                OutlinedTextField(
-                    value = cUrl,
-                    onValueChange = { cUrl = it; pushChurch() },
-                    label = { Text(t("settings.churchUrl")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                )
+                // The church's fields moved to the SHARE destination, beside
+                // the QR their setting feeds.
                 SettingToggle(
                     t("settings.presentAsNew"),
                     t("settings.presentAsNewDesc"),
                     presentSharesAsNew, palette, onPresentSharesAsNew,
                 )
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
-                // Re-reading the welcome, reachable for EVERY reader — the ⋮-menu
-                // entry only shows for a reader whose path set an intro, so an
-                // established believer had no way back to it. Web twin:
-                // SettingsDialog.svelte → "Welcome & intro". Changes no data.
-                Text(t("settings.welcome"), color = palette.faded, fontSize = 12.sp)
-                Text(t("settings.welcomeDesc"), color = palette.faded, fontSize = 12.sp)
-                TextButton(onClick = onWelcome) {
-                    Text(t("settings.welcomeShow"), color = palette.gold)
-                }
-                HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
+                // The welcome's one home is the ≡ utilities now (it shows for
+                // every reader there, established believers included).
                 SettingToggle(t("settings.bundled"), t("settings.bundledDesc"), bundledOn, palette, onToggleBundled)
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 BackupRestoreRows(palette)
+                } // advanced
             }
         },
         confirmButton = { TextButton(onClick = { commitDrafts(); onDismiss() }) { Text(t("settings.done")) } },
@@ -2126,11 +2127,12 @@ private fun MapOverlay(
     title: String,
     palette: ReaderPalette,
     onClose: () -> Unit,
+    actions: @Composable RowScope.() -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     BackHandler(onBack = onClose)
     Column(Modifier.fillMaxSize().background(palette.paper)) {
-        ScreenBar(title, palette, onClose)
+        ScreenBar(title, palette, onClose, actions = actions)
         Box(Modifier.fillMaxSize()) { content() }
     }
 }
