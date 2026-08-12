@@ -642,9 +642,14 @@ test("backup round-trips through a zip", async ({ page }, testInfo) => {
   await page.evaluate(() => ((window as any).__preRestore = true));
   await page.locator('input[type="file"]').setInputFiles(zipPath);
   await expect
-    .poll(async () => page.evaluate(() => (window as any).__preRestore ?? null), {
-      timeout: 30_000,
-    })
+    // A poll tick that lands inside the reload throws "context destroyed" and
+    // fails the poll rather than retrying it — same guard as legacy-restore.
+    .poll(
+      async () => page.evaluate(() => (window as any).__preRestore ?? null).catch(() => "navigating"),
+      {
+        timeout: 30_000,
+      },
+    )
     .toBeNull();
   await expect(page.locator(".subtitle")).toHaveText(/\w+ \d+/, { timeout: 90_000 });
   const text = await page.evaluate(
