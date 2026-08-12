@@ -22,37 +22,8 @@
     return s.panel?.kind === "notesBrowser" ? ((s.q("userNotes")?.notes ?? []) as any[]) : [];
   });
 
-  // Reading plans (Explore ▸ Plans): running plans with derived progress, plus
-  // the catalogue to start from and a concept study launcher. Bespoke, not blocks —
-  // it is interactive (start/stop/enter), which a block list is not.
-  const plans = $derived.by(() => {
-    void s.studyEpoch;
-    return s.panel?.kind === "plans" ? s.q("plans", "") : null;
-  });
-  let conceptStudyTag = $state("");
-  async function launchConceptStudy(): Promise<void> {
-    const tag = conceptStudyTag.trim();
-    if (!tag) return;
-    conceptStudyTag = "";
-    await s.startConceptStudy(tag);
-  }
-  /** The plans still worth offering: a builtin whose CLASS is already occupied
-   *  is not one of them. Running "the whole Bible in a year" and being shown
-   *  the 180- and 90-day plans beside it invites a tap that can only mean
-   *  "throw away the plan I am on" — the reader stops the running plan first
-   *  (the maintainer's UAT call, 2026-08-11). The engine already enforces one
-   *  plan per class with a replace-confirm; this stops the picker from asking. */
-  function offerable(p: any): any[] {
-    const runningClasses = new Set(((p?.running ?? []) as any[]).map((r) => r.class).filter(Boolean));
-    return ((p?.builtins ?? []) as any[]).filter((b) => !runningClasses.has(b.class));
-  }
-
-  /** A schedule plan's display name, from the builtin catalogue (its `nameKey`
-   *  is a catalogue id); falls back to the raw id for an unknown plan. */
-  function planName(id: string): string {
-    const b = ((plans?.builtins ?? []) as any[]).find((x) => x.id === id);
-    return b ? t(b.nameKey) : id;
-  }
+  // Reading plans are NOT a panel kind anymore — they are a destination
+  // (shell/PlansScreen.svelte), entered from the Study hub like Memorize.
 
   const blocks = $derived.by(() => {
     void s.studyEpoch; // any authoring write invalidates panel content
@@ -172,68 +143,6 @@
             <p class="nb-text">{n.text}</p>
           </div>
         {/each}
-      {:else if s.panel.kind === "plans"}
-        <h2 class="nb-title">{t("plans.title")}</h2>
-
-        {#if (plans?.running ?? []).length === 0}
-          <p class="nb-empty">{t("plans.empty")}</p>
-        {/if}
-        {#each plans?.running ?? [] as p (p.id)}
-          <div class="plan-card" class:concept-study={p.kind === "conceptStudy"}>
-            {#if p.kind === "conceptStudy"}
-              <div class="plan-head">
-                <span class="plan-name">{t("plans.conceptStudyTag", { tag: p.tag })}</span>
-                <span class="plan-prog">{t("plans.sweepProgress", { done: p.sweepProgress[0], total: p.sweepProgress[1] })}</span>
-              </div>
-              <div class="plan-actions">
-                {#if s.conceptStudyId !== p.id}
-                  <button onclick={() => s.enterConceptStudy(p.id)}>{t("plans.enter")}</button>
-                {:else}
-                  <button onclick={() => s.exitConceptStudy()}>{t("conceptStudy.exit")}</button>
-                {/if}
-                <button class="danger" onclick={() => s.stopPlan(p.id, p.tag)}>{t("plans.stop")}</button>
-              </div>
-            {:else}
-              <div class="plan-head">
-                <span class="plan-name">{planName(p.id)}</span>
-                <span class="plan-prog">{t("plans.dayProgress", { done: p.scheduleProgress[0], total: p.scheduleProgress[1] })}</span>
-              </div>
-              {#if p.today}
-                <button class="plan-today" onclick={(e) => p.today.chapters[0] && onLink(goUri(`${p.today.chapters[0].book} ${p.today.chapters[0].chapter}:1`), e)}>
-                  {t("plans.today", { chapters: p.today.chapters.map((c: any) => c.display).join(", ") })}
-                </button>
-              {:else}
-                <p class="plan-done">{t("plans.finished")}</p>
-              {/if}
-              <div class="plan-actions">
-                <button class="danger" onclick={() => s.stopPlan(p.id, planName(p.id))}>{t("plans.stop")}</button>
-              </div>
-            {/if}
-          </div>
-        {/each}
-
-        <h3 class="plans-sub">{t("plans.conceptStudyHeading")}</h3>
-        <p class="plans-hint">{t("plans.conceptStudyHint")}</p>
-        <div class="concept-study-launch">
-          <input
-            type="text"
-            bind:value={conceptStudyTag}
-            placeholder={t("plans.conceptStudyPlaceholder")}
-            onkeydown={(e) => e.key === "Enter" && launchConceptStudy()}
-          />
-          <button disabled={!conceptStudyTag.trim()} onclick={launchConceptStudy}>{t("plans.conceptStudyStart")}</button>
-        </div>
-
-        <h3 class="plans-sub">{t("plans.available")}</h3>
-        {#each offerable(plans) as b (b.id)}
-          <button class="plan-builtin" onclick={() => s.startPlan({ id: b.id, class: b.class, name: t(b.nameKey) })}>
-            <span class="plan-name">{t(b.nameKey)}</span>
-            <span class="plan-add">{t("plans.start")}</span>
-          </button>
-        {/each}
-        {#if offerable(plans).length === 0}
-          <p class="plans-hint">{t("plans.classFull")}</p>
-        {/if}
       {:else}
         {#if rndOffer}
           <div class="rnd-offer">
@@ -369,113 +278,6 @@
   .nb-empty {
     color: var(--faded, #8a8276);
     font-size: calc(13.5px * var(--uiScale, 1));
-  }
-  /* Reading-plans panel */
-  .plan-card {
-    border: 1px solid var(--rule, #d8cba8);
-    border-radius: 8px;
-    padding: 10px 12px;
-    margin-bottom: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .plan-card.concept-study {
-    border-color: var(--tier-research, #b04a3a);
-    background: color-mix(in srgb, var(--tier-research, #b04a3a) 8%, transparent);
-  }
-  .plan-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 10px;
-  }
-  .plan-name {
-    font-weight: 600;
-    font-size: calc(14.5px * var(--uiScale, 1));
-  }
-  .plan-prog {
-    color: var(--faded, #8a8276);
-    font-size: calc(12.5px * var(--uiScale, 1));
-    white-space: nowrap;
-  }
-  .plan-today {
-    text-align: left;
-    color: var(--gold, #9e7d38);
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    font-size: calc(13.5px * var(--uiScale, 1));
-  }
-  .plan-done {
-    color: var(--faded, #8a8276);
-    font-size: calc(13px * var(--uiScale, 1));
-  }
-  .plan-actions {
-    display: flex;
-    gap: 8px;
-  }
-  .plan-actions button,
-  .concept-study-launch button,
-  .plan-builtin {
-    border: 1px solid var(--rule, #d8cba8);
-    border-radius: 5px;
-    padding: 4px 10px;
-    background: var(--paper, #fcf9f4);
-    color: var(--ink, #211f1a);
-    cursor: pointer;
-    font-size: calc(13px * var(--uiScale, 1));
-  }
-  .plan-actions button.danger {
-    color: var(--tier-research, #b04a3a);
-    border-color: color-mix(in srgb, var(--tier-research, #b04a3a) 60%, var(--rule, #d8cba8));
-  }
-  .plans-sub {
-    margin: 14px 0 4px;
-    font-size: calc(13.5px * var(--uiScale, 1));
-    color: var(--section-header, #a0894a);
-    font-variant: small-caps;
-    letter-spacing: 0.04em;
-  }
-  .plans-hint {
-    color: var(--faded, #8a8276);
-    font-size: calc(12.5px * var(--uiScale, 1));
-    margin-bottom: 8px;
-  }
-  .concept-study-launch {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 6px;
-  }
-  .concept-study-launch input {
-    flex: 1;
-    min-width: 0;
-    border: 1px solid var(--rule, #d8cba8);
-    border-radius: 5px;
-    padding: 5px 8px;
-    background: var(--paper, #fcf9f4);
-    color: var(--ink, #211f1a);
-    font: inherit;
-    font-size: calc(13px * var(--uiScale, 1));
-  }
-  .plan-builtin {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-    gap: 10px;
-    margin-bottom: 6px;
-    text-align: left;
-  }
-  .plan-builtin:disabled {
-    opacity: 0.55;
-    cursor: default;
-  }
-  .plan-builtin .plan-add {
-    color: var(--gold, #9e7d38);
-    font-size: calc(12.5px * var(--uiScale, 1));
-    white-space: nowrap;
   }
   .plan-actions button:disabled,
   .concept-study-launch button:disabled {

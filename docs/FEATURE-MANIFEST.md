@@ -203,7 +203,12 @@ paints, then scrolls the verse into view. Chapter stepping **crosses book
 bounds** in both shells (`session.stepChapter` / `StudyScreen.step`) — past a
 book's last chapter enters the next at ch 1, before ch 1 the previous at its
 last. Both walk the TOC to do it; `core::canon::adjacent_book` exists but no
-shell calls it.
+shell calls it. **End-of-chapter overscroll** (both shells): the scroll range
+runs until the chapter's LAST LINE reaches the TOP of the pane, not the usual
+bottom-stop — real range, no rubber-band — so a reader lying down can raise
+the tail of a chapter past whatever blocks the bottom of the screen
+(maintainer ask, 2026-08-11; `maxScroll` in `ReaderPane.svelte` /
+`ReaderPane.kt`).
 
 **Delta:** three panes are a web thing (see MAX_PANES above). Android is one
 fullscreen reader, or two panes on a fold opened flat.
@@ -733,7 +738,8 @@ the config for readers of an older file.
 **The bar carries ROLES, the tools live one layer down.** Both shells' bar is
 **Read · Study · Preach · Share · Sing** — the hats a reader wears, not a
 feature list. Study opens the hub (internally still the Explore screen); Preach
-raises Present; Share is its own destination (below); Sing is the hymnal.
+opens its own hub (below); Share is its own destination (below); Sing is the
+hymnal.
 Memorize is a CARD inside Study — a study discipline, not a role — and its
 screen lights the Study tab in both shells. On narrow screens the web draws the
 same **bottom nav bar Android has**, using the very same Material paths
@@ -757,6 +763,14 @@ Before this, Settings from any non-Read destination cost a trip back through
 the Read tab in BOTH shells. Welcome shows for every reader (falls back to the
 new-believer welcome); Church is NOT a menu item — it rides the Share screen.
 
+**Preach, the hub** (`PreachScreen.svelte` / `PreachScreen` in
+`ui/StudyScreen.kt`): the presentation and the materials it is built from
+(maintainer direction, 2026-08-11) — Present as the headline card (raising the
+same fullscreen Present overlay the tab used to raise directly; it still lights
+the Preach tab), then Weaves · Tags · Notes. The cards reuse the Study hub's
+`explore.*` keys plus `preach.present.desc`; the same tools appearing in both
+hubs is deliberate — the bar carries roles, and one tool can serve two hats.
+
 **Share, the destination** (`ShareScreen.svelte` / `ui/ShareScreen.kt`): the
 "Scan for the app" QR + the link via system share / copy (the matrix is
 **encoded at render time** in both shells — `QrCode.svelte` over
@@ -766,7 +780,10 @@ bake in; the same QR closes Present's end card), plus **Your church**: the
 three fields that used to sit at the bottom of Settings, edited beside the QR
 their setting feeds, with a visit button when a URL is set (the recipient's
 path to the congregation a shared link named). The old header Share icon and
-`ShareAppDialog` are gone in both shells.
+`ShareAppDialog` are gone in both shells. Share is the app AND the Gospel
+(maintainer direction, 2026-08-11): a **Share the Gospel** card
+(`share.gospel*` keys) opens Present straight onto the Romans Road — the
+first-run "sharing the gospel" landing, reachable every day after.
 
 **Settings splits everyday from Advanced.** Everyday, visible: language, theme,
 the two type faces, the three reader sliders (+ web-only verse-per-line).
@@ -1332,8 +1349,11 @@ filters and every zip-layout enumeration). Two kinds, frozen as `"schedule"` /
   restores word-study taps and the tracker; stopping the run never touches
   the tag or its members.
 
-**Web** (`study/StudyPanel.svelte` plans panel, `shell/Shell.svelte` banner,
-`state/session.svelte.ts` mode + sweep): Study ▸ Plans panel — running-plan
+**Web** (`shell/PlansScreen.svelte`, `shell/Shell.svelte` banner,
+`state/session.svelte.ts` mode + sweep): Study ▸ Plans is a full SCREEN (a
+destination off the Study hub, the Memorize pattern — it was a study-panel
+kind until the maintainer's "crammed, not luxurious" UAT call, 2026-08-11),
+sectioned Running · Study a concept · Start a plan — running-plan
 cards (day card, progress, stop-with-confirm), the builtin picker, the
 Concept Study launcher; a persistent mode banner with Exit and a live
 `{done} / {total}` sweep count; tap-to-tag through `ReaderPane`. In the mode
@@ -1346,13 +1366,13 @@ mechanism's internal name),
 writing the run via `concept_study_sweep`, never the reading record. Decision
 #5's reader-side surfaces (`shell/PlanChip.svelte` + the BookNav today card,
 shaped once in `shell/planToday.ts`): a nav-strip chip above the canon strip
-("Day 12 · Gen 30–31", "+{n} more" opening the Plans panel) rides the reader
+("Day 12 · Gen 30–31", "+{n} more" opening the Plans screen) rides the reader
 while a schedule runs — tap → today's first unread chapter — and the passage
 navigator leads with a today card whose chapters are the buttons, read ones
 marked. Both stand down in concept-study mode (the tracker is suspended, so
 schedule reading there earns no credit). E2e:
 `e2e/concept-study.spec.ts` (tap-to-tag, tracker suspension, tag survival,
-the Plans-panel launch path, the touch-tap ghost-click regression, the
+the Plans-screen launch path, the touch-tap ghost-click regression, the
 progress surfaces) and `e2e/plans-today.spec.ts` (chip → today, the navigator
 card, the mode standing both down).
 

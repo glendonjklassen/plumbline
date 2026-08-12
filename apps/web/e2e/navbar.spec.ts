@@ -110,7 +110,10 @@ test("phone: Present keeps the four destinations, picking and presenting alike",
   await boot(page);
   const nav = page.locator(".bottom-nav");
 
+  // Preach is a hub now (Present + the sermon's materials); Present is its
+  // headline card.
   await nav.getByRole("button", { name: "Preach" }).click();
+  await page.locator(".ex-card", { hasText: "Present" }).first().click();
   await expect(page.locator(".present")).toBeVisible();
   await expect(nav, "the picker covered the bottom bar").toBeVisible();
   await expect(nav.locator("button.on")).toHaveText(/Preach/);

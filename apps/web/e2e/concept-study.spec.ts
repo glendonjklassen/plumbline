@@ -182,14 +182,14 @@ test("the mode shows sweep progress — the banner counts and the navigator pain
   await expect(page.locator(".concept-study-banner .prog")).toHaveText(/^2 \/ \d+/);
 });
 
-// The Plans-panel path the reader actually walks: type a tag, press Start, and
+// The Plans-screen path the reader actually walks: type a tag, press Start, and
 // the mode is entered; the run then shows as a card that can re-enter the mode.
 // Dies if the launcher stops wiring the input through startConceptStudy, or if
 // the running card loses its Resume button.
-test("the Plans panel launches a concept study and re-enters it from its card", async ({ page }) => {
+test("the Plans screen launches a concept study and re-enters it from its card", async ({ page }) => {
   await boot(page);
 
-  await page.evaluate(() => ((window as any).__plumbline.panel = { kind: "plans" }));
+  await page.evaluate(() => (((window as any).__plumbline as any).screen = "plans"));
   await page.getByPlaceholder("Tag to gather into (e.g. grace)").fill("faith");
   await page.getByRole("button", { name: "Start Concept Study" }).click();
 
@@ -200,7 +200,7 @@ test("the Plans panel launches a concept study and re-enters it from its card", 
   // Leave, then re-enter from the run's card — coverage (the run) persists.
   await page.getByRole("button", { name: "Exit Concept Study" }).click();
   await expect(page.locator(".concept-study-banner")).toHaveCount(0);
-  await page.evaluate(() => ((window as any).__plumbline.panel = { kind: "plans" }));
+  await page.evaluate(() => (((window as any).__plumbline as any).screen = "plans"));
   const card = page.locator(".plan-card.concept-study", { hasText: "faith" });
   await expect(card).toBeVisible();
   await card.getByRole("button", { name: "Resume" }).click();

@@ -129,9 +129,10 @@ private enum class SecondPane { Study, Bible }
 
 /** The bottom-nav ROLES (one-handed reach): Read · Study · Preach · Share ·
  *  Sing. `Explore` is the Study hub's internal name and `Memorize` a screen the
- *  hub opens (it lights the Study tab); Preach is a launcher on the same bar
- *  but renders as the fullscreen Present overlay. */
-private enum class Dest { Read, Explore, Memorize, Hymnal, Share }
+ *  hub opens (it lights the Study tab); Preach is its own hub (Present + the
+ *  sermon's materials), and Present raised from it stays a fullscreen overlay
+ *  that lights the same tab. */
+private enum class Dest { Read, Explore, Memorize, Preach, Hymnal, Share }
 
 /** A study "library" the Explore screen loads into the study surface as blocks. */
 enum class Library { Threads, Tags, Weaves, Suggested, Guide, About }
@@ -936,10 +937,33 @@ fun StudyScreen(
                     onSing = { hymnSing = it },
                 )
 
+                Dest.Preach -> PreachScreen(
+                    palette = palette,
+                    onPresent = { showPresent = true },
+                    onWeaves = { showWeaves = true },
+                    onTags = { openLibrary(Library.Tags) },
+                    onNotes = { showNotes = true },
+                    onClose = { dest = Dest.Read },
+                    barActions = utilityMenu,
+                )
+
                 Dest.Share -> ShareScreen(
                     palette = palette,
                     church = church,
                     onChurch = { church = it },
+                    onPresentGospel = {
+                        // The first-run "sharing the gospel" landing, from where
+                        // the sharing actually happens: straight into the trail;
+                        // if the stock thread was somehow removed the picker
+                        // shows instead.
+                        scope.engineCall(
+                            engine, null,
+                            { engine.ThreadsJson()?.let { runCatching { parseWire<Threads>(it).threads }.getOrNull() } },
+                        ) { threads ->
+                            presentThread = threads?.firstOrNull { it.name == "Romans Road" }
+                            showPresent = true
+                        }
+                    },
                     onClose = { dest = Dest.Read },
                     barActions = utilityMenu,
                 )
@@ -1024,10 +1048,11 @@ fun StudyScreen(
                 colors = navColors,
             )
             NavigationBarItem(
-                selected = showPresent,
-                // Present is a surface rather than a `Dest`, so it is cleared with the
-                // rest and then raised — the order matters.
-                onClick = { dismissTransient(); showPresent = true },
+                // A hub like Study, not a straight raise of Present: the role
+                // holds the presentation AND its materials (weaves, tags,
+                // notes). Present, raised from the hub, still lights this tab.
+                selected = dest == Dest.Preach || showPresent,
+                onClick = { dismissTransient(); dest = Dest.Preach },
                 icon = { Icon(NavIconPresent, contentDescription = null) },
                 label = { Text(t("nav.preach")) },
                 colors = navColors,
@@ -1673,6 +1698,30 @@ private fun ExploreScreen(
             // The same key the web card renders — the one label that had
             // drifted onto map.chordMap and risked translating twice.
             ExploreCard(t("explore.weaveMap"), t("explore.weaveMap.desc"), palette, onChord)
+        }
+    }
+}
+
+/** The PREACH hub: the presentation and the materials it is built from
+ *  (maintainer direction, 2026-08-11) — Present stays the headline card;
+ *  weaves, tags and notes sit under it. The same tools appear inside Study:
+ *  the bar carries ROLES, and one tool can serve two hats. */
+@Composable
+private fun PreachScreen(
+    palette: ReaderPalette,
+    onPresent: () -> Unit,
+    onWeaves: () -> Unit,
+    onTags: () -> Unit,
+    onNotes: () -> Unit,
+    onClose: () -> Unit,
+    barActions: @Composable RowScope.() -> Unit = {},
+) {
+    MapOverlay(t("nav.preach"), palette, onClose, actions = barActions) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            ExploreCard(t("nav.present"), t("preach.present.desc"), palette, onPresent)
+            ExploreCard(t("explore.weaves"), t("explore.weaves.desc"), palette, onWeaves)
+            ExploreCard(t("explore.tags"), t("explore.tags.desc"), palette, onTags)
+            ExploreCard(t("explore.notes"), t("explore.notes.desc"), palette, onNotes)
         }
     }
 }

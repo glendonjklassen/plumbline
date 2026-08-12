@@ -15,7 +15,7 @@
   const s = getSession();
 
   const cards = [
-    { id: "plans", go: () => (s.panel = { kind: "plans" }) },
+    { id: "plans", go: () => (s.screen = "plans") },
     {
       id: "memorize",
       go: () => {

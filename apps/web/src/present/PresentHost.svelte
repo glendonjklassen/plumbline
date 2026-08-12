@@ -84,12 +84,20 @@
       try {
         await navigator.share({ title: "Plumbline", url });
         return;
-      } catch {
-        /* fall through to clipboard */
+      } catch (e) {
+        // A dismissed sheet is an answer, not a failure — falling through would
+        // overwrite the reader's clipboard for a share they just cancelled (and
+        // writeText throws anyway: the closing sheet still holds the focus).
+        // Every other rejection still gets the fallback. (ContextMenu's rule.)
+        if ((e as DOMException | undefined)?.name === "AbortError") return;
       }
     }
-    await navigator.clipboard.writeText(url);
-    s.showToast(t("share.copied"));
+    try {
+      await navigator.clipboard.writeText(url);
+      s.showToast(t("share.copied"));
+    } catch {
+      s.showToast(t("settings.copyBlocked"));
+    }
   }
 
   // Sharing a passage is a QR, not the phone's share sheet. Present is the

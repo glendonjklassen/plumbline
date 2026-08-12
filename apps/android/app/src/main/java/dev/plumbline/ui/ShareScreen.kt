@@ -50,6 +50,7 @@ fun ShareScreen(
     palette: ReaderPalette,
     church: ChurchState?,
     onChurch: (ChurchState) -> Unit,
+    onPresentGospel: () -> Unit,
     onClose: () -> Unit,
     barActions: @Composable RowScope.() -> Unit = {},
 ) {
@@ -98,6 +99,18 @@ fun ShareScreen(
                 Button(onClick = { shareAppLink(context, church) }) {
                     Text(t("share.action"))
                 }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // Share is the app AND the Gospel (maintainer direction,
+            // 2026-08-11): the same Present that Preach raises, opened
+            // straight onto the Romans Road — the first-run "sharing the
+            // gospel" path, living where the sharing happens.
+            Text(t("share.gospel"), color = palette.faded, fontSize = 12.sp)
+            Text(t("share.gospelDesc"), color = palette.faded, fontSize = 12.sp)
+            TextButton(onClick = onPresentGospel) {
+                Text(t("share.gospelGo"), color = palette.gold)
             }
 
             Spacer(Modifier.height(20.dp))

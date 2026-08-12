@@ -83,7 +83,14 @@ async function restore(page: Page, zip: Buffer): Promise<void> {
     buffer: zip,
   });
   await expect
-    .poll(async () => page.evaluate(() => (window as any).__preRestore ?? null), { timeout: 30_000 })
+    // The evaluate can land INSIDE the navigation it is waiting for — the old
+    // context is torn down mid-call and it THROWS, which fails expect.poll
+    // rather than retrying it (CI caught this; retries hit the same race).
+    // Bridge the gap: a destroyed context means "still navigating", not null.
+    .poll(
+      async () => page.evaluate(() => (window as any).__preRestore ?? null).catch(() => "navigating"),
+      { timeout: 30_000 },
+    )
     .toBeNull();
 }
 
