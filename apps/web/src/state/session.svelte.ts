@@ -47,8 +47,7 @@ export type PanelView =
   | { kind: "search" }
   | { kind: "guide" }
   | { kind: "about" }
-  | { kind: "notesBrowser" }
-  | { kind: "plans" };
+  | { kind: "notesBrowser" };
 
 /** The analytical map popups. Both are weave visualisations, not
  *  embedding-derived. */
@@ -215,7 +214,7 @@ export class Session {
    * were reading. `"read"` is the absence of a destination rather than one of
    * its own.
    */
-  screen = $state<"read" | "explore" | "memorize" | "hymnal" | "share">("read");
+  screen = $state<"read" | "explore" | "memorize" | "plans" | "preach" | "hymnal" | "share">("read");
 
   // ── the hymnal ──────────────────────────────────────────────────────────────
 

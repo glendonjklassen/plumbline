@@ -21,12 +21,20 @@
       try {
         await navigator.share({ title, url: link });
         return;
-      } catch {
-        /* fall through to clipboard */
+      } catch (e) {
+        // A dismissed sheet is an answer, not a failure — falling through would
+        // overwrite the reader's clipboard for a share they just cancelled (and
+        // writeText throws anyway: the closing sheet still holds the focus).
+        // Every other rejection still gets the fallback. (ContextMenu's rule.)
+        if ((e as DOMException | undefined)?.name === "AbortError") return;
       }
     }
-    await navigator.clipboard.writeText(link);
-    s.showToast(t("share.copied"));
+    try {
+      await navigator.clipboard.writeText(link);
+      s.showToast(t("share.copied"));
+    } catch {
+      s.showToast(t("settings.copyBlocked"));
+    }
   }
 
   // The reader's home church. Loaded once per visit to the screen; every field
@@ -60,6 +68,23 @@
         <p class="with">{t("share.with", { church: s.church.name })}</p>
       {/if}
       <button class="primary" onclick={shareLink}>{t("share.action")}</button>
+    </div>
+    <!-- Share is the app AND the Gospel (maintainer direction, 2026-08-11):
+         the same Present that Preach raises, opened straight onto the Romans
+         Road — the first-run "Sharing the gospel" path, now living where the
+         sharing happens. -->
+    <div class="card" data-surface="share gospel">
+      <h3>{t("share.gospel")}</h3>
+      <p class="desc">{t("share.gospelDesc")}</p>
+      <button
+        class="visit"
+        onclick={() => {
+          s.presentThreadName = "Romans Road";
+          s.showPresent = true;
+        }}
+      >
+        {t("share.gospelGo")}
+      </button>
     </div>
     <div class="card">
       <h3>{t("settings.church")}</h3>

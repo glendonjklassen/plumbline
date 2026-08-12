@@ -415,7 +415,13 @@ fun ReaderPane(
         }
 
         val docHeight = (dl?.height ?: 0f) + 2 * marginPx
-        val maxScroll = max(0f, docHeight - viewportH)
+        // NOT the usual bottom-stop (content bottom meets screen bottom): the
+        // reader may keep pushing until the chapter's LAST LINE reaches the TOP
+        // of the pane — and no further. For reading on your back, where
+        // something blocks the bottom of the screen and turning early means
+        // moving your head (maintainer UAT ask, 2026-08-11). Real scroll range,
+        // not an elastic overshoot — no snap-back.
+        val maxScroll = if (dl != null) docHeight - marginPx else 0f
 
         // Scroll the navigator's target verse into view once the layout lands.
         // Epoch-guarded so a re-layout (font/margin change) doesn't re-jump.
@@ -529,11 +535,12 @@ fun ReaderPane(
                 .onSizeChanged {
                     val h = it.height.toFloat()
                     viewportH = h
-                    // A shorter viewport (a rotation, a fold) can leave the offset
-                    // past the document's end. Re-clamp HERE — from the layout
-                    // phase — not in composition, which would write scroll state
-                    // on every frame.
-                    scroll.floatValue = scroll.floatValue.coerceIn(0f, max(0f, docHeight - h))
+                    // A rotation or fold can leave the offset past the scroll
+                    // range. Re-clamp HERE — from the layout phase — not in
+                    // composition, which would write scroll state on every
+                    // frame. Same bound as maxScroll above (last line to the
+                    // pane's top), which no longer depends on the viewport.
+                    scroll.floatValue = scroll.floatValue.coerceIn(0f, maxScroll)
                 }
                 .scrollable(scrollState, Orientation.Vertical)
                 .draggable(

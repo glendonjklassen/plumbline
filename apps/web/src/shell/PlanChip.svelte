@@ -4,7 +4,7 @@
   // plan is present where the reading happens instead of only behind
   // Explore ▸ Plans. Tap goes to today's first unread chapter; when several
   // plans run, the first one's day rides the chip and "+1 more" opens the
-  // Plans panel for the rest.
+  // Plans screen for the rest.
   //
   // NOT shown in concept-study mode: the tracker is suspended there, so time in
   // the mode cannot advance a schedule — a chip inviting schedule reading would
@@ -15,9 +15,20 @@
 
   const s = getSession();
 
+  // HOLD the last answer through a refetch. `q()` answers null while a
+  // refetch is in flight, and the plans read is now invalidated by every
+  // ~30-second dwell report (session.onReadingWrote) and every mark-read
+  // write — so rendering `q()` raw made this whole row (border and padding
+  // included) unmount for the in-flight frames and remount when the answer
+  // landed: a repeating jitter at the bottom of the screen, worst at the
+  // moment a chapter completed (the UAT report, 2026-08-11). Only a REAL
+  // answer may change what the chip shows; the gap between answers may not.
+  let held: any[] = [];
   const plans = $derived.by(() => {
     void s.studyEpoch;
-    return todayPlans(s.q("plans", ""));
+    const q = s.q("plans", "");
+    if (q == null) return held;
+    return (held = todayPlans(q));
   });
   const lead = $derived(plans[0] ?? null);
 
@@ -33,7 +44,7 @@
       {t("plans.chip", { day: lead.day, chapters: chapterSpan(remaining(lead)) })}
     </button>
     {#if plans.length > 1}
-      <button class="plan-chip more" onclick={() => (s.panel = { kind: "plans" })}>
+      <button class="plan-chip more" onclick={() => (s.screen = "plans")}>
         {t("plans.chipMore", { n: plans.length - 1 })}
       </button>
     {/if}

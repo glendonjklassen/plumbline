@@ -8,6 +8,8 @@
   import Shortcuts from "./Shortcuts.svelte";
   import BookNav from "./BookNav.svelte";
   import ExploreScreen from "./ExploreScreen.svelte";
+  import PlansScreen from "./PlansScreen.svelte";
+  import PreachScreen from "./PreachScreen.svelte";
   import HymnalScreen from "../hymnal/HymnalScreen.svelte";
   import MarkReadDialog from "./MarkReadDialog.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
@@ -56,7 +58,11 @@
         s.rpc
           .call("readingTick", book, chapter, reached, step, interacted, new Date().toISOString())
           .catch(() => null),
-      onCompleted: (book, chapter) => s.showToast(t("shell.readThrough", { chapter: `${s.bookName(book)} ${chapter}` })),
+      // NO completion toast. Finishing a chapter is the reader's own moment —
+      // "you should know you read it" (maintainer UAT call, 2026-08-11); a
+      // notification popping over the text at exactly that moment is the app
+      // congratulating someone for something they were present for. The read
+      // still lands in the map, the plans and the streak — silently.
     }),
   );
 
@@ -150,7 +156,9 @@
       path:
         "M21 3H3c-1.11 0-2 .89-2 2v14c0 1.11.89 2 2 2h18c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2z" +
         "m0 16.02H3V4.98h18v14.04zM10 12H8l4-4 4 4h-2v4h-4v-4z",
-      go: () => (s.showPresent = true),
+      // A hub like Study, not a straight raise of Present: the role holds the
+      // presentation AND its materials (weaves, tags, notes).
+      go: () => (s.screen = "preach"),
     },
     {
       key: "share",
@@ -203,9 +211,9 @@
   // below it the screen decides — Memorize lights Study, because that is the
   // role it belongs to now that it is a card inside the Study hub.
   const dest = $derived(
-    s.showPresent
+    s.showPresent || s.screen === "preach"
       ? "preach"
-      : s.screen === "explore" || s.screen === "memorize"
+      : s.screen === "explore" || s.screen === "memorize" || s.screen === "plans"
         ? "study"
         : s.screen === "hymnal"
           ? "sing"
@@ -374,7 +382,7 @@
          Weaves/Memorize inside Study, the church and the QR on Share. -->
     <nav class="browse">
         <button onclick={go(() => (s.screen = "explore"))}>{t("nav.study")}</button>
-        <button onclick={go(() => (s.showPresent = true))}>{t("nav.preach")}</button>
+        <button onclick={go(() => (s.screen = "preach"))}>{t("nav.preach")}</button>
         <button onclick={go(() => (s.screen = "share"))}>{t("nav.share")}</button>
         <button onclick={go(() => (s.screen = "hymnal"))}>{t("nav.sing")}</button>
       </nav>
@@ -405,6 +413,10 @@
       <ExploreScreen />
     {:else if s.screen === "memorize"}
       <MemorizeHost />
+    {:else if s.screen === "plans"}
+      <PlansScreen />
+    {:else if s.screen === "preach"}
+      <PreachScreen />
     {:else if s.screen === "hymnal"}
       <HymnalScreen />
     {:else if s.screen === "share"}

@@ -79,7 +79,7 @@ test("the chronological plan is offered, starts, and day 1 begins at Genesis 1",
 
   // The picker OFFERS the row — which it only does when the shipped pack's
   // table actually loads (the engine filters unbuildable table plans out).
-  await page.evaluate(() => ((window as any).__plumbline.panel = { kind: "plans" }));
+  await page.evaluate(() => (((window as any).__plumbline as any).screen = "plans"));
   const row = page.getByRole("button", { name: /The Bible in chronological order/ });
   await expect(row).toBeVisible();
   await row.click();
@@ -94,7 +94,10 @@ test("the chronological plan is offered, starts, and day 1 begins at Genesis 1",
   await expect.poll(async () => (await readToday())?.day ?? 0, { timeout: 10_000 }).toBe(1);
   expect((await readToday()).chapters[0]).toMatchObject({ book: "Gen", chapter: 1 });
 
-  // And it rides the reader like any schedule: the chip names day 1.
+  // And it rides the reader like any schedule: the chip names day 1. The chip
+  // lives on the READ screen, and Plans is a destination that replaces the
+  // reader — so go back the way the ‹ does before looking for it.
+  await page.evaluate(() => (window as any).__plumbline.goRead());
   await expect(page.locator(".plan-chip-row .plan-chip").first()).toHaveText(/Day 1 · /);
 });
 
@@ -115,7 +118,7 @@ test("a running plan takes its class off the picker", async ({ page }) => {
     const s = (window as any).__plumbline;
     await s.author("planStart", "bible-365", new Date().toISOString());
   });
-  await page.evaluate(() => ((window as any).__plumbline.panel = { kind: "plans" }));
+  await page.evaluate(() => (((window as any).__plumbline as any).screen = "plans"));
 
   // The running plan's own card is there…
   await expect(page.locator(".plan-card", { hasText: "The whole Bible in a year" })).toBeVisible();
