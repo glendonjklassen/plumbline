@@ -787,6 +787,15 @@
     header:has(.search.open) .chapter-nav {
       display: none;
     }
+    /* …and so does the SPACER, which is the one that was actually costing the
+       field its width. `.spacer` is `flex: 1` and so is the open field, so the
+       two split the free space evenly and the box a reader tapped filled half
+       the bar with nothing beside it (maintainer, on a phone, 2026-08-13).
+       Hiding the chapter nav alone could not fix that: the spacer simply took
+       the room the nav gave up. */
+    header:has(.search.open) .spacer {
+      display: none;
+    }
   }
   .spacer {
     flex: 1;
