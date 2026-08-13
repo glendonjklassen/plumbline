@@ -353,6 +353,10 @@ fun StudyScreen(
     var sideMargin by remember { mutableStateOf((loadedCfg?.sideMargin ?: 28.0).coerceIn(8.0, 96.0)) }
     var lineSpacing by remember { mutableStateOf((loadedCfg?.lineSpacing ?: 1.35).coerceIn(1.0, 2.2)) }
     var copyStyle by remember { mutableStateOf(loadedCfg?.copyStyle ?: "verseRef") }
+    // The two typography switches, both ON by default: `!= false` so an absent
+    // key (a config written before they existed) reads as the shipped reader.
+    var verseNumbers by remember { mutableStateOf(loadedCfg?.verseNumbers != false) }
+    var addedItalics by remember { mutableStateOf(loadedCfg?.addedItalics != false) }
     var history by remember { mutableStateOf(loadedCfg?.history ?: emptyList()) }
     // The reader's home church — what their own shared links carry (web parity).
     // `intro` is which welcome they were given, so the Welcome button can show it
@@ -385,6 +389,7 @@ fun StudyScreen(
             humanAnalysis = humanAnalysis, machineAnalysis = machineAnalysis,
             church = church, presentSharesAsNew = presentSharesAsNew, intro = introChoice,
             akjvOverlay = akjvOverlay,
+            verseNumbers = verseNumbers, addedItalics = addedItalics,
         )
         scope.launch { withContext(Dispatchers.Default) { runCatching { StudyConfig.SaveJson(PlumblineJson.encodeToString(cfg)) } } }
     }
@@ -819,6 +824,7 @@ fun StudyScreen(
                 engine = engine, book = b, chapter = c, palette = palette,
                 modifier = Modifier.weight(1f), searchHits = searchHits, fontSizeSp = bodySize.toFloat(),
                 sideMargin = sideMargin.toFloat(), lineSpacing = lineSpacing.toFloat(),
+                verseNumbers = verseNumbers, addedItalics = addedItalics,
                 onWordTap = ::onWord,
                 onVerseLongPress = { verse -> actionVerse = verse },
                 onSwipeChapter = { dir -> val (nb, nc) = step(b, c, dir); setPane(nb, nc) },
@@ -1150,6 +1156,8 @@ fun StudyScreen(
                 sideMargin = sideMargin, onSideMargin = { sideMargin = it },
                 lineSpacing = lineSpacing, onLineSpacing = { lineSpacing = it },
                 copyStyle = copyStyle, onCopyStyle = { copyStyle = it },
+                verseNumbers = verseNumbers, onToggleVerseNumbers = { verseNumbers = !verseNumbers },
+                addedItalics = addedItalics, onToggleAddedItalics = { addedItalics = !addedItalics },
                 bundledOn = bundledOn, onToggleBundled = onToggleBundled,
                 akjvAvailable = akjvAvailable,
                 akjvOverlay = akjvOverlay,
@@ -1869,6 +1877,10 @@ private fun SettingsDialog(
     onToggleHuman: () -> Unit,
     machineAnalysis: Boolean,
     onToggleMachine: () -> Unit,
+    verseNumbers: Boolean,
+    onToggleVerseNumbers: () -> Unit,
+    addedItalics: Boolean,
+    onToggleAddedItalics: () -> Unit,
     akjvAvailable: Boolean,
     akjvOverlay: Boolean,
     onToggleAkjv: () -> Unit,
@@ -2081,6 +2093,20 @@ private fun SettingsDialog(
                 }
                 if (advanced) {
                 Text(t("settings.advancedDesc"), color = palette.faded, fontSize = 12.sp)
+                // The two typography switches. Numbers are a LAYOUT input (the
+                // chapter is re-laid-out, since the number's width and gap
+                // belong to the line); italics are paint-only, so that one
+                // re-records the page without measuring anything again.
+                SettingToggle(
+                    t("settings.verseNumbers"),
+                    t("settings.verseNumbersDesc"),
+                    verseNumbers, palette, onToggleVerseNumbers,
+                )
+                SettingToggle(
+                    t("settings.addedItalics"),
+                    t("settings.addedItalicsDesc"),
+                    addedItalics, palette, onToggleAddedItalics,
+                )
                 // The text is always on; each analysis tier switches off on its
                 // own (the old all-or-nothing Full study switch is gone).
                 SettingToggle(

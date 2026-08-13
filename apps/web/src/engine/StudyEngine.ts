@@ -15,6 +15,9 @@ export interface LayoutCfg {
   paraIndent: number;
   paraSpacing: number;
   versePerLine: boolean;
+  /** Paint the leading verse numbers. Optional and defaulted ON at the
+   *  marshalling site, so a caller that predates the setting still gets them. */
+  verseNumbers?: boolean;
 }
 
 export type Grade = "again" | "hard" | "good" | "easy";
@@ -156,13 +159,21 @@ export class StudyEngine {
     return s === null ? null : JSON.parse(s);
   }
 
+  /** `PlumblineLayoutConfig` is hand-marshalled here at fixed offsets: six f32
+   *  then two u32 flags, 32 bytes. It MUST match the #[repr(C)] struct in
+   *  crates/ffi/src/lib.rs field for field — a field added there and not here
+   *  hands the engine whatever was in that word of the heap. */
   layoutChapter(book: string, chapter: number, cfg: LayoutCfg): DisplayList | null {
-    const cfgPtr = (this.#w.exports.plumbline_web_alloc as Function)(28) as number;
+    const CFG_BYTES = 32;
+    const cfgPtr = (this.#w.exports.plumbline_web_alloc as Function)(CFG_BYTES) as number;
     const dv = new DataView(this.#w.exports.memory.buffer);
     [cfg.width, cfg.lineHeight, cfg.spaceWidth, cfg.verseNumGap, cfg.paraIndent, cfg.paraSpacing].forEach(
       (v, i) => dv.setFloat32(cfgPtr + i * 4, v, true),
     );
     dv.setUint32(cfgPtr + 24, cfg.versePerLine ? 1 : 0, true);
+    // Default ON: an undefined here is a caller that predates the setting, not
+    // a reader who turned the numbers off.
+    dv.setUint32(cfgPtr + 28, cfg.verseNumbers === false ? 0 : 1, true);
     const dl = this.#call(
       (b) =>
         (this.#w.exports.plumbline_engine_layout_chapter as Function)(
@@ -170,7 +181,7 @@ export class StudyEngine {
         ) as number,
       [book],
     );
-    (this.#w.exports.plumbline_web_free as Function)(cfgPtr, 28);
+    (this.#w.exports.plumbline_web_free as Function)(cfgPtr, CFG_BYTES);
     return dl ? new DisplayList(this.#w, dl) : null;
   }
 

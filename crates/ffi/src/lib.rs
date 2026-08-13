@@ -809,6 +809,11 @@ pub struct PlumblineLayoutConfig {
     pub para_spacing: f32,
     /// Nonzero: start every verse on a fresh line (verse-per-line mode).
     pub verse_break: u32,
+    /// Nonzero: paint the leading verse numbers (the default). Zero lays the
+    /// chapter out as prose — and it is a LAYOUT input rather than something a
+    /// shell can skip at paint time, because the number's width and its gap
+    /// belong to the line whether or not anything is drawn in them.
+    pub verse_numbers: u32,
 }
 
 impl From<PlumblineLayoutConfig> for LayoutConfig {
@@ -821,6 +826,7 @@ impl From<PlumblineLayoutConfig> for LayoutConfig {
             para_indent: c.para_indent,
             para_spacing: c.para_spacing,
             verse_break: c.verse_break != 0,
+            verse_numbers: c.verse_numbers != 0,
         }
     }
 }
@@ -900,10 +906,12 @@ impl Measure for FfiMeasure {
 ///    one chapter turn to the next (and can be reused after GC) — keying on it
 ///    would empty the memo on every turn of the gold-standard shell. `measure_ctx`
 ///    is null on Android and 0 on the web, so it discriminates nothing either.
-///  - `width` and `verse_break`, which cannot change a glyph's advance. Leaving
-///    them out is what makes a rotation, a margin drag or a verse-per-line toggle
-///    re-lay out the chapter with **zero** crossings — the case the memo exists
-///    for. `para_indent`, `para_spacing` and `verse_num_gap` are arithmetic on the
+///  - `width`, `verse_break` and `verse_numbers`, none of which can change a
+///    glyph's advance — they move boxes around, and a box is measured the same
+///    wherever it lands. Leaving them out is what makes a rotation, a margin
+///    drag, a verse-per-line toggle or turning the numbers off re-lay out the
+///    chapter with **zero** crossings — the case the memo exists for.
+///    `para_indent`, `para_spacing` and `verse_num_gap` are arithmetic on the
 ///    two fields above and would add nothing.
 ///  - The AKJV overlay. It changes the TEXT, and the text is the memo's key, so a
 ///    re-worded verse simply misses.
@@ -3999,6 +4007,7 @@ mod measure_memo_over_the_abi {
             para_indent: 16.0,
             para_spacing: 8.0,
             verse_break: 0,
+            verse_numbers: 1,
         }
     }
 

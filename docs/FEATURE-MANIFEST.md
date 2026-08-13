@@ -192,8 +192,26 @@ Plumbline name and carries no plumb-line imagery.
   `width = min(paneW − 2·sideMargin, 720)`, `lineHeight = (ascent+descent)·lineSpacing`,
   `spaceWidth` measured, `verseNumGap = space·1.4`,
   `paraIndent = lineHeight·0.9`, `paraSpacing = lineHeight·0.45`, `verseBreak`
-  from `versePerLine`. `sideMargin` and `lineSpacing` are the reader's config
-  values, defaulting to 28 and 1.35.
+  from `versePerLine`, `verseNumbers` from `verseNumbers`. `sideMargin` and
+  `lineSpacing` are the reader's config values, defaulting to 28 and 1.35.
+- **Two typography switches** (Settings › Advanced, both shells, both ON by
+  default and both written as explicit booleans — an absent key is a config
+  from before they existed, so every read is `!== false`):
+  - `verseNumbers` is a **layout** input, not a paint flag. The number's box and
+    the gap after it belong to the line, so a shell that simply declined to draw
+    them would flow every verse around an invisible marker; the core emits no
+    number items and reclaims the width (`LayoutConfig.verse_numbers`,
+    `PlumblineLayoutConfig.verse_numbers`, +4 bytes on the by-value struct — the
+    web hand-marshals it at offset 28 of 32). It is therefore in BOTH turn-cache
+    keys (`engine.worker.ts`, Android's `ChapterKey`) and out of `font_identity`,
+    with `verse_break`, since it cannot change a glyph's advance.
+  - `addedItalics` is **paint only**. The measure callback is font-blind, so the
+    engine measures supplied words upright either way and the layout is
+    untouched — deliberately absent from both cache keys, present in Android's
+    `ChapterPaintKey` (the recording bakes the face) and named as an explicit
+    dependency of the web's paint effect (the draw is rAF-deferred, so a read
+    inside it registers nothing). Off, the words stay marked by the `added` tone
+    alone — the same fallback a face with no italic already gets.
 - Paint: verse numbers **bold gold**; FLAG_ADDED italic gray; FLAG_DIVINE /
   FLAG_TITLE colors above. Hit-testing: `hit_test(x − margin_x, y − MARGIN)`.
   **No mark for a Strong's-tagged word** (both shells): a faint gold rule under
@@ -337,10 +355,16 @@ producer emits*, not shell code.
      §Concept map popup below. The three sections above it are the symbolic
      concept engine (co-occurrence over the corpus) and are untouched.
 4. (F) Author actions: `＋ tag verse`, `＋ add to thread`.
-5. **cross-references (N)** — weave partners (≤40), each + weave-name link to
+5. **in N weaves** — which weaves this verse BELONGS TO, each linking to its
+   compare card. Distinct from the partner list below it, which answers a
+   different question: a verse with six links into one weave is one membership,
+   and the partner list buries that under six rows repeating a name. Derived
+   from the partners (a weave is a graph of verse↔verse links, so a verse in one
+   appears in at least one link), deduped by NAME, first-seen order.
+6. **cross-references (N)** — weave partners (≤40), each + weave-name link to
    its compare card.
-6. (F) **study cross-references (N) — TSK** *(Human †)* (≤40; ranges "a–b").
-7. **verses like this** — **REMOVED** (a per-verse list of statistically similar
+7. (F) **study cross-references (N) — TSK** *(Human †)* (≤40; ranges "a–b").
+8. **verses like this** — **REMOVED** (a per-verse list of statistically similar
    verses — the SIF model over the concept embedding, 6 in-testament and 4
    cross-testament — judged machine-generated noise). It lived in `panel.rs` and
    in the core's `VerseSim`, so it went
@@ -352,13 +376,13 @@ producer emits*, not shell code.
    analysis tier, which now holds morphology and text-witness only. The last
    code path that opened the file — `plumbline_engine_concept_neighbours_json`,
    which no shell ever called — is gone too (see §C ABI surface).
-8. (F) **tags** — tags holding this verse; each is a link + `✕` untag (user
+9. (F) **tags** — tags holding this verse; each is a link + `✕` untag (user
    data, not evidence — no tier mark).
-9. **margin notes** *(Human †)* — the verse's 1769 notes, small.
+10. **margin notes** *(Human †)* — the verse's 1769 notes, small.
 
 A **provenance legend** closes a Full-study card once: "where this comes from:
 ✝ the text · † curated scholarship · ≈ machine-derived, weigh it · ⚗
-research-grade". Weave cross-references (item 5) and tags carry no mark (mixed /
+research-grade". Weave membership + cross-references (items 5–6) and tags carry no mark (mixed /
 user-authored, not trust-weighted evidence). The producer emits it as a `Para`
 of tier-coloured runs.
 

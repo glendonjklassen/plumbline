@@ -63,6 +63,11 @@ typedef struct PlumblineLayoutConfig {
   float para_spacing;
   // Nonzero: start every verse on a fresh line (verse-per-line mode).
   uint32_t verse_break;
+  // Nonzero: paint the leading verse numbers (the default). Zero lays the
+  // chapter out as prose — and it is a LAYOUT input rather than something a
+  // shell can skip at paint time, because the number's width and its gap
+  // belong to the line whether or not anything is drawn in them.
+  uint32_t verse_numbers;
 } PlumblineLayoutConfig;
 
 // Advance-width callback: given the caller's context pointer and a

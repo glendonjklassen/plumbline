@@ -109,6 +109,10 @@
   const sideMargin = $derived(Number(s.config.sideMargin ?? 28));
   const lineSpacing = $derived(Number(s.config.lineSpacing ?? 1.35));
   const versePerLine = $derived(!!s.config.versePerLine);
+  // Both default ON: an absent key is a config written before the setting
+  // existed, not a reader who turned it off.
+  const verseNumbers = $derived(s.config.verseNumbers !== false);
+  const addedItalics = $derived(s.config.addedItalics !== false);
   const columnWidth = $derived(Math.max(120, Math.min(cssW - 2 * sideMargin, MAX_COLUMN)));
   const marginX = $derived(Math.max(sideMargin, (cssW - columnWidth) / 2));
 
@@ -174,6 +178,7 @@
         width: columnWidth,
         lineSpacing,
         versePerLine,
+        verseNumbers,
       })
       .then((raw: { items: LayoutItem[]; height: number } | null) => {
         if (seq !== layoutSeq || !raw) return;
@@ -226,7 +231,7 @@
   let prefetchTimer: ReturnType<typeof setTimeout> | null = null;
   function prefetchNeighbours(): void {
     if (prefetchTimer) clearTimeout(prefetchTimer);
-    const cfg = { font: fontPx, width: columnWidth, lineSpacing, versePerLine };
+    const cfg = { font: fontPx, width: columnWidth, lineSpacing, versePerLine, verseNumbers };
     const { book, chapter } = pane;
     const count = s.chapterCount(book);
     prefetchTimer = setTimeout(() => {
@@ -347,6 +352,12 @@
     void cssW;
     void cssH;
     void pane.targetVerse;
+    // The italics switch is a PAINT input, so it has to be named here like the
+    // rest: `draw` runs inside a rAF callback, outside this effect's tracking
+    // scope, so reading it down there registers nothing and the page keeps the
+    // italics until something else happens to repaint. (Verse numbers need no
+    // entry — they change `items`, which is already the first dependency.)
+    void addedItalics;
     // Clamp before painting (untracked — clamping must never feed back into
     // layout): covers End-key overshoot, resizes, and content changes alike.
     untrack(clampScroll);
@@ -374,6 +385,7 @@
         scrollY: pane.scrollY,
         viewportW: cssW,
         viewportH: cssH,
+        addedItalics,
       },
       {
         bandVerse: pane.targetVerse,

@@ -62,6 +62,7 @@ fn cfg() -> PlumblineLayoutConfig {
         para_indent: 16.0,
         para_spacing: 8.0,
         verse_break: 0,
+        verse_numbers: 1,
     }
 }
 

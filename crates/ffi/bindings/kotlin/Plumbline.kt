@@ -272,6 +272,7 @@ fun interface MeasureCallback : Callback {
  *  by-value marshalling misreads the struct. */
 @Structure.FieldOrder(
     "width", "lineHeight", "spaceWidth", "verseNumGap", "paraIndent", "paraSpacing", "verseBreak",
+    "verseNumbers",
 )
 open class PlumblineLayoutConfig : Structure() {
     @JvmField var width: Float = 0f
@@ -282,5 +283,9 @@ open class PlumblineLayoutConfig : Structure() {
     @JvmField var paraSpacing: Float = 0f
     /** Nonzero: start every verse on a fresh line (verse-per-line mode). */
     @JvmField var verseBreak: Int = 0
+    /** Nonzero: paint the leading verse numbers. Defaulted to 1 here, not 0:
+     *  this is an on-by-default setting, and a caller that forgets to set it
+     *  should get the shipped reader, not a chapter stripped of its numbers. */
+    @JvmField var verseNumbers: Int = 1
     class ByValue : PlumblineLayoutConfig(), Structure.ByValue
 }

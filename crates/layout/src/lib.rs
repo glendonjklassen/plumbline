@@ -54,6 +54,12 @@ pub struct LayoutConfig {
     /// Start every verse on a fresh line (verse-per-line reading mode)
     /// instead of flowing verses continuously.
     pub verse_break: bool,
+    /// Paint the small leading verse numbers. Off is the "just the text"
+    /// reading mode — and it belongs HERE rather than in a shell's paint step,
+    /// because a number a shell declines to draw still holds its own width and
+    /// its gap: the text would flow around an invisible marker, which is worse
+    /// than the number it was hiding.
+    pub verse_numbers: bool,
 }
 
 impl Default for LayoutConfig {
@@ -66,6 +72,7 @@ impl Default for LayoutConfig {
             para_indent: 16.0,
             para_spacing: 8.0,
             verse_break: false,
+            verse_numbers: true,
         }
     }
 }
@@ -183,8 +190,10 @@ pub fn layout_chapter<M: Measure>(verses: &[Verse], m: &M, cfg: &LayoutConfig) -
 
         // Verse number marker. Wrap it together with the first word — a
         // number alone at the end of a line orphans it from its verse.
+        // Numbers off: no marker, no gap, and no wrap check for a box that is
+        // not there (`num_w` of zero would still reserve `verse_num_gap`).
         let num = verse.verse.to_string();
-        let num_w = m.text_width(&num);
+        let num_w = if cfg.verse_numbers { m.text_width(&num) } else { 0.0 };
         // Measure the first token once: text_width is a native shaping call
         // (Pango/DirectWrite) and render() heap-allocates. The result is reused
         // for both the number/first-word wrap check here and placing the word
@@ -195,21 +204,24 @@ pub fn layout_chapter<M: Measure>(verses: &[Verse], m: &M, cfg: &LayoutConfig) -
             (text, w)
         });
         let first_w = first_measured.as_ref().map_or(0.0, |(_, w)| *w);
-        if pen.line_started && pen.x + num_w + cfg.verse_num_gap + first_w > cfg.width {
+        let lead = if cfg.verse_numbers { num_w + cfg.verse_num_gap } else { 0.0 };
+        if pen.line_started && pen.x + lead + first_w > cfg.width {
             pen.newline(cfg);
         }
-        items.push(PlacedItem {
-            x: pen.x,
-            y: pen.y,
-            w: num_w,
-            h: cfg.line_height,
-            text: num,
-            kind: ItemKind::VerseNumber(verse.verse),
-            flags: 0,
-            strongs: Vec::new(),
-        });
-        pen.x += num_w + cfg.verse_num_gap;
-        pen.line_started = true;
+        if cfg.verse_numbers {
+            items.push(PlacedItem {
+                x: pen.x,
+                y: pen.y,
+                w: num_w,
+                h: cfg.line_height,
+                text: num,
+                kind: ItemKind::VerseNumber(verse.verse),
+                flags: 0,
+                strongs: Vec::new(),
+            });
+            pen.x += lead;
+            pen.line_started = true;
+        }
 
         for (ti, token) in verse.tokens.iter().enumerate() {
             // Paragraph break: start a fresh, indented line before this word
@@ -305,6 +317,7 @@ mod tests {
             para_indent: 16.0,
             para_spacing: 8.0,
             verse_break: false,
+            verse_numbers: true,
         };
         let dl = layout_chapter(verses, &m, &cfg);
 
@@ -395,6 +408,7 @@ mod para_tests {
             para_indent: 16.0,
             para_spacing: 8.0,
             verse_break: false,
+            verse_numbers: true,
         };
         let dl = layout_chapter(c.chapter_verses("Gen", 1), &Mono, &cfg);
 
@@ -432,10 +446,59 @@ mod para_tests {
             para_indent: 16.0,
             para_spacing: 8.0,
             verse_break: false,
+            verse_numbers: true,
         };
         let dl = layout_chapter(c.chapter_verses("Gen", 1), &Mono, &cfg);
         let num2 = dl.items.iter().find(|it| matches!(it.kind, ItemKind::VerseNumber(2))).unwrap();
         let wide = dl.items.iter().find(|it| it.text == "wide").unwrap();
         assert_eq!(num2.y, wide.y, "the number wraps as a unit with its word");
+    }
+
+    /// Numbers off reclaims the space they held. Not just "no number item":
+    /// the gap after it has to go too, or every verse would start behind an
+    /// invisible marker — which is exactly why this lives in the layout and
+    /// not in a shell's paint step.
+    #[test]
+    fn verse_numbers_off_emits_none_and_reclaims_their_width() {
+        let sample = concat!(
+            r#"{"format":"x","tokenization":"kjv1769-tok2","verses":2}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"t":[["","alpha","",[],0]],"v":1}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"t":[["","beta","",[],0]],"v":2}"#,
+        );
+        let c = corpus::from_str(sample).unwrap();
+        let base = LayoutConfig {
+            width: 10_000.0,
+            line_height: 20.0,
+            space_width: 5.0,
+            verse_num_gap: 4.0,
+            para_indent: 16.0,
+            para_spacing: 8.0,
+            verse_break: false,
+            verse_numbers: true,
+        };
+        let off = LayoutConfig { verse_numbers: false, ..base };
+
+        let with = layout_chapter(c.chapter_verses("Gen", 1), &Mono, &base);
+        let without = layout_chapter(c.chapter_verses("Gen", 1), &Mono, &off);
+
+        assert!(with.items.iter().any(|it| matches!(it.kind, ItemKind::VerseNumber(_))));
+        assert!(
+            !without.items.iter().any(|it| matches!(it.kind, ItemKind::VerseNumber(_))),
+            "numbers off must emit no number boxes"
+        );
+
+        // The text starts at the margin, not behind a ghost marker…
+        let alpha = without.items.iter().find(|it| it.text == "alpha").unwrap();
+        assert_eq!(alpha.x, 0.0);
+        // …and the saving is CUMULATIVE along the line: by verse 2 the text has
+        // moved left by both numbers' width plus both gaps (each "N" is 10 wide
+        // under Mono, and the gap is 4).
+        let beta_with = with.items.iter().find(|it| it.text == "beta").unwrap();
+        let beta_without = without.items.iter().find(|it| it.text == "beta").unwrap();
+        assert_eq!(beta_with.x - beta_without.x, 2.0 * (10.0 + base.verse_num_gap));
+        // Verses still flow with one space between them, not jammed together.
+        assert_eq!(beta_without.x, 5.0 * 10.0 + base.space_width);
     }
 }

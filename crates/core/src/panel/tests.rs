@@ -397,6 +397,89 @@ fn verse_extras_gate_on_full_and_prebake_author_uris() {
     assert!(su.contains(&"go:John:3:18".to_string()));
 }
 
+/// Tapping a verse says WHICH WEAVES IT IS IN, not just what it links to. The
+/// two are different questions and the partner list answers only the second: a
+/// verse with six links into one weave is one membership, and a verse in three
+/// weaves must name all three even when one of them contributes a single link.
+#[test]
+fn a_verse_names_the_weaves_it_belongs_to_once_each() {
+    let mut f = Fake { full: true, ..Default::default() };
+    f.displays.insert("John 3:16".into(), "John 3:16".into());
+    f.words.insert(("John 3:16".into(), 1), "God".into());
+    f.occ_count.insert("G2316".into(), 1);
+    f.entries.insert("G2316".into(), StrongsView { lemma: Some("θεός".into()), ..Default::default() });
+    let x = |verse: &str, weave: &str, i: Option<usize>| XrefView {
+        verse: verse.into(),
+        display: verse.into(),
+        weave: weave.into(),
+        weave_index: i,
+    };
+    f.xrefs.insert(
+        "John 3:16".into(),
+        vec![
+            // Three links into ONE weave, then a second weave, then back to the
+            // first — the interleaving is what a canon-ordered partner list
+            // actually looks like, and what a naive "dedupe neighbours" breaks on.
+            x("John 3:18", "Belief", Some(2)),
+            x("Rom 5:8", "Love of God", Some(5)),
+            x("John 6:47", "Belief", Some(2)),
+            x("1 John 4:9", "Love of God", Some(5)),
+            // A weave the library cannot resolve: named, but not a link.
+            x("Isa 53:5", "Unfiled", None),
+        ],
+    );
+
+    let blocks = word_study(&f, f.full, "John 3:16", 1, &["G2316".to_string()]);
+    let texts: Vec<String> = blocks.iter().map(text_of).collect();
+
+    // The heading counts DISTINCT weaves (three), not the five links.
+    assert!(texts.iter().any(|t| t == "in 3 weaves"), "membership heading missing from {texts:?}");
+    // Each weave named exactly once, in the order its first link appeared.
+    let names: Vec<&String> =
+        texts.iter().filter(|t| ["Belief", "Love of God", "Unfiled"].contains(&t.as_str())).collect();
+    assert_eq!(names, vec!["Belief", "Love of God", "Unfiled"], "each weave once, in first-seen order");
+
+    // A resolvable weave is a link to its compare card; an unresolvable one is
+    // still named, just not clickable.
+    let u = uris(&blocks);
+    assert!(u.contains(&"weave:2".to_string()));
+    assert!(u.contains(&"weave:5".to_string()));
+    // The partner list is still there and still separate — five links, all of them.
+    // `go:` keeps the book's display form, space and all (go_uri splits on the
+    // LAST space) — see go_uri_splits_on_the_last_space above.
+    assert!(u.contains(&"go:1 John:4:9".to_string()));
+    assert!(texts.iter().any(|t| t == "cross-references (5)"), "the partner list must stay");
+}
+
+/// One weave, one link: the heading has to be singular, and the section must
+/// not appear at all for a verse in no weave.
+#[test]
+fn weave_membership_is_singular_at_one_and_absent_at_none() {
+    let mut f = Fake { full: true, ..Default::default() };
+    f.displays.insert("John 3:16".into(), "John 3:16".into());
+    f.words.insert(("John 3:16".into(), 1), "God".into());
+    f.occ_count.insert("G2316".into(), 1);
+    f.entries.insert("G2316".into(), StrongsView { lemma: Some("θεός".into()), ..Default::default() });
+
+    let bare = word_study(&f, f.full, "John 3:16", 1, &["G2316".to_string()]);
+    assert!(
+        !bare.iter().any(|b| text_of(b).starts_with("in ") && text_of(b).contains("weave")),
+        "a verse in no weave gets no membership section"
+    );
+
+    f.xrefs.insert(
+        "John 3:16".into(),
+        vec![XrefView {
+            verse: "John 3:18".into(),
+            display: "John 3:18".into(),
+            weave: "Belief".into(),
+            weave_index: Some(2),
+        }],
+    );
+    let one = word_study(&f, f.full, "John 3:16", 1, &["G2316".to_string()]);
+    assert!(one.iter().any(|b| text_of(b) == "in 1 weave"), "singular at one");
+}
+
 #[test]
 fn gates_split_human_and_machine_tiers() {
     let mut f = Fake::default();

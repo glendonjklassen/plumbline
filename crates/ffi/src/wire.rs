@@ -1115,6 +1115,12 @@ pub fn blocks_to_wire(blocks: Vec<Block>) -> WirePanel {
 
 // ── config / session (shared with the GTK shell via core::config) ─────────────
 
+/// For an ON-by-default switch, so an absent key reads as the shipped default
+/// rather than as the reader having turned it off.
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct WireConfigState {
@@ -1129,6 +1135,16 @@ pub struct WireConfigState {
     /// Verse-per-line reading mode.
     #[serde(default)]
     pub verse_per_line: bool,
+    /// The two reader-typography switches: paint the leading verse numbers,
+    /// and italicize the KJV's supplied words. Both ON by default, so they
+    /// default to TRUE when absent rather than to serde's `false` — a shell
+    /// built before these existed sends neither, and reading that as "the
+    /// reader turned them off" would strip a chapter of its numbers on the
+    /// first save an older shell made.
+    #[serde(default = "default_true")]
+    pub verse_numbers: bool,
+    #[serde(default = "default_true")]
+    pub added_italics: bool,
     /// Colour theme choice (`system`/`light`/`dark`/`night`).
     #[serde(default)]
     pub theme: String,
@@ -1278,6 +1294,8 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
             .collect(),
         active_pane: cfg.active,
         verse_per_line: cfg.verse_per_line,
+        verse_numbers: cfg.verse_numbers,
+        added_italics: cfg.added_italics,
         theme: cfg.theme.token().to_string(),
         text_font: Some(cfg.text_font.token().to_string()),
         chrome_font: Some(cfg.chrome_font.token().to_string()),
@@ -1318,6 +1336,8 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
             .collect(),
         active: w.active_pane,
         verse_per_line: w.verse_per_line,
+        verse_numbers: w.verse_numbers,
+        added_italics: w.added_italics,
         theme: ThemeChoice::parse(&w.theme).unwrap_or_default(),
         // Absent, or a face this build does not ship → the default face. Same
         // stance as `core::config::from_wire`, and for the same reason.

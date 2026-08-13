@@ -59,7 +59,8 @@ class ChapterPaintKeyTest {
         textH: Float = 55.2f,
         ascent: Float = -44.1f,
         inks: ReaderInks = this.inks,
-    ) = ChapterPaintKey(Same(layout), Same(fonts), fontPx, textH, ascent, inks)
+        addedItalics: Boolean = true,
+    ) = ChapterPaintKey(Same(layout), Same(fonts), fontPx, textH, ascent, inks, addedItalics)
 
     /**
      * Every input [dev.plumbline.ui.recordChapter] reads, as the thing the reader
@@ -78,6 +79,9 @@ class ChapterPaintKeyTest {
         "the theme changed the psalm-title ink" to key(inks = inks.copy(title = 0xFF8A8A80.toInt())),
         "the theme changed the gold — verse numbers AND the overlay's dotted mark"
             to key(inks = inks.copy(gold = 0xFFD4AF37.toInt())),
+        // The recording BAKES which paint supplied words were drawn with, so the
+        // switch has to move the key or the italics stay on screen after it.
+        "the reader turned the supplied-word italics off" to key(addedItalics = false),
     )
 
     // ── the two things that must be true of every one of them ───────────────
@@ -153,7 +157,7 @@ class ChapterPaintKeyTest {
             .toSet()
         assertEquals(
             "ChapterPaintKey's fields and the inputs this file tests have drifted apart",
-            setOf("layout", "fonts", "fontPx", "textH", "ascent", "inks"),
+            setOf("layout", "fonts", "fontPx", "textH", "ascent", "inks", "addedItalics"),
             fields,
         )
     }
