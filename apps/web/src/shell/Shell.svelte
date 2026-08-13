@@ -9,6 +9,7 @@
   import BookNav from "./BookNav.svelte";
   import ExploreScreen from "./ExploreScreen.svelte";
   import PlansScreen from "./PlansScreen.svelte";
+  import VizScreen from "./VizScreen.svelte";
   import PreachScreen from "./PreachScreen.svelte";
   import HymnalScreen from "../hymnal/HymnalScreen.svelte";
   import MarkReadDialog from "./MarkReadDialog.svelte";
@@ -213,7 +214,7 @@
   const dest = $derived(
     s.showPresent || s.screen === "preach"
       ? "preach"
-      : s.screen === "explore" || s.screen === "memorize" || s.screen === "plans"
+      : s.screen === "explore" || s.screen === "memorize" || s.screen === "plans" || s.screen === "viz"
         ? "study"
         : s.screen === "hymnal"
           ? "sing"
@@ -419,6 +420,8 @@
       <MemorizeHost />
     {:else if s.screen === "plans"}
       <PlansScreen />
+    {:else if s.screen === "viz"}
+      <VizScreen />
     {:else if s.screen === "preach"}
       <PreachScreen />
     {:else if s.screen === "hymnal"}
@@ -615,7 +618,11 @@
     color: var(--gold, #9e7d38);
   }
   .chapter-nav .passage {
-    font-size: calc(16px * var(--uiScale, 1));
+    /* 19, not 16. The bar's height is set by its 44px tap floor, and the
+       passage — what the bar is ABOUT, and its widest target — filled about a
+       third of it and read as lost (maintainer, on a Pixel, 2026-08-13). The
+       Android twin took the same number. */
+    font-size: calc(19px * var(--uiScale, 1));
     padding: 8px 10px;
     color: var(--ink, #211f1a);
     white-space: nowrap;
@@ -778,6 +785,15 @@
        the way out of it stands down, so the row never has to wrap to hold a
        query. The chapter nav is the widest of them and goes first. */
     header:has(.search.open) .chapter-nav {
+      display: none;
+    }
+    /* …and so does the SPACER, which is the one that was actually costing the
+       field its width. `.spacer` is `flex: 1` and so is the open field, so the
+       two split the free space evenly and the box a reader tapped filled half
+       the bar with nothing beside it (maintainer, on a phone, 2026-08-13).
+       Hiding the chapter nav alone could not fix that: the spacer simply took
+       the room the nav gave up. */
+    header:has(.search.open) .spacer {
       display: none;
     }
   }

@@ -25,6 +25,7 @@
   import { getSession } from "../state/session.svelte";
   import ScreenBar from "../lib/ScreenBar.svelte";
   import { dispatchLink } from "../study/links";
+  import { chapterSpan, firstUnread, remaining, todayPlans } from "./planToday";
   import { lang, plural, t } from "../lib/i18n.svelte";
 
   const s = getSession();
@@ -34,33 +35,27 @@
   const dayStamp = (): string => new Date().toISOString().slice(0, 10) + "T12:00:00Z";
 
   // ── what is in flight ───────────────────────────────────────────────────────
-  const plans = $derived(s.q("plans", ""));
-  const running = $derived((plans?.running ?? []) as any[]);
-  const plan = $derived(running[0] ?? null);
+  //
+  // EVERY running plan gets its own row, in order, each naming the chapters it
+  // still wants (maintainer, 2026-08-13). This read goes through `todayPlans`
+  // rather than into `running` directly, which is the whole reason that module
+  // exists — the chip and the navigator's today card already share it, and
+  // reaching past it here got all four of its rules wrong at once: concept
+  // studies are not schedules and have no day (their id would have rendered
+  // raw, since they are not builtins), a paused plan asks nothing, a finished
+  // one has dropped out, and only the FIRST plan was ever shown.
+  const todays = $derived(todayPlans(s.q("plans", "")));
+  /** The plans that still want something today. `remaining` narrows each row to
+   *  the chapters left, so finishing Genesis 1 of a Gen 1–4 day moves the row to
+   *  "Gen 2–4" instead of standing still all evening. */
+  const needsReading = $derived(todays.filter((p) => !p.doneToday));
+  /** Plans are running, and every one of them is done for today. Saying nothing
+   *  here would fall through to "nothing on the go — start a reading plan",
+   *  which is false and a little insulting to someone who just finished. */
+  const allDone = $derived(todays.length > 0 && needsReading.length === 0);
 
-  /** A run carries an id, not a name: the label is its builtin's translated
-   *  `nameKey`, exactly as the Plans screen resolves it. */
-  function planName(id: string): string {
-    const b = ((plans?.builtins ?? []) as any[]).find((x) => x.id === id);
-    return b ? t(b.nameKey) : id;
-  }
   const dueCount = $derived(((s.q("memoryDue", dayStamp())?.refs ?? []) as string[]).length);
   const suggestedCount = $derived(((s.q("suggestedWeaves")?.suggested ?? []) as any[]).length);
-
-  /** The chapters this plan wants today, as the Plans screen words it. A paused
-   *  plan asks nothing, which is the whole point of pausing it. */
-  const planToday = $derived.by(() => {
-    if (!plan || plan.paused) return null;
-    const chapters = (plan.today?.chapters ?? []) as any[];
-    if (!chapters.length) return null;
-    return t("plans.today", { chapters: chapters.map((c) => c.display).join(", ") });
-  });
-
-  /** The first chapter of today's reading — where "Today: …" goes. */
-  const planFirstRef = $derived.by(() => {
-    const c = plan?.today?.chapters?.[0];
-    return c ? `${c.book} ${c.chapter}:1` : null;
-  });
 
   // ── the reading map, as one number and one bar ──────────────────────────────
   //
@@ -92,8 +87,11 @@
   /** refKey → the core's `go:` verb, split on the LAST space, as core `go_uri`
    *  does. Same helper PlansScreen and MemorizeHost carry. */
   const goUri = (refKey: string): string => `go:${refKey.replace(/ (?=\S*$)/, ":")}`;
-  function goToday(ev: MouseEvent): void {
-    if (planFirstRef) void dispatchLink(s, goUri(planFirstRef), ev);
+  /** Straight to the first chapter of this plan's day that is still unread —
+   *  the same target the nav-strip chip takes. */
+  function goPlan(plan: (typeof todays)[number], ev: MouseEvent): void {
+    const c = firstUnread(plan);
+    if (c) void dispatchLink(s, goUri(`${c.book} ${c.chapter}:1`), ev);
   }
 
   // The library tools, each with the count of what is IN it. Plans and Memorize
@@ -124,13 +122,10 @@
   // The maps live under ONE card (maintainer UAT, 2026-08-12: the weave map
   // "should be one of N subitems of a visualization menu item") — two sibling
   // cards read as two more tools, when they are two views of the same thing.
-  // The card expands in place: a whole destination for a two-item choice would
-  // be a hallway with two doors.
-  const VIZ = [
-    { id: "constellation", go: () => (s.mapPopup = { kind: "constellation" }) },
-    { id: "weaveMap", go: () => (s.mapPopup = { kind: "chord" }) },
-  ];
-  let vizOpen = $state(false);
+  // That card is a DOOR, not a branch: it opens a page (shell/VizScreen.svelte)
+  // the way Plans and Memorize do. It expanded in place at first, and the tree
+  // was the odd one out in a shell where a destination replaces what came
+  // before rather than unfolding inside it (maintainer, 2026-08-13).
 </script>
 
 <section class="screen" aria-label={t("nav.study")}>
@@ -142,15 +137,14 @@
          is one invitation rather than an empty box. -->
     <section class="band" aria-label={t("explore.inProgress")}>
       <h3>{t("explore.inProgress")}</h3>
-      {#if plan}
-        <button class="row" onclick={(ev) => (planToday ? goToday(ev) : openPlans())}>
-          <span class="row-name">{planName(plan.id)}</span>
-          {#if plan.paused}
-            <span class="row-note paused">{t("plans.pausedBadge")}</span>
-          {:else if planToday}
-            <span class="row-note">{planToday}</span>
-          {/if}
+      {#each needsReading as p (p.id)}
+        <button class="row" onclick={(ev) => goPlan(p, ev)}>
+          <span class="row-name">{p.name}</span>
+          <span class="row-note">{t("plans.today", { chapters: chapterSpan(remaining(p)) })}</span>
         </button>
+      {/each}
+      {#if allDone}
+        <div class="row done"><span class="row-note">{t("explore.planDone")}</span></div>
       {/if}
       {#if dueCount > 0}
         <button class="row" onclick={openMemorize}>
@@ -164,7 +158,7 @@
           <span class="row-note">{plural("explore.toReview.one", "explore.toReview.other", suggestedCount)}</span>
         </button>
       {/if}
-      {#if !plan && dueCount === 0 && suggestedCount === 0}
+      {#if todays.length === 0 && dueCount === 0 && suggestedCount === 0}
         <button class="row invite" onclick={openPlans}>
           <span class="row-note">{t("explore.nothingRunning")}</span>
         </button>
@@ -195,20 +189,10 @@
           <span class="ex-desc">{t(`explore.${c.id}.desc`)}</span>
         </button>
       {/each}
-      <div class="ex-group" class:open={vizOpen}>
-        <button class="ex-card ex-toggle" aria-expanded={vizOpen} onclick={() => (vizOpen = !vizOpen)}>
-          <span class="ex-name">{t("explore.viz")} <span class="ex-chevron">{vizOpen ? "▾" : "▸"}</span></span>
-          <span class="ex-desc">{t("explore.viz.desc")}</span>
-        </button>
-        {#if vizOpen}
-          {#each VIZ as v (v.id)}
-            <button class="ex-card ex-sub" onclick={v.go}>
-              <span class="ex-name">{t(`explore.${v.id}`)}</span>
-              <span class="ex-desc">{t(`explore.${v.id}.desc`)}</span>
-            </button>
-          {/each}
-        {/if}
-      </div>
+      <button class="ex-card" onclick={() => (s.screen = "viz")}>
+        <span class="ex-name">{t("explore.viz")} <span class="ex-chevron">›</span></span>
+        <span class="ex-desc">{t("explore.viz.desc")}</span>
+      </button>
     </div>
   </div>
 </section>
@@ -271,7 +255,7 @@
     font-size: calc(14.5px * var(--uiScale, 1));
     color: var(--gold, #9e7d38);
   }
-  .row-note.paused {
+  .row.done .row-note {
     color: var(--faded, #8a8276);
   }
   .invite .row-note {
@@ -363,17 +347,8 @@
     line-height: 1.4;
     color: var(--faded, #8a8276);
   }
-  /* The Visualizations group: one grid cell, the toggle card on top and the
-     sub-cards stacked under it when open — the choice unfolds where the
-     reader's finger already is instead of navigating anywhere. */
-  .ex-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .ex-sub {
-    margin-left: 18px;
-  }
+  /* The one card that opens a PAGE rather than a panel — the chevron says so,
+     the same way a settings row leading somewhere does. */
   .ex-chevron {
     color: var(--gold, #9e7d38);
     font-size: calc(13px * var(--uiScale, 1));

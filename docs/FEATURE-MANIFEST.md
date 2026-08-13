@@ -55,6 +55,16 @@ never a synthetic smear.
   token or lines wrap where they are not drawn. A change is `session.setTextFont`,
   which loads the face into both sides BEFORE bumping `layoutEpoch`. The chrome
   face is `--chrome-font` on the root, read by `body` in `app.css`.
+- **The top bar's passage is 19, not 16** (both shells, 2026-08-13). The bar's
+  height is set by its touch targets — 48dp of icon button on Android, the 44px
+  floor on the web — and the passage is the thing the bar is ABOUT as well as
+  its widest tap target, so at 16 it filled about a third of the bar and read as
+  lost on a Pixel. Raising it does not grow the bar: measured, the web header is
+  65px at either size. Android's copy ALSO takes the reader's text scale now,
+  which it had never done (its labels were fixed sp while the web's chrome
+  followed `--uiScale`), and the phone's nav group takes the row's spare width
+  with the passage ellipsizing — a Compose Row cannot wrap the way the web
+  header does, and what would run off the end is the ≡.
 - **Android.** `ui/Fonts.kt` is the same table (same tokens); `Typography.kt`
   builds a `FontFamily` per face and `serifTypography` substitutes it into
   Material's whole scale, so a bare `Text(…, fontSize = 15.sp)` picks the chrome
@@ -836,9 +846,15 @@ Backup/Restore — sits behind ONE collapsed **Advanced** disclosure
 
 **The Study hub's contents** (both shells, a described card list so the tools
 aren't cryptic): Reading plans (web only until Android's plans ship) ·
-Memorize · Notes · Threads · Tags · Weaves · **Visualizations** (an expanding
-card holding Constellation · Weave map as sub-items — two views of the same
-thing, not two more tools; UAT 2026-08-12) — every
+Memorize · Notes · Threads · Tags · Weaves · **Visualizations** (one card
+holding Constellation · Weave map — two views of the same thing, not two more
+tools; UAT 2026-08-12). That card is a **door, not a branch**: it opens a PAGE
+one layer down (`shell/VizScreen.svelte`; on Android a second `MapOverlay`),
+whose ‹ returns to the hub rather than to the reader — the relationship Plans
+and Memorize already have with it. It expanded in place at first, with the maps
+as indented sub-cards, and that tree was the odd one out in a shell where a
+destination replaces what came before rather than unfolding inside it
+(maintainer, 2026-08-13). Every
 card's label from the same `explore.*` keys in both shells (the Android
 weave-map card had drifted onto `map.chordMap`; fixed). *Delta:* the web lists
 **Suggested** as its own card (`ExploreScreen.svelte`); Android folds it into
@@ -852,9 +868,20 @@ additions, both live:
 
 - an **IN PROGRESS band** above the cards, drawing only rows that have
   something to say (a hub reading "0 due · 0 to review" every day is the fixed
-  text again): the running plan and today's chapters, the memorize queue when
-  anything is due, the review queue when anything waits, and — when nothing is
-  running at all — one invitation instead of an empty box;
+  text again): ONE ROW PER RUNNING PLAN in order, each naming the chapters it
+  still wants; the memorize queue when anything is due; the review queue when
+  anything waits; and — when nothing is running at all — one invitation instead
+  of an empty box. The plan rows go through `planToday.ts`'s `todayPlans`, the
+  same shaping the nav-strip chip and the navigator's today card share, which
+  is what keeps four rules right at once: a concept study is not a schedule and
+  has no day (and is not a builtin, so its raw id would otherwise render as a
+  name), a paused plan asks nothing, a finished one has dropped out, and
+  `remaining` narrows each row to what is left rather than restating the whole
+  day. Every plan running, not just the first — the band read `running[0]` when
+  it shipped, so a reader with three schedules saw one and no sign of the
+  others while the chip two screens away said "+2 more" (maintainer,
+  2026-08-13). All plans done for the day says so, rather than falling through
+  to the start-a-plan invitation;
 - a **count on every card that holds a collection** (notes, threads, tags,
   weaves, suggested), absent at zero so an empty tool reads as quiet rather
   than as a score of nought. Plans and Memorize carry none: they are activities
