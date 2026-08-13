@@ -618,7 +618,11 @@
     color: var(--gold, #9e7d38);
   }
   .chapter-nav .passage {
-    font-size: calc(16px * var(--uiScale, 1));
+    /* 19, not 16. The bar's height is set by its 44px tap floor, and the
+       passage — what the bar is ABOUT, and its widest target — filled about a
+       third of it and read as lost (maintainer, on a Pixel, 2026-08-13). The
+       Android twin took the same number. */
+    font-size: calc(19px * var(--uiScale, 1));
     padding: 8px 10px;
     color: var(--ink, #211f1a);
     white-space: nowrap;

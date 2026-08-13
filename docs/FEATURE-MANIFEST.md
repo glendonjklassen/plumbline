@@ -55,6 +55,16 @@ never a synthetic smear.
   token or lines wrap where they are not drawn. A change is `session.setTextFont`,
   which loads the face into both sides BEFORE bumping `layoutEpoch`. The chrome
   face is `--chrome-font` on the root, read by `body` in `app.css`.
+- **The top bar's passage is 19, not 16** (both shells, 2026-08-13). The bar's
+  height is set by its touch targets — 48dp of icon button on Android, the 44px
+  floor on the web — and the passage is the thing the bar is ABOUT as well as
+  its widest tap target, so at 16 it filled about a third of the bar and read as
+  lost on a Pixel. Raising it does not grow the bar: measured, the web header is
+  65px at either size. Android's copy ALSO takes the reader's text scale now,
+  which it had never done (its labels were fixed sp while the web's chrome
+  followed `--uiScale`), and the phone's nav group takes the row's spare width
+  with the passage ellipsizing — a Compose Row cannot wrap the way the web
+  header does, and what would run off the end is the ≡.
 - **Android.** `ui/Fonts.kt` is the same table (same tokens); `Typography.kt`
   builds a `FontFamily` per face and `serifTypography` substitutes it into
   Material's whole scale, so a bare `Text(…, fontSize = 15.sp)` picks the chrome

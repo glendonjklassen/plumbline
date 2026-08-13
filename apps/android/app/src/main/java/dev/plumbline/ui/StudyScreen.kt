@@ -95,6 +95,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -902,6 +903,7 @@ fun StudyScreen(
                         onGuide = { openLibrary(Library.Guide) },
                         onSettings = { showSettings = true },
                         onWelcome = { reopenIntro = introChoice ?: "new" },
+                        scale = studyScale,
                     )
                     HorizontalDivider(color = palette.rule)
 
@@ -1460,6 +1462,11 @@ private fun TopBar(
     onGuide: () -> Unit,
     onSettings: () -> Unit,
     onWelcome: () -> Unit,
+    /** The reader's text size as a factor of the shipped 18 — the same number
+     *  the study panel and the search sheet take. The bar's own labels were
+     *  fixed sp, so a reader who set 28 got a bar that ignored them, while the
+     *  web's chrome followed (`--uiScale`). */
+    scale: Float = 1f,
 ) {
     Surface(color = palette.paneNavBg) {
         Row(
@@ -1467,18 +1474,37 @@ private fun TopBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Phone: the single pane's book nav lives here (no per-pane header).
+            //
+            // The group takes the row's spare width so the trailing icons can
+            // never be pushed off the end — the passage ELLIPSIZES instead.
+            // A Compose Row cannot wrap the way the web header does, and what
+            // runs off the end here would be the ≡, i.e. the way to Settings.
             if (mode == UiMode.FullscreenVertical) {
                 val name = toc.firstOrNull { it.id == book }?.name ?: book
-                IconButton(onClick = onPrev) {
-                    Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = t("common.previousChapter"), tint = palette.ink)
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onPrev) {
+                        Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = t("common.previousChapter"), tint = palette.ink)
+                    }
+                    // 19sp, not 16: the bar's height is set by its 48dp touch
+                    // targets, and the passage — the thing the bar is ABOUT,
+                    // and its widest tap target — filled about a third of it
+                    // and read as lost (maintainer, Pixel, 2026-08-13).
+                    TextButton(onClick = onOpenNav, modifier = Modifier.weight(1f, fill = false)) {
+                        Text(
+                            "$name $chapter",
+                            color = palette.ink,
+                            fontSize = (19 * scale).sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    IconButton(onClick = onNext) {
+                        Icon(Icons.Filled.KeyboardArrowRight, contentDescription = t("common.nextChapter"), tint = palette.ink)
+                    }
                 }
-                TextButton(onClick = onOpenNav) { Text("$name $chapter", color = palette.ink, fontSize = 16.sp) }
-                IconButton(onClick = onNext) {
-                    Icon(Icons.Filled.KeyboardArrowRight, contentDescription = t("common.nextChapter"), tint = palette.ink)
-                }
+            } else {
+                Spacer(Modifier.weight(1f))
             }
-
-            Spacer(Modifier.weight(1f))
 
             // Share the app lives on the SHARE destination now (the bar role),
             // not as a header dialog.
