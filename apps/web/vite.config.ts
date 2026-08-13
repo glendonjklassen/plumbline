@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
-import { DEFAULT_FONT, FONT_FILES } from "./src/engine/fonts.generated";
+import { DEFAULT_FONT, FONT_ALL_FILES, FONT_FILES } from "./src/engine/fonts.generated";
 
 // Two different lists, because preloading and precaching answer two different
 // questions.
@@ -20,7 +20,10 @@ import { DEFAULT_FONT, FONT_FILES } from "./src/engine/fonts.generated";
 const fontPathsOf = (token: string): string[] =>
   Object.values(FONT_FILES[token]).filter((p): p is string => typeof p === "string");
 const DEFAULT_FONT_PATHS: string[] = fontPathsOf(DEFAULT_FONT);
-const ALL_FONT_PATHS: string[] = Object.keys(FONT_FILES).flatMap(fontPathsOf);
+// FONT_ALL_FILES, not FONT_FILES: the latter is the engine worker's
+// measurement list and deliberately omits the chrome-only static bolds
+// (Atkinson), which the offline precache still owes the document.
+const ALL_FONT_PATHS: string[] = [...FONT_ALL_FILES];
 
 // base "./" keeps the bundle host-agnostic: it works at a domain root (Azure
 // SWA) and under a repo subpath (GitHub Pages) without a rebuild.

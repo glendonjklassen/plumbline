@@ -15,6 +15,7 @@ export const FONT_FILES: Readonly<Record<string, FontFiles>> = {
   "literata": { normal: "fonts/Literata-4d7dcb71.woff2", italic: "fonts/Literata-Italic-d38ec0f7.woff2" },
   "inter": { normal: "fonts/Inter-8366ba8a.woff2", italic: "fonts/Inter-Italic-46b982a6.woff2" },
   "fira-code": { normal: "fonts/FiraCode-909ef859.woff2" },
+  "atkinson-hyperlegible": { normal: "fonts/AtkinsonHyperlegible-Regular-4327a45b.woff2", italic: "fonts/AtkinsonHyperlegible-Italic-e0777042.woff2" },
 };
 
 /** Token → the family name the @font-face rules declare (what a `ctx.font`
@@ -24,6 +25,7 @@ export const FONT_CSS_FAMILY: Readonly<Record<string, string>> = {
   "literata": "Literata",
   "inter": "Inter",
   "fira-code": "Fira Code",
+  "atkinson-hyperlegible": "Atkinson Hyperlegible",
 };
 
 /** The face every axis falls back to — the shipped default, and the answer for
@@ -38,6 +40,7 @@ export const FONT_FALLBACK: Readonly<Record<string, string>> = {
   "literata": "Georgia, serif",
   "inter": "system-ui, sans-serif",
   "fira-code": "ui-monospace, monospace",
+  "atkinson-hyperlegible": "system-ui, sans-serif",
 };
 
 /** Token → the face's optical size multiplier, mirroring
@@ -50,4 +53,24 @@ export const FONT_SCALE: Readonly<Record<string, number>> = {
   "literata": 0.89,
   "inter": 0.87,
   "fira-code": 0.88,
+  "atkinson-hyperlegible": 0.9,
 };
+
+/** EVERY built font file — FONT_FILES plus the chrome-only static bolds that
+ *  the engine worker never measures with. This is the offline PRECACHE list
+ *  (vite.config's shell manifest): a face the document can be asked to paint
+ *  must be on the device, or "can I read offline" depends on whether bold
+ *  chrome text ever rendered while the network was up. */
+export const FONT_ALL_FILES: readonly string[] = [
+  "fonts/EBGaramond-12d2a64e.woff2",
+  "fonts/EBGaramond-Italic-74dbff24.woff2",
+  "fonts/Literata-4d7dcb71.woff2",
+  "fonts/Literata-Italic-d38ec0f7.woff2",
+  "fonts/Inter-8366ba8a.woff2",
+  "fonts/Inter-Italic-46b982a6.woff2",
+  "fonts/FiraCode-909ef859.woff2",
+  "fonts/AtkinsonHyperlegible-Regular-4327a45b.woff2",
+  "fonts/AtkinsonHyperlegible-Italic-e0777042.woff2",
+  "fonts/AtkinsonHyperlegible-Bold-d14a069b.woff2",
+  "fonts/AtkinsonHyperlegible-BoldItalic-26c11fe2.woff2",
+];

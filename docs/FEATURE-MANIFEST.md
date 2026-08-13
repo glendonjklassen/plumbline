@@ -71,11 +71,21 @@ never a synthetic smear.
   (`FLAG_ADDED`) are then marked by the palette's `added` tone alone, which is
   present in every theme. `Font::has_italic` is the one place that fact lives;
   both shells ask it rather than deciding.
+- **A STATIC family declares its own bolds.** Atkinson Hyperlegible (added
+  2026-08-12, the Braille Institute's low-vision face) has no `wght` axis —
+  its bold is its own file. `Font::static_bold` is where that fact lives: the
+  web's @font-face declares each static face at its single weight (a static
+  400 declared as `400 700` paints bold text regular) and lists the 700s as
+  chrome-only (the engine worker measures scripture, which is never bold, so
+  they stay out of its FONT_FILES load list); Android's `FontSpec` carries
+  `bold`/`boldItalic` asset paths that `loadTypefaces` and `buildSerifFamily`
+  prefer over driving the axis.
 - **Per-face optical scale** — `Font::scale()` in the core, mirrored as
   `FONT_SCALE` (web, generated) and `FontSpec.scale` (Android): eb-garamond
-  1.00 · literata 0.89 · inter 0.87 · fira-code 0.88. The bundled faces'
+  1.00 · literata 0.89 · inter 0.87 · fira-code 0.88 · atkinson-hyperlegible
+  0.90. The bundled faces'
   x-heights differ enormously (as a fraction of the em: Garamond 0.400,
-  Literata 0.507, Fira Code 0.525, Inter 0.546), so at the same px Inter read
+  Literata 0.507, Fira Code 0.525, Inter 0.546, Atkinson 0.496), so at the same px Inter read
   over a third larger than Garamond and a face switch changed the apparent
   size, not just the voice. The correction is deliberately PARTIAL — half way
   toward equal x-height, not all the way: full equalisation would render Inter
@@ -94,9 +104,9 @@ never a synthetic smear.
 - **Delivery.** Web: `@font-face` is lazy, so a reader downloads only the
   families they select; the boot PRELOAD names the default family only (a
   preload of four would compete with the data pack for bandwidth), while the
-  offline PRECACHE names all of them (~1 MB once) so "can I read offline" never
+  offline PRECACHE names all of them (~1.1 MB once) so "can I read offline" never
   depends on whether a font fetch happened to be seen by the service worker.
-  Android bundles all four in the APK.
+  Android bundles all five in the APK.
 
 **Provenance of the old rule, so it is not re-canonised:** "one face, chrome
 included" was never a decision. `body { font-family: "EB Garamond" }` arrived in
@@ -128,15 +138,21 @@ compounds it) — sizes and line heights up roughly 2 px / 2.5 sp over the body.
 | LINK_INSET / YINSET | 14 / 5 px | connector gutter inset / clamp margin (`ConnectorsOverlay.svelte`) |
 
 Palette: the one source is `plumbline_core::theme::palette(theme)`, served as
-`plumbline_theme_palette_json` — **fifteen concrete themes** plus follow-system:
-the built-ins (light / dark / night) and the named presets (Darcula, Solarized
+`plumbline_theme_palette_json` — **eighteen concrete themes** plus follow-system:
+the built-ins (light / dark / night), the named editor presets (Solarized
 Light/Dark, Gruvbox, Nord, One Dark, Sepia, Catppuccin Mocha/Latte, Tokyo Night,
-Rosé Pine, Synthwave). Both shells paint reader + chrome + study panel from the
+Rosé Pine, Synthwave), and the house originals (Scriptorium — parchment with
+rubricated accents, light; Blueprint — cyanotype; Phosphor — green CRT with
+amber accents; High Contrast — the deliberate low-vision option, light).
+Darcula was retired 2026-08-12 as a near-duplicate of One Dark; both `parse`s
+alias the stored token there, so a config that holds it opens on its nearest
+neighbour instead of snapping to System. Both shells paint reader + chrome +
+study panel from the
 returned values rather than any hex of their own, and pick the theme from a
 dropdown (`ThemeChoice`), not a radio column. The navigator's reading-map tiles
 (`read_unread`/`read_partial`/`read_done`) reuse each theme's own
 gold/divine/tier_human, so the map always belongs to the active theme. Every
-text role clears WCAG-AA on every surface across all fifteen — a core test
+text role clears WCAG-AA on every surface across all eighteen — a core test
 (`contrast::every_text_role_clears_aa_on_every_surface`), not a convention. The LIGHT values, which are the
 shipped originals: paper `#fcf9f4`; ink `#211f1a`; gold accent `#9e7d38`;
 added-word gray `#6b6862`; divine `#4d3326`; popup paper `#f2eee6`; pane-nav bg

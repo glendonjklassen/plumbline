@@ -148,7 +148,11 @@ private fun loadTypefaces(context: Context, spec: FontSpec): ReaderTypefaces {
     // `added` tone is what marks them (see FontSpec). Synthesising a slant here
     // is exactly what we are refusing to do.
     val italic = spec.italic?.let { at(it, 400) } ?: regular
-    val bold = at(spec.regular, 700) ?: Typeface.create(regular, Typeface.BOLD)
+    // A static family (Atkinson) carries its bold as its own file; a variable
+    // one is the same file driven to 700 on the wght axis.
+    val bold = spec.bold?.let { at(it, 700) }
+        ?: at(spec.regular, 700)
+        ?: Typeface.create(regular, Typeface.BOLD)
     return ReaderTypefaces(regular, italic, bold)
 }
 

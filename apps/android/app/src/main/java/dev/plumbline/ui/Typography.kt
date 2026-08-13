@@ -129,12 +129,16 @@ private fun buildSerifFamily(assets: AssetManager, spec: FontSpec): FontFamily =
         weight = FontWeight.Normal,
         variationSettings = FontVariation.Settings(FontVariation.weight(400)),
     )
-    faces += Font(
-        spec.regular,
-        assets,
-        weight = FontWeight.Bold,
-        variationSettings = FontVariation.Settings(FontVariation.weight(700)),
-    )
+    // A STATIC family (Atkinson) ships bold as its own file — driving a file
+    // with no wght axis to 700 changes nothing, and bold text would paint
+    // regular. Variable families keep riding the axis.
+    faces += spec.bold?.let { Font(it, assets, weight = FontWeight.Bold) }
+        ?: Font(
+            spec.regular,
+            assets,
+            weight = FontWeight.Bold,
+            variationSettings = FontVariation.Settings(FontVariation.weight(700)),
+        )
     // Only when the family HAS an italic. Compose would otherwise synthesise one
     // for FontStyle.Italic; see FontSpec.
     spec.italic?.let { italic ->
@@ -144,13 +148,14 @@ private fun buildSerifFamily(assets: AssetManager, spec: FontSpec): FontFamily =
             style = FontStyle.Italic,
             variationSettings = FontVariation.Settings(FontVariation.weight(400)),
         )
-        faces += Font(
-            italic,
-            assets,
-            weight = FontWeight.Bold,
-            style = FontStyle.Italic,
-            variationSettings = FontVariation.Settings(FontVariation.weight(700)),
-        )
+        faces += spec.boldItalic?.let { Font(it, assets, weight = FontWeight.Bold, style = FontStyle.Italic) }
+            ?: Font(
+                italic,
+                assets,
+                weight = FontWeight.Bold,
+                style = FontStyle.Italic,
+                variationSettings = FontVariation.Settings(FontVariation.weight(700)),
+            )
     }
     FontFamily(faces)
 }.getOrElse { FontFamily.Serif }

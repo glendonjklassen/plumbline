@@ -1947,7 +1947,6 @@ private fun SettingsDialog(
                     "light" to t("settings.themeLight"),
                     "dark" to t("settings.themeDark"),
                     "night" to t("settings.themeNight"),
-                    "darcula" to t("settings.themeDarcula"),
                     "solarized-light" to t("settings.themeSolarizedLight"),
                     "solarized-dark" to t("settings.themeSolarizedDark"),
                     "gruvbox" to t("settings.themeGruvbox"),
@@ -1959,6 +1958,10 @@ private fun SettingsDialog(
                     "tokyo-night" to t("settings.themeTokyoNight"),
                     "rose-pine" to t("settings.themeRosePine"),
                     "synthwave" to t("settings.themeSynthwave"),
+                    "scriptorium" to t("settings.themeScriptorium"),
+                    "blueprint" to t("settings.themeBlueprint"),
+                    "phosphor" to t("settings.themePhosphor"),
+                    "high-contrast" to t("settings.themeHighContrast"),
                 )
                 var themeMenu by remember { mutableStateOf(false) }
                 val currentTheme = themes.firstOrNull { it.first == themeChoice } ?: themes.first()

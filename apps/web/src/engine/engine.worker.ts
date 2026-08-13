@@ -797,7 +797,6 @@ self.onmessage = async (ev: MessageEvent) => {
           "light",
           "dark",
           "night",
-          "darcula",
           "solarized-light",
           "solarized-dark",
           "gruvbox",
@@ -809,6 +808,10 @@ self.onmessage = async (ev: MessageEvent) => {
           "tokyo-night",
           "rose-pine",
           "synthwave",
+          "scriptorium",
+          "blueprint",
+          "phosphor",
+          "high-contrast",
         ];
         const palettes: Record<string, unknown> = {};
         for (const tk of THEME_TOKENS) palettes[tk] = themePalette(booted.wasm, tk);

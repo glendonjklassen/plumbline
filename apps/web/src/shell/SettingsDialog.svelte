@@ -511,7 +511,6 @@
     "light",
     "dark",
     "night",
-    "darcula",
     "solarized-light",
     "solarized-dark",
     "gruvbox",
@@ -523,13 +522,16 @@
     "tokyo-night",
     "rose-pine",
     "synthwave",
+    "scriptorium",
+    "blueprint",
+    "phosphor",
+    "high-contrast",
   ] as const;
   const themeLabel: Record<(typeof themes)[number], string> = {
     system: "themeSystem",
     light: "themeLight",
     dark: "themeDark",
     night: "themeNight",
-    darcula: "themeDarcula",
     "solarized-light": "themeSolarizedLight",
     "solarized-dark": "themeSolarizedDark",
     gruvbox: "themeGruvbox",
@@ -541,6 +543,10 @@
     "tokyo-night": "themeTokyoNight",
     "rose-pine": "themeRosePine",
     synthwave: "themeSynthwave",
+    scriptorium: "themeScriptorium",
+    blueprint: "themeBlueprint",
+    phosphor: "themePhosphor",
+    "high-contrast": "themeHighContrast",
   };
   // Straight off the generated registry, so a family added to
   // scripts/subset-fonts.mjs appears in both pickers with no edit here — and a
