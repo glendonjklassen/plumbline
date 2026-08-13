@@ -124,13 +124,10 @@
   // The maps live under ONE card (maintainer UAT, 2026-08-12: the weave map
   // "should be one of N subitems of a visualization menu item") — two sibling
   // cards read as two more tools, when they are two views of the same thing.
-  // The card expands in place: a whole destination for a two-item choice would
-  // be a hallway with two doors.
-  const VIZ = [
-    { id: "constellation", go: () => (s.mapPopup = { kind: "constellation" }) },
-    { id: "weaveMap", go: () => (s.mapPopup = { kind: "chord" }) },
-  ];
-  let vizOpen = $state(false);
+  // That card is a DOOR, not a branch: it opens a page (shell/VizScreen.svelte)
+  // the way Plans and Memorize do. It expanded in place at first, and the tree
+  // was the odd one out in a shell where a destination replaces what came
+  // before rather than unfolding inside it (maintainer, 2026-08-13).
 </script>
 
 <section class="screen" aria-label={t("nav.study")}>
@@ -195,20 +192,10 @@
           <span class="ex-desc">{t(`explore.${c.id}.desc`)}</span>
         </button>
       {/each}
-      <div class="ex-group" class:open={vizOpen}>
-        <button class="ex-card ex-toggle" aria-expanded={vizOpen} onclick={() => (vizOpen = !vizOpen)}>
-          <span class="ex-name">{t("explore.viz")} <span class="ex-chevron">{vizOpen ? "▾" : "▸"}</span></span>
-          <span class="ex-desc">{t("explore.viz.desc")}</span>
-        </button>
-        {#if vizOpen}
-          {#each VIZ as v (v.id)}
-            <button class="ex-card ex-sub" onclick={v.go}>
-              <span class="ex-name">{t(`explore.${v.id}`)}</span>
-              <span class="ex-desc">{t(`explore.${v.id}.desc`)}</span>
-            </button>
-          {/each}
-        {/if}
-      </div>
+      <button class="ex-card" onclick={() => (s.screen = "viz")}>
+        <span class="ex-name">{t("explore.viz")} <span class="ex-chevron">›</span></span>
+        <span class="ex-desc">{t("explore.viz.desc")}</span>
+      </button>
     </div>
   </div>
 </section>
@@ -363,17 +350,8 @@
     line-height: 1.4;
     color: var(--faded, #8a8276);
   }
-  /* The Visualizations group: one grid cell, the toggle card on top and the
-     sub-cards stacked under it when open — the choice unfolds where the
-     reader's finger already is instead of navigating anywhere. */
-  .ex-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .ex-sub {
-    margin-left: 18px;
-  }
+  /* The one card that opens a PAGE rather than a panel — the chevron says so,
+     the same way a settings row leading somewhere does. */
   .ex-chevron {
     color: var(--gold, #9e7d38);
     font-size: calc(13px * var(--uiScale, 1));

@@ -9,6 +9,7 @@
   import BookNav from "./BookNav.svelte";
   import ExploreScreen from "./ExploreScreen.svelte";
   import PlansScreen from "./PlansScreen.svelte";
+  import VizScreen from "./VizScreen.svelte";
   import PreachScreen from "./PreachScreen.svelte";
   import HymnalScreen from "../hymnal/HymnalScreen.svelte";
   import MarkReadDialog from "./MarkReadDialog.svelte";
@@ -213,7 +214,7 @@
   const dest = $derived(
     s.showPresent || s.screen === "preach"
       ? "preach"
-      : s.screen === "explore" || s.screen === "memorize" || s.screen === "plans"
+      : s.screen === "explore" || s.screen === "memorize" || s.screen === "plans" || s.screen === "viz"
         ? "study"
         : s.screen === "hymnal"
           ? "sing"
@@ -419,6 +420,8 @@
       <MemorizeHost />
     {:else if s.screen === "plans"}
       <PlansScreen />
+    {:else if s.screen === "viz"}
+      <VizScreen />
     {:else if s.screen === "preach"}
       <PreachScreen />
     {:else if s.screen === "hymnal"}

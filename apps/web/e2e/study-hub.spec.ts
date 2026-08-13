@@ -104,6 +104,32 @@ test("the tool cards count what is in them, and stay quiet at zero", async ({ pa
   await expect.poll(async () => Number(await countOn(page, "Threads")), { timeout: 15_000 }).toBe(before + 1);
 });
 
+// Visualizations is a DOOR, not a branch. It expanded in place at first, with
+// the two maps as indented sub-cards, and that tree was the odd one out in a
+// shell where a destination replaces what came before (maintainer, 2026-08-13).
+// The distinction an inline expansion would fail: the hub's own cards have to
+// be GONE while the page is up, and ‹ has to come back to the hub rather than
+// to the reader.
+test("Visualizations opens a page of its own, and ‹ returns to the hub", async ({ page }) => {
+  await boot(page);
+  await openStudy(page);
+  await expect(page.getByRole("button", { name: /^Reading plans/ })).toBeVisible();
+
+  await page.getByRole("button", { name: /^Visualizations/ }).click();
+
+  // A page: its own bar, and the hub it came from is no longer on screen.
+  await expect(page.locator(".bar h2")).toHaveText("Visualizations");
+  await expect(page.getByRole("button", { name: /^Reading plans/ })).toHaveCount(0);
+  // Both maps, each with its full description rather than an indented line.
+  await expect(page.getByRole("button", { name: /^Constellation/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Weave map/ })).toBeVisible();
+
+  // ‹ goes UP ONE LAYER, to Study — not back to the reader.
+  await page.locator(".bar .back").click();
+  await expect(page.locator(".bar h2")).toHaveText("Study");
+  await expect(page.getByRole("button", { name: /^Reading plans/ })).toBeVisible();
+});
+
 test("coverage counts the chapters actually read", async ({ page }) => {
   await boot(page);
   await openStudy(page);

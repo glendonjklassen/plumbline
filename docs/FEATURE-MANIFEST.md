@@ -836,9 +836,15 @@ Backup/Restore — sits behind ONE collapsed **Advanced** disclosure
 
 **The Study hub's contents** (both shells, a described card list so the tools
 aren't cryptic): Reading plans (web only until Android's plans ship) ·
-Memorize · Notes · Threads · Tags · Weaves · **Visualizations** (an expanding
-card holding Constellation · Weave map as sub-items — two views of the same
-thing, not two more tools; UAT 2026-08-12) — every
+Memorize · Notes · Threads · Tags · Weaves · **Visualizations** (one card
+holding Constellation · Weave map — two views of the same thing, not two more
+tools; UAT 2026-08-12). That card is a **door, not a branch**: it opens a PAGE
+one layer down (`shell/VizScreen.svelte`; on Android a second `MapOverlay`),
+whose ‹ returns to the hub rather than to the reader — the relationship Plans
+and Memorize already have with it. It expanded in place at first, with the maps
+as indented sub-cards, and that tree was the odd one out in a shell where a
+destination replaces what came before rather than unfolding inside it
+(maintainer, 2026-08-13). Every
 card's label from the same `explore.*` keys in both shells (the Android
 weave-map card had drifted onto `map.chordMap`; fixed). *Delta:* the web lists
 **Suggested** as its own card (`ExploreScreen.svelte`); Android folds it into

@@ -214,7 +214,7 @@ export class Session {
    * were reading. `"read"` is the absence of a destination rather than one of
    * its own.
    */
-  screen = $state<"read" | "explore" | "memorize" | "plans" | "preach" | "hymnal" | "share">("read");
+  screen = $state<"read" | "explore" | "memorize" | "plans" | "viz" | "preach" | "hymnal" | "share">("read");
 
   // ── the hymnal ──────────────────────────────────────────────────────────────
 

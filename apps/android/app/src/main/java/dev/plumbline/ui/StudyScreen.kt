@@ -1712,10 +1712,13 @@ private fun ExploreScreen(
     onClose: () -> Unit,
     barActions: @Composable RowScope.() -> Unit = {},
 ) {
-    // The maps live under ONE expanding card (web twin ExploreScreen.svelte;
-    // maintainer UAT, 2026-08-12) — two sibling cards read as two more tools,
-    // when they are two views of the same thing.
-    var vizOpen by remember { mutableStateOf(false) }
+    // The maps live under ONE card (web twin ExploreScreen.svelte; maintainer
+    // UAT, 2026-08-12) — two sibling cards read as two more tools, when they
+    // are two views of the same thing. That card is a DOOR: it opens a PAGE of
+    // its own, with its own back arrow, rather than growing a branch in place.
+    // The tree was the odd one out in a shell where every destination replaces
+    // what came before (maintainer, 2026-08-13).
+    var showViz by remember { mutableStateOf(false) }
 
     // How much is in each tool. One fetch per open (and per authoring write),
     // off the main thread — the same three lists their own screens open with,
@@ -1750,15 +1753,28 @@ private fun ExploreScreen(
             ExploreCard(t("explore.tags"), t("explore.tags.desc"), palette, count = tags, onClick = onTags)
             ExploreCard(t("explore.weaves"), t("explore.weaves.desc"), palette, count = weaves, onClick = onWeaves)
             ExploreCard(
-                t("explore.viz") + if (vizOpen) "  ▾" else "  ▸",
+                t("explore.viz") + "  ›",
                 t("explore.viz.desc"),
                 palette,
-            ) { vizOpen = !vizOpen }
-            if (vizOpen) {
-                ExploreCard(t("explore.constellation"), t("explore.constellation.desc"), palette, indent = true, onClick = onConstellation)
+            ) { showViz = true }
+        }
+    }
+
+    // One layer down, and its ‹ returns HERE rather than to the reader — the
+    // same relationship Memorize has with this hub.
+    if (showViz) {
+        MapOverlay(t("explore.viz"), palette, onClose = { showViz = false }, actions = barActions) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                Text(
+                    t("explore.viz.desc"),
+                    color = palette.faded,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 10.dp),
+                )
+                ExploreCard(t("explore.constellation"), t("explore.constellation.desc"), palette, onClick = onConstellation)
                 // The same key the web card renders — the one label that had
                 // drifted onto map.chordMap and risked translating twice.
-                ExploreCard(t("explore.weaveMap"), t("explore.weaveMap.desc"), palette, indent = true, onClick = onChord)
+                ExploreCard(t("explore.weaveMap"), t("explore.weaveMap.desc"), palette, onClick = onChord)
             }
         }
     }
@@ -1793,7 +1809,6 @@ private fun ExploreCard(
     title: String,
     desc: String,
     palette: ReaderPalette,
-    indent: Boolean = false,
     /** How much is IN this tool. Null, or zero, draws nothing: an empty tool
      *  should read as quiet rather than as a score of nought. */
     count: Int? = null,
@@ -1802,8 +1817,7 @@ private fun ExploreCard(
     Column(
         Modifier.fillMaxWidth()
             .clickable(onClick = onClick)
-            // Indented: a SUB-item of the card above (the Visualizations maps).
-            .padding(start = if (indent) 40.dp else 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp),
+            .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(title, color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
