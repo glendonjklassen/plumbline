@@ -510,8 +510,7 @@ fn plans_and_concept_study_via_abi() {
         let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
         assert_eq!(v["running"][0]["doneToday"], true, "a day's worth was read today");
         let tomorrow = c("2026-08-09T12:00:00Z");
-        let v: Value =
-            serde_json::from_str(&take(plumbline_engine_plans_json(e, tomorrow.as_ptr())).unwrap()).unwrap();
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, tomorrow.as_ptr())).unwrap()).unwrap();
         assert_eq!(v["running"][0]["doneToday"], false, "yesterday's reading does not quiet today");
         // (The whole one-chapter plan is now finished; `today` is gone but the
         // pause endpoint below still finds the plan.)

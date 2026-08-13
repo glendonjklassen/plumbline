@@ -156,8 +156,7 @@ fn running_state(
             let days_total = sched.len() as u32;
             let days_done = today.as_ref().map_or(days_total, |t| t.days_done);
             w.schedule_progress = Some([days_done, days_total]);
-            w.done_today =
-                Some(plan::done_today(&sched, |b, c| last_read_day(store, b, c), today_day));
+            w.done_today = Some(plan::done_today(&sched, |b, c| last_read_day(store, b, c), today_day));
             w.today = today.map(|t| WireToday {
                 day: t.day,
                 chapters: t

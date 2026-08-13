@@ -1038,7 +1038,7 @@ mod tests {
     fn time_enough_is_not_a_read_without_the_bottom_of_the_chapter() {
         // A chapter whose words are front-loaded, so the WORD bar clears while
         // verses still remain: v1=17, v2=2, v3=1 — verse 2 is 95% of 20 words.
-        let lines = vec![
+        let lines = [
             serde_json::to_string(&corpus::corpus_header(canon::TOKENIZATION_VERSION, 3)).unwrap(),
             verse("Gen", 1, 1, 17),
             verse("Gen", 1, 2, 2),
