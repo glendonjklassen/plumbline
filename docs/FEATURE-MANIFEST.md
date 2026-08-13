@@ -858,9 +858,20 @@ additions, both live:
 
 - an **IN PROGRESS band** above the cards, drawing only rows that have
   something to say (a hub reading "0 due · 0 to review" every day is the fixed
-  text again): the running plan and today's chapters, the memorize queue when
-  anything is due, the review queue when anything waits, and — when nothing is
-  running at all — one invitation instead of an empty box;
+  text again): ONE ROW PER RUNNING PLAN in order, each naming the chapters it
+  still wants; the memorize queue when anything is due; the review queue when
+  anything waits; and — when nothing is running at all — one invitation instead
+  of an empty box. The plan rows go through `planToday.ts`'s `todayPlans`, the
+  same shaping the nav-strip chip and the navigator's today card share, which
+  is what keeps four rules right at once: a concept study is not a schedule and
+  has no day (and is not a builtin, so its raw id would otherwise render as a
+  name), a paused plan asks nothing, a finished one has dropped out, and
+  `remaining` narrows each row to what is left rather than restating the whole
+  day. Every plan running, not just the first — the band read `running[0]` when
+  it shipped, so a reader with three schedules saw one and no sign of the
+  others while the chip two screens away said "+2 more" (maintainer,
+  2026-08-13). All plans done for the day says so, rather than falling through
+  to the start-a-plan invitation;
 - a **count on every card that holds a collection** (notes, threads, tags,
   weaves, suggested), absent at zero so an empty tool reads as quiet rather
   than as a score of nought. Plans and Memorize carry none: they are activities

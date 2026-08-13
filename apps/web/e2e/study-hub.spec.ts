@@ -46,11 +46,12 @@ test("the band carries the running plan and today's chapters", async ({ page }) 
   // Day one of the whole-Bible plan is Genesis 1–4, and the hub says so rather
   // than making the reader open Plans to find out.
   await expect(band).toContainText("The whole Bible in a year", { timeout: 15_000 });
-  await expect(band).toContainText("Genesis 1");
-  await expect(band).toContainText("Genesis 4");
+  // `chapterSpan` collapses a run into one span, so a Gen 1–4 day reads
+  // "Genesis 1–4" rather than four names.
+  await expect(band).toContainText("Today: Genesis 1–4");
 });
 
-test("a paused plan asks for nothing, and says so", async ({ page }) => {
+test("a paused plan asks for nothing, so it is not in the band at all", async ({ page }) => {
   await boot(page);
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
@@ -59,11 +60,59 @@ test("a paused plan asks for nothing, and says so", async ({ page }) => {
   });
   await openStudy(page);
 
+  // The band answers "what needs reading", and a paused plan needs nothing —
+  // the same rule the nav-strip chip follows. Its row is absent rather than
+  // present-and-greyed: naming chapters it is not asking for would read as
+  // asking for them.
   const band = page.locator(".band");
-  await expect(band).toContainText("paused", { timeout: 15_000 });
-  // Promising chapters it is not asking for would read as asking for them —
-  // the same call the Plans screen makes.
+  await expect(band).toContainText("In progress");
+  await expect(band).not.toContainText("The whole Bible in a year", { timeout: 15_000 });
   await expect(band).not.toContainText("Genesis 1");
+});
+
+// The defect this pins: the band read `running[0]`, so a reader with three
+// schedules saw one of them and no sign the others existed — while the chip
+// two screens away correctly said "+2 more". Every plan gets a row, in order,
+// each naming what IT still wants (maintainer, 2026-08-13).
+test("every running plan gets its own row, in order", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    // Three DIFFERENT classes, which is what lets them run at once: starting a
+    // plan only replaces its own class occupant (core::plan CLASS_*).
+    await s.engine.planStart("bible-365", "2026-08-13T12:00:00Z");
+    await s.engine.planStart("nt-90", "2026-08-13T12:00:00Z");
+    await s.engine.planStart("psalms-proverbs-30", "2026-08-13T12:00:00Z");
+  });
+  await openStudy(page);
+
+  const rows = page.locator(".band .row");
+  await expect.poll(async () => rows.count(), { timeout: 15_000 }).toBe(3);
+
+  // Each row names its own plan AND its own chapters — the whole-Bible plan
+  // opens in Genesis, the NT plan in Matthew, the devotional in Psalms. Three
+  // plans, three different books: this is the assertion `running[0]` failed.
+  const text = await page.locator(".band").innerText();
+  expect(text).toContain("The whole Bible in a year\nToday: Genesis 1\u20134");
+  expect(text).toContain("The New Testament in 90 days\nToday: Matthew 1\u20134");
+  expect(text).toContain("Psalms & Proverbs in a month\nToday: Psalms 1\u20139");
+});
+
+// A concept study is a plan in the same list, but it is not a SCHEDULE: no day,
+// no chapters, and no builtin — so the old `running[0]` read could put its raw
+// id on screen as though it were a plan name.
+test("a concept study is not a schedule, and never appears in the band", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.engine.planStart("bible-365", "2026-08-13T12:00:00Z");
+    await s.engine.conceptStudyStart("grace", "2026-08-13T12:00:00Z");
+  });
+  await openStudy(page);
+
+  const rows = page.locator(".band .row");
+  await expect.poll(async () => rows.count(), { timeout: 15_000 }).toBe(1);
+  await expect(page.locator(".band")).toContainText("The whole Bible in a year");
 });
 
 test("the tool cards count what is in them, and stay quiet at zero", async ({ page }) => {
