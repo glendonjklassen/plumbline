@@ -844,6 +844,37 @@ weave-map card had drifted onto `map.chordMap`; fixed). *Delta:* the web lists
 **Suggested** as its own card (`ExploreScreen.svelte`); Android folds it into
 one Weaves screen with an All/Suggested filter (`WeavesScreen`).
 
+**The hub carries STATE, not just a menu** (2026-08-13). It was eight identical
+rectangles of fixed text, so it looked the same on install day as after a year
+of study — "every time I click study it just doesn't excite me… not like the
+other pages", which tell you today's chapters or hold actual hymns. Two
+additions, both live:
+
+- an **IN PROGRESS band** above the cards, drawing only rows that have
+  something to say (a hub reading "0 due · 0 to review" every day is the fixed
+  text again): the running plan and today's chapters, the memorize queue when
+  anything is due, the review queue when anything waits, and — when nothing is
+  running at all — one invitation instead of an empty box;
+- a **count on every card that holds a collection** (notes, threads, tags,
+  weaves, suggested), absent at zero so an empty tool reads as quiet rather
+  than as a score of nought. Plans and Memorize carry none: they are activities
+  rather than collections, and the band already says what they want today.
+
+Closing the band is the reading map as **one number and one bar** — chapters
+read of the canon's 1,189, painted in the map's own `readDone` over a faint
+`readUnread` track, so it belongs to whichever of the eighteen themes is on and
+tapping it opens the navigator. Chapters rather than a word-weighted percentage:
+"412 of 1,189" is a number a reader can hold.
+
+NO NEW ENGINE CALLS: every number is a query some other screen already makes
+(`plans`, `memoryDue`, `suggestedWeaves`, `userNotes`, `threads`, `tags`,
+`weaves`, `readingBooks`), so the web reads them through the session cache and
+the counts move on an authoring write — a count fetched once looks perfect
+until the reader writes something, which is what `e2e/study-hub.spec.ts` pins.
+Android has no general study epoch, so it refetches on the note epoch and on
+every entry to the hub. *Delta:* the band's plan row is web-only, following
+Reading plans themselves.
+
 ## Languages (both shells)
 
 Full detail in [I18N.md](I18N.md). The contract, in one place:

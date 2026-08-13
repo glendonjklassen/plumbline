@@ -121,7 +121,7 @@ steps, all on the phone.
    open **Plumbline** from your app drawer: the whole Bible is inside the file
    you just installed, so it opens with the network off.
 
-## Getting started (60 seconds)
+## Getting started
 
 First launch asks who's opening the Book — **new in the faith** (a welcome
 with next steps, landing in John), **curious about the Bible** (for someone
