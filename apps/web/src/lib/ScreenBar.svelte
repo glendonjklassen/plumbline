@@ -73,6 +73,15 @@
   .menu:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 14%, transparent);
   }
+  /* Only where this bar is the TOPMOST chrome (a phone hides the app header on
+     a destination). Above 700px the header is still there with its own ≡ two
+     rows up — a second one here was the "two menus of different colours"
+     (maintainer UAT, 2026-08-12). The width is the header's own breakpoint. */
+  @media (min-width: 701px) {
+    .menu {
+      display: none;
+    }
+  }
   h2 {
     margin: 0;
     font-size: calc(18px * var(--uiScale, 1));

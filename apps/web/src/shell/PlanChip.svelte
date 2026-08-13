@@ -28,7 +28,10 @@
     void s.studyEpoch;
     const q = s.q("plans", "");
     if (q == null) return held;
-    return (held = todayPlans(q));
+    // A day's worth was read today (even if it was finishing yesterday's day):
+    // the chip retires until tomorrow. Reading ahead is the reader's business —
+    // the chip's job is done for the day, not owed twice.
+    return (held = todayPlans(q).filter((p) => !p.doneToday));
   });
   const lead = $derived(plans[0] ?? null);
 

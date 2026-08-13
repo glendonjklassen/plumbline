@@ -148,7 +148,11 @@ private fun loadTypefaces(context: Context, spec: FontSpec): ReaderTypefaces {
     // `added` tone is what marks them (see FontSpec). Synthesising a slant here
     // is exactly what we are refusing to do.
     val italic = spec.italic?.let { at(it, 400) } ?: regular
-    val bold = at(spec.regular, 700) ?: Typeface.create(regular, Typeface.BOLD)
+    // A static family (Atkinson) carries its bold as its own file; a variable
+    // one is the same file driven to 700 on the wght axis.
+    val bold = spec.bold?.let { at(it, 700) }
+        ?: at(spec.regular, 700)
+        ?: Typeface.create(regular, Typeface.BOLD)
     return ReaderTypefaces(regular, italic, bold)
 }
 
@@ -177,6 +181,12 @@ fun ReaderPane(
     sideMargin: Float = 28f,
     lineSpacing: Float = 1.35f,
     versePerLine: Boolean = false,
+    // The two reader-typography switches (config, both ON by default).
+    // `verseNumbers` is a LAYOUT input — it moves every word on every line, so
+    // it belongs in ChapterKey; `addedItalics` is paint-only and deliberately
+    // does NOT, or a repaint-only change would throw away a good layout.
+    verseNumbers: Boolean = true,
+    addedItalics: Boolean = true,
     searchHits: Set<String> = emptySet(),
     onWordTap: (Hit) -> Unit = {},
     onVerseLongPress: (String) -> Unit = {},
@@ -282,6 +292,7 @@ fun ReaderPane(
             lineHeight = lineH,
             spaceWidth = space,
             versePerLine = versePerLine,
+            verseNumbers = verseNumbers,
             akjvOverlay = akjvOverlay,
         )
 
@@ -315,6 +326,7 @@ fun ReaderPane(
                 paraIndent = lineH * 0.9f
                 paraSpacing = lineH * 0.45f
                 verseBreak = if (versePerLine) 1 else 0
+                this.verseNumbers = if (verseNumbers) 1 else 0
             }
             // A dedicated measure Paint, so the background layout never touches the
             // draw paints (Paint is not thread-safe) mutated on the main thread.
@@ -414,14 +426,19 @@ fun ReaderPane(
             }
         }
 
-        val docHeight = (dl?.height ?: 0f) + 2 * marginPx
         // NOT the usual bottom-stop (content bottom meets screen bottom): the
         // reader may keep pushing until the chapter's LAST LINE reaches the TOP
         // of the pane — and no further. For reading on your back, where
         // something blocks the bottom of the screen and turning early means
-        // moving your head (maintainer UAT ask, 2026-08-11). Real scroll range,
-        // not an elastic overshoot — no snap-back.
-        val maxScroll = if (dl != null) docHeight - marginPx else 0f
+        // moving your head (maintainer UAT ask, 2026-08-11). The LINE, not the
+        // content bottom: stopping at the line's top keeps it on screen, where
+        // the first cap let the text slide off entirely and left a blank pane
+        // (UAT, 2026-08-12). Real scroll range, not an elastic overshoot — no
+        // snap-back.
+        val lastLineTop = remember(dl) {
+            dl?.items?.asSequence()?.filter { it.kind == "word" }?.maxOfOrNull { it.y } ?: 0f
+        }
+        val maxScroll = if (dl != null) lastLineTop + marginPx else 0f
 
         // Scroll the navigator's target verse into view once the layout lands.
         // Epoch-guarded so a re-layout (font/margin change) doesn't re-jump.
@@ -517,10 +534,16 @@ fun ReaderPane(
             textH = textH,
             ascent = fm.ascent,
             inks = inks,
+            addedItalics = addedItalics,
         )
         val recorder = remember { Recorded<Picture>() }
         val chapterPicture = dl?.let { list ->
-            recorder.of(paintKey) { recordChapter(list, regular, italic, bold, inks, textH, fm.ascent) }
+            recorder.of(paintKey) {
+                // Italics off hands the recorder the UPRIGHT paint for supplied
+                // words. They stay marked by the `added` ink, which is the same
+                // fallback a face with no italic already gets.
+                recordChapter(list, regular, if (addedItalics) italic else regular, bold, inks, textH, fm.ascent)
+            }
         }
 
         Canvas(
@@ -811,6 +834,11 @@ internal data class ChapterPaintKey(
     val textH: Float,
     val ascent: Float,
     val inks: ReaderInks,
+    /** Whether supplied words were recorded in the italic face. In the key
+     *  because the recording BAKES the choice: without it, turning the setting
+     *  off would leave the italics on screen until something else happened to
+     *  invalidate the picture. */
+    val addedItalics: Boolean = true,
 )
 
 /**
@@ -865,6 +893,7 @@ internal data class ChapterKey(
     val lineHeight: Float,
     val spaceWidth: Float,
     val versePerLine: Boolean,
+    val verseNumbers: Boolean,
     val akjvOverlay: Boolean,
 )
 

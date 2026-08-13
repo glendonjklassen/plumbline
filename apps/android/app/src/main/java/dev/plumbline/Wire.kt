@@ -478,6 +478,11 @@ data class ConfigState(
     val firstRun: Boolean = false,
     // Frozen additive field shared with GTK's config.json — must round-trip.
     val versePerLine: Boolean = false,
+    // The two reader-typography switches (additive). Defaulted TRUE, not false:
+    // an absent key is an engine or a config from before they existed, and
+    // reading that as "off" would strip a chapter of its numbers.
+    val verseNumbers: Boolean = true,
+    val addedItalics: Boolean = true,
     // Colour theme choice: "system" | "light" | "dark" | "night". Additive.
     val theme: String = "system",
     // The two TYPE axes (additive, core::font tokens): the face scripture is

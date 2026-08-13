@@ -97,6 +97,18 @@ pub struct Config {
     pub active: usize,
     /// Verse-per-line reading mode (each verse starts a fresh line).
     pub verse_per_line: bool,
+    /// Paint the small leading verse numbers. Off is "just the text" — the
+    /// chapter reads as prose, the way a printed reader's edition sets it.
+    /// A LAYOUT input, not a paint flag: see `plumbline_layout::LayoutConfig`.
+    pub verse_numbers: bool,
+    /// Italicize the words the KJV translators supplied (`FLAG_ADDED`).
+    ///
+    /// On by default, because the italics ARE the 1769 text's own honesty about
+    /// itself. Off for a reader who finds a page of scattered italics harder to
+    /// read than the thing they mark; the words stay distinguishable either way
+    /// by the palette's `added` tone, which is the same fallback a face with no
+    /// italic already relies on ([`crate::font::Font::has_italic`]).
+    pub added_italics: bool,
     /// The reader's colour theme (Tier 0 #5). `System` follows the OS.
     pub theme: ThemeChoice,
     /// The face scripture is painted in — the reader canvas, Present, the
@@ -182,6 +194,8 @@ impl Default for Config {
             panes: Vec::new(),
             active: 0,
             verse_per_line: false,
+            verse_numbers: true,
+            added_italics: true,
             theme: ThemeChoice::default(),
             text_font: Font::default(),
             chrome_font: Font::default(),
@@ -231,6 +245,14 @@ struct ConfigWire {
     active_pane: usize,
     #[serde(default)]
     verse_per_line: bool,
+    /// The two reader-typography switches (additive). `default_true` rather
+    /// than serde's `bool` default: absent in an older file has to mean the
+    /// numbers and italics that reader has always had, not their sudden
+    /// removal on upgrade.
+    #[serde(default = "default_true")]
+    verse_numbers: bool,
+    #[serde(default = "default_true")]
+    added_italics: bool,
     #[serde(default = "default_theme_token")]
     theme: String,
     /// The two type axes (additive). Absent in an older file → the shipped
@@ -316,6 +338,11 @@ fn default_body_size() -> f64 {
 fn default_theme_token() -> String {
     ThemeChoice::default().token().to_string()
 }
+/// For an ON-by-default switch: a key absent from an older file must not read
+/// as "the reader turned this off".
+fn default_true() -> bool {
+    true
+}
 fn default_font_token() -> String {
     Font::default().token().to_string()
 }
@@ -366,6 +393,8 @@ impl Config {
             // Clamp: shells index panes with this.
             active: if n_panes == 0 { 0 } else { w.active_pane.min(n_panes - 1) },
             verse_per_line: w.verse_per_line,
+            verse_numbers: w.verse_numbers,
+            added_italics: w.added_italics,
             theme: ThemeChoice::parse(&w.theme).unwrap_or_default(),
             // A face this build does not ship falls back to the default rather
             // than to nothing: the reader is owed type they can read, and an
@@ -437,6 +466,8 @@ impl Config {
                 .collect(),
             active_pane: self.active,
             verse_per_line: self.verse_per_line,
+            verse_numbers: self.verse_numbers,
+            added_italics: self.added_italics,
             theme: self.theme.token().to_string(),
             text_font: self.text_font.token().to_string(),
             chrome_font: self.chrome_font.token().to_string(),
@@ -603,6 +634,11 @@ mod tests {
             ],
             active: 1,
             verse_per_line: true,
+            // Both OFF here: these default to true, so a round-trip that left
+            // them at the default would pass against a wire field that was
+            // never written or never read.
+            verse_numbers: false,
+            added_italics: false,
             theme: ThemeChoice::Night,
             // Two DIFFERENT non-default faces: an axis that silently carried
             // the other one's value would still round-trip if both were set the
@@ -846,6 +882,8 @@ mod tests {
   "openPanes": [],
   "activePane": 0,
   "versePerLine": false,
+  "verseNumbers": true,
+  "addedItalics": true,
   "theme": "system",
   "textFont": "eb-garamond",
   "chromeFont": "eb-garamond",

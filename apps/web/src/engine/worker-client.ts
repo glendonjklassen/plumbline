@@ -303,7 +303,7 @@ export class EngineRpc {
   layout(
     book: string,
     chapter: number,
-    o: { font: number; width: number; lineSpacing: number; versePerLine: boolean },
+    o: { font: number; width: number; lineSpacing: number; versePerLine: boolean; verseNumbers: boolean },
   ): Promise<any> {
     return this.#send({ op: "layout", book, chapter, ...o });
   }
@@ -312,7 +312,7 @@ export class EngineRpc {
   prefetch(
     book: string,
     chapter: number,
-    o: { font: number; width: number; lineSpacing: number; versePerLine: boolean },
+    o: { font: number; width: number; lineSpacing: number; versePerLine: boolean; verseNumbers: boolean },
   ): Promise<void> {
     return this.#send({ op: "prefetch", book, chapter, ...o });
   }

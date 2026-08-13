@@ -27,6 +27,13 @@
 //! 100%, and **snaps** to a full read. Nobody should be hunting a trailing verse
 //! to make a glow go away.
 //!
+//! But that snap is a tolerance on the CLOCK, not on the chapter. A pass also
+//! has to reach the **last verse** to count as a full read, because 85% of a
+//! chapter's words is a real amount of chapter to have missed — and it is the
+//! end of a chapter, where the argument lands, that a reader stops short of.
+//! So: get to the bottom, and have spent the time. Falling short of either is a
+//! partial pass, which is what the tint already knows how to say.
+//!
 //! ## What gets stored
 //!
 //! Two numbers and two dates per chapter — [`ChapterReading`]. `reached` and
@@ -379,7 +386,9 @@ pub fn since(home: impl AsRef<Path>) -> Option<String> {
 }
 
 /// The `YYYY-MM-DD` day of an RFC3339 stamp (or of a bare date, unchanged).
-fn day_of(stamp: &str) -> String {
+/// Public because it is the store's date grain: anything comparing against a
+/// `last_read`/`touched` day (the plans' done-today check) must round the same way.
+pub fn day_of(stamp: &str) -> String {
     match date_to_days(stamp) {
         Some(d) => days_to_date(d),
         None => stamp.to_string(),
@@ -469,6 +478,22 @@ fn words_through(corpus: &Corpus, book: &str, chapter: u16, reached: u16) -> u32
         words = cum.last().map_or(0, |(_, a)| *a);
     }
     words
+}
+
+/// The last verse of a chapter — the bottom a pass has to reach. Zero for a
+/// chapter the corpus does not have.
+fn last_verse(corpus: &Corpus, book: &str, chapter: u16) -> u16 {
+    corpus.chapter_verses(book, chapter).last().map_or(0, |v| v.verse)
+}
+
+/// Whether a pass got to the END of the chapter, which no percentage can say on
+/// its own: [`COMPLETE_AT`] snaps at 85%, so without this a reader who stopped
+/// three verses short with time to spare was told they had read the whole thing.
+/// Both shells report the high-water verse generously (a verse counts once its
+/// line has cleared the fold), so scrolling to the bottom does reach it.
+fn reached_end(corpus: &Corpus, book: &str, chapter: u16, reached: u16) -> bool {
+    let end = last_verse(corpus, book, chapter);
+    end > 0 && reached >= end
 }
 
 /// The dwell needed to credit `words` at the reading rate, in seconds.
@@ -782,7 +807,8 @@ pub struct Recorded {
     pub chapter: u16,
     /// Coverage after this call.
     pub pct: f32,
-    /// True when this call carried the pass over [`COMPLETE_AT`].
+    /// True when this call carried the pass over [`COMPLETE_AT`] *with* the
+    /// chapter's last verse reached.
     pub completed: bool,
     #[serde(rename = "lastRead", skip_serializing_if = "Option::is_none")]
     pub last_read: Option<String>,
@@ -796,8 +822,10 @@ pub struct Recorded {
 /// when the app goes to the background. Calling more often is correct but
 /// writes a file each time; roughly every 30 seconds is the intended cadence.
 ///
-/// Crossing [`COMPLETE_AT`] snaps coverage to a full read at `now` and clears
-/// the pass, so the next time through starts clean.
+/// Crossing [`COMPLETE_AT`] **with the chapter's last verse reached** snaps
+/// coverage to a full read at `now` and clears the pass, so the next time
+/// through starts clean. Time without the bottom of the chapter, or the bottom
+/// of the chapter without the time, stays a partial pass.
 ///
 /// Eight arguments, one over clippy's default: three are the loaded core the
 /// shell already holds and five are the tick itself, arriving as separate
@@ -833,7 +861,11 @@ pub fn record(
     }
 
     let pct = pass_pct(corpus, book, rec, total);
-    let completed = pct >= COMPLETE_AT && total > 0;
+    // TWO gates, not one: enough time AND the bottom of the chapter. The 85% snap
+    // exists so nobody hunts a trailing verse for a rounding error, but on its own
+    // it also credited a full read to someone who stopped short — the last verses
+    // of a chapter are usually the ones it was going somewhere for.
+    let completed = pct >= COMPLETE_AT && total > 0 && reached_end(corpus, book, chapter, rec.reached);
     if completed {
         rec.last_read = Some(day_of(now));
         rec.touched = Some(day_of(now));
@@ -893,13 +925,14 @@ mod tests {
 
     const NOW: &str = "2026-07-28T12:00:00Z";
 
+    fn verse(b: &str, c: u16, v: u16, words: usize) -> String {
+        let toks: Vec<String> = (0..words).map(|i| format!(r#"["","w{i}","",[],0]"#)).collect();
+        format!(r#"{{"b":"{b}","c":{c},"v":{v},"t":[{}]}}"#, toks.join(","))
+    }
+
     /// A three-chapter toy corpus: 10, 20 and 5 words respectively, spread over
     /// verses so the high-water arithmetic has something to bite on.
     fn toy() -> Corpus {
-        fn verse(b: &str, c: u16, v: u16, words: usize) -> String {
-            let toks: Vec<String> = (0..words).map(|i| format!(r#"["","w{i}","",[],0]"#)).collect();
-            format!(r#"{{"b":"{b}","c":{c},"v":{v},"t":[{}]}}"#, toks.join(","))
-        }
         let mut lines = vec![serde_json::to_string(&corpus::corpus_header(
             canon::TOKENIZATION_VERSION,
             8, // 5 verses in Gen 1, 2 in Gen 2, 1 in Gen 3
@@ -987,16 +1020,45 @@ mod tests {
     }
 
     #[test]
-    fn ninety_percent_is_enough_no_chasing_the_last_verse() {
+    fn the_snap_is_generous_about_time_not_about_scroll() {
         let c = toy();
         let w = ChapterWords::build(&c);
         let home = scratch("generous");
-        // Gen 2 is 2 verses of 10 words. Reaching verse 2 is 100%, but check the
-        // bar itself, on a chapter where it is reachable without the final verse.
-        // Gen 1: verses 1–5 at 2 words each; COMPLETE_AT of its 10 words is 8.5,
-        // so 9 words of dwell over a fully-scrolled chapter must complete it.
+        // The 85% bar is a tolerance on the CLOCK. Gen 1: verses 1–5 at 2 words
+        // each; COMPLETE_AT of its 10 words is 8.5, so 9 words of dwell over a
+        // fully-scrolled chapter must complete it — nobody re-reads the chapter
+        // because their pace ran a shade ahead of the credited rate.
         let r = record(&home, &c, &w, "Gen", 1, 5, seconds_for_words(9), NOW).unwrap();
-        assert!(r.completed, "clearing COMPLETE_AT is a full read");
+        assert!(r.completed, "clearing COMPLETE_AT at the bottom is a full read");
+        assert_eq!(r.pct, 1.0);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn time_enough_is_not_a_read_without_the_bottom_of_the_chapter() {
+        // A chapter whose words are front-loaded, so the WORD bar clears while
+        // verses still remain: v1=17, v2=2, v3=1 — verse 2 is 95% of 20 words.
+        let lines = [
+            serde_json::to_string(&corpus::corpus_header(canon::TOKENIZATION_VERSION, 3)).unwrap(),
+            verse("Gen", 1, 1, 17),
+            verse("Gen", 1, 2, 2),
+            verse("Gen", 1, 3, 1),
+        ];
+        let c = corpus::from_str(&lines.join("\n")).unwrap();
+        let w = ChapterWords::build(&c);
+        let home = scratch("no-bottom");
+
+        // 95% of the words, ample time — but verse 3 never came into view. The
+        // snap must not hand this out as a full read: it is a partial pass, at
+        // the pct the words actually say.
+        let r = record(&home, &c, &w, "Gen", 1, 2, 3600.0, NOW).unwrap();
+        assert!(!r.completed, "the last verse was never reached");
+        assert!((r.pct - 0.95).abs() < 1e-6, "still an honest partial, got {}", r.pct);
+
+        // Scrolling the last verse into view finishes it — the dwell is already
+        // banked on the pass, so no further time is owed.
+        let r = record(&home, &c, &w, "Gen", 1, 3, 0.0, NOW).unwrap();
+        assert!(r.completed, "reaching the bottom completes the banked pass");
         assert_eq!(r.pct, 1.0);
         let _ = std::fs::remove_dir_all(&home);
     }

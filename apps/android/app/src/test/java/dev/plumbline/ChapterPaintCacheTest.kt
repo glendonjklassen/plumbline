@@ -214,8 +214,9 @@ class ChapterPaintCacheTest {
         lineHeight: Float = 64.1f,
         spaceWidth: Float = 11.9f,
         versePerLine: Boolean = false,
+        verseNumbers: Boolean = true,
         akjvOverlay: Boolean = false,
-    ) = ChapterKey(book, chapter, column, fontPx, lineHeight, spaceWidth, versePerLine, akjvOverlay)
+    ) = ChapterKey(book, chapter, column, fontPx, lineHeight, spaceWidth, versePerLine, verseNumbers, akjvOverlay)
 
     /** Every input the core's line-breaker sees, as what the reader did. */
     private fun everyInput(): List<Pair<String, ChapterKey>> = listOf(
@@ -226,6 +227,9 @@ class ChapterPaintCacheTest {
         "the reader moved the line-spacing slider" to key(lineHeight = 70f),
         "the reading face changed the width of a space" to key(spaceWidth = 12.4f),
         "the reader asked for a verse per line" to key(versePerLine = true),
+        // Numbers off moves every word on every line — a LAYOUT input, unlike
+        // the italics switch, which repaints and is deliberately not in the key.
+        "the reader turned the verse numbers off" to key(verseNumbers = false),
         "the reader turned the plain-English overlay on" to key(akjvOverlay = true),
     )
 
@@ -252,7 +256,7 @@ class ChapterPaintCacheTest {
             "ChapterKey's fields and the inputs this file tests have drifted apart",
             setOf(
                 "book", "chapter", "column", "fontPx",
-                "lineHeight", "spaceWidth", "versePerLine", "akjvOverlay",
+                "lineHeight", "spaceWidth", "versePerLine", "verseNumbers", "akjvOverlay",
             ),
             fields,
         )
@@ -308,7 +312,7 @@ class ChapterPaintCacheTest {
         /** The pane's own names for the three derived layout inputs, which are
          *  ChapterKey's `column`, `lineHeight` and `spaceWidth`, plus the flag
          *  that is passed straight through (`versePerLine`). */
-        private val DERIVED = setOf("column", "lineH", "space", "versePerLine")
+        private val DERIVED = setOf("column", "lineH", "space", "versePerLine", "verseNumbers")
 
         private val KEYWORDS = setOf("if", "else", "true", "false")
 

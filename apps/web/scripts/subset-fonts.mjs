@@ -125,6 +125,24 @@ const FAMILIES = [
     scale: 0.88,
     faces: [{ src: "FiraCode.ttf", style: "normal" }],
   },
+  {
+    // The one STATIC family (no `wght` axis): four files where the others are
+    // one or two. Each face declares its own single weight — a static 400
+    // declared as `400 700` would make the browser paint bold text regular —
+    // and the 700s are `chromeOnly`: the engine worker measures scripture,
+    // which is never bold, so FONT_FILES (its load list) skips them while
+    // fonts.css (the document's paint list) declares all four.
+    token: "atkinson-hyperlegible",
+    css: "Atkinson Hyperlegible",
+    fallback: "system-ui, sans-serif",
+    scale: 0.9,
+    faces: [
+      { src: "AtkinsonHyperlegible-Regular.ttf", style: "normal", weight: "400" },
+      { src: "AtkinsonHyperlegible-Italic.ttf", style: "italic", weight: "400" },
+      { src: "AtkinsonHyperlegible-Bold.ttf", style: "normal", weight: "700", chromeOnly: true },
+      { src: "AtkinsonHyperlegible-BoldItalic.ttf", style: "italic", weight: "700", chromeOnly: true },
+    ],
+  },
 ];
 
 /** The face the app falls back to everywhere — must be a key of FAMILIES. */
@@ -188,7 +206,7 @@ for (const family of FAMILIES) {
     writeFileSync(join(outDir, name), bytes);
     rmSync(subTtf, { force: true });
     rmSync(woff2Tmp, { force: true });
-    built.push({ family, style: face.style, name, bytes: bytes.length, from: readFileSync(src).length });
+    built.push({ family, face, style: face.style, name, bytes: bytes.length, from: readFileSync(src).length });
   }
 }
 
@@ -221,7 +239,7 @@ ${built
     (f) => `@font-face {
   font-family: "${f.family.css}";
   src: url("./fonts/${f.name}") format("woff2");
-  font-weight: 400 700;
+  font-weight: ${f.face.weight ?? "400 700"};
   font-style: ${f.style};
   font-display: swap;
 }`,
@@ -235,7 +253,10 @@ for (const f of built) {
   const e =
     byToken.get(f.family.token) ??
     { css: f.family.css, fallback: f.family.fallback, scale: f.family.scale ?? 1, files: {} };
-  e.files[f.style] = `fonts/${f.name}`;
+  // FONT_FILES is the engine worker's MEASUREMENT load list; scripture is
+  // never bold, so a chromeOnly face (Atkinson's static 700s) is declared in
+  // fonts.css above but deliberately absent here.
+  if (!f.face.chromeOnly) e.files[f.style] = `fonts/${f.name}`;
   byToken.set(f.family.token, e);
 }
 
@@ -288,6 +309,15 @@ ${[...byToken].map(([token, e]) => `  "${token}": ${JSON.stringify(e.fallback)},
 export const FONT_SCALE: Readonly<Record<string, number>> = {
 ${[...byToken].map(([token, e]) => `  "${token}": ${e.scale ?? 1},`).join("\n")}
 };
+
+/** EVERY built font file — FONT_FILES plus the chrome-only static bolds that
+ *  the engine worker never measures with. This is the offline PRECACHE list
+ *  (vite.config's shell manifest): a face the document can be asked to paint
+ *  must be on the device, or "can I read offline" depends on whether bold
+ *  chrome text ever rendered while the network was up. */
+export const FONT_ALL_FILES: readonly string[] = [
+${built.map((f) => `  "fonts/${f.name}",`).join("\n")}
+];
 `,
 );
 

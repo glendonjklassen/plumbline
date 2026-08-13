@@ -25,6 +25,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -82,6 +83,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -111,7 +113,10 @@ import dev.plumbline.SearchResult
 import dev.plumbline.StudyEngine
 import dev.plumbline.Toc
 import dev.plumbline.TocBook
+import dev.plumbline.MemoryDue
+import dev.plumbline.ReadingBooks
 import dev.plumbline.UserNote
+import dev.plumbline.UserNotes
 import dev.plumbline.WeaveLib
 import dev.plumbline.WeaveLink1
 import dev.plumbline.ConfigState
@@ -353,6 +358,10 @@ fun StudyScreen(
     var sideMargin by remember { mutableStateOf((loadedCfg?.sideMargin ?: 28.0).coerceIn(8.0, 96.0)) }
     var lineSpacing by remember { mutableStateOf((loadedCfg?.lineSpacing ?: 1.35).coerceIn(1.0, 2.2)) }
     var copyStyle by remember { mutableStateOf(loadedCfg?.copyStyle ?: "verseRef") }
+    // The two typography switches, both ON by default: `!= false` so an absent
+    // key (a config written before they existed) reads as the shipped reader.
+    var verseNumbers by remember { mutableStateOf(loadedCfg?.verseNumbers != false) }
+    var addedItalics by remember { mutableStateOf(loadedCfg?.addedItalics != false) }
     var history by remember { mutableStateOf(loadedCfg?.history ?: emptyList()) }
     // The reader's home church — what their own shared links carry (web parity).
     // `intro` is which welcome they were given, so the Welcome button can show it
@@ -385,6 +394,7 @@ fun StudyScreen(
             humanAnalysis = humanAnalysis, machineAnalysis = machineAnalysis,
             church = church, presentSharesAsNew = presentSharesAsNew, intro = introChoice,
             akjvOverlay = akjvOverlay,
+            verseNumbers = verseNumbers, addedItalics = addedItalics,
         )
         scope.launch { withContext(Dispatchers.Default) { runCatching { StudyConfig.SaveJson(PlumblineJson.encodeToString(cfg)) } } }
     }
@@ -428,7 +438,12 @@ fun StudyScreen(
         chapter = chapter,
         reachedVerse = reachedVerse,
         interactionEpoch = readerInput,
-        enabled = dest == Dest.Read,
+        // Only on the Read tab, and only with the text actually in front of the
+        // reader: Present and the full-screen map overlays cover it entirely, so
+        // a thread presented for twenty minutes must not credit whatever chapter
+        // was underneath. (Web twin: `target()` in Shell.svelte guards on the
+        // same set plus concept study, which this shell does not have.)
+        enabled = dest == Dest.Read && !showPresent && !showConstellation && !showChord,
     )
 
     val mode = rememberUiMode(fold)
@@ -814,6 +829,7 @@ fun StudyScreen(
                 engine = engine, book = b, chapter = c, palette = palette,
                 modifier = Modifier.weight(1f), searchHits = searchHits, fontSizeSp = bodySize.toFloat(),
                 sideMargin = sideMargin.toFloat(), lineSpacing = lineSpacing.toFloat(),
+                verseNumbers = verseNumbers, addedItalics = addedItalics,
                 onWordTap = ::onWord,
                 onVerseLongPress = { verse -> actionVerse = verse },
                 onSwipeChapter = { dir -> val (nb, nc) = step(b, c, dir); setPane(nb, nc) },
@@ -903,7 +919,9 @@ fun StudyScreen(
                 }
 
                 Dest.Explore -> ExploreScreen(
+                    engine = engine,
                     palette = palette,
+                    refreshEpoch = noteEpoch,
                     onMemorize = { memView = MemorizeView.List; dest = Dest.Memorize },
                     onNotes = { showNotes = true },
                     onThreads = { openLibrary(Library.Threads) },
@@ -1145,6 +1163,8 @@ fun StudyScreen(
                 sideMargin = sideMargin, onSideMargin = { sideMargin = it },
                 lineSpacing = lineSpacing, onLineSpacing = { lineSpacing = it },
                 copyStyle = copyStyle, onCopyStyle = { copyStyle = it },
+                verseNumbers = verseNumbers, onToggleVerseNumbers = { verseNumbers = !verseNumbers },
+                addedItalics = addedItalics, onToggleAddedItalics = { addedItalics = !addedItalics },
                 bundledOn = bundledOn, onToggleBundled = onToggleBundled,
                 akjvAvailable = akjvAvailable,
                 akjvOverlay = akjvOverlay,
@@ -1676,7 +1696,12 @@ private fun SearchOverlay(
  *  the bar carries the reader's ROLES and memorization is a study discipline. */
 @Composable
 private fun ExploreScreen(
+    engine: StudyEngine,
     palette: ReaderPalette,
+    /** Bumped by an authoring write. NOT a general study epoch — this shell has
+     *  none — so it is the note epoch: the counts are otherwise refetched every
+     *  time Study is opened, since this composable leaves the tree with it. */
+    refreshEpoch: Int,
     onMemorize: () -> Unit,
     onNotes: () -> Unit,
     onThreads: () -> Unit,
@@ -1687,17 +1712,54 @@ private fun ExploreScreen(
     onClose: () -> Unit,
     barActions: @Composable RowScope.() -> Unit = {},
 ) {
+    // The maps live under ONE expanding card (web twin ExploreScreen.svelte;
+    // maintainer UAT, 2026-08-12) — two sibling cards read as two more tools,
+    // when they are two views of the same thing.
+    var vizOpen by remember { mutableStateOf(false) }
+
+    // How much is in each tool. One fetch per open (and per authoring write),
+    // off the main thread — the same three lists their own screens open with,
+    // so nothing here is a new engine call.
+    var notes by remember { mutableIntStateOf(0) }
+    var threads by remember { mutableIntStateOf(0) }
+    var tags by remember { mutableIntStateOf(0) }
+    var weaves by remember { mutableIntStateOf(0) }
+    LaunchedEffect(refreshEpoch) {
+        withContext(Dispatchers.Default) {
+            notes = runCatching {
+                synchronized(engine) { engine.UserNotesJson() }?.let { parseWire<UserNotes>(it).notes.size }
+            }.getOrNull() ?: 0
+            threads = runCatching {
+                synchronized(engine) { engine.ThreadsJson() }?.let { parseWire<Threads>(it).threads.size }
+            }.getOrNull() ?: 0
+            tags = runCatching {
+                synchronized(engine) { engine.TagsJson() }?.let { parseWire<Tags>(it).tags.size }
+            }.getOrNull() ?: 0
+            weaves = runCatching {
+                synchronized(engine) { engine.WeavesJson() }?.let { parseWire<WeaveLib>(it).weaves.size }
+            }.getOrNull() ?: 0
+        }
+    }
+
     MapOverlay(t("nav.study"), palette, onClose, actions = barActions) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            ExploreCard(t("explore.memorize"), t("explore.memorize.desc"), palette, onMemorize)
-            ExploreCard(t("explore.notes"), t("explore.notes.desc"), palette, onNotes)
-            ExploreCard(t("explore.threads"), t("explore.threads.desc"), palette, onThreads)
-            ExploreCard(t("explore.tags"), t("explore.tags.desc"), palette, onTags)
-            ExploreCard(t("explore.weaves"), t("explore.weaves.desc"), palette, onWeaves)
-            ExploreCard(t("explore.constellation"), t("explore.constellation.desc"), palette, onConstellation)
-            // The same key the web card renders — the one label that had
-            // drifted onto map.chordMap and risked translating twice.
-            ExploreCard(t("explore.weaveMap"), t("explore.weaveMap.desc"), palette, onChord)
+            InProgressBand(engine, palette, refreshEpoch, onMemorize)
+            ExploreCard(t("explore.memorize"), t("explore.memorize.desc"), palette, onClick = onMemorize)
+            ExploreCard(t("explore.notes"), t("explore.notes.desc"), palette, count = notes, onClick = onNotes)
+            ExploreCard(t("explore.threads"), t("explore.threads.desc"), palette, count = threads, onClick = onThreads)
+            ExploreCard(t("explore.tags"), t("explore.tags.desc"), palette, count = tags, onClick = onTags)
+            ExploreCard(t("explore.weaves"), t("explore.weaves.desc"), palette, count = weaves, onClick = onWeaves)
+            ExploreCard(
+                t("explore.viz") + if (vizOpen) "  ▾" else "  ▸",
+                t("explore.viz.desc"),
+                palette,
+            ) { vizOpen = !vizOpen }
+            if (vizOpen) {
+                ExploreCard(t("explore.constellation"), t("explore.constellation.desc"), palette, indent = true, onClick = onConstellation)
+                // The same key the web card renders — the one label that had
+                // drifted onto map.chordMap and risked translating twice.
+                ExploreCard(t("explore.weaveMap"), t("explore.weaveMap.desc"), palette, indent = true, onClick = onChord)
+            }
         }
     }
 }
@@ -1718,21 +1780,139 @@ private fun PreachScreen(
 ) {
     MapOverlay(t("nav.preach"), palette, onClose, actions = barActions) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            ExploreCard(t("nav.present"), t("preach.present.desc"), palette, onPresent)
-            ExploreCard(t("explore.weaves"), t("explore.weaves.desc"), palette, onWeaves)
-            ExploreCard(t("explore.tags"), t("explore.tags.desc"), palette, onTags)
-            ExploreCard(t("explore.notes"), t("explore.notes.desc"), palette, onNotes)
+            ExploreCard(t("nav.present"), t("preach.present.desc"), palette, onClick = onPresent)
+            ExploreCard(t("explore.weaves"), t("explore.weaves.desc"), palette, onClick = onWeaves)
+            ExploreCard(t("explore.tags"), t("explore.tags.desc"), palette, onClick = onTags)
+            ExploreCard(t("explore.notes"), t("explore.notes.desc"), palette, onClick = onNotes)
         }
     }
 }
 
 @Composable
-private fun ExploreCard(title: String, desc: String, palette: ReaderPalette, onClick: () -> Unit) {
+private fun ExploreCard(
+    title: String,
+    desc: String,
+    palette: ReaderPalette,
+    indent: Boolean = false,
+    /** How much is IN this tool. Null, or zero, draws nothing: an empty tool
+     *  should read as quiet rather than as a score of nought. */
+    count: Int? = null,
+    onClick: () -> Unit,
+) {
     Column(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 16.dp),
+        Modifier.fillMaxWidth()
+            .clickable(onClick = onClick)
+            // Indented: a SUB-item of the card above (the Visualizations maps).
+            .padding(start = if (indent) 40.dp else 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp),
     ) {
-        Text(title, color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            if (count != null && count > 0) {
+                Box(
+                    Modifier.padding(start = 8.dp)
+                        .background(palette.gold.copy(alpha = 0.13f), RoundedCornerShape(999.dp))
+                        .padding(horizontal = 8.dp, vertical = 1.dp),
+                ) {
+                    Text("$count", color = palette.gold, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
         Text(desc, color = palette.faded, fontSize = 14.sp, modifier = Modifier.padding(top = 3.dp))
+    }
+    HorizontalDivider(color = palette.rule)
+}
+
+/**
+ * The IN PROGRESS band at the top of the Study hub — the web twin's
+ * `.band` (ExploreScreen.svelte, where the reasoning lives).
+ *
+ * The hub was eight identical rectangles of FIXED text, so it looked the same
+ * on the day you installed the app as after a year of study (maintainer,
+ * 2026-08-13). This is the half that carries STATE.
+ *
+ * Reading plans are web-only for now (manifest §shell deltas), so this shell's
+ * band is the memorize queue, the review queue and the reading map. Fetched
+ * once per open, off the main thread, and re-fetched when [studyEpoch] moves —
+ * an authoring write is the only thing that can change any of these.
+ */
+@Composable
+private fun InProgressBand(
+    engine: StudyEngine,
+    palette: ReaderPalette,
+    refreshEpoch: Int,
+    onMemorize: () -> Unit,
+) {
+    var due by remember { mutableIntStateOf(0) }
+    var read by remember { mutableIntStateOf(0) }
+    var chapters by remember { mutableIntStateOf(0) }
+    LaunchedEffect(refreshEpoch) {
+        withContext(Dispatchers.Default) {
+            val now = nowUtc()
+            due = runCatching {
+                synchronized(engine) { engine.MemoryDueJson(now) }?.let { parseWire<MemoryDue>(it).refs.size }
+            }.getOrNull() ?: 0
+            val books = runCatching {
+                synchronized(engine) { engine.ReadingBooksJson(now) }?.let { parseWire<ReadingBooks>(it).books }
+            }.getOrNull().orEmpty()
+            read = books.sumOf { it.read }
+            chapters = books.sumOf { it.chapters }
+        }
+    }
+
+    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 6.dp)) {
+        Text(
+            t("explore.inProgress").uppercase(),
+            color = palette.sectionGold,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+        )
+        if (due > 0) {
+            Row(
+                Modifier.fillMaxWidth().clickable(onClick = onMemorize).padding(top = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(t("explore.memorize"), color = palette.ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    Strings.plural("memorize.reviews.one", "memorize.reviews.other", due),
+                    color = palette.gold,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(start = 10.dp),
+                )
+            }
+        }
+        // How much of the canon has had a full pass, in the reading map's own
+        // colours — so it belongs to whichever theme is on, for free. CHAPTERS
+        // rather than a word-weighted percentage: "412 of 1,189" is a number a
+        // reader can hold.
+        if (chapters > 0) {
+            Text(
+                t("explore.chaptersRead", "read" to read, "total" to chapters),
+                color = palette.faded,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+            Box(
+                Modifier.fillMaxWidth()
+                    .padding(top = 7.dp, bottom = 4.dp)
+                    .height(8.dp)
+                    .background(palette.readUnread.copy(alpha = 0.12f), RoundedCornerShape(999.dp)),
+            ) {
+                Box(
+                    Modifier.fillMaxWidth(fraction = (read.toFloat() / chapters).coerceIn(0f, 1f))
+                        .height(8.dp)
+                        .background(palette.readDone, RoundedCornerShape(999.dp)),
+                )
+            }
+        }
+        if (due == 0 && chapters == 0) {
+            Text(
+                t("explore.nothingRunning"),
+                color = palette.faded,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+        }
     }
     HorizontalDivider(color = palette.rule)
 }
@@ -1844,6 +2024,10 @@ private fun SettingsDialog(
     onToggleHuman: () -> Unit,
     machineAnalysis: Boolean,
     onToggleMachine: () -> Unit,
+    verseNumbers: Boolean,
+    onToggleVerseNumbers: () -> Unit,
+    addedItalics: Boolean,
+    onToggleAddedItalics: () -> Unit,
     akjvAvailable: Boolean,
     akjvOverlay: Boolean,
     onToggleAkjv: () -> Unit,
@@ -1922,7 +2106,6 @@ private fun SettingsDialog(
                     "light" to t("settings.themeLight"),
                     "dark" to t("settings.themeDark"),
                     "night" to t("settings.themeNight"),
-                    "darcula" to t("settings.themeDarcula"),
                     "solarized-light" to t("settings.themeSolarizedLight"),
                     "solarized-dark" to t("settings.themeSolarizedDark"),
                     "gruvbox" to t("settings.themeGruvbox"),
@@ -1934,6 +2117,10 @@ private fun SettingsDialog(
                     "tokyo-night" to t("settings.themeTokyoNight"),
                     "rose-pine" to t("settings.themeRosePine"),
                     "synthwave" to t("settings.themeSynthwave"),
+                    "scriptorium" to t("settings.themeScriptorium"),
+                    "blueprint" to t("settings.themeBlueprint"),
+                    "phosphor" to t("settings.themePhosphor"),
+                    "high-contrast" to t("settings.themeHighContrast"),
                 )
                 var themeMenu by remember { mutableStateOf(false) }
                 val currentTheme = themes.firstOrNull { it.first == themeChoice } ?: themes.first()
@@ -2053,6 +2240,20 @@ private fun SettingsDialog(
                 }
                 if (advanced) {
                 Text(t("settings.advancedDesc"), color = palette.faded, fontSize = 12.sp)
+                // The two typography switches. Numbers are a LAYOUT input (the
+                // chapter is re-laid-out, since the number's width and gap
+                // belong to the line); italics are paint-only, so that one
+                // re-records the page without measuring anything again.
+                SettingToggle(
+                    t("settings.verseNumbers"),
+                    t("settings.verseNumbersDesc"),
+                    verseNumbers, palette, onToggleVerseNumbers,
+                )
+                SettingToggle(
+                    t("settings.addedItalics"),
+                    t("settings.addedItalicsDesc"),
+                    addedItalics, palette, onToggleAddedItalics,
+                )
                 // The text is always on; each analysis tier switches off on its
                 // own (the old all-or-nothing Full study switch is gone).
                 SettingToggle(

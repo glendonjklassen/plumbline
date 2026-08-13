@@ -71,11 +71,21 @@ never a synthetic smear.
   (`FLAG_ADDED`) are then marked by the palette's `added` tone alone, which is
   present in every theme. `Font::has_italic` is the one place that fact lives;
   both shells ask it rather than deciding.
+- **A STATIC family declares its own bolds.** Atkinson Hyperlegible (added
+  2026-08-12, the Braille Institute's low-vision face) has no `wght` axis —
+  its bold is its own file. `Font::static_bold` is where that fact lives: the
+  web's @font-face declares each static face at its single weight (a static
+  400 declared as `400 700` paints bold text regular) and lists the 700s as
+  chrome-only (the engine worker measures scripture, which is never bold, so
+  they stay out of its FONT_FILES load list); Android's `FontSpec` carries
+  `bold`/`boldItalic` asset paths that `loadTypefaces` and `buildSerifFamily`
+  prefer over driving the axis.
 - **Per-face optical scale** — `Font::scale()` in the core, mirrored as
   `FONT_SCALE` (web, generated) and `FontSpec.scale` (Android): eb-garamond
-  1.00 · literata 0.89 · inter 0.87 · fira-code 0.88. The bundled faces'
+  1.00 · literata 0.89 · inter 0.87 · fira-code 0.88 · atkinson-hyperlegible
+  0.90. The bundled faces'
   x-heights differ enormously (as a fraction of the em: Garamond 0.400,
-  Literata 0.507, Fira Code 0.525, Inter 0.546), so at the same px Inter read
+  Literata 0.507, Fira Code 0.525, Inter 0.546, Atkinson 0.496), so at the same px Inter read
   over a third larger than Garamond and a face switch changed the apparent
   size, not just the voice. The correction is deliberately PARTIAL — half way
   toward equal x-height, not all the way: full equalisation would render Inter
@@ -94,9 +104,9 @@ never a synthetic smear.
 - **Delivery.** Web: `@font-face` is lazy, so a reader downloads only the
   families they select; the boot PRELOAD names the default family only (a
   preload of four would compete with the data pack for bandwidth), while the
-  offline PRECACHE names all of them (~1 MB once) so "can I read offline" never
+  offline PRECACHE names all of them (~1.1 MB once) so "can I read offline" never
   depends on whether a font fetch happened to be seen by the service worker.
-  Android bundles all four in the APK.
+  Android bundles all five in the APK.
 
 **Provenance of the old rule, so it is not re-canonised:** "one face, chrome
 included" was never a decision. `body { font-family: "EB Garamond" }` arrived in
@@ -128,15 +138,21 @@ compounds it) — sizes and line heights up roughly 2 px / 2.5 sp over the body.
 | LINK_INSET / YINSET | 14 / 5 px | connector gutter inset / clamp margin (`ConnectorsOverlay.svelte`) |
 
 Palette: the one source is `plumbline_core::theme::palette(theme)`, served as
-`plumbline_theme_palette_json` — **fifteen concrete themes** plus follow-system:
-the built-ins (light / dark / night) and the named presets (Darcula, Solarized
+`plumbline_theme_palette_json` — **eighteen concrete themes** plus follow-system:
+the built-ins (light / dark / night), the named editor presets (Solarized
 Light/Dark, Gruvbox, Nord, One Dark, Sepia, Catppuccin Mocha/Latte, Tokyo Night,
-Rosé Pine, Synthwave). Both shells paint reader + chrome + study panel from the
+Rosé Pine, Synthwave), and the house originals (Scriptorium — parchment with
+rubricated accents, light; Blueprint — cyanotype; Phosphor — green CRT with
+amber accents; High Contrast — the deliberate low-vision option, light).
+Darcula was retired 2026-08-12 as a near-duplicate of One Dark; both `parse`s
+alias the stored token there, so a config that holds it opens on its nearest
+neighbour instead of snapping to System. Both shells paint reader + chrome +
+study panel from the
 returned values rather than any hex of their own, and pick the theme from a
 dropdown (`ThemeChoice`), not a radio column. The navigator's reading-map tiles
 (`read_unread`/`read_partial`/`read_done`) reuse each theme's own
 gold/divine/tier_human, so the map always belongs to the active theme. Every
-text role clears WCAG-AA on every surface across all fifteen — a core test
+text role clears WCAG-AA on every surface across all eighteen — a core test
 (`contrast::every_text_role_clears_aa_on_every_surface`), not a convention. The LIGHT values, which are the
 shipped originals: paper `#fcf9f4`; ink `#211f1a`; gold accent `#9e7d38`;
 added-word gray `#6b6862`; divine `#4d3326`; popup paper `#f2eee6`; pane-nav bg
@@ -176,8 +192,26 @@ Plumbline name and carries no plumb-line imagery.
   `width = min(paneW − 2·sideMargin, 720)`, `lineHeight = (ascent+descent)·lineSpacing`,
   `spaceWidth` measured, `verseNumGap = space·1.4`,
   `paraIndent = lineHeight·0.9`, `paraSpacing = lineHeight·0.45`, `verseBreak`
-  from `versePerLine`. `sideMargin` and `lineSpacing` are the reader's config
-  values, defaulting to 28 and 1.35.
+  from `versePerLine`, `verseNumbers` from `verseNumbers`. `sideMargin` and
+  `lineSpacing` are the reader's config values, defaulting to 28 and 1.35.
+- **Two typography switches** (Settings › Advanced, both shells, both ON by
+  default and both written as explicit booleans — an absent key is a config
+  from before they existed, so every read is `!== false`):
+  - `verseNumbers` is a **layout** input, not a paint flag. The number's box and
+    the gap after it belong to the line, so a shell that simply declined to draw
+    them would flow every verse around an invisible marker; the core emits no
+    number items and reclaims the width (`LayoutConfig.verse_numbers`,
+    `PlumblineLayoutConfig.verse_numbers`, +4 bytes on the by-value struct — the
+    web hand-marshals it at offset 28 of 32). It is therefore in BOTH turn-cache
+    keys (`engine.worker.ts`, Android's `ChapterKey`) and out of `font_identity`,
+    with `verse_break`, since it cannot change a glyph's advance.
+  - `addedItalics` is **paint only**. The measure callback is font-blind, so the
+    engine measures supplied words upright either way and the layout is
+    untouched — deliberately absent from both cache keys, present in Android's
+    `ChapterPaintKey` (the recording bakes the face) and named as an explicit
+    dependency of the web's paint effect (the draw is rAF-deferred, so a read
+    inside it registers nothing). Off, the words stay marked by the `added` tone
+    alone — the same fallback a face with no italic already gets.
 - Paint: verse numbers **bold gold**; FLAG_ADDED italic gray; FLAG_DIVINE /
   FLAG_TITLE colors above. Hit-testing: `hit_test(x − margin_x, y − MARGIN)`.
   **No mark for a Strong's-tagged word** (both shells): a faint gold rule under
@@ -321,10 +355,16 @@ producer emits*, not shell code.
      §Concept map popup below. The three sections above it are the symbolic
      concept engine (co-occurrence over the corpus) and are untouched.
 4. (F) Author actions: `＋ tag verse`, `＋ add to thread`.
-5. **cross-references (N)** — weave partners (≤40), each + weave-name link to
+5. **in N weaves** — which weaves this verse BELONGS TO, each linking to its
+   compare card. Distinct from the partner list below it, which answers a
+   different question: a verse with six links into one weave is one membership,
+   and the partner list buries that under six rows repeating a name. Derived
+   from the partners (a weave is a graph of verse↔verse links, so a verse in one
+   appears in at least one link), deduped by NAME, first-seen order.
+6. **cross-references (N)** — weave partners (≤40), each + weave-name link to
    its compare card.
-6. (F) **study cross-references (N) — TSK** *(Human †)* (≤40; ranges "a–b").
-7. **verses like this** — **REMOVED** (a per-verse list of statistically similar
+7. (F) **study cross-references (N) — TSK** *(Human †)* (≤40; ranges "a–b").
+8. **verses like this** — **REMOVED** (a per-verse list of statistically similar
    verses — the SIF model over the concept embedding, 6 in-testament and 4
    cross-testament — judged machine-generated noise). It lived in `panel.rs` and
    in the core's `VerseSim`, so it went
@@ -336,13 +376,13 @@ producer emits*, not shell code.
    analysis tier, which now holds morphology and text-witness only. The last
    code path that opened the file — `plumbline_engine_concept_neighbours_json`,
    which no shell ever called — is gone too (see §C ABI surface).
-8. (F) **tags** — tags holding this verse; each is a link + `✕` untag (user
+9. (F) **tags** — tags holding this verse; each is a link + `✕` untag (user
    data, not evidence — no tier mark).
-9. **margin notes** *(Human †)* — the verse's 1769 notes, small.
+10. **margin notes** *(Human †)* — the verse's 1769 notes, small.
 
 A **provenance legend** closes a Full-study card once: "where this comes from:
 ✝ the text · † curated scholarship · ≈ machine-derived, weigh it · ⚗
-research-grade". Weave cross-references (item 5) and tags carry no mark (mixed /
+research-grade". Weave membership + cross-references (items 5–6) and tags carry no mark (mixed /
 user-authored, not trust-weighted evidence). The producer emits it as a `Para`
 of tier-coloured runs.
 
@@ -796,11 +836,44 @@ Backup/Restore — sits behind ONE collapsed **Advanced** disclosure
 
 **The Study hub's contents** (both shells, a described card list so the tools
 aren't cryptic): Reading plans (web only until Android's plans ship) ·
-Memorize · Notes · Threads · Tags · Weaves · Constellation · Weave map — every
+Memorize · Notes · Threads · Tags · Weaves · **Visualizations** (an expanding
+card holding Constellation · Weave map as sub-items — two views of the same
+thing, not two more tools; UAT 2026-08-12) — every
 card's label from the same `explore.*` keys in both shells (the Android
 weave-map card had drifted onto `map.chordMap`; fixed). *Delta:* the web lists
 **Suggested** as its own card (`ExploreScreen.svelte`); Android folds it into
 one Weaves screen with an All/Suggested filter (`WeavesScreen`).
+
+**The hub carries STATE, not just a menu** (2026-08-13). It was eight identical
+rectangles of fixed text, so it looked the same on install day as after a year
+of study — "every time I click study it just doesn't excite me… not like the
+other pages", which tell you today's chapters or hold actual hymns. Two
+additions, both live:
+
+- an **IN PROGRESS band** above the cards, drawing only rows that have
+  something to say (a hub reading "0 due · 0 to review" every day is the fixed
+  text again): the running plan and today's chapters, the memorize queue when
+  anything is due, the review queue when anything waits, and — when nothing is
+  running at all — one invitation instead of an empty box;
+- a **count on every card that holds a collection** (notes, threads, tags,
+  weaves, suggested), absent at zero so an empty tool reads as quiet rather
+  than as a score of nought. Plans and Memorize carry none: they are activities
+  rather than collections, and the band already says what they want today.
+
+Closing the band is the reading map as **one number and one bar** — chapters
+read of the canon's 1,189, painted in the map's own `readDone` over a faint
+`readUnread` track, so it belongs to whichever of the eighteen themes is on and
+tapping it opens the navigator. Chapters rather than a word-weighted percentage:
+"412 of 1,189" is a number a reader can hold.
+
+NO NEW ENGINE CALLS: every number is a query some other screen already makes
+(`plans`, `memoryDue`, `suggestedWeaves`, `userNotes`, `threads`, `tags`,
+`weaves`, `readingBooks`), so the web reads them through the session cache and
+the counts move on an authoring write — a count fetched once looks perfect
+until the reader writes something, which is what `e2e/study-hub.spec.ts` pins.
+Android has no general study epoch, so it refetches on the note epoch and on
+every entry to the hub. *Delta:* the band's plan row is web-only, following
+Reading plans themselves.
 
 ## Languages (both shells)
 
@@ -939,7 +1012,11 @@ baseline, OT/NT seam; ribbons heaviest-first, alpha
 / NT `(0.50,0.70,0.90)` / cross `(0.78,0.59,0.86)` (+0.08 α, cap 0.5); apex
 `min(0.42·h, 22+0.26·h·|dx|/w)`; self-pair = small loop. Click: x→book →
 navigate active pane + close. The map counts every deduped pair, resolved or not —
-unlike the connector overlay, which draws only resolved ones.
+unlike the connector overlay, which draws only resolved ones. **A portrait
+viewport flips the whole map** (both shells, UAT 2026-08-12): the canon axis
+runs down the LEFT edge (top = Genesis), ribbons bulge right, labels read
+spine-wise — landscape logic painted through one rotation transform, taps
+mapped y→book; landscape gave a phone's 66 books a thumb's span of axis.
 
 ## Constellation popup (M:937–1529)
 
@@ -1264,8 +1341,11 @@ chapter is a **percentage**, gated two ways at once:
 `min(words above the furthest verse reached, dwell × 500 wpm) ÷ chapter words`.
 Scrolling to the bottom instantly credits nothing; sitting on verse 1 credits only
 verse 1. Dwell is **aggregate, not per-verse** — time over verse 3 pays for verse
-30 once you get there — and a pass completes at **85%** and snaps to 1.0, so there
-is never a trailing verse to chase. Stored per chapter: `reached`, `dwell`
+30 once you get there — and a pass completes at **85% with the chapter's last
+verse reached** and snaps to 1.0. The snap is a tolerance on the CLOCK (nobody
+re-reads a chapter because their pace ran ahead of the credited rate), not on
+the chapter: 85% of the words with the end never on screen stays `Partial`
+(UAT, 2026-08-12). Stored per chapter: `reached`, `dwell`
 (both belong to the pass under way, cleared when it completes), `lastRead` and
 `touched`. The reading rate is 500 wpm, tuned twice and both times upward: at
 220, Jude's 613 words wanted 2.8 minutes of dwell, which a brisk reader beats;
@@ -1370,15 +1450,27 @@ shaped once in `shell/planToday.ts`): a nav-strip chip above the canon strip
 while a schedule runs — tap → today's first unread chapter — and the passage
 navigator leads with a today card whose chapters are the buttons, read ones
 marked. Both stand down in concept-study mode (the tracker is suspended, so
-schedule reading there earns no credit). E2e:
+schedule reading there earns no credit). The CHIP also stands down for the
+rest of the calendar day once a full plan-day finishes today — even
+yesterday's leftovers (`doneToday` on the wire, `plan::done_today` dating a
+finished day by its chapters' `last_read`); the today card keeps showing
+where the plan stands. Plans PAUSE and RESUME (`paused` in the plan file,
+additive): a paused plan keeps its file, progress and class but asks nothing
+— no chip, no today card — and its Plans-screen card is introduced by its
+identity, the plan name plus the day it was started ("Started 3 Aug 2026 ·
+paused"). E2e:
 `e2e/concept-study.spec.ts` (tap-to-tag, tracker suspension, tag survival,
 the Plans-screen launch path, the touch-tap ghost-click regression, the
 progress surfaces) and `e2e/plans-today.spec.ts` (chip → today, the navigator
-card, the mode standing both down).
+card, the mode standing both down, the day's-worth chip retirement, pause →
+nothing asked → resume).
 
-**C ABI** (5 fns): `plumbline_engine_plans_json` (concept-study entries carry
-`sweepProgress` AND the per-chapter `swept` map the navigator paints from) /
+**C ABI** (6 fns): `plumbline_engine_plans_json` (`now` dates each schedule's
+`doneToday`; concept-study entries carry
+`sweepProgress` AND the per-chapter `swept` map the navigator paints from;
+every running entry carries `started` + `paused`) /
 `plan_start` / `plan_stop` /
+`plan_set_paused` /
 `concept_study_start` (returns the run id, `!`-prefixed error otherwise) /
 `concept_study_sweep`.
 

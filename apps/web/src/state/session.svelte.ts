@@ -1258,6 +1258,13 @@ export class Session {
     this.showToast(err ?? t("plans.started", { name: b.name }));
   }
 
+  /** Pause or resume a plan. No confirm: nothing is lost either way, and the
+   *  Plans screen states the plan's standing right where the button sits. */
+  async setPlanPaused(id: string, paused: boolean, name: string): Promise<void> {
+    const err = await this.author("planSetPaused", id, paused);
+    this.showToast(err ?? t(paused ? "plans.pausedToast" : "plans.resumedToast", { name }));
+  }
+
   /** Stop a plan (schedule or concept study) — confirmed, since it removes the
    *  plan's record. A concept study's gathered tag is untouched. */
   async stopPlan(id: string, name: string): Promise<void> {

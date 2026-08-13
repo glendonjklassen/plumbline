@@ -67,6 +67,10 @@ export interface PaintOpts {
   scrollY: number;
   viewportW: number;
   viewportH: number;
+  /** Italicize the KJV's supplied words (`config.addedItalics`, default on).
+   *  A PAINT decision only — the engine measures every word upright either
+   *  way, so turning italics off cannot invalidate a cached layout. */
+  addedItalics?: boolean;
 }
 
 /** Verse number of an item (verseNumber items carry it; words via refKey). */
@@ -280,8 +284,10 @@ export function paintChapter(
   // A face with no italic (Fira Code) must not be ASKED for one: the browser
   // would shear the upright, and a fake italic on every translator-supplied word
   // is worse than none. Those words still read as supplied — the palette's
-  // `added` tone below carries it, in every face.
-  const italicFont = readerFontHasItalic() ? `italic ${fontPx}px ${family}` : bodyFont;
+  // `added` tone below carries it, in every face. A reader who turns the
+  // italics off lands in exactly that same place, deliberately.
+  const italicFont =
+    readerFontHasItalic() && o.addedItalics !== false ? `italic ${fontPx}px ${family}` : bodyFont;
   const boldFont = `bold ${fontPx}px ${family}`;
   for (const it of items) {
     if (!visible(it.y, it.y + it.h)) continue;

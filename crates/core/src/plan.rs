@@ -106,6 +106,12 @@ pub struct Plan {
     /// Concept study only: swept chapters, `book id → sorted chapter numbers`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub swept: BTreeMap<String, Vec<u16>>,
+    /// Set aside, kept whole. A paused schedule holds its place (its `done`
+    /// days, its class) but asks nothing: no chip, no today card. Additive —
+    /// absent in every file written before pause existed, and absent again the
+    /// moment a plan resumes, so old readers of the format never see it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub paused: bool,
 }
 
 /// A built-in plan the picker offers. `name_key` is an i18n catalogue id —
@@ -324,6 +330,44 @@ pub fn next_day(plan: &Plan, sched: &[Vec<(String, u16)>], is_read: impl Fn(&str
     next.map(|day| Today { day, chapters: sched[day as usize - 1].clone(), days_done, days_total: total })
 }
 
+/// Whether a full plan-day was finished ON `today` (a `YYYY-MM-DD` day, the
+/// reading store's date grain) — the signal that retires the nav-strip chip
+/// for the rest of the calendar day.
+///
+/// A day counts as "finished today" when every chapter it names reads back
+/// complete and the LATEST of their read dates is today: the day was still
+/// open this morning and the reader closed it. That covers finishing
+/// yesterday's leftovers ("Day 12" begun Tuesday, finished Wednesday — the
+/// chip retires Wednesday) without consulting any calendar the plan itself
+/// does not keep — pacing stays sequence-anchored, this is purely about not
+/// asking for more the day a day's worth was given.
+///
+/// `last_read_day` is the reading store's date for one chapter's last full
+/// pass, `None` when it has never had one — the same closure-shaped seam as
+/// [`next_day`]'s `is_read`, so no reading logic is duplicated here. Days
+/// honoured only by the `done` cache have no dates to consult and simply
+/// don't count as today.
+pub fn done_today(
+    sched: &[Vec<(String, u16)>],
+    last_read_day: impl Fn(&str, u16) -> Option<String>,
+    today: &str,
+) -> bool {
+    sched.iter().any(|chs| {
+        let mut latest: Option<String> = None;
+        for (b, c) in chs {
+            match last_read_day(b, *c) {
+                Some(d) => {
+                    if latest.as_deref().is_none_or(|l| d.as_str() > l) {
+                        latest = Some(d);
+                    }
+                }
+                None => return false, // an unread chapter: the day is still open
+            }
+        }
+        latest.is_some_and(|d| d == today)
+    })
+}
+
 /// Record a day as done (1-based; sorted, deduped). Returns whether it was new.
 /// The caller persists — this is the cache [`next_day`] consults so a day never
 /// un-completes when the reading record under it is later cleared.
@@ -472,6 +516,7 @@ mod tests {
             done: Vec::new(),
             tag: None,
             swept: BTreeMap::new(),
+            paused: false,
         }
     }
 
@@ -535,6 +580,34 @@ mod tests {
 
         // Everything read → the plan is finished.
         assert!(next_day(&p, &sched, |_, _| true).is_none());
+    }
+
+    #[test]
+    fn done_today_retires_the_day_a_days_worth_was_read() {
+        let c = toy();
+        let w = ChapterWords::build(&c);
+        // 3 days over Gen: day 1 = Gen 1+2 (word-weighted), day 2… — the shape
+        // does not matter, only that day 1 holds two chapters.
+        let sched = schedule(&scope_chapters(&Scope::Canon, &w), &w, 2);
+        assert_eq!(sched[0].len(), 2, "day 1 must span two chapters for the leftover case");
+        let dates = |d1: Option<&'static str>, d2: Option<&'static str>| {
+            move |b: &str, ch: u16| match (b, ch) {
+                ("Gen", 1) => d1.map(str::to_string),
+                ("Gen", 2) => d2.map(str::to_string),
+                _ => None,
+            }
+        };
+
+        // Nothing finished: the chip stays.
+        assert!(!done_today(&sched, dates(None, None), "2026-08-12"));
+        // Half of day 1 read today: the day is still open, the chip stays.
+        assert!(!done_today(&sched, dates(Some("2026-08-12"), None), "2026-08-12"));
+        // Yesterday's leftovers finished today: a day's worth — the chip retires…
+        assert!(done_today(&sched, dates(Some("2026-08-11"), Some("2026-08-12")), "2026-08-12"));
+        // …but only for the rest of that calendar day.
+        assert!(!done_today(&sched, dates(Some("2026-08-11"), Some("2026-08-12")), "2026-08-13"));
+        // A day finished entirely in the past asks again today.
+        assert!(!done_today(&sched, dates(Some("2026-08-10"), Some("2026-08-11")), "2026-08-12"));
     }
 
     #[test]

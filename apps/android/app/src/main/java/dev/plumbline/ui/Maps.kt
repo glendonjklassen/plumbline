@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
@@ -543,16 +544,39 @@ fun ChordMap(
                             onDoubleTap = { zoom.reset() },
                             onTap = { screen ->
                                 val bc = max(1, map.bookCount)
-                                val cx = zoom.toContent(screen).x
-                                val idx = (cx / max(1f, canvasSize.width.toFloat()) * bc).toInt().coerceIn(0, bc - 1)
+                                // The position ALONG the canon axis: screen x in
+                                // landscape, screen y when the portrait flip below
+                                // runs the axis down the left edge.
+                                val c = zoom.toContent(screen)
+                                val portrait = canvasSize.height > canvasSize.width
+                                val along =
+                                    if (portrait) c.y / max(1f, canvasSize.height.toFloat())
+                                    else c.x / max(1f, canvasSize.width.toFloat())
+                                val idx = (along * bc).toInt().coerceIn(0, bc - 1)
                                 if (idx in books.indices) onPickBook(books[idx].id)
                             },
                         )
                     }
                     .zoomable(zoom),
             ) {
-                val w = size.width
-                val h = size.height
+                // A phone held upright gives the canon axis a thumb's span for 66
+                // books — useless (maintainer UAT, 2026-08-12). PORTRAIT flips the
+                // whole map: the axis runs DOWN the left edge (top = Genesis) and
+                // the ribbons bulge right; labels read spine-wise. Everything
+                // below paints in landscape logic against (lw, lh) and the
+                // transform does the rest, so the two orientations cannot drift.
+                val portrait = size.height > size.width
+                val lw = if (portrait) size.height else size.width
+                val lh = if (portrait) size.width else size.height
+                withTransform({
+                    if (portrait) {
+                        // Logical (x, y) → screen (w − y, x).
+                        translate(left = size.width)
+                        rotate(degrees = 90f, pivot = Offset.Zero)
+                    }
+                }) {
+                val w = lw
+                val h = lh
                 val bc = max(1, map.bookCount).toFloat()
                 val y0 = h - 26.dp.toPx()
                 val maxC = max(1, map.max).toFloat()
@@ -626,6 +650,7 @@ fun ChordMap(
                     262.dp.toPx(), 7.dp.toPx(), Paint.Align.LEFT,
                     Color(red = 89, green = 77, blue = 56, alpha = 160).toArgbInt(),
                 )
+                }
             }
         }
     }

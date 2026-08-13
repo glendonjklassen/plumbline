@@ -35,6 +35,11 @@ internal data class FontSpec(
     val regular: String,
     val italic: String?,
     val scale: Float,
+    /** Static-bold files, for a family with no `wght` axis (Atkinson — see
+     *  `Font::static_bold` in the core). Null for the variable families, whose
+     *  bold is the same file driven to 700. */
+    val bold: String? = null,
+    val boldItalic: String? = null,
 )
 
 /**
@@ -51,6 +56,16 @@ internal val BUNDLED_FONTS: List<FontSpec> = listOf(
     FontSpec("inter", "Inter", "fonts/Inter-Regular.ttf", "fonts/Inter-Italic.ttf", scale = 0.87f),
     // No italic entry: the file does not exist, and asking for one would get a shear.
     FontSpec("fira-code", "Fira Code", "fonts/FiraCode-Regular.ttf", null, scale = 0.88f),
+    // STATIC family (no wght axis) — its bold is its own file, carried in
+    // [bold]/[boldItalic]; driving its regular to 700 would paint bold text
+    // regular. The low-vision face (Braille Institute, OFL).
+    FontSpec(
+        "atkinson-hyperlegible", "Atkinson Hyperlegible",
+        "fonts/AtkinsonHyperlegible-Regular.ttf", "fonts/AtkinsonHyperlegible-Italic.ttf",
+        scale = 0.90f,
+        bold = "fonts/AtkinsonHyperlegible-Bold.ttf",
+        boldItalic = "fonts/AtkinsonHyperlegible-BoldItalic.ttf",
+    ),
 )
 
 /** The face everything falls back to — the shipped default. */

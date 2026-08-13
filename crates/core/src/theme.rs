@@ -27,8 +27,9 @@ pub enum Theme {
     Night,
     /// Named presets, inspired by well-known editor themes and tuned to clear
     /// the same WCAG-AA bar the built-ins do (so they read as this app, not as a
-    /// pixel-copy). Dark unless noted.
-    Darcula,
+    /// pixel-copy). Dark unless noted. (Darcula was retired 2026-08-12 — it sat
+    /// a stone's throw from One Dark; `parse` aliases the stored token there so
+    /// no reader's config breaks.)
     SolarizedLight,
     SolarizedDark,
     Gruvbox,
@@ -40,6 +41,15 @@ pub enum Theme {
     TokyoNight,
     RosePine,
     Synthwave,
+    /// The house originals — not editor ports. Scriptorium is a medieval
+    /// manuscript (parchment, iron-gall ink, rubricated accents; light);
+    /// Blueprint is a cyanotype (a plumbline is a builder's tool); Phosphor is
+    /// a green CRT with amber accents; HighContrast is the deliberate
+    /// low-vision option (light).
+    Scriptorium,
+    Blueprint,
+    Phosphor,
+    HighContrast,
 }
 
 impl Theme {
@@ -48,7 +58,6 @@ impl Theme {
             Theme::Light => "light",
             Theme::Dark => "dark",
             Theme::Night => "night",
-            Theme::Darcula => "darcula",
             Theme::SolarizedLight => "solarized-light",
             Theme::SolarizedDark => "solarized-dark",
             Theme::Gruvbox => "gruvbox",
@@ -60,6 +69,10 @@ impl Theme {
             Theme::TokyoNight => "tokyo-night",
             Theme::RosePine => "rose-pine",
             Theme::Synthwave => "synthwave",
+            Theme::Scriptorium => "scriptorium",
+            Theme::Blueprint => "blueprint",
+            Theme::Phosphor => "phosphor",
+            Theme::HighContrast => "high-contrast",
         }
     }
     pub fn parse(t: &str) -> Option<Theme> {
@@ -67,7 +80,9 @@ impl Theme {
             "light" => Some(Theme::Light),
             "dark" => Some(Theme::Dark),
             "night" => Some(Theme::Night),
-            "darcula" => Some(Theme::Darcula),
+            // Retired 2026-08-12; configs that stored it land on its nearest
+            // neighbour rather than falling back to System.
+            "darcula" => Some(Theme::OneDark),
             "solarized-light" => Some(Theme::SolarizedLight),
             "solarized-dark" => Some(Theme::SolarizedDark),
             "gruvbox" => Some(Theme::Gruvbox),
@@ -79,12 +94,24 @@ impl Theme {
             "tokyo-night" => Some(Theme::TokyoNight),
             "rose-pine" => Some(Theme::RosePine),
             "synthwave" => Some(Theme::Synthwave),
+            "scriptorium" => Some(Theme::Scriptorium),
+            "blueprint" => Some(Theme::Blueprint),
+            "phosphor" => Some(Theme::Phosphor),
+            "high-contrast" => Some(Theme::HighContrast),
             _ => None,
         }
     }
     /// Whether the system chrome (scrollbars, dialogs) should be dark.
     pub fn is_dark(self) -> bool {
-        !matches!(self, Theme::Light | Theme::SolarizedLight | Theme::Sepia | Theme::CatppuccinLatte)
+        !matches!(
+            self,
+            Theme::Light
+                | Theme::SolarizedLight
+                | Theme::Sepia
+                | Theme::CatppuccinLatte
+                | Theme::Scriptorium
+                | Theme::HighContrast
+        )
     }
 }
 
@@ -98,7 +125,6 @@ pub enum ThemeChoice {
     Light,
     Dark,
     Night,
-    Darcula,
     SolarizedLight,
     SolarizedDark,
     Gruvbox,
@@ -110,6 +136,10 @@ pub enum ThemeChoice {
     TokyoNight,
     RosePine,
     Synthwave,
+    Scriptorium,
+    Blueprint,
+    Phosphor,
+    HighContrast,
 }
 
 impl ThemeChoice {
@@ -119,7 +149,6 @@ impl ThemeChoice {
             ThemeChoice::Light => "light",
             ThemeChoice::Dark => "dark",
             ThemeChoice::Night => "night",
-            ThemeChoice::Darcula => "darcula",
             ThemeChoice::SolarizedLight => "solarized-light",
             ThemeChoice::SolarizedDark => "solarized-dark",
             ThemeChoice::Gruvbox => "gruvbox",
@@ -131,6 +160,10 @@ impl ThemeChoice {
             ThemeChoice::TokyoNight => "tokyo-night",
             ThemeChoice::RosePine => "rose-pine",
             ThemeChoice::Synthwave => "synthwave",
+            ThemeChoice::Scriptorium => "scriptorium",
+            ThemeChoice::Blueprint => "blueprint",
+            ThemeChoice::Phosphor => "phosphor",
+            ThemeChoice::HighContrast => "high-contrast",
         }
     }
     pub fn parse(t: &str) -> Option<ThemeChoice> {
@@ -139,7 +172,9 @@ impl ThemeChoice {
             "light" => Some(ThemeChoice::Light),
             "dark" => Some(ThemeChoice::Dark),
             "night" => Some(ThemeChoice::Night),
-            "darcula" => Some(ThemeChoice::Darcula),
+            // Retired 2026-08-12 (see `Theme::parse`): a stored darcula config
+            // resolves to its nearest neighbour, not to System.
+            "darcula" => Some(ThemeChoice::OneDark),
             "solarized-light" => Some(ThemeChoice::SolarizedLight),
             "solarized-dark" => Some(ThemeChoice::SolarizedDark),
             "gruvbox" => Some(ThemeChoice::Gruvbox),
@@ -151,6 +186,10 @@ impl ThemeChoice {
             "tokyo-night" => Some(ThemeChoice::TokyoNight),
             "rose-pine" => Some(ThemeChoice::RosePine),
             "synthwave" => Some(ThemeChoice::Synthwave),
+            "scriptorium" => Some(ThemeChoice::Scriptorium),
+            "blueprint" => Some(ThemeChoice::Blueprint),
+            "phosphor" => Some(ThemeChoice::Phosphor),
+            "high-contrast" => Some(ThemeChoice::HighContrast),
             _ => None,
         }
     }
@@ -161,7 +200,6 @@ impl ThemeChoice {
             ThemeChoice::Light => Theme::Light,
             ThemeChoice::Dark => Theme::Dark,
             ThemeChoice::Night => Theme::Night,
-            ThemeChoice::Darcula => Theme::Darcula,
             ThemeChoice::SolarizedLight => Theme::SolarizedLight,
             ThemeChoice::SolarizedDark => Theme::SolarizedDark,
             ThemeChoice::Gruvbox => Theme::Gruvbox,
@@ -173,6 +211,10 @@ impl ThemeChoice {
             ThemeChoice::TokyoNight => Theme::TokyoNight,
             ThemeChoice::RosePine => Theme::RosePine,
             ThemeChoice::Synthwave => Theme::Synthwave,
+            ThemeChoice::Scriptorium => Theme::Scriptorium,
+            ThemeChoice::Blueprint => Theme::Blueprint,
+            ThemeChoice::Phosphor => Theme::Phosphor,
+            ThemeChoice::HighContrast => Theme::HighContrast,
             ThemeChoice::System => {
                 if system_dark {
                     Theme::Dark
@@ -201,7 +243,6 @@ impl ThemeChoice {
             ThemeChoice::Light => "Theme: light",
             ThemeChoice::Dark => "Theme: dark",
             ThemeChoice::Night => "Theme: night",
-            ThemeChoice::Darcula => "Theme: Darcula",
             ThemeChoice::SolarizedLight => "Theme: Solarized Light",
             ThemeChoice::SolarizedDark => "Theme: Solarized Dark",
             ThemeChoice::Gruvbox => "Theme: Gruvbox",
@@ -213,6 +254,10 @@ impl ThemeChoice {
             ThemeChoice::TokyoNight => "Theme: Tokyo Night",
             ThemeChoice::RosePine => "Theme: Rosé Pine",
             ThemeChoice::Synthwave => "Theme: Synthwave",
+            ThemeChoice::Scriptorium => "Theme: Scriptorium",
+            ThemeChoice::Blueprint => "Theme: Blueprint",
+            ThemeChoice::Phosphor => "Theme: Phosphor",
+            ThemeChoice::HighContrast => "Theme: High Contrast",
         }
     }
 }
@@ -401,33 +446,128 @@ pub fn palette(theme: Theme) -> Palette {
         // tier_human so the navigator is unmistakably part of the active theme —
         // never a fixed gold/copper/sage that ignores the palette.
         //
-        // JetBrains IDEA "Darcula": brown-grey ground, its orange keyword / green
-        // string / yellow function accents.
-        Theme::Darcula => Palette {
+        // A medieval manuscript: parchment paper, iron-gall brown-black ink,
+        // and the accent role RUBRICATED — verse numbers, links and connectors
+        // in the scribe's red, which is what a rubric is. The divine name sits
+        // in the same red family one step deeper, as an illuminator would have
+        // it. `tier_research` moves to a plum ink so it cannot be confused
+        // with the rubric.
+        Theme::Scriptorium => Palette {
+            dark: false,
+            paper: "#f2e5c4".into(),
+            ink: "#33261a".into(),
+            faded: "#6a563d".into(),
+            added: "#5d4d38".into(),
+            divine: "#7c1a10".into(),
+            title_ink: "#5a462e".into(),
+            gold: "#96261b".into(),
+            section: "#6b4c16".into(),
+            tier_god: "#6d5115".into(),
+            tier_human: "#49602a".into(),
+            tier_machine: "#5c5442".into(),
+            tier_research: "#6e3554".into(),
+            mono: "#5c5442".into(),
+            morph: "#5a4a20".into(),
+            lemma: "#574f28".into(),
+            rule: "#cdb98a".into(),
+            popup_paper: "#ecdcb4".into(),
+            pane_nav_bg: "#e9d6a9".into(),
+            strip_bg: "#e4cf9e".into(),
+            pin: "#1c5fa8".into(),
+            read_unread: "#8a6414".into(),
+            read_partial: "#96481b".into(),
+            read_done: "#567244".into(),
+        },
+        // A cyanotype: Prussian-blue paper, pale chalk ink, the drafting lines
+        // in lighter blue. A plumbline is a builder's tool; this is the theme
+        // that says so. Gold stays for the divine name and the God tier — the
+        // one precious thing on a working drawing.
+        Theme::Blueprint => Palette {
             dark: true,
-            paper: "#2b2b2b".into(),
-            ink: "#a9b7c6".into(),
-            faded: "#9ba1a8".into(),
-            added: "#c1c8cf".into(),
-            divine: "#d1935f".into(),
-            title_ink: "#a6adb4".into(),
-            gold: "#e0b060".into(),
-            section: "#c99a55".into(),
-            tier_god: "#e0b060".into(),
-            tier_human: "#82a866".into(),
-            tier_machine: "#9ba1a8".into(),
-            tier_research: "#e28a7c".into(),
-            mono: "#9ba1a8".into(),
-            morph: "#cdae7a".into(),
-            lemma: "#c3b48f".into(),
-            rule: "#4b4b4b".into(),
-            popup_paper: "#313335".into(),
-            pane_nav_bg: "#323232".into(),
-            strip_bg: "#2f2f2f".into(),
-            pin: "#4a88c7".into(),
-            read_unread: "#e0b060".into(),
-            read_partial: "#d1935f".into(),
-            read_done: "#82a866".into(),
+            paper: "#0e2a47".into(),
+            ink: "#dbe9f7".into(),
+            faded: "#96b5d6".into(),
+            added: "#b3c9e2".into(),
+            divine: "#f2c94c".into(),
+            title_ink: "#a9c4e0".into(),
+            gold: "#8fd0ff".into(),
+            section: "#9cc3e8".into(),
+            tier_god: "#f2c94c".into(),
+            tier_human: "#8fd9a8".into(),
+            tier_machine: "#a8bcd4".into(),
+            tier_research: "#ff9d8a".into(),
+            mono: "#a4b8cf".into(),
+            morph: "#b7a4ef".into(),
+            lemma: "#e0a9d0".into(),
+            rule: "#29496e".into(),
+            popup_paper: "#123253".into(),
+            pane_nav_bg: "#143a5f".into(),
+            strip_bg: "#17406a".into(),
+            pin: "#ff8c42".into(),
+            read_unread: "#f2c94c".into(),
+            read_partial: "#ff9e64".into(),
+            read_done: "#7fd0a0".into(),
+        },
+        // A green-phosphor CRT, with the classic amber second phosphor as the
+        // accent — so links and verse numbers glow amber against green body
+        // text, the dual-tube terminal look. Near-black paper with a green
+        // cast, never pure black (that is Night's job).
+        Theme::Phosphor => Palette {
+            dark: true,
+            paper: "#050a05".into(),
+            ink: "#6fe58a".into(),
+            faded: "#54ad6c".into(),
+            added: "#8fdca4".into(),
+            divine: "#ffcf4d".into(),
+            title_ink: "#5fc07c".into(),
+            gold: "#ffb000".into(),
+            section: "#7ac98f".into(),
+            tier_god: "#ffb000".into(),
+            tier_human: "#6fe58a".into(),
+            tier_machine: "#7fae8c".into(),
+            tier_research: "#ff7e6e".into(),
+            mono: "#74a882".into(),
+            morph: "#8ad4a0".into(),
+            lemma: "#a8d8b4".into(),
+            rule: "#12331c".into(),
+            popup_paper: "#081408".into(),
+            pane_nav_bg: "#0a180c".into(),
+            strip_bg: "#0c1c0e".into(),
+            pin: "#38b6ff".into(),
+            read_unread: "#ffb000".into(),
+            read_partial: "#ff8c42".into(),
+            read_done: "#58c477".into(),
+        },
+        // The deliberate low-vision option: pure white paper, pure black ink,
+        // and every muted role pulled far past AA (the quiet greys of the other
+        // light themes are exactly what a low-vision reader cannot use). Pairs
+        // naturally with Atkinson Hyperlegible, though type and colour stay
+        // independent axes.
+        Theme::HighContrast => Palette {
+            dark: false,
+            paper: "#ffffff".into(),
+            ink: "#000000".into(),
+            faded: "#3d3d3d".into(),
+            added: "#2e2e2e".into(),
+            divine: "#3b2400".into(),
+            title_ink: "#333333".into(),
+            gold: "#6b4e00".into(),
+            section: "#5c4a00".into(),
+            tier_god: "#6b4e00".into(),
+            tier_human: "#1d5c1d".into(),
+            tier_machine: "#2e2e2e".into(),
+            tier_research: "#8f1500".into(),
+            mono: "#2e2e2e".into(),
+            morph: "#4a3d00".into(),
+            lemma: "#443b11".into(),
+            rule: "#767676".into(),
+            popup_paper: "#f5f5f5".into(),
+            pane_nav_bg: "#ededed".into(),
+            strip_bg: "#e5e5e5".into(),
+            pin: "#0044cc".into(),
+            read_unread: "#6b4e00".into(),
+            read_partial: "#8f4700".into(),
+            read_done: "#1d5c1d".into(),
         },
         Theme::SolarizedDark => Palette {
             dark: true,
@@ -745,11 +885,10 @@ mod tests {
     /// Every concrete theme — the one list the roundtrip and contrast tests
     /// share, so a new theme can't be added to `palette()` and quietly skip
     /// either check.
-    pub(super) const ALL_THEMES: [Theme; 15] = [
+    pub(super) const ALL_THEMES: [Theme; 18] = [
         Theme::Light,
         Theme::Dark,
         Theme::Night,
-        Theme::Darcula,
         Theme::SolarizedLight,
         Theme::SolarizedDark,
         Theme::Gruvbox,
@@ -761,6 +900,10 @@ mod tests {
         Theme::TokyoNight,
         Theme::RosePine,
         Theme::Synthwave,
+        Theme::Scriptorium,
+        Theme::Blueprint,
+        Theme::Phosphor,
+        Theme::HighContrast,
     ];
 
     #[test]
@@ -773,7 +916,6 @@ mod tests {
             ThemeChoice::Light,
             ThemeChoice::Dark,
             ThemeChoice::Night,
-            ThemeChoice::Darcula,
             ThemeChoice::SolarizedLight,
             ThemeChoice::SolarizedDark,
             ThemeChoice::Gruvbox,
@@ -785,10 +927,18 @@ mod tests {
             ThemeChoice::TokyoNight,
             ThemeChoice::RosePine,
             ThemeChoice::Synthwave,
+            ThemeChoice::Scriptorium,
+            ThemeChoice::Blueprint,
+            ThemeChoice::Phosphor,
+            ThemeChoice::HighContrast,
         ] {
             assert_eq!(ThemeChoice::parse(c.token()), Some(c));
         }
         assert_eq!(Theme::parse("nope"), None);
+        // Retired 2026-08-12, aliased rather than dropped: a config that stored
+        // darcula opens on its nearest neighbour instead of snapping to System.
+        assert_eq!(Theme::parse("darcula"), Some(Theme::OneDark));
+        assert_eq!(ThemeChoice::parse("darcula"), Some(ThemeChoice::OneDark));
     }
 
     #[test]

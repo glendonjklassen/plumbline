@@ -46,6 +46,12 @@ pub enum Font {
     Inter,
     /// A monospace. The only bundled face with NO italic (see the module note).
     FiraCode,
+    /// The Braille Institute's low-vision face: exaggerated letterform
+    /// distinctions (unambiguous I/l/1, footed capitals, a slashed zero) so
+    /// characters cannot be mistaken for one another. The accessibility
+    /// option, and it pairs naturally with the High Contrast theme — though,
+    /// as ever, type and colour are independent axes.
+    AtkinsonHyperlegible,
 }
 
 impl Font {
@@ -56,6 +62,7 @@ impl Font {
             Font::Literata => "literata",
             Font::Inter => "inter",
             Font::FiraCode => "fira-code",
+            Font::AtkinsonHyperlegible => "atkinson-hyperlegible",
         }
     }
 
@@ -66,6 +73,7 @@ impl Font {
             "literata" => Some(Font::Literata),
             "inter" => Some(Font::Inter),
             "fira-code" => Some(Font::FiraCode),
+            "atkinson-hyperlegible" => Some(Font::AtkinsonHyperlegible),
             _ => None,
         }
     }
@@ -81,6 +89,7 @@ impl Font {
             Font::Literata => "Literata",
             Font::Inter => "Inter",
             Font::FiraCode => "Fira Code",
+            Font::AtkinsonHyperlegible => "Atkinson Hyperlegible",
         }
     }
 
@@ -88,6 +97,16 @@ impl Font {
     /// apart by the palette's `added` tone alone — see the module note.
     pub fn has_italic(self) -> bool {
         !matches!(self, Font::FiraCode)
+    }
+
+    /// Whether this face ships a REAL bold, as separate static files rather
+    /// than a `wght` axis. The four original families are variable fonts (one
+    /// file covers 400–700); Atkinson Hyperlegible is static, so its bold is
+    /// its own file and the web's @font-face declarations must say so — a
+    /// static 400 declared as `font-weight: 400 700` would paint bold text
+    /// regular. Shell-informative, like [`Font::has_italic`].
+    pub fn static_bold(self) -> bool {
+        matches!(self, Font::AtkinsonHyperlegible)
     }
 
     /// The face's optical size multiplier: what a shell multiplies the reader's
@@ -112,13 +131,18 @@ impl Font {
             Font::Literata => 0.89,
             Font::Inter => 0.87,
             Font::FiraCode => 0.88,
+            // x-height 0.496 (OS/2 sxHeight 496 / 1000 em, measured from the
+            // shipped file) — all but Literata's 0.507, so the same half
+            // correction lands one point higher.
+            Font::AtkinsonHyperlegible => 0.90,
         }
     }
 
     /// Every face, in the order the pickers offer them: the default first, then
     /// the alternatives. One list, so a face added to the enum cannot be
     /// forgotten by a shell — [`tests::every_variant_is_in_all`] holds it.
-    pub const ALL: [Font; 4] = [Font::EbGaramond, Font::Literata, Font::Inter, Font::FiraCode];
+    pub const ALL: [Font; 5] =
+        [Font::EbGaramond, Font::Literata, Font::Inter, Font::FiraCode, Font::AtkinsonHyperlegible];
 }
 
 #[cfg(test)]
@@ -146,10 +170,10 @@ mod tests {
     fn every_variant_is_in_all() {
         // ALL is what both shells enumerate. A variant missing from it is a face
         // the reader can hold in their config and never pick in the UI.
-        for f in [Font::EbGaramond, Font::Literata, Font::Inter, Font::FiraCode] {
+        for f in [Font::EbGaramond, Font::Literata, Font::Inter, Font::FiraCode, Font::AtkinsonHyperlegible] {
             assert!(Font::ALL.contains(&f), "{} is missing from Font::ALL", f.name());
         }
-        assert_eq!(Font::ALL.len(), 4);
+        assert_eq!(Font::ALL.len(), 5);
     }
 
     #[test]
@@ -195,8 +219,19 @@ mod tests {
         // words, and a wrong answer either loses the KJV's italics or asks a
         // font for a face it does not have.
         assert!(!Font::FiraCode.has_italic());
-        for f in [Font::EbGaramond, Font::Literata, Font::Inter] {
+        for f in [Font::EbGaramond, Font::Literata, Font::Inter, Font::AtkinsonHyperlegible] {
             assert!(f.has_italic(), "{} should have an italic", f.name());
+        }
+    }
+
+    #[test]
+    fn only_atkinson_carries_a_static_bold() {
+        // The variable families cover 400–700 in one file; Atkinson's bold is
+        // its own file. A shell that gets this wrong either paints bold text
+        // regular (static declared as a range) or ships a file it never uses.
+        assert!(Font::AtkinsonHyperlegible.static_bold());
+        for f in [Font::EbGaramond, Font::Literata, Font::Inter, Font::FiraCode] {
+            assert!(!f.static_bold(), "{} is a variable family", f.name());
         }
     }
 }

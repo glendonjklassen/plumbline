@@ -10,6 +10,12 @@
   let canvas: HTMLCanvasElement;
   let host: HTMLDivElement;
   let cssW = $state(0);
+  // The full strip (sections, labels, pins) has painted at least once. Until
+  // then the canvas stays transparent over the strip's own CSS background —
+  // the same colour the paint lays down — so boot shows a quiet band that the
+  // detail FADES into, instead of a differently-coloured bar that the minimap
+  // pops onto a beat after the page (maintainer UAT, 2026-08-12).
+  let painted = $state(false);
 
   const HEIGHT = 30;
   const seg = $derived(s.q("canonSegments")); // {segments:[{label,first,last}], otNtDivide}
@@ -47,6 +53,7 @@
     ctx.textBaseline = "middle";
     ctx.font = '11px "EB Garamond", Georgia, serif';
     if (!seg?.segments) return;
+    painted = true;
     seg.segments.forEach((sec: any, i: number) => {
       const x0 = xOf(sec.first);
       const x1 = xOf(sec.last + 1);
@@ -145,6 +152,7 @@
        out by name rather than as "book 43 of 66". -->
   <canvas
     bind:this={canvas}
+    class:painted
     style:height="{HEIGHT}px"
     role="slider"
     tabindex="0"
@@ -167,11 +175,22 @@
   .strip {
     height: 30px;
     border-top: 1px solid var(--rule, #d8cba8);
+    /* The exact colour the canvas paints (applyTheme publishes the palette as
+       CSS variables before the engine exists). The band is RIGHT from the
+       first frame; the canvas fades its detail in over it. */
+    background: var(--stripBg, #ebe6db);
   }
   canvas {
     display: block;
     width: 100%;
     cursor: pointer;
+    /* See `painted` in the script: transparent until the first full paint, so
+       boot never shows a half-drawn strip — just the band, then the detail. */
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+  canvas.painted {
+    opacity: 1;
   }
   /* Inset so the ring sits inside the 30px band instead of over the text above. */
   canvas:focus-visible {

@@ -10,7 +10,7 @@
   import { getSession } from "../state/session.svelte";
   import ScreenBar from "../lib/ScreenBar.svelte";
   import { dispatchLink } from "../study/links";
-  import { t } from "../lib/i18n.svelte";
+  import { lang, t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -52,6 +52,14 @@
     return b ? t(b.nameKey) : id;
   }
 
+  /** "3 Aug 2026" in the reader's language — how a run is told apart from any
+   *  other run of the same plan: its name plus the day it was started. */
+  function startedOn(stamp: string): string {
+    const d = new Date(stamp);
+    if (isNaN(d.getTime())) return stamp.slice(0, 10);
+    return d.toLocaleDateString(lang(), { day: "numeric", month: "short", year: "numeric" });
+  }
+
   /** refKey → the core's `go:` verb, split on the LAST space, as core `go_uri`
    *  does. Also in App.svelte and MemorizeHost — see App.svelte for why. */
   const goUri = (refKey: string): string => `go:${refKey.replace(/ (?=\S*$)/, ":")}`;
@@ -75,12 +83,22 @@
         <p class="hint">{t("plans.empty")}</p>
       {/if}
       {#each schedules as p (p.id)}
-        <div class="plan-card">
+        <div class="plan-card" class:paused={p.paused}>
           <div class="plan-head">
             <span class="plan-name">{planName(p.id)}</span>
             <span class="plan-prog">{t("plans.dayProgress", { done: p.scheduleProgress[0], total: p.scheduleProgress[1] })}</span>
           </div>
-          {#if p.today}
+          <!-- A run is its name plus the day it began — what tells "the NT in 90
+               I paused in March" from "the one I started fresh". -->
+          <p class="plan-started">
+            {t("plans.startedOn", { date: startedOn(p.started) })}{#if p.paused}
+              · {t("plans.pausedBadge")}{/if}
+          </p>
+          {#if p.paused}
+            <!-- No today line: a paused plan asks nothing. Where it will pick
+                 up is one Resume away, and promising chapters it is not asking
+                 for reads as asking for them. -->
+          {:else if p.today}
             <button class="plan-today" onclick={(e) => p.today.chapters[0] && onLink(goUri(`${p.today.chapters[0].book} ${p.today.chapters[0].chapter}:1`), e)}>
               {t("plans.today", { chapters: p.today.chapters.map((c: any) => c.display).join(", ") })}
             </button>
@@ -88,6 +106,13 @@
             <p class="plan-done">{t("plans.finished")}</p>
           {/if}
           <div class="plan-actions">
+            {#if p.today}
+              {#if p.paused}
+                <button onclick={() => s.setPlanPaused(p.id, false, planName(p.id))}>{t("plans.resume")}</button>
+              {:else}
+                <button onclick={() => s.setPlanPaused(p.id, true, planName(p.id))}>{t("plans.pause")}</button>
+              {/if}
+            {/if}
             <button class="danger" onclick={() => s.stopPlan(p.id, planName(p.id))}>{t("plans.stop")}</button>
           </div>
         </div>
@@ -185,6 +210,16 @@
   .plan-card.concept-study {
     border-color: var(--tier-research, #b04a3a);
     background: color-mix(in srgb, var(--tier-research, #b04a3a) 8%, transparent);
+  }
+  /* Set aside: visibly at rest, not disabled — Resume is right there. */
+  .plan-card.paused {
+    background: transparent;
+    border-style: dashed;
+  }
+  .plan-started {
+    color: var(--faded, #8a8276);
+    font-size: calc(12.5px * var(--uiScale, 1));
+    margin: -6px 0 0;
   }
   .plan-head {
     display: flex;

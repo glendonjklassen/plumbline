@@ -914,6 +914,35 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
     });
 
     let xrefs = src.verse_xrefs(verse);
+
+    // WHICH WEAVES THIS VERSE IS IN, before the partner list and separate from
+    // it. The partners answer "what does this connect to"; a reader also wants
+    // "what is this verse part of", and the partner list buries that — a verse
+    // in one weave with six links reads as six rows repeating the same weave
+    // name, and a verse in three weaves gives no way to see the three at all.
+    //
+    // Derived from the partners rather than fetched, because a weave is a graph
+    // of verse↔verse links: a verse that appears in a weave appears in at least
+    // one of its links, so the distinct weaves ARE the membership. Insertion
+    // order is kept (canon order of the partners), and the dedupe is by NAME
+    // because that is what identifies a weave to the reader.
+    let mut in_weaves: Vec<(&str, Option<usize>)> = Vec::new();
+    for x in &xrefs {
+        if !in_weaves.iter().any(|(name, _)| *name == x.weave) {
+            in_weaves.push((&x.weave, x.weave_index));
+        }
+    }
+    if !in_weaves.is_empty() {
+        out.push(Block::para(vec![Run::new(sp("panel.inWeaves", in_weaves.len()), sz::LABEL, Color::Ink).bold()]));
+        for (name, index) in &in_weaves {
+            let run = Run::new(*name, sz::LIST, Color::Gold);
+            out.push(Block::para(vec![match index {
+                Some(i) => run.link(format!("weave:{i}")),
+                None => run,
+            }]));
+        }
+    }
+
     if !xrefs.is_empty() {
         out.push(Block::para(vec![Run::new(sn("panel.xrefs", xrefs.len()), sz::LABEL, Color::Ink).bold()]));
         for p in xrefs.iter().take(40) {

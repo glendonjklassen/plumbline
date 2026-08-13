@@ -18,11 +18,16 @@ export interface TodayPlan {
   name: string;
   day: number;
   chapters: TodayChapter[];
+  /** A full plan-day was finished today (even yesterday's leftovers) — the
+   *  chip retires for the rest of the calendar day; the navigator's today
+   *  card keeps showing where the plan stands. */
+  doneToday: boolean;
 }
 
 /** Running schedules that still have a day to read, oldest-declared first.
  *  `today` is null once a plan is finished, so a finished plan simply drops
- *  out. Concept studies never appear — they have no days. */
+ *  out — and a PAUSED plan asks nothing anywhere, so it drops out here too.
+ *  Concept studies never appear — they have no days. */
 export function todayPlans(plans: any): TodayPlan[] {
   const builtins = (plans?.builtins ?? []) as any[];
   const nameOf = (id: string): string => {
@@ -30,8 +35,14 @@ export function todayPlans(plans: any): TodayPlan[] {
     return b ? t(b.nameKey) : id;
   };
   return ((plans?.running ?? []) as any[])
-    .filter((p) => p.kind === "schedule" && p.today)
-    .map((p) => ({ id: p.id, name: nameOf(p.id), day: p.today.day, chapters: p.today.chapters }));
+    .filter((p) => p.kind === "schedule" && p.today && !p.paused)
+    .map((p) => ({
+      id: p.id,
+      name: nameOf(p.id),
+      day: p.today.day,
+      chapters: p.today.chapters,
+      doneToday: p.doneToday === true,
+    }));
 }
 
 /** Today's chapters, ranges collapsed the way the spec writes them:

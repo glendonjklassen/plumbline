@@ -62,6 +62,7 @@ fn cfg() -> PlumblineLayoutConfig {
         para_indent: 16.0,
         para_spacing: 8.0,
         verse_break: 0,
+        verse_numbers: 1,
     }
 }
 
@@ -498,6 +499,35 @@ fn plans_and_concept_study_via_abi() {
         assert_eq!(run["kind"], "schedule");
         assert_eq!(run["today"]["day"], 1);
         assert_eq!(run["today"]["chapters"][0]["read"], false, "unread until the tracker says so");
+        // The chip's standing-down signal and the pause state ride the wire.
+        assert_eq!(run["doneToday"], false, "nothing read yet, nothing done today");
+        assert_eq!(run["paused"], false);
+        assert_eq!(run["started"], "2026-08-08T12:00:00Z");
+
+        // Read the day's one chapter (this toy NT is John 3 alone) TODAY: the
+        // day's worth is done, and the wire says so — while a query dated the
+        // NEXT day asks again.
+        let _ = take(plumbline_engine_reading_record_json(e, c("John").as_ptr(), 3, 999, 3600.0, now.as_ptr()));
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        assert_eq!(v["running"][0]["doneToday"], true, "a day's worth was read today");
+        let tomorrow = c("2026-08-09T12:00:00Z");
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, tomorrow.as_ptr())).unwrap()).unwrap();
+        assert_eq!(v["running"][0]["doneToday"], false, "yesterday's reading does not quiet today");
+        // (The whole one-chapter plan is now finished; `today` is gone but the
+        // pause endpoint below still finds the plan.)
+
+        // Pause: kept whole, flagged on the wire; resume clears it. A double
+        // pause is a no-op, an unknown id is an error.
+        assert!(plumbline_engine_plan_set_paused(e, c("nt-90").as_ptr(), true).is_null());
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        assert_eq!(v["running"][0]["paused"], true);
+        assert!(plumbline_engine_plan_set_paused(e, c("nt-90").as_ptr(), true).is_null());
+        assert!(plumbline_engine_plan_set_paused(e, c("nt-90").as_ptr(), false).is_null());
+        let v: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        assert_eq!(v["running"][0]["paused"], false);
+        assert!(take(plumbline_engine_plan_set_paused(e, c("no-such").as_ptr(), true))
+            .unwrap()
+            .contains("no running plan"));
 
         // An unknown plan id is an error, not a silent no-op.
         assert!(take(plumbline_engine_plan_start(e, c("no-such-plan").as_ptr(), now.as_ptr()))

@@ -184,14 +184,20 @@ interface LayoutReq {
   width: number;
   lineSpacing: number;
   versePerLine: boolean;
+  verseNumbers: boolean;
 }
 
 function layoutChapter(m: LayoutReq): LaidOut | null {
   // The face token is part of the key: a cached layout was measured under one
   // face's metrics AND its optical scale (readerFont applies both), so a face
   // switch must miss here rather than serve geometry the new face will not
-  // paint at.
-  const key = `${m.book} ${m.chapter}|${readerFontToken()}|${m.font}|${m.width}|${m.lineSpacing}|${m.versePerLine}|${akjvOn}`;
+  // paint at. Same for `verseNumbers`: it moves every word on every line, so a
+  // layout cached under one setting is wrong geometry under the other. (The
+  // ITALICS switch is deliberately absent — it changes paint only, never
+  // measurement, so its layouts are interchangeable.)
+  const key =
+    `${m.book} ${m.chapter}|${readerFontToken()}|${m.font}|${m.width}|` +
+    `${m.lineSpacing}|${m.versePerLine}|${m.verseNumbers}|${akjvOn}`;
   const hit = turnCache.get(key);
   if (hit) {
     turnCache.delete(key); // re-insert to keep LRU order
@@ -214,6 +220,7 @@ function layoutChapter(m: LayoutReq): LaidOut | null {
     paraIndent: lineHeight * 0.9,
     paraSpacing: lineHeight * 0.45,
     versePerLine: m.versePerLine,
+    verseNumbers: m.verseNumbers,
   };
   const t1 = performance.now();
   const crossings0 = PERF ? booted!.wasm.measureCalls() : 0;
@@ -797,7 +804,6 @@ self.onmessage = async (ev: MessageEvent) => {
           "light",
           "dark",
           "night",
-          "darcula",
           "solarized-light",
           "solarized-dark",
           "gruvbox",
@@ -809,6 +815,10 @@ self.onmessage = async (ev: MessageEvent) => {
           "tokyo-night",
           "rose-pine",
           "synthwave",
+          "scriptorium",
+          "blueprint",
+          "phosphor",
+          "high-contrast",
         ];
         const palettes: Record<string, unknown> = {};
         for (const tk of THEME_TOKENS) palettes[tk] = themePalette(booted.wasm, tk);

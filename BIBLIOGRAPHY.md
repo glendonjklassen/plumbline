@@ -94,4 +94,8 @@ what promotes it out of the queue into the library.
 
 Scripture renders in **EB Garamond** (SIL Open Font License), bundled with the
 web shell under `apps/web/public/fonts/`; the Compose shell asks for the same
-family from `assets/fonts/` and falls back to the platform serif.
+family from `assets/fonts/` and falls back to the platform serif. The picker
+offers four more faces, all bundled the same way and all OFL: **Literata**
+(Type Together, for Google Fonts), **Inter** (Rasmus Andersson), **Fira Code**
+(Nikita Prokopov et al.), and **Atkinson Hyperlegible** (Braille Institute of
+America — the low-vision face).

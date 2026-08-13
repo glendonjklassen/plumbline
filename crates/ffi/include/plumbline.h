@@ -63,6 +63,11 @@ typedef struct PlumblineLayoutConfig {
   float para_spacing;
   // Nonzero: start every verse on a fresh line (verse-per-line mode).
   uint32_t verse_break;
+  // Nonzero: paint the leading verse numbers (the default). Zero lays the
+  // chapter out as prose — and it is a LAYOUT input rather than something a
+  // shell can skip at paint time, because the number's width and its gap
+  // belong to the line whether or not anything is drawn in them.
+  uint32_t verse_numbers;
 } PlumblineLayoutConfig;
 
 // Advance-width callback: given the caller's context pointer and a
@@ -1037,10 +1042,12 @@ char *plumbline_engine_reading_tick_json(struct PlumblineEngine *engine,
 
 // Every running plan with derived state, plus the builtin catalogue for the
 // picker, as `{running:[…], builtins:[…]}`. Never null on a live engine.
+// `now` is what dates each schedule's `doneToday`; null reads as "no day",
+// so the flag is simply false everywhere.
 //
 // # Safety
 // `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
-char *plumbline_engine_plans_json(const struct PlumblineEngine *engine, const char *_now);
+char *plumbline_engine_plans_json(const struct PlumblineEngine *engine, const char *now);
 
 // Start a built-in schedule plan by its `id` (see `plumbline_engine_plans_json`
 // `builtins`). Starting a plan whose class is already occupied REPLACES the
@@ -1084,6 +1091,18 @@ char *plumbline_engine_concept_study_sweep(struct PlumblineEngine *engine,
 // # Safety
 // `engine` is valid; `id` is null or valid NUL-terminated UTF-8.
 char *plumbline_engine_plan_stop(struct PlumblineEngine *engine, const char *id);
+
+// Pause or resume a plan — set aside, kept whole: its file, its progress and
+// its class stay put; shells stop asking for its today (no chip, no card)
+// while `paused`. A concept study can pause too (it simply stops being
+// offered as resumable-in-one-tap surfaces choose). An absent id is an
+// error — pausing a plan that is not running means the shell's list is
+// stale, and saying so beats a silent no-op. Null on success, else an owned
+// error string.
+//
+// # Safety
+// `engine` is valid; `id` is null or valid NUL-terminated UTF-8.
+char *plumbline_engine_plan_set_paused(struct PlumblineEngine *engine, const char *id, bool paused);
 
 // Every book's reading standing at `now` (RFC3339), canon order, as
 // `{books:[…],since,spec}`. Never null on a live engine.
