@@ -796,7 +796,9 @@ Backup/Restore — sits behind ONE collapsed **Advanced** disclosure
 
 **The Study hub's contents** (both shells, a described card list so the tools
 aren't cryptic): Reading plans (web only until Android's plans ship) ·
-Memorize · Notes · Threads · Tags · Weaves · Constellation · Weave map — every
+Memorize · Notes · Threads · Tags · Weaves · **Visualizations** (an expanding
+card holding Constellation · Weave map as sub-items — two views of the same
+thing, not two more tools; UAT 2026-08-12) — every
 card's label from the same `explore.*` keys in both shells (the Android
 weave-map card had drifted onto `map.chordMap`; fixed). *Delta:* the web lists
 **Suggested** as its own card (`ExploreScreen.svelte`); Android folds it into
@@ -939,7 +941,11 @@ baseline, OT/NT seam; ribbons heaviest-first, alpha
 / NT `(0.50,0.70,0.90)` / cross `(0.78,0.59,0.86)` (+0.08 α, cap 0.5); apex
 `min(0.42·h, 22+0.26·h·|dx|/w)`; self-pair = small loop. Click: x→book →
 navigate active pane + close. The map counts every deduped pair, resolved or not —
-unlike the connector overlay, which draws only resolved ones.
+unlike the connector overlay, which draws only resolved ones. **A portrait
+viewport flips the whole map** (both shells, UAT 2026-08-12): the canon axis
+runs down the LEFT edge (top = Genesis), ribbons bulge right, labels read
+spine-wise — landscape logic painted through one rotation transform, taps
+mapped y→book; landscape gave a phone's 66 books a thumb's span of axis.
 
 ## Constellation popup (M:937–1529)
 
@@ -1264,8 +1270,11 @@ chapter is a **percentage**, gated two ways at once:
 `min(words above the furthest verse reached, dwell × 500 wpm) ÷ chapter words`.
 Scrolling to the bottom instantly credits nothing; sitting on verse 1 credits only
 verse 1. Dwell is **aggregate, not per-verse** — time over verse 3 pays for verse
-30 once you get there — and a pass completes at **85%** and snaps to 1.0, so there
-is never a trailing verse to chase. Stored per chapter: `reached`, `dwell`
+30 once you get there — and a pass completes at **85% with the chapter's last
+verse reached** and snaps to 1.0. The snap is a tolerance on the CLOCK (nobody
+re-reads a chapter because their pace ran ahead of the credited rate), not on
+the chapter: 85% of the words with the end never on screen stays `Partial`
+(UAT, 2026-08-12). Stored per chapter: `reached`, `dwell`
 (both belong to the pass under way, cleared when it completes), `lastRead` and
 `touched`. The reading rate is 500 wpm, tuned twice and both times upward: at
 220, Jude's 613 words wanted 2.8 minutes of dwell, which a brisk reader beats;
@@ -1370,15 +1379,27 @@ shaped once in `shell/planToday.ts`): a nav-strip chip above the canon strip
 while a schedule runs — tap → today's first unread chapter — and the passage
 navigator leads with a today card whose chapters are the buttons, read ones
 marked. Both stand down in concept-study mode (the tracker is suspended, so
-schedule reading there earns no credit). E2e:
+schedule reading there earns no credit). The CHIP also stands down for the
+rest of the calendar day once a full plan-day finishes today — even
+yesterday's leftovers (`doneToday` on the wire, `plan::done_today` dating a
+finished day by its chapters' `last_read`); the today card keeps showing
+where the plan stands. Plans PAUSE and RESUME (`paused` in the plan file,
+additive): a paused plan keeps its file, progress and class but asks nothing
+— no chip, no today card — and its Plans-screen card is introduced by its
+identity, the plan name plus the day it was started ("Started 3 Aug 2026 ·
+paused"). E2e:
 `e2e/concept-study.spec.ts` (tap-to-tag, tracker suspension, tag survival,
 the Plans-screen launch path, the touch-tap ghost-click regression, the
 progress surfaces) and `e2e/plans-today.spec.ts` (chip → today, the navigator
-card, the mode standing both down).
+card, the mode standing both down, the day's-worth chip retirement, pause →
+nothing asked → resume).
 
-**C ABI** (5 fns): `plumbline_engine_plans_json` (concept-study entries carry
-`sweepProgress` AND the per-chapter `swept` map the navigator paints from) /
+**C ABI** (6 fns): `plumbline_engine_plans_json` (`now` dates each schedule's
+`doneToday`; concept-study entries carry
+`sweepProgress` AND the per-chapter `swept` map the navigator paints from;
+every running entry carries `started` + `paused`) /
 `plan_start` / `plan_stop` /
+`plan_set_paused` /
 `concept_study_start` (returns the run id, `!`-prefixed error otherwise) /
 `concept_study_sweep`.
 

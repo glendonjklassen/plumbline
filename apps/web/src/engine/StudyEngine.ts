@@ -582,9 +582,17 @@ export class StudyEngine {
 
   // ── reading plans + the concept study ──────────────────────────────────────────
   /** `{running:[…], builtins:[…]}` — the reader's plans with derived state,
-   *  and the catalogue the picker offers. */
+   *  and the catalogue the picker offers.
+   *
+   *  `now` dates each schedule's `doneToday` (did a full plan-day finish
+   *  today?). Every shell call site passes `""` — it is the read-through
+   *  cache's KEY, and a key that carried the clock would mint a fresh entry
+   *  per call — so the empty stamp means "now", stamped here where the clock
+   *  is. The cache cannot go stale across midnight in a way that matters: it
+   *  is invalidated by every dwell report, so the moment reading resumes the
+   *  flag re-dates. */
   plans(now: string): any {
-    return this.#json("plumbline_engine_plans_json", now);
+    return this.#json("plumbline_engine_plans_json", now || new Date().toISOString());
   }
   /** Start a built-in schedule by id (replaces its class occupant). */
   planStart(id: string, now: string): string | null {
@@ -593,6 +601,11 @@ export class StudyEngine {
   /** Stop a plan (removes its file; a concept study's tag is untouched). */
   planStop(id: string): string | null {
     return this.#author("plumbline_engine_plan_stop", (f, i) => f(this.#engine, i), [id]);
+  }
+  /** Pause (true) or resume (false) a plan — set aside, kept whole: file,
+   *  progress and class stay put; `today` surfaces stop asking meanwhile. */
+  planSetPaused(id: string, paused: boolean): string | null {
+    return this.#author("plumbline_engine_plan_set_paused", (f, i) => f(this.#engine, i, paused ? 1 : 0), [id]);
   }
   /** Start or resume a concept study for `tag`; returns the run's id — what the
    *  shell writes into `config.conceptStudy` to enter the mode. An error comes

@@ -268,10 +268,12 @@ async function pointAt(page: Page, x: number, y: number, W: number, H: number): 
   return [box.x + (x / W) * box.width, box.y + (y / H) * box.height];
 }
 
-/** Explore → one of its cards. The real route a reader takes to the two
- *  library-wide maps. */
+/** Explore → Visualizations → one of its maps. The real route a reader takes
+ *  to the two library-wide maps (they are sub-items of one card, UAT
+ *  2026-08-12). */
 async function openFromExplore(page: Page, card: RegExp): Promise<void> {
   await page.locator("nav.browse").getByRole("button", { name: "Study" }).click();
+  await page.getByRole("button", { name: /^Visualizations/ }).click();
   await page.getByRole("button", { name: card }).click();
 }
 

@@ -250,14 +250,26 @@
     });
   });
 
+  // The top of the chapter's last text line — where overscroll stops. Falls
+  // back to the content bottom for a layout with no words (never in practice).
+  const lastLineTop = $derived(
+    items.reduce((m, it) => (it.kind === "word" && it.y > m ? it.y : m), 0) || contentH,
+  );
   function maxScroll(): number {
-    // NOT the usual bottom-stop (content bottom meets screen bottom): the
-    // reader may keep pushing until the chapter's LAST LINE reaches the TOP
-    // of the pane — and no further. For reading on your back, where something
-    // blocks the bottom of the screen and turning early means moving your
-    // head (maintainer UAT ask, 2026-08-11). The spacer below carries the
-    // same tail, so this is real scroll room — no rubber-band snap-back.
-    return contentH + MARGIN;
+    // A PHONE is not the usual bottom-stop (content bottom meets screen
+    // bottom): the reader may keep pushing until the chapter's LAST LINE
+    // reaches the TOP of the pane — and no further. For reading on your back,
+    // where something blocks the bottom of the screen and turning early means
+    // moving your head (maintainer UAT ask, 2026-08-11, phones only
+    // 2026-08-12). The LINE, not the content bottom: stopping there keeps the
+    // line on screen, where the first cap let the text slide off entirely and
+    // left a blank pane. The spacer below carries the same tail, so this is
+    // real scroll room — no rubber-band snap-back.
+    //
+    // On a desktop nobody reads lying down and the tail just looks like a
+    // scrollbar lying about how much text is left, so the classic stop rules.
+    if (s.narrow) return lastLineTop + MARGIN;
+    return Math.max(0, contentH + 2 * MARGIN - cssH);
   }
   function clampScroll(): void {
     // No layout yet: leave pane.scrollY alone — it may hold a restored offset
@@ -268,7 +280,12 @@
 
   // ── native scroll ↔ pane.scrollY ──
   // cssH + maxScroll(), so the browser's own clamp agrees with clampScroll.
-  const spacerH = $derived(contentH > 0 ? cssH + contentH + MARGIN : cssH);
+  // (Reads `s.narrow` and the layout the same way maxScroll does.)
+  const spacerH = $derived(
+    contentH > 0
+      ? cssH + (s.narrow ? lastLineTop + MARGIN : Math.max(0, contentH + 2 * MARGIN - cssH))
+      : cssH,
+  );
   let programmaticScroll = false;
   function onScroll(): void {
     const top = container.scrollTop;

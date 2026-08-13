@@ -41,9 +41,19 @@ struct WireRunning {
     kind: plan::Kind,
     #[serde(skip_serializing_if = "Option::is_none")]
     class: Option<String>,
+    /// When the plan was started — with the name, how a set-aside plan is
+    /// introduced ("NT in 90 · started 3 Aug").
+    started: String,
+    /// Set aside, kept whole: holds its place, asks nothing (no chip, no
+    /// today card — shells filter on this).
+    paused: bool,
     /// Concept study only: the preset tag a tap files under.
     #[serde(skip_serializing_if = "Option::is_none")]
     tag: Option<String>,
+    /// Schedule only: a full plan-day was finished TODAY (`plan::done_today`),
+    /// which retires the nav-strip chip for the rest of the calendar day.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    done_today: Option<bool>,
     /// Schedule only: today's card (null once the plan is finished).
     #[serde(skip_serializing_if = "Option::is_none")]
     today: Option<WireToday>,
@@ -91,7 +101,13 @@ struct WireBuiltin {
 /// `last_read` date. Independent of `now` (a completed read does not un-complete
 /// with time), which is why plan completion needs no clock.
 fn chapter_read(store: &reading::Store, book: &str, chapter: u16) -> bool {
-    store.get(book).is_some_and(|recs| recs.iter().any(|r| r.chapter == chapter && r.last_read.is_some()))
+    last_read_day(store, book, chapter).is_some()
+}
+
+/// The `YYYY-MM-DD` a chapter's last full pass landed on, `None` if it has
+/// never had one — what [`plan::done_today`] dates a finished plan-day by.
+fn last_read_day(store: &reading::Store, book: &str, chapter: u16) -> Option<String> {
+    store.get(book)?.iter().find(|r| r.chapter == chapter)?.last_read.clone()
 }
 
 /// The schedule a plan describes, or empty when it cannot be built (a
@@ -117,12 +133,16 @@ fn running_state(
     words: &ChapterWords,
     store: &reading::Store,
     home: Option<&std::path::Path>,
+    today_day: &str,
 ) -> WireRunning {
     let mut w = WireRunning {
         id: plan.id.clone(),
         kind: plan.kind,
         class: plan.class.clone(),
+        started: plan.started.clone(),
+        paused: plan.paused,
         tag: plan.tag.clone(),
+        done_today: None,
         today: None,
         schedule_progress: None,
         sweep_progress: None,
@@ -136,6 +156,8 @@ fn running_state(
             let days_total = sched.len() as u32;
             let days_done = today.as_ref().map_or(days_total, |t| t.days_done);
             w.schedule_progress = Some([days_done, days_total]);
+            w.done_today =
+                Some(plan::done_today(&sched, |b, c| last_read_day(store, b, c), today_day));
             w.today = today.map(|t| WireToday {
                 day: t.day,
                 chapters: t
@@ -166,13 +188,15 @@ fn canon_chapter_total(words: &ChapterWords) -> usize {
 
 /// Every running plan with derived state, plus the builtin catalogue for the
 /// picker, as `{running:[…], builtins:[…]}`. Never null on a live engine.
+/// `now` is what dates each schedule's `doneToday`; null reads as "no day",
+/// so the flag is simply false everywhere.
 ///
 /// # Safety
 /// `engine` is a live engine; `now` is null or valid NUL-terminated UTF-8.
 #[no_mangle]
 pub unsafe extern "C" fn plumbline_engine_plans_json(
     engine: *const PlumblineEngine,
-    _now: *const c_char,
+    now: *const c_char,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let Some(e) = engine.as_ref() else { return ptr::null_mut() };
@@ -180,7 +204,8 @@ pub unsafe extern "C" fn plumbline_engine_plans_json(
         let words = e.reading_words();
         let store = e.home.as_ref().map(|h| reading::load(h).0).unwrap_or_default();
         let home = e.home.as_deref();
-        let running = plans.iter().map(|p| running_state(p, words, &store, home)).collect();
+        let today = opt_str(now).map(reading::day_of).unwrap_or_default();
+        let running = plans.iter().map(|p| running_state(p, words, &store, home, &today)).collect();
         let builtins = plan::builtins()
             .into_iter()
             // A table plan is offered only where its table actually loads —
@@ -252,6 +277,7 @@ pub unsafe extern "C" fn plumbline_engine_plan_start(
             done: Vec::new(),
             tag: None,
             swept: Default::default(),
+            paused: false,
         };
         match plan::write_plan(&home, &started) {
             Ok(()) => ptr::null_mut(),
@@ -305,6 +331,7 @@ pub unsafe extern "C" fn plumbline_engine_concept_study_start(
             done: Vec::new(),
             tag: Some(tag.trim().to_string()),
             swept: Default::default(),
+            paused: false,
         };
         match plan::write_plan(&home, &run) {
             Ok(()) => out_string(id),
@@ -368,6 +395,42 @@ pub unsafe extern "C" fn plumbline_engine_plan_stop(engine: *mut PlumblineEngine
         let Some(id) = opt_str(id) else { return out_string("null or invalid argument".into()) };
         match plan::remove_plan(&home, id) {
             Ok(_) => ptr::null_mut(),
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Pause or resume a plan — set aside, kept whole: its file, its progress and
+/// its class stay put; shells stop asking for its today (no chip, no card)
+/// while `paused`. A concept study can pause too (it simply stops being
+/// offered as resumable-in-one-tap surfaces choose). An absent id is an
+/// error — pausing a plan that is not running means the shell's list is
+/// stale, and saying so beats a silent no-op. Null on success, else an owned
+/// error string.
+///
+/// # Safety
+/// `engine` is valid; `id` is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_plan_set_paused(
+    engine: *mut PlumblineEngine,
+    id: *const c_char,
+    paused: bool,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else { return out_string("null engine".into()) };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory (opened from bytes); cannot author".into());
+        };
+        let Some(id) = opt_str(id) else { return out_string("null or invalid argument".into()) };
+        let Some(mut found) = plan::load_plans(&home).0.into_iter().find(|p| p.id == id) else {
+            return out_string(format!("no running plan: {id}"));
+        };
+        if found.paused == paused {
+            return ptr::null_mut(); // already there: a double-tap is not an error
+        }
+        found.paused = paused;
+        match plan::write_plan(&home, &found) {
+            Ok(()) => ptr::null_mut(),
             Err(e) => out_string(e.to_string()),
         }
     })

@@ -247,6 +247,8 @@ internal interface PlumblineNative : Library {
     fun plumbline_engine_plans_json(engine: Pointer, now: String): Pointer?
     fun plumbline_engine_plan_start(engine: Pointer, id: String, now: String): Pointer?
     fun plumbline_engine_plan_stop(engine: Pointer, id: String): Pointer?
+    /** Pause (true) or resume (false) a plan — set aside, kept whole. */
+    fun plumbline_engine_plan_set_paused(engine: Pointer, id: String, paused: Boolean): Pointer?
     /** Returns the run's id, or an error string prefixed with '!'. */
     fun plumbline_engine_concept_study_start(engine: Pointer, tag: String, now: String): Pointer?
     fun plumbline_engine_concept_study_sweep(engine: Pointer, id: String, book: String, chapter: Int): Pointer?

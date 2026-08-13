@@ -373,8 +373,12 @@
       <button onclick={() => s.stepChapter(s.activePane, 1)} aria-label={t("common.nextChapter")}>›</button>
     </div>
     <!-- Which pane is ACTIVE. Hidden on a phone, where the chapter nav above
-         says it already. Kept in the DOM at every width on purpose: 21 e2e
-         files use it as the "text is on screen" boot signal. -->
+         says it already, and on every DESTINATION, where the passage is not what
+         the screen is about — the Hymnal advertising "1 Corinthians 7" in the
+         top-left is the wide-screen version of the stacked-bars problem the
+         phone rule below fixes (Android never shows it: its TopBar is drawn
+         inside Dest.Read only). Kept in the DOM at every width on purpose: 21
+         e2e files use it as the "text is on screen" boot signal. -->
     <span class="subtitle">{subtitle}</span>
     <!-- The ROLES are first-class in the top bar (Compose bottom-nav parity:
          Read is the base layer, then Study · Preach · Share · Sing); the ≡ menu
@@ -630,6 +634,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* A destination is not a passage. Above 700px the header stays (it IS the
+     destination switcher up there), but the reader's passage goes with the
+     reader — otherwise the Hymnal, Study, Preach and Share all wear a chapter
+     name they have nothing to do with. */
+  .frame:not([data-screen="read"]) .subtitle {
+    display: none;
   }
   .browse {
     display: flex;

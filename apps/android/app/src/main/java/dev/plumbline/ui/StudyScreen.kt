@@ -428,7 +428,12 @@ fun StudyScreen(
         chapter = chapter,
         reachedVerse = reachedVerse,
         interactionEpoch = readerInput,
-        enabled = dest == Dest.Read,
+        // Only on the Read tab, and only with the text actually in front of the
+        // reader: Present and the full-screen map overlays cover it entirely, so
+        // a thread presented for twenty minutes must not credit whatever chapter
+        // was underneath. (Web twin: `target()` in Shell.svelte guards on the
+        // same set plus concept study, which this shell does not have.)
+        enabled = dest == Dest.Read && !showPresent && !showConstellation && !showChord,
     )
 
     val mode = rememberUiMode(fold)
@@ -1687,17 +1692,28 @@ private fun ExploreScreen(
     onClose: () -> Unit,
     barActions: @Composable RowScope.() -> Unit = {},
 ) {
+    // The maps live under ONE expanding card (web twin ExploreScreen.svelte;
+    // maintainer UAT, 2026-08-12) — two sibling cards read as two more tools,
+    // when they are two views of the same thing.
+    var vizOpen by remember { mutableStateOf(false) }
     MapOverlay(t("nav.study"), palette, onClose, actions = barActions) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            ExploreCard(t("explore.memorize"), t("explore.memorize.desc"), palette, onMemorize)
-            ExploreCard(t("explore.notes"), t("explore.notes.desc"), palette, onNotes)
-            ExploreCard(t("explore.threads"), t("explore.threads.desc"), palette, onThreads)
-            ExploreCard(t("explore.tags"), t("explore.tags.desc"), palette, onTags)
-            ExploreCard(t("explore.weaves"), t("explore.weaves.desc"), palette, onWeaves)
-            ExploreCard(t("explore.constellation"), t("explore.constellation.desc"), palette, onConstellation)
-            // The same key the web card renders — the one label that had
-            // drifted onto map.chordMap and risked translating twice.
-            ExploreCard(t("explore.weaveMap"), t("explore.weaveMap.desc"), palette, onChord)
+            ExploreCard(t("explore.memorize"), t("explore.memorize.desc"), palette, onClick = onMemorize)
+            ExploreCard(t("explore.notes"), t("explore.notes.desc"), palette, onClick = onNotes)
+            ExploreCard(t("explore.threads"), t("explore.threads.desc"), palette, onClick = onThreads)
+            ExploreCard(t("explore.tags"), t("explore.tags.desc"), palette, onClick = onTags)
+            ExploreCard(t("explore.weaves"), t("explore.weaves.desc"), palette, onClick = onWeaves)
+            ExploreCard(
+                t("explore.viz") + if (vizOpen) "  ▾" else "  ▸",
+                t("explore.viz.desc"),
+                palette,
+            ) { vizOpen = !vizOpen }
+            if (vizOpen) {
+                ExploreCard(t("explore.constellation"), t("explore.constellation.desc"), palette, indent = true, onClick = onConstellation)
+                // The same key the web card renders — the one label that had
+                // drifted onto map.chordMap and risked translating twice.
+                ExploreCard(t("explore.weaveMap"), t("explore.weaveMap.desc"), palette, indent = true, onClick = onChord)
+            }
         }
     }
 }
@@ -1718,18 +1734,27 @@ private fun PreachScreen(
 ) {
     MapOverlay(t("nav.preach"), palette, onClose, actions = barActions) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            ExploreCard(t("nav.present"), t("preach.present.desc"), palette, onPresent)
-            ExploreCard(t("explore.weaves"), t("explore.weaves.desc"), palette, onWeaves)
-            ExploreCard(t("explore.tags"), t("explore.tags.desc"), palette, onTags)
-            ExploreCard(t("explore.notes"), t("explore.notes.desc"), palette, onNotes)
+            ExploreCard(t("nav.present"), t("preach.present.desc"), palette, onClick = onPresent)
+            ExploreCard(t("explore.weaves"), t("explore.weaves.desc"), palette, onClick = onWeaves)
+            ExploreCard(t("explore.tags"), t("explore.tags.desc"), palette, onClick = onTags)
+            ExploreCard(t("explore.notes"), t("explore.notes.desc"), palette, onClick = onNotes)
         }
     }
 }
 
 @Composable
-private fun ExploreCard(title: String, desc: String, palette: ReaderPalette, onClick: () -> Unit) {
+private fun ExploreCard(
+    title: String,
+    desc: String,
+    palette: ReaderPalette,
+    indent: Boolean = false,
+    onClick: () -> Unit,
+) {
     Column(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 16.dp),
+        Modifier.fillMaxWidth()
+            .clickable(onClick = onClick)
+            // Indented: a SUB-item of the card above (the Visualizations maps).
+            .padding(start = if (indent) 40.dp else 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp),
     ) {
         Text(title, color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         Text(desc, color = palette.faded, fontSize = 14.sp, modifier = Modifier.padding(top = 3.dp))

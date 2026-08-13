@@ -38,6 +38,11 @@ canon](assets/readme/reader-weaves.png)
 - German language support
 - Canon strip "minimap" under the reader to show where you're at in the Bible
 
+![Acts 7 and Genesis 15 side by side in a deep indigo theme, weave connectors
+between the quoted passages, and the weave's own note with its cited verses
+in the study panel — the same reader, re-inked by a
+theme](assets/readme/themeable.png)
+
 ### Study
 
 - Add notes to words/verses
@@ -233,13 +238,6 @@ public-domain Textus Receptus tagging; cross-references from the TSK via
 openbible.info. Full credits and licenses: **[BIBLIOGRAPHY.md](BIBLIOGRAPHY.md)**.
 Scripture renders in EB Garamond (OFL, bundled).
 
-## License
-
-The code is MIT — **[LICENSE](LICENSE)**. The text and the lexical data keep
-their own terms (public domain, CC-BY 4.0, CC-BY-SA); the carve-out at the end
-of LICENSE names them directory by directory, and
-[BIBLIOGRAPHY.md](BIBLIOGRAPHY.md) has it file by file.
-
 ## Translation selection
 
 This application is built with the 1769 King James Version of the Bible, which
@@ -312,7 +310,14 @@ additions:
 - John 7:53–8:11
 - 1 John 5:7–8
 
+## License
+
+The code is MIT — **[LICENSE](LICENSE)**. The text and the lexical data keep
+their own terms (public domain, CC-BY 4.0, CC-BY-SA); the carve-out at the end
+of LICENSE names them directory by directory, and
+[BIBLIOGRAPHY.md](BIBLIOGRAPHY.md) has it file by file.
+
 ## Final note
 
-May God bless you as you read his Word, whether here or elsewhere, and don't
+May God bless you as you read His Word, whether here or elsewhere, and don't
 fail to share it with others.

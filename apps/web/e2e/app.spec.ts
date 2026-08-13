@@ -472,7 +472,9 @@ test("destinations are exclusive (memorize does not linger)", async ({ page }) =
   await expect(page.getByText("Review due")).toBeVisible();
   await page.getByRole("button", { name: "Study", exact: true }).click();
   await expect(page.getByText("Review due")).toBeHidden();
-  await expect(page.getByText("Weave map")).toBeVisible();
+  // The maps are sub-items of the Visualizations card now (UAT 2026-08-12) —
+  // the card itself is the hub's "we're back on Study" landmark.
+  await expect(page.getByText("Visualizations")).toBeVisible();
 });
 
 test("word study opens from a single click and respects the gates", async ({ page }) => {

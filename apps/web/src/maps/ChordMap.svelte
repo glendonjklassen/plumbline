@@ -21,6 +21,12 @@
   let canvas: HTMLCanvasElement;
   let host: HTMLDivElement | undefined = $state();
   let zoom: ZoomState = $state({ scale: 1, x: 0, y: 0 });
+  // A portrait viewport flips the whole map: the canon axis runs DOWN the left
+  // edge (top = Genesis) and the ribbons bulge right. Landscape gave a phone's
+  // 66 books a thumb's span of axis — useless (maintainer UAT, 2026-08-12).
+  // paint() always works in landscape logic; the rotation does the rest, so
+  // the two orientations cannot drift. Set at paint time, read by onClick.
+  let portrait = false;
 
   $effect(() => {
     void model;
@@ -33,6 +39,7 @@
     if (!canvas || !host || !model) return;
     const cssW = host.clientWidth;
     const cssH = host.clientHeight;
+    portrait = cssH > cssW;
     const dpr = devicePixelRatio || 1;
     canvas.width = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
@@ -41,7 +48,15 @@
     ctx.fillStyle = "#f2eee6";
     ctx.fillRect(0, 0, cssW, cssH);
     ctx.translate(zoom.x, zoom.y);
-    ctx.scale(zoom.scale * (cssW / W), zoom.scale * (cssH / H));
+    if (portrait) {
+      // Logical (x, y) → screen (cssW − y·sy, x·sx): the axis' baseline (large
+      // logical y) lands at the left edge, logical x runs down the screen.
+      ctx.translate(cssW, 0);
+      ctx.rotate(Math.PI / 2);
+      ctx.scale(zoom.scale * (cssH / W), zoom.scale * (cssW / H));
+    } else {
+      ctx.scale(zoom.scale * (cssW / W), zoom.scale * (cssH / H));
+    }
     paint(ctx);
   });
 
@@ -115,7 +130,12 @@
   function onClick(e: MouseEvent): void {
     if (!host) return;
     const rect = canvas.getBoundingClientRect();
-    const px = ((e.clientX - rect.left - zoom.x) / (zoom.scale * (rect.width / W)) / W) * model.bookCount;
+    // The position ALONG the canon axis — screen x in landscape, screen y in
+    // portrait (the flipped map runs Genesis→Revelation down the screen).
+    const along = portrait
+      ? (e.clientY - rect.top - zoom.y) / (zoom.scale * (rect.height / W))
+      : (e.clientX - rect.left - zoom.x) / (zoom.scale * (rect.width / W));
+    const px = (along / W) * model.bookCount;
     const idx = Math.min(model.bookCount - 1, Math.max(0, Math.floor(px)));
     const book = toc?.books?.[idx];
     if (book) {

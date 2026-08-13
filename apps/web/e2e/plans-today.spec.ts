@@ -173,6 +173,79 @@ test("finishing a chapter advances the chip and its label", async ({ page }) => 
   });
 });
 
+// The chip's whole job is "here is today's reading" — so the day the reading
+// is DONE, it must stand down (maintainer UAT, 2026-08-12: "if I did a day's
+// worth — even if it was finishing yesterday's — the chip should disappear").
+// Dies if `doneToday` falls off the plans wire, or if PlanChip stops filtering
+// on it: completing every chapter of the day advances `today` to the NEXT day,
+// so without the filter the chip happily shows "Day 2" the same evening.
+test("reading the day's worth retires the chip for the day", async ({ page }) => {
+  await boot(page);
+  const today = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.author("planStart", "nt-90", new Date().toISOString());
+    const plans = await s.fetchQ("plans", "");
+    return plans.running.find((p: any) => p.id === "nt-90").today.chapters;
+  });
+  const chip = page.locator(".plan-chip-row .plan-chip").first();
+  await expect(chip).toBeVisible({ timeout: 10_000 });
+
+  // Read every chapter of the day (reached past the last verse, dwell enough
+  // for the words — the completed pass the tracker would have banked).
+  await page.evaluate(async (chapters) => {
+    const s = (window as any).__plumbline;
+    for (const c of chapters) {
+      const out = await s.rpc.call("readingRecord", c.book, c.chapter, 999, 3600, new Date().toISOString());
+      if (!out?.completed) throw new Error(`chapter did not complete: ${c.book} ${c.chapter}`);
+    }
+  }, today);
+
+  // The wire says the day was done today, and the chip stands down entirely —
+  // not "Day 2", which is tomorrow's ask.
+  await expect
+    .poll(async () =>
+      page.evaluate(async () => {
+        const plans = await (window as any).__plumbline.fetchQ("plans", "");
+        return plans.running.find((p: any) => p.id === "nt-90").doneToday;
+      }),
+    )
+    .toBe(true);
+  await expect(page.locator(".plan-chip-row")).toHaveCount(0);
+});
+
+// Pause sets a plan aside WHOLE: the chip stands down, the card says when the
+// run began (name + start day is its identity), and Resume brings it back with
+// nothing lost. Dies if the endpoint drops, if todayPlans stops filtering
+// `paused`, or if the Plans card loses the Pause/Resume controls.
+test("a paused plan asks nothing until it is resumed", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.author("planStart", "bible-365", new Date().toISOString());
+  });
+  const chip = page.locator(".plan-chip-row .plan-chip").first();
+  await expect(chip).toBeVisible({ timeout: 10_000 });
+
+  // Pause from the Plans screen, where the plan lives.
+  await page.evaluate(() => (((window as any).__plumbline as any).screen = "plans"));
+  const card = page.locator(".plan-card", { hasText: "The whole Bible in a year" });
+  await card.getByRole("button", { name: "Pause" }).click();
+  await expect(card).toContainText("paused");
+  await expect(card).toContainText(/Started /); // the run's identity: name + start day
+  await expect(card.getByRole("button", { name: "Pause" })).toHaveCount(0);
+
+  // Back in the reader, the chip is gone — a paused plan asks nothing.
+  await page.evaluate(() => (window as any).__plumbline.goRead());
+  await expect(page.locator(".plan-chip-row")).toHaveCount(0);
+
+  // Resume: the chip returns, same day, nothing lost.
+  await page.evaluate(() => (((window as any).__plumbline as any).screen = "plans"));
+  await card.getByRole("button", { name: "Resume" }).click();
+  await expect(card.getByRole("button", { name: "Pause" })).toBeVisible();
+  await page.evaluate(() => (window as any).__plumbline.goRead());
+  await expect(page.locator(".plan-chip-row .plan-chip").first()).toHaveText(/Day 1 · /);
+});
+
 test("no Explore card spills its text past its border, at any text scale", async ({ page }) => {
   // A phone's width is where the UAT saw it — desktop is wide enough for the
   // card text to fit even squashed, which would let the test pass over the bug.

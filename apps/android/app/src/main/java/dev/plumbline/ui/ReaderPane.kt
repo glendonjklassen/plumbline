@@ -414,14 +414,19 @@ fun ReaderPane(
             }
         }
 
-        val docHeight = (dl?.height ?: 0f) + 2 * marginPx
         // NOT the usual bottom-stop (content bottom meets screen bottom): the
         // reader may keep pushing until the chapter's LAST LINE reaches the TOP
         // of the pane — and no further. For reading on your back, where
         // something blocks the bottom of the screen and turning early means
-        // moving your head (maintainer UAT ask, 2026-08-11). Real scroll range,
-        // not an elastic overshoot — no snap-back.
-        val maxScroll = if (dl != null) docHeight - marginPx else 0f
+        // moving your head (maintainer UAT ask, 2026-08-11). The LINE, not the
+        // content bottom: stopping at the line's top keeps it on screen, where
+        // the first cap let the text slide off entirely and left a blank pane
+        // (UAT, 2026-08-12). Real scroll range, not an elastic overshoot — no
+        // snap-back.
+        val lastLineTop = remember(dl) {
+            dl?.items?.asSequence()?.filter { it.kind == "word" }?.maxOfOrNull { it.y } ?: 0f
+        }
+        val maxScroll = if (dl != null) lastLineTop + marginPx else 0f
 
         // Scroll the navigator's target verse into view once the layout lands.
         // Epoch-guarded so a re-layout (font/margin change) doesn't re-jump.
