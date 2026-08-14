@@ -866,6 +866,14 @@ of study — "every time I click study it just doesn't excite me… not like the
 other pages", which tell you today's chapters or hold actual hymns. Two
 additions, both live:
 
+- the band draws a **placeholder of its own shape** while its four reads are in
+  flight — `q` answers null while fetching, which renders identically to
+  "nothing running", so the band drew empty and then GREW, shoving the card grid
+  down a beat after it settled. The ghost is sized by MEASUREMENT, not by eye:
+  two ghost rows made it worse in the other direction (the grid jumped 49px UP
+  when the real band turned out shorter), and one row plus the coverage strip
+  took the shift from 49px to 3. A read that never answers must not strand it,
+  so after three seconds the band shows whatever it has;
 - an **IN PROGRESS band** above the cards, drawing only rows that have
   something to say (a hub reading "0 due · 0 to review" every day is the fixed
   text again): ONE ROW PER RUNNING PLAN in order, each naming the chapters it
@@ -887,6 +895,23 @@ additions, both live:
   than as a score of nought. Plans and Memorize carry none: they are activities
   rather than collections, and the band already says what they want today.
 
+The band also carries the **lifetime counter**: how many times this reader has
+been through the whole Bible. Seeded ONCE by hand (a numeric prompt — `inputmode`
+on the web, a `KeyboardType.Number` field on Android) because somebody arriving
+with thirty years behind them should not start at nought, and EARNED after that:
+nothing in the UI edits it, and the only thing that moves it is finishing the
+canon. `bibleReads` is **-1 for "never said"**, deliberately not 0 — a reader who
+answers "none" has told us something and must not be asked again. Crediting is
+exactly once per finished canon: `bibleReadsCredited` marks the CURRENT complete
+state as counted and is cleared if the map drops below full, so the number moves
+on finishing rather than on every visit (the mutation that credits on every
+observation reaches 1,002 and fails its test). Seeding sets the flag TRUE
+whatever the canon says, so a reader who is already finished is not immediately
+credited with the read they just declared; the band reconciles it.
+
+*Not built:* nothing resets the reading map, so a second full pass needs the map
+to drop below complete and return. A "start a new pass" action is the follow-up.
+
 Closing the band is the reading map as **one number and one bar** — chapters
 read of the canon's 1,189, painted in the map's own `readDone` over a faint
 `readUnread` track, so it belongs to whichever of the eighteen themes is on and
@@ -901,6 +926,35 @@ until the reader writes something, which is what `e2e/study-hub.spec.ts` pins.
 Android has no general study epoch, so it refetches on the note epoch and on
 every entry to the hub. *Delta:* the band's plan row is web-only, following
 Reading plans themselves.
+
+**Where you were, PER SEATING** (`core::session_slot`, 2026-08-13). A reader's
+last chapter is not one thing: somebody who studies on weekday mornings, sits in
+a Sunday service and goes to a Wednesday meeting has three separate places they
+were, and one "last chapter" serves whichever they did most recently — so
+arriving at church reopened Saturday night's study. Four slots, and the
+boundaries are a judgement stated in the core rather than buried in a shell:
+`sunday-morning` (Sunday before noon) · `sunday-evening` (Sunday from noon) ·
+`wednesday-evening` (Wednesday from 5pm) · `other`. Wednesday MORNING is
+deliberately `other` — the slot is for the midweek meeting, and a Wednesday
+morning is a weekday morning. The RULE is the core's
+(`plumbline_session_slot`, engine-independent like the theme palette) and the
+shells pass their own LOCAL date and hour, because a slot computed in UTC puts a
+Sunday-evening service in Monday for half the world. `config.slots` is keyed by
+token and additive; a seating never used falls through to the plain last
+position, which is what every reader has today and has its own test. The web
+restores fire-and-forget (the panes are built before the answer lands) guarded
+by `#navigatedSinceBoot`, so a reader who taps in those few ms is not yanked
+away; Android resolves it synchronously, being a string comparison.
+
+**History reads as RUNS** — "Genesis 1–3", not three lines. Adjacency is in the
+LIST, not merely similarity: `[Gen 3, John 1, Gen 2]` stays three lines, because
+merging those two Genesis entries would claim the reader went 2→3 without
+leaving, and the order they did things in is the entire content of a history. A
+tap opens the run's MOST RECENT chapter. *Written twice on purpose* — the shells
+own this list (`pushHistory` prepends locally and the config only reaches the
+engine on a debounced save, so anything the core derived would be stale the
+moment the reader turned a page), so the rules live in HistorySpansTest (7 cases)
+and `e2e/history.spec.ts`.
 
 ## Languages (both shells)
 

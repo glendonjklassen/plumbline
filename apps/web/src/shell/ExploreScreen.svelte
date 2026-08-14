@@ -102,6 +102,50 @@
 
   const nf = $derived(new Intl.NumberFormat(lang()));
 
+  // ── the lifetime counter ────────────────────────────────────────────────────
+  //
+  // How many times this reader has been through the whole Bible. Seeded ONCE by
+  // hand — somebody arriving with thirty years behind them should not start at
+  // nought — and EARNED after that: nothing here edits it, and the only thing
+  // that moves it is finishing the canon (maintainer, 2026-08-13).
+  //
+  // -1 is "never said", which is deliberately not 0: a reader who answers "none"
+  // has told us something, and must not be asked again.
+  const reads = $derived(Number(s.config.bibleReads ?? -1));
+  const readsSet = $derived(reads >= 0);
+
+  /** Crediting a finished canon, exactly once. `bibleReadsCredited` marks the
+   *  CURRENT complete state as counted, and is cleared if the map ever drops
+   *  below full — so the number moves on finishing, not on every visit to this
+   *  screen afterwards. */
+  $effect(() => {
+    if (!showReal || !readsSet || !coverage) return;
+    const complete = coverage.read >= coverage.total && coverage.total > 0;
+    const credited = s.config.bibleReadsCredited === true;
+    if (complete && !credited) {
+      s.config.bibleReads = reads + 1;
+      s.config.bibleReadsCredited = true;
+      s.saveConfig();
+    } else if (!complete && credited) {
+      s.config.bibleReadsCredited = false;
+      s.saveConfig();
+    }
+  });
+
+  async function setReads(): Promise<void> {
+    // Asked once. There is no edit path afterwards on purpose: a number you can
+    // retype is a number that means nothing.
+    if (readsSet) return;
+    const n = await s.askNumber(t("explore.readsAsk"));
+    if (n === null) return;
+    s.config.bibleReads = n;
+    // Whatever the canon says right now is the state this answer was given
+    // against, so a reader who is ALREADY finished is not immediately credited
+    // with a read they just told us about.
+    s.config.bibleReadsCredited = !!coverage && coverage.total > 0 && coverage.read >= coverage.total;
+    s.saveConfig();
+  }
+
   function openPlans(): void {
     s.screen = "plans";
   }
@@ -207,6 +251,20 @@
           <!-- The visual bonus, and it is the reading map's own colour: how much
                of the canon has had a full pass. Tapping it opens the navigator,
                where the map itself lives. -->
+          <!-- The lifetime counter, beside the coverage bar it belongs with:
+               one says how far through this pass you are, the other how many
+               passes there have been. Unset, it is an invitation; set, it is a
+               statement and not a control. -->
+          {#if readsSet}
+            <div class="reads"><span class="reads-n">{nf.format(reads)}</span>
+              <span class="reads-label">{plural("explore.readsTimes.one", "explore.readsTimes.other", reads)}</span>
+            </div>
+          {:else}
+            <button class="reads unset" onclick={setReads}>
+              <span class="reads-label">{t("explore.readsSet")}</span>
+            </button>
+          {/if}
+
           {#if coverage}
             <button class="coverage" onclick={() => (s.bookNavFor = s.activePane)}>
               <span class="cov-text">
@@ -358,6 +416,34 @@
     background: var(--paper, #fcf9f4);
   }
   .coverage:hover {
+    border-color: var(--gold, #9e7d38);
+  }
+  /* A quiet statement, not a control — once set it does nothing when tapped,
+     and it should not invite one. */
+  .reads {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 10px;
+    background: var(--paper, #fcf9f4);
+    text-align: left;
+  }
+  .reads-n {
+    font-size: calc(22px * var(--uiScale, 1));
+    font-weight: 600;
+    color: var(--gold, #9e7d38);
+  }
+  .reads-label {
+    font-size: calc(14.5px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
+  }
+  .reads.unset {
+    min-height: auto;
+    width: 100%;
+  }
+  .reads.unset:hover {
     border-color: var(--gold, #9e7d38);
   }
   .cov-text {

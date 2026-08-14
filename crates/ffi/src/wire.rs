@@ -1121,6 +1121,12 @@ fn default_true() -> bool {
     true
 }
 
+/// "Never said" for the lifetime counter — an absent key must not read as a
+/// reader who answered nought.
+fn minus_one() -> i64 {
+    -1
+}
+
 #[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct WireConfigState {
@@ -1137,6 +1143,14 @@ pub struct WireConfigState {
     /// in a given slot, which is not the same as an empty position.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub slots: std::collections::BTreeMap<String, WirePaneRef>,
+    /// Lifetime reads through the Bible, or -1 for "never said" — which is NOT
+    /// the same as a reader who answered "none". Seeded once by hand and earned
+    /// thereafter; see `core::config::Config::bible_reads`.
+    #[serde(default = "minus_one")]
+    pub bible_reads: i64,
+    /// Whether the current full-canon state has already been counted.
+    #[serde(default)]
+    pub bible_reads_credited: bool,
     /// Verse-per-line reading mode.
     #[serde(default)]
     pub verse_per_line: bool,
@@ -1298,6 +1312,8 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
             .map(|p| WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: p.verse })
             .collect(),
         active_pane: cfg.active,
+        bible_reads: cfg.bible_reads,
+        bible_reads_credited: cfg.bible_reads_credited,
         slots: cfg
             .slots
             .iter()
@@ -1345,6 +1361,8 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
             .map(|p| PaneRef { book: p.book.clone(), chapter: p.chapter.max(1), verse: p.verse.filter(|v| *v >= 1) })
             .collect(),
         active: w.active_pane,
+        bible_reads: w.bible_reads,
+        bible_reads_credited: w.bible_reads_credited,
         slots: w
             .slots
             .iter()

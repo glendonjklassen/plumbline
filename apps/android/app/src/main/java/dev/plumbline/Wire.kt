@@ -480,6 +480,10 @@ data class ConfigState(
     // core::session_slot). Absent for a seating never used, which is not the
     // same as an empty position — the plain last position covers that.
     val slots: Map<String, PaneRef1> = emptyMap(),
+    // Lifetime reads through the Bible, -1 for "never said" — which is NOT the
+    // same as a reader who answered "none". Seeded once, earned thereafter.
+    val bibleReads: Int = -1,
+    val bibleReadsCredited: Boolean = false,
     // Frozen additive field shared with GTK's config.json — must round-trip.
     val versePerLine: Boolean = false,
     // The two reader-typography switches (additive). Defaulted TRUE, not false:

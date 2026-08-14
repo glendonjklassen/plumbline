@@ -300,6 +300,11 @@ export class Session {
     title: string;
     initial: string;
     multiline: boolean;
+    /** Ask for a NUMBER: the field carries `inputmode="numeric"`, which is what
+     *  raises a phone's numpad instead of its full keyboard. Still a text field
+     *  — `type="number"` brings spinners and a browser's own validation UI to a
+     *  dialog that already has an OK button. */
+    numeric?: boolean;
     resolve: (v: string | null) => void;
   } | null>(null);
 
@@ -422,6 +427,24 @@ export class Session {
   askText(title: string, initial = "", multiline = false): Promise<string | null> {
     return new Promise((resolve) => {
       this.promptReq = { title, initial, multiline, resolve };
+    });
+  }
+
+  /** Ask for a whole number, with a phone's numpad rather than its keyboard.
+   *  Answers null on cancel or on anything that is not a number. */
+  askNumber(title: string, initial = ""): Promise<number | null> {
+    return new Promise((resolve) => {
+      this.promptReq = {
+        title,
+        initial,
+        multiline: false,
+        numeric: true,
+        resolve: (v) => {
+          if (v === null) return resolve(null);
+          const n = Number.parseInt(v.trim(), 10);
+          resolve(Number.isFinite(n) && n >= 0 ? n : null);
+        },
+      };
     });
   }
 

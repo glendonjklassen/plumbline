@@ -45,6 +45,11 @@
     {#if s.promptReq.multiline}
       <textarea data-modal-focus bind:value rows="5"></textarea>
       <p class="hint">{t("prompt.hint")}</p>
+    {:else if s.promptReq.numeric}
+      <!-- `inputmode`, not `type="number"`: this raises a phone's numpad while
+           keeping a plain text field, where type=number would add spinners and
+           the browser's own validation UI to a dialog that has an OK button. -->
+      <input data-modal-focus bind:value inputmode="numeric" pattern="[0-9]*" />
     {:else}
       <input data-modal-focus bind:value />
     {/if}

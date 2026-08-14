@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
@@ -391,6 +392,12 @@ fun StudyScreen(
     var addedItalics by remember { mutableStateOf(loadedCfg?.addedItalics != false) }
     var history by remember { mutableStateOf(loadedCfg?.history ?: emptyList()) }
     var slots by remember { mutableStateOf(loadedCfg?.slots ?: emptyMap()) }
+    // The lifetime counter: seeded once by hand, earned thereafter. -1 is
+    // "never said", deliberately not 0 — a reader who answers "none" has told
+    // us something and must not be asked again.
+    var bibleReads by remember { mutableIntStateOf(loadedCfg?.bibleReads ?: -1) }
+    var bibleReadsCredited by remember { mutableStateOf(loadedCfg?.bibleReadsCredited ?: false) }
+    var askReads by remember { mutableStateOf(false) }
     // The reader's home church — what their own shared links carry (web parity).
     // `intro` is which welcome they were given, so the Welcome button can show it
     // again without a reinstall.
@@ -418,7 +425,7 @@ fun StudyScreen(
         val cfg = (loadedCfg ?: ConfigState()).copy(
             bodySize = bodySize, sideMargin = sideMargin, lineSpacing = lineSpacing, copyStyle = copyStyle,
             openPanes = listOf(PaneRef1(book, chapter, firstVisibleVerse)), activePane = 0, history = history,
-            slots = slots,
+            slots = slots, bibleReads = bibleReads, bibleReadsCredited = bibleReadsCredited,
             theme = themeChoice, textFont = textFont, chromeFont = chromeFont,
             humanAnalysis = humanAnalysis, machineAnalysis = machineAnalysis,
             church = church, presentSharesAsNew = presentSharesAsNew, intro = introChoice,
@@ -954,6 +961,11 @@ fun StudyScreen(
                     engine = engine,
                     palette = palette,
                     refreshEpoch = noteEpoch,
+                    bibleReads = bibleReads,
+                    onAskReads = { askReads = true },
+                    onCredit = { bibleReads = maxOf(bibleReads, 0) + 1; bibleReadsCredited = true; persistCfg() },
+                    onUncredit = { bibleReadsCredited = false; persistCfg() },
+                    credited = bibleReadsCredited,
                     onMemorize = { memView = MemorizeView.List; dest = Dest.Memorize },
                     onNotes = { showNotes = true },
                     onThreads = { openLibrary(Library.Threads) },
@@ -1224,6 +1236,41 @@ fun StudyScreen(
                     }) { Text(t("common.save")) }
                 },
                 dismissButton = { TextButton(onClick = { prompt = null }) { Text(t("common.cancel")) } },
+            )
+        }
+        // Asked ONCE, and there is no edit path afterwards on purpose: a number
+        // you can retype is a number that means nothing. The keyboard is the
+        // NUMBER pad — the web twin sets inputmode="numeric" for the same reason.
+        if (askReads) {
+            var entry by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { askReads = false },
+                title = { Text(t("explore.readsAsk")) },
+                text = {
+                    OutlinedTextField(
+                        value = entry,
+                        onValueChange = { v -> entry = v.filter { it.isDigit() }.take(4) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        entry.toIntOrNull()?.let { n ->
+                            bibleReads = n
+                            // Seeded as CREDITED, whatever the canon says: a
+                            // reader who is already finished must not be
+                            // immediately given a read they have just told us
+                            // about. The band reconciles it on the next
+                            // composition — if the canon is not complete it
+                            // clears the flag, which is the honest state.
+                            bibleReadsCredited = true
+                            persistCfg()
+                        }
+                        askReads = false
+                    }) { Text(t("common.save")) }
+                },
+                dismissButton = { TextButton(onClick = { askReads = false }) { Text(t("common.cancel")) } },
             )
         }
         // Presentation mode: once a thread is chosen
@@ -1754,6 +1801,12 @@ private fun SearchOverlay(
 private fun ExploreScreen(
     engine: StudyEngine,
     palette: ReaderPalette,
+    /** Lifetime reads, -1 when the reader has never said. */
+    bibleReads: Int,
+    credited: Boolean,
+    onAskReads: () -> Unit,
+    onCredit: () -> Unit,
+    onUncredit: () -> Unit,
     /** Bumped by an authoring write. NOT a general study epoch — this shell has
      *  none — so it is the note epoch: the counts are otherwise refetched every
      *  time Study is opened, since this composable leaves the tree with it. */
@@ -1802,7 +1855,10 @@ private fun ExploreScreen(
 
     MapOverlay(t("nav.study"), palette, onClose, actions = barActions) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            InProgressBand(engine, palette, refreshEpoch, onMemorize)
+            InProgressBand(
+                engine, palette, refreshEpoch, onMemorize,
+                bibleReads, credited, onAskReads, onCredit, onUncredit,
+            )
             ExploreCard(t("explore.memorize"), t("explore.memorize.desc"), palette, onClick = onMemorize)
             ExploreCard(t("explore.notes"), t("explore.notes.desc"), palette, count = notes, onClick = onNotes)
             ExploreCard(t("explore.threads"), t("explore.threads.desc"), palette, count = threads, onClick = onThreads)
@@ -1911,6 +1967,11 @@ private fun InProgressBand(
     palette: ReaderPalette,
     refreshEpoch: Int,
     onMemorize: () -> Unit,
+    bibleReads: Int,
+    credited: Boolean,
+    onAskReads: () -> Unit,
+    onCredit: () -> Unit,
+    onUncredit: () -> Unit,
 ) {
     var due by remember { mutableIntStateOf(0) }
     var read by remember { mutableIntStateOf(0) }
@@ -1994,6 +2055,38 @@ private fun InProgressBand(
                         .background(palette.readDone, RoundedCornerShape(999.dp)),
                 )
             }
+        }
+        // THE LIFETIME COUNTER, beside the coverage bar: one says how far
+        // through this pass you are, the other how many passes there have been.
+        // Crediting happens exactly once per finished canon — `credited` marks
+        // the CURRENT complete state as counted and is cleared if the map ever
+        // drops below full, so the number moves on finishing rather than on
+        // every visit to this screen.
+        LaunchedEffect(read, chapters, credited, bibleReads) {
+            if (bibleReads < 0 || chapters == 0) return@LaunchedEffect
+            val complete = read >= chapters
+            if (complete && !credited) onCredit() else if (!complete && credited) onUncredit()
+        }
+        if (bibleReads >= 0) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 12.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Text("$bibleReads", color = palette.gold, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    Strings.plural("explore.readsTimes.one", "explore.readsTimes.other", bibleReads),
+                    color = palette.faded,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(start = 8.dp, bottom = 2.dp),
+                )
+            }
+        } else {
+            Text(
+                t("explore.readsSet"),
+                color = palette.gold,
+                fontSize = 14.sp,
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onAskReads).padding(top = 12.dp),
+            )
         }
         if (due == 0 && chapters == 0) {
             Text(
