@@ -825,6 +825,20 @@ char *plumbline_engine_user_note_set(struct PlumblineEngine *engine,
 // `theme` is null or valid NUL-terminated UTF-8 for the call.
 char *plumbline_theme_palette_json(const char *theme);
 
+// Which SEATING a local date and hour fall in — `"sunday-morning"`,
+// `"sunday-evening"`, `"wednesday-evening"` or `"other"`. Engine-independent,
+// never null.
+//
+// The shells pass their OWN local date (`YYYY-MM-DD`) and hour (0–23), because
+// the core has no clock and no timezone: a slot computed in UTC would put a
+// Sunday-evening service in Monday for half the world. The RULE lives here so
+// the two shells cannot drift on when a service is, which is exactly the kind
+// of thing that would be written twice and quietly diverge.
+//
+// # Safety
+// `date` is null or valid NUL-terminated UTF-8 for the call.
+char *plumbline_session_slot(const char *date, uint32_t hour);
+
 // EVERY user-visible string, for one language, in ONE call:
 // `{"lang","strings":{id: text, …},"languages":[{"code","endonym"}]}`.
 //

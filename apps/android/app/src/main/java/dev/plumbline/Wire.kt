@@ -476,6 +476,10 @@ data class ConfigState(
     val openPanes: List<PaneRef1>? = null,
     val activePane: Int = 0,
     val firstRun: Boolean = false,
+    // Where the reader was PER SEATING, keyed by slot token (additive; see
+    // core::session_slot). Absent for a seating never used, which is not the
+    // same as an empty position — the plain last position covers that.
+    val slots: Map<String, PaneRef1> = emptyMap(),
     // Frozen additive field shared with GTK's config.json — must round-trip.
     val versePerLine: Boolean = false,
     // The two reader-typography switches (additive). Defaulted TRUE, not false:

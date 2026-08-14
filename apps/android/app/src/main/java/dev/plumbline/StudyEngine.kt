@@ -103,6 +103,15 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
          *  Never null. */
         fun PaletteJson(theme: String): String = take(ffi.plumbline_theme_palette_json(theme))!!
 
+        /** Which SEATING a LOCAL date (`YYYY-MM-DD`) and hour (0–23) fall in:
+         *  `"sunday-morning"` | `"sunday-evening"` | `"wednesday-evening"` |
+         *  `"other"`. The rule is the core's so the two shells cannot drift on
+         *  when a service is; the date must be the reader's OWN, because a slot
+         *  computed in UTC puts a Sunday-evening service in Monday for half the
+         *  world. Never null. */
+        fun SessionSlot(date: String, hour: Int): String =
+            take(ffi.plumbline_session_slot(date, hour)) ?: "other"
+
         /** The in-app guide / About cards as panel blocks. Static content. */
         fun GuideBlocksJson(): String = take(ffi.plumbline_panel_guide_blocks_json())!!
         fun AboutBlocksJson(): String = take(ffi.plumbline_panel_about_blocks_json())!!

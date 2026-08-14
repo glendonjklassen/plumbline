@@ -237,9 +237,35 @@ fun StudyScreen(
     // Persisted reader config (shared, cross-shell): last-viewed passage, reader
     // prefs, and reading history all restore from it.
     val loadedCfg = remember { runCatching { parseWire<ConfigState>(StudyConfig.LoadJson()) }.getOrNull() }
-    val lastPane = loadedCfg?.openPanes
+    val plainLast = loadedCfg?.openPanes
         ?.getOrNull(loadedCfg.activePane.coerceAtLeast(0))
         ?: loadedCfg?.openPanes?.firstOrNull()
+
+    // WHICH SEATING is this? A reader's last chapter is not one thing: somebody
+    // who studies on weekday mornings, sits in a Sunday service and goes to a
+    // Wednesday meeting has three separate places they were, and one "last
+    // chapter" serves whichever they did most recently — so arriving at church
+    // reopened Saturday night's study (maintainer, 2026-08-13).
+    //
+    // Resolved ONCE per launch, synchronously, because the pane below is built
+    // from it: this is a string comparison in the core, not a file read. The
+    // date and hour are LOCAL — a slot computed in UTC would put a Sunday
+    // evening service in Monday for half the world.
+    val sessionSlot = remember {
+        val now = java.util.Calendar.getInstance()
+        val date = String.format(
+            java.util.Locale.US,
+            "%04d-%02d-%02d",
+            now.get(java.util.Calendar.YEAR),
+            now.get(java.util.Calendar.MONTH) + 1,
+            now.get(java.util.Calendar.DAY_OF_MONTH),
+        )
+        runCatching { StudyEngine.SessionSlot(date, now.get(java.util.Calendar.HOUR_OF_DAY)) }
+            .getOrNull() ?: "other"
+    }
+    // This seating's own position wins; a seating never used falls through to
+    // the plain last position, which is what every reader has today.
+    val lastPane = loadedCfg?.slots?.get(sessionSlot) ?: plainLast
 
     // Primary Bible pane — restore where we left off, else John 3 (desktop default).
     var book by remember { mutableStateOf(lastPane?.book ?: "John") }
@@ -364,6 +390,7 @@ fun StudyScreen(
     var verseNumbers by remember { mutableStateOf(loadedCfg?.verseNumbers != false) }
     var addedItalics by remember { mutableStateOf(loadedCfg?.addedItalics != false) }
     var history by remember { mutableStateOf(loadedCfg?.history ?: emptyList()) }
+    var slots by remember { mutableStateOf(loadedCfg?.slots ?: emptyMap()) }
     // The reader's home church — what their own shared links carry (web parity).
     // `intro` is which welcome they were given, so the Welcome button can show it
     // again without a reinstall.
@@ -391,6 +418,7 @@ fun StudyScreen(
         val cfg = (loadedCfg ?: ConfigState()).copy(
             bodySize = bodySize, sideMargin = sideMargin, lineSpacing = lineSpacing, copyStyle = copyStyle,
             openPanes = listOf(PaneRef1(book, chapter, firstVisibleVerse)), activePane = 0, history = history,
+            slots = slots,
             theme = themeChoice, textFont = textFont, chromeFont = chromeFont,
             humanAnalysis = humanAnalysis, machineAnalysis = machineAnalysis,
             church = church, presentSharesAsNew = presentSharesAsNew, intro = introChoice,
@@ -407,6 +435,8 @@ fun StudyScreen(
     LaunchedEffect(book, chapter) {
         history = (listOf(PaneRef1(book, chapter)) +
             history.filterNot { it.book == book && it.chapter == chapter }).take(50)
+        // …and against this seating, so the next one like it reopens here.
+        slots = slots + (sessionSlot to PaneRef1(book, chapter))
         persistCfg()
     }
 

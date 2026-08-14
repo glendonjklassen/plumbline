@@ -65,7 +65,7 @@ use plumbline_core::strongs::{self, OccurrenceIx, StrongsDict};
 use plumbline_core::tag::{self, LoadedTag, TagTarget};
 use plumbline_core::thread::{self, LoadedThread, ThreadEntry};
 use plumbline_core::weave::{self, Link, LoadedWeave, WeaveKind};
-use plumbline_core::{canon, export, hymnal, i18n, notes, theme, usernote, VRef};
+use plumbline_core::{canon, export, hymnal, i18n, notes, session_slot, theme, usernote, VRef};
 use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure, MeasureMemo, Memoized};
 use plumbline_rnd::{bridge, burst, concept, morph};
 
@@ -3483,6 +3483,26 @@ pub unsafe extern "C" fn plumbline_theme_palette_json(theme: *const c_char) -> *
     guard(ptr::null_mut(), || {
         let t = opt_str(theme).and_then(theme::Theme::parse).unwrap_or(theme::Theme::Light);
         out_json(&theme::palette(t))
+    })
+}
+
+/// Which SEATING a local date and hour fall in — `"sunday-morning"`,
+/// `"sunday-evening"`, `"wednesday-evening"` or `"other"`. Engine-independent,
+/// never null.
+///
+/// The shells pass their OWN local date (`YYYY-MM-DD`) and hour (0–23), because
+/// the core has no clock and no timezone: a slot computed in UTC would put a
+/// Sunday-evening service in Monday for half the world. The RULE lives here so
+/// the two shells cannot drift on when a service is, which is exactly the kind
+/// of thing that would be written twice and quietly diverge.
+///
+/// # Safety
+/// `date` is null or valid NUL-terminated UTF-8 for the call.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_session_slot(date: *const c_char, hour: u32) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let d = opt_str(date).unwrap_or("");
+        out_string(session_slot::slot_for(d, hour).token().to_string())
     })
 }
 

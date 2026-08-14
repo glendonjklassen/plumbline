@@ -1132,6 +1132,11 @@ pub struct WireConfigState {
     pub open_panes: Vec<WirePaneRef>,
     #[serde(default)]
     pub active_pane: usize,
+    /// Where the reader was PER SEATING, keyed by slot token (additive; see
+    /// `core::session_slot`). Absent for a reader who has never been anywhere
+    /// in a given slot, which is not the same as an empty position.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub slots: std::collections::BTreeMap<String, WirePaneRef>,
     /// Verse-per-line reading mode.
     #[serde(default)]
     pub verse_per_line: bool,
@@ -1293,6 +1298,11 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
             .map(|p| WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: p.verse })
             .collect(),
         active_pane: cfg.active,
+        slots: cfg
+            .slots
+            .iter()
+            .map(|(k, p)| (k.clone(), WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: p.verse }))
+            .collect(),
         verse_per_line: cfg.verse_per_line,
         verse_numbers: cfg.verse_numbers,
         added_italics: cfg.added_italics,
@@ -1335,6 +1345,16 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
             .map(|p| PaneRef { book: p.book.clone(), chapter: p.chapter.max(1), verse: p.verse.filter(|v| *v >= 1) })
             .collect(),
         active: w.active_pane,
+        slots: w
+            .slots
+            .iter()
+            .map(|(k, p)| {
+                (
+                    k.clone(),
+                    PaneRef { book: p.book.clone(), chapter: p.chapter.max(1), verse: p.verse.filter(|v| *v >= 1) },
+                )
+            })
+            .collect(),
         verse_per_line: w.verse_per_line,
         verse_numbers: w.verse_numbers,
         added_italics: w.added_italics,

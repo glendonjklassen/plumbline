@@ -176,6 +176,12 @@ internal interface PlumblineNative : Library {
     // ── theme palettes (engine-independent) ─────────────────────────────────
     fun plumbline_theme_palette_json(theme: String?): Pointer?
 
+    // ── which seating this is (engine-independent) ──────────────────────────
+    /** `"sunday-morning"` | `"sunday-evening"` | `"wednesday-evening"` |
+     *  `"other"` for a LOCAL `YYYY-MM-DD` and hour 0–23. The rule lives in the
+     *  core so the two shells cannot drift on when a service is. */
+    fun plumbline_session_slot(date: String?, hour: Int): Pointer?
+
     // ── every user-visible string, one language at a time ───────────────────
     /** `{lang, strings:{id: text}, languages:[{code, endonym}]}`. The WHOLE
      *  catalogue in one call — a call per string would be thousands of trips
