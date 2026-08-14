@@ -31,6 +31,7 @@ pub mod reading;
 pub mod reference;
 pub mod renderings;
 pub mod search;
+pub mod session_slot;
 pub mod store;
 pub mod strongs;
 pub mod tag;

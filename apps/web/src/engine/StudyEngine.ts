@@ -720,6 +720,17 @@ export function themePalette(w: WasmEngine, theme: string): any {
   return s === null ? null : JSON.parse(s);
 }
 
+/** Which SEATING a LOCAL date and hour fall in — the rule lives in the core so
+ *  the two shells cannot drift on when a service is. The date must be the
+ *  reader's own (a slot computed in UTC would put a Sunday-evening service in
+ *  Monday for half the world). */
+export function sessionSlot(w: WasmEngine, date: string, hour: number): string {
+  const p = w.inStr(date);
+  const s = w.takeStr((w.exports.plumbline_session_slot as Function)(p, hour) as number);
+  w.freeStr(p);
+  return s ?? "other";
+}
+
 export function guideBlocks(w: WasmEngine): any {
   const s = w.takeStr((w.exports.plumbline_panel_guide_blocks_json as Function)() as number);
   return s === null ? null : JSON.parse(s);

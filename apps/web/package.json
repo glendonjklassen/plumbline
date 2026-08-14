@@ -1,7 +1,7 @@
 {
   "name": "plumbline-web",
   "private": true,
-  "version": "0.49.1",
+  "version": "0.50.0",
   "type": "module",
   "scripts": {
     "dev": "npm run pack:i18n && vite",

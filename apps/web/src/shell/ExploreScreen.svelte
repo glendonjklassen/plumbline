@@ -44,7 +44,32 @@
   // studies are not schedules and have no day (their id would have rendered
   // raw, since they are not builtins), a paused plan asks nothing, a finished
   // one has dropped out, and only the FIRST plan was ever shown.
-  const todays = $derived(todayPlans(s.q("plans", "")));
+  // The four reads the band is built from, held once so readiness can be told
+  // from emptiness. `q` answers null while its fetch is in flight, and null and
+  // "nothing running" render identically — so without this the band drew as
+  // empty for a frame or two and then GREW, shoving the cards down the page
+  // ("they pop in on load so it's a bit jarring", maintainer, 2026-08-13).
+  const plansQ = $derived(s.q("plans", ""));
+  const dueQ = $derived(s.q("memoryDue", dayStamp()));
+  const suggestedQ = $derived(s.q("suggestedWeaves"));
+  const booksQ = $derived(s.q("readingBooks", dayStamp()));
+
+  /** Every band read has answered. Not a spinner's flag — it decides whether the
+   *  band draws its real rows or a placeholder of the same shape, so the page
+   *  never changes height under the reader's thumb. */
+  const ready = $derived(plansQ != null && dueQ != null && suggestedQ != null && booksQ != null);
+
+  /** A read that never answers must not leave a skeleton on screen forever: one
+   *  failed query would otherwise strand the whole band. After this the band
+   *  shows whatever it has, which for a failed read is the honest empty state. */
+  let waited = $state(false);
+  $effect(() => {
+    const timer = setTimeout(() => (waited = true), 3_000);
+    return () => clearTimeout(timer);
+  });
+  const showReal = $derived(ready || waited);
+
+  const todays = $derived(todayPlans(plansQ));
   /** The plans that still want something today. `remaining` narrows each row to
    *  the chapters left, so finishing Genesis 1 of a Gen 1–4 day moves the row to
    *  "Gen 2–4" instead of standing still all evening. */
@@ -54,8 +79,8 @@
    *  which is false and a little insulting to someone who just finished. */
   const allDone = $derived(todays.length > 0 && needsReading.length === 0);
 
-  const dueCount = $derived(((s.q("memoryDue", dayStamp())?.refs ?? []) as string[]).length);
-  const suggestedCount = $derived(((s.q("suggestedWeaves")?.suggested ?? []) as any[]).length);
+  const dueCount = $derived(((dueQ?.refs ?? []) as string[]).length);
+  const suggestedCount = $derived(((suggestedQ?.suggested ?? []) as any[]).length);
 
   // ── the reading map, as one number and one bar ──────────────────────────────
   //
@@ -64,7 +89,7 @@
   // have had a full pass. The bar is painted in the map's own `readDone` hue,
   // so it belongs to whichever of the eighteen themes is on, for free.
   const coverage = $derived.by(() => {
-    const books = (s.q("readingBooks", dayStamp())?.books ?? []) as any[];
+    const books = (booksQ?.books ?? []) as any[];
     if (!books.length) return null;
     let read = 0;
     let total = 0;
@@ -76,6 +101,50 @@
   });
 
   const nf = $derived(new Intl.NumberFormat(lang()));
+
+  // ── the lifetime counter ────────────────────────────────────────────────────
+  //
+  // How many times this reader has been through the whole Bible. Seeded ONCE by
+  // hand — somebody arriving with thirty years behind them should not start at
+  // nought — and EARNED after that: nothing here edits it, and the only thing
+  // that moves it is finishing the canon (maintainer, 2026-08-13).
+  //
+  // -1 is "never said", which is deliberately not 0: a reader who answers "none"
+  // has told us something, and must not be asked again.
+  const reads = $derived(Number(s.config.bibleReads ?? -1));
+  const readsSet = $derived(reads >= 0);
+
+  /** Crediting a finished canon, exactly once. `bibleReadsCredited` marks the
+   *  CURRENT complete state as counted, and is cleared if the map ever drops
+   *  below full — so the number moves on finishing, not on every visit to this
+   *  screen afterwards. */
+  $effect(() => {
+    if (!showReal || !readsSet || !coverage) return;
+    const complete = coverage.read >= coverage.total && coverage.total > 0;
+    const credited = s.config.bibleReadsCredited === true;
+    if (complete && !credited) {
+      s.config.bibleReads = reads + 1;
+      s.config.bibleReadsCredited = true;
+      s.saveConfig();
+    } else if (!complete && credited) {
+      s.config.bibleReadsCredited = false;
+      s.saveConfig();
+    }
+  });
+
+  async function setReads(): Promise<void> {
+    // Asked once. There is no edit path afterwards on purpose: a number you can
+    // retype is a number that means nothing.
+    if (readsSet) return;
+    const n = await s.askNumber(t("explore.readsAsk"));
+    if (n === null) return;
+    s.config.bibleReads = n;
+    // Whatever the canon says right now is the state this answer was given
+    // against, so a reader who is ALREADY finished is not immediately credited
+    // with a read they just told us about.
+    s.config.bibleReadsCredited = !!coverage && coverage.total > 0 && coverage.read >= coverage.total;
+    s.saveConfig();
+  }
 
   function openPlans(): void {
     s.screen = "plans";
@@ -137,45 +206,76 @@
          is one invitation rather than an empty box. -->
     <section class="band" aria-label={t("explore.inProgress")}>
       <h3>{t("explore.inProgress")}</h3>
-      {#each needsReading as p (p.id)}
-        <button class="row" onclick={(ev) => goPlan(p, ev)}>
-          <span class="row-name">{p.name}</span>
-          <span class="row-note">{t("plans.today", { chapters: chapterSpan(remaining(p)) })}</span>
-        </button>
-      {/each}
-      {#if allDone}
-        <div class="row done"><span class="row-note">{t("explore.planDone")}</span></div>
-      {/if}
-      {#if dueCount > 0}
-        <button class="row" onclick={openMemorize}>
-          <span class="row-name">{t("explore.memorize")}</span>
-          <span class="row-note">{plural("memorize.reviews.one", "memorize.reviews.other", dueCount)}</span>
-        </button>
-      {/if}
-      {#if suggestedCount > 0}
-        <button class="row" onclick={() => (s.panel = { kind: "suggested" })}>
-          <span class="row-name">{t("explore.suggested")}</span>
-          <span class="row-note">{plural("explore.toReview.one", "explore.toReview.other", suggestedCount)}</span>
-        </button>
-      {/if}
-      {#if todays.length === 0 && dueCount === 0 && suggestedCount === 0}
-        <button class="row invite" onclick={openPlans}>
-          <span class="row-note">{t("explore.nothingRunning")}</span>
-        </button>
-      {/if}
+      {#if !showReal}
+        <!-- A PLACEHOLDER OF THE SAME SHAPE, not a spinner. The band's job here
+             is to hold its own height. ONE row and the coverage strip is what
+             the band resolves to in the common cases — a reader with one plan
+             running, and a reader with none (who gets the invitation row) — so
+             the cards below start where they will stay. Sized generously it
+             was worse, not better: two ghost rows made the grid jump 49px UP
+             when the real band turned out shorter. Hidden from assistive tech;
+             there is nothing here to read. -->
+        <div class="skeleton" aria-hidden="true">
+          <div class="row ghost"></div>
+          <div class="coverage ghost"></div>
+        </div>
+      {:else}
+        <div class="settled">
+          {#each needsReading as p (p.id)}
+            <button class="row" onclick={(ev) => goPlan(p, ev)}>
+              <span class="row-name">{p.name}</span>
+              <span class="row-note">{t("plans.today", { chapters: chapterSpan(remaining(p)) })}</span>
+            </button>
+          {/each}
+          {#if allDone}
+            <div class="row done"><span class="row-note">{t("explore.planDone")}</span></div>
+          {/if}
+          {#if dueCount > 0}
+            <button class="row" onclick={openMemorize}>
+              <span class="row-name">{t("explore.memorize")}</span>
+              <span class="row-note">{plural("memorize.reviews.one", "memorize.reviews.other", dueCount)}</span>
+            </button>
+          {/if}
+          {#if suggestedCount > 0}
+            <button class="row" onclick={() => (s.panel = { kind: "suggested" })}>
+              <span class="row-name">{t("explore.suggested")}</span>
+              <span class="row-note">{plural("explore.toReview.one", "explore.toReview.other", suggestedCount)}</span>
+            </button>
+          {/if}
+          {#if todays.length === 0 && dueCount === 0 && suggestedCount === 0}
+            <button class="row invite" onclick={openPlans}>
+              <span class="row-note">{t("explore.nothingRunning")}</span>
+            </button>
+          {/if}
 
-      <!-- The visual bonus, and it is the reading map's own colour: how much of
-           the canon has had a full pass. Tapping it opens the navigator, where
-           the map itself lives. -->
-      {#if coverage}
-        <button class="coverage" onclick={() => (s.bookNavFor = s.activePane)}>
-          <span class="cov-text">
-            {t("explore.chaptersRead", { read: nf.format(coverage.read), total: nf.format(coverage.total) })}
-          </span>
-          <span class="cov-bar" aria-hidden="true">
-            <span class="cov-fill" style="width: {(coverage.frac * 100).toFixed(2)}%"></span>
-          </span>
-        </button>
+          <!-- The visual bonus, and it is the reading map's own colour: how much
+               of the canon has had a full pass. Tapping it opens the navigator,
+               where the map itself lives. -->
+          <!-- The lifetime counter, beside the coverage bar it belongs with:
+               one says how far through this pass you are, the other how many
+               passes there have been. Unset, it is an invitation; set, it is a
+               statement and not a control. -->
+          {#if readsSet}
+            <div class="reads"><span class="reads-n">{nf.format(reads)}</span>
+              <span class="reads-label">{plural("explore.readsTimes.one", "explore.readsTimes.other", reads)}</span>
+            </div>
+          {:else}
+            <button class="reads unset" onclick={setReads}>
+              <span class="reads-label">{t("explore.readsSet")}</span>
+            </button>
+          {/if}
+
+          {#if coverage}
+            <button class="coverage" onclick={() => (s.bookNavFor = s.activePane)}>
+              <span class="cov-text">
+                {t("explore.chaptersRead", { read: nf.format(coverage.read), total: nf.format(coverage.total) })}
+              </span>
+              <span class="cov-bar" aria-hidden="true">
+                <span class="cov-fill" style="width: {(coverage.frac * 100).toFixed(2)}%"></span>
+              </span>
+            </button>
+          {/if}
+        </div>
       {/if}
     </section>
 
@@ -219,6 +319,49 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+  }
+  /* The placeholder and the real thing are the same stack, so swapping one for
+     the other moves nothing sideways. */
+  .skeleton,
+  .settled {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  /* A ghost is the row's own box with no content: same height, same radius,
+     same rule — a shape settling rather than a thing arriving. */
+  .ghost {
+    background: color-mix(in srgb, var(--ink, #211f1a) 4%, var(--paper, #fcf9f4));
+    animation: breathe 1.6s ease-in-out infinite;
+  }
+  .row.ghost {
+    min-height: calc(46px * var(--uiScale, 1));
+  }
+  .coverage.ghost {
+    min-height: calc(56px * var(--uiScale, 1));
+  }
+  @keyframes breathe {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 0.85; }
+  }
+  /* The real content arrives by fading UP, never by pushing: the placeholder it
+     replaces was the same height. */
+  .settled {
+    animation: settle 0.18s ease-out both;
+  }
+  @keyframes settle {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  /* A reader who has asked for less motion gets none of it — the content simply
+     is there. The point was never the animation; it was not moving the page. */
+  @media (prefers-reduced-motion: reduce) {
+    .ghost {
+      animation: none;
+    }
+    .settled {
+      animation: none;
+    }
   }
   .band h3 {
     margin: 0 0 2px;
@@ -273,6 +416,34 @@
     background: var(--paper, #fcf9f4);
   }
   .coverage:hover {
+    border-color: var(--gold, #9e7d38);
+  }
+  /* A quiet statement, not a control — once set it does nothing when tapped,
+     and it should not invite one. */
+  .reads {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 10px;
+    background: var(--paper, #fcf9f4);
+    text-align: left;
+  }
+  .reads-n {
+    font-size: calc(22px * var(--uiScale, 1));
+    font-weight: 600;
+    color: var(--gold, #9e7d38);
+  }
+  .reads-label {
+    font-size: calc(14.5px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
+  }
+  .reads.unset {
+    min-height: auto;
+    width: 100%;
+  }
+  .reads.unset:hover {
     border-color: var(--gold, #9e7d38);
   }
   .cov-text {
@@ -334,6 +505,10 @@
   /* How much is in this tool. Absent at zero rather than shown as "0": an empty
      tool should read as quiet, not as a score of nought. */
   .ex-count {
+    /* The cards themselves are static text and are on screen from the first
+       frame; only their counts wait on a query, so they fade in rather than
+       snapping. Inline, so nothing moves when they land. */
+    animation: settle 0.18s ease-out both;
     margin-left: 6px;
     font-size: calc(13px * var(--uiScale, 1));
     font-weight: 600;

@@ -13,6 +13,7 @@
 //! separator); writes go through the cross-platform atomic writer in
 //! [`crate::store`], so this is correct on Windows and Unix alike.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -95,6 +96,25 @@ pub struct Config {
     pub panes: Vec<PaneRef>,
     /// Which pane was active last session.
     pub active: usize,
+    /// Where the reader was, PER SEATING — see [`crate::session_slot`]. Opening
+    /// the app at a Sunday service resumes last Sunday's service rather than
+    /// Saturday night's study. Keyed by slot token, so a build that adds a slot
+    /// simply starts writing a new key. Empty until the reader has been
+    /// somewhere in a given slot, and the plain last position
+    /// ([`Config::panes`]) is the fallback for a slot never used.
+    pub slots: BTreeMap<String, PaneRef>,
+    /// How many times this reader has read the Bible through, or `-1` for
+    /// "never said". Seeded ONCE by hand — a reader arriving with thirty years
+    /// behind them should not start at nought — and after that it is EARNED:
+    /// nothing in the UI edits it, and the only thing that moves it is
+    /// finishing the canon. Zero is a legitimate answer, which is why "unset"
+    /// is -1 rather than 0.
+    pub bible_reads: i64,
+    /// Whether the CURRENT full-canon state has already been counted. Set when
+    /// the map first reads complete, cleared when it drops below — so finishing
+    /// credits exactly one read however many times the hub is opened
+    /// afterwards.
+    pub bible_reads_credited: bool,
     /// Verse-per-line reading mode (each verse starts a fresh line).
     pub verse_per_line: bool,
     /// Paint the small leading verse numbers. Off is "just the text" — the
@@ -193,6 +213,9 @@ impl Default for Config {
             body_size: 18.0,
             panes: Vec::new(),
             active: 0,
+            slots: BTreeMap::new(),
+            bible_reads: -1,
+            bible_reads_credited: false,
             verse_per_line: false,
             verse_numbers: true,
             added_italics: true,
@@ -243,6 +266,17 @@ struct ConfigWire {
     open_panes: Vec<PaneWire>,
     #[serde(default)]
     active_pane: usize,
+    /// Per-seating positions (additive). A BTreeMap so the file is written in a
+    /// stable order — an on-disk format that reshuffles itself makes every save
+    /// look like a change to anything diffing or syncing it.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    slots: BTreeMap<String, PaneWire>,
+    /// Lifetime reads (additive). Absent → never said, which is -1 and NOT the
+    /// same as a reader who answered "none".
+    #[serde(default = "default_bible_reads", skip_serializing_if = "is_unset_reads")]
+    bible_reads: i64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    bible_reads_credited: bool,
     #[serde(default)]
     verse_per_line: bool,
     /// The two reader-typography switches (additive). `default_true` rather
@@ -343,6 +377,13 @@ fn default_theme_token() -> String {
 fn default_true() -> bool {
     true
 }
+/// Never said, which is not the same as "none".
+fn default_bible_reads() -> i64 {
+    -1
+}
+fn is_unset_reads(n: &i64) -> bool {
+    *n < 0
+}
 fn default_font_token() -> String {
     Font::default().token().to_string()
 }
@@ -392,6 +433,15 @@ impl Config {
                 .collect(),
             // Clamp: shells index panes with this.
             active: if n_panes == 0 { 0 } else { w.active_pane.min(n_panes - 1) },
+            bible_reads: w.bible_reads,
+            bible_reads_credited: w.bible_reads_credited,
+            slots: w
+                .slots
+                .into_iter()
+                .map(|(k, p)| {
+                    (k, PaneRef { book: p.book, chapter: p.chapter.max(1), verse: p.verse.filter(|v| *v >= 1) })
+                })
+                .collect(),
             verse_per_line: w.verse_per_line,
             verse_numbers: w.verse_numbers,
             added_italics: w.added_italics,
@@ -465,6 +515,18 @@ impl Config {
                 .map(|p| PaneWire { book: p.book.clone(), chapter: p.chapter, verse: p.verse, extra: Map::new() })
                 .collect(),
             active_pane: self.active,
+            bible_reads: self.bible_reads,
+            bible_reads_credited: self.bible_reads_credited,
+            slots: self
+                .slots
+                .iter()
+                .map(|(k, p)| {
+                    (
+                        k.clone(),
+                        PaneWire { book: p.book.clone(), chapter: p.chapter, verse: p.verse, extra: Map::new() },
+                    )
+                })
+                .collect(),
             verse_per_line: self.verse_per_line,
             verse_numbers: self.verse_numbers,
             added_italics: self.added_italics,
@@ -633,6 +695,16 @@ mod tests {
                 PaneRef { book: "Rom".into(), chapter: 8, verse: None },
             ],
             active: 1,
+            // Both halves of the lifetime counter, so the round-trip covers a
+            // SET value rather than only the -1 that is skipped on the wire.
+            bible_reads: 7,
+            bible_reads_credited: true,
+            // A slot with something in it, so the round-trip covers the map
+            // rather than only its empty case.
+            slots: BTreeMap::from([(
+                "sunday-morning".to_string(),
+                PaneRef { book: "Ps".into(), chapter: 23, verse: Some(4) },
+            )]),
             verse_per_line: true,
             // Both OFF here: these default to true, so a round-trip that left
             // them at the default would pass against a wire field that was

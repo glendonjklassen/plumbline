@@ -72,6 +72,7 @@ import {
   themePalette,
   shareLink,
   readingSpec,
+  sessionSlot,
   type LayoutCfg,
 } from "./StudyEngine";
 
@@ -718,6 +719,7 @@ function statics(): Record<string, (...a: any[]) => any> {
     // both need.
     shareLink: (request: unknown) => shareLink(w, request as Parameters<typeof shareLink>[1]),
     readingSpec: () => readingSpec(w),
+    sessionSlot: (date: string, hour: number) => sessionSlot(w, date, hour),
   };
 }
 

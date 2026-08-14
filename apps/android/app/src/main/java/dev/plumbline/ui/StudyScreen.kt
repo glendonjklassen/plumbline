@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
@@ -237,9 +238,35 @@ fun StudyScreen(
     // Persisted reader config (shared, cross-shell): last-viewed passage, reader
     // prefs, and reading history all restore from it.
     val loadedCfg = remember { runCatching { parseWire<ConfigState>(StudyConfig.LoadJson()) }.getOrNull() }
-    val lastPane = loadedCfg?.openPanes
+    val plainLast = loadedCfg?.openPanes
         ?.getOrNull(loadedCfg.activePane.coerceAtLeast(0))
         ?: loadedCfg?.openPanes?.firstOrNull()
+
+    // WHICH SEATING is this? A reader's last chapter is not one thing: somebody
+    // who studies on weekday mornings, sits in a Sunday service and goes to a
+    // Wednesday meeting has three separate places they were, and one "last
+    // chapter" serves whichever they did most recently — so arriving at church
+    // reopened Saturday night's study (maintainer, 2026-08-13).
+    //
+    // Resolved ONCE per launch, synchronously, because the pane below is built
+    // from it: this is a string comparison in the core, not a file read. The
+    // date and hour are LOCAL — a slot computed in UTC would put a Sunday
+    // evening service in Monday for half the world.
+    val sessionSlot = remember {
+        val now = java.util.Calendar.getInstance()
+        val date = String.format(
+            java.util.Locale.US,
+            "%04d-%02d-%02d",
+            now.get(java.util.Calendar.YEAR),
+            now.get(java.util.Calendar.MONTH) + 1,
+            now.get(java.util.Calendar.DAY_OF_MONTH),
+        )
+        runCatching { StudyEngine.SessionSlot(date, now.get(java.util.Calendar.HOUR_OF_DAY)) }
+            .getOrNull() ?: "other"
+    }
+    // This seating's own position wins; a seating never used falls through to
+    // the plain last position, which is what every reader has today.
+    val lastPane = loadedCfg?.slots?.get(sessionSlot) ?: plainLast
 
     // Primary Bible pane — restore where we left off, else John 3 (desktop default).
     var book by remember { mutableStateOf(lastPane?.book ?: "John") }
@@ -364,6 +391,13 @@ fun StudyScreen(
     var verseNumbers by remember { mutableStateOf(loadedCfg?.verseNumbers != false) }
     var addedItalics by remember { mutableStateOf(loadedCfg?.addedItalics != false) }
     var history by remember { mutableStateOf(loadedCfg?.history ?: emptyList()) }
+    var slots by remember { mutableStateOf(loadedCfg?.slots ?: emptyMap()) }
+    // The lifetime counter: seeded once by hand, earned thereafter. -1 is
+    // "never said", deliberately not 0 — a reader who answers "none" has told
+    // us something and must not be asked again.
+    var bibleReads by remember { mutableIntStateOf(loadedCfg?.bibleReads ?: -1) }
+    var bibleReadsCredited by remember { mutableStateOf(loadedCfg?.bibleReadsCredited ?: false) }
+    var askReads by remember { mutableStateOf(false) }
     // The reader's home church — what their own shared links carry (web parity).
     // `intro` is which welcome they were given, so the Welcome button can show it
     // again without a reinstall.
@@ -391,6 +425,7 @@ fun StudyScreen(
         val cfg = (loadedCfg ?: ConfigState()).copy(
             bodySize = bodySize, sideMargin = sideMargin, lineSpacing = lineSpacing, copyStyle = copyStyle,
             openPanes = listOf(PaneRef1(book, chapter, firstVisibleVerse)), activePane = 0, history = history,
+            slots = slots, bibleReads = bibleReads, bibleReadsCredited = bibleReadsCredited,
             theme = themeChoice, textFont = textFont, chromeFont = chromeFont,
             humanAnalysis = humanAnalysis, machineAnalysis = machineAnalysis,
             church = church, presentSharesAsNew = presentSharesAsNew, intro = introChoice,
@@ -407,6 +442,8 @@ fun StudyScreen(
     LaunchedEffect(book, chapter) {
         history = (listOf(PaneRef1(book, chapter)) +
             history.filterNot { it.book == book && it.chapter == chapter }).take(50)
+        // …and against this seating, so the next one like it reopens here.
+        slots = slots + (sessionSlot to PaneRef1(book, chapter))
         persistCfg()
     }
 
@@ -924,6 +961,11 @@ fun StudyScreen(
                     engine = engine,
                     palette = palette,
                     refreshEpoch = noteEpoch,
+                    bibleReads = bibleReads,
+                    onAskReads = { askReads = true },
+                    onCredit = { bibleReads = maxOf(bibleReads, 0) + 1; bibleReadsCredited = true; persistCfg() },
+                    onUncredit = { bibleReadsCredited = false; persistCfg() },
+                    credited = bibleReadsCredited,
                     onMemorize = { memView = MemorizeView.List; dest = Dest.Memorize },
                     onNotes = { showNotes = true },
                     onThreads = { openLibrary(Library.Threads) },
@@ -1194,6 +1236,41 @@ fun StudyScreen(
                     }) { Text(t("common.save")) }
                 },
                 dismissButton = { TextButton(onClick = { prompt = null }) { Text(t("common.cancel")) } },
+            )
+        }
+        // Asked ONCE, and there is no edit path afterwards on purpose: a number
+        // you can retype is a number that means nothing. The keyboard is the
+        // NUMBER pad — the web twin sets inputmode="numeric" for the same reason.
+        if (askReads) {
+            var entry by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { askReads = false },
+                title = { Text(t("explore.readsAsk")) },
+                text = {
+                    OutlinedTextField(
+                        value = entry,
+                        onValueChange = { v -> entry = v.filter { it.isDigit() }.take(4) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        entry.toIntOrNull()?.let { n ->
+                            bibleReads = n
+                            // Seeded as CREDITED, whatever the canon says: a
+                            // reader who is already finished must not be
+                            // immediately given a read they have just told us
+                            // about. The band reconciles it on the next
+                            // composition — if the canon is not complete it
+                            // clears the flag, which is the honest state.
+                            bibleReadsCredited = true
+                            persistCfg()
+                        }
+                        askReads = false
+                    }) { Text(t("common.save")) }
+                },
+                dismissButton = { TextButton(onClick = { askReads = false }) { Text(t("common.cancel")) } },
             )
         }
         // Presentation mode: once a thread is chosen
@@ -1724,6 +1801,12 @@ private fun SearchOverlay(
 private fun ExploreScreen(
     engine: StudyEngine,
     palette: ReaderPalette,
+    /** Lifetime reads, -1 when the reader has never said. */
+    bibleReads: Int,
+    credited: Boolean,
+    onAskReads: () -> Unit,
+    onCredit: () -> Unit,
+    onUncredit: () -> Unit,
     /** Bumped by an authoring write. NOT a general study epoch — this shell has
      *  none — so it is the note epoch: the counts are otherwise refetched every
      *  time Study is opened, since this composable leaves the tree with it. */
@@ -1772,7 +1855,10 @@ private fun ExploreScreen(
 
     MapOverlay(t("nav.study"), palette, onClose, actions = barActions) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            InProgressBand(engine, palette, refreshEpoch, onMemorize)
+            InProgressBand(
+                engine, palette, refreshEpoch, onMemorize,
+                bibleReads, credited, onAskReads, onCredit, onUncredit,
+            )
             ExploreCard(t("explore.memorize"), t("explore.memorize.desc"), palette, onClick = onMemorize)
             ExploreCard(t("explore.notes"), t("explore.notes.desc"), palette, count = notes, onClick = onNotes)
             ExploreCard(t("explore.threads"), t("explore.threads.desc"), palette, count = threads, onClick = onThreads)
@@ -1881,10 +1967,19 @@ private fun InProgressBand(
     palette: ReaderPalette,
     refreshEpoch: Int,
     onMemorize: () -> Unit,
+    bibleReads: Int,
+    credited: Boolean,
+    onAskReads: () -> Unit,
+    onCredit: () -> Unit,
+    onUncredit: () -> Unit,
 ) {
     var due by remember { mutableIntStateOf(0) }
     var read by remember { mutableIntStateOf(0) }
     var chapters by remember { mutableIntStateOf(0) }
+    // Whether the reads have landed, told apart from "landed and empty" — the
+    // web twin's `showReal`. Without it the band drew empty for a beat and then
+    // GREW, shoving the cards down the page as it went.
+    var settled by remember { mutableStateOf(false) }
     LaunchedEffect(refreshEpoch) {
         withContext(Dispatchers.Default) {
             val now = nowUtc()
@@ -1897,6 +1992,7 @@ private fun InProgressBand(
             read = books.sumOf { it.read }
             chapters = books.sumOf { it.chapters }
         }
+        settled = true
     }
 
     Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 6.dp)) {
@@ -1907,6 +2003,21 @@ private fun InProgressBand(
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 1.sp,
         )
+        if (!settled) {
+            // A PLACEHOLDER OF THE SAME SHAPE, not a spinner: one row and the
+            // coverage strip is what the band resolves to in the common cases,
+            // so the cards below start where they will stay instead of being
+            // shoved down when the reads land (web twin's `.ghost`).
+            val ghost = palette.ink.copy(alpha = 0.04f)
+            Box(
+                Modifier.fillMaxWidth().padding(top = 10.dp).height(22.dp)
+                    .background(ghost, RoundedCornerShape(6.dp)),
+            )
+            Box(
+                Modifier.fillMaxWidth().padding(top = 12.dp).height(30.dp)
+                    .background(ghost, RoundedCornerShape(6.dp)),
+            )
+        } else {
         if (due > 0) {
             Row(
                 Modifier.fillMaxWidth().clickable(onClick = onMemorize).padding(top = 10.dp),
@@ -1945,6 +2056,38 @@ private fun InProgressBand(
                 )
             }
         }
+        // THE LIFETIME COUNTER, beside the coverage bar: one says how far
+        // through this pass you are, the other how many passes there have been.
+        // Crediting happens exactly once per finished canon — `credited` marks
+        // the CURRENT complete state as counted and is cleared if the map ever
+        // drops below full, so the number moves on finishing rather than on
+        // every visit to this screen.
+        LaunchedEffect(read, chapters, credited, bibleReads) {
+            if (bibleReads < 0 || chapters == 0) return@LaunchedEffect
+            val complete = read >= chapters
+            if (complete && !credited) onCredit() else if (!complete && credited) onUncredit()
+        }
+        if (bibleReads >= 0) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 12.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Text("$bibleReads", color = palette.gold, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    Strings.plural("explore.readsTimes.one", "explore.readsTimes.other", bibleReads),
+                    color = palette.faded,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(start = 8.dp, bottom = 2.dp),
+                )
+            }
+        } else {
+            Text(
+                t("explore.readsSet"),
+                color = palette.gold,
+                fontSize = 14.sp,
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onAskReads).padding(top = 12.dp),
+            )
+        }
         if (due == 0 && chapters == 0) {
             Text(
                 t("explore.nothingRunning"),
@@ -1952,6 +2095,7 @@ private fun InProgressBand(
                 fontSize = 14.sp,
                 modifier = Modifier.padding(top = 10.dp),
             )
+        }
         }
     }
     HorizontalDivider(color = palette.rule)
@@ -2024,14 +2168,16 @@ private fun HistorySheet(
                     Text(t("history.empty"), color = palette.ink)
                 }
             } else {
+                // One line per RUN, not per chapter — see [historySpans].
+                val spans = remember(history) { historySpans(history.map { it.book to it.chapter }) }
                 LazyColumn(Modifier.fillMaxWidth()) {
-                    items(history) { p ->
+                    items(spans) { sp ->
                         Row(
                             Modifier.fillMaxWidth()
-                                .clickable { onOpen(p.book, p.chapter) }
+                                .clickable { onOpen(sp.book, sp.open) }
                                 .padding(horizontal = 20.dp, vertical = 12.dp),
                         ) {
-                            Text("${nameOf[p.book] ?: p.book} ${p.chapter}", color = palette.ink, fontSize = 16.sp)
+                            Text(sp.label(nameOf[sp.book] ?: sp.book), color = palette.ink, fontSize = 16.sp)
                         }
                         HorizontalDivider(color = palette.rule)
                     }
@@ -2441,4 +2587,45 @@ private fun hingeThickness(fold: FoldingFeature?, vertical: Boolean): Dp {
     val density = LocalDensity.current
     val px = if (vertical) fold.bounds.width() else fold.bounds.height()
     return with(density) { px.toDp() }
+}
+
+/**
+ * One run of reading history: adjacent entries in the same book with contiguous
+ * chapters, collapsed. The web twin is `shell/historySpans.ts`, and
+ * HistorySpansTest holds the two to the same rules.
+ */
+internal data class HistorySpan(
+    val book: String,
+    /** What a tap opens: the chapter of the run's MOST RECENT entry, which is
+     *  where the reader actually was — not the lowest number in the span. */
+    val open: Int,
+    var lo: Int,
+    var hi: Int,
+) {
+    /** "Genesis 1" for a single chapter, "Genesis 1–3" for a run (EN DASH, as
+     *  everywhere else a range is written in this app). */
+    fun label(name: String): String = if (lo == hi) "$name $lo" else "$name $lo–$hi"
+}
+
+/**
+ * Collapse each run of adjacent same-book contiguous chapters into one span.
+ *
+ * ADJACENT IN THE LIST, not merely similar: `[Gen 3, John 1, Gen 2]` stays three
+ * spans, because the reader went somewhere else in between and merging across
+ * that would rewrite the order they did things in. Contiguity is checked against
+ * either end of the run, so reading forwards (which lands in this
+ * most-recent-first list as 3, 2, 1) and reading backwards both collapse.
+ */
+internal fun historySpans(history: List<Pair<String, Int>>): List<HistorySpan> {
+    val out = mutableListOf<HistorySpan>()
+    for ((book, chapter) in history) {
+        val run = out.lastOrNull()
+        if (run != null && run.book == book && (chapter == run.lo - 1 || chapter == run.hi + 1)) {
+            run.lo = minOf(run.lo, chapter)
+            run.hi = maxOf(run.hi, chapter)
+            continue
+        }
+        out += HistorySpan(book, chapter, chapter, chapter)
+    }
+    return out
 }

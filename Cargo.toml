@@ -21,7 +21,7 @@ default-members = [
 # shells — About renders it as `engine ` + this number. The workflow refuses a tag
 # whose version disagrees with this line (and with apps/web/package.json), so a
 # release ships one number, not three.
-version = "0.49.1"
+version = "0.50.0"
 edition = "2021"
 license = "MIT"
 authors = ["Glendon Klassen <gjklassen@proton.me>"]

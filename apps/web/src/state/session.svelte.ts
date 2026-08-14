@@ -300,6 +300,11 @@ export class Session {
     title: string;
     initial: string;
     multiline: boolean;
+    /** Ask for a NUMBER: the field carries `inputmode="numeric"`, which is what
+     *  raises a phone's numpad instead of its full keyboard. Still a text field
+     *  — `type="number"` brings spinners and a browser's own validation UI to a
+     *  dialog that already has an OK button. */
+    numeric?: boolean;
     resolve: (v: string | null) => void;
   } | null>(null);
 
@@ -422,6 +427,24 @@ export class Session {
   askText(title: string, initial = "", multiline = false): Promise<string | null> {
     return new Promise((resolve) => {
       this.promptReq = { title, initial, multiline, resolve };
+    });
+  }
+
+  /** Ask for a whole number, with a phone's numpad rather than its keyboard.
+   *  Answers null on cancel or on anything that is not a number. */
+  askNumber(title: string, initial = ""): Promise<number | null> {
+    return new Promise((resolve) => {
+      this.promptReq = {
+        title,
+        initial,
+        multiline: false,
+        numeric: true,
+        resolve: (v) => {
+          if (v === null) return resolve(null);
+          const n = Number.parseInt(v.trim(), 10);
+          resolve(Number.isFinite(n) && n >= 0 ? n : null);
+        },
+      };
     });
   }
 
@@ -807,6 +830,33 @@ export class Session {
     }
     this.showFirstRun = !!loaded.firstRun;
 
+    // WHICH SEATING is this? Asked of the engine with the reader's OWN local
+    // date and hour, then used to prefer that slot's saved position over the
+    // plain last one — so arriving at a Sunday service reopens last Sunday's
+    // service rather than Saturday night's study (maintainer, 2026-08-13).
+    //
+    // Fire-and-forget rather than awaited: the answer is a few ms away and the
+    // panes below must be built NOW, so the restore is applied when it lands and
+    // only if the reader has not already navigated. A slot never used falls
+    // through to the plain last position, which is what every reader has today.
+    const now = new Date();
+    const localDate =
+      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    void this.rpc
+      .static("sessionSlot", localDate, now.getHours())
+      .then((slot: string) => {
+        this.slot = slot;
+        const seat = (this.config.slots as Record<string, any> | undefined)?.[slot];
+        // `#restoredInto` guards the race: if the reader has already gone
+        // somewhere in the few ms this took, their tap wins over the restore.
+        if (seat?.book && !this.#navigatedSinceBoot) {
+          this.navigate(0, seat.book, seat.chapter, seat.verse ?? null, { history: false });
+        }
+      })
+      .catch(() => {
+        /* no slot: the plain last position stands, exactly as before */
+      });
+
     const saved = loaded.openPanes?.length ? loaded.openPanes : [{ book: "John", chapter: 3 }];
     // Restore no more panes than fit — `addPane` guards the button, but a config
     // written by a wider window (or an older build) can still carry more than
@@ -1112,7 +1162,28 @@ export class Session {
     const h: any[] = (this.config.history ??= []);
     const without = h.filter((e) => !(e.book === book && e.chapter === chapter));
     this.config.history = [{ book, chapter }, ...without].slice(0, HISTORY_CAP);
+    this.#markSlot(book, chapter);
   }
+
+  /** The seating this session belongs to, resolved ONCE per launch from the
+   *  reader's own local clock (`core::session_slot`, asked through the engine so
+   *  the two shells cannot drift on when a service is). Null until the answer
+   *  lands, which is a few ms into boot — a navigation before then simply does
+   *  not mark a slot, and the plain last position still covers it. */
+  slot = $state<string | null>(null);
+
+  /** Remember this passage against the current seating, so the next Sunday
+   *  morning reopens THIS Sunday morning rather than Saturday night's study. */
+  #markSlot(book: string, chapter: number): void {
+    if (!this.slot) return;
+    const slots: Record<string, unknown> = (this.config.slots ??= {});
+    slots[this.slot] = { book, chapter };
+  }
+
+  /** Whether the reader has moved since boot. The slot restore lands a few ms
+   *  after the panes are built, and it must never yank someone away from a
+   *  passage they chose in the meantime. */
+  #navigatedSinceBoot = false;
 
   /** Navigate a pane, recording per-pane back/forward + recents history. */
   navigate(
@@ -1124,6 +1195,9 @@ export class Session {
   ): void {
     const pane = this.panes[paneIdx];
     if (!pane) return;
+    // Any navigation — including the slot restore's own, harmlessly, since it
+    // is one-shot — means the reader is no longer sitting on the booted page.
+    this.#navigatedSinceBoot = true;
     const count = this.chapterCount(book);
     if (count > 0) chapter = Math.min(chapter, count);
     chapter = Math.max(chapter, 1);
