@@ -1885,6 +1885,10 @@ private fun InProgressBand(
     var due by remember { mutableIntStateOf(0) }
     var read by remember { mutableIntStateOf(0) }
     var chapters by remember { mutableIntStateOf(0) }
+    // Whether the reads have landed, told apart from "landed and empty" — the
+    // web twin's `showReal`. Without it the band drew empty for a beat and then
+    // GREW, shoving the cards down the page as it went.
+    var settled by remember { mutableStateOf(false) }
     LaunchedEffect(refreshEpoch) {
         withContext(Dispatchers.Default) {
             val now = nowUtc()
@@ -1897,6 +1901,7 @@ private fun InProgressBand(
             read = books.sumOf { it.read }
             chapters = books.sumOf { it.chapters }
         }
+        settled = true
     }
 
     Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 6.dp)) {
@@ -1907,6 +1912,21 @@ private fun InProgressBand(
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 1.sp,
         )
+        if (!settled) {
+            // A PLACEHOLDER OF THE SAME SHAPE, not a spinner: one row and the
+            // coverage strip is what the band resolves to in the common cases,
+            // so the cards below start where they will stay instead of being
+            // shoved down when the reads land (web twin's `.ghost`).
+            val ghost = palette.ink.copy(alpha = 0.04f)
+            Box(
+                Modifier.fillMaxWidth().padding(top = 10.dp).height(22.dp)
+                    .background(ghost, RoundedCornerShape(6.dp)),
+            )
+            Box(
+                Modifier.fillMaxWidth().padding(top = 12.dp).height(30.dp)
+                    .background(ghost, RoundedCornerShape(6.dp)),
+            )
+        } else {
         if (due > 0) {
             Row(
                 Modifier.fillMaxWidth().clickable(onClick = onMemorize).padding(top = 10.dp),
@@ -1952,6 +1972,7 @@ private fun InProgressBand(
                 fontSize = 14.sp,
                 modifier = Modifier.padding(top = 10.dp),
             )
+        }
         }
     }
     HorizontalDivider(color = palette.rule)
