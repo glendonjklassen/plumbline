@@ -2,10 +2,14 @@
   // Reading history (the shared config's recents, most-recent-first).
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
+  import { historySpans, spanLabel } from "./historySpans";
   import { t } from "../lib/i18n.svelte";
 
   const s = getSession();
   const history = $derived((s.config.history ?? []) as { book: string; chapter: number }[]);
+  /** One line per RUN, not per chapter: an evening in Genesis 1–3 is one thing
+   *  the reader did, and three lines of it pushed everything else off the sheet. */
+  const spans = $derived(historySpans(history));
 
   function open(book: string, chapter: number): void {
     s.showHistory = false;
@@ -29,8 +33,8 @@
       <p class="empty">{t("history.empty")}</p>
     {/if}
     <div class="list">
-      {#each history as h, i (i)}
-        <button onclick={() => open(h.book, h.chapter)}>{s.bookName(h.book)} {h.chapter}</button>
+      {#each spans as sp, i (i)}
+        <button onclick={() => open(sp.book, sp.open)}>{spanLabel(sp, (b) => s.bookName(b))}</button>
       {/each}
     </div>
   </div>

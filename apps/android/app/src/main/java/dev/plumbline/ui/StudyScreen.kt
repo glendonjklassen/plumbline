@@ -2045,14 +2045,16 @@ private fun HistorySheet(
                     Text(t("history.empty"), color = palette.ink)
                 }
             } else {
+                // One line per RUN, not per chapter — see [historySpans].
+                val spans = remember(history) { historySpans(history.map { it.book to it.chapter }) }
                 LazyColumn(Modifier.fillMaxWidth()) {
-                    items(history) { p ->
+                    items(spans) { sp ->
                         Row(
                             Modifier.fillMaxWidth()
-                                .clickable { onOpen(p.book, p.chapter) }
+                                .clickable { onOpen(sp.book, sp.open) }
                                 .padding(horizontal = 20.dp, vertical = 12.dp),
                         ) {
-                            Text("${nameOf[p.book] ?: p.book} ${p.chapter}", color = palette.ink, fontSize = 16.sp)
+                            Text(sp.label(nameOf[sp.book] ?: sp.book), color = palette.ink, fontSize = 16.sp)
                         }
                         HorizontalDivider(color = palette.rule)
                     }
@@ -2462,4 +2464,45 @@ private fun hingeThickness(fold: FoldingFeature?, vertical: Boolean): Dp {
     val density = LocalDensity.current
     val px = if (vertical) fold.bounds.width() else fold.bounds.height()
     return with(density) { px.toDp() }
+}
+
+/**
+ * One run of reading history: adjacent entries in the same book with contiguous
+ * chapters, collapsed. The web twin is `shell/historySpans.ts`, and
+ * HistorySpansTest holds the two to the same rules.
+ */
+internal data class HistorySpan(
+    val book: String,
+    /** What a tap opens: the chapter of the run's MOST RECENT entry, which is
+     *  where the reader actually was — not the lowest number in the span. */
+    val open: Int,
+    var lo: Int,
+    var hi: Int,
+) {
+    /** "Genesis 1" for a single chapter, "Genesis 1–3" for a run (EN DASH, as
+     *  everywhere else a range is written in this app). */
+    fun label(name: String): String = if (lo == hi) "$name $lo" else "$name $lo–$hi"
+}
+
+/**
+ * Collapse each run of adjacent same-book contiguous chapters into one span.
+ *
+ * ADJACENT IN THE LIST, not merely similar: `[Gen 3, John 1, Gen 2]` stays three
+ * spans, because the reader went somewhere else in between and merging across
+ * that would rewrite the order they did things in. Contiguity is checked against
+ * either end of the run, so reading forwards (which lands in this
+ * most-recent-first list as 3, 2, 1) and reading backwards both collapse.
+ */
+internal fun historySpans(history: List<Pair<String, Int>>): List<HistorySpan> {
+    val out = mutableListOf<HistorySpan>()
+    for ((book, chapter) in history) {
+        val run = out.lastOrNull()
+        if (run != null && run.book == book && (chapter == run.lo - 1 || chapter == run.hi + 1)) {
+            run.lo = minOf(run.lo, chapter)
+            run.hi = maxOf(run.hi, chapter)
+            continue
+        }
+        out += HistorySpan(book, chapter, chapter, chapter)
+    }
+    return out
 }
