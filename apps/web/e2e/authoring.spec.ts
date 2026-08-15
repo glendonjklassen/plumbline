@@ -155,9 +155,13 @@ test("a reader tags two verses from the verse menu and turns the tag into a weav
   await row.click();
   await expect(picker).toBeHidden();
 
-  // ── Explore ▸ Tags: two members, and the conversion on offer ──
+  // ── Study ▸ Tags ▸ Browse: two members, and the conversion on offer ──
+  // Tags is a PAGE now (2026-08-14) rather than a card that raised the library
+  // straight away, so the library is one tap further in — the same route a
+  // reader takes.
   await page.locator("nav.browse").getByRole("button", { name: "Study" }).click();
   await page.locator(".ex-card", { hasText: /^Tags/ }).click();
+  await page.getByRole("button", { name: /^Browse tags/ }).click();
   await expect(panel.locator("p", { hasText: TAG }), "both verses are in the tag").toContainText("2 members", {
     timeout: 30_000,
   });
