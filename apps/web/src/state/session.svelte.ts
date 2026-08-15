@@ -214,7 +214,7 @@ export class Session {
    * were reading. `"read"` is the absence of a destination rather than one of
    * its own.
    */
-  screen = $state<"read" | "explore" | "memorize" | "plans" | "viz" | "preach" | "hymnal" | "share">("read");
+  screen = $state<"read" | "explore" | "memorize" | "plans" | "viz" | "tags" | "preach" | "hymnal" | "share">("read");
 
   // ── the hymnal ──────────────────────────────────────────────────────────────
 
@@ -376,7 +376,7 @@ export class Session {
   /** Whether anything [[dismissTransient]] would close is on screen — the
    *  question the phone's Back button asks (see [[installRouter]]). */
   get transientOpen(): boolean {
-    if (this.promptReq || this.confirmReq) return true;
+    if (this.promptReq || this.confirmReq || this.pickReq) return true;
     return Session.TRANSIENT.some(
       ([field, closed]) => (this as unknown as Record<string, unknown>)[field] !== closed,
     );
@@ -392,6 +392,29 @@ export class Session {
     verb: string;
     resolve: (ok: boolean) => void;
   } | null>(null);
+
+  /** Active list picker (rendered by PickDialog); resolves null on cancel. */
+  pickReq = $state<{
+    title: string;
+    options: string[];
+    resolve: (v: string | null) => void;
+  } | null>(null);
+
+  /**
+   * Ask the reader to choose one of `options`.
+   *
+   * A picker rather than a text field: every caller so far is choosing among
+   * things that already exist (tags), and asking somebody to retype a name they
+   * are looking at is how you get a typo that creates a second tag.
+   */
+  askPick(title: string, options: string[]): Promise<string | null> {
+    // One question at a time, like `askConfirm` — a second ask while one is open
+    // answers the first with a cancel rather than leaving it forever pending.
+    this.pickReq?.resolve(null);
+    return new Promise((resolve) => {
+      this.pickReq = { title, options, resolve };
+    });
+  }
 
   /**
    * Ask before destroying something. Resolves true only if the reader says so.
@@ -421,6 +444,8 @@ export class Session {
   cancelPrompt(): void {
     this.promptReq?.resolve(null);
     this.promptReq = null;
+    this.pickReq?.resolve(null);
+    this.pickReq = null;
   }
 
   /** Ask the user for text — the web twin of the desktops' native prompts. */

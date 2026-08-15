@@ -2002,6 +2002,86 @@ pub unsafe extern "C" fn plumbline_engine_tag_delete(engine: *mut PlumblineEngin
     })
 }
 
+/// Rename the tag `from` to `to`, KEEPING ITS IDENTITY. Matched
+/// case-insensitively, like the other tag calls. A change of case only is a
+/// legal rename onto itself.
+///
+/// Refuses a blank new name, and refuses a name another tag already answers to —
+/// that is a MERGE, which is destructive and has to be asked for by name
+/// (`plumbline_engine_tag_merge`) rather than fallen into because two names
+/// collided. A `from` that names no tag is a success with nothing done.
+///
+/// Null on success, else an owned error string.
+///
+/// # Safety
+/// `engine` is valid; `from`/`to` are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_tag_rename(
+    engine: *mut PlumblineEngine,
+    from: *const c_char,
+    to: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        let Some(home) = engine.home.clone() else {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        };
+        let (Some(from), Some(to)) = (opt_str(from), opt_str(to)) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let mut study = engine.study_write();
+        match tag::rename_tag(&home, &study.tags, from, to, &now_stamp()) {
+            Ok(_) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Fold the tag `from` into the tag `into`, then delete `from`. Members already
+/// in `into` are not duplicated, and the SURVIVOR's copy of a shared member wins
+/// — letting the source overwrite would discard a note the reader wrote on the
+/// tag they chose to keep.
+///
+/// DESTRUCTIVE: the source tag's file is removed. Refuses a merge of a tag into
+/// itself (source and destination would be one file, written and then deleted)
+/// and refuses a name that no tag answers to.
+///
+/// Null on success, else an owned error string.
+///
+/// # Safety
+/// `engine` is valid; `from`/`into` are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_tag_merge(
+    engine: *mut PlumblineEngine,
+    from: *const c_char,
+    into: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        if engine.home.is_none() {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        }
+        let (Some(from), Some(into)) = (opt_str(from), opt_str(into)) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let mut study = engine.study_write();
+        match tag::merge_tags(&study.tags, from, into, &now_stamp()) {
+            Ok(_) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
 /// Weave the two whole verses `a_ref` / `b_ref` into the weave named `name`
 /// (created on first use). `added` is a caller-supplied UTC timestamp.
 ///

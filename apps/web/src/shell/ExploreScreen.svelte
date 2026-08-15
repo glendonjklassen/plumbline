@@ -179,7 +179,10 @@
       count: ((s.q("threads")?.threads ?? []) as any[]).length,
       go: () => (s.panel = { kind: "threads" }),
     },
-    { id: "tags", count: ((s.q("tags")?.tags ?? []) as any[]).length, go: () => (s.panel = { kind: "tags" }) },
+    // A DOOR now, like Visualizations: there is more than one thing to do with
+    // a tag library (browse, rename, merge) and a card that raised the panel
+    // directly had nowhere to put the rest.
+    { id: "tags", count: ((s.q("tags")?.tags ?? []) as any[]).length, go: () => (s.screen = "tags") },
     {
       id: "weaves",
       count: ((s.q("weaves")?.weaves ?? []) as any[]).length,

@@ -10,10 +10,12 @@
   import ExploreScreen from "./ExploreScreen.svelte";
   import PlansScreen from "./PlansScreen.svelte";
   import VizScreen from "./VizScreen.svelte";
+  import TagsScreen from "./TagsScreen.svelte";
   import PreachScreen from "./PreachScreen.svelte";
   import HymnalScreen from "../hymnal/HymnalScreen.svelte";
   import MarkReadDialog from "./MarkReadDialog.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
+  import PickDialog from "./PickDialog.svelte";
   import CanonStrip from "./CanonStrip.svelte";
   import PlanChip from "./PlanChip.svelte";
   import HistorySheet from "./HistorySheet.svelte";
@@ -214,7 +216,7 @@
   const dest = $derived(
     s.showPresent || s.screen === "preach"
       ? "preach"
-      : s.screen === "explore" || s.screen === "memorize" || s.screen === "plans" || s.screen === "viz"
+      : s.screen === "explore" || s.screen === "memorize" || s.screen === "plans" || s.screen === "viz" || s.screen === "tags"
         ? "study"
         : s.screen === "hymnal"
           ? "sing"
@@ -422,6 +424,8 @@
       <PlansScreen />
     {:else if s.screen === "viz"}
       <VizScreen />
+    {:else if s.screen === "tags"}
+      <TagsScreen />
     {:else if s.screen === "preach"}
       <PreachScreen />
     {:else if s.screen === "hymnal"}
@@ -548,6 +552,7 @@
 <MarkReadDialog />
 <ThreadPicker />
 <ConfirmDialog />
+<PickDialog />
 
 <style>
   .frame {

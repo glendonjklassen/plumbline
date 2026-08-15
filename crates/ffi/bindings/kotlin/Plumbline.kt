@@ -92,6 +92,12 @@ internal interface PlumblineNative : Library {
     ): Pointer?
     fun plumbline_engine_tag_remove(engine: Pointer, name: String, kind: String, value: String): Pointer?
     fun plumbline_engine_tag_delete(engine: Pointer, name: String): Pointer?
+    /** Rename a tag, keeping its identity. Refuses a blank name, and refuses a
+     *  name another tag already answers to — that is a merge, and merging is
+     *  destructive enough to have to be asked for. */
+    fun plumbline_engine_tag_rename(engine: Pointer, from: String, to: String): Pointer?
+    /** Fold one tag into another and delete the source. DESTRUCTIVE. */
+    fun plumbline_engine_tag_merge(engine: Pointer, from: String, into: String): Pointer?
     fun plumbline_engine_weave_add_link(
         engine: Pointer, name: String, aRef: String, bRef: String, added: String,
     ): Pointer?

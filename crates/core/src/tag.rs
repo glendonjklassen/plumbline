@@ -342,6 +342,104 @@ pub fn remove_tag(loaded: &[LoadedTag], name: &str) -> Result<bool, Error> {
     }
 }
 
+/// Rename a tag, KEEPING ITS IDENTITY.
+///
+/// The file is `slug(name).json`, so a rename is a write to a new path and a
+/// delete of the old one — and the whole reason [`Tag::id`] exists is that the
+/// tag on the other side has to be recognisably the same tag. The id is carried
+/// over untouched; only the label changes.
+///
+/// Refuses, rather than guessing, when:
+///
+/// * the new name is blank — a tag with no name cannot be picked from a list;
+/// * another tag already answers to it. That is a MERGE, and merging is
+///   destructive, so it must be asked for by name ([`merge_tags`]) instead of
+///   happening because two names collided.
+///
+/// A pure change of case (`grace` → `Grace`) is a legal rename of the tag onto
+/// itself: the slug is unchanged, so the file is rewritten in place and nothing
+/// is deleted.
+pub fn rename_tag(
+    home: impl AsRef<Path>,
+    loaded: &[LoadedTag],
+    from: &str,
+    to: &str,
+    now: &str,
+) -> Result<bool, Error> {
+    let to = to.trim();
+    if to.is_empty() {
+        return Err(Error::Parse("a tag needs a name".into()));
+    }
+    let wanted = from.trim().to_lowercase();
+    let Some(lt) = loaded.iter().find(|lt| lt.tag.name.to_lowercase() == wanted) else {
+        return Ok(false);
+    };
+    // Another tag by that name — but not this one, which is what makes a
+    // case-only rename legal.
+    if loaded.iter().any(|o| o.tag.name.to_lowercase() == to.to_lowercase() && o.file != lt.file) {
+        return Err(Error::Parse(format!("a tag called “{to}” already exists")));
+    }
+
+    let mut renamed = lt.tag.clone();
+    renamed.name = to.to_string();
+    let dest = tag_file(&home, to);
+    write_tag(&dest, &renamed, now)?;
+    // Only when the slug actually moved. A case-only rename writes the same
+    // path, and deleting it here would delete the tag we just wrote.
+    if dest != lt.file {
+        match std::fs::remove_file(&lt.file) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(Error::Io { path: lt.file.display().to_string(), source: e }),
+        }
+    }
+    Ok(true)
+}
+
+/// Fold `from` into `into`, then delete `from`. Answers how many members moved.
+///
+/// Members already in `into` are not duplicated — membership is identity by
+/// [`TagTarget`], so a verse in both tags stays one entry, and the one that
+/// survives is the TARGET's, with its note and its original `added` stamp. The
+/// alternative — letting the source overwrite — would quietly discard a note the
+/// reader wrote on the tag they are keeping.
+///
+/// Destructive by design: the source tag's file is removed. The shells ask
+/// first.
+///
+/// Takes no `home`: both files are already located by [`LoadedTag`], and the
+/// destination is rewritten in place — a merge never moves a tag.
+pub fn merge_tags(loaded: &[LoadedTag], from: &str, into: &str, now: &str) -> Result<usize, Error> {
+    let a = from.trim().to_lowercase();
+    let b = into.trim().to_lowercase();
+    if a == b {
+        return Err(Error::Parse("a tag cannot be merged into itself".into()));
+    }
+    let Some(src) = loaded.iter().find(|lt| lt.tag.name.to_lowercase() == a) else {
+        return Err(Error::Parse(format!("no tag called “{}”", from.trim())));
+    };
+    let Some(dst) = loaded.iter().find(|lt| lt.tag.name.to_lowercase() == b) else {
+        return Err(Error::Parse(format!("no tag called “{}”", into.trim())));
+    };
+
+    let mut merged = dst.tag.clone();
+    let mut moved = 0;
+    for m in &src.tag.members {
+        if merged.members.iter().any(|have| have.target == m.target) {
+            continue;
+        }
+        merged.members.push(m.clone());
+        moved += 1;
+    }
+    write_tag(&dst.file, &merged, now)?;
+    match std::fs::remove_file(&src.file) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(Error::Io { path: src.file.display().to_string(), source: e }),
+    }
+    Ok(moved)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -417,6 +515,158 @@ mod tests {
         assert_eq!(loaded[0].tag.members[0].target, concept);
 
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// A scratch home with two tags in it, each holding one verse.
+    fn two_tags(tag: &str) -> std::path::PathBuf {
+        let home = std::env::temp_dir().join(format!("plumbline-tag-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("tags")).unwrap();
+        for (name, book) in [("Grace", "Eph"), ("Mercy", "Ps")] {
+            let (loaded, _) = load_tags(&home);
+            add_member(
+                &home,
+                &loaded,
+                name,
+                "kjv1769-tok2",
+                TagTarget::Verse(VRef::new(book, 2, 8)),
+                None,
+                "2026-01-01T00:00:00Z",
+            )
+            .unwrap();
+        }
+        home
+    }
+
+    #[test]
+    fn a_rename_keeps_the_tag_s_identity() {
+        let home = two_tags("rename");
+        let (loaded, _) = load_tags(&home);
+        let before = loaded.iter().find(|lt| lt.tag.name == "Grace").unwrap().tag.id.clone();
+        assert!(before.is_some(), "the fixture's tag has an id to keep");
+
+        assert!(rename_tag(&home, &loaded, "grace", "Unmerited favour", "2026-08-14T00:00:00Z").unwrap());
+
+        let (after, errs) = load_tags(&home);
+        assert!(errs.is_empty(), "{errs:?}");
+        assert_eq!(after.len(), 2, "a rename is not a copy — the old file is gone");
+        let moved = after.iter().find(|lt| lt.tag.name == "Unmerited favour").expect("renamed");
+        // THE WHOLE POINT: the file moved, and the tag did not become a new tag.
+        assert_eq!(moved.tag.id, before, "a rename keeps the identity; the name is only a label");
+        assert_eq!(moved.tag.members.len(), 1, "and keeps its members");
+    }
+
+    #[test]
+    fn renaming_onto_another_tag_is_refused_because_that_would_be_a_merge() {
+        let home = two_tags("rename-clash");
+        let (loaded, _) = load_tags(&home);
+        // Merging is destructive, so it has to be ASKED for, not fallen into
+        // because two names collided.
+        assert!(rename_tag(&home, &loaded, "Grace", "mercy", "2026-08-14T00:00:00Z").is_err());
+        let (after, _) = load_tags(&home);
+        assert_eq!(after.len(), 2, "nothing was touched");
+    }
+
+    #[test]
+    fn a_case_only_rename_rewrites_in_place_and_does_not_delete_itself() {
+        let home = two_tags("rename-case");
+        let (loaded, _) = load_tags(&home);
+        // The slug is unchanged, so this writes the file it would then delete —
+        // the case the `dest != lt.file` guard exists for.
+        assert!(rename_tag(&home, &loaded, "Grace", "GRACE", "2026-08-14T00:00:00Z").unwrap());
+        let (after, errs) = load_tags(&home);
+        assert!(errs.is_empty());
+        assert_eq!(after.len(), 2, "the tag still exists");
+        assert!(after.iter().any(|lt| lt.tag.name == "GRACE"));
+    }
+
+    #[test]
+    fn a_blank_name_and_an_unknown_tag_are_both_refused() {
+        let home = two_tags("rename-bad");
+        let (loaded, _) = load_tags(&home);
+        assert!(rename_tag(&home, &loaded, "Grace", "   ", "2026-08-14T00:00:00Z").is_err());
+        // A tag that is not there is a miss, not an error — the same shape
+        // `remove_tag` uses.
+        assert!(!rename_tag(&home, &loaded, "Nonesuch", "Whatever", "2026-08-14T00:00:00Z").unwrap());
+    }
+
+    #[test]
+    fn a_merge_moves_members_and_deletes_the_source() {
+        let home = two_tags("merge");
+        let (loaded, _) = load_tags(&home);
+        let moved = merge_tags(&loaded, "Mercy", "Grace", "2026-08-14T00:00:00Z").unwrap();
+        assert_eq!(moved, 1);
+
+        let (after, errs) = load_tags(&home);
+        assert!(errs.is_empty(), "{errs:?}");
+        assert_eq!(after.len(), 1, "the source tag is gone");
+        let kept = &after[0];
+        assert_eq!(kept.tag.name, "Grace");
+        assert_eq!(kept.tag.members.len(), 2, "both verses ended up in the survivor");
+    }
+
+    #[test]
+    fn a_verse_in_both_tags_stays_one_member_and_keeps_the_survivor_s_note() {
+        let home = two_tags("merge-dupe");
+        let shared = TagTarget::Verse(VRef::new("John", 3, 16));
+        // The same verse in both, with a note only on the tag being KEPT.
+        let (loaded, _) = load_tags(&home);
+        add_member(
+            &home,
+            &loaded,
+            "Grace",
+            "kjv1769-tok2",
+            shared.clone(),
+            Some("keep me".into()),
+            "2026-02-01T00:00:00Z",
+        )
+        .unwrap();
+        let (loaded, _) = load_tags(&home);
+        add_member(
+            &home,
+            &loaded,
+            "Mercy",
+            "kjv1769-tok2",
+            shared.clone(),
+            Some("discard".into()),
+            "2026-02-02T00:00:00Z",
+        )
+        .unwrap();
+
+        let (loaded, _) = load_tags(&home);
+        let moved = merge_tags(&loaded, "Mercy", "Grace", "2026-08-14T00:00:00Z").unwrap();
+        assert_eq!(moved, 1, "only the verse that was NOT already there moves");
+
+        let (after, _) = load_tags(&home);
+        let kept = after.iter().find(|lt| lt.tag.name == "Grace").unwrap();
+        let dupes = kept.tag.members.iter().filter(|m| m.target == shared).count();
+        assert_eq!(dupes, 1, "membership is identity by target, not a list to append to");
+        // The SURVIVOR's note wins. Letting the source overwrite would quietly
+        // discard a note the reader wrote on the tag they chose to keep.
+        let note = kept.tag.members.iter().find(|m| m.target == shared).unwrap().note.clone();
+        assert_eq!(note.as_deref(), Some("keep me"));
+    }
+
+    #[test]
+    fn merging_a_tag_into_itself_is_refused_rather_than_deleting_it() {
+        let home = two_tags("merge-self");
+        let (loaded, _) = load_tags(&home);
+        // Without this guard the source and destination are the same file: it
+        // would be written and then removed, taking the tag with it.
+        assert!(merge_tags(&loaded, "Grace", "grace", "2026-08-14T00:00:00Z").is_err());
+        let (after, _) = load_tags(&home);
+        assert_eq!(after.len(), 2, "both tags survive");
+        assert!(after.iter().any(|lt| lt.tag.name == "Grace"));
+    }
+
+    #[test]
+    fn merging_an_unknown_tag_touches_nothing() {
+        let home = two_tags("merge-missing");
+        let (loaded, _) = load_tags(&home);
+        assert!(merge_tags(&loaded, "Nonesuch", "Grace", "2026-08-14T00:00:00Z").is_err());
+        assert!(merge_tags(&loaded, "Grace", "Nonesuch", "2026-08-14T00:00:00Z").is_err());
+        let (after, _) = load_tags(&home);
+        assert_eq!(after.len(), 2);
     }
 
     #[test]

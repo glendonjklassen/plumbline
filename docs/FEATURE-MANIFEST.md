@@ -846,7 +846,7 @@ Backup/Restore — sits behind ONE collapsed **Advanced** disclosure
 
 **The Study hub's contents** (both shells, a described card list so the tools
 aren't cryptic): Reading plans (web only until Android's plans ship) ·
-Memorize · Notes · Threads · Tags · Weaves · **Visualizations** (one card
+Memorize · Notes · Threads · **Tags** · Weaves · **Visualizations** (one card
 holding Constellation · Weave map — two views of the same thing, not two more
 tools; UAT 2026-08-12). That card is a **door, not a branch**: it opens a PAGE
 one layer down (`shell/VizScreen.svelte`; on Android a second `MapOverlay`),
@@ -859,6 +859,32 @@ card's label from the same `explore.*` keys in both shells (the Android
 weave-map card had drifted onto `map.chordMap`; fixed). *Delta:* the web lists
 **Suggested** as its own card (`ExploreScreen.svelte`); Android folds it into
 one Weaves screen with an All/Suggested filter (`WeavesScreen`).
+
+**Tags is a DOOR too** (2026-08-14), for the reason Visualizations is: there is
+more than one thing to do with a tag library, and a card that raised the library
+panel directly had nowhere to put the rest. The page holds Browse (what it always
+did) · **Rename** · **Merge** — the two operations a tag collection accumulates a
+need for, because names drift ("grace", "Grace", "God's grace") and end up
+wanting to be one tag. An action with nothing to act on is DISABLED rather than
+hidden, with the reason in its description: a menu whose items appear as you
+acquire data is a menu you cannot learn.
+
+`tag::rename_tag` KEEPS THE TAG'S IDENTITY — the file is `slug(name).json`, so a
+rename is a write plus a delete, and [`Tag::id`] is carried across so the tag on
+the other side is the same tag rather than a new one wearing the name (which is
+what that field was added for). It refuses a blank name, and refuses a name
+another tag already answers to: that is a MERGE, and merging is destructive
+enough to have to be asked for by name. A change of case only is a legal rename
+onto itself — the slug is unchanged, so the file is rewritten in place and the
+`dest != lt.file` guard is what stops it deleting what it just wrote.
+
+`tag::merge_tags` folds one tag into another and deletes the source. Members are
+identity by `TagTarget`, so a verse in both stays one entry and the SURVIVOR's
+copy wins — letting the source overwrite would quietly discard a note the reader
+wrote on the tag they chose to keep. Merging a tag into itself is refused
+(source and destination would be one file, written and then removed). Both
+guards are mutation-tested; both shells ask before merging and name which side
+survives.
 
 **The hub carries STATE, not just a menu** (2026-08-13). It was eight identical
 rectangles of fixed text, so it looked the same on install day as after a year
