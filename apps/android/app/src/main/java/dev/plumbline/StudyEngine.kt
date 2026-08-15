@@ -263,6 +263,14 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
         take(ffi.plumbline_engine_tag_remove(h, name, kind, value))
 
     /** Delete a whole tag and every member on it. Null = success. */
+    /** Rename a tag, keeping its identity. Null on success, else the error. */
+    fun TagRename(from: String, to: String): String? =
+        take(ffi.plumbline_engine_tag_rename(h, from, to))
+
+    /** Fold one tag into another and DELETE the source. Null on success. */
+    fun TagMerge(from: String, into: String): String? =
+        take(ffi.plumbline_engine_tag_merge(h, from, into))
+
     fun TagDelete(name: String): String? =
         take(ffi.plumbline_engine_tag_delete(h, name))
 

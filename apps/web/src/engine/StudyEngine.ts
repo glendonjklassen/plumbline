@@ -415,6 +415,15 @@ export class StudyEngine {
   tagDelete(name: string): string | null {
     return this.#author("plumbline_engine_tag_delete", (f, ...p) => f(this.#engine, ...p), [name]);
   }
+  /** Rename a tag, keeping its identity. Refuses a blank name, and refuses one
+   *  another tag already answers to — that would be a merge. */
+  tagRename(from: string, to: string): string | null {
+    return this.#author("plumbline_engine_tag_rename", (f, ...p) => f(this.#engine, ...p), [from, to]);
+  }
+  /** Fold one tag into another and DELETE the source. */
+  tagMerge(from: string, into: string): string | null {
+    return this.#author("plumbline_engine_tag_merge", (f, ...p) => f(this.#engine, ...p), [from, into]);
+  }
   weaveAddLink(name: string, aRef: string, bRef: string, added: string): string | null {
     return this.#author("plumbline_engine_weave_add_link", (f, ...p) => f(this.#engine, ...p), [name, aRef, bRef, added]);
   }

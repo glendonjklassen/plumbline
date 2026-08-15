@@ -91,6 +91,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
@@ -398,6 +399,10 @@ fun StudyScreen(
     var bibleReads by remember { mutableIntStateOf(loadedCfg?.bibleReads ?: -1) }
     var bibleReadsCredited by remember { mutableStateOf(loadedCfg?.bibleReadsCredited ?: false) }
     var askReads by remember { mutableStateOf(false) }
+    /** An open list-pick: its title, the options, and what to do with the choice.
+     *  A picker rather than a text field — every caller is choosing among things
+     *  that already exist, and retyping a name is how a typo makes a second tag. */
+    var pick by remember { mutableStateOf<Triple<String, List<String>, (String) -> Unit>?>(null) }
     // The reader's home church — what their own shared links carry (web parity).
     // `intro` is which welcome they were given, so the Welcome button can show it
     // again without a reinstall.
@@ -963,6 +968,44 @@ fun StudyScreen(
                     refreshEpoch = noteEpoch,
                     bibleReads = bibleReads,
                     onAskReads = { askReads = true },
+                    onRenameTag = { names ->
+                        pick = Triple(t("tags.renameWhich"), names) { from ->
+                            prompt = AuthorPrompt(t("tags.renameTo", "name" to from), from) { to ->
+                                if (to.isNotBlank() && to != from) {
+                                    scope.engineCall(engine, null, { engine.TagRename(from, to) }) { err ->
+                                        noteEpoch++
+                                        Toast.makeText(
+                                            context,
+                                            if (err.isNullOrBlank()) t("tags.renamed", "from" to from, "to" to to) else err,
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    onMergeTags = { names ->
+                        pick = Triple(t("tags.mergeWhich"), names) { from ->
+                            pick = Triple(t("tags.mergeInto", "name" to from), names.filter { it != from }) { into ->
+                                // Destructive, so it asks — and the question names
+                                // which one survives.
+                                confirmAction = ConfirmRequest(
+                                    title = t("tags.mergeAsk", "from" to from, "into" to into),
+                                    body = t("tags.mergeBody", "from" to from, "into" to into),
+                                    verb = t("tags.mergeVerb"),
+                                ) {
+                                    scope.engineCall(engine, null, { engine.TagMerge(from, into) }) { err ->
+                                        noteEpoch++
+                                        Toast.makeText(
+                                            context,
+                                            if (err.isNullOrBlank()) t("tags.merged", "from" to from, "into" to into) else err,
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    }
+                                }
+                            }
+                        }
+                    },
                     onCredit = { bibleReads = maxOf(bibleReads, 0) + 1; bibleReadsCredited = true; persistCfg() },
                     onUncredit = { bibleReadsCredited = false; persistCfg() },
                     credited = bibleReadsCredited,
@@ -1241,6 +1284,23 @@ fun StudyScreen(
         // Asked ONCE, and there is no edit path afterwards on purpose: a number
         // you can retype is a number that means nothing. The keyboard is the
         // NUMBER pad — the web twin sets inputmode="numeric" for the same reason.
+        pick?.let { (title, options, onPicked) ->
+            AlertDialog(
+                onDismissRequest = { pick = null },
+                title = { Text(title) },
+                text = {
+                    // Scrolls: a reader with sixty tags still has Cancel where
+                    // they left it.
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        for (opt in options) {
+                            TextButton(onClick = { pick = null; onPicked(opt) }) { Text(opt) }
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = { TextButton(onClick = { pick = null }) { Text(t("common.cancel")) } },
+            )
+        }
         if (askReads) {
             var entry by remember { mutableStateOf("") }
             AlertDialog(
@@ -1807,6 +1867,10 @@ private fun ExploreScreen(
     onAskReads: () -> Unit,
     onCredit: () -> Unit,
     onUncredit: () -> Unit,
+    /** Rename / merge, asked and performed by the host — the dialogs live where
+     *  the other authoring dialogs do. */
+    onRenameTag: (List<String>) -> Unit,
+    onMergeTags: (List<String>) -> Unit,
     /** Bumped by an authoring write. NOT a general study epoch — this shell has
      *  none — so it is the note epoch: the counts are otherwise refetched every
      *  time Study is opened, since this composable leaves the tree with it. */
@@ -1828,13 +1892,14 @@ private fun ExploreScreen(
     // The tree was the odd one out in a shell where every destination replaces
     // what came before (maintainer, 2026-08-13).
     var showViz by remember { mutableStateOf(false) }
+    var showTags by remember { mutableStateOf(false) }
 
     // How much is in each tool. One fetch per open (and per authoring write),
     // off the main thread — the same three lists their own screens open with,
     // so nothing here is a new engine call.
     var notes by remember { mutableIntStateOf(0) }
     var threads by remember { mutableIntStateOf(0) }
-    var tags by remember { mutableIntStateOf(0) }
+    var tagNames by remember { mutableStateOf<List<String>>(emptyList()) }
     var weaves by remember { mutableIntStateOf(0) }
     LaunchedEffect(refreshEpoch) {
         withContext(Dispatchers.Default) {
@@ -1844,9 +1909,9 @@ private fun ExploreScreen(
             threads = runCatching {
                 synchronized(engine) { engine.ThreadsJson() }?.let { parseWire<Threads>(it).threads.size }
             }.getOrNull() ?: 0
-            tags = runCatching {
-                synchronized(engine) { engine.TagsJson() }?.let { parseWire<Tags>(it).tags.size }
-            }.getOrNull() ?: 0
+            tagNames = runCatching {
+                synchronized(engine) { engine.TagsJson() }?.let { parseWire<Tags>(it).tags.map { t -> t.name } }
+            }.getOrNull() ?: emptyList()
             weaves = runCatching {
                 synchronized(engine) { engine.WeavesJson() }?.let { parseWire<WeaveLib>(it).weaves.size }
             }.getOrNull() ?: 0
@@ -1862,7 +1927,10 @@ private fun ExploreScreen(
             ExploreCard(t("explore.memorize"), t("explore.memorize.desc"), palette, onClick = onMemorize)
             ExploreCard(t("explore.notes"), t("explore.notes.desc"), palette, count = notes, onClick = onNotes)
             ExploreCard(t("explore.threads"), t("explore.threads.desc"), palette, count = threads, onClick = onThreads)
-            ExploreCard(t("explore.tags"), t("explore.tags.desc"), palette, count = tags, onClick = onTags)
+            // A DOOR, like Visualizations: there is more than one thing to do
+            // with a tag library (browse, rename, merge) and a card that raised
+            // the library directly had nowhere to put the rest.
+            ExploreCard(t("explore.tags") + "  ›", t("explore.tags.desc"), palette, count = tagNames.size) { showTags = true }
             ExploreCard(t("explore.weaves"), t("explore.weaves.desc"), palette, count = weaves, onClick = onWeaves)
             ExploreCard(
                 t("explore.viz") + "  ›",
@@ -1874,6 +1942,35 @@ private fun ExploreScreen(
 
     // One layer down, and its ‹ returns HERE rather than to the reader — the
     // same relationship Memorize has with this hub.
+    if (showTags) {
+        MapOverlay(t("explore.tags"), palette, onClose = { showTags = false }, actions = barActions) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                Text(
+                    t("explore.tags.desc"),
+                    color = palette.faded,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 10.dp),
+                )
+                ExploreCard(t("tags.browse"), t("tags.browse.desc"), palette) { showTags = false; onTags() }
+                // An action with nothing to act on is DISABLED rather than
+                // hidden: a menu whose items appear as you acquire data is a
+                // menu you cannot learn. The reason it is off is the description.
+                ExploreCard(
+                    t("tags.rename"),
+                    if (tagNames.size < 1) t("tags.rename.needs") else t("tags.rename.desc"),
+                    palette,
+                    enabled = tagNames.isNotEmpty(),
+                ) { onRenameTag(tagNames) }
+                ExploreCard(
+                    t("tags.merge"),
+                    if (tagNames.size < 2) t("tags.merge.needs") else t("tags.merge.desc"),
+                    palette,
+                    enabled = tagNames.size >= 2,
+                ) { onMergeTags(tagNames) }
+            }
+        }
+    }
+
     if (showViz) {
         MapOverlay(t("explore.viz"), palette, onClose = { showViz = false }, actions = barActions) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -1921,6 +2018,9 @@ private fun ExploreCard(
     title: String,
     desc: String,
     palette: ReaderPalette,
+    /** Whether this action can act. A disabled card is dimmed and inert rather
+     *  than absent — see the Tags page for why. */
+    enabled: Boolean = true,
     /** How much is IN this tool. Null, or zero, draws nothing: an empty tool
      *  should read as quiet rather than as a score of nought. */
     count: Int? = null,
@@ -1928,7 +2028,8 @@ private fun ExploreCard(
 ) {
     Column(
         Modifier.fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
+            .alpha(if (enabled) 1f else 0.55f)
             .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
