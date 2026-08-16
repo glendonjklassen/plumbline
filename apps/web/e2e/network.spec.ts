@@ -13,7 +13,14 @@ import { expect, test, type Page } from "@playwright/test";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
-const UPSTREAM = "http://localhost:4173";
+// 127.0.0.1 BY NUMBER, both here and in `npm run preview`'s --host: this
+// origin is Node dialling Node, and inside a container the two runtimes can
+// resolve `localhost` to different address families — vite bound to one,
+// http.request trying the other, and every proxied request answered with
+// res.destroy() (net::ERR_EMPTY_RESPONSE). The browser is unaffected either
+// way (its own happy-eyeballs falls back); only this Node-to-Node hop needs
+// the family pinned.
+const UPSTREAM = "http://127.0.0.1:4173";
 
 /** A forwarding origin whose `stall` predicate holds matching requests open
  *  (no response, no error) for as long as the test needs.
