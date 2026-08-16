@@ -278,11 +278,13 @@ tasks.register<Copy>("syncData") {
             // The Spanish corpus, Reina-Valera 1909 (data-prep/rv1909/README).
             "rv1909.jsonl",
             "strongs.json",
-            // Each language's own Strong's dictionary — AI-translated
-            // definitions plus that Bible's own renderings
-            // (data-prep/strongs-de/README). Bundled for the same reason as the
-            // corpora: word study works the moment the app opens. ~3 MB each
-            // compressed.
+            // Each language's own Strong's dictionary — that Bible's own
+            // renderings, plus translated definitions where a translation run
+            // has happened (German has one; Spanish is renderings-only so far,
+            // which is what `machine_translated` on the registry row records —
+            // see data-prep/strongs-lang/README). Bundled for the same reason
+            // as the corpora: word study works the moment the app opens. ~3 MB
+            // each compressed.
             "strongs-de.json",
             "strongs-es.json",
             "kjv-notes.jsonl",
