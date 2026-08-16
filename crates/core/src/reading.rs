@@ -93,9 +93,18 @@ pub const FORMAT: &str = "plumbline-reading-v1";
 /// 300 wpm × [`COMPLETE_AT`]=0.90 it demanded 53s of credited dwell, and a real
 /// ~450 wpm read banked ~36s after grace — reached the end, called Partial. A
 /// flipper still banks nothing (they spend seconds, not half-minutes), so the
-/// rate rose to 500 and the snap dropped to 0.85 together: the pair puts a
-/// 450–600 wpm reader clear of the bar with margin instead of on its edge.
-pub const READING_WORDS_PER_MINUTE: f32 = 500.0;
+/// rate rose to 500 and the snap dropped to 0.85 together.
+///
+/// 500 was STILL arguing (street use, 2026-08-16): finished chapters kept
+/// landing at Partial. Two causes, fixed together. The grace window was a TAX
+/// — deducted from every pass and re-served after every word-study tap, dialog
+/// and backgrounding, so a study-heavy read paid it four or five times — and is
+/// now refunded once a stay is proven (see [`DwellTracker::tick`]). And 500 sat
+/// too close to a brisk read of familiar text: at 500 a 295-word chapter wanted
+/// 30.1s credited, which a ~600 wpm re-read undercut. 700 is the pace of a fast
+/// skim, not of reading — and the gate loses nothing by it, because a flipper
+/// is refused by banking no seconds at all, not by the rate.
+pub const READING_WORDS_PER_MINUTE: f32 = 700.0;
 
 /// Coverage at or above which a pass counts as a full read and snaps to 1.0.
 pub const COMPLETE_AT: f32 = 0.85;
@@ -710,8 +719,13 @@ pub struct DwellReport {
 ///
 /// Three refusals, and they are the whole design:
 ///
-/// * a GRACE period before anything accrues, so paging through a book to find
-///   something never credits the chapters it flew past;
+/// * a GRACE window before anything accrues, so paging through a book to find
+///   something never credits the chapters it flew past. The window is a
+///   THRESHOLD, not a tax: its whole job is to tell a flip from a stay, and
+///   that job is done the moment a pass survives it — so the seconds it
+///   withheld, which were real reading, are credited back. Without the refund
+///   every dialog and word-study tap re-served the window and quietly docked
+///   3s from the pass;
 /// * an IDLE cutoff, so a phone left face-up on a table does not read Leviticus
 ///   overnight;
 /// * nothing on screen stops the clock and banks the tail, because a
@@ -727,6 +741,9 @@ pub struct DwellTracker {
     on_screen: f32,
     since_input: f32,
     pending: f32,
+    /// Whether this pass's grace window has already been credited back —
+    /// the refund happens once per pass, on the first sample to survive it.
+    graced: bool,
 }
 
 impl DwellTracker {
@@ -763,6 +780,7 @@ impl DwellTracker {
             self.reached = reached;
             self.on_screen = 0.0;
             self.since_input = 0.0;
+            self.graced = false;
             return out;
         }
         self.owner.as_ref()?;
@@ -777,6 +795,13 @@ impl DwellTracker {
         // that time nobody spent reading never becomes progress.
         if self.on_screen < GRACE_SECONDS || self.since_input > IDLE_SECONDS {
             return None;
+        }
+        // The window is survived, so it has answered its one question — this
+        // was a stay, not a flip — and the seconds it withheld were real
+        // reading. Credit them back, once per pass.
+        if !self.graced {
+            self.graced = true;
+            self.pending += self.on_screen - step;
         }
         self.pending += step;
         (self.pending >= TICK_SECONDS).then(|| self.bank()).flatten()
@@ -1060,6 +1085,33 @@ mod tests {
         let r = record(&home, &c, &w, "Gen", 1, 3, 0.0, NOW).unwrap();
         assert!(r.completed, "reaching the bottom completes the banked pass");
         assert_eq!(r.pct, 1.0);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// The street complaint, pinned in absolute terms on purpose (2026-08-08,
+    /// and again 2026-08-16 after the rate rose to 500): a real read of a short
+    /// chapter, finished to the last verse, landing at Partial. Every other
+    /// test here states its dwell in the rate's own terms so the rate can move
+    /// — this one must NOT, because it is the test of whether the rate is fast
+    /// enough. 1 Thess 3 is 295 words; familiar text reads at ~600 wpm; the
+    /// wall-clock such a read actually spends has to clear the bar, since the
+    /// gate's only job is refusing flippers, who spend seconds.
+    #[test]
+    fn a_fast_read_of_a_short_chapter_is_a_read() {
+        let lines = [
+            serde_json::to_string(&corpus::corpus_header(canon::TOKENIZATION_VERSION, 5)).unwrap(),
+            verse("Gen", 1, 1, 59),
+            verse("Gen", 1, 2, 59),
+            verse("Gen", 1, 3, 59),
+            verse("Gen", 1, 4, 59),
+            verse("Gen", 1, 5, 59),
+        ];
+        let c = corpus::from_str(&lines.join("\n")).unwrap();
+        let w = ChapterWords::build(&c);
+        let home = scratch("fast-read");
+        let wall = 295.0 * 60.0 / 600.0; // 29.5s: the read really happened
+        let r = record(&home, &c, &w, "Gen", 1, 5, wall, NOW).unwrap();
+        assert!(r.completed, "a 600 wpm read that reached the end is a read, got pct {}", r.pct);
         let _ = std::fs::remove_dir_all(&home);
     }
 
@@ -1531,9 +1583,11 @@ mod tests {
         let mut t = DwellTracker::default();
         // One sample to arrive in the chapter (it establishes the target and
         // credits nothing, as the web tracker's target-change branch did),
-        // GRACE_SECONDS-1 more inside grace, then TICK_SECONDS of accrual.
-        let (grace, tick) = (GRACE_SECONDS as usize, TICK_SECONDS as usize);
-        let out = seconds(&mut t, "Gen", 1, 12, grace + tick);
+        // then TICK_SECONDS on screen. The grace window is refunded once
+        // survived, so 30 seconds in front of the reader is 30 credited — the
+        // report lands exactly on the tick.
+        let tick = TICK_SECONDS as usize;
+        let out = seconds(&mut t, "Gen", 1, 12, 1 + tick);
         assert_eq!(out.len(), 1, "exactly one report per {TICK_SECONDS}s of credited reading");
         assert_eq!(out[0], DwellReport { book: "Gen".into(), chapter: 1, reached: 12, seconds: TICK_SECONDS });
         // And it starts over, rather than reporting every second from here on.
@@ -1572,12 +1626,12 @@ mod tests {
     #[test]
     fn seconds_are_credited_to_the_chapter_that_earned_them() {
         let mut t = DwellTracker::default();
-        seconds(&mut t, "Gen", 1, 5, 13); // 3s grace + 10s credited
+        seconds(&mut t, "Gen", 1, 5, 13); // arrival + 12s on screen, grace refunded
         let out = t.tick(Some(("Gen", 2)), 40, false, 1.0).expect("the tail of Gen 1");
         assert_eq!(out.book, "Gen");
         assert_eq!(out.chapter, 1);
         assert_eq!(out.reached, 5, "Gen 1 must not be credited with how far Gen 2 got");
-        assert_eq!(out.seconds, 10.0);
+        assert_eq!(out.seconds, 12.0);
 
         // And within a pass it is the HIGH-WATER mark, not wherever the reader
         // happens to be sitting when the seconds are handed over.
@@ -1593,26 +1647,46 @@ mod tests {
     /// same chapter (a dialog opening and closing), so a reader who dismissed a
     /// dialog resumed accruing immediately; the web reset on both.
     #[test]
-    fn coming_back_serves_the_grace_period_again() {
+    fn coming_back_serves_the_grace_window_again() {
         let mut t = DwellTracker::default();
         seconds(&mut t, "Gen", 1, 5, 13);
         assert!(t.stop().is_some(), "the tail is banked on the way out");
-        // Exactly enough samples for ONE full report if the grace period is
-        // served again: one to arrive, GRACE_SECONDS-1 inside grace, then
-        // TICK_SECONDS of accrual. Nothing may be left over — a leftover tail is
-        // the grace seconds having been credited after all.
-        let out = seconds(&mut t, "Gen", 1, 5, GRACE_SECONDS as usize + TICK_SECONDS as usize);
-        assert_eq!(out.len(), 1);
-        assert_eq!(out[0].seconds, TICK_SECONDS);
-        assert_eq!(t.stop(), None, "the seconds spent re-arriving were credited anyway");
+        // A bounce back into the chapter, inside the re-served window: nothing
+        // may be credited, not even on the way back out. This is the refusal
+        // the window exists for, and the refund must not undermine it.
+        assert!(seconds(&mut t, "Gen", 1, 5, 3).is_empty());
+        assert_eq!(t.stop(), None, "a bounce credits nothing");
+    }
+
+    /// The grace window is a threshold, not a tax. Its one job is to tell a
+    /// flip from a stay, and that job is done the moment a pass survives it —
+    /// so the seconds it withheld are credited back. Without the refund, every
+    /// dialog and word-study tap re-served the window and quietly docked 3s
+    /// from the pass; a study-heavy chapter paid it five times over, which is
+    /// one of the two ways a finished chapter kept landing at Partial (street
+    /// use, 2026-08-16 — the other was the rate, see
+    /// [`READING_WORDS_PER_MINUTE`]).
+    #[test]
+    fn a_pass_that_survives_grace_is_credited_the_graced_seconds() {
+        let mut t = DwellTracker::default();
+        // Arrival plus ten seconds on screen. A flip would have banked nothing;
+        // the old tax would have banked seven.
+        seconds(&mut t, "Gen", 1, 5, 11);
+        let out = t.stop().expect("ten real seconds");
+        assert_eq!(out.seconds, 10.0, "all ten seconds count, not ten minus the window");
+        // Interrupted and back — a dialog closing, the app resuming. The window
+        // is served again (a bounce still credits nothing) and refunded again.
+        seconds(&mut t, "Gen", 1, 5, 11);
+        let out = t.stop().expect("the second stay");
+        assert_eq!(out.seconds, 10.0, "an interruption must not tax the pass");
     }
 
     #[test]
     fn the_tail_of_a_session_is_banked_not_lost() {
         let mut t = DwellTracker::default();
         seconds(&mut t, "John", 3, 16, 8);
-        let out = t.stop().expect("five credited seconds must survive being stopped");
-        assert_eq!((out.book.as_str(), out.chapter, out.seconds), ("John", 3, 5.0));
+        let out = t.stop().expect("seven credited seconds must survive being stopped");
+        assert_eq!((out.book.as_str(), out.chapter, out.seconds), ("John", 3, 7.0));
         assert_eq!(t.stop(), None, "and only once");
     }
 
