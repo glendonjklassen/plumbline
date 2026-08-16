@@ -53,9 +53,15 @@
   }
 
   function close(): void {
-    // Memorize is a card inside the STUDY hub now, so its hub's ‹ returns
-    // there — up one layer, not two. (Leaving `screen` on "memorize" with no
-    // view would render an empty screen with no way out.)
+    // Up ONE layer, the way Android's MemFrame steps: a drill or the stats page
+    // returns to the Memorize hub, and only the hub returns to the Study hub —
+    // the ‹ agrees with Escape and the phone's Back (Session.popOneLayer), which
+    // both step the same way. (Leaving `screen` on "memorize" with no view would
+    // render an empty screen with no way out.)
+    if (s.memorize && s.memorize.view !== "hub") {
+      s.memorize = { view: "hub" };
+      return;
+    }
     s.memorize = null;
     s.screen = "explore";
   }

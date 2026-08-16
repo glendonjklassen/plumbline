@@ -311,36 +311,23 @@
         else return;
         break;
       // Escape peels ONE layer, outermost first, so it never skips past something
-      // the reader can see. The destination screens are the last layer before the
-      // text, which is why they come after the panel: Escape out of a study panel
-      // opened from Explore should land back in Explore, not in Genesis.
+      // the reader can see. The ladder itself lives on the session now
+      // (popOneLayer) because the phone's Back button climbs the same one — the
+      // two used to disagree, Back collapsing the whole stack in a press while
+      // Escape stepped, and a third answer again from the ‹ in the bar.
       //
-      // THE DIALOGS ANSWER FIRST NOW. Every `aria-modal` surface carries
+      // THE DIALOGS STILL ANSWER FIRST. Every `aria-modal` surface carries
       // `use:modal` (lib/modal.ts), which takes focus and stops Escape at the
       // dialog — so while one is open this ladder is not reached at all, and the
-      // press cannot peel a second layer out from under it. The dialog rungs stay
-      // as the fallback for a press that arrives with focus outside any of them.
-      // What the ladder still OWNS is everything that is not a dialog: the map
-      // popup, the study panel, and the destination screens.
+      // press cannot peel a second layer out from under it. The ladder's dialog
+      // rungs stay as the fallback for a press that arrives with focus outside
+      // any of them.
       //
       // Note the early return at the top of this function: it drops every key
       // that came from a field, so Escape pressed while the reader is typing in
       // one never reaches this ladder.
       case "Escape":
-        if (s.menuOpen) s.menuOpen = false;
-        else if (s.promptReq) s.cancelPrompt();
-        else if (s.mapPopup) s.mapPopup = null;
-        else if (s.bookNavFor !== null) s.bookNavFor = null;
-        else if (s.markReadFor) s.markReadFor = null;
-        else if (s.threadPickFor) s.threadPickFor = null;
-        else if (s.tagPickFor) s.tagPickFor = null;
-        else if (s.showSettings) s.showSettings = false;
-        else if (s.showHistory) s.showHistory = false;
-        else if (s.showShortcuts) s.showShortcuts = false;
-        else if (s.panel) {
-          s.panel = null;
-          s.clearSearch();
-        } else if (s.screen !== "read") s.goRead();
+        s.popOneLayer();
         break;
       case "?":
       case "F1":
