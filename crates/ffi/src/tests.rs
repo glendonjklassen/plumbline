@@ -2979,7 +2979,13 @@ fn german_corpus_lexicon_serves_the_german_dictionary_with_caveat() {
         assert!(blocks.contains("Gott, Gottheit"), "the German definition did not serve: {blocks}");
         assert!(!blocks.contains("a deity"), "the English definition leaked past the German dictionary: {blocks}");
         assert!(blocks.contains("Luther:"), "the renderings are not labelled for the reader's Bible: {blocks}");
-        let caveat = plumbline_core::i18n::t(plumbline_core::i18n::Lang::De, "study.deCaveat", &[]);
+        // Named for the Bible the renderings came out of, from the language's
+        // row — the sentence used to spell "Luther" itself, in both catalogues.
+        let caveat = plumbline_core::i18n::t(
+            plumbline_core::i18n::Lang::De,
+            "study.lexCaveat",
+            &[("bible", plumbline_core::i18n::Lang::De.corpus().label)],
+        );
         assert!(blocks.contains(&caveat), "the machine-translation caveat is missing: {blocks}");
         assert!(
             blocks.contains("ext:https://github.com/glendonjklassen/plumbline/issues"),

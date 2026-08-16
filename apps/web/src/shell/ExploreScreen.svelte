@@ -442,8 +442,15 @@
     font-size: calc(14.5px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }
+  /* A TAP TARGET, and the only one on this row: 44px is the floor the rest of
+     the chrome keeps (e2e/touch-targets.spec.ts). `min-height: auto` undid a
+     card floor this no longer inherits and left it at 41 — and the test caught
+     it only on the runs where the hub's real content had replaced the
+     placeholder before it measured, which is why it read as flaky rather than
+     as the plain violation it is. */
   .reads.unset {
-    min-height: auto;
+    min-height: 44px;
+    align-items: center;
     width: 100%;
   }
   .reads.unset:hover {

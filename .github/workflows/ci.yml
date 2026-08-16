@@ -53,15 +53,23 @@ jobs:
         run: cargo test --locked -p plumbline-core -p plumbline-layout -p plumbline-rnd -p plumbline-ffi -p plumbline-hydrate
       - name: Test the R&D features
         run: cargo test --locked -p plumbline-rnd --features "bridge morphology concept"
-      # The GERMAN CORPUS against the file that actually ships. `#[ignore]`d in
-      # the default run because it reads 15 MB and needs a hydrated checkout;
-      # here it is the only thing proving `data/luther1912.jsonl` sits at the
-      # KJV's verse addresses, comes back as German, and does not get handed the
-      # KJV's Strong's or plain-English overlay.
-      # --test-threads=1: these tests flip the process-global language and
-      # would race each other's resets in parallel.
-      - name: Test the German corpus
-        run: cargo test --locked -p plumbline-ffi --lib -- --ignored german_corpus --test-threads=1
+      # EVERY SHIPPED CORPUS against the file that actually ships. `#[ignore]`d
+      # in the default run because they read tens of MB and need a hydrated
+      # checkout; here they are the only thing proving each corpus sits at the
+      # KJV's verse addresses, comes back in its own language, and is not handed
+      # evidence keyed to another text's tokens.
+      #
+      # NO NAME FILTER, deliberately. This ran `--ignored german_corpus`, which
+      # is a list of languages by another name: the Spanish test was written,
+      # passed locally, and would never have run here — and neither, it turns
+      # out, had `the_deferred_load_still_brings_the_morphology_to_an_english_reader`,
+      # the half that keeps the German morphology assertion from passing because
+      # the loader is broken for everybody. The whole ignored set is ~20 s.
+      #
+      # --test-threads=1: these tests flip the process-global language and would
+      # race each other's resets in parallel.
+      - name: Test every shipped corpus
+        run: cargo test --locked -p plumbline-ffi --lib -- --ignored --test-threads=1
       # The corpus idxcache must be REPRODUCIBLE. It is the biggest file in the
       # web pack and the pack manifest hashes it, so a cache that differs run to
       # run re-mints every `?v=` URL and makes every reader re-download the whole
