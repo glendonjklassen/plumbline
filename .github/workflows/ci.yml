@@ -204,11 +204,33 @@ jobs:
   # navigator, and the backup round-trip.
   web:
     runs-on: ubuntu-latest
+    # Playwright's own container rather than a bare runner: `npx playwright
+    # install --with-deps` was 9m20s of every run — a minute of browser
+    # download and eight minutes of apt-get walking WebKit's dependency
+    # closure (GStreamer, flite, libwoff…) package by package. The image
+    # ships chromium + webkit AND those system libraries preinstalled at
+    # /ms-playwright, so the step is simply gone. Everything inside is FOSS
+    # (Ubuntu, Node, Playwright under Apache-2.0, the browsers under their
+    # own licenses); the Dockerfile lives in the playwright repo.
+    #
+    # THE TAG MUST MATCH the @playwright/test version package-lock.json pins.
+    # A newer npm package looks for browser builds the image does not have and
+    # the config's executablePath() check fails at load — loudly, which is the
+    # point — so a Playwright bump is a two-file change: the lock and this tag.
+    # `--ipc=host` is Playwright's own guidance for chromium in containers;
+    # the Actions default /dev/shm is 64 MB and chromium crashes into it.
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.0-noble
+      options: --ipc=host
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-wasip1
+      # The image ships browsers, not compilers — and rustc needs a host `cc`
+      # to link build scripts and proc macros even for a wasm target.
+      - name: Host linker
+        run: command -v cc || (apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev)
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with:
@@ -234,16 +256,12 @@ jobs:
           npm run check
           npm run build
         working-directory: apps/web
-      # WebKit as well as chromium: the webkit-offline project in
-      # playwright.config.ts proves the offline promise on the engine where the
-      # Cache API and eviction actually differ, and it is the only engine on iOS.
-      # `--with-deps` is what makes the bundled build launchable (libicu74,
-      # libxml2, libflite), which is why the config trusts a bundled WebKit only
-      # under CI. Costs a ~102 MB download; without it the config fails loudly at
-      # load rather than letting the coverage vanish quietly.
-      - name: Install Playwright browsers (chromium, and webkit for the offline project)
-        run: npx playwright install --with-deps chromium webkit
-        working-directory: apps/web
+      # No browser-install step: the container already carries chromium AND the
+      # webkit the offline project needs (playwright.config.ts proves the
+      # offline promise on the engine where the Cache API and eviction actually
+      # differ, and WebKit is the only engine on iOS). The config still fails
+      # loudly at load if webkit is missing, so that coverage cannot vanish
+      # quietly into a chromium-only run.
       # Two invocations on purpose (see playwright.config.ts): the bulk of the
       # suite runs on 3 workers, then the @perf-tagged tests — the ones that
       # assert wall-clock budgets — rerun serialised so CPU contention from a
