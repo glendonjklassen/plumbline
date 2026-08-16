@@ -269,5 +269,16 @@ ANTHROPIC_API_KEY=sk-… python3 data-prep/strongs-lang/translate.py es
 python3 data-prep/strongs-lang/build-strongs.py es
 ```
 
-**Spanish is at the halfway point today**: the renderings ship, the definitions
-are still Strong's English, and the row says `machine_translated: false`.
+**How the two shipped intermediates were actually made.** The German
+`translations.de.json` came out of `translate.py` over the Batch API. The
+Spanish `translations.es.json` was translated by a fleet of Claude Sonnet
+subagents instead (2026-08-16) — same system prompt, same fixed renderings for
+Strong's formulaic vocabulary (properly → propiamente, compare → compárese, …),
+the dictionary sliced into ≤200-entry files and each slice translated by one
+agent. Every slice was validated before merging: it parses, its key set matches
+its input exactly, every translated field is non-empty with none invented, and
+every cross-reference code (H7225, G26) survives verbatim; slices that dropped
+even one entry were rejected and re-run. `translate.py` remains the
+reproducible path for anyone with an API key — the two routes produce the same
+kind of artifact, and the committed intermediate is the source of truth either
+way.

@@ -2890,6 +2890,33 @@ fn spanish_corpus_opens_at_the_kjv_addresses_and_reads_spanish() {
             "the Spanish study card has no Spanish tag action: {blocks}"
         );
 
+        // THE DEFINITIONS ARE SPANISH NOW (the 2026-08-16 translation run), and
+        // the same disclosure the German dictionary carries comes with them:
+        // the AI caveat, named for the reader's own Bible, with the report
+        // link. `machine_translated: true` on the row is what turns both on —
+        // while the definitions were still English the flag was false and this
+        // caveat was absent, which was the honest state then as this is now.
+        // The discovery loop above lands on token 0, "Porque" (G1063) — the
+        // first tagged token of RV John 3:16 — so the card carries that entry.
+        assert!(
+            blocks.contains("asignando una razón"),
+            "G1063's Spanish definition did not serve: {blocks}"
+        );
+        assert!(
+            !blocks.contains("assigning a reason"),
+            "the English definition leaked past the Spanish dictionary: {blocks}"
+        );
+        let caveat = plumbline_core::i18n::t(
+            plumbline_core::i18n::Lang::Es,
+            "study.lexCaveat",
+            &[("bible", plumbline_core::i18n::Lang::Es.corpus().label)],
+        );
+        assert!(blocks.contains(&caveat), "the machine-translation caveat is missing: {blocks}");
+        assert!(
+            blocks.contains("ext:https://github.com/glendonjklassen/plumbline/issues"),
+            "the report link is missing: {blocks}"
+        );
+
         // NO PRINTED-NUMBERING ANNOTATION ANYWHERE, because Reina-Valera agrees
         // with the KJV's breaks. Malachi 4:1 is the verse German annotates, so
         // it is the one that proves the row — not a global switch — decides.
