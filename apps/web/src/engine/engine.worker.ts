@@ -47,9 +47,9 @@ import {
   fetchRndPack,
   fetchStage2Pack,
   fetchSuggestedWeaves,
-  fetchGermanCorpus,
-  fetchGermanLexicon,
-  germanCorpusEntry,
+  fetchLangCorpus,
+  fetchLangLexicon,
+  langCorpusEntry,
   packFileUrl,
   setAssetBase,
   suggestedWeavesEntry,
@@ -490,7 +490,7 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
     }
 
     const t0 = performance.now();
-    const files = await fetchStage2Pack(booted!.manifest, undefined, booted!.home.germanInstalled);
+    const files = await fetchStage2Pack(booted!.manifest, undefined, booted!.home.langsInstalled);
     booted!.trace.push(["stage2 fetch+gunzip", Math.round(performance.now() - t0)]);
     await yieldTask();
     timedChunk("stage2 load (Strong's + notes)", () => {
@@ -501,7 +501,15 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
     // the engine from here on. NOT the margin notes, which load_study re-reads on
     // every authoring write, and NOT cross-references.tsv, whose lazy index can
     // still be built on an arbitrary later tap.
-    const freedCore = booted!.home.evict(["data/strongs.json", "data/strongs-de.json", "data/akjv.akjvb"]);
+    // Every dictionary the pack could have delivered, not a hand-kept list:
+    // whichever one `strongs_for` picked, loadCoreData has parsed it and the
+    // home's copy is duplication. The paths come off the manifest, so a
+    // language added to the registry is evicted by having been added.
+    const freedCore = booted!.home.evict([
+      "data/strongs.json",
+      "data/akjv.akjvb",
+      ...booted!.manifest.files.filter((f) => f.role?.startsWith("lexicon:")).map((f) => f.path),
+    ]);
     if (freedCore) booted!.trace.push(["home evict after stage 2 (KB)", Math.round(freedCore / 1024)]);
     self.postMessage({ type: "coreReady" });
     await warmChunked();
@@ -1010,33 +1018,35 @@ self.onmessage = async (ev: MessageEvent) => {
         reply(written);
         break;
       }
-      // ── the German corpus ────────────────────────────────────────────────
-      // The reader picking German IS the ask, so there is no Settings row: the
-      // picker calls this and then reloads. A progress fraction, unlike the
-      // suggested bundle, because this is ~2.4 MB and a phone deserves to see
-      // it moving.
-      case "germanState": {
-        const entry = germanCorpusEntry(booted!.manifest);
+      // ── a language's scripture ───────────────────────────────────────────
+      // The reader picking the language IS the ask, so there is no Settings
+      // row: the picker calls this and then reloads. A progress fraction,
+      // unlike the suggested bundle, because this is a couple of MB and a phone
+      // deserves to see it moving.
+      case "langPackState": {
+        const entry = langCorpusEntry(booted!.manifest, m.code as string);
         reply({
           available: !!entry,
-          installed: booted!.home.germanInstalled,
+          installed: booted!.home.langsInstalled.has(m.code as string),
           gzBytes: entry?.gzBytes ?? 0,
         });
         break;
       }
-      case "installGerman": {
-        const cache = await fetchGermanCorpus(booted!.manifest, (p) =>
-          self.postMessage({ type: "germanProgress", fraction: p.fraction }),
+      case "installLangPack": {
+        const code = m.code as string;
+        const entry = langCorpusEntry(booted!.manifest, code);
+        const cache = await fetchLangCorpus(booted!.manifest, code, (p) =>
+          self.postMessage({ type: "langPackProgress", fraction: p.fraction }),
         );
-        if (!cache) {
-          fail("this build has no German corpus");
+        if (!cache || !entry) {
+          fail(`this build has no ${code} corpus`);
           break;
         }
-        // The German lexicon rides the same ask, into the depot — the reload
-        // that follows reads it back through stage 2. A pack without one is
-        // fine: study serves the English dictionary until it ships.
-        await fetchGermanLexicon(booted!.manifest);
-        await booted!.home.installGermanCorpus(cache);
+        // That language's lexicon rides the same ask, into the depot — the
+        // reload that follows reads it back through stage 2. A pack without one
+        // is fine: study serves the English dictionary until it ships.
+        await fetchLangLexicon(booted!.manifest, code);
+        await booted!.home.installLangCorpus(code, entry.path, cache);
         // RE-PIN, for `installSuggested`'s reason: the corpus is part of this
         // device's pack now, and prune keeps only what the pin names — without
         // this the next sweep reclaims a 28 MB download.

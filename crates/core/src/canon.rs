@@ -20,7 +20,7 @@ use std::sync::OnceLock;
 /// [`SHIPPED_TOKENIZATIONS`].
 pub const TOKENIZATION_VERSION: &str = "kjv1769-tok2";
 
-/// Every tokenization stamp this build ships a corpus for.
+/// Whether this build ships a corpus with `tok`'s tokenization.
 ///
 /// A corpus (or its start-up cache) carrying one of these was written by a
 /// tokenizer we agree with; anything else is refused, which is the check's whole
@@ -28,15 +28,18 @@ pub const TOKENIZATION_VERSION: &str = "kjv1769-tok2";
 /// "does it match [`TOKENIZATION_VERSION`]", and the German Bible
 /// (`luther1912-tok1`, see `data-prep/README.md`) is what pulled the two apart.
 ///
-/// The German corpus sits at the KJV's own verse addresses, so `refKey` means
-/// one verse in both and nothing keyed on a ref has to care which is loaded.
-/// TOKEN INDICES are a different matter — they are per-corpus by nature, which
-/// is what a tokenization stamp has always been about.
-pub const SHIPPED_TOKENIZATIONS: [&str; 2] = [TOKENIZATION_VERSION, "luther1912-tok1"];
-
-/// Whether this build ships a corpus with `tok`'s tokenization.
+/// Read off the LANGUAGE REGISTRY rather than kept as a second list beside it.
+/// A hand-maintained list is a place to forget: adding Spanish and not adding
+/// `rv1909-tok1` here would have refused the corpus that had just been shipped,
+/// and the app would have fallen back to the KJV with no error a reader could
+/// see. One column, one source.
+///
+/// Every shipped corpus sits at the KJV's own verse addresses, so `refKey`
+/// means one verse in all of them and nothing keyed on a ref cares which is
+/// loaded. TOKEN INDICES are a different matter — they are per-corpus by
+/// nature, which is what a tokenization stamp has always been about.
 pub fn tokenization_is_ours(tok: &str) -> bool {
-    SHIPPED_TOKENIZATIONS.contains(&tok)
+    crate::i18n::Lang::ALL.iter().any(|l| l.corpus().tokenization == tok)
 }
 
 /// A canonical book: its OSIS id (used in data files and refs), the name as

@@ -11,7 +11,7 @@
   import { zipRead, zipWrite } from "../engine/zip";
   import { idbApply } from "../engine/idb";
   import { nowStamp } from "../engine/StudyEngine";
-  import { deviceLocale, fill, languages, plural, t } from "../lib/i18n.svelte";
+  import { deviceLocale, fill, hasOwnLexicon, languages, needsPack, plural, t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -228,21 +228,25 @@
     // interface over the English text and can try again by re-picking. Silent
     // beyond the bar, because the alternative is an error about a download they
     // did not explicitly start.
-    if (code === "de") {
-      const state = await s.rpc.germanState().catch(() => null);
+    //
+    // WHICH LANGUAGES NEED ONE is the engine's answer, not this file's: the
+    // catalogue's language list carries `packFiles`, empty for a language whose
+    // text is already in the base pack. This was `if (code === "de")`.
+    if (needsPack(code)) {
+      const state = await s.rpc.langPackState(code).catch(() => null);
       if (state?.available && !state.installed) {
         switching = { ...switching!, fraction: 0 };
-        s.rpc.onGermanProgress = (f) => (switching = { ...switching!, fraction: f });
-        await s.rpc.installGerman().catch(() => false);
+        s.rpc.onLangPackProgress = (f) => (switching = { ...switching!, fraction: f });
+        await s.rpc.installLangPack(code).catch(() => false);
       }
     }
     location.reload();
   }
 
-  /** English definitions over the German dictionary: flush, await, reload —
-   *  setLanguage's discipline, because the dictionary is picked at open. */
-  async function setStrongsDeOff(off: boolean): Promise<void> {
-    s.config.strongsDeOff = off;
+  /** English definitions over this language's own dictionary: flush, await,
+   *  reload — setLanguage's discipline, because it is picked at open. */
+  async function setBaseLexicon(off: boolean): Promise<void> {
+    s.config.localizedLexiconOff = off;
     s.flushConfig();
     await s.rpc.flush();
     location.reload();
@@ -614,20 +618,22 @@
           {l.endonym}
         </label>
       {/each}
-      {#if (s.config.language ?? "").startsWith("de")}
-        <!-- The escape hatch from the machine-translated German dictionary
-             back to the English original (the maintainer's ask: the AI
-             translation must be opt-out-able). Reloads like the language
-             itself: the dictionary is picked when the engine opens. -->
+      {#if hasOwnLexicon()}
+        <!-- The escape hatch from a machine-translated dictionary back to the
+             English original (the maintainer's ask: the AI translation must be
+             opt-out-able). Shown for any language that HAS one of its own,
+             asked of the engine's registry rather than by comparing against
+             "de". Reloads like the language itself: the dictionary is picked
+             when the engine opens. -->
         <label class="toggle">
           <span class="body">
-            <span class="name">{t("settings.strongsDeOff")}</span>
-            <span class="desc">{t("settings.strongsDeOffDesc")}</span>
+            <span class="name">{t("settings.baseLexicon")}</span>
+            <span class="desc">{t("settings.baseLexiconDesc")}</span>
           </span>
           <input
             type="checkbox"
-            checked={s.config.strongsDeOff === true}
-            onchange={(e) => void setStrongsDeOff(e.currentTarget.checked)}
+            checked={s.config.localizedLexiconOff === true}
+            onchange={(e) => void setBaseLexicon(e.currentTarget.checked)}
           />
         </label>
       {/if}
@@ -1018,7 +1024,7 @@
       <div class="sw-bar">
         <div class="sw-fill" style:width="{Math.round(switching.fraction * 100)}%"></div>
       </div>
-      <p class="sw-detail">{switching.say("settings.gettingTheBible", { percent: Math.round(switching.fraction * 100) })}</p>
+      <p class="sw-detail">{switching.say("settings.gettingTheBible", { language: switching.endonym, percent: Math.round(switching.fraction * 100) })}</p>
       <p class="sw-note">{switching.say("settings.gettingTheBibleNote")}</p>
     {/if}
   </div>

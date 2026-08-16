@@ -69,3 +69,4 @@ apps/web/public/plumbline_ffi.wasm
 # hymn texts and charts. Not a source file and not worth versioning: it is one
 # command away whenever it is wanted.
 HYMNAL-REVIEW.md
+__pycache__/

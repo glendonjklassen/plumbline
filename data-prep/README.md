@@ -214,17 +214,60 @@ python3 data-prep/luther/merge-strongs.py "SF_2022-02-27_GER_LUTH1912_(LUTHER_19
 python3 data-prep/luther/check-luther.py
 ```
 
-## German Strong's dictionary (`data/strongs-de.json`)
+## The Spanish Bible (`data/rv1909.jsonl`)
 
-Two scripts in `data-prep/strongs-de/`:
+`data-prep/rv1909/build-rv1909.py` turns the eBible.org USFX edition of the
+Reina-Valera 1909 (public domain, via `seven1m/open-bibles`) into
+`data/rv1909.jsonl`, in `kjv.jsonl`'s frozen shape with the stamp `rv1909-tok1`.
+
+The source arrives better equipped than the German one did: it already sits at
+KJV verse addresses (66 books, 1,189 chapters, 31,102 verses, every count
+identical), it is already Strong's-tagged inline, and it marks
+translator-supplied words with `<add>` — which is what the KJV's italics are, so
+`FLAG_ADDED` means the same thing in both. No alignment pass and no numbering
+table: Reina-Valera keeps the KJV's chapter and verse breaks throughout.
+
+The one adjustment is that the source tags PHRASES where `kjv.jsonl` tags head
+words; the build follows the KJV, because the renderings are derived by counting
+the words under each code and `occurrence_count` counts tagged tokens. The
+script's header has the argument.
+
+`check-rv1909.py` is the proof and takes the source as an optional argument; with
+it, it checks that every verse's letters are the source's.
+
+```sh
+curl -LO https://raw.githubusercontent.com/seven1m/open-bibles/master/spa-rv1909.usfx.xml
+python3 data-prep/rv1909/build-rv1909.py spa-rv1909.usfx.xml
+python3 data-prep/rv1909/check-rv1909.py spa-rv1909.usfx.xml
+```
+
+## Localized Strong's dictionaries (`data/strongs-<code>.json`)
+
+Two scripts in `data-prep/strongs-lang/`, both taking a language code and reading
+`plumbline-hydrate languages` for which corpus and which output file that code
+means:
 
 - `translate.py` — machine-translates `strongs_def` and `derivation` of every
-  `data/strongs.json` entry into German over the Batch API (needs
-  `ANTHROPIC_API_KEY`; idempotent and resumable; writes the committed
-  intermediate `translations.json`). The app labels these definitions as
+  `data/strongs.json` entry over the Batch API (needs `ANTHROPIC_API_KEY`;
+  idempotent and resumable; writes the committed intermediate
+  `translations.<code>.json`). The app labels these definitions as
   machine-translated and points readers at the repo's issues for corrections.
-- `build-strongs-de.py` — assembles the shipped file: language-neutral fields
+- `build-strongs.py` — assembles the shipped file: language-neutral fields
   copied, translated prose folded in (English fallback where a translation is
-  missing), and the `kjv_def` slot filled with **Luther renderings** derived
-  from the tagged corpus — the German words that actually stand under each
-  code, most frequent first. Derived data, not AI output.
+  missing), and the `kjv_def` slot filled with **that language's own renderings**
+  derived from its tagged corpus — the words that actually stand under each code,
+  most frequent first. Derived data, not AI output.
+
+It prints what `machine_translated` should be on that language's registry row.
+Set it: the study card's AI caveat reads off that flag, and a dictionary whose
+renderings are localized while its prose is still English must not claim to be a
+translation.
+
+```sh
+python3 data-prep/strongs-lang/build-strongs.py de
+ANTHROPIC_API_KEY=sk-… python3 data-prep/strongs-lang/translate.py es
+python3 data-prep/strongs-lang/build-strongs.py es
+```
+
+**Spanish is at the halfway point today**: the renderings ship, the definitions
+are still Strong's English, and the row says `machine_translated: false`.

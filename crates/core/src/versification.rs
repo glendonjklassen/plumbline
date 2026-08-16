@@ -35,16 +35,19 @@ use std::sync::OnceLock;
 use crate::i18n::Lang;
 use crate::reference::VRef;
 
-/// `osis \t chapter \t verse \t germanRef`, produced by
-/// `data-prep/luther/build-luther.py` from the source's own inline numbers.
-const LUTHER: &str = include_str!("versification/luther-numbering.tsv");
-
-/// refKey → the `chapter:verse` a German Bible prints. ~357 entries.
-fn luther_map() -> &'static HashMap<String, (u16, u16)> {
-    static MAP: OnceLock<HashMap<String, (u16, u16)>> = OnceLock::new();
-    MAP.get_or_init(|| {
+/// refKey → the `chapter:verse` a printed Bible in this language shows, parsed
+/// from the `osis \t chapter \t verse \t printedRef` table its
+/// [`crate::i18n::NumberingSpec`] names. ~357 entries for German; empty for a
+/// language whose tradition agrees with the KJV's breaks, which is most of them.
+///
+/// One cell per language, indexed by the variant, so a reader parses only their
+/// own table and only once.
+fn printed_map(lang: Lang) -> &'static HashMap<String, (u16, u16)> {
+    static MAPS: [OnceLock<HashMap<String, (u16, u16)>>; Lang::COUNT] = [const { OnceLock::new() }; Lang::COUNT];
+    MAPS[lang as usize].get_or_init(|| {
         let mut m = HashMap::new();
-        for line in LUTHER.lines() {
+        let Some(spec) = lang.spec().numbering else { return m };
+        for line in spec.table.lines() {
             if line.starts_with('#') || line.trim().is_empty() {
                 continue;
             }
@@ -69,10 +72,7 @@ fn luther_map() -> &'static HashMap<String, (u16, u16)> {
 ///
 /// Already formatted for the language, so German gets its comma: `"3,19"`.
 pub fn printed_as(lang: Lang, vref: &VRef) -> Option<String> {
-    if lang != Lang::De {
-        return None;
-    }
-    let (c, v) = luther_map().get(&vref.ref_key()).copied()?;
+    let (c, v) = printed_map(lang).get(&vref.ref_key()).copied()?;
     // Same separator rule as a full reference — see `ref.chapterVerse`, which is
     // a comma in German and a colon in English.
     Some(crate::i18n::t(lang, "ref.chapterVerse", &[("chapter", &c.to_string()), ("verse", &v.to_string())]))
@@ -82,7 +82,12 @@ pub fn printed_as(lang: Lang, vref: &VRef) -> Option<String> {
 /// the two traditions agree.
 pub fn printed_note(lang: Lang, vref: &VRef) -> Option<String> {
     let printed = printed_as(lang, vref)?;
-    Some(crate::i18n::t(lang, "ref.printedAs", &[("ref", &printed)]))
+    // WHOSE numbering, from the language's row rather than from the sentence.
+    // It used to be baked into the translation — `ref.printedAs` read
+    // "Luther {ref}" in English AND in German — which meant the next language's
+    // annotation would have credited its verse numbers to Luther.
+    let tradition = lang.spec().numbering.map(|n| n.label).unwrap_or_default();
+    Some(crate::i18n::t(lang, "ref.printedAs", &[("tradition", tradition), ("ref", &printed)]))
 }
 
 #[cfg(test)]
@@ -95,8 +100,19 @@ mod tests {
         // silently parsed to a handful of entries would annotate almost nothing
         // and look like "the traditions agree", which is the failure worth
         // catching.
-        let m = luther_map();
+        let m = printed_map(Lang::De);
         assert!(m.len() > 300, "the Luther numbering table has only {} entries", m.len());
+    }
+
+    #[test]
+    fn a_language_whose_tradition_agrees_has_no_table_and_that_is_not_a_gap() {
+        // Reina-Valera follows the KJV's breaks, so Spanish carries no numbering
+        // row — and the absence has to behave like agreement rather than like a
+        // missing file. An empty map that still answered `Some` for some verse
+        // would put a bogus "printed as" line on a Spanish study card.
+        assert!(printed_map(Lang::Es).is_empty(), "Spanish grew a numbering table without one being written");
+        assert_eq!(printed_as(Lang::Es, &VRef::new("Mal", 4, 1)), None);
+        assert_eq!(printed_note(Lang::Es, &VRef::new("Joel", 3, 1)), None);
     }
 
     #[test]

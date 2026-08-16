@@ -109,8 +109,8 @@ export class EngineRpc {
   onRndReady: () => void = () => {};
   /** R&D pack download progress (0..1) — drives the "load analysis" UI. */
   onRndProgress: (fraction: number) => void = () => {};
-  /** How far the German corpus download has got, 0..1. */
-  onGermanProgress: (fraction: number) => void = () => {};
+  /** How far the language-pack download has got, 0..1. */
+  onLangPackProgress: (fraction: number) => void = () => {};
   /** Download finished; the engine is now parsing it (seconds on a phone). */
   onRndPreparing: () => void = () => {};
   /** A save to this device's storage did not land — quota, blocked storage, a
@@ -170,7 +170,7 @@ export class EngineRpc {
         this.#stage = m.phase;
         return this.onProgress(m);
       }
-      if (m.type === "germanProgress") return this.onGermanProgress(m.fraction ?? 0);
+      if (m.type === "langPackProgress") return this.onLangPackProgress(m.fraction ?? 0);
       if (m.type === "authored") return this.onAuthored();
       if (m.type === "readingWrote") return this.onReadingWrote();
       if (m.type === "coreReady") return this.onCoreReady();
@@ -385,14 +385,14 @@ export class EngineRpc {
     return this.#send({ op: "installSuggested" });
   }
 
-  /** Whether this build offers the German corpus, and whether it is here. */
-  germanState(): Promise<{ available: boolean; installed: boolean; gzBytes: number }> {
-    return this.#send({ op: "germanState" });
+  /** Whether this build offers a language's scripture, and whether it is here. */
+  langPackState(code: string): Promise<{ available: boolean; installed: boolean; gzBytes: number }> {
+    return this.#send({ op: "langPackState", code });
   }
 
-  /** Download and store the German corpus. The caller RELOADS afterwards: the
+  /** Download and store a language's corpus. The caller RELOADS afterwards: the
    *  corpus is chosen when the engine opens, so nothing changes until it does. */
-  installGerman(): Promise<boolean> {
-    return this.#send({ op: "installGerman" });
+  installLangPack(code: string): Promise<boolean> {
+    return this.#send({ op: "installLangPack", code });
   }
 }

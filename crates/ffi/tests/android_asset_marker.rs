@@ -42,13 +42,16 @@ const EXPECTED_ASSETS: &[&str] = &[
     "kjv.jsonl",
     // The v4 addition: the German corpus (re-tagged with Strong's in v5).
     "luther1912.jsonl",
+    // The v6 addition: the Spanish corpus and its dictionary.
+    "rv1909.jsonl",
     // Also v5: the German Strong's dictionary (AI-translated definitions).
     "strongs-de.json",
+    "strongs-es.json",
     "strongs.json",
 ];
 
 /// The marker the CURRENT asset set is paired with.
-const EXPECTED_MARKER: &str = ".data-v5";
+const EXPECTED_MARKER: &str = ".data-v6";
 
 #[test]
 fn bundled_data_marker_is_bumped_for_the_current_asset_set() {
@@ -98,6 +101,41 @@ fn bundled_data_marker_is_bumped_for_the_current_asset_set() {
         "MainActivity.kt no longer uses the marker {EXPECTED_MARKER} this test is paired with; \
          if the bundled data changed, update EXPECTED_ASSETS too"
     );
+}
+
+/// EVERY LANGUAGE THE CORE SHIPS REACHES THE APK.
+///
+/// The list above is deliberately hand-written — two edits per data change is
+/// this test's whole design, because the second one is a device's only notice.
+/// What must NOT be hand-remembered is which files a language consists of: that
+/// is a row in `plumbline_core::i18n`, and a language added there but not here
+/// would ship an APK whose Spanish reader silently gets the KJV.
+///
+/// So the registry is the lower bound and the list is the upper one: a new row
+/// fails this test until its files are bundled AND the marker is bumped.
+#[test]
+fn the_asset_list_carries_every_language_in_the_registry() {
+    for lang in plumbline_core::i18n::Lang::ALL {
+        let spec = lang.spec();
+        if let Some(c) = &spec.corpus {
+            assert!(
+                EXPECTED_ASSETS.contains(&c.file),
+                "{} reads data/{} and the APK does not bundle it — add it to build.gradle.kts, \
+                 to EXPECTED_ASSETS, and bump the marker",
+                lang.code(),
+                c.file
+            );
+        }
+        if let Some(l) = spec.lexicon {
+            assert!(
+                EXPECTED_ASSETS.contains(&l.file),
+                "{}'s dictionary data/{} is not bundled — word study would fall back to English \
+                 on device with no sign anything is missing",
+                lang.code(),
+                l.file
+            );
+        }
+    }
 }
 
 /// The web ships the same files through the pack, so a data file bundled on one

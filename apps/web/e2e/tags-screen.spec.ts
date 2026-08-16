@@ -20,13 +20,36 @@ async function boot(page: Page): Promise<void> {
 }
 
 /** Two tags with one verse each, written through the engine the reader's own
- *  taps use. The stock set seeds tags too, so these are named distinctly. */
+ *  taps use. The stock set seeds tags too, so these are named distinctly.
+ *
+ *  AND THEN WAITS FOR THE SHELL TO SEE THEM, which is not ceremony — it is the
+ *  whole reason this file was intermittently red on a loaded runner.
+ *
+ *  Two things sit between the write and the screen. `tagAdd` goes STRAIGHT to
+ *  the engine, so the worker never posts the `authored` event the session
+ *  invalidates its query cache on; and `q()` returns `null` on its first call
+ *  and fills in later, so even a fresh cache is empty for a tick. A Tags page
+ *  opened in that window derives `tags` as `[]` — the pick dialog lists nothing,
+ *  the click for "Zeta mercy" times out, and the merge assertion fails against a
+ *  merge that never ran. Which of those happened depended on machine load, which
+ *  is why it passed here and failed in CI.
+ */
 async function seedTags(page: Page): Promise<void> {
   await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     await s.engine.tagAdd("Zeta grace", "verse", "Eph 2:8", null, "2026-08-14T00:00:00Z");
     await s.engine.tagAdd("Zeta mercy", "verse", "Ps 23:6", null, "2026-08-14T00:00:00Z");
+    s.invalidate();
   });
+  await expect
+    .poll(
+      async () => {
+        const names = await tagNames(page);
+        return names.includes("Zeta grace") && names.includes("Zeta mercy");
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
 }
 
 async function openTags(page: Page): Promise<void> {

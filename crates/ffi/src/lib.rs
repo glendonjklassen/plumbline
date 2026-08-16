@@ -146,10 +146,10 @@ pub struct PlumblineEngine {
     /// the core pack arrives moments later via `load_core_data`. Unset means
     /// "not here yet": lookups answer empty and fill on the shell's re-fetch.
     strongs: OnceLock<StrongsDict>,
-    /// Whether `strongs` holds the German dictionary (`strongs_for`) — the
-    /// panel labels renderings and carries the machine-translation caveat
-    /// from this.
-    strongs_de: std::sync::atomic::AtomicBool,
+    /// Whether `strongs` holds a LOCALIZED dictionary rather than the English
+    /// source (`strongs_for`) — the panel labels renderings for the right Bible
+    /// and carries the machine-translation caveat from this.
+    strongs_localized: std::sync::atomic::AtomicBool,
     /// The corpus-derived indexes are built LAZILY (TODO #28: boot cost —
     /// the app opens like Instagram, many times a day; every millisecond of
     /// open is paid every time). First access builds; `warm_indexes` forces
@@ -293,7 +293,7 @@ impl PlumblineEngine {
         PlumblineEngine {
             corpus,
             strongs: strongs_cell,
-            strongs_de: std::sync::atomic::AtomicBool::new(false),
+            strongs_localized: std::sync::atomic::AtomicBool::new(false),
             search_ix: OnceLock::new(),
             search_partial: std::sync::Mutex::new(None),
             occ_partial: std::sync::Mutex::new(None),
@@ -395,23 +395,33 @@ impl PlumblineEngine {
         // is open. Strong's loads for EITHER corpus — the dictionary is keyed
         // by code and each corpus carries its own token tags now (the German
         // corpus since merge-strongs.py), so nothing here is anchored to KJV
-        // token indices. The overlay stays KJV-only — see the gate in `new`:
-        // it is a delta over KJV token runs, and on the German corpus it stays
-        // unset, which is what makes `AkjvAvailable()` false and hides the
-        // toggle rather than offering a reader an English overlay for a German
-        // verse.
+        // token indices.
         if self.strongs.get().is_none() {
-            let (path, is_de) = strongs_for(&h.join("data"));
+            let (path, is_localized) = strongs_for(&h.join("data"));
             if let Ok(sd) = strongs::load_strongs(path) {
                 let _ = self.strongs.set(sd);
-                self.strongs_de.store(is_de, std::sync::atomic::Ordering::Relaxed);
+                self.strongs_localized.store(is_localized, std::sync::atomic::Ordering::Relaxed);
             }
         }
-        if self.corpus.tokenization_version() == canon::TOKENIZATION_VERSION && self.akjv.get().is_none() {
-            // Stage 2, beside Strong's: small, and wanted the moment the reader
-            // flips the toggle rather than after a download they must approve.
-            if let Some(a) = akjv::load_akjv(canon::TOKENIZATION_VERSION, h.join("data").join("akjv.jsonl")) {
-                let _ = self.akjv.set(a);
+        // THE MODERNIZATION BELONGS TO A TEXT, and the OPEN text is what picks
+        // it — not the reader's language. A German reader whose Luther download
+        // has not landed is reading the KJV, and the AKJV is a correct and
+        // useful thing to offer them while they are on it.
+        //
+        // A language whose row names no modernization simply never loads one,
+        // which is what makes `AkjvAvailable()` false and hides the toggle. That
+        // used to be a comparison against the KJV's tokenization here, which
+        // said "this feature is the norm and other texts are the exception"; it
+        // is one English feature among the per-language columns now.
+        let open_tok = self.corpus.tokenization_version().to_string();
+        if let Some(file) = i18n::Lang::for_tokenization(&open_tok).and_then(|l| l.spec().modernization) {
+            if self.akjv.get().is_none() {
+                // Stage 2, beside Strong's: small, and wanted the moment the
+                // reader flips the toggle rather than after a download they
+                // must approve.
+                if let Some(a) = akjv::load_akjv(&open_tok, h.join("data").join(file)) {
+                    let _ = self.akjv.set(a);
+                }
             }
         }
         *self.study_write() = load_study(&self.home);
@@ -1026,33 +1036,35 @@ pub unsafe extern "C" fn plumbline_string_free(ptr: *mut c_char) {
 /// The corpus file for a language, under `home` — the path, not a promise that
 /// it is there.
 ///
-/// One place, so the engine, the hydrator and any tool agree. English is
-/// `data/kjv.jsonl`; German is `data/luther1912.jsonl` (`data-prep/README.md`).
-/// Whether it can actually be opened is [`open_corpus`]'s question.
+/// One place, so the engine, the hydrator and any tool agree. The file comes
+/// from the language's row in the registry (`plumbline_core::i18n`) — English
+/// `data/kjv.jsonl`, German `data/luther1912.jsonl`, Spanish `data/rv1909.jsonl`
+/// (`data-prep/README.md`). Whether it can actually be opened is
+/// [`open_corpus`]'s question.
 pub fn corpus_for(home: &str, lang: i18n::Lang) -> PathBuf {
-    let data = PathBuf::from(home).join("data");
-    match lang {
-        i18n::Lang::De => data.join("luther1912.jsonl"),
-        i18n::Lang::En => data.join("kjv.jsonl"),
-    }
+    PathBuf::from(home).join("data").join(lang.corpus().file)
 }
 
-/// The Strong's dictionary for the active language: `strongs-de.json` for a
-/// German reader when the pack ships it (machine-translated definitions +
-/// corpus-derived Luther renderings — BIBLIOGRAPHY.md), else the English
-/// `strongs.json`. Same file shape either way; the bool says which one, so the
-/// panel can label the renderings and carry the machine-translation caveat.
+/// The Strong's dictionary for the active language: the localized one when the
+/// language's row names it and the pack shipped it (machine-translated
+/// definitions + renderings derived from that language's own tagged corpus —
+/// BIBLIOGRAPHY.md), else the English source. Same file shape either way; the
+/// bool says which, so the panel can label the renderings for the right Bible
+/// and carry the machine-translation caveat.
 fn strongs_for(data: &std::path::Path) -> (PathBuf, bool) {
-    // `strongsDeOff` is the reader's escape hatch back to the original English
-    // definitions (Settings ▸ language). Read here, at pick time, because the
-    // toggle reloads the app exactly like a language change does.
-    if i18n::active() == i18n::Lang::De && !config::load().0.strongs_de_off {
-        let de = data.join("strongs-de.json");
-        if de.exists() {
-            return (de, true);
+    let base = data.join(i18n::Lang::En.spec().lexicon.map(|l| l.file).unwrap_or("strongs.json"));
+    // `localizedLexiconOff` is the reader's escape hatch back to the original
+    // English definitions (Settings ▸ language). Read here, at pick time,
+    // because the toggle reloads the app exactly like a language change does.
+    if !config::load().0.localized_lexicon_off {
+        if let Some(lex) = i18n::active().spec().lexicon {
+            let local = data.join(lex.file);
+            if local != base && local.exists() {
+                return (local, true);
+            }
         }
     }
-    (data.join("strongs.json"), false)
+    (base, false)
 }
 
 /// The corpus for `lang`, falling back to the KJV when it will not open.
@@ -1120,7 +1132,7 @@ pub unsafe extern "C" fn plumbline_engine_open(home: *const c_char, out_err: *mu
         // corpus alone; load_core_data brings the dictionary in later. A file
         // that EXISTS but fails to parse stays a hard error. A German reader
         // gets strongs-de.json when the pack ships it (`strongs_for`).
-        let (strongs_path, strongs_is_de) = strongs_for(&PathBuf::from(home).join("data"));
+        let (strongs_path, strongs_is_localized) = strongs_for(&PathBuf::from(home).join("data"));
         let strongs = if strongs_path.exists() {
             match strongs::load_strongs(&strongs_path) {
                 Ok(s) => Some(s),
@@ -1133,7 +1145,7 @@ pub unsafe extern "C" fn plumbline_engine_open(home: *const c_char, out_err: *mu
             None
         };
         let engine = PlumblineEngine::new(corpus, strongs, Some(PathBuf::from(home)));
-        engine.strongs_de.store(strongs_is_de, std::sync::atomic::Ordering::Relaxed);
+        engine.strongs_localized.store(strongs_is_localized, std::sync::atomic::Ordering::Relaxed);
         Box::into_raw(Box::new(engine))
     })
 }
@@ -2685,8 +2697,8 @@ impl PanelSource for PlumblineEngine {
     fn is_kjv_text(&self) -> bool {
         self.corpus.tokenization_version() == canon::TOKENIZATION_VERSION
     }
-    fn lexicon_de(&self) -> bool {
-        self.strongs_de.load(std::sync::atomic::Ordering::Relaxed)
+    fn lexicon_localized(&self) -> bool {
+        self.strongs_localized.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     fn token_word(&self, verse: &str, token: u32) -> Option<String> {

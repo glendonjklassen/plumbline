@@ -101,6 +101,15 @@ fn s(id: &str) -> String {
     crate::i18n::t(crate::i18n::active(), id, &[])
 }
 
+/// Whether the active language's dictionary has MACHINE-TRANSLATED definitions,
+/// as opposed to merely being that language's own file. The two are not the
+/// same: a dictionary ships its localized renderings as soon as the tagged
+/// corpus exists and its translated prose only after a translation run, and the
+/// disclosure has to follow the second, not the first.
+fn machine_translated() -> bool {
+    crate::i18n::active().spec().lexicon.is_some_and(|l| l.machine_translated)
+}
+
 /// The same, with `{n}` filled.
 fn sn(id: &str, n: usize) -> String {
     crate::i18n::t(crate::i18n::active(), id, &[("n", &n.to_string())])
@@ -358,11 +367,12 @@ pub trait PanelSource {
     fn is_kjv_text(&self) -> bool {
         true
     }
-    /// Whether the loaded Strong's dictionary is the German one
-    /// (`strongs-de.json`) — machine-translated definitions plus corpus-derived
-    /// Luther renderings. The study card labels the renderings for the right
-    /// Bible and carries the machine-translation caveat when this is true.
-    fn lexicon_de(&self) -> bool {
+    /// Whether the loaded Strong's dictionary is a LOCALIZED one
+    /// (`strongs-de.json`, `strongs-es.json`) rather than the English source —
+    /// machine-translated definitions plus renderings derived from that
+    /// language's own tagged corpus. The study card labels the renderings for
+    /// the right Bible and carries the machine-translation caveat when true.
+    fn lexicon_localized(&self) -> bool {
         false
     }
     /// A verse's display form (`"John 3:16"`), if it resolves.
@@ -745,7 +755,7 @@ pub fn word_study_gated(src: &dyn PanelSource, gates: Gates, verse: &str, token:
         for code in codes {
             code_study(src, code, &word, gates, &mut out);
         }
-        de_caveat(src, &mut out);
+        lexicon_caveat(src, &mut out);
     }
     verse_extras(src, verse, gates, &mut out);
     if kjv && gates.any() && !codes.is_empty() {
@@ -790,19 +800,27 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
             }
             if let Some(d) = &e.def {
                 let mut runs = vec![Run::new(d, sz::BODY, Color::Ink)];
-                if src.lexicon_de() {
+                if src.lexicon_localized() && machine_translated() {
                     // The at-a-glance mark, right on the definition it
                     // qualifies; the full caveat + report link close the card.
+                    // Only when the definitions REALLY are translated — a
+                    // dictionary whose renderings are localized and whose prose
+                    // is still Strong's own English must not be marked as AI
+                    // output. See `i18n::LexiconSpec`.
                     runs.push(Run::new("  ", sz::NOTE, Color::Faded));
                     runs.push(Run::new(s("study.aiMark"), sz::NOTE, Color::Faded).italic());
                 }
                 out.push(Block::para(runs));
             }
             if let Some(k) = &e.kjv {
-                // In the German dictionary this slot holds the LUTHER
-                // renderings (derived from the tagged corpus); label it for
-                // the Bible it describes.
-                let label = if src.lexicon_de() { "Luther" } else { "KJV" };
+                // In a localized dictionary this slot holds that language's own
+                // renderings, derived from its tagged corpus — Luther's words
+                // for a German reader, Reina-Valera's for a Spanish one. The
+                // name comes from the language's row, so a new Bible is labelled
+                // correctly by having been added rather than by anyone
+                // remembering this line.
+                let label =
+                    if src.lexicon_localized() { i18n::active().corpus().label } else { i18n::Lang::En.corpus().label };
                 out.push(Block::para(vec![Run::new(format!("{label}: {k}"), sz::NOTE, Color::Faded)]));
             }
         }
@@ -1032,18 +1050,22 @@ fn user_note_block(src: &dyn PanelSource, verse: &str, out: &mut Vec<Block>) {
     }
 }
 
-/// The machine-translation caveat, once per card, when the German dictionary
+/// The machine-translation caveat, once per card, when a localized dictionary
 /// is serving: what the definitions are, and where to report a bad one (the
 /// maintainer's ask, 2026-08-11 — an AI-generated lexicon must say so, and a
 /// reader who spots an error should have somewhere to send it).
-fn de_caveat(src: &dyn PanelSource, out: &mut Vec<Block>) {
-    if !src.lexicon_de() {
+///
+/// The sentence names the Bible the renderings came out of, from the language's
+/// row. It used to name Luther in the string itself, in both catalogues.
+fn lexicon_caveat(src: &dyn PanelSource, out: &mut Vec<Block>) {
+    if !src.lexicon_localized() || !machine_translated() {
         return;
     }
+    let bible = i18n::active().corpus().label;
     out.push(Block::para(vec![
-        Run::new(s("study.deCaveat"), sz::NOTE, Color::Faded).italic(),
+        Run::new(i18n::t(i18n::active(), "study.lexCaveat", &[("bible", bible)]), sz::NOTE, Color::Faded).italic(),
         Run::new("  ", sz::NOTE, Color::Faded),
-        Run::new(s("study.deCaveatLink"), sz::NOTE, Color::Gold)
+        Run::new(s("study.lexCaveatLink"), sz::NOTE, Color::Gold)
             .link("ext:https://github.com/glendonjklassen/plumbline/issues"),
     ]));
 }
@@ -1059,7 +1081,7 @@ pub fn code_study_card(src: &dyn PanelSource, full: bool, code: &str, word: &str
 pub fn code_study_card_gated(src: &dyn PanelSource, gates: Gates, code: &str, word: &str) -> Vec<Block> {
     let mut out = Vec::new();
     code_study(src, code, word, gates, &mut out);
-    de_caveat(src, &mut out);
+    lexicon_caveat(src, &mut out);
     if gates.any() && src.is_kjv_text() {
         out.push(legend());
     }

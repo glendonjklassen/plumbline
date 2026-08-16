@@ -2816,6 +2816,95 @@ fn german_corpus_opens_at_the_kjv_addresses_and_reads_german() {
     }
 }
 
+/// The Spanish corpus, and the reason this test is nearly a copy of the German
+/// one above: THAT IS THE POINT OF THE LANGUAGE REGISTRY. Nothing between these
+/// two tests knows a language by name — `corpus_for`, `strongs_for`, the
+/// modernization gate and the printed-numbering annotation all read the row —
+/// so the second language should behave like the first without a line of code
+/// having been written for it.
+///
+/// Named into the `german_corpus` CI filter's company and `#[ignore]`d with its
+/// siblings: it reads the real hydrated pack and flips the process-global
+/// language.
+///
+/// ```sh
+/// cargo test --locked -p plumbline-ffi -- --ignored spanish_corpus
+/// ```
+#[test]
+#[ignore]
+fn spanish_corpus_opens_at_the_kjv_addresses_and_reads_spanish() {
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    if !repo.join("data/rv1909.jsonl").exists() {
+        eprintln!("no data/rv1909.jsonl in this checkout — skipping");
+        return;
+    }
+    let home = CString::new(repo.to_str().unwrap()).unwrap();
+
+    unsafe {
+        let _ = take(plumbline_i18n_set_language(c"es".as_ptr(), ptr::null()));
+        let mut err: *mut c_char = ptr::null_mut();
+        let e = plumbline_engine_open(home.as_ptr(), &mut err);
+        assert!(!e.is_null(), "Spanish open failed: {:?}", opt_str(err));
+
+        // The same address, the third text.
+        let v: Value =
+            serde_json::from_str(&take(plumbline_engine_verse_json(e, c"John 3:16".as_ptr())).unwrap()).unwrap();
+        let body = v["body"].as_str().unwrap();
+        assert!(body.contains("Dios"), "John 3:16 is not Spanish: {body}");
+        assert!(!body.contains("God so loved"), "John 3:16 came back in English: {body}");
+
+        let toc: Value = serde_json::from_str(&take(plumbline_engine_toc_json(e)).unwrap()).unwrap();
+        let books = toc["books"].as_array().unwrap();
+        assert_eq!(books.len(), 66);
+        assert_eq!(books.iter().find(|b| b["id"] == "Gen").unwrap()["name"], "Génesis");
+        assert_eq!(books.iter().find(|b| b["id"] == "Ps").unwrap()["chapters"], 150);
+        // Reina-Valera keeps the KJV's breaks everywhere, which is why Spanish
+        // carries no `numbering` row — Joel is the book where German does not.
+        assert_eq!(books.iter().find(|b| b["id"] == "Joel").unwrap()["chapters"], 3);
+
+        // The modernization is a delta over KJV token runs. Spanish names none
+        // in its row, so none is offered — and nothing here checks for Spanish
+        // to decide that.
+        let _ = take(plumbline_engine_load_core_data(e));
+        assert!(!plumbline_engine_akjv_available(e), "the KJV modernization was offered over Spanish text");
+
+        // THE TAGS ARE THE SOURCE'S OWN. The Reina-Valera edition ships
+        // Strong's inline, so a Spanish word study is real study: the codes on
+        // these tokens belong to these words.
+        let tagged = (0..8)
+            .find(|i| {
+                let w: Value =
+                    serde_json::from_str(&take(plumbline_engine_token_json(e, c"John 3:16".as_ptr(), *i)).unwrap())
+                        .unwrap();
+                w["strongs"].as_array().is_some_and(|a| !a.is_empty())
+            })
+            .expect("no tagged token in the first 8 of Spanish John 3:16 — did the build carry the <w> markup?");
+
+        let blocks = take(plumbline_engine_word_study_blocks2_json(e, c"John 3:16".as_ptr(), tagged, 3)).unwrap();
+        for english in ["Renderings", "same root"] {
+            assert!(!blocks.contains(english), "KJV-token evidence {english:?} reached a Spanish reader: {blocks}");
+        }
+        assert!(blocks.contains("occ:"), "the Spanish study card has no concordance link: {blocks}");
+        assert!(
+            blocks.contains(&plumbline_core::i18n::t(plumbline_core::i18n::Lang::Es, "panel.tagVerse", &[])),
+            "the Spanish study card has no Spanish tag action: {blocks}"
+        );
+
+        // NO PRINTED-NUMBERING ANNOTATION ANYWHERE, because Reina-Valera agrees
+        // with the KJV's breaks. Malachi 4:1 is the verse German annotates, so
+        // it is the one that proves the row — not a global switch — decides.
+        let mal = take(plumbline_engine_word_study_blocks2_json(e, c"Mal 4:1".as_ptr(), 0, 3)).unwrap();
+        assert!(!mal.contains("Luther"), "a Spanish reader was told what a German Bible prints: {mal}");
+        assert!(!mal.contains("3,19"), "Malaquías 4:1 was annotated with a numbering Spanish does not use: {mal}");
+
+        // Cross-references key on refKey, so they are as true here as in the KJV.
+        assert!(blocks.contains("Romanos 5:8"), "a Spanish cross-reference is not in Spanish: {blocks}");
+
+        plumbline_engine_free(e);
+        let _ = take(plumbline_i18n_set_language(c"en".as_ptr(), ptr::null()));
+    }
+}
+
 /// The other half of the morphology gate: on the KJV the deferred load DOES
 /// bring it in, so the assertion above cannot pass by the loader being broken
 /// for everybody.
@@ -2890,7 +2979,13 @@ fn german_corpus_lexicon_serves_the_german_dictionary_with_caveat() {
         assert!(blocks.contains("Gott, Gottheit"), "the German definition did not serve: {blocks}");
         assert!(!blocks.contains("a deity"), "the English definition leaked past the German dictionary: {blocks}");
         assert!(blocks.contains("Luther:"), "the renderings are not labelled for the reader's Bible: {blocks}");
-        let caveat = plumbline_core::i18n::t(plumbline_core::i18n::Lang::De, "study.deCaveat", &[]);
+        // Named for the Bible the renderings came out of, from the language's
+        // row — the sentence used to spell "Luther" itself, in both catalogues.
+        let caveat = plumbline_core::i18n::t(
+            plumbline_core::i18n::Lang::De,
+            "study.lexCaveat",
+            &[("bible", plumbline_core::i18n::Lang::De.corpus().label)],
+        );
         assert!(blocks.contains(&caveat), "the machine-translation caveat is missing: {blocks}");
         assert!(
             blocks.contains("ext:https://github.com/glendonjklassen/plumbline/issues"),

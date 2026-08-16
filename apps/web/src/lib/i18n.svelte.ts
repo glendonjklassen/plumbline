@@ -68,7 +68,22 @@ function seed(): { code: string; strings: Record<string, string> } {
 const initial = seed();
 let strings = $state<Record<string, string>>(initial.strings);
 let code = $state<string>(initial.code);
-let choices = $state<{ code: string; endonym: string; name: string }[]>([]);
+export interface LanguageChoice {
+  code: string;
+  endonym: string;
+  name: string;
+  /** The Bible a reader of this language gets: "KJV", "Luther", "Reina-Valera". */
+  bible: string;
+  /** Home paths this language needs that the base pack does not carry. Empty
+   *  for English — and the whole answer to "is there anything to download when
+   *  the reader picks this", which used to be `code === "de"` in Settings. */
+  packFiles: string[];
+  /** Whether it has a Strong's dictionary of its own (machine-translated), and
+   *  therefore whether the "English definitions instead" escape hatch applies. */
+  hasLexicon: boolean;
+}
+
+let choices = $state<LanguageChoice[]>([]);
 
 /** The catalogue the engine resolved, as it came back over the ABI. Replaces
  *  the boot seed wholesale — including the `boot.*` keys, so a language the
@@ -81,6 +96,9 @@ export function setCatalog(cat: { lang?: string; strings?: Record<string, string
     code: String(l.code),
     endonym: String(l.endonym),
     name: String(l.name ?? ""),
+    bible: String(l.bible ?? ""),
+    packFiles: Array.isArray(l.packFiles) ? l.packFiles.map(String) : [],
+    hasLexicon: typeof l.lexiconRole === "string",
   }));
   try {
     localStorage.setItem(LAST_LANG, code);
@@ -97,8 +115,19 @@ export function lang(): string {
 
 /** Every language this build ships, each labelled in ITSELF — a reader looking
  *  for German is looking for "Deutsch". Empty until the boot reply lands. */
-export function languages(): { code: string; endonym: string; name: string }[] {
+export function languages(): LanguageChoice[] {
   return choices;
+}
+
+/** Whether picking this language means fetching its scripture first. Asked of
+ *  the engine's own registry rather than decided here — see `LanguageChoice`. */
+export function needsPack(code: string): boolean {
+  return (choices.find((l) => l.code === code)?.packFiles.length ?? 0) > 0;
+}
+
+/** Whether the language being painted has a dictionary of its own. */
+export function hasOwnLexicon(): boolean {
+  return choices.find((l) => l.code === code)?.hasLexicon === true;
 }
 
 /** What may be substituted into a placeholder. `null`/`undefined` are allowed

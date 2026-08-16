@@ -23,13 +23,15 @@
 
 import { instantiate, type WasmEngine } from "./engine";
 import { depotAvailable, depotHas, depotResponse } from "./depot";
-import { buildHome, dropLegacyIdxcache, GERMAN_CACHE, installedOptional, type VirtualHome } from "./home";
+import { buildHome, dropLegacyIdxcache, installedOptional, type VirtualHome } from "./home";
 import {
   assetUrl,
   corpusRoleFor,
   devicePackFiles,
   hasOptional,
+  isCorpusRole,
   isOtherCorpus,
+  langOfRole,
   type PackFile,
   fetchManifest,
   fetchPack,
@@ -104,8 +106,9 @@ export interface BootResult {
 }
 
 /** Whether the reader has taken the optional corpus behind `role`. */
-function manifestHasInstalled(role: string, taken: { germanInstalled: boolean }): boolean {
-  return role === "germanCorpus" ? taken.germanInstalled : true;
+function manifestHasInstalled(role: string, taken: { langsInstalled: Set<string> }): boolean {
+  const code = langOfRole(role);
+  return code === null || taken.langsInstalled.has(code);
 }
 
 export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = ""): Promise<BootResult> {
@@ -163,9 +166,9 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
   // therefore gets one coherent decision instead of a per-file mix.
   const base = assetUrl("");
   // What this device has already chosen to keep, read before anything is
-  // fetched: the German corpus is an `optional` entry, so nothing on the stage-1
-  // path would carry it otherwise, and the engine would open the English text
-  // for a reader who downloaded the German one.
+  // fetched: a second language's corpus is an `optional` entry, so nothing on
+  // the stage-1 path would carry it otherwise, and the engine would open the
+  // English text for a reader who downloaded another one.
   const taken = await timed("optional markers (idb)", installedOptional);
   const mine = (f: PackFile) => hasOptional(taken, f);
   // WHICH CORPUS TO INFLATE — see `corpusRoleFor`. Both stay in the pin and the
@@ -175,7 +178,7 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
   // `lang` is HANDED IN by the main thread. It lives in `localStorage`, and this
   // function runs in the engine worker, where there is no `localStorage` at all —
   // reading it here would throw, the catch would swallow it, and every boot would
-  // silently fall back to the KJV with the German download sitting unused
+  // silently fall back to the KJV with the reader's download sitting unused
   // (e2e/language.spec.ts).
   const wantCorpus = corpusRoleFor(lang, (role) => manifestHasInstalled(role, taken));
   const skipOther = (f: PackFile) => isOtherCorpus(f, wantCorpus);
@@ -270,7 +273,10 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
   // BOTH corpus caches, for the same reason: whichever one the engine opened, the
   // home's copy is now a pure duplicate of what the engine holds — and the one it
   // did NOT open was never read at all, so it is 28 MB of nothing.
-  const freed = home.evict(["data/kjv.jsonl.idxcache", GERMAN_CACHE]);
+  // EVERY corpus cache the manifest names, not a hand-kept pair: the one the
+  // engine opened is now a duplicate of what it holds, and the ones it did not
+  // open were never read at all.
+  const freed = home.evict(manifest.files.filter((f) => isCorpusRole(f.role)).map((f) => f.path));
   if (freed) trace.push(["home evict after open (KB)", Math.round(freed / 1024)]);
 
   // Reclaim the legacy IndexedDB copy of the corpus cache, but only now — after

@@ -51,4 +51,27 @@ export const BOOT_STRINGS: Record<string, Record<string, string>> = {
     "boot.startupFailed": "Startup failed: {why}",
     "boot.tagline": "The Holy Bible"
   },
+  es: {
+    "boot.couldNotOpen": "no se pudo abrir el corpus",
+    "boot.details": "Detalles técnicos",
+    "boot.dismiss": "Descartar",
+    "boot.error.corpus": "Plumbline no pudo leer los datos de la Escritura en este dispositivo. Al recargar se descarga de nuevo lo que falta.",
+    "boot.error.engine": "El motor de estudio se detuvo antes de que Plumbline terminara de abrirse. Al recargar se inicia de nuevo.",
+    "boot.error.network": "Plumbline no pudo terminar de descargar lo que necesita para abrirse. Revise la conexión e inténtelo otra vez. Una vez esté en el dispositivo, abre sin conexión alguna.",
+    "boot.error.quota": "No queda espacio en este dispositivo para guardar la Biblia.",
+    "boot.error.stale": "Esta copia de Plumbline es más antigua que los datos de la Escritura que acaba de descargar. Recargue la página para obtener la versión actual.",
+    "boot.error.storage": "Este navegador no permite que Plumbline guarde nada en el dispositivo. Hay que permitir los datos del sitio (cookies y almacenamiento) para esta dirección. Una ventana privada también puede bloquearlo.",
+    "boot.error.unknown": "Plumbline no pudo iniciarse. Recargar suele resolverlo; si no, los detalles de abajo son lo que necesita un informe de error.",
+    "boot.error.wasm": "El motor de Plumbline no arrancó en este navegador. Vale la pena cerrar otras pestañas y recargar; si sigue ocurriendo, puede que el navegador sea demasiado antiguo para WebAssembly.",
+    "boot.mishap": "Algo salió mal — recargue",
+    "boot.oneTime": "descarga de 3 MB",
+    "boot.phase.download": "Obteniendo los datos de la Escritura — {percent}%",
+    "boot.phase.open": "Abriendo el texto…",
+    "boot.phase.prepare": "Preparando el motor de estudio…",
+    "boot.phase.warm": "Construyendo los análisis…",
+    "boot.reload": "Recargar",
+    "boot.retry": "Reintentar",
+    "boot.startupFailed": "Fallo al iniciar: {why}",
+    "boot.tagline": "La Santa Biblia"
+  },
 };

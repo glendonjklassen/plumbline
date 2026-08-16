@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Machine-translate the Strong's definitions into German, via the Batch API.
 
-    ANTHROPIC_API_KEY=sk-... python3 data-prep/strongs-de/translate.py
+    ANTHROPIC_API_KEY=sk-... python3 data-prep/strongs-lang/translate.py
 
 Translates the two English prose fields of every data/strongs.json entry —
 `strongs_def` and `derivation` — and writes the result to
-`data-prep/strongs-de/translations.json` (an intermediate this directory
-commits; `build-strongs-de.py` folds it into the shipped pack file).
+`data-prep/strongs-lang/translations.de.json` (an intermediate this directory
+commits; `build-strongs.py` folds it into the shipped pack file).
 `kjv_def` is NOT translated: its German counterpart is the Luther renderings,
-derived from the tagged corpus by `build-strongs-de.py` — real data, not
+derived from the tagged corpus by `build-strongs.py` — real data, not
 translation.
 
 Idempotent and resumable: already-translated codes are skipped, so an

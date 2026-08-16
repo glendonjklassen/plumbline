@@ -1018,19 +1018,46 @@ carries `lang`, stamped at CREATE and never on re-save. Nothing reads it: it is
 what makes the versification migration runnable later. Absent means "unknown",
 not English — see I18N.md.
 
-**The German Bible** (both shells). Luther 1912, public domain, its
-own tokenization stamp `luther1912-tok1`, AT THE KJV'S OWN VERSE ADDRESSES — the
-source was already mapped to KJV numbering, so `refKey` means one verse in both
-and no migration exists. `corpus_for`/`open_corpus` in crates/ffi choose the
-text, and the language must be set BEFORE the engine opens because that is when
-the choice is made. Strong's, morphology and the plain-English overlay are
-withheld from it: they are keyed by token index against the KJV's tokenization.
+**The language registry** (`crates/core/src/i18n.rs`). A language is ONE ROW:
+code, endonym, exonym, catalogue, corpus (file + tokenization stamp + the name a
+reader knows that Bible by), Strong's dictionary and whether its definitions are
+machine-translated, an optional modernization of that language's standard
+translation, an optional printed-numbering table. `corpus_for`, `strongs_for`,
+`tokenization_is_ours`, the modernization gate, the printed-numbering
+annotation, the study card's rendering label, the hydrator's file list, the web
+pack's roles and the Android asset check all READ THE ROW. Adding a language is
+a variant, a row, a catalogue and the data files it names. See I18N.md.
 
-**SHELL DELTA — delivery.** Android BUNDLES the German corpus in the APK
-(~1.8 MB, marker `.data-v4`); the web fetches it on demand as `stage: "optional"`
-(2.4 MB gz) when the reader picks German, because nothing on the web is bundled
-and an English reader must not download a German Bible. Same split as the
-hymnal.
+**The other Bibles** (both shells). Luther 1912 (`luther1912-tok1`) and
+Reina-Valera 1909 (`rv1909-tok1`), both public domain, both AT THE KJV'S OWN
+VERSE ADDRESSES — each source was already mapped to KJV numbering, so `refKey`
+means one verse in all three and no migration exists. Each carries its own
+Strong's tags, so word study is real study in all three. The language must be set
+BEFORE the engine opens, because that is when the text is chosen.
+
+Morphology and the AKJV modernization are withheld from a text they were not
+built against: both are keyed by token index against `kjv1769-tok2`. The
+modernization is a per-language COLUMN, not a special case — it is one English
+feature, as Luther's verse numbering is one German one — and it is selected by
+the OPEN corpus's tokenization, so a reader whose download has not landed still
+gets it over the KJV they are actually reading.
+
+Spanish needs no printed-numbering annotation at all (Reina-Valera keeps the
+KJV's breaks); its dictionary ships the Reina-Valera renderings with Strong's own
+English definitions until a translation run fills them in, and
+`machine_translated: false` on its row is what stops the study card claiming
+otherwise.
+
+**SHELL DELTA — delivery.** Android BUNDLES every language's corpus and
+dictionary in the APK (~2 MB each, marker `.data-v6`); the web fetches them on
+demand as `stage: "optional"` under `corpus:<code>` / `lexicon:<code>` roles when
+the reader picks that language, because nothing on the web is bundled and an
+English reader must not download a Spanish Bible. Same split as the hymnal.
+
+**SHELL DELTA — hymn texts.** 84 of 90 hymns carry English text and 31 carry
+German; NONE carries Spanish, in both shells. The mechanism is language-keyed and
+ready; what is missing is a public-domain source with verifiable attribution, and
+hymn text is not something to reconstruct from memory.
 
 ## Hymnal (both shells)
 

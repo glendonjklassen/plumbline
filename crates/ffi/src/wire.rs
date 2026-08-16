@@ -1219,10 +1219,13 @@ pub struct WireConfigState {
     /// taps into tag-with-confirm while this is set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub concept_study: Option<String>,
-    /// English definitions preferred over the German Strong's dictionary
-    /// (additive). Absent = off: German serves when the pack ships it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub strongs_de_off: Option<bool>,
+    /// English definitions preferred over this language's own Strong's
+    /// dictionary (additive). Absent = off: the localized one serves when the
+    /// pack ships it. `alias` keeps a shell or a stored payload still saying
+    /// `strongsDeOff` — the name it carried while German was the only
+    /// translation — from silently losing the reader's choice.
+    #[serde(default, alias = "strongsDeOff", skip_serializing_if = "Option::is_none")]
+    pub localized_lexicon_off: Option<bool>,
     /// Load-only: true when no config file existed yet (guided first run).
     #[serde(default)]
     pub first_run: bool,
@@ -1340,7 +1343,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         intro: (!cfg.intro.is_empty()).then(|| cfg.intro.clone()),
         language: (!cfg.language.is_empty()).then(|| cfg.language.clone()),
         concept_study: (!cfg.concept_study.is_empty()).then(|| cfg.concept_study.clone()),
-        strongs_de_off: Some(cfg.strongs_de_off),
+        localized_lexicon_off: Some(cfg.localized_lexicon_off),
         church: (!cfg.church.is_empty()).then(|| WireChurch {
             name: cfg.church.name.clone(),
             info: cfg.church.info.clone(),
@@ -1421,7 +1424,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         // An id the plan store answers for at use — a stale one reads as
         // normal mode there, so nothing validates it away here.
         concept_study: w.concept_study.as_deref().map(|s| s.trim().to_string()).unwrap_or_default(),
-        strongs_de_off: w.strongs_de_off.unwrap_or(false),
+        localized_lexicon_off: w.localized_lexicon_off.unwrap_or(false),
         // Through the core's clamps, not a local trim: this is the one place a
         // shell's church becomes the core's, so it is where the caps stop being
         // something each shell has to remember.
@@ -1743,6 +1746,7 @@ pub struct WireCatalog {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WireLanguage {
     pub code: String,
     /// What this language calls itself — "Deutsch", not "German".
@@ -1751,19 +1755,54 @@ pub struct WireLanguage {
     /// this, the endonym or the code, so a reader narrows the book by any of
     /// "de", "German" or "Deutsch".
     pub name: String,
+    /// The Bible a reader of this language gets, by the name they would know it
+    /// by: "KJV", "Luther", "Reina-Valera".
+    pub bible: String,
+    /// The manifest role its corpus cache is filed under, and the role its own
+    /// Strong's dictionary is filed under (absent when it has none).
+    ///
+    /// THE SHELLS ASK RATHER THAN KNOW. The web had `corpusRoleFor` returning a
+    /// literal `"germanCorpus"`, a `GERMAN_CACHE` constant and an
+    /// `if (code === "de")` in Settings — three places that each had to be found
+    /// and edited to add a language. They read these now.
+    pub corpus_role: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lexicon_role: Option<String>,
+    /// Files this language needs that the base pack does not carry, as home
+    /// paths (`data/…`). Empty for English. This is the whole answer to "is
+    /// there anything to download when the reader picks this language".
+    pub pack_files: Vec<String>,
 }
 
 pub fn catalog_to_wire(lang: i18n::Lang) -> WireCatalog {
     WireCatalog {
         lang: lang.code().to_string(),
         strings: i18n::resolved(lang),
-        languages: i18n::Lang::ALL
-            .iter()
-            .map(|l| WireLanguage {
-                code: l.code().to_string(),
-                endonym: l.endonym().to_string(),
-                name: l.exonym().to_string(),
-            })
-            .collect(),
+        languages: i18n::Lang::ALL.iter().map(|l| language_to_wire(*l)).collect(),
+    }
+}
+
+fn language_to_wire(l: i18n::Lang) -> WireLanguage {
+    // English's corpus cache and dictionary ARE the base pack, so it has nothing
+    // extra to fetch; every other language's text and dictionary are optional
+    // downloads (`docs/I18N.md` — nothing is bundled on the web, and an English
+    // reader must not fetch a German Bible to read Genesis).
+    let mut pack_files = Vec::new();
+    if l != i18n::Lang::En {
+        if l.spec().corpus.is_some() {
+            pack_files.push(format!("data/{}", l.corpus().cache_file()));
+        }
+        if let Some(lex) = l.spec().lexicon {
+            pack_files.push(format!("data/{}", lex.file));
+        }
+    }
+    WireLanguage {
+        code: l.code().to_string(),
+        endonym: l.endonym().to_string(),
+        name: l.exonym().to_string(),
+        bible: l.corpus().label.to_string(),
+        corpus_role: l.corpus_role(),
+        lexicon_role: (l != i18n::Lang::En && l.spec().lexicon.is_some()).then(|| l.lexicon_role()),
+        pack_files,
     }
 }
