@@ -666,6 +666,11 @@ chapter turn, `pushState` only when a transient surface opens — that
 distinction is the feature, not an implementation detail: without it a reader
 flicking through Psalms needs forty Back presses to leave, and Back steps them
 back through their own reading instead of closing the sheet in front of them.
+Back peels **one layer per press** (`Session.popOneLayer` — the same ladder
+Escape climbs, each screen up to the parent its own ‹ names), re-arming the
+surface entry while layers remain; it used to dismiss the whole stack in one
+press, which was the web's back-button complaint and a parity break with
+Android's per-surface `BackHandler`s.
 
 Precedence, all asserted in `e2e/routing.spec.ts`: an incoming address beats the
 position the reader left; a `?at=` share link beats a stale hash in the same

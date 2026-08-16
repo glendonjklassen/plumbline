@@ -279,12 +279,11 @@ tasks.register<Copy>("syncData") {
             "rv1909.jsonl",
             "strongs.json",
             // Each language's own Strong's dictionary — that Bible's own
-            // renderings, plus translated definitions where a translation run
-            // has happened (German has one; Spanish is renderings-only so far,
-            // which is what `machine_translated` on the registry row records —
-            // see data-prep/strongs-lang/README). Bundled for the same reason
-            // as the corpora: word study works the moment the app opens. ~3 MB
-            // each compressed.
+            // renderings under machine-translated definitions, disclosed by
+            // `machine_translated` on the registry row (see
+            // data-prep/README.md §Localized Strong's). Bundled for the same
+            // reason as the corpora: word study works the moment the app
+            // opens. ~3 MB each compressed.
             "strongs-de.json",
             "strongs-es.json",
             "kjv-notes.jsonl",

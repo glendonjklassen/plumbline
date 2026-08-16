@@ -183,9 +183,10 @@ static SPECS: [LangSpec; Lang::COUNT] = [
         catalog: include_str!("i18n/es.json"),
         corpus: Some(CorpusSpec { file: "rv1909.jsonl", tokenization: "rv1909-tok1", label: "Reina-Valera" }),
         // The renderings are Reina-Valera's own words, derived from the tagged
-        // corpus; the definitions are still Strong's English until the
-        // translation run has been paid for. See `LexiconSpec`.
-        lexicon: Some(LexiconSpec { file: "strongs-es.json", machine_translated: false }),
+        // corpus; the definitions are machine-translated (a Sonnet subagent
+        // fleet, 2026-08-16 — data-prep/README.md), which is what this flag
+        // discloses to the reader. See `LexiconSpec`.
+        lexicon: Some(LexiconSpec { file: "strongs-es.json", machine_translated: true }),
         modernization: None,
         // Reina-Valera follows the KJV's chapter and verse breaks throughout —
         // `check-rv1909.py` proves all 66 books, every chapter count and every

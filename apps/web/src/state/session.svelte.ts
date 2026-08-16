@@ -373,6 +373,70 @@ export class Session {
     }
   }
 
+  /**
+   * Peel ONE transient layer, outermost first — the ladder Escape has always
+   * climbed, moved into the session so the phone's Back button climbs the SAME
+   * one ([[installRouter]]). Back used to run [[dismissTransient]], which
+   * collapsed the whole stack in a single press: Study hub → Tags page → menu,
+   * one Back, and the reader was staring at Genesis — while Escape on the same
+   * screen, and Android's per-surface BackHandlers, both peeled one layer.
+   * Three affordances, two answers, and the phone's was the wrong one.
+   *
+   * Returns whether anything was peeled: Back re-arms its history entry when
+   * layers remain, and stops spending presses when nothing is left.
+   *
+   * The ORDER is containment, outermost first. Dialogs answer before anything
+   * else (they are modal, so they are on top by construction — and while one is
+   * open, `use:modal` stops Escape at the dialog, leaving these rungs as the
+   * fallback for Back and for a press that arrives with focus elsewhere). Then
+   * popups and pickers; then the surfaces that nest — Sing mode lives inside a
+   * hymn, a drill inside the Memorize hub; then the study panel; and last the
+   * screens, each up to the SAME parent its own ‹ names: a sub-page of the
+   * Study hub returns to the hub, a hub returns to the text. One press, one
+   * layer — Escape out of a study panel opened from Explore lands back in
+   * Explore, not in Genesis.
+   */
+  popOneLayer(): boolean {
+    if (this.menuOpen) this.menuOpen = false;
+    else if (this.promptReq) this.cancelPrompt();
+    else if (this.confirmReq) this.cancelConfirm();
+    // cancelPrompt is also the pick's cancel — the two share it (one question
+    // at a time, so they are never open together).
+    else if (this.pickReq) this.cancelPrompt();
+    else if (this.contextMenu) this.contextMenu = null;
+    else if (this.mapPopup) this.mapPopup = null;
+    else if (this.bookNavFor !== null) this.bookNavFor = null;
+    else if (this.markReadFor) this.markReadFor = null;
+    else if (this.threadPickFor) this.threadPickFor = null;
+    else if (this.tagPickFor) this.tagPickFor = null;
+    else if (this.tagWeaveFor !== null) this.tagWeaveFor = null;
+    else if (this.memorizePassageFrom) this.memorizePassageFrom = null;
+    else if (this.reopenIntro) this.reopenIntro = null;
+    else if (this.showSettings) this.showSettings = false;
+    else if (this.showHistory) this.showHistory = false;
+    else if (this.showShortcuts) this.showShortcuts = false;
+    else if (this.hymnSinging) this.hymnSinging = false;
+    else if (this.hymn) this.hymn = null;
+    else if (this.showPresent) this.showPresent = false;
+    else if (this.memorize && this.memorize.view !== "hub") this.memorize = { view: "hub" };
+    else if (this.panel) {
+      this.panel = null;
+      this.clearSearch();
+    } else if (this.screen === "tags" || this.screen === "viz" || this.screen === "plans") {
+      this.screen = "explore";
+    } else if (this.screen === "memorize") {
+      // Same shape as MemorizeHost's own close(): leaving `screen` on
+      // "memorize" with no view would render an empty screen with no way out.
+      this.memorize = null;
+      this.screen = "explore";
+    } else if (this.screen !== "read") {
+      this.goRead();
+    } else {
+      return false;
+    }
+    return true;
+  }
+
   /** Whether anything [[dismissTransient]] would close is on screen — the
    *  question the phone's Back button asks (see [[installRouter]]). */
   get transientOpen(): boolean {
@@ -1545,8 +1609,12 @@ export class Session {
       }
       if (this.#surfaceEntry) {
         this.#surfaceEntry = false;
-        this.dismissTransient();
+        // ONE layer, not the stack: the same ladder Escape climbs. While layers
+        // remain the entry is re-armed, so the next press peels the next layer —
+        // Back walks down exactly the way the reader walked up.
+        this.popOneLayer();
         this.syncUrl();
+        if (this.transientOpen) this.pushSurfaceEntry();
         return;
       }
       this.#routeFromUrl();

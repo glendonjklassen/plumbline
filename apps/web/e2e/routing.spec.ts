@@ -57,8 +57,18 @@ import { expect, test, type Page } from "@playwright/test";
 //      "opening a surface must push exactly one history entry", and then on
 //      "Back left the document" — with no entry to spend, Back leaves the origin.
 //   7. apps/web/src/state/session.svelte.ts — in `installRouter`'s popstate
-//      handler, delete `this.dismissTransient();`. → same test red on "Back did not
+//      handler, delete `this.popOneLayer();`. → same test red on "Back did not
 //      close the surface".
+//  12. apps/web/src/state/session.svelte.ts — in `installRouter`'s popstate
+//      handler, `this.popOneLayer()` → `this.dismissTransient()` (the old
+//      behaviour). → "the phone Back button peels one layer at a time, the way
+//      Escape does" red on its FIRST press: the menu, the Tags page and the hub
+//      all vanish at once, so the poll for `screen === "tags"` sees "read".
+//  13. apps/web/src/state/session.svelte.ts — same handler, delete the re-arm
+//      (`if (this.transientOpen) this.pushSurfaceEntry();`). → same test red on
+//      the SECOND press: the spent entry was never replaced, so Back has nothing
+//      to spend and either leaves the document or routes from a stale address —
+//      either way the poll for `screen === "explore"` never resolves.
 //   8. apps/web/src/state/session.svelte.ts — in `routeFromHash`, weaken the range
 //      check to `if (chapter < 1) return null;`. → "an address the app cannot read
 //      still boots to a readable chapter" red on `#/Ps/151` (navigate clamps, so
@@ -245,6 +255,57 @@ test("the phone Back button closes an open surface instead of leaving the app", 
   await expect(page.locator(".pane canvas").first()).toBeVisible();
   expect(hashOf(page)).toBe("#/John/3");
   expect(await where(page)).toMatchObject({ book: "John", chapter: 3 });
+});
+
+test("the phone Back button peels one layer at a time, the way Escape does", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 780 });
+  await boot(page);
+  await expect.poll(() => hashOf(page), { timeout: 20_000 }).toBe("#/John/3");
+
+  // Build the stack the way a reader does: Study hub, then its Tags page, then
+  // the ≡ menu on top — driven through session state like every surface test,
+  // because this test is about what Back does to the stack, not about taps.
+  await page.evaluate(() => {
+    const s = (window as any).__plumbline;
+    s.screen = "explore";
+    s.screen = "tags";
+    s.menuOpen = true;
+  });
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__plumbline.transientOpen), { timeout: 10_000 })
+    .toBe(true);
+  // The marker that catches Back leaving the document (see the test above).
+  await page.evaluate(() => ((window as any).__stillHere = "yes"));
+
+  const layer = () =>
+    page.evaluate(() => {
+      const s = (window as any).__plumbline;
+      return s ? { menu: s.menuOpen, screen: s.screen } : "no app";
+    });
+
+  // Press one: the menu — and ONLY the menu. The old handler dismissed the whole
+  // stack here, which is the complaint this test pins: Study ▸ Tags ▸ menu, one
+  // press of Back, and the reader was staring at the text three layers down.
+  await page.goBack({ timeout: 15_000 }).catch(() => {});
+  await expect.poll(layer, { message: "the first press must peel the menu alone", timeout: 10_000 })
+    .toEqual({ menu: false, screen: "tags" });
+
+  // Press two: the Tags page, up to its own parent — the hub its ‹ names, not
+  // the reader. Works only if the first press re-armed the history entry.
+  await page.goBack({ timeout: 15_000 }).catch(() => {});
+  await expect.poll(layer, { message: "the second press must return Tags to the hub", timeout: 10_000 })
+    .toEqual({ menu: false, screen: "explore" });
+
+  // Press three: the hub itself, and now the text — with the document intact and
+  // the address still the reader's own.
+  await page.goBack({ timeout: 15_000 }).catch(() => {});
+  await expect.poll(layer, { message: "the third press must land on the text", timeout: 10_000 })
+    .toEqual({ menu: false, screen: "read" });
+  expect(
+    await page.evaluate(() => (window as any).__stillHere ?? "the app was left"),
+    "three presses must not leave the document",
+  ).toBe("yes");
+  expect(hashOf(page)).toBe("#/John/3");
 });
 
 test("an address the app cannot read still boots to a readable chapter", async ({ page }) => {

@@ -36,7 +36,14 @@ import type { AddressInfo } from "node:net";
 // entirely (refusal 3 in `mayCache`), and `precache.ts` writes it LAST, from one
 // response into both keys, only once every other shell file is confirmed present.
 
-const UPSTREAM = "http://localhost:4173";
+// 127.0.0.1 BY NUMBER, both here and in `npm run preview`'s --host: this
+// origin is Node dialling Node, and inside a container the two runtimes can
+// resolve `localhost` to different address families — vite bound to one,
+// http.request trying the other, and every proxied request answered with
+// res.destroy() (net::ERR_EMPTY_RESPONSE). The browser is unaffected either
+// way (its own happy-eyeballs falls back); only this Node-to-Node hop needs
+// the family pinned.
+const UPSTREAM = "http://127.0.0.1:4173";
 
 /** A proxy to the preview server that can stand in front of it as a NEW DEPLOY.
  *

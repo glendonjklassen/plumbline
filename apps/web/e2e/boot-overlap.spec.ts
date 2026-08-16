@@ -63,6 +63,9 @@ function recordingOrigin(upstream: string): Promise<{
   close: () => Promise<void>;
 }> {
   const up = new URL(upstream);
+  // Node dialling Node: pin the family (see network.spec.ts's UPSTREAM note) —
+  // the browser's baseURL stays "localhost", only this hop goes by number.
+  if (up.hostname === "localhost") up.hostname = "127.0.0.1";
   const hits: Hit[] = [];
   let refused: { match: string; status: number } | null = null;
   let delayed: { match: string; ms: number } | null = null;

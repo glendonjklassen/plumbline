@@ -177,6 +177,18 @@ test("Visualizations opens a page of its own, and ‹ returns to the hub", async
   await page.locator(".bar .back").click();
   await expect(page.locator(".bar h2")).toHaveText("Study");
   await expect(page.getByRole("button", { name: /^Reading plans/ })).toBeVisible();
+
+  // And Escape agrees with the ‹: same page, same parent. It used to jump
+  // straight to the reader, so the same screen had two back affordances with
+  // two different answers (three, counting the phone's Back button — see
+  // routing.spec.ts "peels one layer at a time"). All three climb one ladder
+  // now (Session.popOneLayer). Mutation: in popOneLayer, route "viz" through
+  // `goRead()` instead of "explore" → red here on the bar reading "Study".
+  await page.getByRole("button", { name: /^Visualizations/ }).click();
+  await expect(page.locator(".bar h2")).toHaveText("Visualizations");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".bar h2")).toHaveText("Study");
+  await expect(page.getByRole("button", { name: /^Reading plans/ })).toBeVisible();
 });
 
 test("coverage counts the chapters actually read", async ({ page }) => {
