@@ -2898,10 +2898,7 @@ fn spanish_corpus_opens_at_the_kjv_addresses_and_reads_spanish() {
         // caveat was absent, which was the honest state then as this is now.
         // The discovery loop above lands on token 0, "Porque" (G1063) — the
         // first tagged token of RV John 3:16 — so the card carries that entry.
-        assert!(
-            blocks.contains("asignando una razón"),
-            "G1063's Spanish definition did not serve: {blocks}"
-        );
+        assert!(blocks.contains("asignando una razón"), "G1063's Spanish definition did not serve: {blocks}");
         assert!(
             !blocks.contains("assigning a reason"),
             "the English definition leaked past the Spanish dictionary: {blocks}"
