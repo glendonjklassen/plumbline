@@ -263,20 +263,28 @@ tasks.register<Copy>("syncData") {
         // makes. Without it the engine reports the overlay unavailable and the
         // Android toggle correctly hides itself — the feature was fully wired
         // in Kotlin but invisible on device, because the data never shipped.
-        // luther1912.jsonl is the GERMAN corpus (data-prep/README.md). Bundled
-        // rather than downloaded: it compresses to ~1.8 MB inside the APK, which
-        // is small beside cross-references.tsv, and it means a German reader has
-        // scripture the moment the app opens. The web fetches it on demand
-        // instead, because nothing there is ever bundled.
+        // EVERY LANGUAGE'S TEXT IS BUNDLED, and that is the Android delivery
+        // decision (docs/I18N.md): each compresses to ~2 MB inside the APK,
+        // small beside cross-references.tsv, and it means a reader in any
+        // shipped language has scripture the moment the app opens. The web
+        // fetches them on demand instead, because nothing there is ever
+        // bundled. `bundled_data_marker_is_bumped_for_the_current_asset_set`
+        // in crates/ffi/tests checks this list against the language registry,
+        // so a language added to the core but not to this list fails the build.
         include(
             "kjv.jsonl",
+            // The German corpus (data-prep/README.md).
             "luther1912.jsonl",
+            // The Spanish corpus, Reina-Valera 1909 (data-prep/rv1909/README).
+            "rv1909.jsonl",
             "strongs.json",
-            // The German Strong's dictionary — AI-translated definitions plus
-            // Luther renderings (data-prep/strongs-de/README). Bundled for the
-            // same reason as the corpus: a German reader gets word study the
-            // moment the app opens. ~3 MB compressed.
+            // Each language's own Strong's dictionary — AI-translated
+            // definitions plus that Bible's own renderings
+            // (data-prep/strongs-de/README). Bundled for the same reason as the
+            // corpora: word study works the moment the app opens. ~3 MB each
+            // compressed.
             "strongs-de.json",
+            "strongs-es.json",
             "kjv-notes.jsonl",
             "cross-references.tsv",
             "akjv.akjvb",

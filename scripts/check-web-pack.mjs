@@ -25,6 +25,9 @@ const repo = dirname(dirname(fileURLToPath(import.meta.url)));
 const packRoot = join(repo, "apps/web/public/pack");
 const manifestPath = join(packRoot, "manifest.json");
 
+/** The roles the loader understands: two fixed ones, plus a per-language corpus
+ *  and dictionary keyed by code (`crates/core/src/i18n.rs` composes them). */
+const ROLE_OK = /^(corpusCache|suggestedWeaves|(corpus|lexicon):[a-z]{2,3})$/;
 const STAGES = new Set(["text", "study", "analysis", "optional"]);
 const SEED_DIRS = new Set(["threads", "tags", "weaves"]);
 const problems = [];
@@ -63,7 +66,7 @@ for (const f of manifest.files) {
   if (f.seedOnce && !SEED_DIRS.has(f.path.split("/")[0])) {
     fail(`${at}: seedOnce outside the stock dirs {${[...SEED_DIRS]}} — it would be treated as user-authored`);
   }
-  if (f.role !== undefined && !["corpusCache", "suggestedWeaves", "germanCorpus", "germanLexicon"].includes(f.role)) {
+  if (f.role !== undefined && !ROLE_OK.test(f.role)) {
     fail(`${at}: unknown role ${JSON.stringify(f.role)}`);
   }
   // The retired v1 tier flags. Loud, because a half-migrated producer is worse
@@ -75,6 +78,17 @@ for (const f of manifest.files) {
 
 // ── the invariants the loader depends on ─────────────────────────────────────
 
+/** Every per-language role in this manifest, grouped. `corpus:<code>` and
+ *  `lexicon:<code>` are composed from the language registry in
+ *  `crates/core/src/i18n.rs`; this checker does not need to know which codes
+ *  exist, only that each behaves. */
+const byRole = new Map();
+for (const f of manifest.files) {
+  if (f.role && (f.role.startsWith("corpus:") || f.role.startsWith("lexicon:"))) {
+    byRole.set(f.role, [...(byRole.get(f.role) ?? []), f]);
+  }
+}
+
 const roles = manifest.files.filter((f) => f.role === "corpusCache");
 if (roles.length !== 1) {
   fail(`expected exactly one role:"corpusCache" entry, found ${roles.length} — the fast open keys off it`);
@@ -82,32 +96,29 @@ if (roles.length !== 1) {
   fail(`the corpusCache is stage ${roles[0].stage}; it must be "text" or the reader waits for it`);
 }
 
-// The GERMAN CORPUS, same shape and the same two things to get wrong.
+// EVERY OTHER LANGUAGE'S CORPUS, same shape and the same two things to get
+// wrong — checked per code rather than for German by name, so a language added
+// to the registry is checked by having been added.
 //
-// It must NOT claim `corpusCache`: that role is how the loader finds the text to
-// open at boot, and a second file claiming it would make which language opens
-// depend on manifest order. And it must be `optional`, or every English reader
-// downloads 2.4 MB of German scripture before they can read Genesis.
-const german = manifest.files.filter((f) => f.role === "germanCorpus");
-if (german.length > 1) {
-  fail(`expected at most one role:"germanCorpus" entry, found ${german.length}`);
-} else if (german.length === 1) {
-  if (german[0].stage !== "optional") {
-    fail(`the German corpus is stage ${german[0].stage}; it must be "optional" — nobody reading English should download it`);
+// One must NOT claim `corpusCache`: that role is how the loader finds the text
+// to open at boot, and a second file claiming it would make which language
+// opens depend on manifest order. And each must be `optional`, or every English
+// reader downloads a Bible in a language they do not read before they can read
+// Genesis.
+//
+// Their dictionaries ride the same install, so they carry the same constraint.
+for (const [role, entries] of byRole) {
+  const code = role.slice(role.indexOf(":") + 1);
+  const kind = role.startsWith("corpus:") ? "corpus" : "lexicon";
+  if (entries.length > 1) {
+    fail(`expected at most one role:"${role}" entry, found ${entries.length}`);
+    continue;
   }
-  if (german[0].role === "corpusCache") {
-    fail("the German corpus claims the corpusCache role, which decides what opens at boot");
+  if (entries[0].stage !== "optional") {
+    fail(
+      `the ${code} ${kind} is stage ${entries[0].stage}; it must be "optional" — nobody reading another language should download it`,
+    );
   }
-}
-
-// The GERMAN LEXICON rides the German install, so it has the German corpus's
-// constraint: optional, or every English reader downloads a dictionary in a
-// language they are not reading.
-const germanLex = manifest.files.filter((f) => f.role === "germanLexicon");
-if (germanLex.length > 1) {
-  fail(`expected at most one role:"germanLexicon" entry, found ${germanLex.length}`);
-} else if (germanLex.length === 1 && germanLex[0].stage !== "optional") {
-  fail(`the German lexicon is stage ${germanLex[0].stage}; it must be "optional" (it installs with the German corpus)`);
 }
 
 // The suggested-weave bundle is found by role, like the corpus cache, and it

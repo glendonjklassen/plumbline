@@ -42,7 +42,7 @@ export interface PackFile {
    *  the suggested-weave bundle, which the reader downloads from Settings.
    *  Both are found by role rather than by filename, so a rename cannot quietly
    *  unhook them. */
-  role?: "corpusCache" | "suggestedWeaves" | "germanCorpus" | "germanLexicon";
+  role?: "corpusCache" | "suggestedWeaves" | `corpus:${string}` | `lexicon:${string}`;
   /** Where these bytes live, relative to the app base. Present on files that came
    *  from a PIN, absent on a manifest straight off the network (where it is
    *  derived). Storing it lets two pack generations coexist in the depot: an
@@ -307,17 +307,21 @@ export function fetchPack(
 }
 
 /** Stage 2 — Strong's, cross-references, margin notes, the overlay and the
- *  bridge witnesses, fetched right after the reader hands over. A device with
- *  the German corpus installed also gets the German lexicon here, so the
+ *  bridge witnesses, fetched right after the reader hands over. A device with a
+ *  language's corpus installed also gets that language's lexicon here, so the
  *  engine's `strongs_for` pick finds it in the home before `loadCoreData`. */
 export function fetchStage2Pack(
   manifest: PackManifest,
   onProgress?: (p: PackProgress) => void,
-  germanInstalled = false,
+  langsInstalled: Set<string> = new Set(),
 ): Promise<Map<string, Uint8Array>> {
   return fetchFiles(
     manifest.version,
-    manifest.files.filter((f) => f.stage === "study" || (f.role === "germanLexicon" && germanInstalled)),
+    manifest.files.filter((f) => {
+      if (f.stage === "study") return true;
+      const code = langOfRole(f.role);
+      return f.role?.startsWith("lexicon:") === true && code !== null && langsInstalled.has(code);
+    }),
     onProgress,
   );
 }
@@ -368,15 +372,32 @@ export function fetchRndPack(
  *
  *  The home is passed structurally rather than as `VirtualHome` so `pack.ts`
  *  stays free of a `home.ts` import — they already point the other way. */
-export function hasOptional(
-  home: { suggestedInstalled: boolean; germanInstalled: boolean },
-  f: PackFile,
-): boolean {
+export function hasOptional(home: { suggestedInstalled: boolean; langsInstalled: Set<string> }, f: PackFile): boolean {
   if (f.role === "suggestedWeaves") return home.suggestedInstalled;
-  if (f.role === "germanCorpus") return home.germanInstalled;
-  // The lexicon rides with the corpus: one install, one answer.
-  if (f.role === "germanLexicon") return home.germanInstalled;
-  return false;
+  // The lexicon rides with the corpus: one install, one answer, so both roles
+  // ask the same question of the same language code.
+  const code = langOfRole(f.role);
+  return code !== null && home.langsInstalled.has(code);
+}
+
+/** The language code a `corpus:xx` / `lexicon:xx` role names, else null.
+ *
+ *  ONE PARSER, so the loader, the pin and Settings cannot disagree about what a
+ *  role means. These were three literal strings — `germanCorpus`,
+ *  `germanLexicon`, and a `"de"` compared in a Svelte file — which is why
+ *  adding a language meant finding all three. */
+export function langOfRole(role: string | undefined): string | null {
+  if (!role) return null;
+  const at = role.indexOf(":");
+  if (at < 0) return null;
+  const kind = role.slice(0, at);
+  return kind === "corpus" || kind === "lexicon" ? role.slice(at + 1) : null;
+}
+
+/** Whether this entry is any corpus cache — English's distinguished role, or a
+ *  language's own. */
+export function isCorpusRole(role: string | undefined): boolean {
+  return role === "corpusCache" || (!!role && role.startsWith("corpus:"));
 }
 
 /**
@@ -401,15 +422,19 @@ export function hasOptional(
  * Every way of being wrong lands on the KJV, which is what a boot does today: a
  * missing key, a stale key, a language whose corpus was never downloaded.
  */
-export function corpusRoleFor(lang: string | null, has: (role: string) => boolean): "corpusCache" | "germanCorpus" {
+export function corpusRoleFor(lang: string | null, has: (role: string) => boolean): string {
   const wants = (lang ?? "").split(/[-_]/)[0].toLowerCase();
-  if (wants === "de" && has("germanCorpus")) return "germanCorpus";
-  return "corpusCache";
+  // BY CONVENTION, not by a table: `crates/core/src/i18n.rs` files every
+  // non-English corpus under `corpus:<code>` and this composes the same string.
+  // The alternative — a map from language to role — is the thing that had to be
+  // edited to add Spanish, and forgetting it is a silent fall back to the KJV.
+  const role = `corpus:${wants}`;
+  return wants && wants !== "en" && has(role) ? role : "corpusCache";
 }
 
 /** Whether this pack file is a corpus cache the reader is NOT reading. */
-export function isOtherCorpus(f: PackFile, want: "corpusCache" | "germanCorpus"): boolean {
-  return (f.role === "corpusCache" || f.role === "germanCorpus") && f.role !== want;
+export function isOtherCorpus(f: PackFile, want: string): boolean {
+  return isCorpusRole(f.role) && f.role !== want;
 }
 
 export function devicePackFiles(manifest: PackManifest, has: (f: PackFile) => boolean): PackFile[] {
@@ -420,37 +445,38 @@ export function suggestedWeavesEntry(manifest: PackManifest): PackFile | null {
   return manifest.files.find((f) => f.role === "suggestedWeaves") ?? null;
 }
 
-/** The German corpus cache, and ONLY when the reader has picked German.
+/** A language's corpus cache, and ONLY when the reader has picked it.
  *
  *  Found by role for the same reason as the bundle above. Null when this pack
- *  has none, which a shell reads as "German scripture is not on offer in this
- *  build" — the interface is still German, over the English text, because
+ *  has none, which a shell reads as "that scripture is not on offer in this
+ *  build" — the interface is still translated, over the English text, because
  *  `corpus_for` in crates/ffi falls back rather than failing. */
-export function germanCorpusEntry(manifest: PackManifest): PackFile | null {
-  return manifest.files.find((f) => f.role === "germanCorpus") ?? null;
+export function langCorpusEntry(manifest: PackManifest, code: string): PackFile | null {
+  return manifest.files.find((f) => f.role === `corpus:${code}`) ?? null;
 }
 
-/** The German Strong's dictionary, when this pack ships one — installed with
- *  the corpus (one ask covers both), read by the engine's `strongs_for`. */
-export function germanLexiconEntry(manifest: PackManifest): PackFile | null {
-  return manifest.files.find((f) => f.role === "germanLexicon") ?? null;
+/** A language's own Strong's dictionary, when this pack ships one — installed
+ *  with the corpus (one ask covers both), read by the engine's `strongs_for`. */
+export function langLexiconEntry(manifest: PackManifest, code: string): PackFile | null {
+  return manifest.files.find((f) => f.role === `lexicon:${code}`) ?? null;
 }
 
-/** Fetch the German lexicon into the depot (read-through: boot finds it there).
- *  Null when the pack ships none — German study then serves the English
- *  dictionary, which the engine falls back to by itself. */
-export async function fetchGermanLexicon(manifest: PackManifest): Promise<Uint8Array | null> {
-  const entry = germanLexiconEntry(manifest);
+/** Fetch a language's lexicon into the depot (read-through: boot finds it
+ *  there). Null when the pack ships none — that language's study then serves
+ *  the English dictionary, which the engine falls back to by itself. */
+export async function fetchLangLexicon(manifest: PackManifest, code: string): Promise<Uint8Array | null> {
+  const entry = langLexiconEntry(manifest, code);
   if (!entry) return null;
   const got = await fetchFiles(manifest.version, [entry]);
   return got.get(entry.path) ?? null;
 }
 
-export async function fetchGermanCorpus(
+export async function fetchLangCorpus(
   manifest: PackManifest,
+  code: string,
   onProgress?: (p: PackProgress) => void,
 ): Promise<Uint8Array | null> {
-  const entry = germanCorpusEntry(manifest);
+  const entry = langCorpusEntry(manifest, code);
   if (!entry) return null;
   const got = await fetchFiles(manifest.version, [entry], onProgress);
   return got.get(entry.path) ?? null;

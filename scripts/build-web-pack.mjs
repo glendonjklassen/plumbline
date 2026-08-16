@@ -97,10 +97,33 @@ const AKJV_PACKED = "akjv.akjvb";
 // web that is a boot that hangs for seconds and then blows the storage budget.
 // The cache is the text now; the JSONL stays a data-prep input.
 const KJV_TEXT = "kjv.jsonl";
-// Same argument, same file for the other text. Missing it meant every English
-// reader fetched 1.8 MB of German JSONL from the generic `data/` walk below —
-// found by e2e/language.spec.ts, which watches for exactly that request.
-const GERMAN_TEXT = "luther1912.jsonl";
+
+// ── the language registry ────────────────────────────────────────────────────
+//
+// ASKED FOR, NOT DUPLICATED. Which corpus belongs to which language, what its
+// cache is called and which dictionary goes with it are facts the Rust core
+// already holds (`crates/core/src/i18n.rs`); this script used to hold a second
+// copy of the German half of them — a `GERMAN_TEXT` constant, two role names,
+// three exclusions below — and a third copy lived in the TypeScript loader.
+// `plumbline-hydrate languages` prints the registry, and this script already
+// shells out to that binary for the idxcache, so there is no new machinery and
+// no generated file to fall out of date.
+const REGISTRY = JSON.parse(
+  execFileSync("cargo", ["run", "--release", "--locked", "-q", "-p", "plumbline-hydrate", "--", "languages"], {
+    cwd: repo,
+    encoding: "utf8",
+  }),
+).languages;
+const BASE_LANG = REGISTRY.find((l) => l.code === "en");
+/** The languages whose text is an optional download: everyone but English. */
+const EXTRA_LANGS = REGISTRY.filter((l) => l.code !== BASE_LANG.code && l.corpus);
+/** Every per-language file the generic `data/` walk must NOT pick up.
+ *
+ *  A corpus JSONL is superseded by its idxcache (see above) and a second
+ *  language's dictionary is an optional download, so both would otherwise be
+ *  fetched by every English reader — 1.8 MB of German JSONL was, until
+ *  e2e/language.spec.ts caught it watching for exactly that request. */
+const LANG_FILES = new Set(EXTRA_LANGS.flatMap((l) => [l.corpus, l.lexicon].filter(Boolean)));
 
 // (srcDir, homeDir, filter, seedOnce) tuples for the home shipped to the browser.
 const SOURCES = [
@@ -110,8 +133,7 @@ const SOURCES = [
     (n) =>
       !n.endsWith(".idxcache") &&
       n !== KJV_TEXT &&
-      n !== GERMAN_TEXT &&
-      n !== "strongs-de.json" && // German lexicon: optional, emitted with its role below
+      !LANG_FILES.has(n) && // every other language's text + dictionary: emitted with their roles below
       !n.startsWith(VEC_PREFIX) &&
       n !== MORPH_TEXT &&
       n !== MORPH_PACKED &&
@@ -203,43 +225,47 @@ rmSync(cacheTmp, { force: true });
 // role: the loader has to be able to FIND the corpus cache, not merely know it
 // is stage-1 — it is the one file whose presence decides whether the engine
 // takes the fast open or parses the JSONL that is no longer shipped.
-emit("data", "kjv.jsonl.idxcache", cacheRaw, { stage: "text", role: "corpusCache" });
+emit("data", "kjv.jsonl.idxcache", cacheRaw, { stage: "text", role: BASE_LANG.corpusRole });
 
-// ── the German corpus: the same cache, for the other text ────────────────────
+// ── every other language's text: the same cache, for the other Bibles ────────
 //
-// OPTIONAL, and that is the whole delivery decision. Android bundles this file
-// in the APK, where 1.8 MB compressed is nothing; on the web nothing is ever
-// bundled, so the only question is which stage — and an English reader must not
-// download a German Bible to read Genesis. It is fetched when the reader picks
-// German (see the loader), and until it lands `corpus_for` in crates/ffi opens
-// the KJV instead, so the app is never without a text.
+// OPTIONAL, and that is the whole delivery decision. Android bundles these in
+// the APK, where a couple of MB compressed is nothing; on the web nothing is
+// ever bundled, so the only question is which stage — and an English reader
+// must not download a German Bible to read Genesis. Each is fetched when the
+// reader picks that language (see the loader), and until it lands `corpus_for`
+// in crates/ffi opens the KJV instead, so the app is never without a text.
 //
-// `role` rather than a filename match, for the corpus cache's reason: the loader
-// has to be able to FIND it. Its own role, not `corpusCache`, because the stage-1
-// boot must keep taking the English one — a second file claiming that role would
-// make which text opens depend on manifest order.
-// The German Strong's dictionary travels the same way: optional, found by its
-// own role, installed with the corpus (one ask covers both). Excluded from the
-// generic data/ walk above so no English reader ever fetches it; conditional
-// on existing because it is built by data-prep/strongs-de/ only after the
-// translation batch has run.
-const germanLexiconSrc = join(repo, "data/strongs-de.json");
-if (existsSync(germanLexiconSrc)) {
-  emit("data", "strongs-de.json", readFileSync(germanLexiconSrc), { stage: "optional", role: "germanLexicon" });
-}
-
-const germanSrc = join(repo, "data/luther1912.jsonl");
-if (existsSync(germanSrc)) {
-  const germanTmp = join(tmpdir(), `plumbline-idxcache-de-${process.pid}`);
+// `role` rather than a filename match, for the corpus cache's reason: the
+// loader has to be able to FIND it. Its own role per language, never
+// `corpusCache`, because the stage-1 boot must keep taking the English one — a
+// second file claiming that role would make which text opens depend on manifest
+// order.
+//
+// Each language's dictionary travels the same way: optional, found by its own
+// role, installed with the corpus (one ask covers both). Excluded from the
+// generic data/ walk above so no English reader ever fetches one; conditional on
+// existing because a corpus is built by its own data-prep pipeline and a
+// checkout that has not run it is not broken.
+for (const lang of EXTRA_LANGS) {
+  if (lang.lexicon) {
+    const lexSrc = join(repo, "data", lang.lexicon);
+    if (existsSync(lexSrc)) {
+      emit("data", lang.lexicon, readFileSync(lexSrc), { stage: "optional", role: lang.lexiconRole });
+    }
+  }
+  const src = join(repo, "data", lang.corpus);
+  if (!existsSync(src)) continue;
+  const tmp = join(tmpdir(), `plumbline-idxcache-${lang.code}-${process.pid}`);
   execFileSync(
     "cargo",
     ["run", "--release", "--locked", "-q", "-p", "plumbline-hydrate", "--", "web-cache",
-     "--data", germanSrc, "--out", germanTmp],
+     "--data", src, "--out", tmp],
     { cwd: repo, stdio: ["ignore", "inherit", "inherit"] },
   );
-  const germanRaw = readFileSync(germanTmp);
-  rmSync(germanTmp, { force: true });
-  emit("data", "luther1912.jsonl.idxcache", germanRaw, { stage: "optional", role: "germanCorpus" });
+  const raw = readFileSync(tmp);
+  rmSync(tmp, { force: true });
+  emit("data", lang.corpusCache, raw, { stage: "optional", role: lang.corpusRole });
 }
 
 // ── the suggested weaves: one bundle, downloaded only if asked for ───────────

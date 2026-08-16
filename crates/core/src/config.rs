@@ -193,11 +193,12 @@ pub struct Config {
     /// work) and lives in the config so every pane and both shells agree what
     /// a tap means. The shell suspends its reading tracker while this is set.
     pub concept_study: String,
-    /// Opt OUT of the German Strong's dictionary (`strongs-de.json`): a German
-    /// reader who prefers the original English definitions over the
-    /// machine-translated German sets this. Off (false) = German when the pack
-    /// ships it, the default. Applied when the engine opens, like the language.
-    pub strongs_de_off: bool,
+    /// Opt OUT of this language's own Strong's dictionary (`strongs-de.json`,
+    /// `strongs-es.json`): a reader who prefers the original English
+    /// definitions to a machine translation of them sets this. Off (false) =
+    /// the localized dictionary when the pack ships one, the default. Applied
+    /// when the engine opens, like the language.
+    pub localized_lexicon_off: bool,
 }
 
 /// A verse copy-shape token accepted for [`Config::copy_style`].
@@ -232,7 +233,7 @@ impl Default for Config {
             church: Church::default(),
             present_shares_as_new: true,
             akjv_overlay: false,
-            strongs_de_off: false,
+            localized_lexicon_off: false,
             intro: String::new(),
             language: String::new(),
             concept_study: String::new(),
@@ -317,10 +318,16 @@ struct ConfigWire {
     /// older file → on, which is the default the feature shipped with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     present_shares_as_new: Option<bool>,
-    /// English definitions preferred over the German Strong's dictionary;
-    /// absent in an older file → off (German serves when shipped).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    strongs_de_off: Option<bool>,
+    /// English definitions preferred over this language's own Strong's
+    /// dictionary; absent in an older file → off (the localized one serves when
+    /// shipped).
+    ///
+    /// `alias` because this shipped as `strongsDeOff` when German was the only
+    /// translation, and the name is sitting in config files on devices. Reading
+    /// the old spelling keeps a reader's choice; writing only the new one means
+    /// the German-shaped name stops spreading.
+    #[serde(default, alias = "strongsDeOff", skip_serializing_if = "Option::is_none")]
+    localized_lexicon_off: Option<bool>,
     /// The plain-English overlay; absent in an older file → off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     akjv_overlay: Option<bool>,
@@ -472,8 +479,8 @@ impl Config {
             // Trimmed on the way in: these arrive from a shared link's query
             // string, where trailing spaces are an accident of copy-paste.
             present_shares_as_new: w.present_shares_as_new.unwrap_or(true),
-            // Absent = off: the German dictionary serves when the pack ships it.
-            strongs_de_off: w.strongs_de_off.unwrap_or(false),
+            // Absent = off: the localized dictionary serves when the pack ships one.
+            localized_lexicon_off: w.localized_lexicon_off.unwrap_or(false),
             // Absent = off: the KJV is the text, and off is what the reader was
             // getting on every launch before this field was kept.
             akjv_overlay: w.akjv_overlay.unwrap_or(false),
@@ -545,7 +552,7 @@ impl Config {
             human_analysis: Some(self.human_analysis),
             machine_analysis: Some(self.machine_analysis),
             present_shares_as_new: Some(self.present_shares_as_new),
-            strongs_de_off: Some(self.strongs_de_off),
+            localized_lexicon_off: Some(self.localized_lexicon_off),
             akjv_overlay: Some(self.akjv_overlay),
             intro: (!self.intro.is_empty()).then(|| self.intro.clone()),
             language: (!self.language.is_empty()).then(|| self.language.clone()),
@@ -731,7 +738,7 @@ mod tests {
             intro: "curious".to_string(),
             language: "de".to_string(),
             concept_study: "run-grace".to_string(),
-            strongs_de_off: true,
+            localized_lexicon_off: true,
             church: Church {
                 name: "Grace Bible Church".into(),
                 info: "Sundays 10am · 12 Long Street".into(),
@@ -966,7 +973,7 @@ mod tests {
   "humanAnalysis": false,
   "machineAnalysis": false,
   "presentSharesAsNew": true,
-  "strongsDeOff": false,
+  "localizedLexiconOff": false,
   "akjvOverlay": false
 }
 "#

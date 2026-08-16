@@ -23,21 +23,47 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use plumbline_core::canon::TOKENIZATION_VERSION;
+use plumbline_core::i18n::Lang;
 use plumbline_core::{akjv, corpus, crossref, home, notes, strongs};
 use plumbline_rnd::{bridge, morph};
 
-/// The pack files, relative to a home. Core files gate the reader; the R&D
-/// files are optional tiers. Sidecars ride with their primary file.
-const CORE_FILES: &[(&str, bool)] = &[
-    ("data/kjv.jsonl", true),
-    ("data/strongs.json", true),
-    ("data/kjv-notes.jsonl", false),
-    // The German corpus (data-prep/README.md). OPTIONAL, so a home hydrated
-    // from a checkout that has not built it still passes: the engine falls back
-    // to the KJV when it is absent, which is the same thing a web reader who has
-    // not downloaded it sees.
-    ("data/luther1912.jsonl", false),
-];
+/// The pack files that belong to no particular language, relative to a home.
+/// The per-language ones come from the registry — see [`language_files`].
+const CORE_FILES: &[(&str, bool)] = &[("data/kjv-notes.jsonl", false)];
+
+/// Every file a language's row names: its corpus, its Strong's dictionary, its
+/// modernization. The bool is "the reader is broken without it".
+///
+/// DERIVED, because a hand-written list is a place to forget — and it had
+/// already been forgotten once. `strongs-de.json` shipped in the pack and in
+/// the APK but was never on this list, so a home hydrated with `plumbline-hydrate`
+/// gave a German reader English definitions with no sign anything was missing.
+///
+/// Only English's files are required. A checkout that has not built the German
+/// or Spanish text is not broken: the engine falls back to the KJV, which is
+/// exactly what a web reader who has not downloaded that language sees.
+fn language_files() -> Vec<(String, bool)> {
+    let mut out = Vec::new();
+    for lang in Lang::ALL {
+        let required = lang == Lang::En;
+        let spec = lang.spec();
+        if let Some(c) = &spec.corpus {
+            out.push((format!("data/{}", c.file), required));
+        }
+        if let Some(l) = spec.lexicon {
+            out.push((format!("data/{}", l.file), required));
+        }
+        if let Some(m) = spec.modernization {
+            // Never required: it is a toggle, and a reader who never turns it on
+            // cannot tell it is absent. The packed sibling comes too — the
+            // loader prefers it (`akjv::akjvb_path`) and falls back to the JSONL,
+            // so copying only one of the two is a silent parse on every launch.
+            out.push((format!("data/{m}"), false));
+            out.push((format!("data/{}", akjv::akjvb_path(Path::new(m)).display()), false));
+        }
+    }
+    out
+}
 const RND_FILES: &[&str] = &[
     "data/cross-references.tsv",
     "data/morphology.jsonl",
@@ -89,6 +115,22 @@ fn main() -> ExitCode {
                     ExitCode::FAILURE
                 }
             }
+        }
+        // THE LANGUAGE REGISTRY, FOR THE BUILD SCRIPTS.
+        //
+        // `scripts/build-web-pack.mjs` decides which files go in the pack and
+        // what role each carries, and it used to know German by name: a
+        // `GERMAN_TEXT` constant, a `germanCorpus` role, a `germanLexicon` role,
+        // three exclusions from the generic walk. Node cannot read a Rust
+        // static, so either the table is duplicated there — the exact thing this
+        // refactor is undoing — or it is asked for. It is asked for.
+        //
+        // Printed as one JSON object on stdout. The pack script already shells
+        // out to this binary for the idxcache, so this adds no new machinery and
+        // there is no generated file to drift.
+        "languages" => {
+            println!("{}", plumbline_core::i18n::registry_json());
+            ExitCode::SUCCESS
         }
         "web-cache" => {
             let Some(data) = flag("--data") else {
@@ -272,7 +314,13 @@ fn copy(from: &Path, to: &Path) -> std::io::Result<()> {
             ));
         }
     }
-    let all: Vec<&str> = CORE_FILES.iter().map(|(r, _)| *r).chain(RND_FILES.iter().copied()).collect();
+    let langs = language_files();
+    let all: Vec<&str> = CORE_FILES
+        .iter()
+        .map(|(r, _)| *r)
+        .chain(langs.iter().map(|(r, _)| r.as_str()))
+        .chain(RND_FILES.iter().copied())
+        .collect();
     let mut copied = 0usize;
     for rel in all {
         let src = from.join(rel);
@@ -374,23 +422,27 @@ fn check(home: &Path) -> ExitCode {
 
     // ── reader core ──────────────────────────────────────────────────────────
     println!("Reader (core):");
-    match corpus::load_corpus(data.join("kjv.jsonl")) {
-        Ok(c) => println!("  ✓ kjv.jsonl — {} verses", c.len()),
-        Err(e) => {
-            println!("  ✗ kjv.jsonl — {e}");
-            core_ok = false;
+    // ONE LOOP OVER THE REGISTRY, so a language added to the core is reported
+    // here by having been added. English is required; every other text is
+    // optional and reported as such, because a reader without it falls back to
+    // the KJV rather than meeting a broken app.
+    for lang in Lang::ALL {
+        let file = lang.corpus().file;
+        if !lang.has_own_corpus() && lang != Lang::En {
+            continue;
         }
-    }
-    // Optional, and reported as such: a checkout without it is not broken.
-    let german = data.join("luther1912.jsonl");
-    if german.exists() {
-        match corpus::load_corpus(&german) {
-            Ok(c) => println!("  ✓ luther1912.jsonl — {} verses (German)", c.len()),
-            // NOT a core failure: German readers fall back to the KJV.
-            Err(e) => println!("  ! luther1912.jsonl — {e}"),
+        let path = data.join(file);
+        match (corpus::load_corpus(&path), lang == Lang::En) {
+            (Ok(c), _) => println!("  ✓ {file} — {} verses ({})", c.len(), lang.exonym()),
+            (Err(e), true) => {
+                println!("  ✗ {file} — {e}");
+                core_ok = false;
+            }
+            (Err(_), false) if !path.exists() => {
+                println!("  – {file} — absent ({} readers get the KJV)", lang.exonym())
+            }
+            (Err(e), false) => println!("  ! {file} — {e}"),
         }
-    } else {
-        println!("  – luther1912.jsonl — absent (German readers get the KJV)");
     }
     match strongs::load_strongs(data.join("strongs.json")) {
         Ok(d) => println!("  ✓ strongs.json — {} entries", d.len()),

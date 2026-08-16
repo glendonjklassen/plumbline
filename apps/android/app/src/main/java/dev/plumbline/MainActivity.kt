@@ -133,10 +133,12 @@ class MainActivity : ComponentActivity() {
                     // v0.46.0 addition shipped WITHOUT this bump, so existing
                     // installs never re-extracted it), and the German corpus
                     // re-tagged with Strong's.
+                    // v6: rv1909.jsonl + strongs-es.json, the Spanish corpus and
+                    // its dictionary.
                     // `bundledDataMarkerIsBumpedForTheCurrentAssetSet` in
                     // MainActivityTest fails the build if this marker lags the
                     // bundled asset set.
-                    val corpus = File(home, ".data-v5")
+                    val corpus = File(home, ".data-v6")
                     if (!corpus.exists()) {
                         copyAsset("data", File(home, "data"), buf = buf)
                         if ((assets.list("bridge")?.size ?: 0) > 0) {

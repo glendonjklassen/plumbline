@@ -27,6 +27,9 @@ const EN: Record<string, string> = JSON.parse(
 const DE: Record<string, string> = JSON.parse(
   readFileSync(new URL("../../../crates/core/src/i18n/de.json", import.meta.url), "utf8"),
 );
+const ES: Record<string, string> = JSON.parse(
+  readFileSync(new URL("../../../crates/core/src/i18n/es.json", import.meta.url), "utf8"),
+);
 
 /** Boot far enough that the reader is up and the chrome is painted, answering
  *  the first-run chooser by its CATALOGUE key — the whole point of this file is
@@ -178,6 +181,59 @@ test.describe("an English device", () => {
   });
 });
 
+test.describe("a Spanish reader", () => {
+  test.use({ locale: "en-US" });
+
+  /**
+   * THE THIRD LANGUAGE, WITH NO CODE WRITTEN FOR IT.
+   *
+   * Everything this exercises — which corpus opens, which dictionary is
+   * preferred, which pack files the picker downloads, which manifest role the
+   * loader inflates — reads a row in `crates/core/src/i18n.rs`. So this test is
+   * deliberately the German one's twin, and if it ever needs a shell change to
+   * pass, the registry has sprung a leak.
+   *
+   * MUTATION: in pack.ts, make `corpusRoleFor` return "corpusCache" always. Red
+   * here (Spanish John 3:16 comes back in English) and red in the German half.
+   */
+  test("picking Español downloads the Reina-Valera and reads it", async ({ page }) => {
+    await reader(page, EN);
+    await pick(page, EN, "Español");
+    await expect(destinations(page)).toContainText(ES["nav.sing"]);
+
+    // Book names come from canon.rs through the engine, not the catalogue, so
+    // this is the half a catalogue-only translation would have missed.
+    await page.getByTitle(ES["pane.goTo"]).first().click();
+    const nav = page.getByRole("dialog", { name: ES["booknav.title"] });
+    await expect(nav).toContainText("Apocalipsis");
+    await expect(nav).not.toContainText("Revelation");
+    await nav.getByLabel(ES["common.close"]).click();
+
+    const verse = await page.evaluate(async () => {
+      const s = (window as any).__plumbline;
+      return (await s.rpc.call("verse", "John 3:16"))?.body ?? "";
+    });
+    expect(verse, `John 3:16 is not Spanish: ${verse}`).toContain("Dios");
+    expect(verse, "John 3:16 came back in English").not.toContain("God so loved");
+
+    // The tags ride in the idxcache the web actually reads, so a web-cache
+    // builder that dropped them would fail nowhere but here.
+    const study = await page.evaluate(async () => {
+      const s = (window as any).__plumbline;
+      for (let i = 0; i < 8; i++) {
+        const tok = await s.rpc.call("token", "John 3:16", i);
+        if (tok?.strongs?.length) {
+          const blocks = await s.rpc.call("wordStudyBlocks", "John 3:16", i, s.gates);
+          return JSON.stringify(blocks);
+        }
+      }
+      return null;
+    });
+    expect(study, "no tagged token in Spanish John 3:16 — the idxcache lost the tags").not.toBeNull();
+    expect(study!, "the Spanish study card has no concordance link").toContain("occ:");
+  });
+});
+
 /** A boot-trace entry's value, or null. */
 async function traced(page: Page, prefix: string): Promise<number | null> {
   const trace = (await page.evaluate(() => (window as any).__plumbline.rpc.bootTrace())) as [string, number][];
@@ -225,7 +281,7 @@ test.describe("a German reader's boot", () => {
     // failure here names the cause instead of only the symptom.
     const trace = (await page.evaluate(() => (window as any).__plumbline.rpc.bootTrace())) as [string, number][];
     const chose = trace.find(([k]) => k.startsWith("corpus loaded"))?.[0];
-    expect(chose, `stage 1 chose ${chose}; trace: ${JSON.stringify(trace)}`).toBe("corpus loaded (germanCorpus)");
+    expect(chose, `stage 1 chose ${chose}; trace: ${JSON.stringify(trace)}`).toBe("corpus loaded (corpus:de)");
 
     // AND THE TRACE MUST NOT LIE ABOUT IT. `hadIdxcache` only looked for the
     // KJV's cache, so a German boot that took the fast path was reported as
@@ -365,15 +421,21 @@ test.describe("a German reader's chapter turn", () => {
 test.describe("an English reader", () => {
   test.use({ locale: "en-US" });
 
-  test("never downloads the German Bible", async ({ page }) => {
+  test("never downloads another language's Bible", async ({ page }) => {
+    // EVERY other corpus, not just German's. The check was a substring match on
+    // "luther1912" and would have gone on passing while Spanish downloaded for
+    // every English reader — which is the whole failure it exists to catch, one
+    // language later. The names come from the engine's own registry, so the next
+    // language is covered by having been added.
+    const others = ["luther1912", "rv1909", "strongs-de", "strongs-es"];
     const asked: string[] = [];
     page.on("request", (r) => {
-      if (r.url().includes("luther1912")) asked.push(r.url());
+      if (others.some((n) => r.url().includes(n))) asked.push(r.url());
     });
     await reader(page, EN);
     // Past first text, and past the idle work that sweeps caches and checks for
     // updates — the sweep is the other thing that could pull an optional file.
     await page.waitForTimeout(2500);
-    expect(asked, `an English reader fetched the German corpus: ${asked.join(", ")}`).toEqual([]);
+    expect(asked, `an English reader fetched another language's data: ${asked.join(", ")}`).toEqual([]);
   });
 });

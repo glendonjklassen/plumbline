@@ -33,43 +33,235 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::OnceLock;
 
-/// The languages the app ships. Adding one is a variant, a JSON file and a line
-/// in [`Lang::ALL`] — the completeness test then insists it carries every key.
+/// The languages the app ships.
+///
+/// **Adding one is a variant here and a row in [`SPECS`] beside it**, plus the
+/// data files that row names. Nothing else. The corpus the engine opens, the
+/// Strong's dictionary it prefers, the printed-numbering annotation, the pack
+/// files each shell downloads, the assets Android bundles and the tokenization
+/// allow-list all READ THE ROW.
+///
+/// That is worth stating because it was not true until Spanish was added.
+/// German lived in a dozen hardcoded sites that each knew a little about it —
+/// `corpus_for` matching `Lang::De`, a config field named `strongs_de_off`, a
+/// `germanCorpus` pack role, a `GERMAN_CACHE` constant, `if (code === "de")` in
+/// the web's Settings, a hand-maintained Android asset list — and none of them
+/// knew about each other. `a_row_is_complete` and
+/// `every_shipped_string_is_translated` are what keep a new row from being
+/// half-filled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Lang {
     En,
     De,
+    Es,
 }
 
+/// The scripture a language reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CorpusSpec {
+    /// The file under the home's `data/`, e.g. `"luther1912.jsonl"`.
+    pub file: &'static str,
+    /// The tokenization stamp its header must carry. Token indices are
+    /// per-corpus by nature — the same verse tokenizes into different words at
+    /// different indices in every translation — so each text has its own, and
+    /// [`crate::canon::tokenization_is_ours`] is this column.
+    pub tokenization: &'static str,
+    /// What a reader would call this Bible: the label on a rendering list, and
+    /// the name beside a verse number that differs from the KJV's.
+    pub label: &'static str,
+}
+
+impl CorpusSpec {
+    /// The start-up cache beside it. DERIVED, never spelled twice: these two
+    /// names drifting apart is a boot that silently re-parses ~19 MB of JSONL
+    /// and looks only like "the app got slower".
+    pub fn cache_file(&self) -> String {
+        format!("{}.idxcache", self.file)
+    }
+}
+
+/// A language's Strong's dictionary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LexiconSpec {
+    /// The file under `data/`, e.g. `"strongs-de.json"`.
+    pub file: &'static str,
+    /// Whether its DEFINITIONS are machine-translated, which the study card
+    /// says on screen.
+    ///
+    /// A FACT ABOUT THE SHIPPED FILE, like its tokenization is a fact about a
+    /// corpus, because the two halves of a localized dictionary arrive by
+    /// different routes: the renderings are derived from that language's own
+    /// tagged corpus the moment the corpus exists, while the definitions need a
+    /// translation run (`data-prep/strongs-lang/translate.py`, an API key and
+    /// an hour). Between those two moments the file is real and useful and its
+    /// definitions are still Strong's own English — and a caveat claiming
+    /// otherwise would be the app telling the reader something untrue about
+    /// what it is showing them. `build-strongs.py` prints what to set this to.
+    pub machine_translated: bool,
+}
+
+/// What a printed Bible in this language calls a verse the KJV addresses
+/// differently. See [`crate::versification`] — it annotates, never renumbers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NumberingSpec {
+    /// `osis \t chapter \t verse \t printedRef`, compiled in.
+    pub table: &'static str,
+    /// Whose numbering it is, so the annotation can say "Luther 3,19" rather
+    /// than leaving the reader to guess which tradition disagreed.
+    pub label: &'static str,
+}
+
+/// Everything that makes a language a language, in one row.
+pub struct LangSpec {
+    /// The BCP-47-ish code that crosses the wire and sits in the reader's config.
+    pub code: &'static str,
+    /// What this language calls itself — the only honest label for a picker,
+    /// since a reader looking for German is looking for "Deutsch".
+    pub endonym: &'static str,
+    /// Its English name, for a reader who narrows the hymnal by typing
+    /// "Spanish" rather than "Español". Both shells match either, plus the code.
+    pub exonym: &'static str,
+    /// The compiled-in catalogue (`i18n/<code>.json`). English is the source;
+    /// every other language overrides it key by key.
+    catalog: &'static str,
+    /// The scripture this language reads, when it has one of its own.
+    ///
+    /// `None` is a real state rather than a placeholder: a translated interface
+    /// is useful before a corpus is licensed, and such a reader reads English's
+    /// text with everything else in their language.
+    pub corpus: Option<CorpusSpec>,
+    /// The Strong's dictionary under `data/`. English's is the source the others
+    /// are translated from, and a language without its own reads it.
+    pub lexicon: Option<LexiconSpec>,
+    /// A MODERNIZATION of this language's standard translation — the file under
+    /// `data/` holding a delta of re-worded token runs. English's is the AKJV,
+    /// which updates the 1769's archaic wording ("thou shalt" → "you shall")
+    /// without being a different translation or a simplified one.
+    ///
+    /// A COLUMN, not a special case, and that is the point of it being here. It
+    /// used to be gated by comparing the open corpus's tokenization against the
+    /// KJV's, which reads as "this feature is the norm and other languages are
+    /// the exception". It is not: it is one English feature that happens to be
+    /// the only one of its kind so far, exactly as Luther's verse numbering is
+    /// one German one. A modernized Reina-Valera would fill this in and nothing
+    /// else would change.
+    pub modernization: Option<&'static str>,
+    /// Printed numbering that disagrees with the KJV's addresses, when it does.
+    pub numbering: Option<NumberingSpec>,
+}
+
+/// One row per [`Lang`], in variant order.
+static SPECS: [LangSpec; Lang::COUNT] = [
+    LangSpec {
+        code: "en",
+        endonym: "English",
+        exonym: "English",
+        catalog: include_str!("i18n/en.json"),
+        corpus: Some(CorpusSpec { file: "kjv.jsonl", tokenization: crate::canon::TOKENIZATION_VERSION, label: "KJV" }),
+        lexicon: Some(LexiconSpec { file: "strongs.json", machine_translated: false }),
+        modernization: Some("akjv.jsonl"),
+        // The KJV's numbering IS the addressing scheme; there is nothing for it
+        // to disagree with.
+        numbering: None,
+    },
+    LangSpec {
+        code: "de",
+        endonym: "Deutsch",
+        exonym: "German",
+        catalog: include_str!("i18n/de.json"),
+        corpus: Some(CorpusSpec { file: "luther1912.jsonl", tokenization: "luther1912-tok1", label: "Luther" }),
+        lexicon: Some(LexiconSpec { file: "strongs-de.json", machine_translated: true }),
+        // No modernized Luther is shipped; the toggle hides itself because this
+        // column is empty, not because anything anywhere checks for German.
+        modernization: None,
+        numbering: Some(NumberingSpec { table: include_str!("versification/luther-numbering.tsv"), label: "Luther" }),
+    },
+    LangSpec {
+        code: "es",
+        endonym: "Español",
+        exonym: "Spanish",
+        catalog: include_str!("i18n/es.json"),
+        corpus: Some(CorpusSpec { file: "rv1909.jsonl", tokenization: "rv1909-tok1", label: "Reina-Valera" }),
+        // The renderings are Reina-Valera's own words, derived from the tagged
+        // corpus; the definitions are still Strong's English until the
+        // translation run has been paid for. See `LexiconSpec`.
+        lexicon: Some(LexiconSpec { file: "strongs-es.json", machine_translated: false }),
+        modernization: None,
+        // Reina-Valera follows the KJV's chapter and verse breaks throughout —
+        // `check-rv1909.py` proves all 66 books, every chapter count and every
+        // last-verse number identical — so a Spanish reader's printed Bible
+        // agrees with the address on screen and there is nothing to annotate.
+        numbering: None,
+    },
+];
+
 impl Lang {
-    pub const ALL: [Lang; 2] = [Lang::En, Lang::De];
+    pub const COUNT: usize = 3;
+    pub const ALL: [Lang; Lang::COUNT] = [Lang::En, Lang::De, Lang::Es];
+
+    /// This language's row. The one accessor everything else is built on.
+    pub fn spec(self) -> &'static LangSpec {
+        &SPECS[self as usize]
+    }
 
     /// The BCP-47-ish code that crosses the wire and sits in the reader's config.
     pub fn code(self) -> &'static str {
-        match self {
-            Lang::En => "en",
-            Lang::De => "de",
-        }
+        self.spec().code
     }
 
-    /// What this language calls itself — the only honest label for a language
-    /// picker, since a reader looking for German is looking for "Deutsch".
+    /// What this language calls itself.
     pub fn endonym(self) -> &'static str {
-        match self {
-            Lang::En => "English",
-            Lang::De => "Deutsch",
+        self.spec().endonym
+    }
+
+    /// This language's English name.
+    pub fn exonym(self) -> &'static str {
+        self.spec().exonym
+    }
+
+    /// The text this language reads, which for a language with none of its own
+    /// is English's. Every caller that opens or names a corpus goes through
+    /// here, so "what does a Spanish reader read" has exactly one answer.
+    pub fn corpus(self) -> &'static CorpusSpec {
+        self.spec().corpus.as_ref().or(Lang::En.spec().corpus.as_ref()).expect("English has a corpus")
+    }
+
+    /// Whether this language reads a text of its own rather than English's —
+    /// the question behind every "is this the KJV" gate in the panel.
+    pub fn has_own_corpus(self) -> bool {
+        self.spec().corpus.is_some() && self != Lang::En
+    }
+
+    /// The web manifest role this language's corpus cache is filed under.
+    ///
+    /// English's is the distinguished `corpusCache`, and stays so: it is the one
+    /// file the stage-1 boot opens, it is never optional, and the loader must
+    /// find it before it knows anything about the reader. Every other language's
+    /// is keyed by its code, so adding a language adds a role instead of editing
+    /// a list — which is what `germanCorpus` used to be.
+    pub fn corpus_role(self) -> String {
+        if self == Lang::En {
+            "corpusCache".to_string()
+        } else {
+            format!("corpus:{}", self.code())
         }
     }
 
-    /// This language's English name — the exonym, for a reader who narrows the
-    /// hymnal by typing "German" rather than "Deutsch". Pairs with
-    /// [`Self::endonym`]; the finder in both shells matches either, plus the
-    /// [`Self::code`].
-    pub fn exonym(self) -> &'static str {
-        match self {
-            Lang::En => "English",
-            Lang::De => "German",
-        }
+    /// The manifest role this language's own Strong's dictionary is filed under.
+    /// Unused for English, whose dictionary rides in the base pack.
+    pub fn lexicon_role(self) -> String {
+        format!("lexicon:{}", self.code())
+    }
+
+    /// The language whose text carries this tokenization stamp.
+    ///
+    /// The question an ENGINE asks, and it is deliberately not "what is the
+    /// reader's language": a German reader whose Luther download has not landed
+    /// is reading the KJV, and the features that belong to that text — its
+    /// modernization, the KJV-token-anchored analytics — are correct for them
+    /// while they are on it. The text decides, not the interface.
+    pub fn for_tokenization(tok: &str) -> Option<Lang> {
+        Lang::ALL.into_iter().find(|l| l.corpus().tokenization == tok)
     }
 
     /// The language this code names, if the app ships it — tolerating a region
@@ -101,14 +293,8 @@ pub fn resolve(chosen: &str, device: &str) -> Lang {
     Lang::shipped(chosen).or_else(|| Lang::shipped(device)).unwrap_or(Lang::En)
 }
 
-const EN: &str = include_str!("i18n/en.json");
-const DE: &str = include_str!("i18n/de.json");
-
 fn raw(lang: Lang) -> &'static str {
-    match lang {
-        Lang::En => EN,
-        Lang::De => DE,
-    }
+    lang.spec().catalog
 }
 
 // ── the active language ──────────────────────────────────────────────────────
@@ -200,8 +386,41 @@ pub fn stamped_extra() -> serde_json::Map<String, serde_json::Value> {
 /// Set the language for the rest of this process. A shell calls this once, at
 /// startup, with what [`resolve`] gave it.
 pub fn set_active(lang: Lang) {
-    let idx = Lang::ALL.iter().position(|l| *l == lang).unwrap_or(0);
-    ACTIVE.store(idx as u8, Ordering::Relaxed);
+    ACTIVE.store(lang as u8, Ordering::Relaxed);
+}
+
+/// The whole registry as JSON, for the build scripts.
+///
+/// `scripts/build-web-pack.mjs` decides which files go in the web pack and what
+/// role each carries, and it knew German by name: a `GERMAN_TEXT` constant, a
+/// `germanCorpus` role, a `germanLexicon` role, three exclusions from its
+/// generic walk. Node cannot read a Rust static, so either that table is
+/// duplicated there — the very thing the registry is undoing — or it is asked
+/// for. It is asked for: `plumbline-hydrate languages` prints this, and the pack
+/// script already shells out to that binary for the idxcache, so there is no
+/// generated file to drift.
+pub fn registry_json() -> String {
+    let langs: Vec<serde_json::Value> = Lang::ALL
+        .iter()
+        .map(|l| {
+            let s = l.spec();
+            serde_json::json!({
+                "code": s.code,
+                "endonym": s.endonym,
+                "name": s.exonym,
+                "corpus": s.corpus.as_ref().map(|c| c.file),
+                "corpusCache": s.corpus.as_ref().map(|c| c.cache_file()),
+                "tokenization": s.corpus.as_ref().map(|c| c.tokenization),
+                "label": s.corpus.as_ref().map(|c| c.label),
+                "lexicon": s.lexicon.map(|l| l.file),
+                "machineTranslated": s.lexicon.map(|l| l.machine_translated),
+                "modernization": s.modernization,
+                "corpusRole": l.corpus_role(),
+                "lexiconRole": l.lexicon_role(),
+            })
+        })
+        .collect();
+    serde_json::json!({ "languages": langs }).to_string()
 }
 
 /// One language's strings, id → text.
@@ -220,20 +439,16 @@ pub type Strings = BTreeMap<String, String>;
 /// as "German takes forever": the tap RPC queues behind the layout on the one
 /// thread that answers both.
 ///
-/// A `match` rather than an array indexed by `lang`, so adding a language is a
-/// compile error here instead of a silently shared cell.
+/// One cell per language, indexed by the variant — the same shape as [`SPECS`],
+/// and filled lazily, so a reader pays for their own catalogue and not for the
+/// ones they will never see.
 ///
 /// Panics on malformed JSON, deliberately: the files are compiled into the
 /// binary, so a bad one is a build-time mistake every test hits immediately, not
 /// something a device can encounter.
 fn table(lang: Lang) -> &'static Strings {
-    static EN_TABLE: OnceLock<Strings> = OnceLock::new();
-    static DE_TABLE: OnceLock<Strings> = OnceLock::new();
-    let cell = match lang {
-        Lang::En => &EN_TABLE,
-        Lang::De => &DE_TABLE,
-    };
-    cell.get_or_init(|| {
+    static TABLES: [OnceLock<Strings>; Lang::COUNT] = [const { OnceLock::new() }; Lang::COUNT];
+    TABLES[lang as usize].get_or_init(|| {
         serde_json::from_str(raw(lang)).unwrap_or_else(|e| panic!("i18n/{}.json is not valid: {e}", lang.code()))
     })
 }
@@ -241,13 +456,8 @@ fn table(lang: Lang) -> &'static Strings {
 /// `lang`'s strings laid over English, memoized like [`table`] — the map [`t`]
 /// reads on every lookup, so the merge cannot happen per call either.
 fn merged(lang: Lang) -> &'static Strings {
-    static EN_MERGED: OnceLock<Strings> = OnceLock::new();
-    static DE_MERGED: OnceLock<Strings> = OnceLock::new();
-    let cell = match lang {
-        Lang::En => &EN_MERGED,
-        Lang::De => &DE_MERGED,
-    };
-    cell.get_or_init(|| {
+    static MERGED: [OnceLock<Strings>; Lang::COUNT] = [const { OnceLock::new() }; Lang::COUNT];
+    MERGED[lang as usize].get_or_init(|| {
         let mut out = table(Lang::En).clone();
         if lang != Lang::En {
             out.extend(table(lang).iter().map(|(k, v)| (k.clone(), v.clone())));
@@ -360,6 +570,78 @@ pub fn plural(lang: Lang, id_one: &str, id_other: &str, n: u64, args: &[(&str, &
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// THE ROWS ARE INDEXED BY THE VARIANT, so a row inserted in the wrong place
+    /// hands German the Spanish corpus and every other accessor follows it. That
+    /// failure is silent — `Lang::De.code()` would simply answer `"es"` — so the
+    /// anchor has to be spelled out rather than derived, which is the one place
+    /// in this module where repeating yourself is the point.
+    #[test]
+    fn each_variant_reaches_its_own_row() {
+        assert_eq!(Lang::En.code(), "en");
+        assert_eq!(Lang::De.code(), "de");
+        assert_eq!(Lang::Es.code(), "es");
+        assert_eq!(Lang::De.corpus().file, "luther1912.jsonl");
+        assert_eq!(Lang::Es.corpus().file, "rv1909.jsonl");
+        assert_eq!(Lang::ALL.len(), SPECS.len());
+    }
+
+    /// A half-filled row is the failure this registry exists to prevent: adding
+    /// Spanish used to mean finding twelve sites, and the point of one row is
+    /// that forgetting a column is a test failure rather than a language that
+    /// quietly reads the English Bible.
+    #[test]
+    fn a_row_is_complete() {
+        for lang in Lang::ALL {
+            let s = lang.spec();
+            assert!(!s.code.is_empty(), "a language with no code");
+            assert!(!s.endonym.is_empty(), "{} has no endonym", s.code);
+            assert!(!s.exonym.is_empty(), "{} has no exonym", s.code);
+            assert!(!s.catalog.trim().is_empty(), "{} has an empty catalogue", s.code);
+
+            if let Some(c) = &s.corpus {
+                assert!(!c.file.is_empty() && !c.tokenization.is_empty(), "{}'s corpus row is half-filled", s.code);
+                // The label reaches a reader — it is what a rendering list is
+                // headed with and what a differing verse number is credited to.
+                assert!(!c.label.is_empty(), "{}'s corpus has no name a reader would know it by", s.code);
+                assert_eq!(c.cache_file(), format!("{}.idxcache", c.file));
+            }
+
+            // A localized dictionary's `kjv_def` slot holds renderings derived
+            // from that language's OWN tagged corpus. Ship one without the text
+            // it was derived from and the card lists words that are not in the
+            // Bible on screen.
+            if s.lexicon.is_some() && lang != Lang::En {
+                assert!(s.corpus.is_some(), "{} has a localized lexicon but reads English's text", s.code);
+            }
+            if let Some(n) = &s.numbering {
+                assert!(!n.label.is_empty(), "{}'s numbering is credited to nobody", s.code);
+                assert!(!n.table.trim().is_empty(), "{}'s numbering table is empty", s.code);
+            }
+        }
+    }
+
+    /// Two languages sharing a file is a corpus that overwrites another's, and a
+    /// shared tokenization stamp lets a cache built for one text be accepted for
+    /// the other — which is token indices silently pointing at the wrong words.
+    #[test]
+    fn no_two_languages_share_a_data_file() {
+        let mut files: Vec<&str> = Vec::new();
+        let mut toks: Vec<&str> = Vec::new();
+        let mut lexicons: Vec<&str> = Vec::new();
+        for lang in Lang::ALL {
+            if let Some(c) = &lang.spec().corpus {
+                assert!(!files.contains(&c.file), "{} reuses the corpus file {}", lang.code(), c.file);
+                assert!(!toks.contains(&c.tokenization), "{} reuses the stamp {}", lang.code(), c.tokenization);
+                files.push(c.file);
+                toks.push(c.tokenization);
+            }
+            if let Some(l) = lang.spec().lexicon {
+                assert!(!lexicons.contains(&l.file), "{} reuses the dictionary {}", lang.code(), l.file);
+                lexicons.push(l.file);
+            }
+        }
+    }
 
     #[test]
     fn every_catalogue_parses() {
