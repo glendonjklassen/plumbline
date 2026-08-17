@@ -41,6 +41,7 @@ internal interface PlumblineNative : Library {
     fun plumbline_string_free(ptr: Pointer?)
 
     fun plumbline_engine_open(home: String, outErr: PointerByReference): Pointer?
+    fun plumbline_engine_open_lang(home: String, lang: String, outErr: PointerByReference): Pointer?
     fun plumbline_engine_open_from_bytes(
         kjv: ByteArray, kjvLen: NativeLong,
         strongs: ByteArray, strongsLen: NativeLong,
