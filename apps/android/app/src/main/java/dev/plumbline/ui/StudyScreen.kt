@@ -1249,6 +1249,16 @@ fun StudyScreen(
                 bodySize = bodySize, onBodySize = { bodySize = it },
                 sideMargin = sideMargin, onSideMargin = { sideMargin = it },
                 lineSpacing = lineSpacing, onLineSpacing = { lineSpacing = it },
+                onDefaultStyle = {
+                    // The shipped style (core::config's defaults): sizes,
+                    // spacing, margins, both faces and the theme — nothing
+                    // else. The state lands in the config on dismiss, the same
+                    // path every other row in the dialog takes.
+                    onThemeChoice("system")
+                    onTextFont(DEFAULT_FONT.token)
+                    onChromeFont(DEFAULT_FONT.token)
+                    bodySize = 18.0; sideMargin = 28.0; lineSpacing = 1.35
+                },
                 copyStyle = copyStyle, onCopyStyle = { copyStyle = it },
                 verseNumbers = verseNumbers, onToggleVerseNumbers = { verseNumbers = !verseNumbers },
                 addedItalics = addedItalics, onToggleAddedItalics = { addedItalics = !addedItalics },
@@ -1408,6 +1418,12 @@ fun StudyScreen(
                     persistCfg()
                 },
                 onChurch = { church = it },
+                // The wording choice on the new/curious pages. The flip lands
+                // in the engine through ReaderPane's layout (it sets the
+                // overlay inside the engine lock), and in the config through
+                // the same persistCfg the chosen path already fires.
+                akjvAvailable = akjvAvailable,
+                onWording = { akjvOverlay = it },
             )
         }
         // Re-reading a welcome: the same page, no path chosen and no setting
@@ -1570,7 +1586,19 @@ private fun PaneHeader(
             IconButton(onClick = onPrev) {
                 Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = t("common.previousChapter"), tint = palette.ink)
             }
-            TextButton(onClick = onOpenNav) { Text("$name $chapter", color = palette.ink) }
+            // The same overflow discipline as the phone TopBar below: a fold
+            // pane is half a screen wide, so "1 Corinthians" can overrun it —
+            // the NAME ellipsizes and the chapter number never leaves the bar.
+            TextButton(onClick = onOpenNav, modifier = Modifier.weight(1f, fill = false)) {
+                Text(
+                    name,
+                    color = palette.ink,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Text(" $chapter", color = palette.ink, maxLines = 1, softWrap = false)
+            }
             IconButton(onClick = onNext) {
                 Icon(Icons.Filled.KeyboardArrowRight, contentDescription = t("common.nextChapter"), tint = palette.ink)
             }
@@ -1626,13 +1654,25 @@ private fun TopBar(
                     // targets, and the passage — the thing the bar is ABOUT,
                     // and its widest tap target — filled about a third of it
                     // and read as lost (maintainer, Pixel, 2026-08-13).
+                    //
+                    // Two Texts, so the NAME is the half that ellipsizes and
+                    // the chapter number — the thing being navigated by —
+                    // never leaves the bar (web twin: .pbook / .pchap).
                     TextButton(onClick = onOpenNav, modifier = Modifier.weight(1f, fill = false)) {
                         Text(
-                            "$name $chapter",
+                            name,
                             color = palette.ink,
                             fontSize = (19 * scale).sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Text(
+                            " $chapter",
+                            color = palette.ink,
+                            fontSize = (19 * scale).sp,
+                            maxLines = 1,
+                            softWrap = false,
                         )
                     }
                     IconButton(onClick = onNext) {
@@ -2291,16 +2331,28 @@ private fun HistorySheet(
 /** One Settings dialog: the per-tier analysis gates, theme, text
  *  size/margin/spacing, copy format, and the bundled study set — folded
  *  together so the overflow menu stays short. */
-/** One radio row — the shape the theme and copy-format lists already use, named
- *  so the language picker above them does not spell it a third time. */
+/** One radio row — the shape the copy-format list uses. [desc] adds a second
+ *  line under the label, for a choice whose options each cost a sentence (the
+ *  wording pair). */
 @Composable
-private fun SettingRadio(label: String, selected: Boolean, palette: ReaderPalette, onPick: () -> Unit) {
+private fun SettingRadio(
+    label: String,
+    selected: Boolean,
+    palette: ReaderPalette,
+    desc: String? = null,
+    onPick: () -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onPick).padding(vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = if (desc == null) Alignment.CenterVertically else Alignment.Top,
     ) {
         RadioButton(selected = selected, onClick = onPick)
-        Text(label, color = palette.ink)
+        Column {
+            Text(label, color = palette.ink)
+            if (desc != null) {
+                Text(desc, color = palette.faded, fontSize = 12.sp, modifier = Modifier.padding(top = 1.dp))
+            }
+        }
     }
 }
 
@@ -2330,6 +2382,8 @@ private fun SettingsDialog(
     onSideMargin: (Double) -> Unit,
     lineSpacing: Double,
     onLineSpacing: (Double) -> Unit,
+    /** The style knobs back to the shipped values — see the call site. */
+    onDefaultStyle: () -> Unit,
     copyStyle: String,
     onCopyStyle: (String) -> Unit,
     bundledOn: Boolean,
@@ -2376,12 +2430,54 @@ private fun SettingsDialog(
                     color = palette.faded, fontSize = 13.sp,
                     modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
                 )
-                // "" is "follow the device" — see ConfigState.language. The rest
-                // are ENDONYMS, always: someone looking for German is looking for
-                // "Deutsch", on a screen they may not be able to read.
-                SettingRadio(t("settings.languageDevice"), language.isEmpty(), palette) { onLanguage("") }
-                for (l in Strings.languages) {
-                    SettingRadio(l.endonym, language == l.code, palette) { onLanguage(l.code) }
+                // A dropdown, like the theme below — a radio column grows a row
+                // per language. "" is "follow the device" (ConfigState.language);
+                // the rest are ENDONYMS, always: someone looking for German is
+                // looking for "Deutsch", on a screen they may not be able to read.
+                var langMenu by remember { mutableStateOf(false) }
+                val currentLang =
+                    if (language.isEmpty()) t("settings.languageDevice")
+                    else Strings.languages.firstOrNull { it.code == language }?.endonym ?: language
+                Box {
+                    Row(
+                        Modifier.fillMaxWidth().clickable { langMenu = true }.padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(currentLang, color = palette.ink, modifier = Modifier.weight(1f))
+                        Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = palette.faded)
+                    }
+                    DropdownMenu(expanded = langMenu, onDismissRequest = { langMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(t("settings.languageDevice")) },
+                            onClick = { langMenu = false; onLanguage("") },
+                        )
+                        for (l in Strings.languages) {
+                            DropdownMenuItem(
+                                text = { Text(l.endonym) },
+                                onClick = { langMenu = false; onLanguage(l.code) },
+                            )
+                        }
+                    }
+                }
+                if (akjvAvailable) {
+                    // Out of Advanced (2026-08-16): a new or curious reader
+                    // deciding how the words should read must not have to open
+                    // a disclosure to decide it. A CHOICE, not a switch, so
+                    // each option says plainly what it costs. Still a reading
+                    // aid over the SAME text, not a version picker: the words
+                    // stay the KJV's everywhere it matters (memorize, Present,
+                    // copy, share), and every marked word tells you what it
+                    // replaced.
+                    HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 10.dp))
+                    Text(t("settings.wording"), color = palette.faded, fontSize = 12.sp)
+                    SettingRadio(
+                        t("settings.wordingClassic"), !akjvOverlay, palette,
+                        t("settings.wordingClassicDesc"),
+                    ) { if (akjvOverlay) onToggleAkjv() }
+                    SettingRadio(
+                        t("settings.wordingModern"), akjvOverlay, palette,
+                        t("settings.wordingModernDesc"),
+                    ) { if (!akjvOverlay) onToggleAkjv() }
                 }
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 10.dp))
                 Text(t("settings.theme"), color = palette.faded, fontSize = 12.sp)
@@ -2506,6 +2602,19 @@ private fun SettingsDialog(
                     onValueChangeFinished = { spacingDraft.commit { v -> onLineSpacing(v.toDouble()) } },
                     valueRange = 1.2f..2.0f,
                 )
+                // One tap back to the shipped style — the escape from a sizing
+                // or theming spiral, at the foot of the knobs it undoes.
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        t("settings.defaultStyleDesc"),
+                        color = palette.faded, fontSize = 12.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onDefaultStyle) { Text(t("settings.defaultStyle")) }
+                }
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 // ADVANCED, folded shut (web parity: the <details> disclosure).
                 // Analysis tiers, copy format, data — the rows most readers
@@ -2553,18 +2662,6 @@ private fun SettingsDialog(
                     t("settings.machineDesc"),
                     machineAnalysis, palette, onToggleMachine,
                 )
-                // A reading aid over the SAME text, not a version picker: the
-                // words stay the KJV's everywhere it matters (memorize,
-                // Present, copy, share), and every marked word tells you what
-                // it replaced. Hidden when the home carries no overlay rather
-                // than offering a switch that does nothing.
-                if (akjvAvailable) {
-                    SettingToggle(
-                        t("settings.akjv"),
-                        t("settings.akjvDesc"),
-                        akjvOverlay, palette, onToggleAkjv,
-                    )
-                }
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 Text(t("settings.copyFormat"), color = palette.faded, fontSize = 12.sp)
                 val copyOpts = listOf(

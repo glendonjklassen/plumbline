@@ -72,7 +72,9 @@ async function pick(page: Page, now: Record<string, string>, want: string): Prom
   // A property on `window` cannot survive a new document, so its disappearance is
   // the one unambiguous "this is the page after the reload".
   await page.evaluate(() => ((globalThis as any).__beforeSwitch = true));
-  await dialog.getByRole("radio", { name: want, exact: true }).check();
+  // A dropdown since 2026-08-16 (it was a radio column); the option labels are
+  // still the endonyms.
+  await dialog.getByLabel(now["settings.language"], { exact: true }).selectOption({ label: want });
   await page.waitForFunction(
     () => !(globalThis as any).__beforeSwitch && !!(globalThis as any).__plumbline,
     undefined,

@@ -73,6 +73,14 @@
     const p = s.panes[s.activePane];
     return p ? `${s.bookName(p.book)} ${p.chapter}` : "";
   });
+  // The phone bar's passage, in two halves, so the book NAME can give ground
+  // (ellipsis) while the chapter number — the thing being navigated by — never
+  // leaves the screen. See `.pbook` / `.pchap` in the styles below.
+  const passageBook = $derived.by(() => {
+    const p = s.panes[s.activePane];
+    return p ? s.bookName(p.book) : "";
+  });
+  const passageChapter = $derived(s.panes[s.activePane]?.chapter ?? "");
 
   // The sweep's progress, on the banner. The reading map's glow is deliberately
   // frozen in the mode (the tracker is suspended), so without this the mode had
@@ -359,7 +367,10 @@
          at this width. -->
     <div class="chapter-nav">
       <button onclick={() => s.stepChapter(s.activePane, -1)} aria-label={t("common.previousChapter")}>‹</button>
-      <button class="passage" onclick={() => (s.bookNavFor = s.activePane)}>{subtitle} ▾</button>
+      <button class="passage" onclick={() => (s.bookNavFor = s.activePane)}>
+        <span class="pbook">{passageBook}</span>
+        <span class="pchap">{passageChapter} ▾</span>
+      </button>
       <button onclick={() => s.stepChapter(s.activePane, 1)} aria-label={t("common.nextChapter")}>›</button>
     </div>
     <!-- Which pane is ACTIVE. Hidden on a phone, where the chapter nav above
@@ -601,6 +612,21 @@
     display: none;
     align-items: center;
     gap: 2px;
+    /* ZERO flex-basis AND a zero minimum, because shrinkability alone could
+       not keep this row whole: with `flex-wrap: wrap`, line-breaking uses an
+       item's UNSHRUNK size, so a content-sized nav ("1 Corinthians 13" at a
+       big text size) dropped the ⌕ and ≡ to a second bar no matter how
+       shrinkable it was. And the basis alone is not enough either — the
+       automatic minimum (`min-width: auto`) is the nav's min-content, which
+       hauls the full book name right back into line collection: a span's
+       min-content CONTRIBUTION is its whole text even under overflow:hidden
+       (measured, chromium, 2026-08-16). So both are zero: the nav enters the
+       line at nothing and GROWS into the spare width (the phone rule below
+       stands the spacer down), and inside it only `.pbook` gives ground.
+       The ⌕ and ≡ now cannot leave the screen at any width×scale this app
+       reaches — their own 44px floors are what would wrap, far past 320px. */
+    flex: 1 1 0;
+    min-width: 0;
   }
   .chapter-nav button {
     font-size: calc(19px * var(--uiScale, 1));
@@ -617,6 +643,26 @@
     font-size: calc(19px * var(--uiScale, 1));
     padding: 8px 10px;
     color: var(--ink, #211f1a);
+    /* Two spans, so the book NAME is what ellipsizes and the chapter number —
+       the thing being navigated by — never leaves the screen. NOT
+       `min-content` (its min-content includes the whole name, see the nav's
+       comment): the number is protected by `.pchap` being `flex: none` while
+       `.pbook` alone gives ground. At the outermost extreme (320px at the
+       largest text, a two-digit chapter) the number can kiss the › arrow by a
+       few px — measured, and preferred to the two-row bar it replaces. */
+    display: flex;
+    align-items: baseline;
+    gap: 0.3em;
+    min-width: 0;
+  }
+  .chapter-nav .pbook {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .chapter-nav .pchap {
+    flex: none;
     white-space: nowrap;
   }
   .subtitle {
@@ -756,6 +802,13 @@
          ≡, which is the way to Settings. At 44px each they are their own
          separation and do not need 10px of it. */
       gap: 6px;
+    }
+    /* The chapter nav (flex-grow, above) owns the spare width on a phone: with
+       the spacer still `flex: 1` the two split it, and a long book name
+       ellipsized while blank space stood right beside it. The ⌕ and ≡ stay
+       right because the nav grows into the same room the spacer held. */
+    header .spacer {
+      flex: 0 0 0;
     }
     /* `header` prefix so these beat the base rules further down the file. */
     header .glass {

@@ -65,6 +65,20 @@ never a synthetic smear.
   followed `--uiScale`), and the phone's nav group takes the row's spare width
   with the passage ellipsizing — a Compose Row cannot wrap the way the web
   header does, and what would run off the end is the ≡.
+- **The passage ellipsizes its NAME, never its chapter number** (both shells,
+  2026-08-16). "1 Corinthians 13" at a raised text size used to wrap the web
+  phone bar's ⌕ and ≡ onto a second row: shrinkability alone cannot prevent
+  that, because flex line-breaking uses an item's UNSHRUNK size. The web
+  chapter nav now has a ZERO flex-basis AND `min-width: 0` (the automatic
+  minimum would haul the full name back into line collection — a span's
+  min-content contribution is its whole text even under overflow:hidden), so
+  it can never be what tips the row: it grows into the spare width instead
+  (the phone rule stands the spacer down), and the passage is two spans —
+  `.pbook` ellipsizes, `.pchap` is `flex: none` and never leaves the screen.
+  Android's `TopBar` and the fold-mode `PaneHeader` (which had NO overflow
+  handling) split the passage into two `Text`s the same way: the name
+  weights-and-ellipsizes, the number stays. Pinned by text-scale.spec.ts
+  "a long book name ellipsizes instead of wrapping".
 - **Android.** `ui/Fonts.kt` is the same table (same tokens); `Typography.kt`
   builds a `FontFamily` per face and `serifTypography` substitutes it into
   Material's whole scale, so a bare `Text(…, fontSize = 15.sp)` picks the chrome
@@ -769,6 +783,15 @@ first-time reader, and the path that asks least of someone should be seen first.
   opt-in). The text is always on; tiers change any time in Settings.
   Dismissing without choosing (click-away / system back) keeps the defaults.
 
+**The curious and new paths also ask how the words should read**
+(2026-08-16, both shells): the classic/modernized wording choice
+(§Settings › Wording — same strings, same `akjvOverlay` key) sits above the
+Open button, classic preselected, applied on the spot, with a note that
+Settings can change it later. These are the readers likeliest to be stopped by
+"shouldest", and the choice is theirs to make before the first chapter. Shown
+only when the engine reports the overlay available, and never on a re-read (a
+re-read moves no settings).
+
 A link shared from Present offers only the first two paths — it was handed to
 someone in person, and the rest is setup for a reader who already has a Bible
 habit. Either welcome is re-readable later (the `intro` config field remembers
@@ -840,14 +863,28 @@ path to the congregation a shared link named). The old header Share icon and
 (`share.gospel*` keys) opens Present straight onto the Romans Road — the
 first-run "sharing the gospel" landing, reachable every day after.
 
-**Settings splits everyday from Advanced.** Everyday, visible: language, theme,
-the two type faces, the three reader sliders (+ web-only verse-per-line).
-Everything else — the analysis tier gates, AKJV overlay, copy format, bundled
-set, present-as-new, (web) suggested pack / offline download / report, and
-Backup/Restore — sits behind ONE collapsed **Advanced** disclosure
-(`<details class="advanced">` on web, an expandable row in
-`SettingsDialog`/`StudyScreen.kt`). Church and Welcome left Settings entirely
-(Share screen and ≡ respectively).
+**Settings splits everyday from Advanced.** Everyday, visible: language (a
+DROPDOWN since 2026-08-16, like the theme — a radio column grew a row per
+language), the **Wording** choice (below), theme, the two type faces, the three
+reader sliders (+ web-only verse-per-line), and a **Default style** button
+(`settings.defaultStyle`) that puts size/spacing/margins, both faces and the
+theme back to core::config's defaults (18 / 28 / 1.35 / eb-garamond ×2 /
+system) — style only, never the reading aids or the reader's data. Everything
+else — the analysis tier gates, copy format, bundled set, present-as-new, (web)
+suggested pack / offline download / report, and Backup/Restore — sits behind
+ONE collapsed **Advanced** disclosure (`<details class="advanced">` on web, an
+expandable row in `SettingsDialog`/`StudyScreen.kt`). Church and Welcome left
+Settings entirely (Share screen and ≡ respectively).
+
+**Wording is an everyday CHOICE, not an Advanced switch** (2026-08-16; it began
+as "Modernized wording" inside Advanced). Two radio options under
+`settings.wording`, each carrying its cost in its description: **Classic**
+(`wordingClassic` — the KJV as printed, classic and beautiful, potentially
+unfamiliar words) vs **Modernized** (`wordingModern` — plainer, less elegant;
+changes marked with a dotted underline, tap to see the KJV word). It drives the
+same `akjvOverlay` config key and stays hidden unless the engine reports the
+overlay available, so the German/Spanish corpora never see it. Still a reading
+aid over the SAME text — memorize/Present/copy/share stay the KJV's words.
 
 **The Study hub's contents** (both shells, a described card list so the tools
 aren't cryptic): Reading plans (web only until Android's plans ship) ·

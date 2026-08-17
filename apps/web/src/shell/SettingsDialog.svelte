@@ -261,6 +261,19 @@
     s.config[key] = v;
     s.saveConfig();
   }
+  /** The style knobs back to the shipped values (core::config's defaults, the
+   *  golden file): size, spacing, margins, both faces, and the theme. Nothing
+   *  else — the reading aids and the reader's data are not "style". */
+  async function defaultStyle(): Promise<void> {
+    setTheme("system");
+    setNum("bodySize", 18);
+    setNum("sideMargin", 28);
+    setNum("lineSpacing", 1.35);
+    if ((s.config.chromeFont ?? DEFAULT_FONT) !== DEFAULT_FONT) s.setChromeFont(DEFAULT_FONT);
+    // Last and guarded: the text face relayouts the chapter, so skip it when it
+    // is already the shipped one.
+    if ((s.config.textFont ?? DEFAULT_FONT) !== DEFAULT_FONT) await setTextFont(DEFAULT_FONT);
+  }
   async function toggleBundled(): Promise<void> {
     await s.rpc.setBundled(!s.bundledOn);
     s.flushConfig();
@@ -595,29 +608,22 @@
            should not have to hunt past twenty of them to find it. -->
       <p class="label">{t("settings.language")}</p>
       <p class="desc-note">{t("settings.languageDesc")}</p>
-      <label class="radio">
-        <input
-          type="radio"
-          name="language"
-          checked={!(s.config.language ?? "")}
-          onchange={() => void setLanguage("")}
-        />
-        {t("settings.languageDevice")}
-      </label>
-      {#each languages() as l (l.code)}
-        <label class="radio">
-          <input
-            type="radio"
-            name="language"
-            checked={(s.config.language ?? "") === l.code}
-            onchange={() => void setLanguage(l.code)}
-          />
-          <!-- The endonym, always: someone looking for German is looking for
-               "Deutsch", and they are looking for it in a dialog they may not be
-               able to read a word of. -->
-          {l.endonym}
-        </label>
-      {/each}
+      <!-- A dropdown, like the theme's: a radio column grows a row per language
+           and had begun to dominate the dialog's opening screen. The options
+           are ENDONYMS, always — someone looking for German is looking for
+           "Deutsch", and they are looking for it in a dialog they may not be
+           able to read a word of. -->
+      <select
+        class="dropdown"
+        aria-label={t("settings.language")}
+        value={s.config.language ?? ""}
+        onchange={(e) => void setLanguage((e.currentTarget as HTMLSelectElement).value)}
+      >
+        <option value="">{t("settings.languageDevice")}</option>
+        {#each languages() as l (l.code)}
+          <option value={l.code}>{l.endonym}</option>
+        {/each}
+      </select>
       {#if hasOwnLexicon()}
         <!-- The escape hatch from a machine-translated dictionary back to the
              English original (the maintainer's ask: the AI translation must be
@@ -635,6 +641,41 @@
             checked={s.config.localizedLexiconOff === true}
             onchange={(e) => void setBaseLexicon(e.currentTarget.checked)}
           />
+        </label>
+      {/if}
+      {#if s.akjvAvailable}
+        <!-- Out of Advanced (2026-08-16): a new or curious reader deciding how
+             the words should read must not have to open a disclosure to decide
+             it. A CHOICE, not a switch, so each option can say plainly what it
+             costs. Still a reading aid over the SAME text, not a version
+             picker: the words stay the KJV's everywhere it matters (memorize,
+             Present, copy, share), and every marked word tells you what it
+             replaced. -->
+        <hr />
+        <p class="label">{t("settings.wording")}</p>
+        <label class="radio rich">
+          <input
+            type="radio"
+            name="wording"
+            checked={s.config.akjvOverlay !== true}
+            onchange={() => void s.setAkjvOverlay(false)}
+          />
+          <span class="body">
+            <span class="name">{t("settings.wordingClassic")}</span>
+            <span class="desc">{t("settings.wordingClassicDesc")}</span>
+          </span>
+        </label>
+        <label class="radio rich">
+          <input
+            type="radio"
+            name="wording"
+            checked={s.config.akjvOverlay === true}
+            onchange={() => void s.setAkjvOverlay(true)}
+          />
+          <span class="body">
+            <span class="name">{t("settings.wordingModern")}</span>
+            <span class="desc">{t("settings.wordingModernDesc")}</span>
+          </span>
         </label>
       {/if}
       <hr />
@@ -714,6 +755,10 @@
           }}
         />
       </label>
+      <div class="row">
+        <button class="action" disabled={fontBusy} onclick={() => void defaultStyle()}>{t("settings.defaultStyle")}</button>
+      </div>
+      <p class="desc-note">{t("settings.defaultStyleDesc")}</p>
       <hr />
       <details class="advanced">
         <summary>{t("settings.advanced")}</summary>
@@ -751,22 +796,6 @@
           }}
         />
       </label>
-      {#if s.akjvAvailable}
-        <!-- A reading aid over the SAME text, not a version picker: the words
-             stay the KJV's everywhere it matters (memorize, Present, copy,
-             share), and every marked word tells you what it replaced. -->
-        <label class="toggle">
-          <span class="body">
-            <span class="name">{t("settings.akjv")}</span>
-            <span class="desc">{t("settings.akjvDesc")}</span>
-          </span>
-          <input
-            type="checkbox"
-            checked={s.config.akjvOverlay === true}
-            onchange={(e) => void s.setAkjvOverlay(e.currentTarget.checked)}
-          />
-        </label>
-      {/if}
       <label class="toggle">
         <span class="body">
           <span class="name">{t("settings.human")}</span>
@@ -1336,6 +1365,26 @@
     font-size: calc(14.5px * var(--uiScale, 1));
     cursor: pointer;
     padding: 2px 0;
+  }
+  /* A radio with a description under its name — the wording choice, where the
+     two options each have a cost worth a sentence. */
+  .rich {
+    align-items: flex-start;
+  }
+  .rich input {
+    margin-top: 3px;
+  }
+  .rich .body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .rich .name {
+    font-size: calc(15px * var(--uiScale, 1));
+  }
+  .rich .desc {
+    font-size: calc(12px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
   }
   /* The theme picker: a dropdown, not a radio column — the list grew past what a
      column of radios can show without dominating the dialog. */
