@@ -78,6 +78,17 @@ function agreement(s: Snap): number {
 }
 const AGREE_TOL = 1.5;
 
+/** Fira Code's optical scale (`FONT_SCALE` in engine/fonts.generated.ts): a
+ *  monospace at the same nominal size reads larger, so it is painted smaller. */
+const FIRA_SCALE = 0.88;
+
+/** The reader's text size as the app itself has it. Read rather than written
+ *  down: these tests once hardcoded the shipped default (18, then 20), so
+ *  changing it failed a suite that was measuring the FACE, not the size. */
+async function defaultPx(page: Page): Promise<number> {
+  return await page.evaluate(() => Number((window as any).__plumbline.config.bodySize));
+}
+
 // Mutations, each of which must fail this test:
 //   * apply the multiplier in paint.ts ONLY — `readerFontPx(o.fontPx)` there but
 //     `${px}px` reverted to the raw setting in measure.ts's readerFont →
@@ -92,11 +103,12 @@ test("switching the scripture face re-lays the chapter, at the face's optical si
   await boot(page);
 
   // The default face at the default size: the optical scale of the shipped
-  // default is exactly 1.0, so the slider's 18 IS the painted 18 — nothing
+  // default is exactly 1.0, so the slider's size IS the painted size — nothing
   // moves for a reader who never opens the picker.
   await expect.poll(() => snap(page), { timeout: 20_000 }).not.toBeNull();
+  const size = await defaultPx(page);
   const before = (await snap(page))!;
-  expect(before.px).toBe(18);
+  expect(before.px).toBe(size);
   expect(agreement(before), "measured and painted widths disagree at boot").toBeLessThan(AGREE_TOL);
 
   // Garamond → Fira Code: the pair that made the stale-cache bug vivid, since
@@ -115,13 +127,13 @@ test("switching the scripture face re-lays the chapter, at the face's optical si
     .not.toBe(before.lastY);
 
   const after = (await snap(page))!;
-  // 18 × 0.88 (FONT_SCALE["fira-code"]) — the painted px carries the optical
-  // scale; config.bodySize still says 18.
-  expect(after.px).toBeCloseTo(15.84, 2);
+  // size × 0.88 (FONT_SCALE["fira-code"]) — the painted px carries the optical
+  // scale; config.bodySize still says what the reader set.
+  expect(after.px).toBeCloseTo(size * FIRA_SCALE, 2);
   expect(
-    await page.evaluate(() => (window as any).__plumbline.config.bodySize ?? 18),
+    await defaultPx(page),
     "the optical scale must never be written back into the stored size",
-  ).toBe(18);
+  ).toBe(size);
   expect(agreement(after), "measured and painted widths disagree after the switch").toBeLessThan(
     AGREE_TOL,
   );
@@ -132,6 +144,7 @@ test("switching the scripture face re-lays the chapter, at the face's optical si
 // garbage, which reads as "didn't take".)
 test("the chosen face survives a reload, still at its optical size", async ({ page }) => {
   await boot(page);
+  const size = await defaultPx(page);
   await page.evaluate(() => (window as any).__plumbline.setTextFont("fira-code"));
   await expect
     .poll(async () => (await snap(page))?.bodyFont ?? "", { timeout: 20_000 })
@@ -151,6 +164,6 @@ test("the chosen face survives a reload, still at its optical size", async ({ pa
     .poll(async () => (await snap(page))?.bodyFont ?? "", { timeout: 20_000 })
     .toContain("Fira Code");
   const s = (await snap(page))!;
-  expect(s.px).toBeCloseTo(15.84, 2);
+  expect(s.px).toBeCloseTo(size * FIRA_SCALE, 2);
   expect(agreement(s), "measured and painted widths disagree after a reload").toBeLessThan(AGREE_TOL);
 });
