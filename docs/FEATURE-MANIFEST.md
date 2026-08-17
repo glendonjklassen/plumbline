@@ -1119,13 +1119,26 @@ English definitions until a translation run fills them in, and
 `machine_translated: false` on its row is what stops the study card claiming
 otherwise.
 
-**PER-PANE TEXT LANGUAGE — the seam exists, the shells do not use it yet.**
-`plumbline_engine_open_lang(home, lang)` opens a second engine on another
-language's text from the same home, which is what German-beside-English will
-ride on; the reader's own data is shared because every text sits at the KJV's
-verse addresses. Design, rejected alternative, and the per-shell work:
-[docs/PER-PANE-LANGUAGE.md](PER-PANE-LANGUAGE.md). Until a shell uses it, the
-language remains one setting for the whole app, set BEFORE the engine opens.
+**PER-PANE TEXT LANGUAGE — WEB ONLY (2026-08-17).** A reading pane picks its own
+Bible from a chip on its header (KJV · Luther · Reina-Valera) and the app's
+language does not move: German beside English for John 3. Full study per pane —
+a word tapped in the German column is studied in German, from that language's
+own Strong's, and the concordance opened from that study lists German verses.
+The reader's data is SHARED, not copied, because every text sits at the KJV's
+verse addresses. `config.openPanes[].lang` persists it (additive; absent = the
+reader's own text).
+
+The engine is `plumbline_engine_open_lang(home, lang)` — a second engine on the
+same home, which deliberately does NOT fall back to English, because a pane
+labelled Deutsch painting the KJV is the failure the whole path exists to
+avoid. Authoring stays on the primary handle; the alt handles re-read the study
+files after a write. Design, the rejected alternative, the measured cost
+(~61 MB of wasm heap per extra Bible; three at once takes the heap from 104 MB
+to 226 MB) and the test traps: [docs/PER-PANE-LANGUAGE.md](PER-PANE-LANGUAGE.md).
+
+**SHELL DELTA — Android does not have this yet.** Its language remains one
+setting for the whole app, set BEFORE the engine opens. Every corpus is already
+bundled in the APK, so the port has no download to arrange.
 
 **SHELL DELTA — delivery.** Android BUNDLES every language's corpus and
 dictionary in the APK (~2 MB each, marker `.data-v6`); the web fetches them on

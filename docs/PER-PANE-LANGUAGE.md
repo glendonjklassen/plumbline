@@ -1,8 +1,9 @@
 # Per-pane text language
 
-**Status (2026-08-17, v0.54.0): the engine seam is in and tested; neither shell
-uses it yet.** This file is the decision and the remaining work, so the next
-session starts from a plan rather than a survey.
+**Status (2026-08-17, v0.55.0): SHIPPED ON THE WEB. Android is the remaining
+half.** The engine seam, the config field, the worker's per-language engines and
+the pane control are all in, with `apps/web/e2e/pane-language.spec.ts` holding
+them. What follows is the design as built, then what Android still needs.
 
 ## What it is
 
@@ -55,43 +56,79 @@ the text is missing (`plumbline_engine_open` does, because a reader is owed a
 Bible). A pane labelled Deutsch must not quietly paint the KJV; the error is
 the shell's cue to offer the download.
 
-## What is left, per shell
+## How the web does it (built)
 
-**Web** (`apps/web`) — the larger half, because the engine lives in one worker:
+- `engine.worker.ts` keeps `altEngines`, a `StudyEngine` per language code, and
+  a `callIn` op routes a read to one of them. **The method name is unchanged**,
+  so every existing read works on any handle and per-pane language costs no
+  per-feature RPC. Authoring never routes — it is the primary's alone.
+- **The language is part of the turn-cache key.** Without it a German pane at
+  the same width serves the English pane's cached display list: the right
+  geometry for the wrong Bible, and the mutation that proves the test.
+- **No reload.** The settings language switch reloads the app (the TOC is pinned
+  for the session); a pane switch must not, because the pane beside it is being
+  read. Progress shows *in the pane*.
+- `openPaneLang` downloads through the same pack path the settings switch uses,
+  then opens. Opening reads the **idxcache**, not the JSONL — ~150 ms locally,
+  so it does not starve the one worker thread with a canon-wide parse.
+- The panel views whose content is scripture (`wordStudy`, `codeStudy`,
+  `concordance`, `renderingConcordance`) carry the language, and the link router
+  propagates it: a German word study's "other occurrences" lists German verses.
+- **Release and repair.** A language no pane reads is freed
+  (`releaseLangs`), and the home's copy of its files is evicted after the engine
+  has parsed them (~33 MB each). That combination means a language re-opened
+  later in the session finds its file gone — so the open RETRIES through the
+  supply path, and the depot answers without the network. The cold path is the
+  repair, exactly as it is for the core pack.
 
-1. `engine.worker.ts` holds `StudyEngine` singly. It needs a map keyed by
-   language, opened on demand, and the RPC surface needs an optional language on
-   the text-facing calls (layout, verse, chapter counts, word study). Keep the
-   authoring calls unqualified — they are the primary's alone.
-2. The alt corpus is an optional pack file (`corpus:<code>` role, `stage:
-   "optional"`), already fetched on demand for a language SWITCH. A per-pane
-   language wants the same download on a per-pane pick, with the depot
-   read-through doing the work (`engine/depot.ts`) and boot never blocked on it.
-3. `PaneState` gains `lang`; `openPanes` in the config gains it too — additive,
-   absent meaning "the reader's language", per the frozen-wire rule.
-4. A per-pane control. The pane header is where it belongs (the ✚/✕ pane
-   controls already live there); a chip showing the corpus label from the
-   language row (`KJV` / `Luther` / `Reina-Valera`) rather than a flag.
-5. **The one-worker rule still applies**: opening a corpus is a long synchronous
-   engine call, so it must be chunked or it starves every layout and tap RPC
-   queued behind it (CLAUDE.md §UI testing). Boot-responsiveness regression test
-   territory.
+### What it costs, measured
 
-**Android** (`apps/android`): every corpus is already bundled in the APK, so
-there is no download to arrange — a second engine and the pane's own handle.
-One pane on a phone, two on a fold opened flat (`FoldMode.kt`), so the control
-belongs on the pane header there too.
+`e2e/pane-language.spec.ts` prints this on every run rather than asserting a
+number, so a regression is visible without a brittle budget:
+
+| Texts open | wasm heap |
+|---|---|
+| 1 (English only) | ~104 MB |
+| 3 (English + Luther + Reina-Valera) | ~226 MB |
+
+About **61 MB per extra Bible** — its idxcache, retained by the open corpus,
+plus the chapters actually read. Three at once is the ceiling (the web caps at
+three panes) and it works; on a low-end phone it is the number to watch, which
+is why unused languages are released rather than kept.
+
+## What is left: Android
+
+Every corpus is already bundled in the APK, so there is no download to arrange
+— a second engine (`plumbline_engine_open_lang`, already in the Kotlin binding)
+and the pane's own handle. One pane on a phone, two on a fold opened flat
+(`FoldMode.kt`), so the control belongs on the pane header there too. The web's
+shape ports directly: language in the layout key, study routed to the pane's
+engine, release what no pane reads.
 
 **Both**: the study panel must say which TEXT a word study came from when it is
 not the reader's own language, or a German definition under an English pane is
 unexplained.
 
-## Tests worth writing first
+## Tests
 
-- Two engines live at once answer independently (shipped:
-  `a_second_engine_opens_a_named_language_and_never_substitutes_english`).
-- A tag authored on the primary appears in the alt pane's word study after the
-  shell's reload — the staleness contract, stated as a test.
-- A pane whose language has no downloaded text shows the offer, never English.
-- The boot-responsiveness budget survives opening a second corpus (derived from
-  the machine's own measured chunk cost, never a fixed millisecond ceiling).
+Shipped: `crates/ffi` `a_second_engine_opens_a_named_language_and_never_substitutes_english`,
+and `apps/web/e2e/pane-language.spec.ts` — German beside English with the UI
+unmoved, study following the pane's text, the memory measurement, and release +
+re-open.
+
+Two traps this feature walked into, recorded because they will recur on Android:
+
+1. **A helper that does not wait proves nothing.** `setPaneBible` first returned
+   on the menu click, so the test tapped a word before the German text had
+   replaced the English — and the assertions passed against unswitched text.
+   It now polls the pane's own `lang`.
+2. **Comparing two studies before and after a switch is not a language test.**
+   Changing the text moves the words, so the same coordinate lands on a
+   different token and the two answers differ even when the language is dropped
+   entirely. The test now pins the two links separately: the tap carries the
+   language into the panel view, and the same verse+token rendered with and
+   without it paints differently.
+
+Still worth writing: a tag authored on the primary appearing in the alt pane's
+word study (the `refreshAlts` contract), and a boot-responsiveness check that
+opening a second corpus does not starve queued layout/tap RPCs.
