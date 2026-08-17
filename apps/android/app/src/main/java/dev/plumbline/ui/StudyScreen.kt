@@ -383,7 +383,7 @@ fun StudyScreen(
     var navEpoch by remember { mutableStateOf(0) }
 
     // Reader prefs + reading history (all persisted to the shared config).
-    var bodySize by remember { mutableStateOf((loadedCfg?.bodySize ?: 18.0).coerceIn(12.0, 40.0)) }
+    var bodySize by remember { mutableStateOf((loadedCfg?.bodySize ?: 20.0).coerceIn(12.0, 40.0)) }
     var sideMargin by remember { mutableStateOf((loadedCfg?.sideMargin ?: 28.0).coerceIn(8.0, 96.0)) }
     var lineSpacing by remember { mutableStateOf((loadedCfg?.lineSpacing ?: 1.35).coerceIn(1.0, 2.2)) }
     var copyStyle by remember { mutableStateOf(loadedCfg?.copyStyle ?: "verseRef") }
@@ -1257,7 +1257,7 @@ fun StudyScreen(
                     onThemeChoice("system")
                     onTextFont(DEFAULT_FONT.token)
                     onChromeFont(DEFAULT_FONT.token)
-                    bodySize = 18.0; sideMargin = 28.0; lineSpacing = 1.35
+                    bodySize = 20.0; sideMargin = 28.0; lineSpacing = 1.35
                 },
                 copyStyle = copyStyle, onCopyStyle = { copyStyle = it },
                 verseNumbers = verseNumbers, onToggleVerseNumbers = { verseNumbers = !verseNumbers },

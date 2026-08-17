@@ -105,7 +105,7 @@
    *  chapter's text under another's name. */
   let shownKey = "";
 
-  const fontPx = $derived(Number(s.config.bodySize ?? 18));
+  const fontPx = $derived(Number(s.config.bodySize ?? 20));
   const sideMargin = $derived(Number(s.config.sideMargin ?? 28));
   const lineSpacing = $derived(Number(s.config.lineSpacing ?? 1.35));
   const versePerLine = $derived(!!s.config.versePerLine);

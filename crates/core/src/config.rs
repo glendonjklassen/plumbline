@@ -211,7 +211,7 @@ impl Default for Config {
     fn default() -> Config {
         Config {
             mode: StudyMode::Simple,
-            body_size: 18.0,
+            body_size: 20.0,
             panes: Vec::new(),
             active: 0,
             slots: BTreeMap::new(),
@@ -957,7 +957,7 @@ mod tests {
             std::fs::read_to_string(&path).unwrap(),
             r#"{
   "studyMode": "simple",
-  "bodySize": 18.0,
+  "bodySize": 20.0,
   "openPanes": [],
   "activePane": 0,
   "versePerLine": false,

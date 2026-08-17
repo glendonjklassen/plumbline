@@ -1357,7 +1357,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
     let mode = StudyMode::parse(&w.study_mode).unwrap_or(StudyMode::Simple);
     Config {
         mode,
-        body_size: if w.body_size.is_finite() && w.body_size > 0.0 { w.body_size } else { 18.0 },
+        body_size: if w.body_size.is_finite() && w.body_size > 0.0 { w.body_size } else { Config::default().body_size },
         panes: w
             .open_panes
             .iter()

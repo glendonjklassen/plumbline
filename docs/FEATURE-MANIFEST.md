@@ -735,7 +735,7 @@ launch loaded defaults); **web** `XDG_CONFIG_HOME=/home/.config` in the WASI env
 (`engine/engine.ts`), which is why the backup zip carries
 `.config/plumbline/config.json`.
 
-`{"studyMode":"simple"|"full","bodySize":18.0,"openPanes":[{"book","chapter","verse"}],
+`{"studyMode":"simple"|"full","bodySize":20.0,"openPanes":[{"book","chapter","verse"}],
 "activePane":0,"versePerLine":false,"theme":"system","copyStyle":"verseRef",
 "sideMargin":28.0,"lineSpacing":1.35,"humanAnalysis":false,"machineAnalysis":false,
 "history":[{"book":"John","chapter":3}]}`.

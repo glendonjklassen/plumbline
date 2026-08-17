@@ -242,7 +242,7 @@
   // is the app's half of it; the browser's own font preference is the other
   // half and the probe measures that. See lib/uiScale.ts.
   const readerScale = $derived(
-    (Number(s.config.bodySize ?? 18) / 18) * (FONT_SCALE[s.config.chromeFont ?? DEFAULT_FONT] ?? 1),
+    (Number(s.config.bodySize ?? 20) / 18) * (FONT_SCALE[s.config.chromeFont ?? DEFAULT_FONT] ?? 1),
   );
 
   // ── global keys (manifest §Keyboard + wheel) ──
@@ -260,7 +260,7 @@
     if (s.mapPopup && e.key !== "Escape") return;
     const pane = s.panes[s.activePane];
     if (!pane) return;
-    const fontPx = Number(s.config.bodySize ?? 18);
+    const fontPx = Number(s.config.bodySize ?? 20);
     const line = fontPx * 3;
     const page = 0.85 * (innerHeight - 120);
     const scroll = (dy: number, all = false) => {
