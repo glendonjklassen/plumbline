@@ -395,6 +395,11 @@ export class StudyEngine {
   searchBlocks(query: string): any {
     return this.#json("plumbline_engine_search_blocks_json", query);
   }
+  /** `scope` is a `core::search::SearchScope` token — `all` | `ot` | `nt` |
+   *  `book:<osis>` | `chapter:<osis>:<ch>`. The search SCREEN's chips. */
+  searchBlocksScoped(query: string, scope: string): any {
+    return this.#json("plumbline_engine_search_blocks_scoped_json", query, scope);
+  }
 
   // ── authoring (null = success, else error string; home syncs after) ────────
 

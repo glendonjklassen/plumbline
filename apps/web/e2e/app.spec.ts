@@ -491,12 +491,19 @@ test("word study opens from a single click and respects the gates", async ({ pag
   await expect(page.locator("aside.panel").getByText("your note")).toBeVisible();
 });
 
-test("live search shows results and Esc clears", async ({ page }) => {
+test("live search shows results, and Escape steps back out", async ({ page }) => {
   await boot(page);
+  await page.getByLabel("Open search").click();
   await page.getByRole("searchbox").fill("in the beginning");
-  await expect(page.locator("aside.panel")).toContainText("result");
+  await expect(page.locator('[data-surface="search results"]')).toContainText("result");
+  // Escape on a field with a query in it empties the field; a second press
+  // leaves the screen. Two stages, because a reader mid-search means "clear
+  // this", and a reader looking at an empty box means "let me out".
   await page.keyboard.press("Escape");
-  await expect(page.locator("aside.panel")).toBeHidden();
+  await expect(page.getByRole("searchbox")).toHaveValue("");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("searchbox")).toHaveCount(0);
+  await expect(page.locator(".pane canvas").first()).toBeVisible();
 });
 
 test("settings switch the theme", async ({ page }) => {
@@ -1468,8 +1475,8 @@ test("a Present link offers only the two paths it was meant for", async ({ page 
 
 test("the phone top bar stays on one row, search behind a glass", async ({ page }) => {
   // Welcome + Church + Share + Search + ≡ wrapped onto a second row on a
-  // phone (feedback 2026-07-27). Search collapses to an icon and only takes
-  // the row while it is being used.
+  // phone (feedback 2026-07-27). Search is an icon — and now a door to its own
+  // screen — so it never takes the row at all.
   await page.setViewportSize({ width: 390, height: 844 });
   await boot(page);
   await page.evaluate(() =>
@@ -1490,15 +1497,15 @@ test("the phone top bar stays on one row, search behind a glass", async ({ page 
     });
   await expect.poll(oneRow).toBe(true);
 
-  // The field is behind the glass, and taking it doesn't push anything off.
-  await expect(page.getByRole("searchbox")).toBeHidden();
+  // The bar carries no field at all now — the glass is a door to the search
+  // SCREEN (search.spec.ts), so the row it used to fight for is never
+  // contested. What still matters here is that the glass is reachable on a
+  // phone and that pressing it leaves the bar's one-row promise intact.
+  await expect(page.locator("header").getByRole("searchbox")).toHaveCount(0);
   await page.getByLabel("Open search").click();
   await expect(page.getByRole("searchbox")).toBeFocused();
-  expect(await oneRow()).toBe(true);
   await page.getByRole("searchbox").fill("in the beginning");
-  await expect(page.locator("aside.panel")).toContainText("result");
-  await page.getByLabel("Close search").click();
-  await expect(page.getByRole("searchbox")).toBeHidden();
+  await expect(page.locator('[data-surface="search results"]')).toContainText("result");
 });
 
 test("the welcome points a new believer at the church that shared it", async ({ page }) => {

@@ -44,7 +44,6 @@ export type PanelView =
   | { kind: "weaves" }
   | { kind: "suggested" }
   | { kind: "compare"; index: number }
-  | { kind: "search" }
   | { kind: "guide" }
   | { kind: "about" }
   | { kind: "notesBrowser" };
@@ -173,7 +172,19 @@ export class Session {
     this.#searchTimer = null;
     this.searchDraft = "";
     this.searchQuery = "";
+    this.searchScope = "all";
   }
+
+  /**
+   * Where the search screen looks, as `core::search::SearchScope::token` spells
+   * it — `all` | `ot` | `nt` | `book:<osis>` | `chapter:<osis>:<ch>`.
+   *
+   * The two narrow chips are resolved against the ACTIVE PANE at the moment the
+   * reader picks them, and stored as the concrete book/chapter rather than as
+   * "this book": a search screen that silently re-aimed when the pane moved
+   * underneath it would change what a shown result list means without saying so.
+   */
+  searchScope = $state("all");
 
   /** Refreshed after any authoring write (worker reload → shell re-fetch). */
   studyEpoch = $state(0);
@@ -214,7 +225,9 @@ export class Session {
    * were reading. `"read"` is the absence of a destination rather than one of
    * its own.
    */
-  screen = $state<"read" | "explore" | "memorize" | "plans" | "viz" | "tags" | "preach" | "hymnal" | "share">("read");
+  screen = $state<
+    "read" | "explore" | "memorize" | "plans" | "viz" | "tags" | "preach" | "hymnal" | "share" | "search"
+  >("read");
 
   // ── the hymnal ──────────────────────────────────────────────────────────────
 
@@ -582,14 +595,19 @@ export class Session {
    * many.
    *
    * [[CACHE_CAP]] bounds the COUNT and says so; this is the exemption for the
-   * entries where that is not enough. A `searchBlocks` answer is up to 200 hits
+   * entries where that is not enough. A search answer is up to 200 hits
    * carrying their verse text — the largest single thing this cache holds — and
-   * its key is the query string, so a reader typing a word left one behind per
-   * keystroke. Only the query on screen can be read, so only the query on screen
-   * is kept; the rest were evicting other panels' answers to hold results for
-   * fragments of a word nobody will type again.
+   * its key is the query string (now the query AND the scope), so a reader
+   * typing a word left one behind per keystroke. Only the query on screen can be
+   * read, so only the query on screen is kept; the rest were evicting other
+   * panels\' answers to hold results for fragments of a word nobody will type
+   * again.
+   *
+   * BOTH names are capped. `searchBlocksScoped` is what the search screen calls;
+   * `searchBlocks` is the unscoped endpoint, still on the engine and still the
+   * one an older cached answer would sit under.
    */
-  static readonly PER_METHOD_CAP: Record<string, number> = { searchBlocks: 1 };
+  static readonly PER_METHOD_CAP: Record<string, number> = { searchBlocks: 1, searchBlocksScoped: 1 };
 
   /** Live cache size — what the e2e bound test measures. */
   get cacheSize(): number {

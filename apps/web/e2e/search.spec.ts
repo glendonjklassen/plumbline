@@ -54,7 +54,15 @@ async function settleBackground(page: Page): Promise<void> {
   }
 }
 
-/** Record every `searchBlocks` query that reaches the engine, in order. */
+/** Open the search SCREEN from the app bar, and wait for its field. */
+async function openSearch(page: Page) {
+  await page.getByLabel("Open search").click();
+  const field = page.getByLabel("Search", { exact: true });
+  await expect(field).toBeFocused();
+  return field;
+}
+
+/** Record every scoped-search query that reaches the engine, in order. */
 async function watchSearches(page: Page): Promise<void> {
   await page.evaluate(() => {
     const s = (window as any).__plumbline;
@@ -62,7 +70,7 @@ async function watchSearches(page: Page): Promise<void> {
     (window as any).__asked = asked;
     const call = s.rpc.call.bind(s.rpc);
     s.rpc.call = (method: string, ...args: unknown[]) => {
-      if (method === "searchBlocks") asked.push(String(args[0]));
+      if (method === "searchBlocksScoped") asked.push(String(args[0]));
       return call(method, ...args);
     };
   });
@@ -77,14 +85,9 @@ test("a burst of keystrokes reaches the engine as one query", async ({ page }) =
   await settleBackground(page);
   await watchSearches(page);
 
-  // The ⌕ button is `display: none` on a wide screen, where the field is always
-  // there — it only exists to reveal the field on a narrow one. Clicking it
-  // unconditionally hung this test at the default 1280px viewport.
-  const glass = page.getByLabel("Open search");
-  if (await glass.isVisible()) await glass.click();
-  const field = page.getByLabel("Search", { exact: true });
-  await field.click();
-  await expect(field).toBeFocused();
+  // The ⌕ is the way into the search SCREEN now, at every width, and the
+  // screen focuses its own field on arrival.
+  const field = await openSearch(page);
 
   const word = "shepherd";
   await page.keyboard.type(word, { delay: 15 });
@@ -127,13 +130,13 @@ test("the cache keeps one search answer, not one per query", async ({ page }) =>
     const s = (window as any).__plumbline;
     const before = s.cacheSize as number;
     const queries = ["shep", "sheph", "shephe", "shepher", "shepherd", "shepherds"];
-    for (const q of queries) await s.fetchQ("searchBlocks", q);
+    for (const q of queries) await s.fetchQ("searchBlocksScoped", q, "all");
     // ONE synchronous pass, so no async fill can land between the reads.
-    const held = queries.filter((q) => s.q("searchBlocks", q) !== null);
+    const held = queries.filter((q) => s.q("searchBlocksScoped", q, "all") !== null);
     return {
       held,
       asked: queries.length,
-      cap: s.constructor.PER_METHOD_CAP.searchBlocks as number,
+      cap: s.constructor.PER_METHOD_CAP.searchBlocksScoped as number,
       grew: (s.cacheSize as number) - before,
       last: queries[queries.length - 1],
     };
@@ -147,29 +150,56 @@ test("the cache keeps one search answer, not one per query", async ({ page }) =>
   expect(r.grew, "six searches must not cost six cache entries").toBeLessThanOrEqual(r.cap);
 });
 
-// On a PHONE the field is revealed by the magnifying glass, and when it is
-// revealed it has to own the row. It did not: `.spacer` is `flex: 1` and so is
-// the open field, so the two split the free space and a reader who tapped
-// search got a box filling barely a third of the bar with empty space beside it
-// ("looks a bit janky", maintainer, 2026-08-13). Hiding the chapter nav — the
-// rule that was already there — could not fix it on its own, because the spacer
-// simply absorbed whatever the nav gave up.
-test("the search field owns the row on a phone", async ({ page }) => {
+// Search is a DESTINATION now, not a field in the app bar over a study sheet.
+// The glass used to reveal an input that shared the header row with the
+// chapter nav, the spacer and the ≡ — and answered into the 380px study
+// sidebar. A phone got a bottom sheet over the text it was searching.
+test("the glass opens a search screen, not a field in the bar", async ({ page }) => {
   await page.setViewportSize({ width: 412, height: 915 }); // a Pixel's CSS width
   await boot(page);
 
-  await page.getByLabel("Open search").click();
-  const field = page.locator("header .search");
-  await expect(field).toBeVisible();
+  await expect(page.locator("header .search")).toHaveCount(0);
+  const field = await openSearch(page);
 
+  // The field is the screen's, and it has the room a query deserves: most of
+  // the width, rather than a share of a row it competes for.
   const box = (await field.boundingBox())!;
-  const header = (await page.locator("header").boundingBox())!;
-  const share = box.width / header.width;
-  // The rest of the row is the ✕ and the ≡, which must stay reachable — so the
-  // field takes MOST of the bar, not all of it. It measured 36% with the bug.
-  expect(share, `the field took ${Math.round(share * 100)}% of the bar`).toBeGreaterThan(0.6);
+  expect(box.width / 412).toBeGreaterThan(0.8);
 
-  // And it is still a working field, not merely a wide one.
   await field.fill("shepherd");
-  await expect(page.locator('[data-surface="study panel"]')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: /Psalms 23:1/ }).first()).toBeVisible({ timeout: 30_000 });
+  // A result takes the reader to the verse — leaving the screen for the text.
+  await page.getByRole("button", { name: /Psalms 23:1/ }).first().click();
+  await expect(page.locator(".subtitle")).toHaveText("Psalms 23", { timeout: 30_000 });
+});
+
+// The point of the screen: searching a PART of the Bible. "shepherd" is in both
+// testaments, so every chip has something to drop.
+//
+// MUTATION: in SearchScreen.svelte, pass "all" instead of `s.searchScope` to
+// searchBlocksScoped. Red: the New Testament chip still reports the whole-Bible
+// count.
+test("a scope chip narrows the search", async ({ page }) => {
+  await boot(page);
+  const field = await openSearch(page);
+  await field.fill("shepherd");
+
+  const count = async (): Promise<number> => {
+    const head = await page.locator('[data-surface="search results"] >> text=/\\d+ results?/').first().textContent();
+    return Number(/(\d[\d,]*)/.exec(head ?? "")?.[1]?.replace(/,/g, "") ?? -1);
+  };
+  await expect.poll(count, { timeout: 30_000 }).toBeGreaterThan(0);
+  const everywhere = await count();
+
+  await page.getByRole("button", { name: "New Testament" }).click();
+  await expect.poll(count, { timeout: 30_000 }).toBeLessThan(everywhere);
+  const nt = await count();
+
+  await page.getByRole("button", { name: "Old Testament" }).click();
+  await expect.poll(count, { timeout: 30_000 }).not.toBe(nt);
+  const ot = await count();
+
+  // The two halves account for the whole: a scope that quietly widened or
+  // dropped verses would not add up.
+  expect(ot + nt, `everywhere ${everywhere}, OT ${ot}, NT ${nt}`).toBe(everywhere);
 });

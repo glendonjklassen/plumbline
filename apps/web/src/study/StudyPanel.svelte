@@ -52,8 +52,6 @@
         return s.q("suggestedBlocks")?.blocks;
       case "compare":
         return s.q("compareBlocks", p.index, true)?.blocks;
-      case "search":
-        return s.q("searchBlocks", s.searchQuery)?.blocks;
       case "guide":
         return s.qs("guideBlocks")?.blocks;
       case "about":
