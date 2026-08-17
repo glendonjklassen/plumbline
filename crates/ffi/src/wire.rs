@@ -1240,6 +1240,10 @@ pub struct WirePaneRef {
     /// First visible verse (additive; absent = top of the chapter).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verse: Option<u16>,
+    /// This pane's TEXT language (additive; absent/empty = the reader's own).
+    /// A pane's text language is not the UI's — see `config::PaneRef::lang`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub lang: String,
 }
 
 /// A home church on the wire (see [`WireConfigState::church`]).
@@ -1312,7 +1316,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         open_panes: cfg
             .panes
             .iter()
-            .map(|p| WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: p.verse })
+            .map(|p| WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: p.verse, lang: p.lang.clone() })
             .collect(),
         active_pane: cfg.active,
         bible_reads: cfg.bible_reads,
@@ -1320,7 +1324,12 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         slots: cfg
             .slots
             .iter()
-            .map(|(k, p)| (k.clone(), WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: p.verse }))
+            .map(|(k, p)| {
+                (
+                    k.clone(),
+                    WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: p.verse, lang: p.lang.clone() },
+                )
+            })
             .collect(),
         verse_per_line: cfg.verse_per_line,
         verse_numbers: cfg.verse_numbers,
@@ -1334,7 +1343,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         history: cfg
             .history
             .iter()
-            .map(|p| WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: None })
+            .map(|p| WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: None, lang: String::new() })
             .collect(),
         human_analysis: Some(cfg.human_analysis),
         machine_analysis: Some(cfg.machine_analysis),
@@ -1357,11 +1366,16 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
     let mode = StudyMode::parse(&w.study_mode).unwrap_or(StudyMode::Simple);
     Config {
         mode,
-        body_size: if w.body_size.is_finite() && w.body_size > 0.0 { w.body_size } else { 18.0 },
+        body_size: if w.body_size.is_finite() && w.body_size > 0.0 { w.body_size } else { Config::default().body_size },
         panes: w
             .open_panes
             .iter()
-            .map(|p| PaneRef { book: p.book.clone(), chapter: p.chapter.max(1), verse: p.verse.filter(|v| *v >= 1) })
+            .map(|p| PaneRef {
+                book: p.book.clone(),
+                chapter: p.chapter.max(1),
+                verse: p.verse.filter(|v| *v >= 1),
+                lang: p.lang.clone(),
+            })
             .collect(),
         active: w.active_pane,
         bible_reads: w.bible_reads,
@@ -1372,7 +1386,12 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
             .map(|(k, p)| {
                 (
                     k.clone(),
-                    PaneRef { book: p.book.clone(), chapter: p.chapter.max(1), verse: p.verse.filter(|v| *v >= 1) },
+                    PaneRef {
+                        book: p.book.clone(),
+                        chapter: p.chapter.max(1),
+                        verse: p.verse.filter(|v| *v >= 1),
+                        lang: p.lang.clone(),
+                    },
                 )
             })
             .collect(),
@@ -1401,7 +1420,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         history: w
             .history
             .iter()
-            .map(|p| PaneRef { book: p.book.clone(), chapter: p.chapter.max(1), verse: None })
+            .map(|p| PaneRef { book: p.book.clone(), chapter: p.chapter.max(1), verse: None, lang: String::new() })
             .collect(),
         // Absent = off; the tiers are opt-in (core::config::from_wire).
         human_analysis: w.human_analysis.unwrap_or(false),

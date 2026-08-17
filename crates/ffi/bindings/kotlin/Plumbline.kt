@@ -41,6 +41,7 @@ internal interface PlumblineNative : Library {
     fun plumbline_string_free(ptr: Pointer?)
 
     fun plumbline_engine_open(home: String, outErr: PointerByReference): Pointer?
+    fun plumbline_engine_open_lang(home: String, lang: String, outErr: PointerByReference): Pointer?
     fun plumbline_engine_open_from_bytes(
         kjv: ByteArray, kjvLen: NativeLong,
         strongs: ByteArray, strongsLen: NativeLong,
@@ -72,6 +73,7 @@ internal interface PlumblineNative : Library {
     fun plumbline_engine_renderings_json(engine: Pointer, code: String): Pointer?
     fun plumbline_engine_word_codes_json(engine: Pointer, word: String): Pointer?
     fun plumbline_engine_search_json(engine: Pointer, query: String): Pointer?
+    fun plumbline_engine_search_scoped_json(engine: Pointer, query: String, scope: String): Pointer?
 
     // ── study data (read): threads / tags / weaves / xrefs ──────────────────
     fun plumbline_engine_threads_json(engine: Pointer): Pointer?
@@ -157,6 +159,7 @@ internal interface PlumblineNative : Library {
     fun plumbline_engine_suggested_blocks_json(engine: Pointer): Pointer?
     fun plumbline_engine_compare_blocks_json(engine: Pointer, index: Int, full: Boolean): Pointer?
     fun plumbline_engine_search_blocks_json(engine: Pointer, query: String): Pointer?
+    fun plumbline_engine_search_blocks_scoped_json(engine: Pointer, query: String, scope: String): Pointer?
 
     // ── authoring: weave link with word spans ───────────────────────────────
     fun plumbline_engine_weave_add_link_spans(

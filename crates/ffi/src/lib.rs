@@ -1052,12 +1052,22 @@ pub fn corpus_for(home: &str, lang: i18n::Lang) -> PathBuf {
 /// bool says which, so the panel can label the renderings for the right Bible
 /// and carry the machine-translation caveat.
 fn strongs_for(data: &std::path::Path) -> (PathBuf, bool) {
+    strongs_for_lang(data, i18n::active())
+}
+
+/// [`strongs_for`] for an EXPLICIT language — what a second engine opened on
+/// another text needs, since the active language is the UI's and a pane's text
+/// language is now its own (see [`plumbline_engine_open_lang`]).
+///
+/// `localizedLexiconOff` still applies: it is a preference about DEFINITIONS
+/// ("give me Strong's own English"), not about which Bible is on screen, so it
+/// holds for every pane the reader opens.
+fn strongs_for_lang(data: &std::path::Path, lang: i18n::Lang) -> (PathBuf, bool) {
     let base = data.join(i18n::Lang::En.spec().lexicon.map(|l| l.file).unwrap_or("strongs.json"));
-    // `localizedLexiconOff` is the reader's escape hatch back to the original
-    // English definitions (Settings ▸ language). Read here, at pick time,
-    // because the toggle reloads the app exactly like a language change does.
+    // Read here, at pick time, because the toggle reloads the app exactly like a
+    // language change does.
     if !config::load().0.localized_lexicon_off {
-        if let Some(lex) = i18n::active().spec().lexicon {
+        if let Some(lex) = lang.spec().lexicon {
             let local = data.join(lex.file);
             if local != base && local.exists() {
                 return (local, true);
@@ -1133,6 +1143,77 @@ pub unsafe extern "C" fn plumbline_engine_open(home: *const c_char, out_err: *mu
         // that EXISTS but fails to parse stays a hard error. A German reader
         // gets strongs-de.json when the pack ships it (`strongs_for`).
         let (strongs_path, strongs_is_localized) = strongs_for(&PathBuf::from(home).join("data"));
+        let strongs = if strongs_path.exists() {
+            match strongs::load_strongs(&strongs_path) {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    set_err(out_err, e.to_string());
+                    return ptr::null_mut();
+                }
+            }
+        } else {
+            None
+        };
+        let engine = PlumblineEngine::new(corpus, strongs, Some(PathBuf::from(home)));
+        engine.strongs_localized.store(strongs_is_localized, std::sync::atomic::Ordering::Relaxed);
+        Box::into_raw(Box::new(engine))
+    })
+}
+
+/// Open a SECOND engine on a named language's text — what a per-pane language
+/// rides on: German beside English, without the UI language moving.
+///
+/// The same home, so the reader's own data (threads, tags, weaves, notes) is
+/// the SAME data — every text sits at the KJV's verse addresses, so a refKey
+/// means one verse in all of them and nothing needs mapping. After an authoring
+/// write, call [`plumbline_engine_load_core_data`] on this handle too, or its
+/// study view stays as it was when it opened.
+///
+/// TWO DIFFERENCES from [`plumbline_engine_open`], both deliberate:
+///
+/// 1. The language is a PARAMETER, not the global the UI language lives in.
+/// 2. There is NO English fallback. `plumbline_engine_open` falls back because
+///    a reader is owed a Bible; here the caller asked for one specific text to
+///    put beside another, and quietly handing back the one already on screen
+///    would paint English under a pane labelled Deutsch. A missing text is an
+///    error the shell can act on — it is the shell that offers the download.
+///
+/// Returns null on failure (unknown language code, or the text is not on the
+/// device); `out_err` behaves as in [`plumbline_engine_open`]. Free it with
+/// [`plumbline_engine_free`] like any other engine.
+///
+/// # Safety
+/// `home` and `lang` are valid NUL-terminated UTF-8; `out_err` is null or a
+/// writable slot for one `*mut c_char`.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_open_lang(
+    home: *const c_char,
+    lang: *const c_char,
+    out_err: *mut *mut c_char,
+) -> *mut PlumblineEngine {
+    guard(ptr::null_mut(), || {
+        if !out_err.is_null() {
+            *out_err = ptr::null_mut();
+        }
+        let (Some(home), Some(code)) = (opt_str(home), opt_str(lang)) else {
+            set_err(out_err, "home path or language is null or not valid UTF-8".into());
+            return ptr::null_mut();
+        };
+        // STRICT: `Lang::parse` reads an unknown code as English, which is right
+        // for a UI language and wrong here for the same reason the fallback is.
+        let Some(lang) = i18n::Lang::shipped(code) else {
+            set_err(out_err, format!("this build does not ship the language `{code}`"));
+            return ptr::null_mut();
+        };
+        let corpus = match corpus::load_corpus(corpus_for(home, lang)) {
+            Ok(c) => c,
+            Err(e) => {
+                set_err(out_err, e.to_string());
+                return ptr::null_mut();
+            }
+        };
+        let data = PathBuf::from(home).join("data");
+        let (strongs_path, strongs_is_localized) = strongs_for_lang(&data, lang);
         let strongs = if strongs_path.exists() {
             match strongs::load_strongs(&strongs_path) {
                 Ok(s) => Some(s),
@@ -1671,6 +1752,35 @@ pub unsafe extern "C" fn plumbline_engine_search_json(
         };
         let study = engine.study_read();
         match search::run_search(&engine.corpus, &study.notes, engine.search_ix(), query) {
+            Some(answer) => out_json(&wire::search_to_wire(&answer)),
+            None => ptr::null_mut(),
+        }
+    })
+}
+
+/// [`plumbline_engine_search_json`] narrowed to a scope — the search screen's
+/// chips. `scope` is `all` | `ot` | `nt` | `book:<osis>` |
+/// `chapter:<osis>:<ch>`; anything else (or null) searches everything.
+///
+/// A REFERENCE query still answers `goto` whatever the scope: the reader typed
+/// an address, and a chip must not refuse to take them there.
+///
+/// # Safety
+/// `engine` is valid; `query` is a valid NUL-terminated UTF-8 string; `scope`
+/// is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_search_scoped_json(
+    engine: *const PlumblineEngine,
+    query: *const c_char,
+    scope: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(engine), Some(query)) = (engine.as_ref(), opt_str(query)) else {
+            return ptr::null_mut();
+        };
+        let study = engine.study_read();
+        let scope = opt_str(scope).and_then(search::SearchScope::parse).unwrap_or_default();
+        match search::run_search_scoped(&engine.corpus, &study.notes, engine.search_ix(), query, &scope) {
             Some(answer) => out_json(&wire::search_to_wire(&answer)),
             None => ptr::null_mut(),
         }
@@ -2985,8 +3095,15 @@ impl PanelSource for PlumblineEngine {
         self.corpus.verse(&v).map(|verse| verse.body())
     }
     fn search(&self, query: &str) -> panel::SearchView {
+        self.search_scoped(query, "all")
+    }
+    fn search_scoped(&self, query: &str, scope: &str) -> panel::SearchView {
         let study = self.study_read();
-        match search::run_search(&self.corpus, &study.notes, self.search_ix(), query) {
+        // An unparseable token searches EVERYTHING rather than nothing: a
+        // shell that sends a scope this build does not know still gets an
+        // answer to the reader's query.
+        let scope = search::SearchScope::parse(scope).unwrap_or_default();
+        match search::run_search_scoped(&self.corpus, &study.notes, self.search_ix(), query, &scope) {
             Some(search::SearchAnswer::GoTo { book, chapter, verse }) => {
                 let display = match verse {
                     Some(v) => VRef::new(book.clone(), chapter, v).display(),
@@ -3267,6 +3384,29 @@ pub unsafe extern "C" fn plumbline_engine_search_blocks_json(
             return ptr::null_mut();
         }
         out_json(&wire::blocks_to_wire(panel::search(e, query)))
+    })
+}
+
+/// [`plumbline_engine_search_blocks_json`] narrowed to a scope token — see
+/// [`plumbline_engine_search_scoped_json`] for the vocabulary.
+///
+/// # Safety
+/// `engine` is a live engine; `query` and `scope` are null or valid
+/// NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_search_blocks_scoped_json(
+    engine: *const PlumblineEngine,
+    query: *const c_char,
+    scope: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(query)) = (engine.as_ref(), opt_str(query)) else {
+            return ptr::null_mut();
+        };
+        if query.trim().is_empty() {
+            return ptr::null_mut();
+        }
+        out_json(&wire::blocks_to_wire(panel::search_in(e, query, opt_str(scope).unwrap_or("all"))))
     })
 }
 

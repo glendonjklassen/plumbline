@@ -7,6 +7,14 @@ import { nowStamp } from "../engine/StudyEngine";
 import type { Session } from "../state/session.svelte";
 import { t } from "../lib/i18n.svelte";
 
+/** The text language the OPEN study belongs to, so a link out of it stays in
+ *  the same Bible. Undefined for every panel that is not language-bearing. */
+function panelLang(s: Session): string | undefined {
+  const p = s.panel;
+  if (!p) return undefined;
+  return "lang" in p ? p.lang : undefined;
+}
+
 export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Promise<void> {
   const link = await s.rpc.static("routeLink", uri);
   if (!link) return;
@@ -27,14 +35,23 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       // never a javascript: or data: URI. Same open shape as the church QR.
       window.open(link.url, "_blank", "noopener,noreferrer");
       break;
+    // The language TRAVELS with the study. A German word study's "other
+    // occurrences" link must list German verses: dropping the language here
+    // would hand the reader English text under a German headword, which is the
+    // seam this carries it across.
     case "occurrences":
-      s.panel = { kind: "concordance", code: link.code };
+      s.panel = { kind: "concordance", code: link.code, lang: panelLang(s) };
       break;
     case "rendering":
-      s.panel = { kind: "renderingConcordance", code: link.code, rendering: link.rendering };
+      s.panel = {
+        kind: "renderingConcordance",
+        code: link.code,
+        rendering: link.rendering,
+        lang: panelLang(s),
+      };
       break;
     case "codeStudy":
-      s.panel = { kind: "codeStudy", code: link.code, word: link.word ?? null };
+      s.panel = { kind: "codeStudy", code: link.code, word: link.word ?? null, lang: panelLang(s) };
       break;
     case "thread":
       s.panel = { kind: "thread", index: link.index };

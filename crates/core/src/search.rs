@@ -21,6 +21,92 @@ use std::collections::{HashMap, HashSet};
 /// Results shown at most; the total stays honest above the cap.
 pub const HIT_CAP: usize = 200;
 
+/// Matthew's position in canon order — where the New Testament begins.
+/// `canon`'s own test pins `book_order("Matt") == 39`.
+const NT_FIRST_ORDER: usize = 39;
+
+/// Where a search looks — the search screen's scope chips. Every scope is a
+/// CONTIGUOUS run of canonical verse indices (the corpus is in canon order),
+/// so filtering is one range test per posting and the honest `total` counts
+/// only what the scope covers. A reference query ignores the scope on
+/// purpose: "John 3" is navigation, not filtering.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum SearchScope {
+    #[default]
+    All,
+    /// One book, by OSIS id.
+    Book(String),
+    /// One chapter of one book.
+    Chapter(String, u16),
+    /// Genesis–Malachi.
+    OldTestament,
+    /// Matthew–Revelation.
+    NewTestament,
+}
+
+impl SearchScope {
+    /// The wire token the scoped FFI endpoints take:
+    /// `all` | `ot` | `nt` | `book:<osis>` | `chapter:<osis>:<ch>`.
+    pub fn token(&self) -> String {
+        match self {
+            SearchScope::All => "all".to_string(),
+            SearchScope::OldTestament => "ot".to_string(),
+            SearchScope::NewTestament => "nt".to_string(),
+            SearchScope::Book(b) => format!("book:{b}"),
+            SearchScope::Chapter(b, c) => format!("chapter:{b}:{c}"),
+        }
+    }
+
+    /// Parse a wire token; `None` for anything unrecognized (the FFI layer
+    /// treats that as `All` rather than failing the whole query).
+    pub fn parse(t: &str) -> Option<SearchScope> {
+        match t {
+            "all" => return Some(SearchScope::All),
+            "ot" => return Some(SearchScope::OldTestament),
+            "nt" => return Some(SearchScope::NewTestament),
+            _ => {}
+        }
+        if let Some(b) = t.strip_prefix("book:") {
+            return (!b.is_empty()).then(|| SearchScope::Book(b.to_string()));
+        }
+        if let Some(rest) = t.strip_prefix("chapter:") {
+            let (b, c) = rest.rsplit_once(':')?;
+            let ch: u16 = c.parse().ok()?;
+            return (!b.is_empty() && ch >= 1).then(|| SearchScope::Chapter(b.to_string(), ch));
+        }
+        None
+    }
+
+    /// The verse-index range this scope covers in this corpus. `None` means
+    /// "no filter" (`All`); an unknown book or chapter resolves to the EMPTY
+    /// range — a scope the corpus can't locate must not quietly widen to
+    /// everything.
+    fn resolve(&self, corpus: &Corpus) -> Option<std::ops::Range<usize>> {
+        match self {
+            SearchScope::All => None,
+            // Matthew opens the New Testament, and every corpus this app ships
+            // sits at the KJV's own verse addresses (manifest §Languages). A
+            // corpus without Matthew falls forward to the first NT book it does
+            // have, so the split never lands mid-testament.
+            SearchScope::OldTestament => Some(0..nt_start(corpus)),
+            SearchScope::NewTestament => Some(nt_start(corpus)..corpus.len()),
+            SearchScope::Book(b) => Some(corpus.book_range(b).unwrap_or(0..0)),
+            SearchScope::Chapter(b, c) => Some(match corpus.index_of(&VRef::new(b, *c, 1)) {
+                Some(start) => start..start + corpus.chapter_verses(b, *c).len(),
+                None => 0..0,
+            }),
+        }
+    }
+}
+
+/// Where the New Testament starts in this corpus.
+fn nt_start(corpus: &Corpus) -> usize {
+    canon::book_ids()
+        .skip(NT_FIRST_ORDER)
+        .find_map(|b| corpus.book_range(b).map(|r| r.start))
+        .unwrap_or_else(|| corpus.len())
+}
+
 /// The inverted index, built once over the corpus. `word` alone answers the
 /// exact and phrase tiers; the other three widen a single word without
 /// re-reading the text. Ported from `SearchIx`.
@@ -203,6 +289,19 @@ pub type Notes = HashMap<VRef, Vec<String>>;
 /// Answer a query against the corpus, its margin notes, and the index.
 /// `None` means the query is blank. Ported from `runSearch`.
 pub fn run_search(corpus: &Corpus, notes: &Notes, ix: &SearchIx, raw_query: &str) -> Option<SearchAnswer> {
+    run_search_scoped(corpus, notes, ix, raw_query, &SearchScope::All)
+}
+
+/// [`run_search`] narrowed to a [`SearchScope`]. A reference query still
+/// answers `GoTo` whatever the scope — the reader typed an address, and
+/// refusing to take them there because a chip is set would read as broken.
+pub fn run_search_scoped(
+    corpus: &Corpus,
+    notes: &Notes,
+    ix: &SearchIx,
+    raw_query: &str,
+    scope: &SearchScope,
+) -> Option<SearchAnswer> {
     let q = raw_query.trim();
     if q.is_empty() {
         return None;
@@ -210,8 +309,9 @@ pub fn run_search(corpus: &Corpus, notes: &Notes, ix: &SearchIx, raw_query: &str
     if let Some((book, chapter, verse)) = parse_ref_query(corpus, q) {
         return Some(SearchAnswer::GoTo { book, chapter, verse });
     }
+    let range = scope.resolve(corpus);
     if let Some(fq) = parse_form_query(q) {
-        return Some(form_search(corpus, ix, &fq));
+        return Some(form_search_scoped(corpus, ix, &fq, range));
     }
 
     let qws: Vec<String> = q.split_whitespace().map(normalize_word).filter(|w| !w.is_empty()).collect();
@@ -219,8 +319,11 @@ pub fn run_search(corpus: &Corpus, notes: &Notes, ix: &SearchIx, raw_query: &str
         return None;
     }
 
-    let (how, rows) =
-        if qws.len() == 1 { single_word(corpus, notes, ix, &qws[0]) } else { multi_word(corpus, notes, ix, &qws) };
+    let (how, rows) = if qws.len() == 1 {
+        single_word(corpus, notes, ix, &qws[0], range)
+    } else {
+        multi_word(corpus, notes, ix, &qws, range)
+    };
 
     let total = rows.total;
     let hits = rows
@@ -319,15 +422,26 @@ struct Rows<'a> {
     kept: Vec<(usize, bool, Why<'a>)>,
     /// Distinct verses across every tier — uncapped, and shown as the total.
     total: usize,
+    /// The scope's verse-index range; `None` is the whole corpus. Checked at
+    /// the mouth of `push` so every tier — words, notes, variants, lemmas,
+    /// typos — is filtered in one place and `total` never counts a verse the
+    /// scope excludes.
+    scope: Option<std::ops::Range<usize>>,
 }
 
 impl<'a> Rows<'a> {
-    fn new(corpus: &Corpus) -> Self {
-        Rows { seen: Seen::new(corpus.len()), kept: Vec::new(), total: 0 }
+    fn new(corpus: &Corpus, scope: Option<std::ops::Range<usize>>) -> Self {
+        Rows { seen: Seen::new(corpus.len()), kept: Vec::new(), total: 0, scope }
     }
 
-    /// Offer one verse. False when a better tier already claimed it.
+    /// Offer one verse. False when the scope excludes it or a better tier
+    /// already claimed it.
     fn push(&mut self, i: usize, note: bool, why: Why<'a>) -> bool {
+        if let Some(r) = &self.scope {
+            if !r.contains(&i) {
+                return false;
+            }
+        }
         if !self.seen.insert(i) {
             return false;
         }
@@ -345,8 +459,14 @@ impl<'a> Rows<'a> {
     }
 }
 
-fn single_word<'a>(corpus: &Corpus, notes: &Notes, ix: &'a SearchIx, w: &str) -> (&'static str, Rows<'a>) {
-    let mut rows = Rows::new(corpus);
+fn single_word<'a>(
+    corpus: &Corpus,
+    notes: &Notes,
+    ix: &'a SearchIx,
+    w: &str,
+    scope: Option<std::ops::Range<usize>>,
+) -> (&'static str, Rows<'a>) {
+    let mut rows = Rows::new(corpus, scope);
 
     // Tier 1, then the margin notes. The postings are already deduplicated and
     // ascending, so offering them in order IS the canon order.
@@ -455,14 +575,24 @@ fn near_words<'a>(ix: &'a SearchIx, w: &str) -> Vec<(&'a String, usize)> {
     near
 }
 
-fn multi_word<'a>(corpus: &Corpus, notes: &Notes, ix: &SearchIx, qws: &[String]) -> (&'static str, Rows<'a>) {
+fn multi_word<'a>(
+    corpus: &Corpus,
+    notes: &Notes,
+    ix: &SearchIx,
+    qws: &[String],
+    scope: Option<std::ops::Range<usize>>,
+) -> (&'static str, Rows<'a>) {
     let postings: Vec<&[usize]> = qws.iter().map(|w| ix.word_idxs(w)).collect();
 
     // Intersect every word's postings first (a phrase hit needs all of them),
     // then confirm a consecutive run comparing tokens in place. For common
     // bigrams ("of the") this replaces rebuilding ~500k lowercased Strings per
     // keystroke with an allocation-free scan of a few hundred candidates.
-    let every_word = and_idxs(&postings);
+    // Narrowed BEFORE the phrase confirmation, so a scoped query neither
+    // decodes verses it will discard nor lets a phrase outside the scope
+    // choose the label for hits inside it.
+    let in_scope = |i: &usize| scope.as_ref().is_none_or(|r| r.contains(i));
+    let every_word: Vec<usize> = and_idxs(&postings).into_iter().filter(in_scope).collect();
     let phrase_idxs: Vec<usize> =
         every_word.iter().copied().filter(|&i| corpus.verse_at(i).is_some_and(|v| phrase_in_verse(qws, v))).collect();
 
@@ -472,7 +602,7 @@ fn multi_word<'a>(corpus: &Corpus, notes: &Notes, ix: &SearchIx, qws: &[String])
         ("no exact phrase — verses with every word", every_word)
     };
 
-    let mut rows = Rows::new(corpus);
+    let mut rows = Rows::new(corpus, scope);
     rows.push_all(text_idxs, false, Why::Plain);
     let needle = qws.join(" ");
     rows.push_all(note_idxs(corpus, notes, ix, &needle), true, Why::Plain);
@@ -775,9 +905,22 @@ pub fn parse_form_query(q: &str) -> Option<FormQuery> {
 /// placeholder telling the reader to hydrate it. Ported from `formSearch`
 /// (bare-code path; predicate path stubbed pending `plumbline-rnd`).
 pub fn form_search(corpus: &Corpus, ix: &SearchIx, fq: &FormQuery) -> SearchAnswer {
+    form_search_scoped(corpus, ix, fq, None)
+}
+
+/// [`form_search`] narrowed to a scope's verse-index range.
+fn form_search_scoped(
+    corpus: &Corpus,
+    ix: &SearchIx,
+    fq: &FormQuery,
+    scope: Option<std::ops::Range<usize>>,
+) -> SearchAnswer {
     if fq.preds.is_empty() {
         if let Some(s) = &fq.strong {
-            let idxs = ix.lemma_idxs(s);
+            // Count the whole scope, show the first cap of it — the same
+            // honest-total-over-capped-rows shape the word tiers use.
+            let idxs: Vec<usize> =
+                ix.lemma_idxs(s).iter().copied().filter(|i| scope.as_ref().is_none_or(|r| r.contains(i))).collect();
             let hits = idxs
                 .iter()
                 .take(HIT_CAP)
@@ -907,6 +1050,152 @@ mod tests {
     fn unkeepable_verb_stems_leave_the_word_whole() {
         for w in ["king", "ring", "thing", "bed", "red", "seed"] {
             assert_eq!(stem_word(w), w, "{w} was peeled to a stub");
+        }
+    }
+
+    /// The scope chips, over the sample's Gen / Ps / John. "God" is in all
+    /// three books, so every narrowing has something to drop.
+    #[test]
+    fn a_scope_narrows_the_hits_and_the_total() {
+        let c = corpus::from_str(SAMPLE).unwrap();
+        let ix = ix_of(&c);
+        let notes = Notes::new();
+        let refs = |scope: SearchScope| match run_search_scoped(&c, &notes, &ix, "God", &scope) {
+            Some(SearchAnswer::Hits { total, hits, .. }) => {
+                let r: Vec<String> = hits.iter().map(|h| h.vref.ref_key()).collect();
+                // The total is the scope's own count, not the corpus-wide one:
+                // "4 results" under a chapter chip that shows 3 is the bug this
+                // pins.
+                assert_eq!(total, r.len(), "total disagrees with the rows for {}", scope.token());
+                r
+            }
+            _ => panic!("expected hits"),
+        };
+
+        assert_eq!(refs(SearchScope::All).len(), 4);
+        assert_eq!(refs(SearchScope::Book("Gen".into())), ["Gen 1:1", "Gen 1:2", "Gen 1:3"]);
+        assert_eq!(refs(SearchScope::Book("John".into())), ["John 3:16"]);
+        assert_eq!(refs(SearchScope::Chapter("Gen".into(), 1)).len(), 3);
+        assert_eq!(refs(SearchScope::NewTestament), ["John 3:16"]);
+        assert_eq!(refs(SearchScope::OldTestament).len(), 3);
+        // A chapter the corpus does not have is EMPTY, never everything: a
+        // scope that fails to resolve must not silently widen.
+        assert!(refs(SearchScope::Chapter("Gen".into(), 99)).is_empty());
+        assert!(refs(SearchScope::Book("Nope".into())).is_empty());
+    }
+
+    /// A scope filters the widening tiers too — not just the exact one — and a
+    /// tier label describes what the reader can actually see. "blessing" is an
+    /// exact hit in Gen 1:3 and a stem variant of "blessed" in Gen 1:2.
+    #[test]
+    fn a_scope_filters_every_tier_and_the_label_follows() {
+        let c = corpus::from_str(SAMPLE).unwrap();
+        let ix = ix_of(&c);
+        let notes = Notes::new();
+        let ask = |q: &str, scope: SearchScope| match run_search_scoped(&c, &notes, &ix, q, &scope) {
+            Some(SearchAnswer::Hits { how, total, hits }) => {
+                (how, total, hits.iter().map(|h| h.vref.ref_key()).collect::<Vec<_>>())
+            }
+            _ => panic!("expected hits"),
+        };
+
+        // Unscoped: the exact verse leads, the variant follows.
+        let (how, _, refs) = ask("blessing", SearchScope::All);
+        assert_eq!(how, "verses with the word");
+        assert_eq!(refs, ["Gen 1:3", "Gen 1:2"]);
+
+        // Scoped to the verse-2 chapter of a book that has only the VARIANT:
+        // scoping to John drops both, and the answer is empty rather than
+        // falling back to the corpus.
+        let (_, total, refs) = ask("blessing", SearchScope::Book("John".into()));
+        assert_eq!((total, refs.len()), (0, 0));
+
+        // A form query (bare Strong's code) is scoped by the same range —
+        // H430 tags Gen 1:1, 1:2 and 1:3.
+        let (how, total, refs) = ask("H430", SearchScope::Chapter("Gen".into(), 1));
+        assert_eq!(how, "verses tagged H430");
+        assert_eq!((total, refs.len()), (3, 3));
+        let (_, total, _) = ask("H430", SearchScope::NewTestament);
+        assert_eq!(total, 0);
+    }
+
+    /// A reference query is NAVIGATION and outranks the scope: a reader who
+    /// types "John 3" while a Genesis chip is set means "take me there".
+    #[test]
+    fn a_reference_query_ignores_the_scope() {
+        let c = corpus::from_str(SAMPLE).unwrap();
+        let ix = ix_of(&c);
+        let notes = Notes::new();
+        let ans = run_search_scoped(&c, &notes, &ix, "John 3", &SearchScope::Book("Gen".into()));
+        match ans {
+            Some(SearchAnswer::GoTo { book, chapter, verse }) => {
+                assert_eq!((book.as_str(), chapter, verse), ("John", 3, None));
+            }
+            other => panic!("expected a goto, got {other:?}"),
+        }
+    }
+
+    /// A phrase OUTSIDE the scope must not decide the answer inside it.
+    ///
+    /// The scope has to narrow the multi-word candidates BEFORE the phrase
+    /// confirmation picks the tier. Filtering only as rows are pushed leaves
+    /// the phrase tier chosen by a verse the reader cannot see, and its
+    /// every-word hits — the ones inside the scope — are then never offered at
+    /// all: a scoped search that answers "no results" over a verse holding
+    /// every word.
+    #[test]
+    fn a_phrase_outside_the_scope_does_not_silence_the_hits_inside_it() {
+        let c = corpus::from_str(concat!(
+            r#"{"format":"x","tokenization":"kjv1769-tok2","verses":2}"#,
+            "\n",
+            r#"{"b":"Gen","c":1,"t":[["","the","",[],0],["","word","",[],0],["","of","",[],0],["","God","",[],0]],"v":1}"#,
+            "\n",
+            r#"{"b":"John","c":1,"t":[["","the","",[],0],["","word","",[],0],["","which","",[],0],["","came","",[],0],["","of","",[],0],["","him","",[],0]],"v":1}"#,
+        ))
+        .unwrap();
+        let ix = ix_of(&c);
+        let notes = Notes::new();
+        let ask = |scope: SearchScope| match run_search_scoped(&c, &notes, &ix, "word of", &scope) {
+            Some(SearchAnswer::Hits { how, total, hits }) => {
+                (how, total, hits.iter().map(|h| h.vref.ref_key()).collect::<Vec<_>>())
+            }
+            other => panic!("expected hits, got {other:?}"),
+        };
+
+        // Unscoped, Genesis has the phrase and wins the tier.
+        let (how, _, refs) = ask(SearchScope::All);
+        assert_eq!(how, "verses with the phrase");
+        assert_eq!(refs, ["Gen 1:1"]);
+
+        // Scoped to John, whose verse holds both words apart: the answer is
+        // John's verse under the every-word label, NOT an empty phrase answer.
+        let (how, total, refs) = ask(SearchScope::Book("John".into()));
+        assert_eq!(how, "no exact phrase — verses with every word");
+        assert_eq!((total, refs), (1, vec!["John 1:1".to_string()]));
+    }
+
+    /// The testament split is a constant; canon owns the truth of it.
+    #[test]
+    fn nt_first_order_is_matthew() {
+        assert_eq!(canon::book_order("Matt"), Some(NT_FIRST_ORDER));
+        assert_eq!(canon::book_ids().nth(NT_FIRST_ORDER), Some("Matt"));
+    }
+
+    /// The wire tokens the shells and the FFI pass around round-trip, and
+    /// junk parses as `None` (the FFI layer reads that as "no filter").
+    #[test]
+    fn scope_tokens_roundtrip() {
+        for s in [
+            SearchScope::All,
+            SearchScope::OldTestament,
+            SearchScope::NewTestament,
+            SearchScope::Book("1Cor".into()),
+            SearchScope::Chapter("Ps".into(), 119),
+        ] {
+            assert_eq!(SearchScope::parse(&s.token()), Some(s));
+        }
+        for junk in ["", "book:", "chapter:Gen", "chapter:Gen:0", "chapter:Gen:x", "nonsense"] {
+            assert_eq!(SearchScope::parse(junk), None, "{junk} parsed");
         }
     }
 

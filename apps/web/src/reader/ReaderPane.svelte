@@ -56,13 +56,13 @@
   import { untrack } from "svelte";
   import { getSession } from "../state/session.svelte";
   import { hitTest, MARGIN, paintChapter, verseExtents, type LayoutItem, type PaintOverlays } from "./paint";
-  import { t } from "../lib/i18n.svelte";
+  import { languages, t } from "../lib/i18n.svelte";
 
   const MAX_COLUMN = 720;
 
   interface Props {
     paneIdx: number;
-    onWordStudy?: (refKey: string, tokenIndex: number) => void;
+    onWordStudy?: (refKey: string, tokenIndex: number, lang?: string) => void;
     overlays?: PaintOverlays;
   }
   let { paneIdx, onWordStudy, overlays = {} }: Props = $props();
@@ -105,7 +105,7 @@
    *  chapter's text under another's name. */
   let shownKey = "";
 
-  const fontPx = $derived(Number(s.config.bodySize ?? 18));
+  const fontPx = $derived(Number(s.config.bodySize ?? 20));
   const sideMargin = $derived(Number(s.config.sideMargin ?? 28));
   const lineSpacing = $derived(Number(s.config.lineSpacing ?? 1.35));
   const versePerLine = $derived(!!s.config.versePerLine);
@@ -160,7 +160,7 @@
     // text under a header reading Acts — which reads as broken. A re-layout of
     // the SAME chapter (resize, zoom, spacing)
     // keeps its text on screen: there is nothing stale about it.
-    const key = `${pane.book} ${pane.chapter}`;
+    const key = `${pane.book} ${pane.chapter} ${pane.lang ?? ""}`;
     if (key !== shownKey) {
       untrack(() => {
         shownKey = key;
@@ -179,6 +179,7 @@
         lineSpacing,
         versePerLine,
         verseNumbers,
+        lang: pane.lang,
       })
       .then((raw: { items: LayoutItem[]; height: number } | null) => {
         if (seq !== layoutSeq || !raw) return;
@@ -231,7 +232,7 @@
   let prefetchTimer: ReturnType<typeof setTimeout> | null = null;
   function prefetchNeighbours(): void {
     if (prefetchTimer) clearTimeout(prefetchTimer);
-    const cfg = { font: fontPx, width: columnWidth, lineSpacing, versePerLine, verseNumbers };
+    const cfg = { font: fontPx, width: columnWidth, lineSpacing, versePerLine, verseNumbers, lang: pane.lang };
     const { book, chapter } = pane;
     const count = s.chapterCount(book);
     prefetchTimer = setTimeout(() => {
@@ -628,7 +629,7 @@
       return;
     }
     const hit = hitAt(e);
-    if (hit?.tokenIndex != null) onWordStudy?.(hit.verse, hit.tokenIndex);
+    if (hit?.tokenIndex != null) onWordStudy?.(hit.verse, hit.tokenIndex, pane.lang);
   }
   // Single click a word (touch taps go through onPointerUp).
   function onClick(e: MouseEvent): void {
@@ -662,6 +663,39 @@
   }
 
   const isActive = $derived(s.activePane === paneIdx && s.panes.length > 1);
+
+  // ── this pane's TEXT language (docs/PER-PANE-LANGUAGE.md) ──
+  // The chip names the BIBLE, not the language — "Luther", not "Deutsch". It is
+  // the text the column is painting, the reader picked a translation, and it is
+  // what the study card says about the same choice.
+  let langMenu = $state(false);
+  const langChoices = $derived(languages());
+  const paneBible = $derived.by(() => {
+    const own = langChoices.find((l) => l.code === (pane.lang || s.config.language || ""));
+    return own?.bible ?? langChoices.find((l) => l.code === "en")?.bible ?? "";
+  });
+  /** Download progress for THIS pane's language, 0..1 while it is coming. */
+  let langFraction = $state<number | null>(null);
+  $effect(() => {
+    const prev = s.rpc.onPaneLangProgress;
+    s.rpc.onPaneLangProgress = (code, fraction) => {
+      prev(code, fraction);
+      if (pane.langLoading && code === pendingLang) langFraction = fraction;
+    };
+    return () => {
+      s.rpc.onPaneLangProgress = prev;
+    };
+  });
+  let pendingLang = $state("");
+
+  async function pickLang(code: string): Promise<void> {
+    langMenu = false;
+    pendingLang = code;
+    langFraction = null;
+    await s.setPaneLang(paneIdx, code);
+    pendingLang = "";
+    langFraction = null;
+  }
 </script>
 
 <div class="pane" class:active={isActive}>
@@ -677,6 +711,19 @@
     </button>
     <button onclick={() => s.stepChapter(paneIdx, 1)} title={t("common.nextChapter")}>›</button>
     <span class="spacer"></span>
+    <!-- Only where there is a choice to make: one shipped language is no
+         decision, and a chip that never changes anything is furniture. -->
+    {#if langChoices.length > 1}
+      <button
+        class="lang"
+        onclick={() => (langMenu = !langMenu)}
+        title={t("pane.textLanguage")}
+        aria-haspopup="menu"
+        aria-expanded={langMenu}
+      >
+        {paneBible} ▾
+      </button>
+    {/if}
     {#if s.panes.length < s.maxPanes}
       <button onclick={() => s.addPane(paneIdx)} title={t("pane.split")}>＋</button>
     {/if}
@@ -684,6 +731,33 @@
       <button onclick={() => s.closePane(paneIdx)} title={t("pane.close")}>✕</button>
     {/if}
   </div>
+  {#if langMenu}
+    <!-- Click-away, so the menu behaves like every other popup in the shell. -->
+    <button class="lang-backdrop" onclick={() => (langMenu = false)} aria-label={t("common.close")}></button>
+    <div class="lang-menu" role="menu">
+      {#each langChoices as l (l.code)}
+        <button
+          role="menuitem"
+          class:on={(pane.lang || "") === (l.code === (s.config.language || "en") ? "" : l.code)}
+          onclick={() => void pickLang(l.code === (s.config.language || "en") ? "" : l.code)}
+        >
+          <span class="bible">{l.bible}</span>
+          <span class="endonym">{l.endonym}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
+  {#if pane.langLoading}
+    <!-- IN THE PANE, not over the app: the column beside this one is still
+         being read, and a full-screen overlay would stop it. -->
+    <p class="lang-status" role="status">
+      {langFraction === null
+        ? t("pane.langOpening")
+        : t("pane.langDownloading", { percent: Math.round(langFraction * 100) })}
+    </p>
+  {:else if pane.langError}
+    <p class="lang-status error" role="status">{t("pane.langFailed")}</p>
+  {/if}
   <!-- Named so a screen reader can list this pane and jump to it by passage;
        two panes are two regions, "Genesis 1" and "John 3". -->
   <div
@@ -730,6 +804,7 @@
 
 <style>
   .pane {
+    position: relative;
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -751,6 +826,69 @@
     padding: 6px 10px;
     background: var(--paneNavBg, #efeae1);
     font-size: calc(16px * var(--uiScale, 1));
+  }
+  .nav .lang {
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: calc(13px * var(--uiScale, 1));
+    color: var(--faded, #6c665d);
+  }
+  .nav .lang:hover {
+    background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
+  }
+  /* The click-away layer: below the menu, above everything else in the pane. */
+  .lang-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: transparent;
+  }
+  .lang-menu {
+    position: absolute;
+    z-index: 31;
+    right: 8px;
+    margin-top: 2px;
+    background: var(--popupPaper, #f2eee6);
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
+    display: flex;
+    flex-direction: column;
+    min-width: 180px;
+  }
+  .lang-menu button {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: baseline;
+    padding: 10px 12px;
+    border-radius: 6px;
+    text-align: left;
+    color: var(--ink, #211f1a);
+  }
+  .lang-menu button:hover {
+    background: color-mix(in srgb, var(--gold, #9e7d38) 14%, transparent);
+  }
+  .lang-menu button.on .bible {
+    color: var(--gold, #9e7d38);
+    font-weight: 600;
+  }
+  .lang-menu .endonym {
+    color: var(--faded, #6c665d);
+    font-size: calc(12px * var(--uiScale, 1));
+  }
+  .lang-status {
+    margin: 0;
+    padding: 6px 12px;
+    font-size: calc(13px * var(--uiScale, 1));
+    color: var(--faded, #6c665d);
+    background: var(--paneNavBg, #efeae1);
+    border-bottom: 1px solid var(--rule, #d8cba8);
+  }
+  .lang-status.error {
+    color: var(--tierResearch, #aa4838);
   }
   .nav .passage {
     border: 1px solid var(--rule, #d8cba8);

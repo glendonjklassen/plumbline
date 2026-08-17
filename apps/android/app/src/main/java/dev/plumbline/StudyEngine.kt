@@ -161,6 +161,12 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
 
     fun SearchJson(query: String): String? = take(ffi.plumbline_engine_search_json(h, query))
 
+    /** [SearchJson] narrowed to a `core::search::SearchScope` token — `all` |
+     *  `ot` | `nt` | `book:<osis>` | `chapter:<osis>:<ch>`. A reference query
+     *  still answers goto whatever the scope. */
+    fun SearchScopedJson(query: String, scope: String): String? =
+        take(ffi.plumbline_engine_search_scoped_json(h, query, scope))
+
     // ── study data (read) ────────────────────────────────────────────────────
 
     fun ThreadsJson(): String? = take(ffi.plumbline_engine_threads_json(h))
@@ -246,6 +252,10 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
     /** Search results as blocks (goto link or ranked hits + snippets); null on a
      *  blank query. */
     fun SearchBlocksJson(query: String): String? = take(ffi.plumbline_engine_search_blocks_json(h, query))
+
+    /** [SearchBlocksJson] narrowed to a scope token — see [SearchScopedJson]. */
+    fun SearchBlocksScopedJson(query: String, scope: String): String? =
+        take(ffi.plumbline_engine_search_blocks_scoped_json(h, query, scope))
 
     // ── study data (author; null = success, else an error message) ────────────
 

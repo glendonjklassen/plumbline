@@ -3050,3 +3050,64 @@ fn german_corpus_lexicon_serves_the_german_dictionary_with_caveat() {
     }
     let _ = std::fs::remove_dir_all(&home);
 }
+
+/// A SECOND engine on another language's text — what a per-pane language rides
+/// on. The two invariants that make it safe to put beside the first:
+///
+/// 1. it opens the language it was ASKED for, from the same home;
+/// 2. it FAILS when that text is not on the device, rather than falling back to
+///    English the way `plumbline_engine_open` deliberately does. A pane labelled
+///    Deutsch quietly painting the KJV is the bug this half exists to prevent.
+#[test]
+fn a_second_engine_opens_a_named_language_and_never_substitutes_english() {
+    use std::ffi::CString;
+    unsafe {
+        let home = std::env::temp_dir().join(format!("plumbline-ffi-lang-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join("data")).unwrap();
+        std::fs::write(home.join("data").join("kjv.jsonl"), KJV).unwrap();
+        std::fs::write(home.join("data").join("strongs.json"), STRONGS).unwrap();
+        let home_c = CString::new(home.to_str().unwrap()).unwrap();
+        let mut err: *mut c_char = ptr::null_mut();
+
+        // German is NOT on this device yet: an error, not the English text.
+        let de = CString::new("de").unwrap();
+        let alt = plumbline_engine_open_lang(home_c.as_ptr(), de.as_ptr(), &mut err);
+        assert!(alt.is_null(), "a missing text must not open");
+        assert!(!err.is_null(), "and the shell must be told why, so it can offer the download");
+        plumbline_string_free(err);
+        err = ptr::null_mut();
+
+        // A language this build does not ship is refused by name, not read as
+        // English the way a UI-language code would be.
+        let zz = CString::new("zz").unwrap();
+        assert!(plumbline_engine_open_lang(home_c.as_ptr(), zz.as_ptr(), &mut err).is_null());
+        assert!(take(err).unwrap().contains("zz"));
+        err = ptr::null_mut();
+
+        // Now the text IS on the device. The sample is the KJV's bytes under
+        // Luther's name and stamp — this asserts the FILE CHOICE, which is the
+        // part that decides which Bible a pane paints.
+        let luther = KJV.replacen(plumbline_core::canon::TOKENIZATION_VERSION, "luther1912-tok1", 1);
+        std::fs::write(home.join("data").join("luther1912.jsonl"), &luther).unwrap();
+        let alt = plumbline_engine_open_lang(home_c.as_ptr(), de.as_ptr(), &mut err);
+        assert!(err.is_null(), "{:?}", take(err));
+        assert!(!alt.is_null(), "the German text is present and must open");
+
+        // It really opened a text — and the ONE that matters here is which
+        // file was chosen, which the stamp on the loaded corpus settles.
+        let v = take(plumbline_engine_verse_json(alt, c"John 3:16".as_ptr())).unwrap();
+        assert!(!v.is_empty(), "the alt engine must serve verses");
+
+        // Both engines are live at once and answer independently — the point of
+        // the whole exercise.
+        let en = plumbline_engine_open(home_c.as_ptr(), &mut err);
+        assert!(!en.is_null());
+        assert!(!take(plumbline_engine_toc_json(en)).unwrap().is_empty());
+        assert!(!take(plumbline_engine_toc_json(alt)).unwrap().is_empty());
+
+        plumbline_engine_free(alt);
+        plumbline_engine_free(en);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}

@@ -266,7 +266,7 @@
    *  else — the reading aids and the reader's data are not "style". */
   async function defaultStyle(): Promise<void> {
     setTheme("system");
-    setNum("bodySize", 18);
+    setNum("bodySize", 20);
     setNum("sideMargin", 28);
     setNum("lineSpacing", 1.35);
     if ((s.config.chromeFont ?? DEFAULT_FONT) !== DEFAULT_FONT) s.setChromeFont(DEFAULT_FONT);
@@ -716,12 +716,12 @@
       </select>
       <hr />
       <p class="label">{t("settings.textSize")}</p>
-      <p class="aa" style:font-size="{Number(s.config.bodySize ?? 18)}px">Aa</p>
+      <p class="aa" style:font-size="{Number(s.config.bodySize ?? 20)}px">Aa</p>
       <input
         type="range"
         min="14"
         max="30"
-        value={Number(s.config.bodySize ?? 18)}
+        value={Number(s.config.bodySize ?? 20)}
         oninput={(e) => setNum("bodySize", Number((e.target as HTMLInputElement).value))}
       />
       <p class="label">{t("settings.margin")}</p>

@@ -73,6 +73,7 @@ import {
   shareLink,
   readingSpec,
   sessionSlot,
+  StudyEngine,
   type LayoutCfg,
 } from "./StudyEngine";
 
@@ -178,6 +179,36 @@ const turnCache = new Map<string, LaidOut>();
  *  forth stays free, which is exactly what someone comparing wordings does. */
 let akjvOn = false;
 
+/**
+ * The engines for OTHER languages' texts, by language code — a pane reading
+ * German beside an English one (docs/PER-PANE-LANGUAGE.md).
+ *
+ * They share the reader's data (every text sits at the KJV's verse addresses),
+ * so this is a second view of one library rather than a second library. What it
+ * is NOT is a second study store to keep in sync: an authoring write goes
+ * through the primary engine, and `refreshAlts` re-reads the others.
+ */
+const altEngines = new Map<string, StudyEngine>();
+
+/** The engine a request means: the primary unless it named another language. */
+function engineFor(lang?: string | null): StudyEngine {
+  if (!lang) return booted!.engine;
+  const alt = altEngines.get(lang);
+  // NOT a silent fall back to the primary. A pane labelled Deutsch painting the
+  // KJV is the failure this whole path is built to avoid, so an unopened
+  // language is an error the shell can act on — it is the shell that offers the
+  // download.
+  if (!alt) throw new Error(`the ${lang} text is not open on this device`);
+  return alt;
+}
+
+/** After an authoring write: the alt engines re-read the study files the
+ *  primary just rewrote, or a tag made in English never reaches the German
+ *  pane's word study. */
+function refreshAlts(): void {
+  for (const e of altEngines.values()) e.loadCoreData();
+}
+
 interface LayoutReq {
   book: string;
   chapter: number;
@@ -186,6 +217,8 @@ interface LayoutReq {
   lineSpacing: number;
   versePerLine: boolean;
   verseNumbers: boolean;
+  /** The pane's text language; absent = the reader's own. */
+  lang?: string | null;
 }
 
 function layoutChapter(m: LayoutReq): LaidOut | null {
@@ -196,8 +229,12 @@ function layoutChapter(m: LayoutReq): LaidOut | null {
   // layout cached under one setting is wrong geometry under the other. (The
   // ITALICS switch is deliberately absent — it changes paint only, never
   // measurement, so its layouts are interchangeable.)
+  // The LANGUAGE is part of the key for the same reason the face and the
+  // overlay are: it changes the words this chapter lays out to. Without it a
+  // German pane at the same width serves the English pane's cached display
+  // list — the right geometry for the wrong Bible.
   const key =
-    `${m.book} ${m.chapter}|${readerFontToken()}|${m.font}|${m.width}|` +
+    `${m.book} ${m.chapter}|${m.lang ?? ""}|${readerFontToken()}|${m.font}|${m.width}|` +
     `${m.lineSpacing}|${m.versePerLine}|${m.verseNumbers}|${akjvOn}`;
   const hit = turnCache.get(key);
   if (hit) {
@@ -225,7 +262,7 @@ function layoutChapter(m: LayoutReq): LaidOut | null {
   };
   const t1 = performance.now();
   const crossings0 = PERF ? booted!.wasm.measureCalls() : 0;
-  const dl = booted!.engine.layoutChapter(m.book, m.chapter, cfg);
+  const dl = engineFor(m.lang).layoutChapter(m.book, m.chapter, cfg);
   firstLayoutServed?.();
   firstLayoutServed = null;
   const t2 = performance.now();
@@ -772,6 +809,11 @@ self.onmessage = async (ev: MessageEvent) => {
         );
         booted.engine.onAuthored = () => {
           schedulePersist();
+          // The alt engines hold their own view of the study files this write
+          // just changed. Re-read before the shell re-fetches, or a tag made on
+          // the English pane is missing from the German pane's word study until
+          // the next reload.
+          refreshAlts();
           self.postMessage({ type: "authored" });
         };
         // Dwell reports persist ONLY the reading dir — see onReadingWrite — and
@@ -870,6 +912,20 @@ self.onmessage = async (ev: MessageEvent) => {
         reply(timedCall(m.method, () => e[m.method](...m.args)));
         // The overlay changes the words, so the turn cache has to know.
         if (m.method === "setAkjvOverlay") akjvOn = m.args[0] === true;
+        break;
+      }
+      // The same call, against another language's text — word study on a German
+      // pane, its verse text, its chapter counts. The METHOD NAME is unchanged:
+      // every StudyEngine read works on any handle, so per-pane language costs
+      // no per-feature RPC (docs/PER-PANE-LANGUAGE.md).
+      //
+      // AUTHORING NEVER COMES THROUGH HERE. Two writers over one home is a
+      // corruption story the atomic store should not be asked to survive, and
+      // the reader's data is shared anyway — so a write is the primary's, and
+      // the alt engines re-read it.
+      case "callIn": {
+        const e = engineFor(m.lang as string) as unknown as Record<string, (...a: any[]) => unknown>;
+        reply(timedCall(`${m.method}@${m.lang}`, () => e[m.method](...m.args)));
         break;
       }
       case "static": {
@@ -1023,6 +1079,30 @@ self.onmessage = async (ev: MessageEvent) => {
       // row: the picker calls this and then reloads. A progress fraction,
       // unlike the suggested bundle, because this is a couple of MB and a phone
       // deserves to see it moving.
+      // A language no pane reads any more is a Bible-sized allocation doing
+      // nothing. The SHELL owns the answer to "which are still in use" — it is
+      // the thing that knows what every pane is reading — so it passes the list
+      // and this frees the rest.
+      case "releaseLangs": {
+        const keep = new Set((m.keep as string[]) ?? []);
+        let freed = 0;
+        for (const [code, engine] of [...altEngines]) {
+          if (keep.has(code)) continue;
+          engine.free();
+          altEngines.delete(code);
+          freed++;
+        }
+        // The turn cache holds display lists laid out from those engines; a
+        // stale entry would be served if the reader came back to that language
+        // before anything else evicted it, and its engine is gone.
+        if (freed) turnCache.clear();
+        reply(freed);
+        break;
+      }
+      case "wasmMemoryBytes": {
+        reply(booted!.wasm.exports.memory.buffer.byteLength);
+        break;
+      }
       case "langPackState": {
         const entry = langCorpusEntry(booted!.manifest, m.code as string);
         reply({
@@ -1030,6 +1110,77 @@ self.onmessage = async (ev: MessageEvent) => {
           installed: booted!.home.langsInstalled.has(m.code as string),
           gzBytes: entry?.gzBytes ?? 0,
         });
+        break;
+      }
+      // OPEN A LANGUAGE FOR A PANE — download its text if this device has not
+      // got it, then open a second engine on it. No reload, which is the whole
+      // difference from the settings switch below: the English pane must keep
+      // reading while the German text arrives.
+      case "openPaneLang": {
+        const code = m.code as string;
+        if (altEngines.has(code)) {
+          reply({ ready: true });
+          break;
+        }
+        const entry = langCorpusEntry(booted!.manifest, code);
+        if (!entry) {
+          fail(`this build has no ${code} corpus`);
+          break;
+        }
+        /** Put this language's text and dictionary into the home. */
+        const supply = async (): Promise<boolean> => {
+          const cache = await fetchLangCorpus(booted!.manifest, code, (p) =>
+            self.postMessage({ type: "paneLangProgress", code, fraction: p.fraction }),
+          );
+          if (!cache) return false;
+          // That language's own dictionary rides the same ask: without it a
+          // German pane's word study would serve English definitions, which is
+          // half a translation.
+          await fetchLangLexicon(booted!.manifest, code);
+          await booted!.home.installLangCorpus(code, entry.path, cache);
+          return true;
+        };
+
+        if (!booted!.home.langsInstalled.has(code) && !(await supply())) {
+          fail(`the ${code} text could not be downloaded`);
+          break;
+        }
+        // OPENING IS SYNCHRONOUS — a corpus open on the one thread that also
+        // answers layout and taps. It reads the idxcache rather than parsing
+        // JSONL, so it is a load and a directory, not a canon-wide decode.
+        //
+        // RETRIED ONCE THROUGH THE SUPPLY PATH, because the home is not a
+        // promise: the eviction below frees this language's bytes after the
+        // engine has read them, so a reader who goes back to German later in
+        // the session finds the file gone. The depot still has it, so the cold
+        // path is the repair — exactly as it is for the core pack.
+        let opened: StudyEngine;
+        try {
+          opened = timedCall(`open ${code} engine`, () => StudyEngine.openLang(booted!.wasm, "/home", code));
+        } catch {
+          if (!(await supply())) {
+            fail(`the ${code} text could not be restored`);
+            break;
+          }
+          try {
+            opened = timedCall(`reopen ${code} engine`, () => StudyEngine.openLang(booted!.wasm, "/home", code));
+          } catch (e) {
+            fail(e);
+            break;
+          }
+        }
+        altEngines.set(code, opened);
+        // EVICT WHAT THE ENGINE HAS ALREADY READ, exactly as the core boot does
+        // after stage 2. The WASI shim's `File` copies its input, so until this
+        // runs the home holds a second copy of every byte the corpus and the
+        // dictionary just parsed — ~33 MB per language, measured.
+        const freed = booted!.home.evict(
+          booted!.manifest.files
+            .filter((f) => f.role === `corpus:${code}` || f.role === `lexicon:${code}`)
+            .map((f) => f.path),
+        );
+        if (freed) booted!.trace.push([`home evict after opening ${code} (KB)`, Math.round(freed / 1024)]);
+        reply({ ready: true });
         break;
       }
       case "installLangPack": {

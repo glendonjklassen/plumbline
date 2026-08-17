@@ -94,6 +94,20 @@ jobs:
   android:
     runs-on: ubuntu-latest
     needs: [version, create-release]
+    # ─────────────────────────────────────────────────────────────────────
+    # TEMPORARILY ON HOLD (2026-08-17). The Android shell is a release behind
+    # the web — per-pane text language shipped on the web only (docs/PER-PANE-
+    # LANGUAGE.md), so the APK would advertise a version whose headline feature
+    # it does not have.
+    #
+    # `if: false` rather than deleting the job: everything below is still
+    # correct and still reviewed, and lifting the hold is removing this one
+    # line. GitHub reports the job as skipped, so its absence is visible rather
+    # than silent.
+    #
+    # TO LIFT: delete this `if:`, and check the parity note in
+    # docs/FEATURE-MANIFEST.md still says what is true.
+    if: false
     steps:
       - uses: actions/checkout@v4
 

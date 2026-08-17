@@ -29,14 +29,31 @@ export interface PaneState {
    *  map's high-water mark (core::reading). Monotonic within a chapter: reading
    *  back up does not un-read anything. Reset on navigate. */
   reached?: number;
+  /**
+   * The TEXT this pane reads, as a language code. Empty/absent = the reader's
+   * own language, which is every pane until one is changed.
+   *
+   * NOT the UI language: German beside English without the interface moving is
+   * the point (docs/PER-PANE-LANGUAGE.md). It persists per pane.
+   */
+  lang?: string;
+  /** This pane's text is being fetched/opened (0..1 while downloading, or true
+   *  for the open itself). The pane says so rather than going blank. */
+  langLoading?: number | boolean;
+  /** Why this pane could not read the language it was asked for. */
+  langError?: string;
 }
 
 /** Descriptor of what the study surface is showing (sidebar or sheet). */
 export type PanelView =
-  | { kind: "wordStudy"; refKey: string; tokenIndex: number }
-  | { kind: "codeStudy"; code: string; word: string | null }
-  | { kind: "concordance"; code: string }
-  | { kind: "renderingConcordance"; code: string; rendering: string }
+  // The four views whose content IS scripture carry the text language they were
+  // opened from, so a word tapped in a German pane gives German study — and the
+  // concordance opened from THAT study still lists German verses. Absent = the
+  // reader's own text, which is every study opened from an ordinary pane.
+  | { kind: "wordStudy"; refKey: string; tokenIndex: number; lang?: string }
+  | { kind: "codeStudy"; code: string; word: string | null; lang?: string }
+  | { kind: "concordance"; code: string; lang?: string }
+  | { kind: "renderingConcordance"; code: string; rendering: string; lang?: string }
   | { kind: "threads" }
   | { kind: "thread"; index: number }
   | { kind: "tags" }
@@ -44,7 +61,6 @@ export type PanelView =
   | { kind: "weaves" }
   | { kind: "suggested" }
   | { kind: "compare"; index: number }
-  | { kind: "search" }
   | { kind: "guide" }
   | { kind: "about" }
   | { kind: "notesBrowser" };
@@ -173,7 +189,19 @@ export class Session {
     this.#searchTimer = null;
     this.searchDraft = "";
     this.searchQuery = "";
+    this.searchScope = "all";
   }
+
+  /**
+   * Where the search screen looks, as `core::search::SearchScope::token` spells
+   * it — `all` | `ot` | `nt` | `book:<osis>` | `chapter:<osis>:<ch>`.
+   *
+   * The two narrow chips are resolved against the ACTIVE PANE at the moment the
+   * reader picks them, and stored as the concrete book/chapter rather than as
+   * "this book": a search screen that silently re-aimed when the pane moved
+   * underneath it would change what a shown result list means without saying so.
+   */
+  searchScope = $state("all");
 
   /** Refreshed after any authoring write (worker reload → shell re-fetch). */
   studyEpoch = $state(0);
@@ -214,7 +242,9 @@ export class Session {
    * were reading. `"read"` is the absence of a destination rather than one of
    * its own.
    */
-  screen = $state<"read" | "explore" | "memorize" | "plans" | "viz" | "tags" | "preach" | "hymnal" | "share">("read");
+  screen = $state<
+    "read" | "explore" | "memorize" | "plans" | "viz" | "tags" | "preach" | "hymnal" | "share" | "search"
+  >("read");
 
   // ── the hymnal ──────────────────────────────────────────────────────────────
 
@@ -582,14 +612,19 @@ export class Session {
    * many.
    *
    * [[CACHE_CAP]] bounds the COUNT and says so; this is the exemption for the
-   * entries where that is not enough. A `searchBlocks` answer is up to 200 hits
+   * entries where that is not enough. A search answer is up to 200 hits
    * carrying their verse text — the largest single thing this cache holds — and
-   * its key is the query string, so a reader typing a word left one behind per
-   * keystroke. Only the query on screen can be read, so only the query on screen
-   * is kept; the rest were evicting other panels' answers to hold results for
-   * fragments of a word nobody will type again.
+   * its key is the query string (now the query AND the scope), so a reader
+   * typing a word left one behind per keystroke. Only the query on screen can be
+   * read, so only the query on screen is kept; the rest were evicting other
+   * panels\' answers to hold results for fragments of a word nobody will type
+   * again.
+   *
+   * BOTH names are capped. `searchBlocksScoped` is what the search screen calls;
+   * `searchBlocks` is the unscoped endpoint, still on the engine and still the
+   * one an older cached answer would sit under.
    */
-  static readonly PER_METHOD_CAP: Record<string, number> = { searchBlocks: 1 };
+  static readonly PER_METHOD_CAP: Record<string, number> = { searchBlocks: 1, searchBlocksScoped: 1 };
 
   /** Live cache size — what the e2e bound test measures. */
   get cacheSize(): number {
@@ -655,6 +690,83 @@ export class Session {
     return null;
   }
 
+  /**
+   * [[q]] against another LANGUAGE's text — a German pane's word study, its
+   * verse text, its chapter counts.
+   *
+   * The language is part of the CACHE KEY, not just of the call: two panes on
+   * John 3 in two languages ask the same method with the same arguments and
+   * must not answer each other. A falsy language is the reader's own text and
+   * shares the ordinary key, so nothing that never sets one pays for this.
+   */
+  qIn(lang: string | null | undefined, method: string, ...args: unknown[]): any {
+    if (!lang) return this.q(method, ...args);
+    void this.cacheEpoch;
+    const key = cacheKey(`${method}@${lang}`, args);
+    if (this.#cache.has(key)) return this.#touch(key);
+    if (!this.#pending.has(key)) {
+      this.#pending.add(key);
+      this.rpc
+        .callIn(lang, method, ...args)
+        .then((v) => {
+          this.#store(key, v);
+          this.#pending.delete(key);
+          this.cacheEpoch++;
+        })
+        .catch((e) => {
+          this.#pending.delete(key);
+          console.warn(`[plumbline] ${method}@${lang} failed:`, e);
+        });
+    }
+    return null;
+  }
+
+  /**
+   * Point a pane at a language's text, fetching and opening it if this device
+   * has not got it yet.
+   *
+   * The pane shows its own progress and the panes beside it keep reading —
+   * there is no reload here, which is the whole difference from the settings
+   * language switch. An empty code puts the pane back on the reader's own text,
+   * which never needs downloading.
+   */
+  async setPaneLang(index: number, code: string): Promise<void> {
+    const pane = this.panes[index];
+    if (!pane || (pane.lang ?? "") === code) return;
+    pane.langError = undefined;
+    if (!code) {
+      pane.lang = undefined;
+      pane.langLoading = false;
+      this.saveConfig();
+      void this.releaseUnusedLangs();
+      return;
+    }
+    pane.langLoading = true;
+    try {
+      await this.rpc.openPaneLang(code);
+      pane.lang = code;
+      // The pane's own chapter has to be laid out again in the new text, and
+      // the marks/geometry it cached belong to the old one.
+      pane.scrollY = 0;
+      this.saveConfig();
+    } catch (e) {
+      // The reader asked for a Bible and did not get one: say so on the pane
+      // rather than silently leaving it in the language it was already in.
+      pane.langError = e instanceof Error ? e.message : String(e);
+    } finally {
+      pane.langLoading = false;
+      void this.releaseUnusedLangs();
+    }
+  }
+
+  /** Hand back the Bibles no pane is reading. Each open text costs its cache
+   *  in the engine's heap, so a reader who tried German and went back to
+   *  English should not keep paying for it. */
+  releaseUnusedLangs(): Promise<number> {
+    const keep = [...new Set(this.panes.map((p) => p.lang).filter((l): l is string => !!l))];
+    return this.rpc.releaseLangs(keep);
+  }
+
   /** An engine-independent static fn through the same cache (guide/about…). */
   qs(fn: string, ...args: unknown[]): any {
     void this.cacheEpoch;
@@ -679,6 +791,17 @@ export class Session {
     const key = cacheKey(method, args);
     if (this.#cache.has(key)) return this.#touch(key);
     const v = await this.rpc.call(method, ...args);
+    this.#store(key, v);
+    this.cacheEpoch++;
+    return v;
+  }
+
+  /** [[fetchQ]] against another language's text. */
+  async fetchQIn(lang: string | null | undefined, method: string, ...args: unknown[]): Promise<any> {
+    if (!lang) return this.fetchQ(method, ...args);
+    const key = cacheKey(`${method}@${lang}`, args);
+    if (this.#cache.has(key)) return this.#touch(key);
+    const v = await this.rpc.callIn(lang, method, ...args);
     this.#store(key, v);
     this.cacheEpoch++;
     return v;
@@ -966,6 +1089,7 @@ export class Session {
       scrollY: 0,
       back: [],
       fwd: [],
+      lang: p.lang || undefined,
     }));
     this.activePane = Math.min(Math.max(wasActive - from, 0), this.panes.length - 1);
 
@@ -1099,6 +1223,9 @@ export class Session {
       book: p.book,
       chapter: p.chapter,
       verse: this.#firstVisibleVerse(i),
+      // Additive both ways: an unset language writes no key, so a reader who
+      // never used the feature keeps writing the file they always did.
+      ...(p.lang ? { lang: p.lang } : {}),
     }));
     this.config.activePane = this.activePane;
     this.config.firstRun = undefined;
@@ -1669,6 +1796,8 @@ export class Session {
     this.panes.splice(idx, 1);
     this.activePane = Math.min(this.activePane, this.panes.length - 1);
     this.saveConfig();
+    // Closing the only German pane hands that Bible back.
+    void this.releaseUnusedLangs();
   }
 
   setZoom(size: number): void {

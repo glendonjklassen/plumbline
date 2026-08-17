@@ -23,9 +23,11 @@
 import type { Action } from "svelte/action";
 
 /** The size the chrome was drawn at, and the browser's own default. Both are
- *  divisors rather than magic numbers: 18px is the default `bodySize`, and 16px
- *  is the CSS initial font size that every `Npx` in this shell was chosen
- *  against. At the defaults the scale is exactly 1 and nothing moves. */
+ *  divisors rather than magic numbers: 18px is the `bodySize` the chrome was
+ *  calibrated at (the shipped default is 20 now, so a fresh install runs a
+ *  little over 1 — changing this divisor instead would rescale every existing
+ *  reader's chrome), and 16px is the CSS initial font size that every `Npx` in
+ *  this shell was chosen against. */
 const CSS_DEFAULT_PX = 16;
 
 /**

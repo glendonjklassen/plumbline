@@ -152,7 +152,7 @@ compounds it) — sizes and line heights up roughly 2 px / 2.5 sp over the body.
 |---|---|---|
 | MAX_COLUMN | 720 | text column cap; centre in wider panes (`ReaderPane.svelte` `MAX_COLUMN`, `ReaderPane.kt` `MAX_COLUMN_DP`) |
 | MARGIN | 28 | text margin, all sides (`MARGIN_DP` on Android — logical units, density-scaled) |
-| MIN/MAX/DEFAULT bodySize | 12 / 40 / 18 | the text-size slider in BOTH shells (`SettingsDialog.svelte`, `StudyScreen.kt` `valueRange = 12f..40f`). The config accepts a wider 6–96 (`config.rs`) so an old or hand-edited file is honoured, not clamped away |
+| MIN/MAX/DEFAULT bodySize | 12 / 40 / 20 | the text-size slider in BOTH shells (`SettingsDialog.svelte`, `StudyScreen.kt` `valueRange = 12f..40f`). The config accepts a wider 6–96 (`config.rs`) so an old or hand-edited file is honoured, not clamped away |
 | MAX_PANES | 1 / 2 / 3 | reading columns — **web only** (`session.maxPanes`): 1 below 701px, 2 to 1099px, 3 above. Android shows one pane, or two side by side on a fold opened flat (`FoldMode.kt`) |
 | PANEL_WIDTH | 380 | the web's study sidebar, × the text-size setting, capped at 40vw (an unscaled 380 is 45% of an unfolded Pixel Fold, and the Bible is the point). Android's study surface is a bottom sheet (phone) or the second fold pane, so it has no width constant |
 | PANEL_SHEET_MAX | 700 | the web width at or below which the study surface is a bottom sheet instead of a sidebar (`StudyPanel.svelte`). Matches `s.narrow` and the destination bar — see the foldable delta under **Word study panel** |
@@ -703,12 +703,41 @@ means an `android:autoVerify` App Links filter plus the hosted
 ties a shell delta to the release keystore, so it is a deliberate decision
 rather than an oversight.
 
-## Search (M:660, 3739)
+## Search — a DESTINATION (M:660, 3739)
 
-Live per keystroke; empty query closes the panel. `goto` answer → big "go to"
-link (navigates active pane; verse target gets the band). `hits` → "N
-result(s)" + tier phrase small; per hit: verse link, gray `why`, "※ note"
-marker for margin-note matches; "… N more" past cap. *Data*: `search_json`.
+The ⌕ in the top bar opens a SCREEN, on both shells: its own field, a row of
+scope chips, and results in the reader's own column. It was a field in the web
+header answering into the 380px study sidebar (a bottom sheet over the text on
+a phone) until 2026-08-17; Android's was already fullscreen, so there the
+change is the scope.
+
+`goto` answer → big "go to" link (navigates active pane; verse target gets the
+band). `hits` → "N result(s)" + tier phrase small; per hit: verse link, gray
+`why`, "※ note" marker for margin-note matches; "… N more" past cap.
+*Data*: `search_scoped_json` / `search_blocks_scoped_json`.
+
+**Scope chips** (`core::search::SearchScope`) — Everywhere · this book · this
+chapter · Old Testament · New Testament, as the tokens `all` | `book:<osis>` |
+`chapter:<osis>:<ch>` | `ot` | `nt`. Every scope is a CONTIGUOUS run of
+canonical verse indices (`Corpus::book_range`, answered from the chapter
+directory without decoding a verse), checked at the mouth of `Rows::push` so
+every tier filters in one place and the total counts only what the scope
+covers. Rules that are tests, not conventions:
+
+- a REFERENCE query ignores the scope ("John 3" is navigation, not filtering);
+- an unresolvable scope matches NOTHING, never everything;
+- an unparseable scope TOKEN searches everything, never nothing — a shell
+  ahead of the engine still gets an answer;
+- multi-word queries narrow BEFORE the phrase confirmation, or a phrase
+  outside the scope wins the tier and silences the every-word hits inside it.
+
+The two narrow chips carry the CONCRETE book/chapter they were built from, so a
+result list keeps meaning what it meant when it was drawn. The scope resets to
+Everywhere each time the screen is entered (web); Android's chip re-runs the
+query already typed rather than waiting for another Search press.
+
+**Delta:** the web searches per keystroke (180 ms trailing debounce); Android
+searches on the IME Search action, once.
 
 ## Keyboard + wheel (M:1806–1875) — WEB ONLY
 
@@ -735,7 +764,7 @@ launch loaded defaults); **web** `XDG_CONFIG_HOME=/home/.config` in the WASI env
 (`engine/engine.ts`), which is why the backup zip carries
 `.config/plumbline/config.json`.
 
-`{"studyMode":"simple"|"full","bodySize":18.0,"openPanes":[{"book","chapter","verse"}],
+`{"studyMode":"simple"|"full","bodySize":20.0,"openPanes":[{"book","chapter","verse"}],
 "activePane":0,"versePerLine":false,"theme":"system","copyStyle":"verseRef",
 "sideMargin":28.0,"lineSpacing":1.35,"humanAnalysis":false,"machineAnalysis":false,
 "history":[{"book":"John","chapter":3}]}`.
@@ -1090,6 +1119,27 @@ English definitions until a translation run fills them in, and
 `machine_translated: false` on its row is what stops the study card claiming
 otherwise.
 
+**PER-PANE TEXT LANGUAGE — WEB ONLY (2026-08-17).** A reading pane picks its own
+Bible from a chip on its header (KJV · Luther · Reina-Valera) and the app's
+language does not move: German beside English for John 3. Full study per pane —
+a word tapped in the German column is studied in German, from that language's
+own Strong's, and the concordance opened from that study lists German verses.
+The reader's data is SHARED, not copied, because every text sits at the KJV's
+verse addresses. `config.openPanes[].lang` persists it (additive; absent = the
+reader's own text).
+
+The engine is `plumbline_engine_open_lang(home, lang)` — a second engine on the
+same home, which deliberately does NOT fall back to English, because a pane
+labelled Deutsch painting the KJV is the failure the whole path exists to
+avoid. Authoring stays on the primary handle; the alt handles re-read the study
+files after a write. Design, the rejected alternative, the measured cost
+(~61 MB of wasm heap per extra Bible; three at once takes the heap from 104 MB
+to 226 MB) and the test traps: [docs/PER-PANE-LANGUAGE.md](PER-PANE-LANGUAGE.md).
+
+**SHELL DELTA — Android does not have this yet.** Its language remains one
+setting for the whole app, set BEFORE the engine opens. Every corpus is already
+bundled in the APK, so the port has no download to arrange.
+
 **SHELL DELTA — delivery.** Android BUNDLES every language's corpus and
 dictionary in the APK (~2 MB each, marker `.data-v6`); the web fetches them on
 demand as `stage: "optional"` under `corpus:<code>` / `lexicon:<code>` roles when
@@ -1337,6 +1387,7 @@ role + logical size + optional uri); `full` gates the R&D tiers + author actions
 | `plumbline_engine_weaves_blocks_json()` / `plumbline_engine_suggested_blocks_json()` | weaves list / review queue |
 | `plumbline_engine_compare_blocks_json(i, full)` | weave compare card |
 | `plumbline_engine_search_blocks_json(query)` | search results (goto link or ranked hits + snippets); null on blank |
+| `plumbline_engine_search_blocks_scoped_json(query, scope)` | the same, narrowed to a `SearchScope` token |
 | `plumbline_route_link_json(uri)` | parse a panel link into `{verb, …}` (engine-independent) |
 
 One producer (`plumbline_core::panel`) over the `PanelSource` trait feeds all of
@@ -1403,6 +1454,11 @@ New panel-link verbs: `editnote:REF`, `guide`, `about` (parse + wire in both).
   (`palette(theme)`), served as `plumbline_theme_palette_json`; light values are the
   shipped ones (no regression), dark (candlelight-warm) + night (true-black) are
   new. Config gains `theme` (`system`/`light`/`dark`/`night`, additive). The
+  Dark's ink went from `#e8e0d0` to `#f5f1e8` on 2026-08-17 — readers called the
+  body text dim; the warm cast stays, the lightness moved, and `added` moved with
+  it. `index.html`/`404.html` carry the same two hexes for the pre-boot splash
+  and `e2e/splash.spec.ts` re-derives them from `theme.rs` rather than trusting
+  a copy. The
   reader canvas + chrome + study panel paint from the palette in both shells —
   Android maps it into a Compose `Palette` (`ui/Palette.kt`, `colorOf` for the
   block runs' semantic roles), the web into CSS custom properties; Settings /

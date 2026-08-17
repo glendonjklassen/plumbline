@@ -30,6 +30,7 @@
   import ThreadPicker from "../study/ThreadPicker.svelte";
   import TagWeave from "../study/TagWeave.svelte";
   import ShareScreen from "./ShareScreen.svelte";
+  import SearchScreen from "./SearchScreen.svelte";
   import { t } from "../lib/i18n.svelte";
   import { uiScale } from "../lib/uiScale";
   import { DEFAULT_FONT, FONT_SCALE } from "../engine/fonts.generated";
@@ -92,35 +93,21 @@
     return (run?.sweepProgress as [number, number] | undefined) ?? null;
   });
 
-  function openWordStudy(refKey: string, tokenIndex: number): void {
-    s.panel = { kind: "wordStudy", refKey, tokenIndex };
+  function openWordStudy(refKey: string, tokenIndex: number, lang?: string): void {
+    // The pane's own text: a word tapped in the German column is studied in
+    // German, with that language's own Strong's dictionary.
+    s.panel = { kind: "wordStudy", refKey, tokenIndex, lang };
   }
 
-  // ── live search: per keystroke; empty query closes (manifest §Search) ──
-  // The field shows `searchDraft` and never lags a keystroke; `setSearch` starts
-  // the 180 ms trailing timer that moves it into `searchQuery`, which is what the
-  // panel asks the engine for. Opening the panel keys off the DRAFT so the sheet
-  // appears as soon as there is something to search for, not a fifth of a second
-  // later — only the engine call is debounced.
-  function onSearchInput(e: Event): void {
-    s.setSearch((e.currentTarget as HTMLInputElement).value);
-    if (s.searchDraft.trim()) s.panel = { kind: "search" };
-    else if (s.panel?.kind === "search") s.panel = null;
-  }
-
-  // A permanent search field wrapped the bar onto a second row on a phone, so
-  // on narrow screens it collapses to a magnifying glass and takes the row only
-  // while it is being used.
-  let searchOpen = $state(false);
-  let searchEl = $state<HTMLInputElement | null>(null);
+  // ── search: a DESTINATION (manifest §Search) ──
+  // The glass used to open a field in this bar whose answers came back in the
+  // study panel. Search is its own screen now — see SearchScreen.svelte for
+  // why — so the bar carries only the way in. The scope starts fresh at
+  // "everywhere" each time: a chip the reader set for one question, silently
+  // still on for the next, is a search that lies about what it looked at.
   function openSearch(): void {
-    searchOpen = true;
-    queueMicrotask(() => searchEl?.focus());
-  }
-  function closeSearch(): void {
-    searchOpen = false;
-    s.clearSearch();
-    if (s.panel?.kind === "search") s.panel = null;
+    s.searchScope = "all";
+    s.screen = "search";
   }
   // Surfaces are exclusive: picking a destination closes the others
   // (Memorize left open over Explore was disorienting). Shared by the
@@ -242,7 +229,7 @@
   // is the app's half of it; the browser's own font preference is the other
   // half and the probe measures that. See lib/uiScale.ts.
   const readerScale = $derived(
-    (Number(s.config.bodySize ?? 18) / 18) * (FONT_SCALE[s.config.chromeFont ?? DEFAULT_FONT] ?? 1),
+    (Number(s.config.bodySize ?? 20) / 18) * (FONT_SCALE[s.config.chromeFont ?? DEFAULT_FONT] ?? 1),
   );
 
   // ── global keys (manifest §Keyboard + wheel) ──
@@ -260,7 +247,7 @@
     if (s.mapPopup && e.key !== "Escape") return;
     const pane = s.panes[s.activePane];
     if (!pane) return;
-    const fontPx = Number(s.config.bodySize ?? 18);
+    const fontPx = Number(s.config.bodySize ?? 20);
     const line = fontPx * 3;
     const page = 0.85 * (innerHeight - 120);
     const scroll = (dy: number, all = false) => {
@@ -392,21 +379,7 @@
         <button onclick={go(() => (s.screen = "hymnal"))}>{t("nav.sing")}</button>
       </nav>
     <span class="spacer"></span>
-    <button class="glass" class:searching={searchOpen} onclick={openSearch} aria-label={t("common.openSearch")}>⌕</button>
-    <input
-      class="search"
-      class:open={searchOpen}
-      type="search"
-      placeholder={t("shell.searchPlaceholder")}
-      bind:this={searchEl}
-      value={s.searchDraft}
-      oninput={onSearchInput}
-      onkeydown={(e) => e.key === "Escape" && closeSearch()}
-      aria-label={t("common.search")}
-    />
-    {#if searchOpen}
-      <button class="glass narrow-close" onclick={closeSearch} aria-label={t("common.closeSearch")}>✕</button>
-    {/if}
+    <button class="glass" onclick={openSearch} aria-label={t("common.openSearch")}>⌕</button>
     <button class="menu-btn" onclick={() => (s.menuOpen = !s.menuOpen)} aria-label={t("common.menu")}>≡</button>
   </header>
 
@@ -430,6 +403,8 @@
       <HymnalScreen />
     {:else if s.screen === "share"}
       <ShareScreen />
+    {:else if s.screen === "search"}
+      <SearchScreen />
     {:else}
       <div class="reading">
         {#if s.inConceptStudy}
@@ -810,61 +785,17 @@
     header .spacer {
       flex: 0 0 0;
     }
-    /* `header` prefix so these beat the base rules further down the file. */
-    header .glass {
-      display: block;
-    }
-    header .search {
-      display: none;
-    }
-    header .search.open {
-      display: block;
-      flex: 1;
-      width: auto;
-      min-width: 0;
-    }
-    .glass.searching {
-      display: none;
-    }
-    /* Searching, the field owns the row: everything that is not the field or
-       the way out of it stands down, so the row never has to wrap to hold a
-       query. The chapter nav is the widest of them and goes first. */
-    header:has(.search.open) .chapter-nav {
-      display: none;
-    }
-    /* …and so does the SPACER, which is the one that was actually costing the
-       field its width. `.spacer` is `flex: 1` and so is the open field, so the
-       two split the free space evenly and the box a reader tapped filled half
-       the bar with nothing beside it (maintainer, on a phone, 2026-08-13).
-       Hiding the chapter nav alone could not fix that: the spacer simply took
-       the room the nav gave up. */
-    header:has(.search.open) .spacer {
-      display: none;
-    }
   }
   .spacer {
     flex: 1;
   }
   .glass {
-    display: none; /* wide screens keep the field itself */
+    /* The way INTO the search screen, at every width — there is no header
+       field to stand in for anymore. */
     font-size: calc(20px * var(--uiScale, 1));
     line-height: 1;
     padding: 0 6px;
     color: var(--gold, #9e7d38);
-  }
-  .search {
-    width: min(240px, 38vw);
-    background: var(--paper, #fcf9f4);
-    border: 1px solid var(--rule, #d8cba8);
-    border-radius: 6px;
-    padding: 4px 9px;
-    font-size: calc(14px * var(--uiScale, 1));
-    /* The width above is the field's IDEAL, not a floor: on an open fold it is
-       the widest flexible thing in the row, and holding 240px while the
-       subtitle grows is what used to wrap the bar. It gives ground down to a
-       still-typable minimum before anything falls to a second row. */
-    flex-shrink: 1;
-    min-width: 110px;
   }
   .menu-btn {
     font-size: calc(20px * var(--uiScale, 1));

@@ -189,6 +189,29 @@ impl Corpus {
         &self.tok_version
     }
 
+    /// The canonical verse-index range one book occupies, or `None` when the
+    /// corpus does not have that book.
+    ///
+    /// Answered from the chapter DIRECTORY — no chapter decodes, and no
+    /// assumption that a book begins at chapter 1 verse 1 or that the next
+    /// canonical book is present. Search scopes ride on this.
+    pub fn book_range(&self, book: &str) -> Option<std::ops::Range<usize>> {
+        let chapters = self.chapter_ix.get(book)?;
+        let (mut first, mut last) = (usize::MAX, 0usize);
+        for &slot in chapters.values() {
+            first = first.min(slot);
+            last = last.max(slot);
+        }
+        let start = self.slots.get(first)?.start_ord;
+        // The book ends where the slot after its last one begins; the last
+        // book in the corpus runs to the end.
+        let end = match self.slots.get(last + 1) {
+            Some(next) => next.start_ord,
+            None => self.total,
+        };
+        Some(start..end)
+    }
+
     /// Number of chapters in a book (1 if unknown).
     pub fn chapter_count(&self, book: &str) -> u16 {
         self.chapters.get(book).copied().unwrap_or(1)

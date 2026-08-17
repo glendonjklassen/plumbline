@@ -46,14 +46,29 @@ async function fontPx(page: Page, sel: string): Promise<number> {
   return await page.locator(sel).first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
 }
 
+/** The bodySize the chrome was drawn at (lib/uiScale.ts's divisor). NOT the
+ *  shipped default — those were the same number until the default moved to 20
+ *  in v0.54.0, and the tests below assumed it forever. */
+const CHROME_DRAWN_AT = 18;
+
+/** The scale a reader who has touched nothing gets: the shipped default over
+ *  the size the chrome was drawn at. Read from the app, so moving the default
+ *  again moves these expectations with it. */
+async function defaultScale(page: Page): Promise<number> {
+  const size = await page.evaluate(() => Number((window as any).__plumbline.config.bodySize));
+  return size / CHROME_DRAWN_AT;
+}
+
 // Mutation: drop `use:uiScale={readerScale}` from the probe in Shell.svelte →
 //   'Error: the reader turned the text up and --uiScale did not move
 //    expect(received).toBeCloseTo(expected)  Expected: 2  Received: 1'.
 test("the reader's text size is published on :root", async ({ page }) => {
   await boot(page);
-  // 18px is the size the chrome was drawn at, so the default is exactly 1 and
-  // nothing on screen moves for a reader who never touches the setting.
-  expect(await scale(page)).toBeCloseTo(1, 3);
+  // The chrome tracks the reader's text size against the size it was drawn at,
+  // so a fresh install sits at default/18 — 1.11 since the default became 20.
+  // A reader who has touched nothing still sees a chrome proportioned to their
+  // text, which is the whole point of the variable.
+  expect(await scale(page)).toBeCloseTo(await defaultScale(page), 3);
 
   await page.evaluate(() => (window as any).__plumbline.setZoom(36));
   await expect.poll(() => scale(page), { timeout: 5_000 }).toBeCloseTo(2, 3);
@@ -162,20 +177,21 @@ test("the chrome's text scale does not touch the reader", async ({ page }) => {
 //    expect(received).toBeCloseTo(expected)  Expected: 1.5  Received: 1'.
 test("the chrome follows the browser's own text size", async ({ page }) => {
   await boot(page);
-  expect(await scale(page)).toBeCloseTo(1, 3);
+  const base = await defaultScale(page);
+  expect(await scale(page)).toBeCloseTo(base, 3);
   const drawnAt = await fontPx(page, "header .menu-btn");
-  expect(drawnAt).toBeCloseTo(20, 0);
+  expect(drawnAt).toBeCloseTo(20 * base, 0);
 
   // A browser font preference IS the root element's font-size. 24px is the
   // "Large" setting in Chrome's own font-size menu.
   await page.evaluate(() => (document.documentElement.style.fontSize = "24px"));
   await expect
     .poll(() => scale(page), { timeout: 5_000 })
-    .toBeCloseTo(1.5, 3);
+    .toBeCloseTo(base * 1.5, 3);
   expect(
     await fontPx(page, "header .menu-btn"),
     "the chrome ignores the browser's own text size",
-  ).toBeCloseTo(30, 0);
+  ).toBeCloseTo(20 * base * 1.5, 0);
 
   // And the two inputs multiply: a reader who has set both wants both.
   await page.evaluate(() => (window as any).__plumbline.setZoom(27));

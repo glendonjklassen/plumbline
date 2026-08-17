@@ -30,14 +30,16 @@
     const p = s.panel;
     if (!p) return null;
     switch (p.kind) {
+      // `qIn` with no language IS `q`, so a study opened from an ordinary pane
+      // takes exactly the path it always did.
       case "wordStudy":
-        return s.q("wordStudyBlocks", p.refKey, p.tokenIndex, s.gates)?.blocks;
+        return s.qIn(p.lang, "wordStudyBlocks", p.refKey, p.tokenIndex, s.gates)?.blocks;
       case "codeStudy":
-        return s.q("codeStudyBlocks", p.code, p.word, s.gates)?.blocks;
+        return s.qIn(p.lang, "codeStudyBlocks", p.code, p.word, s.gates)?.blocks;
       case "concordance":
-        return s.q("concordanceBlocks", p.code)?.blocks;
+        return s.qIn(p.lang, "concordanceBlocks", p.code)?.blocks;
       case "renderingConcordance":
-        return s.q("renderingConcordanceBlocks", p.code, p.rendering)?.blocks;
+        return s.qIn(p.lang, "renderingConcordanceBlocks", p.code, p.rendering)?.blocks;
       case "threads":
         return s.q("threadsBlocks")?.blocks;
       case "thread":
@@ -52,8 +54,6 @@
         return s.q("suggestedBlocks")?.blocks;
       case "compare":
         return s.q("compareBlocks", p.index, true)?.blocks;
-      case "search":
-        return s.q("searchBlocks", s.searchQuery)?.blocks;
       case "guide":
         return s.qs("guideBlocks")?.blocks;
       case "about":

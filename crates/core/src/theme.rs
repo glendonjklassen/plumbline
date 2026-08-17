@@ -375,17 +375,19 @@ pub fn palette(theme: Theme) -> Palette {
             read_partial: "#a8642c".into(),
             read_done: "#6f8f6a".into(),
         },
-        // Candlelight-warm dark: a dark brown-charcoal paper, warm off-white ink,
-        // a brighter gold that holds contrast on the dark ground.
+        // Candlelight-warm dark: a dark brown-charcoal paper, near-white ink, a
+        // brighter gold that holds contrast on the dark ground. The ink was
+        // #e8e0d0 until 2026-08-17 — readers reported the body text as dim, so
+        // it moved most of the way to white while keeping the warm cast.
         Theme::Dark => Palette {
             dark: true,
             paper: "#1f1b16".into(),
-            ink: "#e8e0d0".into(),
+            ink: "#f5f1e8".into(),
             faded: "#9a9385".into(),
             // Barely below the ink: on dark paper a dimmed added-word grey read
             // as "darkened" and broke the reading flow —
             // the italic slant carries the distinction, the tint only whispers.
-            added: "#d9cfba".into(),
+            added: "#e7e0d0".into(),
             divine: "#d8b48c".into(),
             title_ink: "#b8aa90".into(),
             gold: "#c8a24e".into(),
