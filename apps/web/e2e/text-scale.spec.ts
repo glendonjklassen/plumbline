@@ -221,6 +221,42 @@ test("a longer passage name shrinks rather than wrapping the top bar", async ({ 
   ).toBe(before);
 });
 
+// THE REPORTED PHONE CASE (2026-08-16): "1 Corinthians" at a raised text size
+// dropped the ⌕ and ≡ to a second bar. Wrapping is the header's sanctioned last
+// resort (the 320px test below), but it must not be the FIRST resort — and
+// shrinkability alone cannot prevent it, because flex line-breaking uses an
+// item's UNSHRUNK size. The fix gives the chapter nav a ZERO flex-basis AND a
+// zero minimum (either alone is not enough — `min-width: auto` hauls the full
+// name back into line collection) and splits the passage so the book NAME
+// ellipsizes while the chapter number stays whole (Shell.svelte `.chapter-nav`
+// / `.pbook` / `.pchap`).
+//
+// Mutation: delete EITHER `flex: 1 1 0` or `min-width: 0` from `.chapter-nav`
+//   in Shell.svelte → 'Error: the header wrapped — the ≡ dropped below the
+//   passage  expect(received).toBeLessThan(expected)'. (Both were tried;
+//   each alone goes red.)
+test("a long book name ellipsizes instead of wrapping the phone bar", async ({ page }) => {
+  await boot(page, { width: 393, height: 800 }); // a Pixel, portrait
+  await page.evaluate(() => (window as any).__plumbline.setZoom(30));
+  await expect.poll(() => scale(page), { timeout: 5_000 }).toBeCloseTo(30 / 18, 2);
+
+  await page.evaluate(() => (window as any).__plumbline.navigate(0, "1Cor", 13, null));
+  const chap = page.locator("header .chapter-nav .pchap");
+  await expect(chap).toHaveText("13 ▾");
+
+  const menu = await page.locator("header .menu-btn").boundingBox();
+  const passage = await page.locator("header .chapter-nav .passage").boundingBox();
+  const chapBox = await chap.boundingBox();
+  // One row: the ≡ starts above the passage's bottom edge, i.e. beside it.
+  expect(menu!.y, "the header wrapped — the ≡ dropped below the passage").toBeLessThan(
+    passage!.y + passage!.height,
+  );
+  // And the chapter number is the half that survived: on screen, whole. The
+  // NAME is what gave ground.
+  expect(chapBox!.width).toBeGreaterThan(5);
+  expect(chapBox!.x + chapBox!.width).toBeLessThanOrEqual(394);
+});
+
 test("the menu stays on screen on a narrow phone at a large text size", async ({ page }) => {
   await boot(page, { width: 320, height: 700 });
   await page.evaluate(() => (window as any).__plumbline.setZoom(40));

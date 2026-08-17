@@ -272,6 +272,44 @@
   {/if}
 {/snippet}
 
+{#snippet wordingChoice()}
+  {#if s.akjvAvailable && !rereading}
+    <!-- How the words should read — asked HERE because the new and curious
+         paths are the readers likeliest to be stopped by "shouldest": the
+         choice is theirs before the first chapter, not a switch to hunt for
+         in Settings later. Classic stays the default; each radio applies on
+         the spot (setAkjvOverlay saves and re-lays), so Open simply keeps
+         whatever is chosen. Not offered on a re-read: re-reading a welcome
+         moves no settings. -->
+    <p class="w-ask">{t("intro.wordingAsk")}</p>
+    <label class="card">
+      <input
+        type="radio"
+        name="introWording"
+        checked={s.config.akjvOverlay !== true}
+        onchange={() => void s.setAkjvOverlay(false)}
+      />
+      <span class="body">
+        <span class="name">{t("settings.wordingClassic")}</span>
+        <span class="desc">{t("settings.wordingClassicDesc")}</span>
+      </span>
+    </label>
+    <label class="card">
+      <input
+        type="radio"
+        name="introWording"
+        checked={s.config.akjvOverlay === true}
+        onchange={() => void s.setAkjvOverlay(true)}
+      />
+      <span class="body">
+        <span class="name">{t("settings.wordingModern")}</span>
+        <span class="desc">{t("settings.wordingModernDesc")}</span>
+      </span>
+    </label>
+    <p class="w-later">{t("intro.wordingLater")}</p>
+  {/if}
+{/snippet}
+
 {#snippet churchFields()}
   <p class="ch-why">{t("intro.churchWhy")}</p>
   <input class="ch-field" placeholder={t("settings.churchName")} bind:value={churchName} />
@@ -353,6 +391,7 @@
         <p>{t("intro.welcome.blessing")}</p>
         <p class="hint">{t("intro.tapHint")}</p>
       </div>
+      {@render wordingChoice()}
       <button class="start" onclick={() => (rereading ? (s.reopenIntro = null) : startInJohn())}>
         {rereading ? t("common.close") : t("intro.open")}
       </button>
@@ -373,6 +412,7 @@
         {@render vquote([REF.struggle])}
         <p class="hint">{t("intro.tapHint")}</p>
       </div>
+      {@render wordingChoice()}
       <button class="start" onclick={() => (rereading ? (s.reopenIntro = null) : startInJohn())}>
         {rereading ? t("common.close") : t("intro.open")}
       </button>
@@ -520,6 +560,16 @@
   }
   .ch-title {
     font-weight: 600;
+    text-align: center;
+  }
+  .w-ask {
+    font-weight: 600;
+    text-align: center;
+    margin-top: 2px;
+  }
+  .w-later {
+    font-size: calc(13.5px * var(--uiScale, 1));
+    color: var(--faded, #8a8276);
     text-align: center;
   }
   .ch-why {

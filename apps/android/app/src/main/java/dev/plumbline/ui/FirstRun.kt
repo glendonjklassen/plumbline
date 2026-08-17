@@ -43,6 +43,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -122,6 +123,12 @@ fun FirstRunOverlay(
     /** The church the reader gave, if any — saved to the shared config by the
      *  shell so their shared links carry it. */
     onChurch: (ChurchState) -> Unit = {},
+    /** Whether this home carries the modernized-wording overlay at all — the
+     *  wording choice on the welcome/curious pages renders only when true.
+     *  Left false on a re-read (no settings move then). */
+    akjvAvailable: Boolean = false,
+    /** The reader chose how the words should read (true = modernized). */
+    onWording: (Boolean) -> Unit = {},
     /** Re-reading a welcome ("new"/"curious") rather than first run: no path is
      *  chosen, no settings move, and the button just closes it. */
     reread: String? = null,
@@ -162,6 +169,9 @@ fun FirstRunOverlay(
     // than confirming something already decided.
     var human by remember { mutableStateOf(false) }
     var machine by remember { mutableStateOf(false) }
+    // Classic is the default; the pick is pushed up as it is made, so the
+    // reader sees the words change the moment they land in John.
+    var modernWording by remember { mutableStateOf(false) }
     // Asked on the two paths that hand the app on. Optional; pushed up only
     // when a name was actually given.
     var cName by remember { mutableStateOf("") }
@@ -217,12 +227,18 @@ fun FirstRunOverlay(
                         onRef = { if (reread != null) onNewBeliever(it, "new") else onNewBeliever(it, "new") },
                         onStart = { if (reread != null) onCloseReread() else onNewBeliever(null, "new") },
                         closeLabel = if (reread != null) t("common.close") else null,
+                        akjvAvailable = akjvAvailable,
+                        modernWording = modernWording,
+                        onWording = { modernWording = it; onWording(it) },
                     )
                     3 -> Curious(
                         palette, serif, bodies, labels,
                         onRef = { onNewBeliever(it, "curious") },
                         onStart = { if (reread != null) onCloseReread() else onNewBeliever(null, "curious") },
                         closeLabel = if (reread != null) t("common.close") else null,
+                        akjvAvailable = akjvAvailable,
+                        modernWording = modernWording,
+                        onWording = { modernWording = it; onWording(it) },
                     )
                     4 -> ChurchBeforeSharing(
                         palette,
@@ -297,6 +313,9 @@ private fun Welcome(
     onStart: () -> Unit,
     /** Non-null when re-reading: the button closes instead of starting. */
     closeLabel: String? = null,
+    akjvAvailable: Boolean = false,
+    modernWording: Boolean = false,
+    onWording: (Boolean) -> Unit = {},
 ) {
     @Composable
     fun Para(text: String) = Text(
@@ -370,6 +389,7 @@ private fun Welcome(
         t("intro.tapHint"),
         color = palette.faded, fontSize = 14.5.sp, fontStyle = FontStyle.Italic,
     )
+    if (akjvAvailable) WordingChoice(palette, modernWording, onWording)
     Spacer(Modifier.height(16.dp))
     Button(
         onClick = onStart,
@@ -392,6 +412,9 @@ private fun Curious(
     onRef: (WelcomeRef) -> Unit,
     onStart: () -> Unit,
     closeLabel: String? = null,
+    akjvAvailable: Boolean = false,
+    modernWording: Boolean = false,
+    onWording: (Boolean) -> Unit = {},
 ) {
     @Composable
     fun Para(text: String) = Text(
@@ -455,11 +478,58 @@ private fun Curious(
         t("intro.tapHint"),
         color = palette.faded, fontSize = 14.5.sp, fontStyle = FontStyle.Italic,
     )
+    if (akjvAvailable) WordingChoice(palette, modernWording, onWording)
     Spacer(Modifier.height(16.dp))
     Button(
         onClick = onStart,
         colors = ButtonDefaults.buttonColors(containerColor = palette.gold, contentColor = palette.paper),
     ) { Text(closeLabel ?: t("intro.open"), fontSize = 18.5.sp) }
+}
+
+/** How the words should read — asked on the new/curious paths, the readers
+ *  likeliest to be stopped by "shouldest" (web twin: FirstRun.svelte's
+ *  wordingChoice snippet). Classic is the default; the pick applies on the
+ *  spot, and Settings › Wording can change it any day after. */
+@Composable
+private fun WordingChoice(
+    palette: ReaderPalette,
+    modern: Boolean,
+    onWording: (Boolean) -> Unit,
+) {
+    Spacer(Modifier.height(18.dp))
+    Text(t("intro.wordingAsk"), color = palette.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+    Spacer(Modifier.height(4.dp))
+    WordingCard(palette, !modern, t("settings.wordingClassic"), t("settings.wordingClassicDesc")) { onWording(false) }
+    WordingCard(palette, modern, t("settings.wordingModern"), t("settings.wordingModernDesc")) { onWording(true) }
+    Text(t("intro.wordingLater"), color = palette.faded, fontSize = 13.5.sp)
+}
+
+/** One of the two wording options — the tier card's shape with a radio, since
+ *  the two are exclusive. */
+@Composable
+private fun WordingCard(
+    palette: ReaderPalette,
+    selected: Boolean,
+    name: String,
+    desc: String,
+    onPick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+            .border(1.dp, if (selected) palette.gold else palette.rule, RoundedCornerShape(12.dp))
+            .background(palette.panelBg, RoundedCornerShape(12.dp))
+            .clickable(onClick = onPick)
+            .padding(end = 16.dp, top = 6.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        RadioButton(selected = selected, onClick = onPick)
+        Column {
+            Text(name, color = palette.ink, fontSize = 18.5.sp, fontWeight = FontWeight.SemiBold)
+            Text(desc, color = palette.faded, fontSize = 15.sp, modifier = Modifier.padding(top = 3.dp))
+        }
+    }
 }
 
 /** The three optional church fields, with the reason they are being asked. */
