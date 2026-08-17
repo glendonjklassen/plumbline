@@ -100,12 +100,20 @@ in browser storage.
 
 ### Android
 
+> **The APK is temporarily on hold (from v0.55.0).** The Android app is a
+> release behind the web: per-pane text language shipped on the web only, so a
+> new APK would carry a version number whose headline feature it does not have.
+> **The most recent release with an APK is v0.54.0** — it still installs and
+> still works, and your data is untouched either way. The web app above is
+> current, installs to the home screen, and works offline. The APK returns when
+> Android catches up.
+
 No Play Store, no Google account: you download one file and open it. Four
 steps, all on the phone.
 
 1. **Download it.** Open the
    [Releases page](https://github.com/glendonjklassen/plumbline/releases) on the
-   phone and, under **Assets** on the newest release, tap
+   phone and, under **Assets** on the newest release **that has one**, tap
    `plumbline-<version>-android.apk` (about 20 MB). Chrome will warn that a file
    of this type "can harm your device" — it says that about every APK anyone has
    ever downloaded. Keep it.
