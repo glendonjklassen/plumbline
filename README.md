@@ -100,13 +100,13 @@ in browser storage.
 
 ### Android
 
-> **The APK is temporarily on hold (from v0.55.0).** The Android app is a
-> release behind the web: per-pane text language shipped on the web only, so a
-> new APK would carry a version number whose headline feature it does not have.
-> **The most recent release with an APK is v0.53.1** — it still installs and
-> still works, and your data is untouched either way. The web app above is
-> current, installs to the home screen, and works offline. The APK returns when
-> Android catches up.
+> **The APK is temporarily on hold.** The Android app is a release behind the
+> web — per-pane text language shipped on the web only — so a new APK would
+> carry a version number whose headline feature it does not have. **The newest
+> release that still has an APK attached is the one to use**; it installs and
+> works exactly as before, and your data is untouched either way. The web app
+> above is current, installs to the home screen, and works offline. The APK
+> returns when Android catches up.
 
 No Play Store, no Google account: you download one file and open it. Four
 steps, all on the phone.

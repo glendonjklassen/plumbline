@@ -3088,11 +3088,7 @@ fn a_second_engine_opens_a_named_language_and_never_substitutes_english() {
         // Now the text IS on the device. The sample is the KJV's bytes under
         // Luther's name and stamp — this asserts the FILE CHOICE, which is the
         // part that decides which Bible a pane paints.
-        let luther = KJV.replacen(
-            plumbline_core::canon::TOKENIZATION_VERSION,
-            "luther1912-tok1",
-            1,
-        );
+        let luther = KJV.replacen(plumbline_core::canon::TOKENIZATION_VERSION, "luther1912-tok1", 1);
         std::fs::write(home.join("data").join("luther1912.jsonl"), &luther).unwrap();
         let alt = plumbline_engine_open_lang(home_c.as_ptr(), de.as_ptr(), &mut err);
         assert!(err.is_null(), "{:?}", take(err));

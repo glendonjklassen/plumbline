@@ -1316,12 +1316,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         open_panes: cfg
             .panes
             .iter()
-            .map(|p| WirePaneRef {
-                book: p.book.clone(),
-                chapter: p.chapter,
-                verse: p.verse,
-                lang: p.lang.clone(),
-            })
+            .map(|p| WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: p.verse, lang: p.lang.clone() })
             .collect(),
         active_pane: cfg.active,
         bible_reads: cfg.bible_reads,
@@ -1332,12 +1327,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
             .map(|(k, p)| {
                 (
                     k.clone(),
-                    WirePaneRef {
-                        book: p.book.clone(),
-                        chapter: p.chapter,
-                        verse: p.verse,
-                        lang: p.lang.clone(),
-                    },
+                    WirePaneRef { book: p.book.clone(), chapter: p.chapter, verse: p.verse, lang: p.lang.clone() },
                 )
             })
             .collect(),
