@@ -86,6 +86,26 @@ export class StudyEngine {
     return new StudyEngine(w, engine);
   }
 
+  /**
+   * A SECOND engine on a named language's text, from the same home — what a
+   * pane reading German beside an English one runs on.
+   *
+   * It shares the reader's data because every text sits at the KJV's verse
+   * addresses (docs/PER-PANE-LANGUAGE.md). It does NOT fall back to English:
+   * a missing text throws, and the caller offers the download.
+   */
+  static openLang(w: WasmEngine, home: string, lang: string): StudyEngine {
+    const homePtr = w.inStr(home);
+    const langPtr = w.inStr(lang);
+    const [engine, err] = w.withErrSlot((slot) =>
+      (w.exports.plumbline_engine_open_lang as Function)(homePtr, langPtr, slot) as number,
+    );
+    w.freeStr(homePtr);
+    w.freeStr(langPtr);
+    if (!engine) throw new Error(err ?? `no ${lang} text on this device`);
+    return new StudyEngine(w, engine);
+  }
+
   get wasm(): WasmEngine {
     return this.#w;
   }

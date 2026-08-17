@@ -64,6 +64,13 @@ pub struct PaneRef {
     pub book: String,
     pub chapter: u16,
     pub verse: Option<u16>,
+    /// The TEXT this pane reads, as a language code — empty meaning "the
+    /// reader's own language", which is what every pane was before per-pane
+    /// text existed and what every pane still is until one is changed.
+    ///
+    /// A pane's text language is not the UI's: German beside English is the
+    /// point, so this travels with the pane rather than with the app.
+    pub lang: String,
 }
 
 /// The reader's home church, carried in a shared link so one QR hands over
@@ -366,6 +373,9 @@ struct PaneWire {
     /// First visible verse (additive; absent = top / an old writer).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     verse: Option<u16>,
+    /// This pane's text language (additive; absent = the reader's own).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    lang: String,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -436,7 +446,12 @@ impl Config {
             panes: w
                 .open_panes
                 .into_iter()
-                .map(|p| PaneRef { book: p.book, chapter: p.chapter.max(1), verse: p.verse.filter(|v| *v >= 1) })
+                .map(|p| PaneRef {
+                    book: p.book,
+                    chapter: p.chapter.max(1),
+                    verse: p.verse.filter(|v| *v >= 1),
+                    lang: p.lang,
+                })
                 .collect(),
             // Clamp: shells index panes with this.
             active: if n_panes == 0 { 0 } else { w.active_pane.min(n_panes - 1) },
@@ -446,7 +461,15 @@ impl Config {
                 .slots
                 .into_iter()
                 .map(|(k, p)| {
-                    (k, PaneRef { book: p.book, chapter: p.chapter.max(1), verse: p.verse.filter(|v| *v >= 1) })
+                    (
+                        k,
+                        PaneRef {
+                            book: p.book,
+                            chapter: p.chapter.max(1),
+                            verse: p.verse.filter(|v| *v >= 1),
+                            lang: p.lang,
+                        },
+                    )
                 })
                 .collect(),
             verse_per_line: w.verse_per_line,
@@ -465,7 +488,7 @@ impl Config {
             history: w
                 .history
                 .into_iter()
-                .map(|p| PaneRef { book: p.book, chapter: p.chapter.max(1), verse: None })
+                .map(|p| PaneRef { book: p.book, chapter: p.chapter.max(1), verse: None, lang: String::new() })
                 .take(HISTORY_CAP)
                 .collect(),
             // Absent in an older file → on. (Deriving from studyMode would
@@ -519,7 +542,13 @@ impl Config {
             open_panes: self
                 .panes
                 .iter()
-                .map(|p| PaneWire { book: p.book.clone(), chapter: p.chapter, verse: p.verse, extra: Map::new() })
+                .map(|p| PaneWire {
+                    book: p.book.clone(),
+                    chapter: p.chapter,
+                    verse: p.verse,
+                    lang: p.lang.clone(),
+                    extra: Map::new(),
+                })
                 .collect(),
             active_pane: self.active,
             bible_reads: self.bible_reads,
@@ -530,7 +559,13 @@ impl Config {
                 .map(|(k, p)| {
                     (
                         k.clone(),
-                        PaneWire { book: p.book.clone(), chapter: p.chapter, verse: p.verse, extra: Map::new() },
+                        PaneWire {
+                            book: p.book.clone(),
+                            chapter: p.chapter,
+                            verse: p.verse,
+                            lang: p.lang.clone(),
+                            extra: Map::new(),
+                        },
                     )
                 })
                 .collect(),
@@ -547,7 +582,14 @@ impl Config {
                 .history
                 .iter()
                 .take(HISTORY_CAP)
-                .map(|p| PaneWire { book: p.book.clone(), chapter: p.chapter, verse: None, extra: Map::new() })
+                // History is a list of PLACES, not of panes: no language.
+                .map(|p| PaneWire {
+                    book: p.book.clone(),
+                    chapter: p.chapter,
+                    verse: None,
+                    lang: String::new(),
+                    extra: Map::new(),
+                })
                 .collect(),
             human_analysis: Some(self.human_analysis),
             machine_analysis: Some(self.machine_analysis),
@@ -698,8 +740,8 @@ mod tests {
             mode: StudyMode::Full,
             body_size: 21.5,
             panes: vec![
-                PaneRef { book: "John".into(), chapter: 3, verse: Some(16) },
-                PaneRef { book: "Rom".into(), chapter: 8, verse: None },
+                PaneRef { book: "John".into(), chapter: 3, verse: Some(16), lang: String::new() },
+                PaneRef { book: "Rom".into(), chapter: 8, verse: None, lang: String::new() },
             ],
             active: 1,
             // Both halves of the lifetime counter, so the round-trip covers a
@@ -710,7 +752,7 @@ mod tests {
             // rather than only its empty case.
             slots: BTreeMap::from([(
                 "sunday-morning".to_string(),
-                PaneRef { book: "Ps".into(), chapter: 23, verse: Some(4) },
+                PaneRef { book: "Ps".into(), chapter: 23, verse: Some(4), lang: String::new() },
             )]),
             verse_per_line: true,
             // Both OFF here: these default to true, so a round-trip that left
@@ -728,8 +770,8 @@ mod tests {
             side_margin: 40.0,
             line_spacing: 1.6,
             history: vec![
-                PaneRef { book: "Gen".into(), chapter: 1, verse: None },
-                PaneRef { book: "Rom".into(), chapter: 8, verse: None },
+                PaneRef { book: "Gen".into(), chapter: 1, verse: None, lang: String::new() },
+                PaneRef { book: "Rom".into(), chapter: 8, verse: None, lang: String::new() },
             ],
             human_analysis: true,
             machine_analysis: false,
@@ -948,6 +990,38 @@ mod tests {
 
     /// A config with nothing unknown in it is written byte for byte as it was
     /// before any of that landed — this file rides in the backup zip too.
+    /// A pane's TEXT LANGUAGE survives the file, and its absence still means
+    /// "the reader's own" — the additive rule, applied to the field that makes
+    /// German-beside-English reopen as German beside English.
+    #[test]
+    fn a_pane_carries_its_own_text_language() {
+        let dir = scratch("panelang");
+        let path = dir.join("config.json");
+        let cfg = Config {
+            panes: vec![
+                PaneRef { book: "John".into(), chapter: 3, verse: None, lang: String::new() },
+                PaneRef { book: "John".into(), chapter: 3, verse: None, lang: "de".into() },
+            ],
+            ..Config::default()
+        };
+        save_to(&path, &cfg).unwrap();
+
+        let written: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        // The English pane writes NO key: an unset language is the absence of
+        // one, so a file from before this feature and a file from a reader who
+        // never used it are the same bytes.
+        assert_eq!(written["openPanes"][0]["lang"], Value::Null);
+        assert_eq!(written["openPanes"][1]["lang"], "de");
+
+        let (back, _) = load_from(&path);
+        assert_eq!(back.panes, cfg.panes);
+
+        // A file written before panes had languages reads as the reader's own.
+        std::fs::write(&path, r#"{"openPanes":[{"book":"Ps","chapter":23}]}"#).unwrap();
+        let (old, _) = load_from(&path);
+        assert_eq!(old.panes[0].lang, "");
+    }
+
     #[test]
     fn a_config_with_no_unknown_keys_is_written_exactly_as_before() {
         let dir = scratch("golden");

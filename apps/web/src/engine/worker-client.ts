@@ -111,6 +111,8 @@ export class EngineRpc {
   onRndProgress: (fraction: number) => void = () => {};
   /** How far the language-pack download has got, 0..1. */
   onLangPackProgress: (fraction: number) => void = () => {};
+  /** Download progress for a language a PANE asked for (0..1). */
+  onPaneLangProgress: (code: string, fraction: number) => void = () => {};
   /** Download finished; the engine is now parsing it (seconds on a phone). */
   onRndPreparing: () => void = () => {};
   /** A save to this device's storage did not land — quota, blocked storage, a
@@ -171,6 +173,7 @@ export class EngineRpc {
         return this.onProgress(m);
       }
       if (m.type === "langPackProgress") return this.onLangPackProgress(m.fraction ?? 0);
+      if (m.type === "paneLangProgress") return this.onPaneLangProgress(m.code ?? "", m.fraction ?? 0);
       if (m.type === "authored") return this.onAuthored();
       if (m.type === "readingWrote") return this.onReadingWrote();
       if (m.type === "coreReady") return this.onCoreReady();
@@ -294,6 +297,14 @@ export class EngineRpc {
     }
     return this.#send({ op: "call", method, args });
   }
+  /** The same read against another LANGUAGE's text — a pane reading German
+   *  beside an English one. Falsy `lang` is the reader's own text, so callers
+   *  need no branch. Reads only: authoring is the primary engine's alone
+   *  (docs/PER-PANE-LANGUAGE.md). */
+  callIn(lang: string | null | undefined, method: string, ...args: unknown[]): Promise<any> {
+    if (!lang) return this.call(method, ...args);
+    return this.#send({ op: "callIn", lang, method, args });
+  }
   /** An engine-independent fn (configLoad/Save, themePalette, guide…). */
   static(fn: string, ...args: unknown[]): Promise<any> {
     return this.#send({ op: "static", fn, args });
@@ -303,7 +314,15 @@ export class EngineRpc {
   layout(
     book: string,
     chapter: number,
-    o: { font: number; width: number; lineSpacing: number; versePerLine: boolean; verseNumbers: boolean },
+    o: {
+      font: number;
+      width: number;
+      lineSpacing: number;
+      versePerLine: boolean;
+      verseNumbers: boolean;
+      /** The pane's text language; absent = the reader's own. */
+      lang?: string | null;
+    },
   ): Promise<any> {
     return this.#send({ op: "layout", book, chapter, ...o });
   }
@@ -312,7 +331,14 @@ export class EngineRpc {
   prefetch(
     book: string,
     chapter: number,
-    o: { font: number; width: number; lineSpacing: number; versePerLine: boolean; verseNumbers: boolean },
+    o: {
+      font: number;
+      width: number;
+      lineSpacing: number;
+      versePerLine: boolean;
+      verseNumbers: boolean;
+      lang?: string | null;
+    },
   ): Promise<void> {
     return this.#send({ op: "prefetch", book, chapter, ...o });
   }
@@ -386,12 +412,28 @@ export class EngineRpc {
   }
 
   /** Whether this build offers a language's scripture, and whether it is here. */
+  /** Free the engines for languages no pane reads any more; answers how many
+   *  were released. */
+  releaseLangs(keep: string[]): Promise<number> {
+    return this.#send({ op: "releaseLangs", keep });
+  }
+  /** The wasm instance's heap size in bytes — what an extra open corpus
+   *  actually costs, measured rather than guessed (e2e/pane-language.spec.ts). */
+  wasmMemoryBytes(): Promise<number> {
+    return this.#send({ op: "wasmMemoryBytes" });
+  }
   langPackState(code: string): Promise<{ available: boolean; installed: boolean; gzBytes: number }> {
     return this.#send({ op: "langPackState", code });
   }
 
   /** Download and store a language's corpus. The caller RELOADS afterwards: the
    *  corpus is chosen when the engine opens, so nothing changes until it does. */
+  /** Make a language readable IN A PANE: download its text if this device has
+   *  not got it, then open an engine on it. No reload — the pane beside it
+   *  keeps reading. Progress arrives as `onPaneLangProgress`. */
+  openPaneLang(code: string): Promise<{ ready: boolean }> {
+    return this.#send({ op: "openPaneLang", code });
+  }
   installLangPack(code: string): Promise<boolean> {
     return this.#send({ op: "installLangPack", code });
   }

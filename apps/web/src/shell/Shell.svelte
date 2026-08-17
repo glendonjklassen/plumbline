@@ -93,8 +93,10 @@
     return (run?.sweepProgress as [number, number] | undefined) ?? null;
   });
 
-  function openWordStudy(refKey: string, tokenIndex: number): void {
-    s.panel = { kind: "wordStudy", refKey, tokenIndex };
+  function openWordStudy(refKey: string, tokenIndex: number, lang?: string): void {
+    // The pane's own text: a word tapped in the German column is studied in
+    // German, with that language's own Strong's dictionary.
+    s.panel = { kind: "wordStudy", refKey, tokenIndex, lang };
   }
 
   // ── search: a DESTINATION (manifest §Search) ──
