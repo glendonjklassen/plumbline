@@ -425,6 +425,13 @@ pub trait PanelSource {
     fn verse_body(&self, refkey: &str) -> Option<String>;
     /// Run a search query.
     fn search(&self, query: &str) -> SearchView;
+    /// Run a search query narrowed to a scope, as
+    /// [`crate::search::SearchScope::token`] spells it. A source that has no
+    /// scoped path answers the whole corpus — a wider answer, never a wrong
+    /// one.
+    fn search_scoped(&self, query: &str, _scope: &str) -> SearchView {
+        self.search(query)
+    }
 }
 
 // ── the link router (one verb vocabulary, shared by every shell) ──────────────
@@ -1426,7 +1433,13 @@ fn compare_side(src: &dyn PanelSource, refkey: &str, display: &str, span: Option
 // ── search results ────────────────────────────────────────────────────────────
 
 pub fn search(src: &dyn PanelSource, query: &str) -> Vec<Block> {
-    match src.search(query) {
+    search_in(src, query, "all")
+}
+
+/// [`search`] narrowed to a scope token (`all` | `ot` | `nt` | `book:<osis>` |
+/// `chapter:<osis>:<ch>`) — the search screen's chips.
+pub fn search_in(src: &dyn PanelSource, query: &str, scope: &str) -> Vec<Block> {
+    match src.search_scoped(query, scope) {
         SearchView::Goto { book, chapter, verse, display } => {
             let uri = match verse {
                 Some(v) => format!("go:{book}:{chapter}:{v}"),

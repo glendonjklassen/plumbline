@@ -1677,6 +1677,35 @@ pub unsafe extern "C" fn plumbline_engine_search_json(
     })
 }
 
+/// [`plumbline_engine_search_json`] narrowed to a scope — the search screen's
+/// chips. `scope` is `all` | `ot` | `nt` | `book:<osis>` |
+/// `chapter:<osis>:<ch>`; anything else (or null) searches everything.
+///
+/// A REFERENCE query still answers `goto` whatever the scope: the reader typed
+/// an address, and a chip must not refuse to take them there.
+///
+/// # Safety
+/// `engine` is valid; `query` is a valid NUL-terminated UTF-8 string; `scope`
+/// is null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_search_scoped_json(
+    engine: *const PlumblineEngine,
+    query: *const c_char,
+    scope: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(engine), Some(query)) = (engine.as_ref(), opt_str(query)) else {
+            return ptr::null_mut();
+        };
+        let study = engine.study_read();
+        let scope = opt_str(scope).and_then(search::SearchScope::parse).unwrap_or_default();
+        match search::run_search_scoped(&engine.corpus, &study.notes, engine.search_ix(), query, &scope) {
+            Some(answer) => out_json(&wire::search_to_wire(&answer)),
+            None => ptr::null_mut(),
+        }
+    })
+}
+
 // ── study data: read ─────────────────────────────────────────────────────────
 
 /// The loaded threads as JSON: `{"threads":[{name,notes,created,entries:[…]}]}`.
@@ -2985,8 +3014,15 @@ impl PanelSource for PlumblineEngine {
         self.corpus.verse(&v).map(|verse| verse.body())
     }
     fn search(&self, query: &str) -> panel::SearchView {
+        self.search_scoped(query, "all")
+    }
+    fn search_scoped(&self, query: &str, scope: &str) -> panel::SearchView {
         let study = self.study_read();
-        match search::run_search(&self.corpus, &study.notes, self.search_ix(), query) {
+        // An unparseable token searches EVERYTHING rather than nothing: a
+        // shell that sends a scope this build does not know still gets an
+        // answer to the reader's query.
+        let scope = search::SearchScope::parse(scope).unwrap_or_default();
+        match search::run_search_scoped(&self.corpus, &study.notes, self.search_ix(), query, &scope) {
             Some(search::SearchAnswer::GoTo { book, chapter, verse }) => {
                 let display = match verse {
                     Some(v) => VRef::new(book.clone(), chapter, v).display(),
@@ -3267,6 +3303,29 @@ pub unsafe extern "C" fn plumbline_engine_search_blocks_json(
             return ptr::null_mut();
         }
         out_json(&wire::blocks_to_wire(panel::search(e, query)))
+    })
+}
+
+/// [`plumbline_engine_search_blocks_json`] narrowed to a scope token — see
+/// [`plumbline_engine_search_scoped_json`] for the vocabulary.
+///
+/// # Safety
+/// `engine` is a live engine; `query` and `scope` are null or valid
+/// NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_search_blocks_scoped_json(
+    engine: *const PlumblineEngine,
+    query: *const c_char,
+    scope: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let (Some(e), Some(query)) = (engine.as_ref(), opt_str(query)) else {
+            return ptr::null_mut();
+        };
+        if query.trim().is_empty() {
+            return ptr::null_mut();
+        }
+        out_json(&wire::blocks_to_wire(panel::search_in(e, query, opt_str(scope).unwrap_or("all"))))
     })
 }
 
