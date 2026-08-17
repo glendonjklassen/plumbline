@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,6 +61,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -1213,6 +1216,8 @@ fun StudyScreen(
         if (showSearch) {
             SearchOverlay(
                 engine, palette, studyScale, searchText,
+                hereBook = book, hereChapter = chapter,
+                bookName = { id -> toc.firstOrNull { it.id == id }?.name ?: id },
                 onQueryChange = { searchText = it },
                 onHits = { searchHits = it },
                 onNavigate = { b, c, v -> book = b; chapter = c; pendingVerse = v; navEpoch++ },
@@ -1774,6 +1779,10 @@ private fun SearchOverlay(
     palette: ReaderPalette,
     scale: Float,
     initialQuery: String,
+    /** The open passage, for the "this book" / "this chapter" chips. */
+    hereBook: String,
+    hereChapter: Int,
+    bookName: (String) -> String,
     onQueryChange: (String) -> Unit,
     onHits: (Set<String>) -> Unit,
     onNavigate: (book: String, chapter: Int, verse: Int?) -> Unit,
@@ -1783,6 +1792,10 @@ private fun SearchOverlay(
     var q by remember { mutableStateOf(initialQuery) }
     var blocks by remember { mutableStateOf<String?>(null) }
     var searching by remember { mutableStateOf(false) }
+    // Where to look, as `core::search::SearchScope::token` spells it. The two
+    // narrow chips carry the CONCRETE passage they were built from, so a shown
+    // result list keeps meaning what it meant when it was drawn.
+    var scopeToken by remember { mutableStateOf("all") }
     val focus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     val turns = remember { StudyTurns() }
@@ -1795,6 +1808,7 @@ private fun SearchOverlay(
     // can never arrive after the hits it replaces, and only the newest Enter paints.
     fun run() {
         val query = q.trim()
+        val where = scopeToken
         if (query.isEmpty()) {
             // Nothing already in flight may paint over a field the reader cleared.
             turns.abandon()
@@ -1807,7 +1821,7 @@ private fun SearchOverlay(
         scope.engineCall(
             engine, turns,
             {
-                val r = engine.SearchJson(query)
+                val r = engine.SearchScopedJson(query, where)
                     ?.let { runCatching { parseWire<SearchResult>(it) }.getOrNull() }
                 when {
                     r == null -> null
@@ -1816,7 +1830,7 @@ private fun SearchOverlay(
                     else -> SearchAnswer(
                         goto = null,
                         hits = r.hits?.map { it.verse }?.toSet() ?: emptySet(),
-                        blocks = engine.SearchBlocksJson(query),
+                        blocks = engine.SearchBlocksScopedJson(query, where),
                     )
                 }
             },
@@ -1867,6 +1881,36 @@ private fun SearchOverlay(
                     modifier = Modifier.weight(1f).focusRequester(focus),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { run() }),
+                )
+            }
+        }
+        // The scopes. A chip re-runs the search it changes — the reader has
+        // already typed the query, and making them press Search again to apply
+        // a scope reads as the chip not having worked.
+        val chips = buildList {
+            add("all" to t("search.scopeAll"))
+            if (hereBook.isNotEmpty()) {
+                add("book:$hereBook" to bookName(hereBook))
+                add("chapter:$hereBook:$hereChapter" to "${bookName(hereBook)} $hereChapter")
+            }
+            add("ot" to t("search.scopeOT"))
+            add("nt" to t("search.scopeNT"))
+        }
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            chips.forEach { (token, label) ->
+                val on = scopeToken == token
+                FilterChip(
+                    selected = on,
+                    onClick = { scopeToken = token; if (q.isNotBlank()) run() },
+                    label = { Text(label, fontSize = 13.sp * scale) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = palette.gold,
+                        selectedLabelColor = palette.paper,
+                        labelColor = palette.faded,
+                    ),
                 )
             }
         }
