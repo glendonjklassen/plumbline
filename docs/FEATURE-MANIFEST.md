@@ -1119,6 +1119,14 @@ English definitions until a translation run fills them in, and
 `machine_translated: false` on its row is what stops the study card claiming
 otherwise.
 
+**PER-PANE TEXT LANGUAGE — the seam exists, the shells do not use it yet.**
+`plumbline_engine_open_lang(home, lang)` opens a second engine on another
+language's text from the same home, which is what German-beside-English will
+ride on; the reader's own data is shared because every text sits at the KJV's
+verse addresses. Design, rejected alternative, and the per-shell work:
+[docs/PER-PANE-LANGUAGE.md](PER-PANE-LANGUAGE.md). Until a shell uses it, the
+language remains one setting for the whole app, set BEFORE the engine opens.
+
 **SHELL DELTA — delivery.** Android BUNDLES every language's corpus and
 dictionary in the APK (~2 MB each, marker `.data-v6`); the web fetches them on
 demand as `stage: "optional"` under `corpus:<code>` / `lexicon:<code>` roles when
