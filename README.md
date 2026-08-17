@@ -103,7 +103,7 @@ in browser storage.
 > **The APK is temporarily on hold (from v0.55.0).** The Android app is a
 > release behind the web: per-pane text language shipped on the web only, so a
 > new APK would carry a version number whose headline feature it does not have.
-> **The most recent release with an APK is v0.54.0** — it still installs and
+> **The most recent release with an APK is v0.53.1** — it still installs and
 > still works, and your data is untouched either way. The web app above is
 > current, installs to the home screen, and works offline. The APK returns when
 > Android catches up.
