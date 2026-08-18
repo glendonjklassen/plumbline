@@ -421,6 +421,58 @@ pub fn set_entry_note(
     Ok(lt.file.clone())
 }
 
+/// Drop entry `index` from the thread named `name`.
+///
+/// The thread survives its last entry being removed: an empty thread is a
+/// heading someone is still filling in, and deleting the whole thing on the way
+/// past would throw away its name, its notes and its id — which is
+/// [`remove_thread`]'s job, asked for deliberately.
+pub fn remove_from_thread(loaded: &[LoadedThread], name: &str, index: usize, now: &str) -> Result<PathBuf, Error> {
+    let lt = find_thread(loaded, name)?;
+    let mut thread = lt.thread.clone();
+    if index >= thread.entries.len() {
+        return Err(Error::Corpus(format!("thread {name} has no entry {index}")));
+    }
+    thread.entries.remove(index);
+    write_thread(&lt.file, &thread, now)?;
+    Ok(lt.file.clone())
+}
+
+/// Move entry `from` to position `to` in the thread named `name`.
+///
+/// The ORDER IS THE ARGUMENT a thread makes — the Romans Road is a road, and
+/// the verses are in the order someone walks them — so this is a reorder, not a
+/// sort: whatever the reader arranges is what Present steps through.
+///
+/// `to` is clamped to the last valid position rather than refused, so a shell
+/// that says "move it down" on the last entry gets a no-op instead of an error
+/// it has to special-case.
+pub fn move_in_thread(
+    loaded: &[LoadedThread],
+    name: &str,
+    from: usize,
+    to: usize,
+    now: &str,
+) -> Result<PathBuf, Error> {
+    let lt = find_thread(loaded, name)?;
+    let mut thread = lt.thread.clone();
+    let n = thread.entries.len();
+    if from >= n {
+        return Err(Error::Corpus(format!("thread {name} has no entry {from}")));
+    }
+    let to = to.min(n.saturating_sub(1));
+    if to == from {
+        // Nothing moved. Still a success, and still NOT a write: rewriting the
+        // file would bump `updated` and make a no-op look like an edit to
+        // anything diffing or syncing it.
+        return Ok(lt.file.clone());
+    }
+    let entry = thread.entries.remove(from);
+    thread.entries.insert(to, entry);
+    write_thread(&lt.file, &thread, now)?;
+    Ok(lt.file.clone())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -432,6 +484,62 @@ mod tests {
         {"ref":"Rom 3:23","span":[0,11],"text":["For","all","have","sinned"],"note":null,"added":"2026-07-03T00:00:00Z"},
         {"ref":"Rom 6:23","span":[0,19],"text":["For","the","wages"],"note":"contrast","added":"2026-07-03T00:00:00Z"}
       ]}"#;
+
+    /// Rearranging and removing, the two edits a thread accumulates a need for
+    /// — a road gets a verse in the wrong place, or one that turned out not to
+    /// belong.
+    #[test]
+    fn entries_can_be_reordered_and_removed() {
+        let dir = std::env::temp_dir().join(format!("pl-thread-edit-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        // `load_threads` reads `<home>/threads`, so the sample goes there.
+        std::fs::create_dir_all(dir.join("threads")).unwrap();
+        let file = dir.join("threads").join("romans-road.json");
+        std::fs::write(&file, SAMPLE).unwrap();
+        let reload = || -> Vec<LoadedThread> { load_threads(&dir).0 };
+        let refs =
+            |lts: &[LoadedThread]| -> Vec<String> { lts[0].thread.entries.iter().map(|e| e.vref.ref_key()).collect() };
+
+        let loaded = reload();
+        assert_eq!(refs(&loaded), ["Rom 3:23", "Rom 6:23"]);
+
+        // Down, then back up: the order is the reader's, and it round-trips.
+        move_in_thread(&loaded, "Romans Road", 0, 1, "2026-08-18T00:00:00Z").unwrap();
+        let loaded = reload();
+        assert_eq!(refs(&loaded), ["Rom 6:23", "Rom 3:23"]);
+        move_in_thread(&loaded, "Romans Road", 1, 0, "2026-08-18T00:00:00Z").unwrap();
+        let loaded = reload();
+        assert_eq!(refs(&loaded), ["Rom 3:23", "Rom 6:23"]);
+
+        // "Move the last one down" is a no-op, not an error — the shell should
+        // not have to know which end it is on. And a no-op must not rewrite the
+        // file: `updated` would move and make it look edited.
+        let before = std::fs::read_to_string(&file).unwrap();
+        move_in_thread(&loaded, "Romans Road", 1, 9, "2026-08-18T00:00:00Z").unwrap();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), before, "a no-op move rewrote the file");
+
+        // An entry that turned out not to belong. The note on the survivor
+        // rides along — entries are removed by position, not rebuilt.
+        remove_from_thread(&reload(), "Romans Road", 0, "2026-08-18T00:00:00Z").unwrap();
+        let loaded = reload();
+        assert_eq!(refs(&loaded), ["Rom 6:23"]);
+        assert_eq!(loaded[0].thread.entries[0].note.as_deref(), Some("contrast"));
+
+        // THE THREAD SURVIVES ITS LAST ENTRY. An empty thread is a heading
+        // someone is still filling in; throwing away its name and notes is
+        // `remove_thread`'s job and has to be asked for.
+        remove_from_thread(&loaded, "Romans Road", 0, "2026-08-18T00:00:00Z").unwrap();
+        let loaded = reload();
+        assert_eq!(loaded.len(), 1, "the thread itself was deleted with its last entry");
+        assert!(loaded[0].thread.entries.is_empty());
+        assert_eq!(loaded[0].thread.notes, "the gospel in Romans");
+
+        // Out of range says so rather than silently doing nothing.
+        assert!(remove_from_thread(&loaded, "Romans Road", 0, "2026-08-18T00:00:00Z").is_err());
+        assert!(move_in_thread(&loaded, "Romans Road", 0, 0, "2026-08-18T00:00:00Z").is_err());
+        assert!(move_in_thread(&loaded, "Nope", 0, 0, "2026-08-18T00:00:00Z").is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn parses_a_thread() {

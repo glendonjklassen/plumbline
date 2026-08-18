@@ -957,6 +957,48 @@ weave-map card had drifted onto `map.chordMap`; fixed). *Delta:* the web lists
 **Suggested** as its own card (`ExploreScreen.svelte`); Android folds it into
 one Weaves screen with an All/Suggested filter (`WeavesScreen`).
 
+**Threads are EDITED, not just accumulated** (2026-08-18). A thread's detail
+card carries per-entry **↑ ↓ · remove** beside its note link. The arrows are
+omitted at the ends rather than shown disabled — no room on a phone for a
+control that cannot act, and the list's shape already says which end you are on.
+Removing ASKS FIRST and names the passage (`deletethread:`'s rule); rearranging
+does not, because it is undoable by doing it again. `core::thread`'s
+`move_in_thread` clamps a destination past the end to a no-op AND DOES NOT WRITE
+— rewriting would move `updated` and make a no-op look like an edit — and
+`remove_from_thread` leaves the THREAD standing when its last entry goes: an
+empty thread is a heading someone is still filling in, and discarding its name,
+notes and id is `remove_thread`'s job, asked for deliberately.
+**SHELL DELTA:** the controls render on Android too (the blocks come from the
+core), but its link dispatcher does not carry the `moveentry:`/`removeentry:`
+verbs yet — the taps are INERT there (safely: `RouteLinkJson` parses are wrapped
+in `runCatching`), pending the Android catch-up batch while the APK is on hold.
+
+**A thread may hold the same verse twice, and Present must survive it.** Nothing
+in the format or the authoring path forbids a repeat, and a road can legitimately
+come back to a verse. `PresentHost` keyed its verse list by refKey, so a
+duplicate threw Svelte's `each_key_duplicate` and killed the component
+mid-render — which the maintainer met as "I added a couple of verses and it's
+all smushed", a Present that would not open its thread. Keyed BY POSITION now;
+the list is replaced wholesale on every change, so position is a sound identity.
+The focused-verse view also gained `min-height: 0` + `overflow-y: auto`, for
+`.overview`'s reason: a verse at 54px on a phone in landscape ran off the bottom
+with no way to reach it. Its centring is AUTO MARGINS on the two children, not
+`justify-content` — plain `center` pushes an overflowing verse's first line
+above the top edge where scrolling cannot reach it, and `safe center` is a
+keyword WebKit shipped late, where an unsupported keyword drops the declaration
+and top-aligns every short verse on exactly the iPhones the PWA is the install
+path for. Auto margins absorb the free space when the verse fits and resolve to
+zero when it does not. Both failure shapes are mutation-tested
+(`e2e/thread-editing.spec.ts`).
+
+**WHICH THREAD SHARES THE GOSPEL is a setting** (`config.gospelThread`, web).
+Share's one gospel button and the first-run path of the same name walk it.
+EMPTY MEANS THE STOCK ROMANS ROAD rather than "none", and a name that no longer
+matches any thread falls back to it too — deleting the thread you chose leaves
+the button working rather than dead. One resolver (`Session.gospelThread`), so
+Share and first-run cannot disagree. *Delta:* Android still opens the stock road
+by name.
+
 **Tags is a DOOR too** (2026-08-14), for the reason Visualizations is: there is
 more than one thing to do with a tag library, and a card that raised the library
 panel directly had nowhere to put the rest. The page holds Browse (what it always

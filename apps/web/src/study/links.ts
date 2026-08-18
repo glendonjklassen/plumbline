@@ -190,6 +190,38 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
       if (note !== null) report(s, s.author("threadEntrySetNote", thread.name, link.entry, note));
       break;
     }
+    // REARRANGE. A thread's order is the argument it makes — the Romans Road is
+    // a road — so moving an entry is an ordinary edit, no confirmation.
+    case "moveEntry": {
+      const thread = (await s.fetchQ("threads"))?.threads?.[link.thread];
+      if (!thread) break;
+      // Floored at 0: the destination crosses the ABI as a u32, so a stale or
+      // crafted link with a negative sum would wrap to 4-billion — which the
+      // engine then CLAMPS TO THE END, turning "move up from the top" into
+      // "move to the bottom".
+      report(s, s.author("threadEntryMove", thread.name, link.entry, Math.max(0, link.entry + link.delta)));
+      break;
+    }
+    // REMOVE. Destructive and not undoable, so it asks first — the rule
+    // `deletethread:` and `reject:` already follow. It names the passage,
+    // because "remove entry 3" is not something a reader can check.
+    case "removeEntry": {
+      const thread = (await s.fetchQ("threads"))?.threads?.[link.thread];
+      if (!thread) break;
+      const entry = thread.entries?.[link.entry];
+      const passage = entry?.display ?? entry?.verse ?? "";
+      if (
+        !(await s.askConfirm(
+          t("threads.removeEntryAsk", { passage }),
+          t("threads.removeEntryBody", { thread: thread.name }),
+          t("threads.removeEntryVerb"),
+        ))
+      ) {
+        break;
+      }
+      report(s, s.author("threadEntryRemove", thread.name, link.entry));
+      break;
+    }
     case "editWeaveNotes": {
       const weave = (await s.fetchQ("weaves"))?.weaves?.[link.index];
       if (!weave) break;

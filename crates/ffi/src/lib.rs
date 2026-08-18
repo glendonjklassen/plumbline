@@ -2492,6 +2492,77 @@ pub unsafe extern "C" fn plumbline_engine_thread_entry_set_note(
     })
 }
 
+/// Drop entry `index` from the thread named `name`. Null on success, else an
+/// owned error. The thread SURVIVES its last entry — deleting the thread itself
+/// is [`plumbline_engine_thread_remove`], asked for deliberately.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_thread_entry_remove(
+    engine: *mut PlumblineEngine,
+    name: *const c_char,
+    index: u32,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        if engine.home.is_none() {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        }
+        let Some(name) = opt_str(name) else {
+            return out_string("null or invalid name".to_string());
+        };
+        let mut study = engine.study_write();
+        match thread::remove_from_thread(&study.threads, name, index as usize, &now_stamp()) {
+            Ok(_) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
+/// Move entry `from` to position `to` in the thread named `name`. Null on
+/// success, else an owned error.
+///
+/// A thread's ORDER is the argument it makes, so this is a reorder rather than
+/// a sort. `to` past the end clamps to the last position, so "move the last one
+/// down" is a no-op instead of an error the shell has to special-case — and a
+/// no-op does not rewrite the file.
+///
+/// # Safety
+/// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_thread_entry_move(
+    engine: *mut PlumblineEngine,
+    name: *const c_char,
+    from: u32,
+    to: u32,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        if engine.home.is_none() {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        }
+        let Some(name) = opt_str(name) else {
+            return out_string("null or invalid name".to_string());
+        };
+        let mut study = engine.study_write();
+        match thread::move_in_thread(&study.threads, name, from as usize, to as usize, &now_stamp()) {
+            Ok(_) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
 /// Replace the notes document of the weave named `name` (marks it hand-written).
 /// Null on success, else an owned error. The weave must already exist.
 ///

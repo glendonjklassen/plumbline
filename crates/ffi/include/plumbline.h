@@ -583,6 +583,31 @@ char *plumbline_engine_thread_entry_set_note(struct PlumblineEngine *engine,
                                              uint32_t index,
                                              const char *note);
 
+// Drop entry `index` from the thread named `name`. Null on success, else an
+// owned error. The thread SURVIVES its last entry — deleting the thread itself
+// is [`plumbline_engine_thread_remove`], asked for deliberately.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_thread_entry_remove(struct PlumblineEngine *engine,
+                                           const char *name,
+                                           uint32_t index);
+
+// Move entry `from` to position `to` in the thread named `name`. Null on
+// success, else an owned error.
+//
+// A thread's ORDER is the argument it makes, so this is a reorder rather than
+// a sort. `to` past the end clamps to the last position, so "move the last one
+// down" is a no-op instead of an error the shell has to special-case — and a
+// no-op does not rewrite the file.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_thread_entry_move(struct PlumblineEngine *engine,
+                                         const char *name,
+                                         uint32_t from,
+                                         uint32_t to);
+
 // Replace the notes document of the weave named `name` (marks it hand-written).
 // Null on success, else an owned error. The weave must already exist.
 //

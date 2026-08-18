@@ -79,7 +79,7 @@
       <button
         class="visit"
         onclick={() => {
-          s.presentThreadName = "Romans Road";
+          s.presentThreadName = s.gospelThread();
           s.showPresent = true;
         }}
       >

@@ -1067,6 +1067,8 @@ pub enum WirePanelLink {
     EditThreadNotes { index: usize },
     EditWeaveNotes { index: usize },
     EditEntryNote { thread: usize, entry: usize },
+    MoveEntry { thread: usize, entry: usize, delta: i32 },
+    RemoveEntry { thread: usize, entry: usize },
     EditNote { ref_key: String },
     Guide,
     About,
@@ -1094,6 +1096,8 @@ pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
         PanelLink::EditThreadNotes { index } => WirePanelLink::EditThreadNotes { index },
         PanelLink::EditWeaveNotes { index } => WirePanelLink::EditWeaveNotes { index },
         PanelLink::EditEntryNote { thread, entry } => WirePanelLink::EditEntryNote { thread, entry },
+        PanelLink::MoveEntry { thread, entry, delta } => WirePanelLink::MoveEntry { thread, entry, delta },
+        PanelLink::RemoveEntry { thread, entry } => WirePanelLink::RemoveEntry { thread, entry },
         PanelLink::EditNote { refkey } => WirePanelLink::EditNote { ref_key: refkey },
         PanelLink::Guide => WirePanelLink::Guide,
         PanelLink::About => WirePanelLink::About,
@@ -1225,6 +1229,9 @@ pub struct WireConfigState {
     /// taps into tag-with-confirm while this is set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub concept_study: Option<String>,
+    /// The thread "share the gospel" opens; absent = the stock Romans Road.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gospel_thread: Option<String>,
     /// English definitions preferred over this language's own Strong's
     /// dictionary (additive). Absent = off: the localized one serves when the
     /// pack ships it. `alias` keeps a shell or a stored payload still saying
@@ -1358,6 +1365,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         intro: (!cfg.intro.is_empty()).then(|| cfg.intro.clone()),
         language: (!cfg.language.is_empty()).then(|| cfg.language.clone()),
         concept_study: (!cfg.concept_study.is_empty()).then(|| cfg.concept_study.clone()),
+        gospel_thread: (!cfg.gospel_thread.is_empty()).then(|| cfg.gospel_thread.clone()),
         localized_lexicon_off: Some(cfg.localized_lexicon_off),
         church: (!cfg.church.is_empty()).then(|| WireChurch {
             name: cfg.church.name.clone(),
@@ -1449,6 +1457,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         // An id the plan store answers for at use — a stale one reads as
         // normal mode there, so nothing validates it away here.
         concept_study: w.concept_study.as_deref().map(|s| s.trim().to_string()).unwrap_or_default(),
+        gospel_thread: w.gospel_thread.as_deref().map(|s| s.trim().to_string()).unwrap_or_default(),
         localized_lexicon_off: w.localized_lexicon_off.unwrap_or(false),
         // Through the core's clamps, not a local trim: this is the one place a
         // shell's church becomes the core's, so it is where the caps stop being

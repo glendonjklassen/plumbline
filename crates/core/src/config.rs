@@ -200,6 +200,15 @@ pub struct Config {
     /// work) and lives in the config so every pane and both shells agree what
     /// a tap means. The shell suspends its reading tracker while this is set.
     pub concept_study: String,
+    /// Which thread "share the gospel" opens — the Share screen's one button,
+    /// and the first-run path of the same name.
+    ///
+    /// EMPTY MEANS THE DEFAULT, not "none": the stock Romans Road is what a
+    /// reader who has never chosen gets, and storing that choice explicitly
+    /// would freeze the name of a thread they can rename or delete. A name that
+    /// no longer matches any thread falls back the same way, so deleting your
+    /// chosen thread leaves the button working rather than dead.
+    pub gospel_thread: String,
     /// Opt OUT of this language's own Strong's dictionary (`strongs-de.json`,
     /// `strongs-es.json`): a reader who prefers the original English
     /// definitions to a machine translation of them sets this. Off (false) =
@@ -244,6 +253,7 @@ impl Default for Config {
             intro: String::new(),
             language: String::new(),
             concept_study: String::new(),
+            gospel_thread: String::new(),
         }
     }
 }
@@ -349,6 +359,9 @@ struct ConfigWire {
     /// The active concept study's plan id; absent when reading normally.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     concept_study: Option<String>,
+    /// The thread "share the gospel" opens; absent = the stock Romans Road.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    gospel_thread: Option<String>,
     #[serde(flatten)]
     extra: Map<String, Value>,
 }
@@ -524,6 +537,7 @@ impl Config {
             // plan store's question, answered at use (a stale id reads as
             // normal mode), so nothing validates it away here.
             concept_study: w.concept_study.map(|s| s.trim().to_string()).unwrap_or_default(),
+            gospel_thread: w.gospel_thread.map(|s| s.trim().to_string()).unwrap_or_default(),
             church: w
                 .church
                 .map(|c| Church {
@@ -599,6 +613,7 @@ impl Config {
             intro: (!self.intro.is_empty()).then(|| self.intro.clone()),
             language: (!self.language.is_empty()).then(|| self.language.clone()),
             concept_study: (!self.concept_study.is_empty()).then(|| self.concept_study.clone()),
+            gospel_thread: (!self.gospel_thread.is_empty()).then(|| self.gospel_thread.clone()),
             church: (!self.church.is_empty()).then(|| ChurchWire {
                 name: self.church.name.clone(),
                 info: self.church.info.clone(),
@@ -780,6 +795,7 @@ mod tests {
             intro: "curious".to_string(),
             language: "de".to_string(),
             concept_study: "run-grace".to_string(),
+            gospel_thread: "My Gospel Walk".to_string(),
             localized_lexicon_off: true,
             church: Church {
                 name: "Grace Bible Church".into(),

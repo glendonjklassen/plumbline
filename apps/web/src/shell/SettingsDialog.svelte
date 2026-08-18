@@ -849,6 +849,40 @@
         </label>
       {/each}
       <hr />
+      <!-- WHICH THREAD THE GOSPEL BUTTON OPENS. Share's one button, and the
+           first-run path of the same name, walk a thread — the stock Romans
+           Road unless the reader has built their own. Set here rather than on
+           Share because it is a preference, not the act of sharing.
+
+           The stored value is the thread's NAME, and the empty option means the
+           default rather than "none": storing "Romans Road" explicitly would
+           freeze the name of a thread the reader can rename.
+
+           The displayed value goes through the same existence check the resolver
+           applies: a chosen thread that has since been deleted BEHAVES as the
+           default, so the control shows the default — a select displaying a
+           blank (the browser's answer to a value with no option) would look
+           broken, and showing the stale name would promise a thread that is
+           gone. -->
+      <p class="label">{t("settings.gospelThread")}</p>
+      <p class="desc-note">{t("settings.gospelThreadDesc")}</p>
+      <select
+        class="dropdown"
+        aria-label={t("settings.gospelThread")}
+        value={(s.q("threads")?.threads ?? []).some((th: any) => th.name === s.config.gospelThread)
+          ? s.config.gospelThread
+          : ""}
+        onchange={(e) => {
+          s.config.gospelThread = (e.currentTarget as HTMLSelectElement).value;
+          s.saveConfig();
+        }}
+      >
+        <option value="">{t("settings.gospelThreadDefault")}</option>
+        {#each (s.q("threads")?.threads ?? []) as th (th.name)}
+          <option value={th.name}>{th.name}</option>
+        {/each}
+      </select>
+      <hr />
       <label class="toggle">
         <span class="body">
           <span class="name">{t("settings.bundled")}</span>

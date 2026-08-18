@@ -532,6 +532,21 @@ pub enum PanelLink {
         thread: usize,
         entry: usize,
     },
+    /// `moveentry:T:E:D` — move thread T's entry E by D places (-1 up, +1
+    /// down). A thread's ORDER is the argument it makes, so rearranging it is
+    /// an edit like any other, not a sort.
+    MoveEntry {
+        thread: usize,
+        entry: usize,
+        delta: i32,
+    },
+    /// `removeentry:T:E` — drop thread T's entry E. Destructive, so the shell
+    /// confirms first, like `deletethread:`. The THREAD survives its last
+    /// entry; deleting the thread is its own verb.
+    RemoveEntry {
+        thread: usize,
+        entry: usize,
+    },
     /// `editnote:REF` — prompt, then set the reader's personal note on REF.
     EditNote {
         refkey: String,
@@ -593,6 +608,15 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
         "editentrynote" => {
             let (t, e) = rest.split_once(':')?;
             PanelLink::EditEntryNote { thread: t.parse().ok()?, entry: e.parse().ok()? }
+        }
+        "moveentry" => {
+            let (t, rest) = rest.split_once(':')?;
+            let (e, d) = rest.split_once(':')?;
+            PanelLink::MoveEntry { thread: t.parse().ok()?, entry: e.parse().ok()?, delta: d.parse().ok()? }
+        }
+        "removeentry" => {
+            let (t, e) = rest.split_once(':')?;
+            PanelLink::RemoveEntry { thread: t.parse().ok()?, entry: e.parse().ok()? }
         }
         "editnote" => PanelLink::EditNote { refkey: rest.to_string() },
         "guide" => PanelLink::Guide,
@@ -1209,13 +1233,29 @@ pub fn thread_detail(src: &dyn PanelSource, index: usize) -> Vec<Block> {
     if !t.notes.is_empty() {
         out.push(Block::para(vec![Run::new(&t.notes, sz::NOTE, Color::Faded)]));
     }
+    let last = t.entries.len().saturating_sub(1);
     for (e, en) in t.entries.iter().enumerate() {
         out.push(Block::Rule);
-        out.push(Block::para(vec![
+        // The row's own controls: note · move · remove. The arrows are OMITTED
+        // at the ends rather than shown disabled — there is no room on a phone
+        // for a control that cannot do anything, and the list's shape already
+        // says which end you are at.
+        let mut row = vec![
             go(&en.verse, &en.display, sz::LIST),
             Run::new("   ", sz::LIST, Color::Ink),
             Run::new(s("panel.note"), sz::CAPTION, Color::Faded).link(format!("editentrynote:{index}:{e}")),
-        ]));
+        ];
+        if e > 0 {
+            row.push(Run::new("   ", sz::LIST, Color::Ink));
+            row.push(Run::new(s("panel.moveUp"), sz::CAPTION, Color::Faded).link(format!("moveentry:{index}:{e}:-1")));
+        }
+        if e < last {
+            row.push(Run::new("   ", sz::LIST, Color::Ink));
+            row.push(Run::new(s("panel.moveDown"), sz::CAPTION, Color::Faded).link(format!("moveentry:{index}:{e}:1")));
+        }
+        row.push(Run::new("   ", sz::LIST, Color::Ink));
+        row.push(Run::new(s("panel.removeEntry"), sz::CAPTION, Color::Faded).link(format!("removeentry:{index}:{e}")));
+        out.push(Block::para(row));
         let joined = en.text.join(" ");
         let snap = if joined.chars().count() > 70 {
             format!("{}…", joined.chars().take(70).collect::<String>().trim_end())

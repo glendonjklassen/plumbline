@@ -506,6 +506,17 @@ export class StudyEngine {
   threadSetNotes(name: string, notes: string): string | null {
     return this.#author("plumbline_engine_thread_set_notes", (f, ...p) => f(this.#engine, ...p), [name, notes]);
   }
+  /** Drop entry `index`. The thread survives its last entry — deleting the
+   *  thread itself is `threadRemove`. */
+  threadEntryRemove(name: string, index: number): string | null {
+    // The index rides in the CLOSURE, not in `args`: `#author` marshals strings
+    // and passes pointers, so a number in that list would cross as one.
+    return this.#author("plumbline_engine_thread_entry_remove", (f, n) => f(this.#engine, n, index), [name]);
+  }
+  /** Move entry `from` to position `to`; past the end clamps to a no-op. */
+  threadEntryMove(name: string, from: number, to: number): string | null {
+    return this.#author("plumbline_engine_thread_entry_move", (f, n) => f(this.#engine, n, from, to), [name]);
+  }
   threadEntrySetNote(name: string, index: number, note: string): string | null {
     return this.#author(
       "plumbline_engine_thread_entry_set_note",
