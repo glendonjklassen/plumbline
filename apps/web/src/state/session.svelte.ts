@@ -10,7 +10,7 @@ import { precacheShell } from "../engine/precache";
 import { updateAvailable } from "../engine/update";
 import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FILES } from "../engine/fonts.generated";
 import { EngineRpc, type BootInfo } from "../engine/worker-client";
-import { nowStamp } from "../engine/StudyEngine";
+import { dayStamp, nowStamp } from "../engine/StudyEngine";
 import { fontStackFor, setReaderFont } from "../reader/measure";
 import { cleanChurch, PWA_URL, shareUrl, type Church } from "../shell/church";
 import { lang, t } from "../lib/i18n.svelte";
@@ -825,6 +825,111 @@ export class Session {
    *  (a card falling due at midnight badges on the next launch or resume —
    *  there is no server to push from), so the call sites are boot, resume and
    *  every authoring write. */
+  /**
+   * The Study hub's reads, warmed in the background so opening the hub paints
+   * its numbers instead of a skeleton.
+   *
+   * The hub's progress band asks four questions (plans, cards due, suggested
+   * weaves, the reading map) and the cards below it four more (notes, threads,
+   * tags, weaves). Every one is a `q()` that fires on FIRST RENDER, so they all
+   * started when the reader tapped Study and the band held a placeholder until
+   * they landed — the wait this removes. The answers go into the ordinary
+   * read-through cache under the ordinary keys, so the hub finds them already
+   * there and asks for nothing.
+   *
+   * SEQUENTIALLY, and this is the point rather than a detail: the engine lives
+   * in ONE worker thread, so eight reads fired at once would sit in front of
+   * whatever the reader does next — a chapter turn, a tap on a word. Awaiting
+   * each in turn leaves a gap between them for those to be answered in.
+   *
+   * Failures are ignored on purpose: a warm that cannot answer costs the reader
+   * nothing, because the hub still asks for itself when it opens.
+   */
+  async warmStudyHub(): Promise<void> {
+    const day = dayStamp();
+    const reads: [string, ...unknown[]][] = [
+      // The progress band first — it is the part that used to draw as a
+      // placeholder and then grow.
+      ["plans", ""],
+      ["memoryDue", day],
+      ["suggestedWeaves"],
+      ["readingBooks", day],
+      // Then the counts on the cards below it.
+      ["userNotes"],
+      ["threads"],
+      ["tags"],
+      ["weaves"],
+    ];
+    for (const [method, ...args] of reads) {
+      try {
+        await this.fetchQ(method, ...args);
+      } catch {
+        /* the hub asks for itself when it opens */
+      }
+    }
+  }
+
+  /**
+   * WHY THERE IS NO WARM AT BOOT.
+   *
+   * The obvious place for this was the idle block in `App.svelte`, beside the
+   * cache sweep and the badge. It was there first, and it broke cold starts:
+   * eight engine reads queued on the ONE worker thread that was still opening
+   * the corpus, running stage 2 and laying out the first chapter, so the text
+   * and the launch-shortcut screens arrived late enough for their tests to give
+   * up. Measured on the same machine minutes apart: the launch-shortcut,
+   * offline-shell and app specs took 50 s with no warm and 3.7 min with a warm
+   * at boot, four of them failing.
+   *
+   * The reads themselves are cheap — 31 ms for all eight on a settled engine —
+   * which is exactly why the boot version looked harmless. WHEN they run is the
+   * whole question, so the warm is hung off `onWarmReady`, the moment the
+   * background pipeline says it is done, and off authoring writes after that.
+   * A reader who reaches the Study tab before the pipeline settles gets the
+   * placeholder, which is the behaviour that already existed.
+   *
+   * The floor between two warms.
+   *
+   * NOT a nicety. The triggers include `onReadingWrote`, and a dwell report
+   * lands about once a SECOND while someone is reading — so an un-throttled
+   * warm re-ran eight engine reads every second, on the one thread that also
+   * answers chapter turns and taps. It doubled the e2e suite's wall-clock
+   * (3.4 min → 6.8 min) and made cold-start tests miss their screens: a storm,
+   * not a warm. Fifteen seconds is far longer than a burst of writes and far
+   * shorter than a reader's trip to the Study tab.
+   */
+  static readonly STUDY_WARM_MIN_GAP_MS = 15_000;
+
+  #studyWarmQueued = false;
+  #studyWarmLast = 0;
+
+  /**
+   * Warm the Study hub when the thread is next free, and not more often than
+   * [[STUDY_WARM_MIN_GAP_MS]].
+   *
+   * COALESCED, because the callers are the moments that invalidate the cache —
+   * boot stages land in a burst (core, warm, R&D), a run of authoring writes is
+   * one gesture to the reader, and dwell reports never stop while the page is
+   * being read. Without this each would queue its own pass over eight reads.
+   *
+   * Skipped while the hub is ON SCREEN: it is fetching for itself, and a warm
+   * racing it would ask the same questions twice.
+   */
+  scheduleStudyWarm(): void {
+    if (this.#studyWarmQueued || this.screen === "explore") return;
+    this.#studyWarmQueued = true;
+    const idle = globalThis.requestIdleCallback ?? ((f: () => void) => setTimeout(f, 1200));
+    const run = (): void =>
+      void idle(() => {
+        this.#studyWarmQueued = false;
+        this.#studyWarmLast = Date.now();
+        void this.warmStudyHub();
+      });
+    const wait = this.#studyWarmLast + Session.STUDY_WARM_MIN_GAP_MS - Date.now();
+    if (wait <= 0) run();
+    else setTimeout(run, wait);
+  }
+
   refreshAppBadge(): void {
     const nav = navigator as Navigator & {
       setAppBadge?: (n: number) => Promise<void>;
@@ -1106,6 +1211,9 @@ export class Session {
     rpc.onAuthored = () => {
       this.invalidate();
       this.studyEpoch++;
+      // The write just emptied the cache the hub reads from. Re-warm at idle,
+      // or the next visit to Study waits again for numbers this write changed.
+      this.scheduleStudyWarm();
       // Any write can change what is due (a card added, graded, or removed —
       // and the rest cost one cheap read on a path that just paid a file write).
       this.refreshAppBadge();
@@ -1120,7 +1228,12 @@ export class Session {
     // its stale `read` flags, so the chip and the today card still pointed at
     // the chapter you had just finished — tap it and you were sent back to
     // Genesis 1 all evening (the maintainer's UAT report, 2026-08-11).
-    rpc.onReadingWrote = () => this.invalidateOnly("readingBooks", "readingChapters", "plans");
+    rpc.onReadingWrote = () => {
+      this.invalidateOnly("readingBooks", "readingChapters", "plans");
+      // Finishing a chapter moves the map and the plans — the two numbers the
+      // hub's band leads with.
+      this.scheduleStudyWarm();
+    };
     rpc.onCoreReady = () => {
       // Strong's + margin notes just arrived — panels re-fetch.
       this.invalidate();
@@ -1146,6 +1259,9 @@ export class Session {
       // phone. They exist now; re-fetch so the panel fills in.
       this.invalidate();
       this.studyEpoch++;
+      // This stage wipes the cache, so it is also where the hub's warm has to
+      // be re-taken — a warm from before it would have been thrown away.
+      this.scheduleStudyWarm();
     };
     rpc.onRndPreparing = () => {
       this.rndProgress = 1;
