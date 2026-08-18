@@ -377,6 +377,8 @@ pub struct WireTags {
 pub struct WireTag {
     pub name: String,
     pub created: String,
+    /// Grouping heading for the tag lists; null when the tag has none. Additive.
+    pub category: Option<String>,
     pub members: Vec<WireTagMember>,
 }
 
@@ -404,6 +406,7 @@ pub fn tags_to_wire(loaded: &[LoadedTag]) -> WireTags {
                 WireTag {
                     name: t.name.clone(),
                     created: t.created.clone(),
+                    category: t.category.clone(),
                     members: t
                         .members
                         .iter()

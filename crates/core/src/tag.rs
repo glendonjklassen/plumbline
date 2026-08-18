@@ -97,6 +97,12 @@ pub struct Tag {
     /// sideloaded APK never auto-updates, so a field absent on the day 1.0 ships
     /// is absent from those devices for ever.
     pub updated: Option<String>,
+    /// Optional grouping heading for the tag lists ("Doctrine", "Word studies").
+    /// A collection of tags outgrows one flat list (maintainer UAT, 2026-08-18);
+    /// the category is assigned on the management screen, never while reading.
+    /// Additive: absent from every tag written before it existed, and a tag
+    /// without one writes no key at all.
+    pub category: Option<String>,
     pub members: Vec<TagMember>,
     /// Every key in the file this build has never heard of, carried back out
     /// again on save.
@@ -132,6 +138,8 @@ struct TagRepr {
     #[serde(default)]
     updated: Option<String>,
     #[serde(default)]
+    category: Option<String>,
+    #[serde(default)]
     members: Vec<TagMember>,
     #[serde(flatten)]
     extra: Map<String, Value>,
@@ -154,6 +162,9 @@ impl Serialize for Tag {
         }
         if let Some(updated) = &self.updated {
             m.serialize_entry("updated", updated)?;
+        }
+        if let Some(category) = &self.category {
+            m.serialize_entry("category", category)?;
         }
         m.serialize_entry("members", &self.members)?;
         for (k, v) in &self.extra {
@@ -181,6 +192,8 @@ impl<'de> Deserialize<'de> for Tag {
             created: r.created,
             id: r.id,
             updated: r.updated,
+            // Trimmed on the way in; an all-space category is no category.
+            category: r.category.map(|c| c.trim().to_string()).filter(|c| !c.is_empty()),
             members: r.members,
             extra,
         })
@@ -304,6 +317,8 @@ pub fn add_member(
             // edited one is, through one code path.
             id: None,
             updated: None,
+            // A tag is born uncategorized; the management screen files it later.
+            category: None,
             members: vec![member],
             // The one place a new file's provenance can honestly be recorded:
             // its refKeys are being written NOW, in the language the reader is
@@ -393,6 +408,26 @@ pub fn rename_tag(
             Err(e) => return Err(Error::Io { path: lt.file.display().to_string(), source: e }),
         }
     }
+    Ok(true)
+}
+
+/// Set or clear a tag's category (the management screen's verb — nothing on
+/// the reading path ever calls this). `category` is trimmed and empty clears.
+/// Finds the tag case-insensitively like [`rename_tag`]; answers whether the
+/// tag existed. Setting the category a tag already has does not rewrite the
+/// file — a no-op write would bump `updated` for nothing.
+pub fn set_tag_category(loaded: &[LoadedTag], name: &str, category: Option<&str>, now: &str) -> Result<bool, Error> {
+    let wanted = name.trim().to_lowercase();
+    let Some(lt) = loaded.iter().find(|lt| lt.tag.name.to_lowercase() == wanted) else {
+        return Ok(false);
+    };
+    let cat = category.map(str::trim).filter(|c| !c.is_empty()).map(str::to_string);
+    if lt.tag.category == cat {
+        return Ok(true);
+    }
+    let mut tag = lt.tag.clone();
+    tag.category = cat;
+    write_tag(&lt.file, &tag, now)?;
     Ok(true)
 }
 
@@ -645,6 +680,38 @@ mod tests {
         // discard a note the reader wrote on the tag they chose to keep.
         let note = kept.tag.members.iter().find(|m| m.target == shared).unwrap().note.clone();
         assert_eq!(note.as_deref(), Some("keep me"));
+    }
+
+    #[test]
+    fn a_category_is_set_trimmed_cleared_and_survives_the_file() {
+        let home = two_tags("category");
+        let (loaded, _) = load_tags(&home);
+        // A name no tag answers to: a success with nothing done, like rename.
+        assert!(!set_tag_category(&loaded, "no such tag", Some("Doctrine"), "2026-08-18T00:00:00Z").unwrap());
+        // Case-insensitive lookup, trimmed value.
+        assert!(set_tag_category(&loaded, "grace", Some("  Doctrine "), "2026-08-18T00:00:00Z").unwrap());
+
+        let (loaded, _) = load_tags(&home);
+        let grace = loaded.iter().find(|lt| lt.tag.name == "Grace").unwrap();
+        assert_eq!(grace.tag.category.as_deref(), Some("Doctrine"));
+        assert!(std::fs::read_to_string(&grace.file).unwrap().contains("Doctrine"), "the file carries the key");
+        assert!(
+            loaded.iter().find(|lt| lt.tag.name == "Mercy").unwrap().tag.category.is_none(),
+            "only the tag that was filed"
+        );
+
+        // Setting the category a tag already has writes NOTHING — a rewrite
+        // would bump `updated` for no reason.
+        let before = std::fs::read(&grace.file).unwrap();
+        assert!(set_tag_category(&loaded, "Grace", Some("Doctrine"), "2027-01-01T00:00:00Z").unwrap());
+        assert_eq!(std::fs::read(&grace.file).unwrap(), before, "same category = no rewrite");
+
+        // Clearing removes the key entirely — additive means absent, not null.
+        assert!(set_tag_category(&loaded, "Grace", Some("   "), "2026-08-18T01:00:00Z").unwrap());
+        let (loaded, _) = load_tags(&home);
+        let grace = loaded.iter().find(|lt| lt.tag.name == "Grace").unwrap();
+        assert_eq!(grace.tag.category, None);
+        assert!(!std::fs::read_to_string(&grace.file).unwrap().contains("category"));
     }
 
     #[test]

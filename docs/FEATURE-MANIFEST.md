@@ -187,6 +187,18 @@ byte-identical between them — upright 851,176 bytes, italic 754,468
 (`apps/android/app/src/main/assets/fonts/EBGaramond-Regular.ttf` ≡
 `apps/web/fonts-src/EBGaramond.ttf`).
 
+## Wordy buttons are glyphs (both shells, via the catalogs)
+
+Reasonable actions carry a glyph, not a sentence (maintainer UAT, 2026-08-18:
+"add is just +"): `tag.add`/`thread.add` **＋**, `panel.yourNote` **✎**,
+`panel.note` **✎**, `panel.removeEntry` **✕** — joining the glyphs already in
+place (`＋ tag verse`, `✎ edit`, `✕ delete tag`, `⇔ compare`, `↑`/`↓`). The
+VALUES live in the i18n catalogs (identical across en/de/es), so both shells
+pick them up from the engine with no shell code. Words stay where they earn
+their place: destructive verbs in confirm dialogs (`Delete tag`), the search
+screen's `go to {passage}`, and context-menu items, which follow menu
+convention.
+
 ## App icon — the woven cross (shipped in both shells)
 
 A woven Latin cross: two vertical and two horizontal gold (`#9e7d38`) strands on
@@ -279,6 +291,28 @@ width alone. The two therefore answer differently on the same hardware, and that
 is intended; what is NOT allowed is the web's own breakpoints disagreeing with
 each other — the 701–900px band is where that once went wrong, and
 `e2e/foldable.spec.ts` pins both ends of it.
+
+## Chain-linked panes — same chapter, scrolled together (WEB ONLY)
+
+Two panes on the SAME book+chapter grow a **⛓︎** toggle in the pane strip (next
+to ＋/✕; the motivating case is the same chapter in two languages, maintainer
+UAT 2026-08-18). While it is on, panes on that chapter scroll TOGETHER,
+**verse-aligned rather than offset-copied**: the two texts run to different
+heights, so the only sync that stays true down the column is "the verse under
+your eye is the verse under theirs". `session.syncLinkedScroll(fromIdx)` maps
+(top verse, fraction through its line box) via `paneVerseGeom` — the geometry
+each pane already publishes for the connectors — and writes the partners'
+`scrollY`; each pane's mirror effect raises its programmatic-scroll flag, so a
+linked move never echoes back as a user scroll (called from ReaderPane's
+user-scroll branch and Shell's keyboard `scroll()` only). Above verse 1 the raw
+offset is mirrored (chapter-heading zone). One GLOBAL toggle, session-only, not
+persisted — a link is a reading posture, not a setting. Panes on other chapters
+never move. E2E: `linked-scroll.spec.ts` (incl. a Luther pane asserting
+verse-alignment against its own geometry, with a precondition that the two
+layouts measurably differ).
+
+**SHELL DELTA — Android:** single-pane by design; nothing to chain. Revisit only
+if Android ever grows split view.
 
 ## Ambient weave connectors (M:2821–2934) — WEB ONLY
 
@@ -559,6 +593,32 @@ the library detail cards via the `deletethread:i` / `deletetag:i` verbs, and
 weaves — which have no picker — delete from the compare card via
 `deleteweave:i` → `plumbline_engine_weave_delete(index)` (flat-library ordinal;
 `weave::reject_weave` does the file removal in core).
+
+## Tag categories — headings for the tag lists (core + web; Android pending)
+
+A tag carries an optional **`category`** (overlay-tag-v1, additive: absent key
+when none; trimmed, empty clears) — "tags need categories otherwise it'll be
+soooo long" (maintainer UAT, 2026-08-18). Assigned on the MANAGEMENT screen
+only (`TagsScreen` "File under categories" card → pick → prompt; empty clears)
+— never mid-reading. Core: `tag::set_tag_category` (case-insensitive lookup
+like rename; same-value set writes nothing, so `updated` only moves for real
+changes). **C ABI**: `plumbline_engine_tag_set_category(name, category)`. Wire:
+`WireTag.category` (camelCase, additive).
+
+Where it SHOWS: every tag list groups under category headings **the moment any
+tag has one, and stays dead flat until then** — a reader who never files
+anything sees no change. Grouped surfaces: the tag PICKER
+(`TagPicker.svelte`, `.ghead` rows) and the LIBRARY panel (`panel::tags_list`,
+LABEL runs — `tag:{i}` links keep the tag's index in `tags()` order, not its
+display position, so grouping cannot re-aim a tap). Categories sort
+alphabetically; the uncategorized bring up the rear under `tags.uncategorized`
+("No category"), which only appears once a real heading exists. E2E:
+`tag-categories.spec.ts`; core: `a_category_is_set_trimmed_cleared_and_survives_the_file`.
+
+**SHELL DELTA — Android:** the engine already groups the library panel (blocks
+are core-built) once the `.so` is rebuilt, and the format/ABI are in place; the
+Compose `TagPickerSheet` grouping and a management surface for assigning are
+pending the APK catch-up batch.
 
 ## Ask before destroying anything (both shells)
 

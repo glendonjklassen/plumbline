@@ -248,7 +248,7 @@ fn simple_word_study_is_just_display_word_and_dictionary() {
     // words before the evidence), a rule, the code header, lemma, def, KJV.
     assert_eq!(text_of(&blocks[0]), "John 3:16");
     assert_eq!(text_of(&blocks[1]), "God");
-    assert!(text_of(&blocks[2]).starts_with("your note"));
+    assert!(text_of(&blocks[2]).starts_with("✎"), "the note slot leads with the pencil");
     assert!(matches!(blocks[3], Block::Rule));
     assert_eq!(text_of(&blocks[4]), "G2316   1317 occurrences ▸");
     // The occurrence + note links are pre-baked; author actions are ungated.
@@ -599,6 +599,7 @@ fn tags_list_and_detail_verse_and_code_members() {
     let f = Fake {
         tags: vec![TagView {
             name: "kingdom".into(),
+            category: None,
             members: vec![
                 TagMemberView {
                     kind: "verse".into(),
@@ -636,6 +637,7 @@ fn a_code_member_stays_a_code_row_even_when_it_carries_a_verse() {
     let f = Fake {
         tags: vec![TagView {
             name: "kingdom".into(),
+            category: None,
             members: vec![TagMemberView {
                 kind: "strongs".into(),
                 verse: Some("Matt 6:33".into()),

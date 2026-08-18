@@ -463,6 +463,10 @@ export class StudyEngine {
   tagMerge(from: string, into: string): string | null {
     return this.#author("plumbline_engine_tag_merge", (f, ...p) => f(this.#engine, ...p), [from, into]);
   }
+  /** Set or clear a tag's category — the management screen's verb. Empty clears. */
+  tagSetCategory(name: string, category: string): string | null {
+    return this.#author("plumbline_engine_tag_set_category", (f, ...p) => f(this.#engine, ...p), [name, category]);
+  }
   weaveAddLink(name: string, aRef: string, bRef: string, added: string): string | null {
     return this.#author("plumbline_engine_weave_add_link", (f, ...p) => f(this.#engine, ...p), [name, aRef, bRef, added]);
   }

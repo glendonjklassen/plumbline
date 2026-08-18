@@ -265,6 +265,7 @@ pub struct ThreadEntryView {
 #[derive(Debug, Clone, Default)]
 pub struct TagView {
     pub name: String,
+    pub category: Option<String>,
     pub members: Vec<TagMemberView>,
 }
 
@@ -1285,11 +1286,38 @@ pub fn tags_list(src: &dyn PanelSource) -> Vec<Block> {
         )
         .italic()]));
     }
-    for (i, t) in tags.iter().enumerate() {
-        out.push(Block::para(vec![
+    // GROUPED under category headings once any tag has one — a tag collection
+    // outgrows a flat list (maintainer UAT, 2026-08-18). Until then the list
+    // stays exactly as it always was. Links keep the tag's index in `tags()`
+    // ORDER, not its display position, so grouping cannot re-aim a tap.
+    let row = |i: usize, t: &TagView| {
+        Block::para(vec![
             Run::new(&t.name, sz::BODY, Color::Gold).link(format!("tag:{i}")),
             Run::new(format!("   {}", sp("panel.members", t.members.len())), sz::CAPTION, Color::Faded),
-        ]));
+        ])
+    };
+    if tags.iter().all(|t| t.category.is_none()) {
+        for (i, t) in tags.iter().enumerate() {
+            out.push(row(i, t));
+        }
+        return out;
+    }
+    let mut headings: Vec<&str> = tags.iter().filter_map(|t| t.category.as_deref()).collect();
+    headings.sort_by_key(|h| h.to_lowercase());
+    headings.dedup();
+    for h in headings {
+        out.push(Block::para(vec![Run::new(h, sz::LABEL, Color::Ink).bold()]));
+        for (i, t) in tags.iter().enumerate().filter(|(_, t)| t.category.as_deref() == Some(h)) {
+            out.push(row(i, t));
+        }
+    }
+    // The uncategorized bring up the rear, under a heading only because the
+    // groups above would otherwise look like the whole library.
+    if tags.iter().any(|t| t.category.is_none()) {
+        out.push(Block::para(vec![Run::new(s("tags.uncategorized"), sz::LABEL, Color::Ink).bold()]));
+        for (i, t) in tags.iter().enumerate().filter(|(_, t)| t.category.is_none()) {
+            out.push(row(i, t));
+        }
     }
     out
 }

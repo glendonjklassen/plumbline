@@ -126,7 +126,7 @@ test("a reader tags two verses from the verse menu and turns the tag into a weav
   await expect(picker, "Tag… must open the picker sheet").toBeVisible();
 
   await picker.getByPlaceholder("New tag…").fill(TAG);
-  await picker.getByRole("button", { name: "Add", exact: true }).click();
+  await picker.getByRole("button", { name: "＋", exact: true }).click();
   await expect(picker, "the sheet closes itself once the tag is added").toBeHidden();
   // The reader is told it happened, by name. (The toast also carries the ref;
   // only the name is matched, because that label is being reworked.)

@@ -180,7 +180,7 @@ test("a verse can be removed, and the thread survives", async ({ page }) => {
   // Removing ASKS FIRST, because it cannot be undone — the rule `deletethread:`
   // already follows. The dialog names the passage, and its button names the act
   // rather than saying OK, so this clicks the verb.
-  await page.locator("aside.panel button.link", { hasText: "remove" }).first().click();
+  await page.locator("aside.panel button.link", { hasText: /^✕$/ }).first().click();
   const confirm = page.locator('[data-surface="confirm"]');
   await expect(confirm).toBeVisible({ timeout: 20_000 });
   // The chapter:verse, not the refKey: the dialog names the passage the way the
