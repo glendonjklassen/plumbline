@@ -75,9 +75,22 @@ async function bandCached(page: Page): Promise<Record<string, boolean>> {
 // is why this test waits rather than expecting the cache to be warm instantly.
 test("the Study hub's progress is already loaded before you open it", async ({ page }) => {
   await boot(page);
+  // SETTLE THE PIPELINE FIRST, and step off the Read screen — the two lessons
+  // the test below this one already carries, which this one never got because
+  // it happened to pass. Each boot stage (core → warm → R&D) EMPTIES the cache
+  // and re-warms at idle; the product's documented floor is that a reader who
+  // arrives inside that gap gets the placeholder. Sampling "all cached" while
+  // the stages are still landing asserts more than the product promises — on a
+  // loaded CI runner the R&D stage finished after the warm, the click fell in
+  // its gap, and the hub honestly re-asked for plans and suggestedWeaves. And
+  // reading accrues dwell, a dwell write invalidates `plans`, so staying on the
+  // text keeps a second race open after the first is closed.
+  await settleBackground(page);
+  await page.evaluate(() => ((window as any).__plumbline.screen = "share"));
+  await page.waitForTimeout(1500);
 
-  // The warm runs at idle after the text is up. Nothing on screen waits for it,
-  // which is exactly why the test has to.
+  // The warm runs at idle. Nothing on screen waits for it, which is exactly
+  // why the test has to.
   await expect
     .poll(async () => Object.values(await bandCached(page)).every(Boolean), { timeout: 60_000 })
     .toBe(true);
