@@ -644,7 +644,9 @@ pub fn activity_by_day(cards: &HashMap<VRef, Card>) -> Vec<DayActivity> {
 /// spatial summary beside the per-verse map.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SectionCoverage {
-    pub label: &'static str,
+    /// The section's name in the reader's language — see
+    /// [`crate::reference::segment_label`].
+    pub label: String,
     /// Verses being memorized in this section — a passage card counts every
     /// verse it covers, so this stays "how much of the section do I know".
     pub cards: u32,
@@ -657,8 +659,15 @@ pub struct SectionCoverage {
 /// Roll coverage up to [`crate::reference::CANON_SEGMENTS`].
 pub fn coverage_by_section(cards: &HashMap<VRef, Card>) -> Vec<SectionCoverage> {
     use crate::reference::CANON_SEGMENTS;
-    let mut acc: Vec<SectionCoverage> =
-        CANON_SEGMENTS.iter().map(|(label, _, _)| SectionCoverage { label, cards: 0, mature: 0, reviews: 0 }).collect();
+    let mut acc: Vec<SectionCoverage> = CANON_SEGMENTS
+        .iter()
+        .map(|(label, _, _)| SectionCoverage {
+            label: crate::reference::segment_label(label, crate::i18n::active()),
+            cards: 0,
+            mature: 0,
+            reviews: 0,
+        })
+        .collect();
     for c in cards.values() {
         let Some(bi) = crate::canon::book_order(&c.verse.book) else { continue };
         if let Some(si) = CANON_SEGMENTS.iter().position(|(_, lo, hi)| bi >= *lo && bi <= *hi) {

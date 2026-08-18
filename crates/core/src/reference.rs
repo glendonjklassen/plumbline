@@ -111,6 +111,27 @@ pub const CANON_SEGMENTS: [(&str, usize, usize); 8] = [
     ("Revelation", 65, 65),
 ];
 
+/// A canon section's label in the reader's language.
+///
+/// The strings in [`CANON_SEGMENTS`] are IDS, not copy: they are matched by
+/// value in `memory.rs` and they key the catalogue here, so they stay English
+/// and stable while what the reader is shown moves with their language. Every
+/// surface that names a section — the canon strip, the memorize coverage
+/// summary, the search screen's range presets — goes through this, so the eight
+/// names cannot disagree between them.
+///
+/// An id the catalogue does not carry falls back to itself, which is the
+/// English label and therefore still a name rather than a blank.
+pub fn segment_label(id: &str, lang: crate::i18n::Lang) -> String {
+    let key = format!("canon.{}", id.to_lowercase());
+    let out = crate::i18n::t(lang, &key, &[]);
+    if out == key {
+        id.to_string()
+    } else {
+        out
+    }
+}
+
 /// The index (39) at which the New Testament begins, for the OT/NT seam on the
 /// canon map. (`Matt` is book 39; the OT/NT divide sits between 38 and 39.)
 pub const OT_NT_DIVIDE: usize = 39;
@@ -118,6 +139,37 @@ pub const OT_NT_DIVIDE: usize = 39;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The eight section names are TRANSLATED, and the ids that key them stay
+    /// English so `memory.rs` can keep matching on them.
+    ///
+    /// Every id must resolve to something the catalogue actually carries: the
+    /// helper falls back to the id, so a missing key shows English instead of
+    /// failing, and only a test can tell the difference.
+    #[test]
+    fn every_canon_section_is_named_in_every_language() {
+        use crate::i18n::Lang;
+        for (id, _, _) in CANON_SEGMENTS {
+            for lang in Lang::ALL {
+                let out = segment_label(id, lang);
+                assert!(!out.is_empty(), "{id} is unnamed in {}", lang.code());
+                assert!(!out.starts_with("canon."), "{id} in {} fell through to the raw key `{out}`", lang.code());
+                if lang != Lang::En {
+                    assert_ne!(
+                        out,
+                        id,
+                        "{id} is untranslated in {} — the fallback is English, so a \
+                         missing key looks like a deliberate choice unless this fails",
+                        lang.code()
+                    );
+                }
+            }
+        }
+        // English reads as itself.
+        assert_eq!(segment_label("Gospels", Lang::En), "Gospels");
+        // An id the catalogue has never heard of is still a name, not a blank.
+        assert_eq!(segment_label("Apocrypha", Lang::En), "Apocrypha");
+    }
 
     #[test]
     fn ref_key_roundtrip() {

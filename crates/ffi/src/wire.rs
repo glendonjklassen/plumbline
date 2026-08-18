@@ -776,7 +776,9 @@ pub struct WireCanonSegments {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WireCanonSegment {
-    pub label: &'static str,
+    /// The section's name IN THE READER'S LANGUAGE (`reference::segment_label`).
+    /// Owned rather than `&'static` because it is translated, not a constant.
+    pub label: String,
     pub first: usize,
     pub last: usize,
 }
@@ -785,7 +787,11 @@ pub fn canon_segments_to_wire() -> WireCanonSegments {
     WireCanonSegments {
         segments: plumbline_core::reference::CANON_SEGMENTS
             .iter()
-            .map(|&(label, first, last)| WireCanonSegment { label, first, last })
+            .map(|&(label, first, last)| WireCanonSegment {
+                label: plumbline_core::reference::segment_label(label, plumbline_core::i18n::active()),
+                first,
+                last,
+            })
             .collect(),
         ot_nt_divide: plumbline_core::reference::OT_NT_DIVIDE,
     }

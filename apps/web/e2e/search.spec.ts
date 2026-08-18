@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 
 // Live search, and the two ways it cost more than it was worth (audit F-12).
@@ -278,4 +279,44 @@ test("a canon preset searches its whole section", async ({ page }) => {
   await selects[3].selectOption("28");
   await page.getByRole("button", { name: "Search this range" }).click();
   await expect.poll(count, { timeout: 30_000 }).toBeLessThan(gospels);
+});
+
+// The canon's section names are the reader's language, not English constants.
+// They are ids in `reference::CANON_SEGMENTS` — matched by value in memory.rs —
+// so the ids stay English and `segment_label` translates what is shown. This
+// checks the whole way through: catalogue → engine → the preset a reader taps.
+//
+// Driven by CATALOGUE KEY rather than by German words typed into the test, the
+// discipline language.spec.ts already keeps: the words on those buttons are
+// exactly what is under test elsewhere, and hardcoding them here would be a
+// second copy to get wrong (it was, on the first attempt).
+//
+// MUTATION: in wire.rs serve `label` straight from CANON_SEGMENTS instead of
+// through `segment_label`. Red: the German reader is offered "Gospels".
+const DE_CAT: Record<string, string> = JSON.parse(
+  readFileSync(new URL("../../../crates/core/src/i18n/de.json", import.meta.url), "utf8"),
+);
+
+test.describe("a German reader", () => {
+  test.use({ locale: "de-DE" });
+
+  test("is offered the canon's sections in German", async ({ page }) => {
+    await page.goto("/");
+    const est = page.getByRole("button", { name: DE_CAT["intro.pathEstablished"] });
+    const canvas = page.locator(".pane canvas").first();
+    await expect(est.or(canvas)).toBeVisible({ timeout: 90_000 });
+    if (await est.isVisible().catch(() => false)) {
+      await est.click();
+      await page.getByRole("button", { name: DE_CAT["intro.start"] }).click();
+    }
+    await expect(canvas).toBeVisible({ timeout: 90_000 });
+
+    await page.getByLabel(DE_CAT["common.openSearch"]).click();
+    await page.getByRole("button", { name: DE_CAT["search.scopeRange"] }).click();
+    // The section names, in German — and the canon strip reads the same eight
+    // strings, so this pins both surfaces at once.
+    await expect(page.getByRole("button", { name: /Evangelien/ })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("button", { name: /Gesetz/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Gospels/ })).toHaveCount(0);
+  });
 });
