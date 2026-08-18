@@ -488,7 +488,9 @@ test("word study opens from a single click and respects the gates", async ({ pag
     if (await page.locator("aside.panel").isVisible().catch(() => false)) break;
   }
   await expect(page.locator("aside.panel")).toBeVisible();
-  await expect(page.locator("aside.panel").getByText("your note")).toBeVisible();
+  // The reader's own-note slot, whose label is now the pencil glyph alone
+  // (exact: the ✎ add/✎ edit links beside it are not exact matches).
+  await expect(page.locator("aside.panel").getByText("✎", { exact: true }).first()).toBeVisible();
 });
 
 test("live search shows results, and Escape steps back out", async ({ page }) => {
