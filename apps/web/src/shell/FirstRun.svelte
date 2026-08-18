@@ -215,7 +215,7 @@
   function toRomansRoad(): void {
     saveChurchIfGiven();
     finish(true, true);
-    s.presentThreadName = "Romans Road";
+    s.presentThreadName = s.gospelThread();
     s.showPresent = true;
   }
 

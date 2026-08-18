@@ -181,7 +181,15 @@
         </div>
       {/if}
       <div class="overview">
-        {#each entries as e, i (e.ref)}
+        <!-- KEYED BY POSITION, not by refKey. A thread may legitimately hold the
+             same verse twice — a road can come back to a verse, and nothing in
+             the format or the authoring path forbids it — and a duplicate key
+             makes Svelte throw `each_key_duplicate`, which kills this component
+             mid-render. What the reader saw was a Present that would not open
+             its thread and a page that looked half-drawn (maintainer, "I added
+             a couple of verses and it's all smushed"). The list is replaced
+             wholesale on every change, so position is a sound identity here. -->
+        {#each entries as e, i (i)}
           <button class="entry" onclick={() => (focus = i)}>
             <span class="ref">{e.display}</span>
             <span class="body">{e.body}</span>
@@ -381,13 +389,35 @@
     line-height: 1.45;
   }
   .focus {
+    /* `min-height: 0` + `overflow-y: auto` for the reason `.overview` has them:
+       a flex item will not shrink below its content without the first, so a
+       long verse at this type size ran off the bottom of the screen with no way
+       to reach it. Psalm 119:176 is short; John 3:16 at 54px on a phone in
+       landscape is not.
+
+       Centring is done by the AUTO MARGINS below, not `justify-content: center`
+       — and not `safe center` either. Plain `center` centres content taller
+       than the box, pushing its first line above the top edge where scrolling
+       cannot reach it; `safe center` fixes that but is a recent flexbox keyword
+       WebKit shipped late, and an unsupported keyword drops the whole
+       declaration — top-aligning every short verse on exactly the iPhones the
+       PWA is the install path for. Auto margins are as old as flexbox: they
+       absorb the free space when the verse fits (centred) and resolve to zero
+       when it does not (top-aligned, scrollable). */
     flex: 1;
+    min-height: 0;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
-    justify-content: center;
     padding: 6vh 7vw;
     gap: 3vh;
     cursor: pointer;
+  }
+  .focus .fref {
+    margin-top: auto;
+  }
+  .focus .fbody {
+    margin-bottom: auto;
   }
   /* The two sizes in this shell that `--uiScale` deliberately does not touch.
      A passage held up for someone else to read is sized by the SCREEN it is on,

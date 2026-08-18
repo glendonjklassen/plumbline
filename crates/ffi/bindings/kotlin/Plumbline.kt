@@ -113,6 +113,8 @@ internal interface PlumblineNative : Library {
     fun plumbline_engine_thread_entry_set_note(
         engine: Pointer, name: String, index: Int, note: String?,
     ): Pointer?
+    fun plumbline_engine_thread_entry_remove(engine: Pointer, name: String, index: Int): Pointer?
+    fun plumbline_engine_thread_entry_move(engine: Pointer, name: String, from: Int, to: Int): Pointer?
     fun plumbline_engine_weave_set_notes(engine: Pointer, name: String, notes: String): Pointer?
 
     // ── translators' notes / study xrefs / weave library / canon ────────────

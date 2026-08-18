@@ -1348,6 +1348,33 @@ export class Session {
     return JSON.parse(JSON.stringify(this.config));
   }
 
+  /**
+   * The stock thread "share the gospel" opens when the reader has not chosen
+   * another. The name of the shipped thread, and the fallback for a chosen one
+   * that has since been renamed or deleted.
+   */
+  static readonly GOSPEL_THREAD_DEFAULT = "Romans Road";
+
+  /**
+   * The thread the Share screen's gospel button (and the first-run path of the
+   * same name) opens.
+   *
+   * An empty setting means the default rather than "none", and a setting naming
+   * a thread that no longer exists falls back to it too — deleting the thread
+   * you chose should leave the button working, not dead. Checked against the
+   * loaded threads when they are known; before they load, the name is handed
+   * over as-is and PresentHost falls back to its picker on its own.
+   */
+  gospelThread(): string {
+    const chosen = String(this.config.gospelThread ?? "").trim();
+    if (!chosen) return Session.GOSPEL_THREAD_DEFAULT;
+    const threads = (this.q("threads")?.threads ?? []) as { name: string }[];
+    if (threads.length && !threads.some((t) => t.name === chosen)) {
+      return Session.GOSPEL_THREAD_DEFAULT;
+    }
+    return chosen;
+  }
+
   /** Save immediately (tab hide/close) — no debounce. */
   flushConfig(): void {
     if (this.restoring) return;
