@@ -306,6 +306,8 @@
     gap: 10px;
   }
   .pick {
+    /* `flex: none` for `.entry`'s reason — a button row in a scrollable column. */
+    flex: none;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -370,6 +372,14 @@
     gap: 14px;
   }
   .entry {
+    /* NEVER SHRINKS. These rows are flex items of a scrollable column, and a
+       flex item's `min-height: auto` floor does not hold for a <button> —
+       Chromium's button layout reports a one-line minimum — so under a phone
+       viewport the rows were shrunk to ~40% of their content and every verse
+       painted its tail over the entry below it (maintainer, "the present still
+       looks smushed"). Rigid rows make the overview genuinely overflow, which
+       is what its `overflow-y: auto` is for. */
+    flex: none;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -415,9 +425,13 @@
   }
   .focus .fref {
     margin-top: auto;
+    flex-shrink: 0;
   }
   .focus .fbody {
     margin-bottom: auto;
+    /* <p>, not <button>, so the `min-height: auto` floor holds today — but this
+       pair sits in the same shrink position as `.entry`, so pin it anyway. */
+    flex-shrink: 0;
   }
   /* The two sizes in this shell that `--uiScale` deliberately does not touch.
      A passage held up for someone else to read is sized by the SCREEN it is on,

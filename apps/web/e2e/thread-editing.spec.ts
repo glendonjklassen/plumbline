@@ -236,3 +236,51 @@ test("Share walks the thread chosen in Settings", async ({ page }) => {
     .poll(async () => await page.evaluate(() => (window as any).__plumbline.gospelThread()), { timeout: 20_000 })
     .toBe("Romans Road");
 });
+
+// THE OTHER HALF OF "IT'S ALL SMUSHED" (maintainer, same UAT round, with a
+// screenshot): the overview's rows are <button> flex items in a scrollable
+// column, and a button's `min-height: auto` floor doesn't hold — Chromium's
+// button layout reports a one-line minimum — so on a phone viewport the rows
+// were flex-shrunk to ~40% of their content and every verse painted its tail
+// over the entry below. The duplicate-key crash above was a second bug, not
+// this one. `.entry { flex: none }` is the fix; this pins it at the viewport
+// class that exposed it.
+//
+// MUTATION: drop `flex: none` from `.entry` (and rebuild — the CSS ships in
+// the bundle). Red: rows report scrollHeight beyond clientHeight.
+test.describe("phone-sized Present", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("overview rows are never shrunk below their verse", async ({ page }) => {
+    await boot(page);
+    await page.evaluate(async () => {
+      const s = (window as any).__plumbline;
+      const refs = ["Rom 8:1", "Acts 16:30", "Acts 16:31", "Rom 8:38"];
+      for (const r of refs) await s.author("threadAdd", "Romans Road", r, null, new Date().toISOString());
+      await s.fetchQ("threads");
+    });
+    await page.evaluate(() => {
+      const s = (window as any).__plumbline;
+      s.presentThreadName = "Romans Road";
+      s.showPresent = true;
+    });
+    await expect(page.locator(".overview .entry").first()).toBeVisible({ timeout: 30_000 });
+
+    const m = await page.evaluate(() => {
+      const ov = document.querySelector(".overview") as HTMLElement;
+      const rows = Array.from(ov.querySelectorAll(".entry")) as HTMLElement[];
+      return {
+        rows: rows.length,
+        // Per row: content the box cannot show. 0 everywhere or the verse is
+        // painting over its neighbour.
+        worstShrink: Math.max(...rows.map((el) => el.scrollHeight - el.clientHeight)),
+        overflow: ov.scrollHeight - ov.clientHeight,
+      };
+    });
+    // Preconditions, so a vacuous pass is impossible: enough rows that the
+    // column is under real shrink pressure, and the list genuinely overflows.
+    expect(m.rows).toBeGreaterThanOrEqual(9);
+    expect(m.overflow, "the overview must have real content to scroll").toBeGreaterThan(200);
+    expect(m.worstShrink, "a row is clipping its verse — flex shrink is back").toBeLessThanOrEqual(1);
+  });
+});
