@@ -717,8 +717,34 @@ band). `hits` → "N result(s)" + tier phrase small; per hit: verse link, gray
 *Data*: `search_scoped_json` / `search_blocks_scoped_json`.
 
 **Scope chips** (`core::search::SearchScope`) — Everywhere · this book · this
-chapter · Old Testament · New Testament, as the tokens `all` | `book:<osis>` |
-`chapter:<osis>:<ch>` | `ot` | `nt`. Every scope is a CONTIGUOUS run of
+chapter · Old Testament · New Testament · **Range…**, as the tokens `all` |
+`book:<osis>` | `chapter:<osis>:<ch>` | `ot` | `nt` |
+`span:<osis>:<ch>:<osis>:<ch>`.
+
+**A RANGE, and the canon's own sections** (web, 2026-08-17). The chips answer
+"where I already am"; a range answers a question the reader arrived with — the
+Sermon on the Mount, Paul on the law. `Range…` opens a PANEL under the chips
+(not a dialog: the query and its results stay on screen while they are being
+narrowed) holding one-tap presets and a From/To pair of book+chapter dropdowns.
+Choosing either closes the panel and leaves a chip naming what was searched
+("Genesis 1–3", "Matthew 1 – John 21"), so the count on screen is always
+explained.
+
+The presets ARE `reference::CANON_SEGMENTS` — the same eight rows the canon
+strip paints — resolved to spans by the shell, so a preset can never name a
+stretch the strip draws differently and there is no second list of groupings.
+A span is one CONTIGUOUS run, which is what keeps the engine filter a single
+range test; the selections readers actually want (a book, a section, a stretch
+of a Gospel) are contiguous in canon order. Reversed ends are NORMALIZED rather
+than refused — a reader who fills the far end in first has not asked for
+nothing — and a chapter past the end of its book clamps to that book's end,
+which is how "to the end of Revelation" and a preset built against a corpus
+with different chapter counts both arrive.
+
+**Chapter scopes resolve from the DIRECTORY** (`Corpus::chapter_range`), not by
+looking up verse 1: a corpus slice can open a chapter at verse 16, and the old
+lookup emptied the scope when it did. Same fix, and same reason, as
+`Corpus::book_range`. Every scope is a CONTIGUOUS run of
 canonical verse indices (`Corpus::book_range`, answered from the chapter
 directory without decoding a verse), checked at the mouth of `Rows::push` so
 every tier filters in one place and the total counts only what the scope

@@ -25,6 +25,72 @@
   });
 
   const pane = $derived(s.panes[s.activePane]);
+  const books = $derived((s.q("toc")?.books ?? []) as { id: string; name: string }[]);
+
+  // ── the range picker ───────────────────────────────────────────────────────
+  //
+  // "This book" and "this chapter" answer where a reader already is; a range
+  // answers a question they came with — the Sermon on the Mount, the exile,
+  // Paul on the law. It is a SPAN rather than a set of ticks because almost
+  // every such question is contiguous in canon order, and a span stays one
+  // range test in the engine (core::search::SearchScope::Span).
+  let rangeOpen = $state(false);
+  let fromBook = $state("");
+  let fromChapter = $state(1);
+  let toBook = $state("");
+  let toChapter = $state(1);
+
+  // Opening the picker starts where the READER is, so the common edit is one
+  // field rather than four.
+  function openRange(): void {
+    const here = pane?.book ?? books[0]?.id ?? "";
+    if (!fromBook) {
+      fromBook = here;
+      fromChapter = pane?.chapter ?? 1;
+      toBook = here;
+      toChapter = s.chapterCount(here) || 1;
+    }
+    rangeOpen = !rangeOpen;
+  }
+
+  const clampChapter = (book: string, ch: number): number =>
+    Math.min(Math.max(1, ch), Math.max(1, s.chapterCount(book) || 1));
+
+  function applyRange(): void {
+    if (!fromBook || !toBook) return;
+    const a = clampChapter(fromBook, fromChapter);
+    const z = clampChapter(toBook, toChapter);
+    s.searchScope = `span:${fromBook}:${a}:${toBook}:${z}`;
+    rangeOpen = false;
+  }
+
+  /** The canon's own sections (`reference::CANON_SEGMENTS`, the same rows the
+   *  canon strip paints) as ready-made spans — Law, Gospels, Letters. One
+   *  source, so a preset can never name a stretch the strip draws differently. */
+  const presets = $derived.by(() => {
+    const segs = (s.q("canonSegments")?.segments ?? []) as { label: string; first: number; last: number }[];
+    return segs
+      .map((seg) => {
+        const a = books[seg.first];
+        const z = books[seg.last];
+        if (!a || !z) return null;
+        return {
+          label: seg.label,
+          token: `span:${a.id}:1:${z.id}:${s.chapterCount(z.id) || 1}`,
+          range: a.id === z.id ? a.name : `${a.name}–${z.name}`,
+        };
+      })
+      .filter((x): x is { label: string; token: string; range: string } => x !== null);
+  });
+
+  /** What a span chip says: "John 3–8", "Matthew–John". Built from the token so
+   *  it describes the search that actually ran, not the picker's live fields. */
+  function spanLabel(token: string): string {
+    const [, fb, fc, tb, tc] = token.split(":");
+    const name = (id: string) => books.find((b) => b.id === id)?.name ?? id;
+    if (fb === tb) return fc === tc ? `${name(fb)} ${fc}` : `${name(fb)} ${fc}–${tc}`;
+    return `${name(fb)} ${fc} – ${name(tb)} ${tc}`;
+  }
 
   /**
    * The chips, resolved against the active pane AT BUILD TIME — the two narrow
@@ -46,6 +112,11 @@
       }
     }
     out.push({ token: "ot", label: t("search.scopeOT") }, { token: "nt", label: t("search.scopeNT") });
+    // The span in force keeps its own chip, so the reader can see what they
+    // chose and switch away and back without re-picking it.
+    if (s.searchScope.startsWith("span:")) {
+      out.push({ token: s.searchScope, label: spanLabel(s.searchScope) });
+    }
     return out;
   });
 
@@ -74,6 +145,10 @@
 
   function pick(token: string): void {
     s.searchScope = token;
+    // Choosing anything — a chip or a preset — settles the question the picker
+    // was open to ask, so it closes behind the choice rather than sitting over
+    // the results it just changed.
+    rangeOpen = false;
   }
 
   function onLink(uri: string, ev: MouseEvent): void {
@@ -109,7 +184,53 @@
       {#each chips as c (c.token)}
         <button class="chip" class:on={s.searchScope === c.token} onclick={() => pick(c.token)}>{c.label}</button>
       {/each}
+      <button class="chip range" class:on={rangeOpen} onclick={openRange} aria-expanded={rangeOpen}>
+        {t("search.scopeRange")}
+      </button>
     </div>
+
+    {#if rangeOpen}
+      <!-- The picker is a PANEL, not a dialog: it sits under the chips it
+           belongs to, and the query and results stay on screen behind it, so
+           narrowing a search you can see is one gesture rather than a trip
+           through a modal. -->
+      <div class="range-panel">
+        <div class="presets">
+          {#each presets as p (p.label)}
+            <button class="preset" onclick={() => pick(p.token)} title={p.range}>
+              <span class="preset-name">{p.label}</span>
+              <span class="preset-range">{p.range}</span>
+            </button>
+          {/each}
+        </div>
+
+        <div class="ends">
+          <label class="end">
+            <span class="end-label">{t("search.rangeFrom")}</span>
+            <select bind:value={fromBook} onchange={() => (fromChapter = 1)}>
+              {#each books as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
+            </select>
+            <select bind:value={fromChapter}>
+              {#each Array.from({ length: s.chapterCount(fromBook) || 1 }, (_, i) => i + 1) as n (n)}
+                <option value={n}>{n}</option>
+              {/each}
+            </select>
+          </label>
+          <label class="end">
+            <span class="end-label">{t("search.rangeTo")}</span>
+            <select bind:value={toBook} onchange={() => (toChapter = s.chapterCount(toBook) || 1)}>
+              {#each books as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
+            </select>
+            <select bind:value={toChapter}>
+              {#each Array.from({ length: s.chapterCount(toBook) || 1 }, (_, i) => i + 1) as n (n)}
+                <option value={n}>{n}</option>
+              {/each}
+            </select>
+          </label>
+          <button class="apply" onclick={applyRange}>{t("search.rangeApply")}</button>
+        </div>
+      </div>
+    {/if}
 
     <div class="results" data-surface="search results">
       {#if blocks}
@@ -182,6 +303,75 @@
     color: var(--paper, #fcf9f4);
     background: var(--gold, #9e7d38);
     border-color: var(--gold, #9e7d38);
+  }
+  .range-panel {
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 10px;
+    background: var(--popupPaper, #f2eee6);
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  .presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--rule, #d8cba8);
+  }
+  .preset {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--rule, #d8cba8);
+    text-align: left;
+  }
+  .preset:hover {
+    background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
+  }
+  .preset-name {
+    font-size: calc(13px * var(--uiScale, 1));
+    color: var(--ink, #211f1a);
+  }
+  .preset-range {
+    font-size: calc(11px * var(--uiScale, 1));
+    color: var(--faded, #6c665d);
+  }
+  .ends {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px;
+  }
+  .end {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .end-label {
+    font-size: calc(12px * var(--uiScale, 1));
+    color: var(--faded, #6c665d);
+    min-width: 3.2em;
+  }
+  .end select {
+    font-family: inherit;
+    font-size: calc(13px * var(--uiScale, 1));
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--rule, #d8cba8);
+    background: var(--paper, #fcf9f4);
+    color: var(--ink, #211f1a);
+  }
+  .apply {
+    margin-left: auto;
+    padding: 8px 16px;
+    border-radius: 8px;
+    background: var(--gold, #9e7d38);
+    color: var(--paper, #fcf9f4);
+    font-size: calc(13px * var(--uiScale, 1));
   }
   .results {
     flex: 1;
