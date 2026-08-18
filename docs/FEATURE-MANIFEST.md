@@ -963,6 +963,22 @@ of study — "every time I click study it just doesn't excite me… not like the
 other pages", which tell you today's chapters or hold actual hymns. Two
 additions, both live:
 
+- the band's reads are **WARMED IN THE BACKGROUND** (`Session.warmStudyHub`,
+  2026-08-17), so arriving at the hub paints numbers rather than the ghost. The
+  four band reads and the four card counts are fetched at boot idle and again
+  after anything that empties the cache they live in (an authoring write, a
+  dwell report, a boot stage) — coalesced, skipped while the hub is on screen,
+  and walked SEQUENTIALLY because the engine is one thread and eight reads fired
+  at once would sit in front of the reader's next tap. The placeholder below is
+  still the answer for a cold arrival (a warm that has not run, or a read that
+  failed), so it is a floor, not dead code. The day-keyed reads take their
+  stamp from ONE `dayStamp()` — a warm computing that key differently from the
+  screen it warms would miss every time and look merely slow.
+  **SHELL DELTA:** Android still reads the band when the hub is composed
+  (`LaunchedEffect(refreshEpoch)` in `StudyScreen.kt`, on `Dispatchers.Default`
+  so the UI thread is free but the numbers still arrive after the reader). The
+  same warm belongs there — hoisted to launch and re-taken on `refreshEpoch` —
+  and is deferred with the rest of the Android work while the APK is on hold;
 - the band draws a **placeholder of its own shape** while its four reads are in
   flight — `q` answers null while fetching, which renders identically to
   "nothing running", so the band drew empty and then GREW, shoving the card grid

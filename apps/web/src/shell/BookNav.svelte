@@ -12,6 +12,7 @@
   // grids are synchronous, and Joel's chapter count is on screen instantly.
   import { untrack } from "svelte";
   import { getSession } from "../state/session.svelte";
+  import { dayStamp } from "../engine/StudyEngine";
   import { modal } from "../lib/modal";
   import { readingTint, tintStyle, tintTitle, type ReadingHeat } from "./readingTint";
   import { todayPlans, type TodayPlan } from "./planToday";
@@ -26,15 +27,14 @@
   // how long it has been. Read through the cache like every other engine
   // query, so the grids stay synchronous and the tint fills in a beat later
   // without moving anything on screen.
-  const nowStamp = () => new Date().toISOString();
   const bookHeat = $derived.by(() => {
     if (!open || sweeping) return new Map<string, ReadingHeat>();
-    const r = s.q("readingBooks", nowStamp().slice(0, 10) + "T12:00:00Z");
+    const r = s.q("readingBooks", dayStamp());
     return new Map<string, ReadingHeat>((r?.books ?? []).map((b: any) => [b.book, b as ReadingHeat]));
   });
   const chapterHeat = $derived.by(() => {
     if (!book || sweeping) return new Map<number, ReadingHeat>();
-    const r = s.q("readingChapters", book, nowStamp().slice(0, 10) + "T12:00:00Z");
+    const r = s.q("readingChapters", book, dayStamp());
     return new Map<number, ReadingHeat>((r?.chapters ?? []).map((c: any) => [c.chapter, c as ReadingHeat]));
   });
 

@@ -27,6 +27,20 @@ export function nowStamp(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
+/**
+ * TODAY, as the day-keyed reads spell it (`readingBooks`, `readingChapters`,
+ * `memoryDue`) — midday UTC, so the stamp names one calendar day rather than
+ * flipping across a timezone at midnight.
+ *
+ * ONE definition, because it is a CACHE KEY. It was written out longhand in
+ * three places, two of them deriving "now" differently; a warm that computed
+ * the key even slightly differently from the screen it was warming would miss
+ * every time and look like it was simply slow.
+ */
+export function dayStamp(): string {
+  return nowStamp().slice(0, 10) + "T12:00:00Z";
+}
+
 export class DisplayList {
   #w: WasmEngine;
   #ptr: number;

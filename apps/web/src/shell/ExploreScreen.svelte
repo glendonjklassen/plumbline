@@ -25,6 +25,7 @@
   import { getSession } from "../state/session.svelte";
   import ScreenBar from "../lib/ScreenBar.svelte";
   import { dispatchLink } from "../study/links";
+  import { dayStamp } from "../engine/StudyEngine";
   import { chapterSpan, firstUnread, remaining, todayPlans } from "./planToday";
   import { lang, plural, t } from "../lib/i18n.svelte";
 
@@ -32,7 +33,6 @@
 
   // Midday, not now: the stamp is part of the query cache's KEY, so a clock
   // that ticks would mint a fresh entry per read. Same trick BookNav uses.
-  const dayStamp = (): string => new Date().toISOString().slice(0, 10) + "T12:00:00Z";
 
   // ── what is in flight ───────────────────────────────────────────────────────
   //
