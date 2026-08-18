@@ -109,7 +109,7 @@ test("a bottom sheet's own last control is reachable, not just its box", async (
   expect(box.y + box.height, "the New thread… field must sit above the bar").toBeLessThanOrEqual(navTop + 1);
 
   await field.fill("Reachable");
-  const add = page.getByRole("button", { name: "Add", exact: true });
+  const add = page.getByRole("button", { name: "＋", exact: true });
   const addBox = (await add.boundingBox())!;
   expect(addBox.y + addBox.height, "and so must its Add button").toBeLessThanOrEqual(navTop + 1);
   await add.click();

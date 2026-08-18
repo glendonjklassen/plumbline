@@ -489,6 +489,20 @@ char *plumbline_engine_tag_delete(struct PlumblineEngine *engine, const char *na
 // `engine` is valid; `from`/`to` are null or valid NUL-terminated UTF-8.
 char *plumbline_engine_tag_rename(struct PlumblineEngine *engine, const char *from, const char *to);
 
+// Set or clear the tag's CATEGORY — the grouping heading the tag lists file it
+// under. An empty (or blank) `category` clears it. The management screen's
+// verb: nothing on the reading path calls this. A `name` that answers to no
+// tag is a success with nothing done, and setting the category a tag already
+// carries writes nothing.
+//
+// Null on success, else an owned error string.
+//
+// # Safety
+// `engine` is valid; `name`/`category` are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_tag_set_category(struct PlumblineEngine *engine,
+                                        const char *name,
+                                        const char *category);
+
 // Fold the tag `from` into the tag `into`, then delete `from`. Members already
 // in `into` are not duplicated, and the SURVIVOR's copy of a shared member wins
 // — letting the source overwrite would discard a note the reader wrote on the

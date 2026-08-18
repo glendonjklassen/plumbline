@@ -128,6 +128,9 @@ export class Session {
   palette = $state<any>({});
   panes = $state<PaneState[]>([]);
   activePane = $state(0);
+  /** The ⛓ toggle: panes on the SAME chapter scroll together (verse-aligned).
+   *  Session-only on purpose — a link is a reading posture, not a setting. */
+  scrollLinked = $state(false);
   panel = $state<PanelView | null>(null);
   mapPopup = $state<MapPopup | null>(null);
 
@@ -805,6 +808,47 @@ export class Session {
     this.#store(key, v);
     this.cacheEpoch++;
     return v;
+  }
+
+  /** Chained panes scroll TOGETHER, verse-aligned rather than offset-copied:
+   *  the same chapter in two languages runs to different heights, so the only
+   *  sync that stays true down the column is "the verse under your eye is the
+   *  verse under theirs". Geometry is what each pane already publishes for the
+   *  connectors overlay (verse number → line box). Partners get their `scrollY`
+   *  written — each pane's own mirror effect moves the real scroller with its
+   *  programmatic flag up, so a linked move never echoes back as a user scroll.
+   *  Only panes on the SAME book+chapter follow; everything else is left alone. */
+  syncLinkedScroll(fromIdx: number): void {
+    if (!this.scrollLinked) return;
+    const from = this.panes[fromIdx];
+    const own = this.paneVerseGeom[fromIdx];
+    if (!from || !own?.size) return;
+    const top = from.scrollY;
+    // The verse under the top edge, and how far through its line box we are.
+    let verse: number | null = null;
+    let vg: { y: number; h: number } | null = null;
+    let firstY = Infinity;
+    for (const [v, g] of own) {
+      firstY = Math.min(firstY, g.y);
+      if (g.y <= top && (vg === null || g.y >= vg.y)) {
+        verse = v;
+        vg = g;
+      }
+    }
+    const f = vg && vg.h > 0 ? Math.min(1, Math.max(0, (top - vg.y) / vg.h)) : 0;
+    for (let j = 0; j < this.panes.length; j++) {
+      if (j === fromIdx) continue;
+      const p = this.panes[j];
+      if (!p || p.book !== from.book || p.chapter !== from.chapter) continue;
+      const geom = this.paneVerseGeom[j];
+      if (!geom?.size) continue;
+      const g = verse !== null ? geom.get(verse) : undefined;
+      // Above the first verse sits only the chapter heading — mirror the raw
+      // offset there rather than snapping the partner to its verse 1.
+      const target = g ? g.y + f * g.h : Math.min(top, firstY);
+      p.pendingScroll = false;
+      p.scrollY = Math.max(0, target);
+    }
   }
 
   /** An authoring call: resolves to null on success, else the error string

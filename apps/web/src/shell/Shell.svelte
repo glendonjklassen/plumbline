@@ -255,6 +255,9 @@
         p.scrollY = Math.max(0, p.scrollY + dy);
         p.pendingScroll = false;
       }
+      // Keyboard scrolling follows the ⛓ chain like touch does (shift already
+      // scrolls everything, chained or not).
+      if (!all) s.syncLinkedScroll(s.activePane);
     };
     switch (e.key) {
       case "ArrowUp":

@@ -52,7 +52,7 @@ test("the tag sheet names the book in full, and the tag file still holds the ref
 
   const name = "Charity";
   await sheet.getByPlaceholder("New tag…").fill(name);
-  await sheet.getByRole("button", { name: "Add", exact: true }).click();
+  await sheet.getByRole("button", { name: "＋", exact: true }).click();
 
   // The toast is the other half of the sentence the sheet started.
   await expect(page.locator(".toast"), "the toast is reading out an OSIS id").toContainText(`Tagged ${SHOWN}`);
@@ -80,7 +80,7 @@ test("the thread sheet names the book in full, and the thread still holds the re
 
   const name = "The greater gifts";
   await sheet.getByPlaceholder("New thread…").fill(name);
-  await sheet.getByRole("button", { name: "Add", exact: true }).click();
+  await sheet.getByRole("button", { name: "＋", exact: true }).click();
 
   await expect(page.locator(".toast"), "the toast is reading out an OSIS id").toContainText(`Added ${SHOWN} to`);
 

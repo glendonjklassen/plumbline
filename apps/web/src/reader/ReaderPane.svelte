@@ -302,6 +302,10 @@
       // pending scroll-to-verse must not fight them.
       pane.pendingScroll = false;
       s.activePane = paneIdx;
+      pane.scrollY = top;
+      // Chained panes follow — from the USER branch only, so a linked move
+      // (which arrives with the programmatic flag up) can never echo back.
+      s.syncLinkedScroll(paneIdx);
     }
     pane.scrollY = top;
     trackReached();
@@ -724,6 +728,18 @@
         {paneBible} ▾
       </button>
     {/if}
+    <!-- The chain: only where there is a same-chapter pane to chain TO — the
+         one honest moment for it (maintainer UAT, 2026-08-18: the same chapter
+         in two languages should scroll together). One global toggle, not
+         per-pane: a chain with one end is not a chain. -->
+    {#if s.panes.some((p, j) => j !== paneIdx && p.book === pane.book && p.chapter === pane.chapter)}
+      <button
+        class="chain"
+        class:on={s.scrollLinked}
+        aria-pressed={s.scrollLinked}
+        onclick={() => (s.scrollLinked = !s.scrollLinked)}
+        title={t("pane.linkScroll")}>⛓︎</button>
+    {/if}
     {#if s.panes.length < s.maxPanes}
       <button onclick={() => s.addPane(paneIdx)} title={t("pane.split")}>＋</button>
     {/if}
@@ -984,5 +1000,9 @@
        killed globally in app.css. */
     user-select: none;
     -webkit-user-select: none;
+  }
+  .chain.on {
+    color: var(--gold, #9e7d38);
+    text-shadow: 0 0 1px currentColor;
   }
 </style>

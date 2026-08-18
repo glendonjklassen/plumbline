@@ -22,6 +22,25 @@
     return [...all].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
   });
 
+  /** Grouped under category headings the moment any tag has one — a long flat
+   *  list is exactly what categories exist to fix — and dead flat until then,
+   *  so a reader who never files anything sees no change. Categories sort
+   *  alphabetically; the uncategorized bring up the rear. A null label means
+   *  "no headings at all". */
+  const groups = $derived.by((): { label: string | null; tags: any[] }[] => {
+    if (!tags.some((x) => x.category)) return [{ label: null, tags }];
+    const by = new Map<string, any[]>();
+    for (const tg of tags) {
+      const k = String(tg.category ?? "");
+      if (!by.has(k)) by.set(k, []);
+      by.get(k)!.push(tg);
+    }
+    const labels = [...by.keys()].filter(Boolean).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    const out = labels.map((l) => ({ label: l, tags: by.get(l)! }));
+    if (by.has("")) out.push({ label: t("tags.uncategorized"), tags: by.get("")! });
+    return out;
+  });
+
   let newName = $state("");
 
   function close(): void {
@@ -68,17 +87,23 @@
     <div class="list">
       <!-- `tg`, not `t` — see ThreadPicker: an each-block `t` shadows the
            catalogue lookup and `t` is `any`, so it fails only at runtime. -->
-      {#each tags as tg (tg.name)}
-        <div class="row">
-          <button class="tag" onclick={() => pick(tg.name)}>
-            {tg.name}
-            <span class="count">{tg.members?.length ?? 0}</span>
-          </button>
-          <button class="del" title={t("tag.delete")} onclick={() => void remove(tg.name)}>✕</button>
-        </div>
-      {:else}
-        <p class="empty">{t("tag.empty")}</p>
+      {#each groups as g (g.label ?? "")}
+        {#if g.label !== null}
+          <div class="ghead">{g.label}</div>
+        {/if}
+        {#each g.tags as tg (tg.name)}
+          <div class="row">
+            <button class="tag" onclick={() => pick(tg.name)}>
+              {tg.name}
+              <span class="count">{tg.members?.length ?? 0}</span>
+            </button>
+            <button class="del" title={t("tag.delete")} onclick={() => void remove(tg.name)}>✕</button>
+          </div>
+        {/each}
       {/each}
+      {#if tags.length === 0}
+        <p class="empty">{t("tag.empty")}</p>
+      {/if}
     </div>
     <form
       class="new"
@@ -199,5 +224,13 @@
   }
   .new button:disabled {
     opacity: 0.4;
+  }
+  .ghead {
+    font-size: calc(12.5px * var(--uiScale, 1));
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--faded, #8a8276);
+    margin: 8px 2px 0;
   }
 </style>

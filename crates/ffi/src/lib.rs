@@ -2164,6 +2164,43 @@ pub unsafe extern "C" fn plumbline_engine_tag_rename(
     })
 }
 
+/// Set or clear the tag's CATEGORY — the grouping heading the tag lists file it
+/// under. An empty (or blank) `category` clears it. The management screen's
+/// verb: nothing on the reading path calls this. A `name` that answers to no
+/// tag is a success with nothing done, and setting the category a tag already
+/// carries writes nothing.
+///
+/// Null on success, else an owned error string.
+///
+/// # Safety
+/// `engine` is valid; `name`/`category` are null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_tag_set_category(
+    engine: *mut PlumblineEngine,
+    name: *const c_char,
+    category: *const c_char,
+) -> *mut c_char {
+    guard_err(|| {
+        let Some(engine) = engine.as_mut() else {
+            return out_string("null engine".to_string());
+        };
+        if engine.home.is_none() {
+            return out_string("engine has no home directory (opened from bytes); cannot author".to_string());
+        };
+        let (Some(name), Some(category)) = (opt_str(name), opt_str(category)) else {
+            return out_string("null or invalid argument".to_string());
+        };
+        let mut study = engine.study_write();
+        match tag::set_tag_category(&study.tags, name, Some(category), &now_stamp()) {
+            Ok(_) => {
+                *study = load_study(&engine.home);
+                ptr::null_mut()
+            }
+            Err(e) => out_string(e.to_string()),
+        }
+    })
+}
+
 /// Fold the tag `from` into the tag `into`, then delete `from`. Members already
 /// in `into` are not duplicated, and the SURVIVOR's copy of a shared member wins
 /// — letting the source overwrite would discard a note the reader wrote on the
@@ -3064,6 +3101,7 @@ impl PanelSource for PlumblineEngine {
             .iter()
             .map(|lt| panel::TagView {
                 name: lt.tag.name.clone(),
+                category: lt.tag.category.clone(),
                 members: lt
                     .tag
                     .members

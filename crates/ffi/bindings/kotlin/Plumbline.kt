@@ -98,6 +98,7 @@ internal interface PlumblineNative : Library {
      *  name another tag already answers to — that is a merge, and merging is
      *  destructive enough to have to be asked for. */
     fun plumbline_engine_tag_rename(engine: Pointer, from: String, to: String): Pointer?
+    fun plumbline_engine_tag_set_category(engine: Pointer, name: String, category: String): Pointer?
     /** Fold one tag into another and delete the source. DESTRUCTIVE. */
     fun plumbline_engine_tag_merge(engine: Pointer, from: String, into: String): Pointer?
     fun plumbline_engine_weave_add_link(

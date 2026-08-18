@@ -16,7 +16,8 @@
 
   const s = getSession();
 
-  const tags = $derived(((s.q("tags")?.tags ?? []) as any[]).map((x) => String(x.name)));
+  const tagObjs = $derived((s.q("tags")?.tags ?? []) as any[]);
+  const tags = $derived(tagObjs.map((x) => String(x.name)));
 
   const close = (): void => {
     s.screen = "explore";
@@ -51,9 +52,28 @@
     s.showToast(err ?? t("tags.merged", { from, into }));
   }
 
+  /** Category = a grouping heading for the tag LISTS (picker + library panel).
+   *  Assigned here and only here — never while reading (maintainer UAT,
+   *  2026-08-18: "no need when you're going through the bible"). */
+  async function categorize(): Promise<void> {
+    const name = await s.askPick(t("tags.categorizeWhich"), tags);
+    if (!name) return;
+    const current = String(tagObjs.find((x) => x.name === name)?.category ?? "");
+    const cat = await s.askText(t("tags.categoryFor", { name }), current);
+    if (cat === null || cat.trim() === current) return;
+    const err = await s.author("tagSetCategory", name, cat.trim());
+    s.showToast(
+      err ??
+        (cat.trim()
+          ? t("tags.categorized", { name, category: cat.trim() })
+          : t("tags.categoryCleared", { name })),
+    );
+  }
+
   const actions = $derived([
     { id: "browse", go: browse, need: 0 },
     { id: "rename", go: rename, need: 1 },
+    { id: "categorize", go: categorize, need: 1 },
     // Two tags, or there is nothing to merge INTO.
     { id: "merge", go: merge, need: 2 },
   ]);
