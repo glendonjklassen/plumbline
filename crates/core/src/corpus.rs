@@ -189,6 +189,23 @@ impl Corpus {
         &self.tok_version
     }
 
+    /// The canonical verse-index range one chapter occupies, or `None` when the
+    /// corpus does not have it.
+    ///
+    /// From the DIRECTORY, so it neither decodes the chapter nor assumes verse
+    /// 1 is present — the same two assumptions [`Corpus::book_range`] avoids,
+    /// and the second one is not hypothetical: a corpus slice holding only the
+    /// verses somebody cared about has chapters that start at verse 16.
+    pub fn chapter_range(&self, book: &str, chapter: u16) -> Option<std::ops::Range<usize>> {
+        let slot_ix = *self.chapter_ix.get(book)?.get(&chapter)?;
+        let start = self.slots.get(slot_ix)?.start_ord;
+        let end = match self.slots.get(slot_ix + 1) {
+            Some(next) => next.start_ord,
+            None => self.total,
+        };
+        Some(start..end)
+    }
+
     /// The canonical verse-index range one book occupies, or `None` when the
     /// corpus does not have that book.
     ///

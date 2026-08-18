@@ -203,3 +203,79 @@ test("a scope chip narrows the search", async ({ page }) => {
   // dropped verses would not add up.
   expect(ot + nt, `everywhere ${everywhere}, OT ${ot}, NT ${nt}`).toBe(everywhere);
 });
+
+// SEARCHING A SELECTION OF CHAPTERS (maintainer, 2026-08-17): the chips answer
+// "where I already am", a range answers a question the reader arrived with —
+// the Sermon on the Mount, Paul on the law. A span rather than a set of ticks,
+// because those questions are contiguous in canon order and a span stays one
+// range test in the engine.
+//
+// MUTATION: in SearchScreen.svelte's `applyRange`, drop the chapters from the
+// token (`span:${fromBook}:1:${toBook}:999`). Red: the narrowed count matches
+// the whole-book count, because the range stopped meaning the chapters chosen.
+test("a custom chapter range narrows the search", async ({ page }) => {
+  await boot(page);
+  const field = await openSearch(page);
+  await field.fill("God");
+
+  const count = async (): Promise<number> => {
+    const head = await page.locator('[data-surface="search results"] >> text=/\\d+ results?/').first().textContent();
+    return Number(/(\d[\d,]*)/.exec(head ?? "")?.[1]?.replace(/,/g, "") ?? -1);
+  };
+  await expect.poll(count, { timeout: 30_000 }).toBeGreaterThan(0);
+  const everywhere = await count();
+
+  // Genesis as a whole, then Genesis 1–3: the second must be a subset.
+  await page.getByRole("button", { name: "Range…" }).click();
+  const [fromBook, fromCh, toBook, toCh] = await page.locator(".range-panel select").all();
+  await fromBook.selectOption({ label: "Genesis" });
+  await fromCh.selectOption("1");
+  await toBook.selectOption({ label: "Genesis" });
+  await toCh.selectOption("50");
+  await page.getByRole("button", { name: "Search this range" }).click();
+  await expect.poll(count, { timeout: 30_000 }).toBeLessThan(everywhere);
+  const wholeBook = await count();
+
+  await page.getByRole("button", { name: "Range…" }).click();
+  await (await page.locator(".range-panel select").all())[3].selectOption("3");
+  await page.getByRole("button", { name: "Search this range" }).click();
+  await expect.poll(count, { timeout: 30_000 }).toBeLessThan(wholeBook);
+  expect(await count()).toBeGreaterThan(0);
+
+  // The chip says what was searched, so the number on screen is explained.
+  await expect(page.getByRole("button", { name: /Genesis 1–3/ })).toBeVisible();
+});
+
+// The presets are the canon's own sections (reference::CANON_SEGMENTS), the
+// same rows the canon strip paints — so a preset can never name a stretch the
+// strip draws differently.
+//
+// MUTATION: build the preset token from `books[seg.first]` twice (first..first
+// rather than first..last). Red: "Gospels" returns Matthew's count, not the
+// four Gospels'.
+test("a canon preset searches its whole section", async ({ page }) => {
+  await boot(page);
+  const field = await openSearch(page);
+  await field.fill("God");
+
+  const count = async (): Promise<number> => {
+    const head = await page.locator('[data-surface="search results"] >> text=/\\d+ results?/').first().textContent();
+    return Number(/(\d[\d,]*)/.exec(head ?? "")?.[1]?.replace(/,/g, "") ?? -1);
+  };
+  await expect.poll(count, { timeout: 30_000 }).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "Range…" }).click();
+  await page.getByRole("button", { name: /Gospels/ }).click();
+  await expect.poll(count, { timeout: 30_000 }).toBeGreaterThan(0);
+  const gospels = await count();
+
+  // Matthew alone is inside the Gospels, so it must be a strict subset.
+  await page.getByRole("button", { name: "Range…" }).click();
+  const selects = await page.locator(".range-panel select").all();
+  await selects[0].selectOption({ label: "Matthew" });
+  await selects[1].selectOption("1");
+  await selects[2].selectOption({ label: "Matthew" });
+  await selects[3].selectOption("28");
+  await page.getByRole("button", { name: "Search this range" }).click();
+  await expect.poll(count, { timeout: 30_000 }).toBeLessThan(gospels);
+});

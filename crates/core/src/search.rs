@@ -42,11 +42,20 @@ pub enum SearchScope {
     OldTestament,
     /// Matthew–Revelation.
     NewTestament,
+    /// A contiguous span of chapters, INCLUSIVE at both ends — "John 3–8",
+    /// "Genesis 1 – Deuteronomy 34".
+    ///
+    /// The shells' range picker and their canon presets (Law, Gospels,
+    /// Letters…) both land here: a preset is a span over a
+    /// [`crate::reference::CANON_SEGMENTS`] row, so there is no second list of
+    /// groupings to drift from the canon strip's.
+    Span { from_book: String, from_chapter: u16, to_book: String, to_chapter: u16 },
 }
 
 impl SearchScope {
     /// The wire token the scoped FFI endpoints take:
-    /// `all` | `ot` | `nt` | `book:<osis>` | `chapter:<osis>:<ch>`.
+    /// `all` | `ot` | `nt` | `book:<osis>` | `chapter:<osis>:<ch>` |
+    /// `span:<osis>:<ch>:<osis>:<ch>`.
     pub fn token(&self) -> String {
         match self {
             SearchScope::All => "all".to_string(),
@@ -54,6 +63,9 @@ impl SearchScope {
             SearchScope::NewTestament => "nt".to_string(),
             SearchScope::Book(b) => format!("book:{b}"),
             SearchScope::Chapter(b, c) => format!("chapter:{b}:{c}"),
+            SearchScope::Span { from_book, from_chapter, to_book, to_chapter } => {
+                format!("span:{from_book}:{from_chapter}:{to_book}:{to_chapter}")
+            }
         }
     }
 
@@ -74,6 +86,22 @@ impl SearchScope {
             let ch: u16 = c.parse().ok()?;
             return (!b.is_empty() && ch >= 1).then(|| SearchScope::Chapter(b.to_string(), ch));
         }
+        if let Some(rest) = t.strip_prefix("span:") {
+            // Four fields, book:chapter twice. An OSIS id never contains a
+            // colon, so splitting is unambiguous.
+            let parts: Vec<&str> = rest.split(':').collect();
+            let [b1, c1, b2, c2] = parts[..] else { return None };
+            let (from_chapter, to_chapter) = (c1.parse().ok()?, c2.parse().ok()?);
+            if b1.is_empty() || b2.is_empty() || from_chapter < 1 || to_chapter < 1 {
+                return None;
+            }
+            return Some(SearchScope::Span {
+                from_book: b1.to_string(),
+                from_chapter,
+                to_book: b2.to_string(),
+                to_chapter,
+            });
+        }
         None
     }
 
@@ -91,12 +119,40 @@ impl SearchScope {
             SearchScope::OldTestament => Some(0..nt_start(corpus)),
             SearchScope::NewTestament => Some(nt_start(corpus)..corpus.len()),
             SearchScope::Book(b) => Some(corpus.book_range(b).unwrap_or(0..0)),
-            SearchScope::Chapter(b, c) => Some(match corpus.index_of(&VRef::new(b, *c, 1)) {
-                Some(start) => start..start + corpus.chapter_verses(b, *c).len(),
-                None => 0..0,
-            }),
+            SearchScope::Chapter(b, c) => Some(corpus.chapter_range(b, *c).unwrap_or(0..0)),
+            SearchScope::Span { from_book, from_chapter, to_book, to_chapter } => {
+                let a = chapter_bounds(corpus, from_book, *from_chapter);
+                let z = chapter_bounds(corpus, to_book, *to_chapter);
+                Some(match (a, z) {
+                    // REVERSED ENDS ARE NORMALIZED, not refused: a reader who
+                    // picks the far end first means the span between them, and
+                    // an empty result would read as "no matches" rather than
+                    // "you filled the boxes in the other order".
+                    (Some(a), Some(z)) => {
+                        if a.start <= z.start {
+                            a.start..z.end
+                        } else {
+                            z.start..a.end
+                        }
+                    }
+                    // An end this corpus cannot place empties the span, for the
+                    // reason every unresolvable scope does: it must not widen.
+                    _ => 0..0,
+                })
+            }
         }
     }
+}
+
+/// One chapter's verse-index range, with the chapter CLAMPED into the book.
+///
+/// Clamped rather than refused because the ends of a span come from a picker
+/// and from canon presets: "to the end of Revelation" is naturally expressed as
+/// a chapter number at or past the last one, and a preset built against a
+/// corpus with different chapter counts should still mean "that book's end".
+fn chapter_bounds(corpus: &Corpus, book: &str, chapter: u16) -> Option<std::ops::Range<usize>> {
+    let last = corpus.chapter_count(book);
+    corpus.chapter_range(book, chapter.clamp(1, last.max(1)))
 }
 
 /// Where the New Testament starts in this corpus.
@@ -1174,6 +1230,52 @@ mod tests {
         assert_eq!((total, refs), (1, vec!["John 1:1".to_string()]));
     }
 
+    /// A SPAN — the range picker's scope, and what a canon preset resolves to.
+    ///
+    /// The sample runs Gen 1 · Ps 23 · John 3, so a span can include a middle
+    /// book, stop short of one, or be given backwards.
+    #[test]
+    fn a_span_covers_from_one_chapter_to_another_inclusive() {
+        let c = corpus::from_str(SAMPLE).unwrap();
+        let ix = ix_of(&c);
+        let notes = Notes::new();
+        let span = |fb: &str, fc: u16, tb: &str, tc: u16| SearchScope::Span {
+            from_book: fb.into(),
+            from_chapter: fc,
+            to_book: tb.into(),
+            to_chapter: tc,
+        };
+        let refs = |scope: SearchScope| match run_search_scoped(&c, &notes, &ix, "God", &scope) {
+            Some(SearchAnswer::Hits { total, hits, .. }) => {
+                let r: Vec<String> = hits.iter().map(|h| h.vref.ref_key()).collect();
+                assert_eq!(total, r.len(), "total disagrees with the rows for {}", scope.token());
+                r
+            }
+            other => panic!("expected hits, got {other:?}"),
+        };
+
+        // Genesis through Psalms: takes Genesis's three, stops before John.
+        assert_eq!(refs(span("Gen", 1, "Ps", 23)).len(), 3);
+        // The whole canon, spelled as a span.
+        assert_eq!(refs(span("Gen", 1, "John", 3)).len(), 4);
+        // One book in the middle of the span contributes nothing but is
+        // crossed: Psalms has no "God" in this sample.
+        assert_eq!(refs(span("Ps", 23, "John", 3)), ["John 3:16"]);
+
+        // BACKWARDS ENDS mean the same span. A reader who fills the far end in
+        // first has not asked for nothing.
+        assert_eq!(refs(span("John", 3, "Gen", 1)).len(), 4);
+
+        // A chapter past the end of its book clamps to that book's end, which
+        // is how "to the end of Revelation" and a preset built against another
+        // corpus both arrive.
+        assert_eq!(refs(span("Gen", 1, "Gen", 999)).len(), 3);
+
+        // A book this corpus does not have empties the span rather than
+        // widening it, like every other unresolvable scope.
+        assert!(refs(span("Gen", 1, "Nope", 1)).is_empty());
+    }
+
     /// The testament split is a constant; canon owns the truth of it.
     #[test]
     fn nt_first_order_is_matthew() {
@@ -1191,10 +1293,23 @@ mod tests {
             SearchScope::NewTestament,
             SearchScope::Book("1Cor".into()),
             SearchScope::Chapter("Ps".into(), 119),
+            SearchScope::Span { from_book: "Matt".into(), from_chapter: 1, to_book: "John".into(), to_chapter: 21 },
         ] {
             assert_eq!(SearchScope::parse(&s.token()), Some(s));
         }
-        for junk in ["", "book:", "chapter:Gen", "chapter:Gen:0", "chapter:Gen:x", "nonsense"] {
+        for junk in [
+            "",
+            "book:",
+            "chapter:Gen",
+            "chapter:Gen:0",
+            "chapter:Gen:x",
+            "nonsense",
+            "span:Gen",
+            "span:Gen:1:John",
+            "span:Gen:1:John:x",
+            "span:Gen:0:John:3",
+            "span::1:John:3",
+        ] {
             assert_eq!(SearchScope::parse(junk), None, "{junk} parsed");
         }
     }
