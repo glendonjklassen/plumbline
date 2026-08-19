@@ -592,6 +592,10 @@ data class PanelBlock(
     val runs: List<PanelRun>? = null,
     val indent: Boolean = false,
     val topGap: Boolean = false,
+    // "{thread}:{entry}" on a thread entry's header row — the shell may offer
+    // drag-to-reorder there (the web does; this shell still rides the row's
+    // own ↑/↓ links, see FEATURE-MANIFEST §Threads).
+    val drag: String? = null,
 )
 
 @Serializable

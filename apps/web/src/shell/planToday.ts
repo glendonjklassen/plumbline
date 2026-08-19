@@ -18,9 +18,10 @@ export interface TodayPlan {
   name: string;
   day: number;
   chapters: TodayChapter[];
-  /** A full plan-day was finished today (even yesterday's leftovers) — the
-   *  chip retires for the rest of the calendar day; the navigator's today
-   *  card keeps showing where the plan stands. */
+  /** A full plan-day was finished today (even yesterday's leftovers). Purely
+   *  informational now — the hub's band says so in words — while every surface
+   *  keeps showing the NEXT portion so the reader can work ahead (UAT,
+   *  2026-08-18; the chip used to retire on this for the rest of the day). */
   doneToday: boolean;
 }
 

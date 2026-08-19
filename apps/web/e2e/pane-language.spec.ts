@@ -226,3 +226,37 @@ test("a language no pane reads is released", async ({ page }) => {
   await setPaneBible(page, 0, "Luther", "de");
   expect(await paneText(page, 0)).toMatch(/Pharisäern|Nikodemus|Gott/);
 });
+
+// A PANE'S LANGUAGE SURVIVES A RELAUNCH — engine included. The `lang` always
+// rode `openPanes`, but the engine it names lives and dies with the worker,
+// and nothing reopened it on boot: the restored pane's first layout threw
+// "the de text is not open on this device" and the pane sat BLANK, its word
+// study dead with it. Found by UAT as "Strong's isn't working except for
+// English" (2026-08-18) — the study surface was the symptom, the unopened
+// engine the cause.
+//
+// MUTATION: in session.svelte.ts, drop the restore-time `openPaneLang` loop
+// (or stop setting `langLoading` on restored panes). Red: the pane never
+// paints German after the reload, and the study read below is refused.
+test("a restored language pane paints its text and answers study after a reload", async ({ page }) => {
+  await boot(page);
+  await setPaneBible(page, 0, "Luther", "de");
+
+  // Let the debounced config write reach the worker before the reload races it.
+  await page.waitForTimeout(1500);
+  await page.reload();
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+
+  // The pane came back GERMAN — same language, same text, no silent English.
+  expect(await page.evaluate(() => (window as any).__plumbline.panes[0]?.lang ?? "")).toBe("de");
+  await expect
+    .poll(async () => await paneText(page, 0), { timeout: 60_000 })
+    .toMatch(/Pharisäern|Nikodemus|Gott/);
+
+  // And its study answers — the read that used to throw "not open".
+  const study = await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    return JSON.stringify(await s.fetchQIn("de", "wordStudyBlocks", "John 3:16", 1, s.gates));
+  });
+  expect(study.length).toBeGreaterThan(40);
+});

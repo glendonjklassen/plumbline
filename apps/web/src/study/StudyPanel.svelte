@@ -5,7 +5,7 @@
   // Compose-phone pattern). Re-fetches after any
   // authoring write via studyEpoch (write → reload → re-fetch, never mutate).
   import BlockList from "./BlockList.svelte";
-  import { deleteNote, dispatchLink } from "./links";
+  import { deleteNote, dispatchLink, dragEntry } from "./links";
   import { getSession } from "../state/session.svelte";
   import { t } from "../lib/i18n.svelte";
 
@@ -75,6 +75,14 @@
 
   function onLink(uri: string, ev: MouseEvent): void {
     void dispatchLink(s, uri, ev);
+  }
+
+  /** Drop-reorder: the thread detail's entry rows carry a `drag` id
+   *  ("{thread}:{entry}"); dropping one on another is the same write the row's
+   *  ↑/↓ links make. Only the thread detail marks rows, so this is inert
+   *  everywhere else. */
+  function onDrag(from: string, to: string): void {
+    void dragEntry(s, from, to);
   }
 
   /** refKey → the core's `go:` verb, split on the LAST space, as core `go_uri`
@@ -163,7 +171,7 @@
              the answer has not arrived (or a producer regressed) — either way
              "— loading —" is the honest thing to show. -->
         {#if blocks?.length}
-          <BlockList {blocks} {onLink} />
+          <BlockList {blocks} {onLink} {onDrag} />
           <!-- Which build is this? You cannot answer that from a screenshot, and
                "have you relaunched yet" is a terrible way to debug. The release
                tag identifies the code,

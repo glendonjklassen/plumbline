@@ -72,3 +72,58 @@ test("a category set on the management screen groups the picker and the library"
   await expect(sheet.locator("button.tag").first()).toBeVisible();
   expect(await sheet.locator(".ghead").count(), "flat again once no tag is filed").toBe(0);
 });
+
+// The PICKER IDIOM for filing (UAT, 2026-08-18): once a category exists it is
+// a list you tap — retyping "Doctrine" for every tag filed under it is how a
+// typo quietly forks a second heading. Freetext survives behind "New
+// category…", and "No category" clears without an empty-string convention.
+//
+// MUTATION: in TagsScreen.categorize, skip the `existing.length > 0` branch.
+// Red: the pick dialog below never appears (the flow goes straight to text).
+test("an existing category is picked, not retyped — and freetext stays behind New", async ({ page }) => {
+  await boot(page);
+  await makeTags(page);
+  await page.evaluate(async () => {
+    const s = (window as any).__plumbline;
+    await s.author("tagSetCategory", "kingdom", "Doctrine");
+    await s.fetchQ("tags");
+  });
+
+  await page.evaluate(() => ((window as any).__plumbline.screen = "tags"));
+  await page.getByRole("button", { name: /File under categories/ }).click();
+  await page.locator('[data-surface="pick"]').getByRole("button", { name: "mercy", exact: true }).click();
+
+  // The category question is a PICK now: the existing heading, a door to a new
+  // one, and a way to clear.
+  const pick = page.locator('[data-surface="pick"]');
+  await expect(pick.getByRole("button", { name: "Doctrine", exact: true })).toBeVisible();
+  await expect(pick.getByRole("button", { name: "New category…" })).toBeVisible();
+  await expect(pick.getByRole("button", { name: "No category", exact: true })).toBeVisible();
+  await pick.getByRole("button", { name: "Doctrine", exact: true }).click();
+
+  // Both tags now sit under the one heading — no fork, no second "Doctrine".
+  await page.evaluate(() => ((window as any).__plumbline.panel = { kind: "tags" }));
+  const panel = page.locator("aside.panel");
+  await expect(panel).toContainText("Doctrine");
+  const text = await panel.innerText();
+  expect(text.indexOf("kingdom")).toBeGreaterThan(text.indexOf("Doctrine"));
+  expect(text.indexOf("mercy")).toBeGreaterThan(text.indexOf("Doctrine"));
+  expect(text.match(/Doctrine/g)?.length, "one heading, not a fork").toBe(1);
+
+  // And "New category…" opens the text prompt — the ADD path the UAT asked for.
+  await page.evaluate(() => ((window as any).__plumbline.screen = "tags"));
+  await page.getByRole("button", { name: /File under categories/ }).click();
+  await page.locator('[data-surface="pick"]').getByRole("button", { name: "zeal", exact: true }).click();
+  await pick.getByRole("button", { name: "New category…" }).click();
+  const dialog = page.locator('.dialog[role="dialog"]');
+  await dialog.locator("input[data-modal-focus]").fill("Virtue");
+  await dialog.locator("button.primary").click();
+  await expect
+    .poll(async () =>
+      page.evaluate(async () => {
+        const tags = (await (window as any).__plumbline.fetchQ("tags"))?.tags ?? [];
+        return tags.find((x: any) => x.name === "zeal")?.category ?? "";
+      }),
+    )
+    .toBe("Virtue");
+});

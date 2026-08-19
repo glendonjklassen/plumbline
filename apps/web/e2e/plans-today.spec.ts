@@ -173,13 +173,13 @@ test("finishing a chapter advances the chip and its label", async ({ page }) => 
   });
 });
 
-// The chip's whole job is "here is today's reading" — so the day the reading
-// is DONE, it must stand down (maintainer UAT, 2026-08-12: "if I did a day's
-// worth — even if it was finishing yesterday's — the chip should disappear").
-// Dies if `doneToday` falls off the plans wire, or if PlanChip stops filtering
-// on it: completing every chapter of the day advances `today` to the NEXT day,
-// so without the filter the chip happily shows "Day 2" the same evening.
-test("reading the day's worth retires the chip for the day", async ({ page }) => {
+// Finishing the day's worth ADVANCES the chip to the next day's portion — it
+// does not stand down. (It used to: maintainer UAT 2026-08-12 asked for the
+// disappearing chip, and UAT 2026-08-18 reversed it — "it should show you the
+// next X verses to read, people want to be able to work ahead".) `doneToday`
+// stays on the wire — the Study hub's band uses it for its "done" line — so
+// this also dies if it falls off.
+test("reading the day's worth advances the chip to the next day", async ({ page }) => {
   await boot(page);
   const today = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
@@ -200,8 +200,7 @@ test("reading the day's worth retires the chip for the day", async ({ page }) =>
     }
   }, today);
 
-  // The wire says the day was done today, and the chip stands down entirely —
-  // not "Day 2", which is tomorrow's ask.
+  // The wire says the day was done today…
   await expect
     .poll(async () =>
       page.evaluate(async () => {
@@ -210,7 +209,10 @@ test("reading the day's worth retires the chip for the day", async ({ page }) =>
       }),
     )
     .toBe(true);
-  await expect(page.locator(".plan-chip-row")).toHaveCount(0);
+  // …and the chip shows DAY 2 — the next portion, ready to be read ahead —
+  // rather than disappearing until midnight.
+  await expect(chip).toBeVisible();
+  await expect(chip).toHaveText(/Day 2 · /);
 });
 
 // Pause sets a plan aside WHOLE: the chip stands down, the card says when the

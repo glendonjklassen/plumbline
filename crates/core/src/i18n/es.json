@@ -778,6 +778,7 @@
   "tags.categorize.needs": "Todavía no hay nada que archivar — etiquete un versículo primero.",
   "tags.categoryCleared": "«{name}» ya no tiene categoría",
   "tags.categoryFor": "Categoría para «{name}» — deje vacío para ninguna",
+  "tags.categoryNew": "Nueva categoría…",
   "tags.categorized": "«{name}» archivada en {category}",
   "tags.categorizeWhich": "¿Qué etiqueta quiere archivar?",
   "tags.merge": "Fusionar dos etiquetas",

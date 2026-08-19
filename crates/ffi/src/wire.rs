@@ -1003,8 +1003,16 @@ pub struct WirePanel {
 pub enum WireBlock {
     /// A section header, with an optional tier mark (glyph + colour role).
     Section { title: String, mark_glyph: Option<String>, mark_color: Option<&'static str> },
-    /// A flowing paragraph of styled runs.
-    Para { runs: Vec<WireRun>, indent: bool, top_gap: bool },
+    /// A flowing paragraph of styled runs. `drag` (additive, absent when not a
+    /// drag row) marks a row the shell may reorder by dragging — see
+    /// `core::panel::Block::Para`.
+    Para {
+        runs: Vec<WireRun>,
+        indent: bool,
+        top_gap: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        drag: Option<String>,
+    },
     /// A horizontal rule.
     Rule,
 }
@@ -1117,8 +1125,8 @@ pub fn blocks_to_wire(blocks: Vec<Block>) -> WirePanel {
                     mark_glyph: mark.as_ref().map(|(g, _)| g.clone()),
                     mark_color: mark.map(|(_, c)| color_token(c)),
                 },
-                Block::Para { runs, indent, top_gap } => {
-                    WireBlock::Para { runs: runs.into_iter().map(run_to_wire).collect(), indent, top_gap }
+                Block::Para { runs, indent, top_gap, drag } => {
+                    WireBlock::Para { runs: runs.into_iter().map(run_to_wire).collect(), indent, top_gap, drag }
                 }
                 Block::Rule => WireBlock::Rule,
             })

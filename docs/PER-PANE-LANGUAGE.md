@@ -80,6 +80,16 @@ the shell's cue to offer the download.
   later in the session finds its file gone — so the open RETRIES through the
   supply path, and the depot answers without the network. The cold path is the
   repair, exactly as it is for the core pack.
+- **A pane's language survives a relaunch, engine included.** `lang` rides
+  `openPanes` in the config, but the engine it names lives and dies with the
+  worker — so the session's restore calls `openPaneLang` for every restored
+  language, and each such pane holds its layout (`langLoading`) until the open
+  lands. Without that, the restored pane's first layout threw "the de text is
+  not open on this device" and the pane sat blank, word study dead with it —
+  UAT met it as "Strong's isn't working except for English" (2026-08-18). On
+  failure (offline, depot evicted) the pane keeps its language and shows the
+  error rather than silently painting English under a Luther label. Pinned by
+  pane-language.spec.ts "a restored language pane paints its text…".
 
 ### What it costs, measured
 

@@ -284,3 +284,37 @@ test.describe("phone-sized Present", () => {
     expect(m.worstShrink, "a row is clipping its verse — flex shrink is back").toBeLessThanOrEqual(1);
   });
 });
+
+// DRAG-REORDER (UAT, 2026-08-18: "you should be able to reorder threads with
+// dragging"). The entry rows carry a `drag` id from the core producer
+// (panel.rs `thread_detail`), BlockList grows a grip, and dropping row A on
+// row B is the same engine write the ↑/↓ links make. Driven through the real
+// grip with pointer events — the path a reader's mouse takes.
+//
+// MUTATION: in links.ts `dragEntry`, pass `fe` instead of `te` as the
+// destination. Red: the order never changes.
+test("verses in a thread can be dragged into a new order", async ({ page }) => {
+  await boot(page);
+  const before = await order(page, "Romans Road");
+  expect(before.length).toBeGreaterThan(2);
+
+  await openThread(page, "Romans Road");
+  const grips = page.locator("aside.panel .drag-grip");
+  await expect(grips.first()).toBeVisible({ timeout: 20_000 });
+  expect(await grips.count()).toBe(before.length);
+
+  // Drag the FIRST entry's grip onto the THIRD entry's row.
+  const from = (await grips.nth(0).boundingBox())!;
+  const to = (await grips.nth(2).boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 8 });
+  await page.mouse.up();
+
+  // Entry 0 moved to position 2; everything shuffles up one.
+  await expect.poll(async () => (await order(page, "Romans Road"))[2], { timeout: 20_000 }).toBe(before[0]);
+  const after = await order(page, "Romans Road");
+  expect(after[0]).toBe(before[1]);
+  expect(after[1]).toBe(before[2]);
+  expect(after.length).toBe(before.length);
+});
