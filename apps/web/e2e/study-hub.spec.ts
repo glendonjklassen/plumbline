@@ -47,8 +47,9 @@ test("the band carries the running plan and today's chapters", async ({ page }) 
   // than making the reader open Plans to find out.
   await expect(band).toContainText("The whole Bible in a year", { timeout: 15_000 });
   // `chapterSpan` collapses a run into one span, so a Gen 1–4 day reads
-  // "Genesis 1–4" rather than four names.
-  await expect(band).toContainText("Today: Genesis 1–4");
+  // "Genesis 1–4" rather than four names — day-numbered like the chip, so a
+  // reader working ahead can see the day advance (UAT, 2026-08-18).
+  await expect(band).toContainText("Day 1 · Genesis 1–4");
 });
 
 test("a paused plan asks for nothing, so it is not in the band at all", async ({ page }) => {
@@ -93,9 +94,9 @@ test("every running plan gets its own row, in order", async ({ page }) => {
   // opens in Genesis, the NT plan in Matthew, the devotional in Psalms. Three
   // plans, three different books: this is the assertion `running[0]` failed.
   const text = await page.locator(".band").innerText();
-  expect(text).toContain("The whole Bible in a year\nToday: Genesis 1\u20134");
-  expect(text).toContain("The New Testament in 90 days\nToday: Matthew 1\u20134");
-  expect(text).toContain("Psalms & Proverbs in a month\nToday: Psalms 1\u20139");
+  expect(text).toContain("The whole Bible in a year\nDay 1 · Genesis 1\u20134");
+  expect(text).toContain("The New Testament in 90 days\nDay 1 · Matthew 1\u20134");
+  expect(text).toContain("Psalms & Proverbs in a month\nDay 1 · Psalms 1\u20139");
 });
 
 // A concept study is a plan in the same list, but it is not a SCHEDULE: no day,

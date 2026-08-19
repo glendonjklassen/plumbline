@@ -778,6 +778,7 @@
   "tags.categorize.needs": "Noch nichts einzuordnen — versehen Sie zuerst einen Vers.",
   "tags.categoryCleared": "„{name}“ hat keine Kategorie mehr",
   "tags.categoryFor": "Kategorie für „{name}“ — leer lassen für keine",
+  "tags.categoryNew": "Neue Kategorie …",
   "tags.categorized": "„{name}“ unter {category} eingeordnet",
   "tags.categorizeWhich": "Welches Schlagwort möchten Sie einordnen?",
   "tags.merge": "Zwei Schlagwörter zusammenführen",

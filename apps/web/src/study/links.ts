@@ -281,6 +281,21 @@ function report(s: Session, p: Promise<string | null>): void {
   });
 }
 
+/** Drop-reorder of a thread's entries. The thread detail's entry rows carry a
+ *  `drag` id, "{thread}:{entry}" (core `panel::thread_detail`); dropping row
+ *  `from` on row `to` is the same write the row's ↑/↓ links make — the engine's
+ *  `move_in_thread` removes the entry and re-inserts it at the target ordinal.
+ *  A drop across two different threads' ids (impossible from one panel, cheap
+ *  to refuse) is ignored rather than guessed at. */
+export async function dragEntry(s: Session, from: string, to: string): Promise<void> {
+  const [ft, fe] = from.split(":").map(Number);
+  const [tt, te] = to.split(":").map(Number);
+  if (![ft, fe, tt, te].every(Number.isInteger) || ft !== tt || fe === te) return;
+  const thread = (await s.fetchQ("threads"))?.threads?.[ft];
+  if (!thread) return;
+  report(s, s.author("threadEntryMove", thread.name, fe, Math.max(0, te)));
+}
+
 /** refKey ("Gen 1:7", frozen wire form) → pane coordinates. */
 function parseRefKey(ref: string | undefined): { book: string; chapter: number; verse: number } | null {
   if (!ref) return null;

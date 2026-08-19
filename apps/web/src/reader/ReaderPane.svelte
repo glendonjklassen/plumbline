@@ -148,6 +148,12 @@
   let layoutSeq = 0;
   $effect(() => {
     if (!pane || cssW <= 0) return;
+    // A pane whose text is not open yet — a restored language pane at boot, or
+    // a failed open — must not ask for a layout the worker can only refuse
+    // ("the de text is not open on this device"). `langLoading` flipping false
+    // re-runs this effect, which is what paints the pane the moment its engine
+    // is ready.
+    if (pane.lang && (pane.langLoading || pane.langError)) return;
     // Re-lay when the WORDS change, not just the geometry — the AKJV overlay
     // swaps them engine-side, so nothing about this pane's own inputs moves.
     // An epoch rather than the setting itself, so the re-layout happens strictly
@@ -654,8 +660,11 @@
   function onMouseMove(e: MouseEvent): void {
     const hit = hitAt(e);
     if (hit?.strongs?.length) {
-      // Cache-warmed on first hover; the tooltip fills on the next move.
-      const st = s.q("strongs", hit.strongs[0]);
+      // Cache-warmed on first hover; the tooltip fills on the next move. Asked
+      // of THIS PANE's text (qIn), so a German pane's gloss agrees with the
+      // study card a click opens — `q` alone answered from the app-language
+      // engine whatever the pane was reading.
+      const st = s.qIn(pane.lang, "strongs", hit.strongs[0]);
       hoverTitle = st
         ? `${st.code}  ${st.lemma ?? ""}${st.xlit ? `  ${st.xlit}` : ""}\n${(st.kjv || st.def || "").slice(0, 80)}`
         : "";

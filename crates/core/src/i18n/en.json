@@ -736,6 +736,7 @@
   "tags.categorize.needs": "Nothing to file yet — tag a verse first.",
   "tags.categoryCleared": "“{name}” has no category now",
   "tags.categoryFor": "Category for “{name}” — leave empty for none",
+  "tags.categoryNew": "New category…",
   "tags.categorized": "“{name}” filed under {category}",
   "tags.categorizeWhich": "Which tag would you like to file?",
   "tags.merge": "Merge two tags",

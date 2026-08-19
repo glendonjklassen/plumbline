@@ -86,7 +86,11 @@ pub enum Block {
     Section { title: String, mark: Option<(String, Color)> },
     /// A flowing paragraph of styled runs. `indent` insets it (compare-card
     /// verse text, snippets); `top_gap` adds a little space above (action rows).
-    Para { runs: Vec<Run>, indent: bool, top_gap: bool },
+    /// `drag` marks a row a shell may reorder by dragging — `"{thread}:{entry}"`
+    /// on a thread entry's header row, self-contained so the drop handler needs
+    /// nothing from panel state. The ↑/↓ links on the same row stay: they are
+    /// the touch/assistive path, drag is the pointer shortcut.
+    Para { runs: Vec<Run>, indent: bool, top_gap: bool, drag: Option<String> },
     /// A horizontal rule.
     Rule,
 }
@@ -123,7 +127,14 @@ fn sp(id: &str, n: usize) -> String {
 
 impl Block {
     fn para(runs: Vec<Run>) -> Block {
-        Block::Para { runs, indent: false, top_gap: false }
+        Block::Para { runs, indent: false, top_gap: false, drag: None }
+    }
+    /// Mark a Para as a drag-reorder row (no-op on other kinds).
+    fn dragged(self, id: String) -> Block {
+        match self {
+            Block::Para { runs, indent, top_gap, .. } => Block::Para { runs, indent, top_gap, drag: Some(id) },
+            other => other,
+        }
     }
     fn section(title: impl Into<String>) -> Block {
         Block::Section { title: title.into(), mark: None }
@@ -900,7 +911,7 @@ fn code_study(src: &dyn PanelSource, code: &str, word: &str, gates: Gates, out: 
                     };
                     runs.push(Run::new(label, sz::FINE, Color::Gold).link(format!("code:{o}:{word}")));
                 }
-                out.push(Block::Para { runs, indent: false, top_gap: false });
+                out.push(Block::Para { runs, indent: false, top_gap: false, drag: None });
             }
         }
     }
@@ -961,6 +972,7 @@ fn verse_extras(src: &dyn PanelSource, verse: &str, gates: Gates, out: &mut Vec<
         ],
         indent: false,
         top_gap: true,
+        drag: None,
     });
 
     let xrefs = src.verse_xrefs(verse);
@@ -1074,6 +1086,7 @@ fn user_note_block(src: &dyn PanelSource, verse: &str, out: &mut Vec<Block>) {
         ],
         indent: false,
         top_gap: true,
+        drag: None,
     });
     if let Some(text) = mine {
         if !text.is_empty() {
@@ -1256,7 +1269,11 @@ pub fn thread_detail(src: &dyn PanelSource, index: usize) -> Vec<Block> {
         }
         row.push(Run::new("   ", sz::LIST, Color::Ink));
         row.push(Run::new(s("panel.removeEntry"), sz::CAPTION, Color::Faded).link(format!("removeentry:{index}:{e}")));
-        out.push(Block::para(row));
+        // The entry's header row is the DRAG HANDLE for reordering — a thread's
+        // order is the argument it makes, and dragging is how a road gets
+        // rearranged in one gesture (UAT, 2026-08-18). The ↑/↓ links above
+        // remain the touch and assistive path.
+        out.push(Block::para(row).dragged(format!("{index}:{e}")));
         let joined = en.text.join(" ");
         let snap = if joined.chars().count() > 70 {
             format!("{}…", joined.chars().take(70).collect::<String>().trim_end())
@@ -1495,7 +1512,7 @@ fn compare_side(src: &dyn PanelSource, refkey: &str, display: &str, span: Option
         r.italic = t.added;
         runs.push(r);
     }
-    out.push(Block::Para { runs, indent: true, top_gap: false });
+    out.push(Block::Para { runs, indent: true, top_gap: false, drag: None });
 }
 
 // ── search results ────────────────────────────────────────────────────────────
@@ -1605,7 +1622,7 @@ fn snippet(src: &dyn PanelSource, refkey: &str, query: &str) -> Option<Block> {
     if end < chars.len() {
         runs.push(Run::new("…", sz::CAPTION, Color::Faded));
     }
-    Some(Block::Para { runs, indent: true, top_gap: false })
+    Some(Block::Para { runs, indent: true, top_gap: false, drag: None })
 }
 
 // ── in-app guide + about (Tier 0 #7) ──────────────────────────────────────────

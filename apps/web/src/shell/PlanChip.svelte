@@ -28,10 +28,12 @@
     void s.studyEpoch;
     const q = s.q("plans", "");
     if (q == null) return held;
-    // A day's worth was read today (even if it was finishing yesterday's day):
-    // the chip retires until tomorrow. Reading ahead is the reader's business —
-    // the chip's job is done for the day, not owed twice.
-    return (held = todayPlans(q).filter((p) => !p.doneToday));
+    // The chip does NOT retire when a day's worth is read: finishing day 12
+    // advances `today` to day 13, and the chip shows it — "the next X verses to
+    // read", so a reader can work ahead (UAT, 2026-08-18; this reverses the
+    // 2026-08-12 stand-down, which readers met as being told to stop). The day
+    // number moving is what says the day's worth was banked.
+    return (held = todayPlans(q));
   });
   const lead = $derived(plans[0] ?? null);
 

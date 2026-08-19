@@ -2023,6 +2023,7 @@ fn wire_block_keys_are_golden() {
             runs: vec![Run::new("plain", 16.0, Color::Ink), Run::new("God", 16.0, Color::Gold).link("occ:G2316")],
             indent: true,
             top_gap: true,
+            drag: None,
         },
         Block::Rule,
     ];

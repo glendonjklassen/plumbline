@@ -655,10 +655,19 @@ export class Session {
     return v;
   }
 
+  /** The last REAL answer per key, surviving `invalidate()` — the stale side of
+   *  [[qStale]]'s stale-while-revalidate. Same LRU discipline as the cache. */
+  #lastKnown = new Map<string, any>();
+
   /** Store a fresh answer, then evict from the old end until the cache is back
    *  inside [[CACHE_CAP]]. Pinned reads are skipped: evicting the TOC breaks
    *  navigation exactly the way dropping it in `invalidate()` did. */
   #store(key: string, value: any): void {
+    this.#lastKnown.delete(key);
+    this.#lastKnown.set(key, value);
+    if (this.#lastKnown.size > Session.CACHE_CAP) {
+      this.#lastKnown.delete(this.#lastKnown.keys().next().value!);
+    }
     this.#cache.set(key, value);
     const method = this.#methodOf(key);
     const own = method === null ? undefined : Session.PER_METHOD_CAP[method];
@@ -691,6 +700,27 @@ export class Session {
         });
     }
     return null;
+  }
+
+  /**
+   * [[q]], except a cache miss serves the LAST REAL ANSWER while the refetch is
+   * in flight — stale-while-revalidate.
+   *
+   * For surfaces that show COUNTS AND SUMMARIES (the Study hub's band and card
+   * counts): `invalidate()` runs on every authoring write and `q` answers null
+   * until the refetch lands, so those surfaces redrew empty and then popped
+   * back one answer at a time — the grid shifting under the reader's thumb
+   * ("widgets are spazzy on load", UAT 2026-08-18). A stale count self-corrects
+   * the moment the fresh answer bumps `cacheEpoch`.
+   *
+   * OPT-IN, never a change to `q`: a stale LIST whose ordinals aim taps
+   * (threads / tags / weaves panels — "ordinals shift after every write") must
+   * keep using `q`, or a tap during the refetch window acts on the wrong row.
+   */
+  qStale(method: string, ...args: unknown[]): any {
+    const fresh = this.q(method, ...args);
+    if (fresh != null) return fresh;
+    return this.#lastKnown.get(cacheKey(method, args)) ?? null;
   }
 
   /**
@@ -1239,8 +1269,38 @@ export class Session {
       back: [],
       fwd: [],
       lang: p.lang || undefined,
+      // A restored language pane holds its layout until its engine is open
+      // again — see the reopen loop below.
+      langLoading: !!p.lang,
     }));
     this.activePane = Math.min(Math.max(wasActive - from, 0), this.panes.length - 1);
+
+    // REOPEN the language engines the restored panes read
+    // (docs/PER-PANE-LANGUAGE.md). A pane's language survives in `openPanes`,
+    // but the engine it needs lives and dies with the worker: without this the
+    // first layout for a restored German pane threw "the de text is not open on
+    // this device" and the pane sat blank, its word study dead with it (UAT,
+    // 2026-08-18: "Strong's isn't working except for English"). The depot still
+    // holds the text, so this is normally an open, not a download; each pane
+    // holds its layout (`langLoading`, which the layout effect waits on) until
+    // the open lands.
+    for (const code of new Set(this.panes.map((p) => p.lang).filter((l): l is string => !!l))) {
+      void this.rpc
+        .openPaneLang(code)
+        .then(() => {
+          for (const p of this.panes) if (p.lang === code) p.langLoading = false;
+        })
+        .catch((e) => {
+          // The text could not be opened (offline, with the depot's copy
+          // evicted): keep the reader's choice and say why the pane is empty,
+          // rather than silently painting English under a Luther label.
+          for (const p of this.panes) {
+            if (p.lang !== code) continue;
+            p.langLoading = false;
+            p.langError = e instanceof Error ? e.message : String(e);
+          }
+        });
+    }
 
     const mq = matchMedia("(max-width: 700px)");
     mq.addEventListener("change", () => (this.narrow = mq.matches));

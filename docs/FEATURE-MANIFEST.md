@@ -345,7 +345,8 @@ dot α0.75 r2.3 at `x=margin−9`, next to the verse number (M:2712).
 Native tooltip timing (the scroll container's `title`, `ReaderPane.svelte`
 `hoverTitle`); hit-test under pointer; only when the word has Strong's
 refs. Per code: bold code, lemma, italic xlit, then `kjv` (fallback `def`)
-trimmed to 80 chars. **Delta:** there is no hover on a touch screen, so Android
+trimmed to 80 chars. Asked of THE PANE'S OWN text (`qIn(pane.lang, "strongs",
+…)`), so a German pane's gloss agrees with the study card a click opens. **Delta:** there is no hover on a touch screen, so Android
 has none — a tap opens the study surface instead. *Data*:
 `plumbline_layout_hit_test_json` + `plumbline_engine_strongs_json`.
 
@@ -599,8 +600,14 @@ weaves — which have no picker — delete from the compare card via
 A tag carries an optional **`category`** (overlay-tag-v1, additive: absent key
 when none; trimmed, empty clears) — "tags need categories otherwise it'll be
 soooo long" (maintainer UAT, 2026-08-18). Assigned on the MANAGEMENT screen
-only (`TagsScreen` "File under categories" card → pick → prompt; empty clears)
-— never mid-reading. Core: `tag::set_tag_category` (case-insensitive lookup
+only — never mid-reading. The flow is the PICKER IDIOM (`TagsScreen`
+"File under categories" card → pick the tag → then existing categories are a
+list you tap, with "New category…" (`tags.categoryNew`) opening the freetext
+prompt and "No category" (`tags.uncategorized`) clearing; with no categories
+yet it goes straight to the prompt, which is where the first one is ADDED).
+Retyping a heading per tag was the typo-forks-a-second-category trap the
+thread/tag pickers were built against (e2e:
+`tag-categories.spec.ts` "an existing category is picked, not retyped"). Core: `tag::set_tag_category` (case-insensitive lookup
 like rename; same-value set writes nothing, so `updated` only moves for real
 changes). **C ABI**: `plumbline_engine_tag_set_category(name, category)`. Wire:
 `WireTag.category` (camelCase, additive).
@@ -661,6 +668,21 @@ faded `✕ delete thread` / `✕ delete tag` header link (`deletethread:i` /
 `thread_set_notes` / `thread_entry_set_note` / `weave_set_notes` via a
 pre-filled text prompt (empty submission clears). *Data*: `threads_json`,
 `tags_json` + the above.
+
+**Thread entries REORDER, two ways.** The ↑/↓ links on each entry row
+(`moveentry:T:E:±1` → `thread_entry_move`; core `move_in_thread`) are the
+touch/assistive path in both shells. The web ALSO drags: the entry's header
+row carries `drag: "{thread}:{entry}"` on the block wire (additive Para field,
+absent everywhere else; core `panel::thread_detail` sets it), `BlockList.svelte`
+renders a `⠿` grip (pointer-based, document-level listeners — grip-scoped
+pointer capture loses the pointer when the row re-renders), and a drop calls
+the same `thread_entry_move` write (`links.ts dragEntry`). Duplicates are
+LEGAL: nothing dedupes `thread_add` at any layer, and Present survives a verse
+appearing twice (thread-editing.spec.ts). **SHELL DELTA — Android:** decodes
+`drag` (Wire.kt, unused); drag-reorder is owed with the APK catch-up batch,
+alongside the `moveentry:`/`removeentry:` verbs that are inert there today
+(§"Threads are EDITED"). E2E: `thread-editing.spec.ts` "verses in a thread can
+be dragged into a new order".
 
 ## Suggested-weave review (M:2631, 3477)
 
@@ -1001,6 +1023,15 @@ same `akjvOverlay` config key and stays hidden unless the engine reports the
 overlay available, so the German/Spanish corpora never see it. Still a reading
 aid over the SAME text — memorize/Present/copy/share stay the KJV's words.
 
+**The hub never redraws empty** (web). Its band reads and card counts go
+through `session.qStale` — stale-while-revalidate: `invalidate()` runs on every
+authoring write and dwell tick, and `q`'s null-while-refetching made the hub
+pop back one answer at a time, the grid shifting under the reader's thumb
+("widgets are spazzy on load", UAT 2026-08-18; measured at CLS 0.17 vs ~0
+after). `qStale` is OPT-IN for count/summary surfaces only — a stale list
+whose ordinals aim taps must keep using `q`. The skeleton also ghosts the
+reads line, so the first-ever settle doesn't grow by a row.
+
 **The Study hub's contents** (both shells, a described card list so the tools
 aren't cryptic): Reading plans (web only until Android's plans ship) ·
 Memorize · Notes · Threads · **Tags** · Weaves · **Visualizations** (one card
@@ -1270,7 +1301,13 @@ a word tapped in the German column is studied in German, from that language's
 own Strong's, and the concordance opened from that study lists German verses.
 The reader's data is SHARED, not copied, because every text sits at the KJV's
 verse addresses. `config.openPanes[].lang` persists it (additive; absent = the
-reader's own text).
+reader's own text) — and the RESTORE reopens the engine it names
+(`session.svelte.ts` calls `openPaneLang` per restored language, panes holding
+their layout via `langLoading` until it lands; failure keeps the language and
+shows the pane's error line). Without the reopen, a restored German pane's
+first layout threw "not open on this device" and sat blank, its word study
+dead — UAT 2026-08-18's "Strong's isn't working except for English". Pinned by
+pane-language.spec.ts.
 
 The engine is `plumbline_engine_open_lang(home, lang)` — a second engine on the
 same home, which deliberately does NOT fall back to English, because a pane
@@ -1826,11 +1863,14 @@ shaped once in `shell/planToday.ts`): a nav-strip chip above the canon strip
 while a schedule runs — tap → today's first unread chapter — and the passage
 navigator leads with a today card whose chapters are the buttons, read ones
 marked. Both stand down in concept-study mode (the tracker is suspended, so
-schedule reading there earns no credit). The CHIP also stands down for the
-rest of the calendar day once a full plan-day finishes today — even
-yesterday's leftovers (`doneToday` on the wire, `plan::done_today` dating a
-finished day by its chapters' `last_read`); the today card keeps showing
-where the plan stands. Plans PAUSE and RESUME (`paused` in the plan file,
+schedule reading there earns no credit). Finishing a full plan-day ADVANCES
+the chip to the next day's portion — it does not retire (it did, per the
+2026-08-12 UAT; reversed by 2026-08-18's "people want to be able to work
+ahead"). `doneToday` stays on the wire (`plan::done_today` dating a finished
+day by its chapters' `last_read`): the Study hub's band reads it for its
+"Today's reading is done." line, drawn above the plan rows, which themselves
+always show the next portion day-numbered (`plans.chip` copy, not
+`plans.today`). Plans PAUSE and RESUME (`paused` in the plan file,
 additive): a paused plan keeps its file, progress and class but asks nothing
 — no chip, no today card — and its Plans-screen card is introduced by its
 identity, the plan name plus the day it was started ("Started 3 Aug 2026 ·
@@ -1838,7 +1878,7 @@ paused"). E2e:
 `e2e/concept-study.spec.ts` (tap-to-tag, tracker suspension, tag survival,
 the Plans-screen launch path, the touch-tap ghost-click regression, the
 progress surfaces) and `e2e/plans-today.spec.ts` (chip → today, the navigator
-card, the mode standing both down, the day's-worth chip retirement, pause →
+card, the mode standing both down, the day's-worth chip advance, pause →
 nothing asked → resume).
 
 **C ABI** (6 fns): `plumbline_engine_plans_json` (`now` dates each schedule's

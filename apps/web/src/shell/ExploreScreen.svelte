@@ -49,10 +49,16 @@
   // "nothing running" render identically — so without this the band drew as
   // empty for a frame or two and then GREW, shoving the cards down the page
   // ("they pop in on load so it's a bit jarring", maintainer, 2026-08-13).
-  const plansQ = $derived(s.q("plans", ""));
-  const dueQ = $derived(s.q("memoryDue", dayStamp()));
-  const suggestedQ = $derived(s.q("suggestedWeaves"));
-  const booksQ = $derived(s.q("readingBooks", dayStamp()));
+  // `qStale`, not `q`: every authoring write and dwell tick invalidates the
+  // cache, and a hub opened inside that window redrew empty and popped back
+  // one answer at a time — the cards shifting under the reader's thumb
+  // ("widgets are spazzy on load", UAT 2026-08-18). A held count self-corrects
+  // the moment the fresh answer lands; nothing here aims a tap by ordinal, so
+  // a beat of staleness costs nothing.
+  const plansQ = $derived(s.qStale("plans", ""));
+  const dueQ = $derived(s.qStale("memoryDue", dayStamp()));
+  const suggestedQ = $derived(s.qStale("suggestedWeaves"));
+  const booksQ = $derived(s.qStale("readingBooks", dayStamp()));
 
   /** Every band read has answered. Not a spinner's flag — it decides whether the
    *  band draws its real rows or a placeholder of the same shape, so the page
@@ -70,14 +76,11 @@
   const showReal = $derived(ready || waited);
 
   const todays = $derived(todayPlans(plansQ));
-  /** The plans that still want something today. `remaining` narrows each row to
-   *  the chapters left, so finishing Genesis 1 of a Gen 1–4 day moves the row to
-   *  "Gen 2–4" instead of standing still all evening. */
-  const needsReading = $derived(todays.filter((p) => !p.doneToday));
-  /** Plans are running, and every one of them is done for today. Saying nothing
-   *  here would fall through to "nothing on the go — start a reading plan",
-   *  which is false and a little insulting to someone who just finished. */
-  const allDone = $derived(todays.length > 0 && needsReading.length === 0);
+  /** A full plan-day was banked today. The row still shows the NEXT portion —
+   *  working ahead is invited, not merely permitted (UAT, 2026-08-18) — and
+   *  this line above it is the acknowledgment, because saying nothing to
+   *  someone who just finished is a little insulting (maintainer, 2026-08-13). */
+  const anyDoneToday = $derived(todays.some((p) => p.doneToday));
 
   const dueCount = $derived(((dueQ?.refs ?? []) as string[]).length);
   const suggestedCount = $derived(((suggestedQ?.suggested ?? []) as any[]).length);
@@ -171,21 +174,21 @@
     { id: "memorize", count: null as number | null, go: openMemorize },
     {
       id: "notes",
-      count: ((s.q("userNotes")?.notes ?? []) as any[]).length,
+      count: ((s.qStale("userNotes")?.notes ?? []) as any[]).length,
       go: () => (s.panel = { kind: "notesBrowser" }),
     },
     {
       id: "threads",
-      count: ((s.q("threads")?.threads ?? []) as any[]).length,
+      count: ((s.qStale("threads")?.threads ?? []) as any[]).length,
       go: () => (s.panel = { kind: "threads" }),
     },
     // A DOOR now, like Visualizations: there is more than one thing to do with
     // a tag library (browse, rename, merge) and a card that raised the panel
     // directly had nowhere to put the rest.
-    { id: "tags", count: ((s.q("tags")?.tags ?? []) as any[]).length, go: () => (s.screen = "tags") },
+    { id: "tags", count: ((s.qStale("tags")?.tags ?? []) as any[]).length, go: () => (s.screen = "tags") },
     {
       id: "weaves",
-      count: ((s.q("weaves")?.weaves ?? []) as any[]).length,
+      count: ((s.qStale("weaves")?.weaves ?? []) as any[]).length,
       go: () => (s.panel = { kind: "weaves" }),
     },
     { id: "suggested", count: suggestedCount, go: () => (s.panel = { kind: "suggested" }) },
@@ -220,19 +223,27 @@
              there is nothing here to read. -->
         <div class="skeleton" aria-hidden="true">
           <div class="row ghost"></div>
+          <!-- The reads line is in the settled band for EVERY reader — as the
+               counter once set, as the "how many times" invitation before —
+               so the skeleton owes its height too, or the grid still jumped
+               one row when the real band landed. -->
+          <div class="reads ghost"></div>
           <div class="coverage ghost"></div>
         </div>
       {:else}
         <div class="settled">
-          {#each needsReading as p (p.id)}
-            <button class="row" onclick={(ev) => goPlan(p, ev)}>
-              <span class="row-name">{p.name}</span>
-              <span class="row-note">{t("plans.today", { chapters: chapterSpan(remaining(p)) })}</span>
-            </button>
-          {/each}
-          {#if allDone}
+          {#if anyDoneToday}
             <div class="row done"><span class="row-note">{t("explore.planDone")}</span></div>
           {/if}
+          <!-- Every running plan, ALWAYS with its next portion — after a
+               finished day this is the next day's chapters, day-numbered so
+               the reader can see the day was banked and keep going. -->
+          {#each todays as p (p.id)}
+            <button class="row" onclick={(ev) => goPlan(p, ev)}>
+              <span class="row-name">{p.name}</span>
+              <span class="row-note">{t("plans.chip", { day: p.day, chapters: chapterSpan(remaining(p)) })}</span>
+            </button>
+          {/each}
           {#if dueCount > 0}
             <button class="row" onclick={openMemorize}>
               <span class="row-name">{t("explore.memorize")}</span>
@@ -342,6 +353,9 @@
   }
   .coverage.ghost {
     min-height: calc(56px * var(--uiScale, 1));
+  }
+  .reads.ghost {
+    min-height: calc(34px * var(--uiScale, 1));
   }
   @keyframes breathe {
     0%, 100% { opacity: 0.55; }

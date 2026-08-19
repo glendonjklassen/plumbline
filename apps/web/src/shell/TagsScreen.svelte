@@ -54,12 +54,32 @@
 
   /** Category = a grouping heading for the tag LISTS (picker + library panel).
    *  Assigned here and only here — never while reading (maintainer UAT,
-   *  2026-08-18: "no need when you're going through the bible"). */
+   *  2026-08-18: "no need when you're going through the bible").
+   *
+   *  The picker idiom, not a bare prompt: the categories that exist are a list
+   *  you tap, freetext only for a genuinely NEW one — retyping "Doctrine" for
+   *  every tag filed under it is how a typo quietly forks a second heading.
+   *  With no categories yet there is nothing to pick, so it goes straight to
+   *  the prompt, which is where the reader ADDS their first one. */
   async function categorize(): Promise<void> {
     const name = await s.askPick(t("tags.categorizeWhich"), tags);
     if (!name) return;
     const current = String(tagObjs.find((x) => x.name === name)?.category ?? "");
-    const cat = await s.askText(t("tags.categoryFor", { name }), current);
+    const existing = [...new Set(tagObjs.map((x) => String(x.category ?? "").trim()).filter(Boolean))].sort((a, b) =>
+      a.toLowerCase().localeCompare(b.toLowerCase()),
+    );
+    let cat: string | null;
+    if (existing.length > 0) {
+      const newLabel = t("tags.categoryNew");
+      const noneLabel = t("tags.uncategorized");
+      const picked = await s.askPick(t("tags.categoryFor", { name }), [...existing, newLabel, noneLabel]);
+      if (picked === null) return;
+      if (picked === noneLabel) cat = "";
+      else if (picked === newLabel) cat = await s.askText(t("tags.categoryFor", { name }), current);
+      else cat = picked;
+    } else {
+      cat = await s.askText(t("tags.categoryFor", { name }), current);
+    }
     if (cat === null || cat.trim() === current) return;
     const err = await s.author("tagSetCategory", name, cat.trim());
     s.showToast(
