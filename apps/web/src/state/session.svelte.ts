@@ -246,7 +246,7 @@ export class Session {
    * its own.
    */
   screen = $state<
-    "read" | "explore" | "memorize" | "plans" | "viz" | "tags" | "preach" | "hymnal" | "share" | "search"
+    "read" | "explore" | "memorize" | "plans" | "viz" | "tags" | "weaves" | "preach" | "hymnal" | "share" | "search"
   >("read");
 
   // ── the hymnal ──────────────────────────────────────────────────────────────
@@ -455,7 +455,7 @@ export class Session {
     else if (this.panel) {
       this.panel = null;
       this.clearSearch();
-    } else if (this.screen === "tags" || this.screen === "viz" || this.screen === "plans") {
+    } else if (this.screen === "tags" || this.screen === "weaves" || this.screen === "viz" || this.screen === "plans") {
       this.screen = "explore";
     } else if (this.screen === "memorize") {
       // Same shape as MemorizeHost's own close(): leaving `screen` on

@@ -192,6 +192,36 @@ test("Visualizations opens a page of its own, and ‹ returns to the hub", async
   await expect(page.getByRole("button", { name: /^Reading plans/ })).toBeVisible();
 });
 
+// Weaves is a DOOR too (2026-08-19): the hub spent two sibling cards — Weaves
+// and Suggested — on two views of the same library, so both views live on one
+// page now. The band's "to review" row is the only suggested surface left on
+// the hub itself.
+test("Weaves opens a page holding the library and the review queue", async ({ page }) => {
+  await boot(page);
+  await openStudy(page);
+  // The stock set seeds weaves, so the count landing means the hub settled.
+  await expect.poll(async () => countOn(page, "Weaves"), { timeout: 30_000 }).not.toBeNull();
+  await expect(page.locator(".ex-card", { hasText: /^Suggested/ }), "Suggested is no longer a hub card").toHaveCount(0);
+
+  await page.locator(".ex-card", { hasText: /^Weaves/ }).click();
+  await expect(page.locator(".bar h2")).toHaveText("Weaves");
+  await expect(page.locator(".ex-card", { hasText: /^Review suggested/ })).toBeVisible();
+
+  // Browse raises the library panel the hub card used to raise directly.
+  await page.locator(".ex-card", { hasText: /^Browse weaves/ }).click();
+  await expect(page.locator("aside.panel")).toContainText("Weaves");
+
+  // Escape climbs the same ladder as everywhere else: panel first, then the
+  // page up to its parent hub. Mutation: drop "weaves" from the sub-page rung
+  // in Session.popOneLayer → the second press lands in the reader, and the bar
+  // below reads Genesis instead of Study.
+  await page.keyboard.press("Escape");
+  await expect(page.locator("aside.panel")).toHaveCount(0);
+  await expect(page.locator(".bar h2")).toHaveText("Weaves");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".bar h2")).toHaveText("Study");
+});
+
 test("coverage counts the chapters actually read", async ({ page }) => {
   await boot(page);
   await openStudy(page);

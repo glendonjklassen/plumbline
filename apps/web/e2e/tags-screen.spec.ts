@@ -78,7 +78,7 @@ test("renaming keeps the tag's members", async ({ page }) => {
   await openTags(page);
 
   await page.getByRole("button", { name: /^Rename a tag/ }).click();
-  await page.getByRole("dialog", { name: /Which tag/ }).getByRole("button", { name: "Zeta grace" }).click();
+  await page.getByRole("dialog", { name: /Choose a tag/ }).getByRole("button", { name: "Zeta grace" }).click();
   const field = page.getByRole("dialog", { name: /New name/ }).locator("input");
   await field.fill("Zeta favour");
   await page.getByRole("button", { name: "OK" }).click();
@@ -103,9 +103,9 @@ test("merging asks first, names both sides, and deletes the source", async ({ pa
   await openTags(page);
 
   await page.getByRole("button", { name: /^Merge two tags/ }).click();
-  await page.getByRole("dialog", { name: /Which tag/ }).getByRole("button", { name: "Zeta mercy" }).click();
+  await page.getByRole("dialog", { name: /Choose a tag/ }).getByRole("button", { name: "Zeta mercy" }).click();
   // The tag being merged is not offered as its own destination.
-  const into = page.getByRole("dialog", { name: /into which tag/ });
+  const into = page.getByRole("dialog", { name: /Choose the tag to merge/ });
   await expect(into.getByRole("button", { name: "Zeta mercy" })).toHaveCount(0);
   await into.getByRole("button", { name: "Zeta grace" }).click();
 
@@ -129,8 +129,8 @@ test("backing out of the merge question changes nothing", async ({ page }) => {
   await openTags(page);
 
   await page.getByRole("button", { name: /^Merge two tags/ }).click();
-  await page.getByRole("dialog", { name: /Which tag/ }).getByRole("button", { name: "Zeta mercy" }).click();
-  await page.getByRole("dialog", { name: /into which tag/ }).getByRole("button", { name: "Zeta grace" }).click();
+  await page.getByRole("dialog", { name: /Choose a tag/ }).getByRole("button", { name: "Zeta mercy" }).click();
+  await page.getByRole("dialog", { name: /Choose the tag to merge/ }).getByRole("button", { name: "Zeta grace" }).click();
   await page.getByRole("button", { name: "Cancel" }).click();
 
   const names = await tagNames(page);

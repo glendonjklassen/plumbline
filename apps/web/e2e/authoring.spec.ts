@@ -182,6 +182,7 @@ test("a reader tags two verses from the verse menu and turns the tag into a weav
   // ── the weave is in the library the reader browses ──
   await page.locator("nav.browse").getByRole("button", { name: "Study" }).click();
   await page.locator(".ex-card", { hasText: /^Weaves/ }).click();
+  await page.locator(".ex-card", { hasText: /^Browse weaves/ }).click();
   await expect(
     panel.locator("p", { hasText: TAG }),
     "two chained passages are one link, and it is in the weave library",

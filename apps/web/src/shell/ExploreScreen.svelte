@@ -186,12 +186,15 @@
     // a tag library (browse, rename, merge) and a card that raised the panel
     // directly had nowhere to put the rest.
     { id: "tags", count: ((s.qStale("tags")?.tags ?? []) as any[]).length, go: () => (s.screen = "tags") },
+    // A door for the same reason: the weave library and its suggested-review
+    // queue are two views of one collection, and they were two sibling cards
+    // out here (maintainer, 2026-08-19). The in-progress band above still
+    // surfaces a pending review count directly.
     {
       id: "weaves",
       count: ((s.qStale("weaves")?.weaves ?? []) as any[]).length,
-      go: () => (s.panel = { kind: "weaves" }),
+      go: () => (s.screen = "weaves"),
     },
-    { id: "suggested", count: suggestedCount, go: () => (s.panel = { kind: "suggested" }) },
   ]);
 
   // The maps live under ONE card (maintainer UAT, 2026-08-12: the weave map

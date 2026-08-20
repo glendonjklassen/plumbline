@@ -11,6 +11,7 @@
   import PlansScreen from "./PlansScreen.svelte";
   import VizScreen from "./VizScreen.svelte";
   import TagsScreen from "./TagsScreen.svelte";
+  import WeavesScreen from "./WeavesScreen.svelte";
   import PreachScreen from "./PreachScreen.svelte";
   import HymnalScreen from "../hymnal/HymnalScreen.svelte";
   import MarkReadDialog from "./MarkReadDialog.svelte";
@@ -211,7 +212,7 @@
   const dest = $derived(
     s.showPresent || s.screen === "preach"
       ? "preach"
-      : s.screen === "explore" || s.screen === "memorize" || s.screen === "plans" || s.screen === "viz" || s.screen === "tags"
+      : s.screen === "explore" || s.screen === "memorize" || s.screen === "plans" || s.screen === "viz" || s.screen === "tags" || s.screen === "weaves"
         ? "study"
         : s.screen === "hymnal"
           ? "sing"
@@ -400,6 +401,8 @@
       <VizScreen />
     {:else if s.screen === "tags"}
       <TagsScreen />
+    {:else if s.screen === "weaves"}
+      <WeavesScreen />
     {:else if s.screen === "preach"}
       <PreachScreen />
     {:else if s.screen === "hymnal"}

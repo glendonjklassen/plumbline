@@ -527,6 +527,7 @@ test("phones keep ONE pane (no split; weaves navigate instead)", async ({ page }
   // bottom-bar destination since the menu rationalization.
   await page.locator(".bottom-nav").getByRole("button", { name: "Study", exact: true }).click();
   await page.locator(".ex-card", { hasText: /^Weaves/ }).click();
+  await page.locator(".ex-card", { hasText: /^Browse weaves/ }).click();
   await page.locator("aside.panel button.link").first().click();
   await expect(page.locator(".pane canvas")).toHaveCount(1);
   const panes = await page.evaluate(() => (window as any).__plumbline.panes.length);
@@ -582,9 +583,11 @@ test("opening a weave splits to its passages; verse clicks stay responsive (free
   page,
 }) => {
   await boot(page);
-  // Weaves lives inside Explore now (Android parity — no header browse row).
+  // Weaves is a door inside Explore now: hub card → Weaves page → Browse
+  // raises the library panel (Android parity — no header browse row).
   await page.getByRole("button", { name: "Study", exact: true }).click();
   await page.locator(".ex-card", { hasText: /^Weaves/ }).click();
+  await page.locator(".ex-card", { hasText: /^Browse weaves/ }).click();
   await expect(page.locator("aside.panel")).toBeVisible();
   // Open the first weave: both endpoint passages must come up on their own.
   await page.locator("aside.panel button.link").first().click();
