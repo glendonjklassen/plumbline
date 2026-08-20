@@ -33,7 +33,7 @@ test("a category set on the management screen groups the picker and the library"
 
   // The management screen's card, through the real dialogs.
   await page.evaluate(() => ((window as any).__plumbline.screen = "tags"));
-  await page.getByRole("button", { name: /File under categories/ }).click();
+  await page.getByRole("button", { name: /Categorize a tag/ }).click();
   await page.locator('[data-surface="pick"]').getByRole("button", { name: "kingdom", exact: true }).click();
   const dialog = page.locator('.dialog[role="dialog"]');
   await dialog.locator("input[data-modal-focus]").fill("Doctrine");
@@ -90,7 +90,7 @@ test("an existing category is picked, not retyped — and freetext stays behind 
   });
 
   await page.evaluate(() => ((window as any).__plumbline.screen = "tags"));
-  await page.getByRole("button", { name: /File under categories/ }).click();
+  await page.getByRole("button", { name: /Categorize a tag/ }).click();
   await page.locator('[data-surface="pick"]').getByRole("button", { name: "mercy", exact: true }).click();
 
   // The category question is a PICK now: the existing heading, a door to a new
@@ -112,7 +112,7 @@ test("an existing category is picked, not retyped — and freetext stays behind 
 
   // And "New category…" opens the text prompt — the ADD path the UAT asked for.
   await page.evaluate(() => ((window as any).__plumbline.screen = "tags"));
-  await page.getByRole("button", { name: /File under categories/ }).click();
+  await page.getByRole("button", { name: /Categorize a tag/ }).click();
   await page.locator('[data-surface="pick"]').getByRole("button", { name: "zeal", exact: true }).click();
   await pick.getByRole("button", { name: "New category…" }).click();
   const dialog = page.locator('.dialog[role="dialog"]');

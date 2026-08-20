@@ -601,7 +601,7 @@ A tag carries an optional **`category`** (overlay-tag-v1, additive: absent key
 when none; trimmed, empty clears) — "tags need categories otherwise it'll be
 soooo long" (maintainer UAT, 2026-08-18). Assigned on the MANAGEMENT screen
 only — never mid-reading. The flow is the PICKER IDIOM (`TagsScreen`
-"File under categories" card → pick the tag → then existing categories are a
+"Categorize a tag" card → pick the tag → then existing categories are a
 list you tap, with "New category…" (`tags.categoryNew`) opening the freetext
 prompt and "No category" (`tags.uncategorized`) clearing; with no categories
 yet it goes straight to the prompt, which is where the first one is ADDED).
@@ -1044,9 +1044,20 @@ as indented sub-cards, and that tree was the odd one out in a shell where a
 destination replaces what came before rather than unfolding inside it
 (maintainer, 2026-08-13). Every
 card's label from the same `explore.*` keys in both shells (the Android
-weave-map card had drifted onto `map.chordMap`; fixed). *Delta:* the web lists
-**Suggested** as its own card (`ExploreScreen.svelte`); Android folds it into
-one Weaves screen with an All/Suggested filter (`WeavesScreen`).
+weave-map card had drifted onto `map.chordMap`; fixed).
+
+**Weaves is a DOOR too** (2026-08-19). The web hub used to spend two sibling
+cards — Weaves and Suggested — on two views of the same library; one Weaves
+card now opens a page (`shell/WeavesScreen.svelte`, screen id `"weaves"`,
+wired into `popOneLayer`'s sub-page rung) holding **Browse weaves** and
+**Review suggested weaves** (`weaves.browse*` / `weaves.review*` keys), each
+raising the panel its hub card used to raise (`{kind:"weaves"}` /
+`{kind:"suggested"}`). Review is disabled with the reason in its description
+when the queue is empty, per the Tags-page rule. The hub band's "to review"
+row still opens the queue directly. *Delta:* Android was already one door —
+its `WeavesScreen` is a list with an All/Suggested filter rather than a page
+of cards (e2e: `study-hub.spec.ts` "Weaves opens a page holding the library
+and the review queue").
 
 **Threads are EDITED, not just accumulated** (2026-08-18). A thread's detail
 card carries per-entry **↑ ↓ · remove** beside its note link. The arrows are
@@ -1163,7 +1174,7 @@ additions, both live:
   2026-08-13). All plans done for the day says so, rather than falling through
   to the start-a-plan invitation;
 - a **count on every card that holds a collection** (notes, threads, tags,
-  weaves, suggested), absent at zero so an empty tool reads as quiet rather
+  weaves), absent at zero so an empty tool reads as quiet rather
   than as a score of nought. Plans and Memorize carry none: they are activities
   rather than collections, and the band already says what they want today.
 
@@ -2244,7 +2255,7 @@ lines would wrap where they are not drawn.)
   sorted, + Review due / Coverage / Activity buttons). **Explore** is a described
   card list (Notes, Threads, Tags, Weaves, Constellation, Chord) so the tools
   aren't cryptic; **Weaves** is one screen with an All/Suggested filter (was two
-  items — the web still lists Suggested separately).
+  items — the web folded its Suggested card into a Weaves page on 2026-08-19).
   **History** is a bottom sheet over the `history` config field; the reader
   restores the last-viewed passage from `openPanes` and persists it + history on
   every chapter change (off-thread). **Settings** folds the two analysis gates +
