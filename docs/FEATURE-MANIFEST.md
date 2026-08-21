@@ -1227,7 +1227,18 @@ token and additive; a seating never used falls through to the plain last
 position, which is what every reader has today and has its own test. The web
 restores fire-and-forget (the panes are built before the answer lands) guarded
 by `#navigatedSinceBoot`, so a reader who taps in those few ms is not yanked
-away; Android resolves it synchronously, being a string comparison.
+away; Android resolves it synchronously, being a string comparison. Every
+config save refreshes the CURRENT seating's slot from the live ACTIVE pane
+(the primary on Android), first-visible verse included (2026-08-21): the slot
+wins the restore, so when it was marked chapter-only at navigation time it
+beat the verse-carrying `openPanes` and every same-seating reopen landed at
+the top of the chapter. The web's restore RESEEDS the active pane rather than
+calling `navigate()` — boot-time seeding with better data, not a move the
+reader made — so it cannot steal the screen from a launch shortcut
+(`?open=review`) or stamp history for a page nobody turned. Pinned by
+`e2e/session-slots.spec.ts` ("restores the scroll position"), with
+`e2e/launch-shortcuts.spec.ts` and `e2e/foldable.spec.ts` holding the
+screen-keeping and active-pane sides.
 
 **History reads as RUNS** — "Genesis 1–3", not three lines. Adjacency is in the
 LIST, not merely similarity: `[Gen 3, John 1, Gen 2]` stays three lines, because

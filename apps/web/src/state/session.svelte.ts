@@ -1238,10 +1238,29 @@ export class Session {
       .then((slot: string) => {
         this.slot = slot;
         const seat = (this.config.slots as Record<string, any> | undefined)?.[slot];
-        // `#restoredInto` guards the race: if the reader has already gone
+        // `#navigatedSinceBoot` guards the race: if the reader has already gone
         // somewhere in the few ms this took, their tap wins over the restore.
+        //
+        // RESEED, never navigate(): this is boot-time seeding arriving with
+        // better data a few ms after the panes were built, not a move the
+        // reader made. navigate() also claims the SCREEN — it always lands in
+        // the reader — which stomps the destination a launch shortcut
+        // (?open=review, e2e/launch-shortcuts.spec.ts) chose on this very
+        // boot, and it would stamp history for a page nobody turned. The
+        // ACTIVE pane, because the seat was recorded from it: the pane being
+        // read, which the fold restore keeps (e2e/foldable.spec.ts).
         if (seat?.book && !this.#navigatedSinceBoot) {
-          this.navigate(0, seat.book, seat.chapter, seat.verse ?? null, { history: false });
+          const pane = this.panes[this.activePane] ?? this.panes[0];
+          if (pane) {
+            const count = this.chapterCount(seat.book);
+            pane.book = seat.book;
+            pane.chapter = Math.max(1, count > 0 ? Math.min(seat.chapter, count) : seat.chapter);
+            pane.targetVerse = seat.verse && seat.verse > 1 ? seat.verse : null;
+            pane.pendingScroll = !!(seat.verse && seat.verse > 1);
+            pane.scrollY = 0;
+            pane.reached = 0;
+            this.saveConfig();
+          }
         }
       })
       .catch(() => {
@@ -1448,6 +1467,21 @@ export class Session {
       ...(p.lang ? { lang: p.lang } : {}),
     }));
     this.config.activePane = this.activePane;
+    // This seating's slot carries the SAME live position as openPanes, verse
+    // included: the boot restore prefers the slot, so a chapter-only slot wins
+    // the restore with no verse in hand and reopens at the top of the chapter.
+    // The ACTIVE pane — the one being read, and the one a fold keeps — not
+    // pane 0, or folding a desktop's panes would reopen on the leftmost
+    // reference instead of the passage under the reader's eye.
+    const active = this.panes[this.activePane] ?? this.panes[0];
+    if (this.slot && active) {
+      const verse = this.#firstVisibleVerse(this.panes.indexOf(active));
+      (this.config.slots ??= {})[this.slot] = {
+        book: active.book,
+        chapter: active.chapter,
+        ...(verse ? { verse } : {}),
+      };
+    }
     this.config.firstRun = undefined;
     return JSON.parse(JSON.stringify(this.config));
   }
@@ -1578,8 +1612,14 @@ export class Session {
   /** A pane's first visible verse (for cross-session scroll restore). */
   #firstVisibleVerse(idx: number): number | undefined {
     const pane = this.panes[idx];
+    if (!pane) return undefined;
+    // A scroll target not yet consumed IS the position — the pane just hasn't
+    // laid out yet. Without this, a flush in the sub-second between boot (or a
+    // navigation) and the first layout reads geometry that isn't there, writes
+    // the position verse-less, and loses the very place it was restoring to.
+    if (pane.pendingScroll && pane.targetVerse && pane.targetVerse > 1) return pane.targetVerse;
     const geom = this.paneVerseGeom[idx];
-    if (!pane || !geom) return undefined;
+    if (!geom) return undefined;
     let best: number | undefined;
     let bestY = Infinity;
     for (const [v, g] of geom)
@@ -1625,23 +1665,16 @@ export class Session {
     const h: any[] = (this.config.history ??= []);
     const without = h.filter((e) => !(e.book === book && e.chapter === chapter));
     this.config.history = [{ book, chapter }, ...without].slice(0, HISTORY_CAP);
-    this.#markSlot(book, chapter);
   }
 
   /** The seating this session belongs to, resolved ONCE per launch from the
    *  reader's own local clock (`core::session_slot`, asked through the engine so
    *  the two shells cannot drift on when a service is). Null until the answer
-   *  lands, which is a few ms into boot — a navigation before then simply does
-   *  not mark a slot, and the plain last position still covers it. */
+   *  lands, which is a few ms into boot — a save before then simply does not
+   *  mark a slot, and the plain last position still covers it. The slot's
+   *  passage is written by every `#configSnapshot`, so the next Sunday morning
+   *  reopens THIS Sunday morning rather than Saturday night's study. */
   slot = $state<string | null>(null);
-
-  /** Remember this passage against the current seating, so the next Sunday
-   *  morning reopens THIS Sunday morning rather than Saturday night's study. */
-  #markSlot(book: string, chapter: number): void {
-    if (!this.slot) return;
-    const slots: Record<string, unknown> = (this.config.slots ??= {});
-    slots[this.slot] = { book, chapter };
-  }
 
   /** Whether the reader has moved since boot. The slot restore lands a few ms
    *  after the panes are built, and it must never yank someone away from a

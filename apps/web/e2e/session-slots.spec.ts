@@ -48,6 +48,8 @@ test("a passage read now is remembered against this seating", async ({ page }) =
 
   const saved = await page.evaluate(() => {
     const s = (window as any).__plumbline;
+    // The slot is written by the config snapshot, so flush past the debounce.
+    s.flushConfig();
     return { slot: s.slot, slots: s.config.slots };
   });
   // Whichever seating the test machine's clock is in, the passage is filed
@@ -59,16 +61,18 @@ test("a passage read now is remembered against this seating", async ({ page }) =
 test("a stored seating is what reopens, over the plain last position", async ({ page }) => {
   await boot(page);
   // Seed: this seating remembers Romans 8, while the last position is elsewhere.
-  await page.evaluate(() => {
-    const s = (window as any).__plumbline;
-    s.config.slots = { ...(s.config.slots ?? {}), [s.slot]: { book: "Rom", chapter: 8 } };
-    s.config.openPanes = [{ book: "John", chapter: 3 }];
-    s.saveConfig();
-  });
-  // Let the debounced write reach the worker before the reload races it.
-  await page.waitForTimeout(400);
+  // Written straight to the home (configSave), not through saveConfig: every
+  // shell save refreshes this seating's slot from the live pane — the very
+  // behaviour under test — so a divergent slot has to be planted below the
+  // snapshot, with `restoring` keeping the shell's own pagehide flush off it.
   await page.evaluate(async () => {
-    await (window as any).__plumbline.rpc.static("routeLink", "go:John:3:16");
+    const s = (window as any).__plumbline;
+    const cfg = JSON.parse(JSON.stringify(s.config));
+    cfg.slots = { ...(cfg.slots ?? {}), [s.slot]: { book: "Rom", chapter: 8 } };
+    cfg.openPanes = [{ book: "John", chapter: 3 }];
+    await s.rpc.static("configSave", cfg);
+    await s.rpc.flush();
+    s.restoring = true;
   });
 
   await page.reload();
@@ -79,17 +83,16 @@ test("a stored seating is what reopens, over the plain last position", async ({ 
 
 test("a seating never used falls through to the plain last position", async ({ page }) => {
   await boot(page);
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     // A slot table with an entry for a DIFFERENT seating than this one.
     const other = s.slot === "other" ? "sunday-morning" : "other";
-    s.config.slots = { [other]: { book: "Rev", chapter: 22 } };
-    s.config.openPanes = [{ book: "John", chapter: 3 }];
-    s.saveConfig();
-  });
-  await page.waitForTimeout(400);
-  await page.evaluate(async () => {
-    await (window as any).__plumbline.rpc.static("routeLink", "go:John:3:16");
+    const cfg = JSON.parse(JSON.stringify(s.config));
+    cfg.slots = { [other]: { book: "Rev", chapter: 22 } };
+    cfg.openPanes = [{ book: "John", chapter: 3 }];
+    await s.rpc.static("configSave", cfg);
+    await s.rpc.flush();
+    s.restoring = true;
   });
 
   await page.reload();
@@ -97,4 +100,71 @@ test("a seating never used falls through to the plain last position", async ({ p
   // John 3 stands: this is exactly what every reader gets today, and a slot
   // they have never sat in must not change it.
   await expect(page.locator(".subtitle")).toHaveText("John 3", { timeout: 30_000 });
+});
+
+// The bug this guards against (2026-08-21): the slot was marked chapter-only at
+// navigation time, while only openPanes carried the first-visible verse — and
+// the slot WINS the restore. So every same-seating reopen (close the app, open
+// it again an hour later) found its chapter but landed at the top. Red without
+// the fix at the first assertion: the flushed slot carries no verse.
+test("a reopened seating restores the scroll position, not just the chapter", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() => (window as any).__plumbline.navigate(0, "Ps", 119));
+  await expect(page.locator(".subtitle")).toHaveText("Psalms 119", { timeout: 30_000 });
+
+  // Wait for the fresh chapter's verse geometry — scrollTop clamps to 0 until
+  // the layout has grown the container. Ps 119 has 176 verses; the John 3 the
+  // app booted into has 36, so >100 is the NEW layout, not the old one.
+  await expect
+    .poll(
+      () => page.evaluate(() => (window as any).__plumbline.paneVerseGeom[0]?.size ?? 0),
+      { timeout: 60_000 },
+    )
+    .toBeGreaterThan(100);
+  // Scroll well into the chapter the way a reader does — the browser fires the
+  // scroll event; ReaderPane's user branch takes the offset from there.
+  await page.evaluate(() => {
+    (document.querySelector(".pane .scroll") as HTMLElement).scrollTop = 4000;
+  });
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__plumbline.panes[0].scrollY))
+    .toBeGreaterThan(0);
+
+  // What the close is about to bank: this seating's slot, VERSE INCLUDED.
+  const savedVerse = await page.evaluate(() => {
+    const s = (window as any).__plumbline;
+    s.flushConfig();
+    return s.config.slots?.[s.slot]?.verse;
+  });
+  expect(savedVerse).toBeGreaterThan(1);
+
+  await page.reload();
+  await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+  await expect(page.locator(".subtitle")).toHaveText("Psalms 119", { timeout: 30_000 });
+
+  // Mid-chapter, with the verse it closed on back at the top edge — not the top
+  // of the chapter. Computed the shell's own way: an unconsumed scroll target IS
+  // the position (pendingScroll holds until the reader scrolls, by design);
+  // after that it is read off the pane's published verse geometry.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const s = (window as any).__plumbline;
+          const pane = s.panes[0];
+          const geom = s.paneVerseGeom[0];
+          if (!pane || !geom || pane.scrollY <= 0) return null;
+          if (pane.pendingScroll && pane.targetVerse > 1) return pane.targetVerse;
+          let best: number | null = null;
+          let bestY = Infinity;
+          for (const [v, g] of geom)
+            if (g.y + g.h > pane.scrollY && g.y < bestY) {
+              bestY = g.y;
+              best = v;
+            }
+          return best;
+        }),
+      { timeout: 30_000 },
+    )
+    .toBe(savedVerse);
 });

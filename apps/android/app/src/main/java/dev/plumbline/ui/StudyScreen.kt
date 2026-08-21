@@ -395,7 +395,7 @@ fun StudyScreen(
     var verseNumbers by remember { mutableStateOf(loadedCfg?.verseNumbers != false) }
     var addedItalics by remember { mutableStateOf(loadedCfg?.addedItalics != false) }
     var history by remember { mutableStateOf(loadedCfg?.history ?: emptyList()) }
-    var slots by remember { mutableStateOf(loadedCfg?.slots ?: emptyMap()) }
+    val slots = remember { loadedCfg?.slots ?: emptyMap() }
     // The lifetime counter: seeded once by hand, earned thereafter. -1 is
     // "never said", deliberately not 0 — a reader who answers "none" has told
     // us something and must not be asked again.
@@ -430,10 +430,15 @@ fun StudyScreen(
     val gates = (if (humanAnalysis) 1 else 0) or (if (machineAnalysis) 2 else 0)
 
     fun persistCfg() {
+        // The seating slot carries the SAME live position as openPanes, verse
+        // included: the restore above prefers the slot, so a chapter-only slot
+        // wins the restore with no verse in hand and reopens at the top of the
+        // chapter (the web's #configSnapshot refreshes its slot the same way).
+        val here = PaneRef1(book, chapter, firstVisibleVerse)
         val cfg = (loadedCfg ?: ConfigState()).copy(
             bodySize = bodySize, sideMargin = sideMargin, lineSpacing = lineSpacing, copyStyle = copyStyle,
-            openPanes = listOf(PaneRef1(book, chapter, firstVisibleVerse)), activePane = 0, history = history,
-            slots = slots, bibleReads = bibleReads, bibleReadsCredited = bibleReadsCredited,
+            openPanes = listOf(here), activePane = 0, history = history,
+            slots = slots + (sessionSlot to here), bibleReads = bibleReads, bibleReadsCredited = bibleReadsCredited,
             theme = themeChoice, textFont = textFont, chromeFont = chromeFont,
             humanAnalysis = humanAnalysis, machineAnalysis = machineAnalysis,
             church = church, presentSharesAsNew = presentSharesAsNew, intro = introChoice,
@@ -450,8 +455,8 @@ fun StudyScreen(
     LaunchedEffect(book, chapter) {
         history = (listOf(PaneRef1(book, chapter)) +
             history.filterNot { it.book == book && it.chapter == chapter }).take(50)
-        // …and against this seating, so the next one like it reopens here.
-        slots = slots + (sessionSlot to PaneRef1(book, chapter))
+        // The seating slot rides along inside persistCfg, so this passage is
+        // also recorded against this seating and the next one like it reopens here.
         persistCfg()
     }
 
