@@ -1238,10 +1238,29 @@ export class Session {
       .then((slot: string) => {
         this.slot = slot;
         const seat = (this.config.slots as Record<string, any> | undefined)?.[slot];
-        // `#restoredInto` guards the race: if the reader has already gone
+        // `#navigatedSinceBoot` guards the race: if the reader has already gone
         // somewhere in the few ms this took, their tap wins over the restore.
+        //
+        // RESEED, never navigate(): this is boot-time seeding arriving with
+        // better data a few ms after the panes were built, not a move the
+        // reader made. navigate() also claims the SCREEN — it always lands in
+        // the reader — which stomps the destination a launch shortcut
+        // (?open=review, e2e/launch-shortcuts.spec.ts) chose on this very
+        // boot, and it would stamp history for a page nobody turned. The
+        // ACTIVE pane, because the seat was recorded from it: the pane being
+        // read, which the fold restore keeps (e2e/foldable.spec.ts).
         if (seat?.book && !this.#navigatedSinceBoot) {
-          this.navigate(0, seat.book, seat.chapter, seat.verse ?? null, { history: false });
+          const pane = this.panes[this.activePane] ?? this.panes[0];
+          if (pane) {
+            const count = this.chapterCount(seat.book);
+            pane.book = seat.book;
+            pane.chapter = Math.max(1, count > 0 ? Math.min(seat.chapter, count) : seat.chapter);
+            pane.targetVerse = seat.verse && seat.verse > 1 ? seat.verse : null;
+            pane.pendingScroll = !!(seat.verse && seat.verse > 1);
+            pane.scrollY = 0;
+            pane.reached = 0;
+            this.saveConfig();
+          }
         }
       })
       .catch(() => {
@@ -1451,14 +1470,15 @@ export class Session {
     // This seating's slot carries the SAME live position as openPanes, verse
     // included: the boot restore prefers the slot, so a chapter-only slot wins
     // the restore with no verse in hand and reopens at the top of the chapter.
-    // Primary pane only, like the reading tracker — a second pane is a
-    // parallel reference being consulted, not the place the reader was.
-    const p0 = this.panes[0];
-    if (this.slot && p0) {
-      const verse = this.#firstVisibleVerse(0);
+    // The ACTIVE pane — the one being read, and the one a fold keeps — not
+    // pane 0, or folding a desktop's panes would reopen on the leftmost
+    // reference instead of the passage under the reader's eye.
+    const active = this.panes[this.activePane] ?? this.panes[0];
+    if (this.slot && active) {
+      const verse = this.#firstVisibleVerse(this.panes.indexOf(active));
       (this.config.slots ??= {})[this.slot] = {
-        book: p0.book,
-        chapter: p0.chapter,
+        book: active.book,
+        chapter: active.chapter,
         ...(verse ? { verse } : {}),
       };
     }
