@@ -131,9 +131,15 @@ test("a reopened seating restores the scroll position, not just the chapter", as
     .toBeGreaterThan(0);
 
   // What the close is about to bank: this seating's slot, VERSE INCLUDED.
-  const savedVerse = await page.evaluate(() => {
+  // The flush is AWAITED before the reload: flushConfig only queues the
+  // configSave, and the worker's own persist of it is fire-and-forget — a
+  // reload that outruns the IndexedDB write reopens on the previous,
+  // verse-less save and this test goes red with the fix in place (it did,
+  // twice, on the v0.60.1 tag run).
+  const savedVerse = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     s.flushConfig();
+    await s.rpc.flush();
     return s.config.slots?.[s.slot]?.verse;
   });
   expect(savedVerse).toBeGreaterThan(1);
