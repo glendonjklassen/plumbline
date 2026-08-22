@@ -695,9 +695,7 @@ fn legend() -> Block {
         Run::new("†", sz::MARK, Color::TierHuman),
         Run::new(" curated scholarship  ·  ", sz::MARK, Color::Faded),
         Run::new("≈", sz::MARK, Color::TierMachine),
-        Run::new(" machine-derived, weigh it  ·  ", sz::MARK, Color::Faded),
-        Run::new("⚗", sz::MARK, Color::TierResearch),
-        Run::new(" research-grade", sz::MARK, Color::Faded),
+        Run::new(" machine-derived", sz::MARK, Color::Faded),
     ])
 }
 

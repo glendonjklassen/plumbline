@@ -440,8 +440,13 @@ producer emits*, not shell code.
 10. **margin notes** *(Human †)* — the verse's 1769 notes, small.
 
 A **provenance legend** closes a Full-study card once: "where this comes from:
-✝ the text · † curated scholarship · ≈ machine-derived, weigh it · ⚗
-research-grade". Weave membership + cross-references (items 5–6) and tags carry no mark (mixed /
+✝ the text · † curated scholarship · ≈ machine-derived". The ⚗ research-grade
+item was dropped from the legend: no shipped data produces the mark
+(`quotation-pairs.json` ships zero links and `text-witness.json` has no
+runtime reader), so the legend explained a glyph no reader can see. The
+per-chip `tier_marks` flask stays wired should a graded harvest ever ship.
+The "weigh it" aside on the machine item went with it (plain-copy rule).
+Weave membership + cross-references (items 5–6) and tags carry no mark (mixed /
 user-authored, not trust-weighted evidence). The producer emits it as a `Para`
 of tier-coloured runs.
 
