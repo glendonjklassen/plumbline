@@ -94,15 +94,15 @@
   function goPlan(): void {
     const target = lead && firstUnread(lead);
     if (!target) return;
-    s.showToast(t("bookmarks.going", { name: t("bookmarks.plan"), passage: passageName(target.book, target.chapter) }));
+    s.showToast(t("bookmarks.going", { name: t("bookmarks.plan") }));
     s.navigate(s.activePane, target.book, target.chapter);
   }
 
   function goSlot(tile: (typeof slotTiles)[number]): void {
-    // The toast names the BOOKMARK as well as the place: four tiles all
-    // reading "John 3" are indistinguishable mid-swipe, and the toast is what
-    // confirms which one was pressed.
-    s.showToast(t("bookmarks.going", { name: tile.label, passage: tile.passage }));
+    // The toast names the BOOKMARK, nothing else — the destination is on
+    // screen the moment the pane lands there (maintainer, 2026-08-24: a
+    // "going to…" sentence was noise).
+    s.showToast(t("bookmarks.going", { name: tile.label }));
     s.navigate(s.activePane, tile.book, tile.chapter, tile.verse);
   }
 </script>

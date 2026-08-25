@@ -2016,9 +2016,10 @@ seating in `config.slots` — **Last opened** (`other`), **Sunday morning**,
 crescent / group, Material paths inline like the NAV table) plus label and
 passage. The pager is CSS scroll-snap, one tile per page at 92% basis so the
 next tile peeks — that peek is what says "swipeable" without a row of dots. A
-tap **toasts which bookmark it was and where it is going**
-(`bookmarks.going` — four tiles all reading "John 3" are indistinguishable
-mid-swipe) and navigates the active pane, verse included. Only seatings the
+tap **toasts which bookmark it was** — "Sunday morning bookmark"
+(`bookmarks.going`), the name alone, no "going to…" sentence (maintainer,
+2026-08-24) — and navigates the active pane, verse included; the destination
+shows itself when the pane lands. Only seatings the
 reader has actually been in exist in `config.slots`, so nothing is invented;
 the whole strip stands down in concept-study mode, as the chip always did.
 E2e: `bookmarks.spec.ts`, plus `plans-today.spec.ts` (the plan tile's own

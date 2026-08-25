@@ -35,8 +35,9 @@ test("a stored seating rides the strip; a tap says which bookmark and goes there
   await expect(tile.locator("svg")).toHaveCount(1);
 
   await tile.click();
-  // The toast names the BOOKMARK as well as the destination.
-  await expect(page.locator(".toast")).toContainText("Sunday morning — going to Psalms 23:4");
+  // The toast names the BOOKMARK, plainly — no "going to…" sentence; the
+  // destination shows itself when the pane lands there.
+  await expect(page.locator(".toast")).toHaveText("Sunday morning bookmark");
   await expect(page.locator(".subtitle")).toHaveText("Psalms 23", { timeout: 30_000 });
 });
 
