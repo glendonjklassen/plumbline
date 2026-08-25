@@ -236,9 +236,11 @@ test("a paused plan asks nothing until it is resumed", async ({ page }) => {
   await expect(card).toContainText(/Started /); // the run's identity: name + start day
   await expect(card.getByRole("button", { name: "Pause" })).toHaveCount(0);
 
-  // Back in the reader, the chip is gone — a paused plan asks nothing.
+  // Back in the reader, the PLAN chip is gone — a paused plan asks nothing.
+  // The row itself may stand: it is the bookmarks strip now (2026-08-24), and
+  // the seating tiles are not the plan's to take down.
   await page.evaluate(() => (window as any).__plumbline.goRead());
-  await expect(page.locator(".plan-chip-row")).toHaveCount(0);
+  await expect(page.locator(".plan-chip-row .plan-chip")).toHaveCount(0);
 
   // Resume: the chip returns, same day, nothing lost.
   await page.evaluate(() => (((window as any).__plumbline as any).screen = "plans"));

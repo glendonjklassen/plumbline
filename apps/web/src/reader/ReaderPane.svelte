@@ -59,6 +59,10 @@
   import { languages, t } from "../lib/i18n.svelte";
 
   const MAX_COLUMN = 720;
+  /** Page-turn mode's guaranteed side gutter: the 44px touch floor. The mode
+   *  exists so a page-turner remote (which taps a fixed spot near an edge)
+   *  can page the text — a 0px margin would leave it nothing to press. */
+  const PAGE_TURN_MARGIN = 44;
 
   interface Props {
     paneIdx: number;
@@ -106,7 +110,12 @@
   let shownKey = "";
 
   const fontPx = $derived(Number(s.config.bodySize ?? 20));
-  const sideMargin = $derived(Number(s.config.sideMargin ?? 28));
+  const sideMargin = $derived.by(() => {
+    const m = Number(s.config.sideMargin ?? 28);
+    // Page-turn mode guarantees the tap gutters exist whatever the margin
+    // slider says; off, the slider's value stands untouched.
+    return s.config.pageTurn ? Math.max(m, PAGE_TURN_MARGIN) : m;
+  });
   const lineSpacing = $derived(Number(s.config.lineSpacing ?? 1.35));
   const versePerLine = $derived(!!s.config.versePerLine);
   // Both default ON: an absent key is a config written before the setting
@@ -612,7 +621,7 @@
         // ghost is swallowed at the document, wherever it lands.
         suppressClick = true;
         swallowGhostClick();
-        onTapWord(e);
+        if (!pageTurnTap(e)) onTapWord(e);
       }
       return;
     }
@@ -630,6 +639,22 @@
     document.addEventListener("click", swallow, { capture: true, once: true });
     setTimeout(() => document.removeEventListener("click", swallow, true), 200);
   }
+  /** Page-turn mode: a tap in the side gutters pages the text — the right
+   *  side scrolls ahead, the left back — so a page-turner remote can drive
+   *  the page hands-free. The portion is the keyboard PageDown's own 85% of
+   *  a screen (Shell.svelte), so the two ways of paging agree. Returns true
+   *  when the tap was a page turn and must not fall through to word study. */
+  function pageTurnTap(e: MouseEvent | PointerEvent): boolean {
+    if (!s.config.pageTurn) return false;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    if (x >= marginX && x <= marginX + columnWidth) return false;
+    const dir = x > marginX + columnWidth ? 1 : -1;
+    pane.pendingScroll = false;
+    pane.scrollY = Math.min(Math.max(0, pane.scrollY + dir * 0.85 * cssH), maxScroll());
+    return true;
+  }
+
   // A word tap: in concept-study mode it tags the verse (fast concept sweep); the
   // rest of the time it opens word study (Compose tap parity).
   function onTapWord(e: MouseEvent | PointerEvent): void {
@@ -647,6 +672,7 @@
       suppressClick = false;
       return;
     }
+    if (pageTurnTap(e)) return;
     onTapWord(e);
   }
   function onContextMenu(e: MouseEvent): void {

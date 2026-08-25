@@ -7,7 +7,8 @@
   import { dispatchLink } from "../study/links";
   import { refDisplay } from "./refname";
   import { hasChurch, PWA_URL, shareUrl } from "../shell/church";
-  import { t } from "../lib/i18n.svelte";
+  import { lang, t } from "../lib/i18n.svelte";
+  import { ttsSpeak, ttsSupported } from "./tts.svelte";
 
   const s = getSession();
 
@@ -112,6 +113,29 @@
     s.memorizePassageFrom = ref;
   }
 
+  /** Read aloud (Web Speech API): the whole chapter, or from this verse to the
+   *  chapter's end. Texts are fetched per verse from THIS PANE's own language
+   *  handle (`callIn`), so a German pane is read in German — the voice must
+   *  match the words, not the UI. */
+  async function readAloud(wholeChapter: boolean): Promise<void> {
+    const ref = menu!.refKey;
+    const said = wholeChapter ? shown.slice(0, shown.lastIndexOf(":")) : shown;
+    close();
+    const colon = ref.lastIndexOf(":");
+    const space = ref.lastIndexOf(" ", colon);
+    const book = ref.slice(0, space);
+    const chapter = Number(ref.slice(space + 1, colon));
+    const from = wholeChapter ? 1 : Number(ref.slice(colon + 1));
+    const paneLang = s.panes[s.activePane]?.lang ?? "";
+    const count = Number(await s.rpc.callIn(paneLang, "chapterVerseCount", book, chapter));
+    const bodies: string[] = [];
+    for (let v = from; v <= count; v++) {
+      const verse = await s.rpc.callIn(paneLang, "verse", `${book} ${chapter}:${v}`);
+      if (verse?.body) bodies.push(verse.body);
+    }
+    ttsSpeak(said, bodies, paneLang || lang());
+  }
+
   // Clamp the menu into the viewport.
   let el: HTMLDivElement | undefined = $state();
   const pos = $derived.by(() => {
@@ -141,6 +165,11 @@
     <hr />
     <button onclick={memorize}>{t("menu.memorizeVerse")}</button>
     <button onclick={memorizePassage}>{t("menu.memorizePassage")}</button>
+    {#if ttsSupported()}
+      <hr />
+      <button onclick={() => void readAloud(false)}>{t("menu.readFromHere")}</button>
+      <button onclick={() => void readAloud(true)}>{t("menu.readChapter")}</button>
+    {/if}
   </div>
 {/if}
 

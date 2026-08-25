@@ -181,6 +181,10 @@ fun ReaderPane(
     sideMargin: Float = 28f,
     lineSpacing: Float = 1.35f,
     versePerLine: Boolean = false,
+    // Page-turn mode (config): the side gutters become tap zones that page the
+    // text — right ahead, left back — so a page-turner remote can drive the
+    // page. Guarantees at least a 44dp gutter whatever the margin slider says.
+    pageTurn: Boolean = false,
     // The two reader-typography switches (config, both ON by default).
     // `verseNumbers` is a LAYOUT input — it moves every word on every line, so
     // it belongs in ChapterKey; `addedItalics` is paint-only and deliberately
@@ -277,7 +281,7 @@ fun ReaderPane(
 
     BoxWithConstraints(modifier.fillMaxSize()) {
         val widthPx = with(density) { maxWidth.toPx() }
-        val sidePx = with(density) { sideMargin.dp.toPx() }
+        val sidePx = with(density) { (if (pageTurn) max(sideMargin, 44f) else sideMargin).dp.toPx() }
         val column = min(widthPx - 2 * sidePx, with(density) { MAX_COLUMN_DP.dp.toPx() })
         val originX = (widthPx - column) / 2f
 
@@ -462,6 +466,7 @@ fun ReaderPane(
         // Live-updated snapshot for the tap gesture (so the gesture detector is
         // keyed on the chapter handle only, not restarted on every scroll frame).
         val originXNow = rememberUpdatedState(originX)
+        val columnNow = rememberUpdatedState(column)
 
         val scrollState = rememberScrollableState { delta ->
             val y = scroll.floatValue
@@ -579,6 +584,14 @@ fun ReaderPane(
                 .pointerInput(current) {
                     detectTapGestures(
                         onTap = { pos ->
+                            // Page-turn mode: a tap in either gutter pages the
+                            // text instead of opening word study. 85% of a
+                            // screen, the same portion the web's PageDown takes.
+                            if (pageTurn && (pos.x < originXNow.value || pos.x > originXNow.value + columnNow.value)) {
+                                val dir = if (pos.x > originXNow.value + columnNow.value) 1f else -1f
+                                scroll.floatValue = (scroll.floatValue + dir * 0.85f * viewportH).coerceIn(0f, maxScroll)
+                                return@detectTapGestures
+                            }
                             val chap = current?.handle ?: return@detectTapGestures
                             val x = pos.x - originXNow.value
                             val y = pos.y - marginPx + scroll.floatValue

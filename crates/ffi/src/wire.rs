@@ -1175,6 +1175,14 @@ pub struct WireConfigState {
     /// Verse-per-line reading mode.
     #[serde(default)]
     pub verse_per_line: bool,
+    /// Page-turn mode (additive): tap margins either side of the text that
+    /// scroll most of a screen. Absent → off.
+    #[serde(default)]
+    pub page_turn: bool,
+    /// Sunday service start, minutes since local midnight (additive). Absent =
+    /// never set — the Sunday seating keeps its before-noon rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sunday_service: Option<u32>,
     /// The two reader-typography switches: paint the leading verse numbers,
     /// and italicize the KJV's supplied words. Both ON by default, so they
     /// default to TRUE when absent rather than to serde's `false` — a shell
@@ -1356,6 +1364,8 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
             })
             .collect(),
         verse_per_line: cfg.verse_per_line,
+        page_turn: cfg.page_turn,
+        sunday_service: cfg.sunday_service,
         verse_numbers: cfg.verse_numbers,
         added_italics: cfg.added_italics,
         theme: cfg.theme.token().to_string(),
@@ -1421,6 +1431,10 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
             })
             .collect(),
         verse_per_line: w.verse_per_line,
+        page_turn: w.page_turn,
+        // Same guard as `core::config::from_wire`: a minute outside the day
+        // reads as never-set.
+        sunday_service: w.sunday_service.filter(|m| *m < 24 * 60),
         verse_numbers: w.verse_numbers,
         added_italics: w.added_italics,
         theme: ThemeChoice::parse(&w.theme).unwrap_or_default(),

@@ -963,6 +963,17 @@ char *plumbline_theme_palette_json(const char *theme);
 // `date` is null or valid NUL-terminated UTF-8 for the call.
 char *plumbline_session_slot(const char *date, uint32_t hour);
 
+// [`plumbline_session_slot`] to the minute, honouring a configured Sunday
+// service time. `minute` is minutes since local midnight (0–1439);
+// `sunday_service` is the config's `sundayService` value, or **-1 when the
+// reader never set one**, which keeps the before-noon rule. With a time set,
+// `"sunday-morning"` runs from the service start until 1.5 hours after it —
+// see `core::session_slot::slot_for_at`. Engine-independent, never null.
+//
+// # Safety
+// `date` is null or valid NUL-terminated UTF-8 for the call.
+char *plumbline_session_slot_at(const char *date, uint32_t minute, int32_t sunday_service);
+
 // EVERY user-visible string, for one language, in ONE call:
 // `{"lang","strings":{id: text, …},"languages":[{"code","endonym"}]}`.
 //

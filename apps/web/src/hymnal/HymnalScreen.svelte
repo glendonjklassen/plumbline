@@ -187,7 +187,6 @@
               <span class="rtitle">{h.titles[l]}</span>
               <span class="rsub">{h.firstLines?.[l] ?? ""}</span>
             </span>
-            <span class="tune">{h.tune}</span>
           </button>
         {/each}
       {/if}
@@ -399,11 +398,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-  .tune {
-    font-size: calc(12px * var(--uiScale, 1));
-    letter-spacing: 0.04em;
-    color: var(--faded, #8a8276);
   }
   /* ── one hymn ─────────────────────────────────────────────────────────── */
   .hymn {

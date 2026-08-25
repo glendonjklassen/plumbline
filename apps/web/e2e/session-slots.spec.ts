@@ -41,6 +41,26 @@ test("the core decides which seating a moment is, and both shells ask it", async
   expect(await slotOf(page, "2026-08-18", 9)).toBe("other");
 });
 
+test("a Sunday service time redraws the Sunday seating as its window", async ({ page }) => {
+  await boot(page);
+  const at = (d: string, min: number, svc: number): Promise<string> =>
+    page.evaluate(
+      ([dd, m, sv]) => (window as any).__plumbline.rpc.static("sessionSlotAt", dd, m, sv),
+      [d, min, svc] as const,
+    );
+  // Church at 10:30 (630 minutes): the seating runs from the start until 1.5
+  // hours after — before it, an early Sunday riser resumes their ordinary
+  // reading, not last week's service.
+  expect(await at("2026-08-16", 10 * 60 + 29, 630)).toBe("other");
+  expect(await at("2026-08-16", 10 * 60 + 30, 630)).toBe("sunday-morning");
+  expect(await at("2026-08-16", 11 * 60 + 59, 630)).toBe("sunday-morning");
+  expect(await at("2026-08-16", 12 * 60, 630)).toBe("sunday-evening");
+  // An afternoon congregation's window outranks the noon split.
+  expect(await at("2026-08-16", 13 * 60 + 30, 13 * 60)).toBe("sunday-morning");
+  // -1 is "never set": the before-noon rule stands, exactly as above.
+  expect(await at("2026-08-16", 9 * 60, -1)).toBe("sunday-morning");
+});
+
 test("a passage read now is remembered against this seating", async ({ page }) => {
   await boot(page);
   await page.evaluate(() => (window as any).__plumbline.navigate(0, "Ps", 23));

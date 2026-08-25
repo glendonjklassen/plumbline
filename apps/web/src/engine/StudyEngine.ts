@@ -794,6 +794,17 @@ export function sessionSlot(w: WasmEngine, date: string, hour: number): string {
   return s ?? "other";
 }
 
+/** `sessionSlot` to the minute, honouring a configured Sunday service time:
+ *  `minute` is minutes since local midnight, `sundayService` the config's
+ *  value or -1 when the reader never set one (the before-noon rule). With a
+ *  time set, `sunday-morning` runs from the service start to 1.5h after. */
+export function sessionSlotAt(w: WasmEngine, date: string, minute: number, sundayService: number): string {
+  const p = w.inStr(date);
+  const s = w.takeStr((w.exports.plumbline_session_slot_at as Function)(p, minute, sundayService) as number);
+  w.freeStr(p);
+  return s ?? "other";
+}
+
 export function guideBlocks(w: WasmEngine): any {
   const s = w.takeStr((w.exports.plumbline_panel_guide_blocks_json as Function)() as number);
   return s === null ? null : JSON.parse(s);

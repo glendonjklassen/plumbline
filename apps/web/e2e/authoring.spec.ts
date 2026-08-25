@@ -155,17 +155,15 @@ test("a reader tags two verses from the verse menu and turns the tag into a weav
   await row.click();
   await expect(picker).toBeHidden();
 
-  // ── Study ▸ Tags ▸ Browse: two members, and the conversion on offer ──
-  // Tags is a PAGE now (2026-08-14) rather than a card that raised the library
-  // straight away, so the library is one tap further in — the same route a
-  // reader takes.
+  // ── Study ▸ Tags: two members, and the conversion on offer ──
+  // The tags render on the page itself now (2026-08-24; browsing is the basic
+  // act): the row carries the member count, and tapping it opens the detail
+  // card directly.
   await page.locator("nav.browse").getByRole("button", { name: "Study" }).click();
   await page.locator(".ex-card", { hasText: /^Tags/ }).click();
-  await page.getByRole("button", { name: /^Browse tags/ }).click();
-  await expect(panel.locator("p", { hasText: TAG }), "both verses are in the tag").toContainText("2 members", {
-    timeout: 30_000,
-  });
-  await panel.getByRole("button", { name: TAG }).click();
+  const tagRow = page.locator(".tag-row", { hasText: TAG });
+  await expect(tagRow, "both verses are in the tag").toContainText("2 members", { timeout: 30_000 });
+  await tagRow.click();
 
   // "⇔ make weave" is emitted only for a tag with ≥2 verse members (core
   // `panel::tag_detail`), so finding it here is the second add, restated.
