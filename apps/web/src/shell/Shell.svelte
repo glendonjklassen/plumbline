@@ -27,6 +27,7 @@
   import ConnectorsOverlay from "./ConnectorsOverlay.svelte";
   import MapsHost from "../maps/MapsHost.svelte";
   import ContextMenu from "../reader/ContextMenu.svelte";
+  import { ttsSpeaking, ttsStop } from "../reader/tts.svelte";
   import TagPicker from "../study/TagPicker.svelte";
   import ThreadPicker from "../study/ThreadPicker.svelte";
   import TagWeave from "../study/TagWeave.svelte";
@@ -491,6 +492,17 @@
      seconds, and goes, all in silence. -->
 {#if s.toast}
   <div class="toast" role="status">{s.toast}</div>
+{/if}
+
+<!-- Read-aloud is invisible sound: this chip is the only sign it is running,
+     and the only way to stop it short of the chapter's end. Sticky while it
+     speaks — a fading toast would strand the reader with a voice and no off
+     switch. -->
+{#if ttsSpeaking()}
+  <div class="toast update" class:stacked={s.updateReady} role="status">
+    <span>{t("tts.reading")} · {ttsSpeaking()!.passage}</span>
+    <button class="dismiss" aria-label={t("tts.stop")} onclick={ttsStop}>✕</button>
+  </div>
 {/if}
 
 <!-- A deploy landed while this session was open (an installed PWA can sit for

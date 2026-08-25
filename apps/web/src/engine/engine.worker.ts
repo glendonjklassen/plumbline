@@ -73,6 +73,7 @@ import {
   shareLink,
   readingSpec,
   sessionSlot,
+  sessionSlotAt,
   StudyEngine,
   type LayoutCfg,
 } from "./StudyEngine";
@@ -765,6 +766,8 @@ function statics(): Record<string, (...a: any[]) => any> {
     shareLink: (request: unknown) => shareLink(w, request as Parameters<typeof shareLink>[1]),
     readingSpec: () => readingSpec(w),
     sessionSlot: (date: string, hour: number) => sessionSlot(w, date, hour),
+    sessionSlotAt: (date: string, minute: number, sundayService: number) =>
+      sessionSlotAt(w, date, minute, sundayService),
   };
 }
 

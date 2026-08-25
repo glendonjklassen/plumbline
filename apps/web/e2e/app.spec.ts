@@ -637,8 +637,7 @@ test("backup round-trips through a zip", async ({ page }, testInfo) => {
   });
   await page.getByLabel("Menu").click();
   await page.getByRole("button", { name: "Settings" }).click();
-  // Backup folded into Advanced with the menu rationalization.
-  await page.locator('[data-surface="settings"] details.advanced > summary').click();
+  // Backup sits with the everyday settings (out of Advanced, 2026-08-24).
   const [download] = await Promise.all([
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Back up (.zip)" }).click(),

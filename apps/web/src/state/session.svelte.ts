@@ -1234,7 +1234,14 @@ export class Session {
     const localDate =
       `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     void this.rpc
-      .static("sessionSlot", localDate, now.getHours())
+      .static(
+        "sessionSlotAt",
+        localDate,
+        now.getHours() * 60 + now.getMinutes(),
+        // The configured Sunday service start (minutes since midnight), or -1
+        // for "never set", which keeps the before-noon rule in the core.
+        typeof this.config.sundayService === "number" ? this.config.sundayService : -1,
+      )
       .then((slot: string) => {
         this.slot = slot;
         const seat = (this.config.slots as Record<string, any> | undefined)?.[slot];

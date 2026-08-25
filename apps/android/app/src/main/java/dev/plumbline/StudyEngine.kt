@@ -112,6 +112,14 @@ class StudyEngine private constructor(handle: Pointer) : Closeable {
         fun SessionSlot(date: String, hour: Int): String =
             take(ffi.plumbline_session_slot(date, hour)) ?: "other"
 
+        /** [SessionSlot] to the minute, honouring a configured Sunday service
+         *  time: `minute` is minutes since local midnight, `sundayService` the
+         *  config's value or -1 when the reader never set one (which keeps the
+         *  before-noon rule). With a time set, `sunday-morning` runs from the
+         *  service start until 1.5 hours after it. Never null. */
+        fun SessionSlotAt(date: String, minute: Int, sundayService: Int): String =
+            take(ffi.plumbline_session_slot_at(date, minute, sundayService)) ?: "other"
+
         /** The in-app guide / About cards as panel blocks. Static content. */
         fun GuideBlocksJson(): String = take(ffi.plumbline_panel_guide_blocks_json())!!
         fun AboutBlocksJson(): String = take(ffi.plumbline_panel_about_blocks_json())!!

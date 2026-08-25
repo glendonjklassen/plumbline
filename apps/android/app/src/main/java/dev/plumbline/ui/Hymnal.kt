@@ -274,7 +274,6 @@ private fun HymnIndex(
                                 )
                             }
                         }
-                        Text(h.tune, color = palette.faded, fontSize = 11.sp)
                     }
                     HorizontalDivider(color = palette.rule)
                 }

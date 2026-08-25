@@ -259,6 +259,41 @@ Plumbline name and carries no plumb-line imagery.
   navigates (M:2720–2740).
 - *Data*: `plumbline_engine_layout_chapter` (+ `plumbline_layout_*`), `plumbline_engine_toc_json`.
 
+## Page-turn mode (both shells)
+
+`config.pageTurn` (additive, off by default; Settings ▸ Page turn mode, both
+shells): the reader keeps a tap gutter either side of the text — the reader's
+margin, widened to at least the 44px/44dp touch floor when the mode is on — and
+a tap there scrolls 85% of a screen (the web keyboard PageDown's own portion):
+the right side ahead, the left side back, clamped into the pane's scroll range.
+The point is a **page-turner remote** — a Bluetooth clicker that presses a
+fixed spot near an edge — driving the page hands-free; on the web, remotes
+that emit PageUp/PageDown/arrows already worked through the keyboard map, and
+the gutters are the other half. Taps inside the text column are untouched
+(word study as ever); long-press in a gutter still opens the verse menu. Web:
+`pageTurnTap` in `ReaderPane.svelte` (before `onTapWord` on both the mouse and
+touch paths); Android: the gutter branch at the top of `detectTapGestures.onTap`
+(`ui/ReaderPane.kt`). E2e: `page-turn.spec.ts` (direction, mode-off inertness,
+the guaranteed gutter at the narrowest margin slider).
+
+## Read aloud (WEB ONLY)
+
+The verse menu's **Read aloud from here** (this verse to the chapter's end) and
+**Read chapter aloud**, over the Web Speech API (`reader/tts.svelte.ts`,
+`ContextMenu.svelte`; rows hidden when the browser has no `speechSynthesis`).
+One utterance PER VERSE, never one per chapter — stopping lands between verses,
+and some engines go silent partway through a minutes-long utterance. Verse
+texts come from THIS PANE's own language handle (`rpc.callIn`), and the
+utterance `lang` is the pane's text language, so a German pane is read by a
+German voice — the voice matches the words, not the UI. While it speaks, a
+sticky chip ("Reading aloud · {passage}", `Shell.svelte`) is the only sign a
+voice is running and the only off switch; ✕ cancels the queue, and a new read
+replaces the old one. E2e: `read-aloud.spec.ts` (stubbed synthesizer —
+headless browsers ship no voices; the subject is what the app hands it).
+
+**SHELL DELTA — Android:** none of this; the platform twin is
+`android.speech.tts.TextToSpeech`, owed with a later batch.
+
 ## Multi-pane (M:1649–2113)
 
 1–3 columns; each has a nav strip: prev/next chapter `‹ ›`, the passage
@@ -606,8 +641,8 @@ A tag carries an optional **`category`** (overlay-tag-v1, additive: absent key
 when none; trimmed, empty clears) — "tags need categories otherwise it'll be
 soooo long" (maintainer UAT, 2026-08-18). Assigned on the MANAGEMENT screen
 only — never mid-reading. The flow is the PICKER IDIOM (`TagsScreen`
-"Categorize a tag" card → pick the tag → then existing categories are a
-list you tap, with "New category…" (`tags.categoryNew`) opening the freetext
+"Categorize a tag" button, under the inline tag list since 2026-08-24 → pick
+the tag → then existing categories are a list you tap, with "New category…" (`tags.categoryNew`) opening the freetext
 prompt and "No category" (`tags.uncategorized`) clearing; with no categories
 yet it goes straight to the prompt, which is where the first one is ADDED).
 Retyping a heading per tag was the typo-forks-a-second-category trap the
@@ -620,17 +655,19 @@ changes). **C ABI**: `plumbline_engine_tag_set_category(name, category)`. Wire:
 Where it SHOWS: every tag list groups under category headings **the moment any
 tag has one, and stays dead flat until then** — a reader who never files
 anything sees no change. Grouped surfaces: the tag PICKER
-(`TagPicker.svelte`, `.ghead` rows) and the LIBRARY panel (`panel::tags_list`,
+(`TagPicker.svelte`, `.ghead` rows), the LIBRARY panel (`panel::tags_list`,
 LABEL runs — `tag:{i}` links keep the tag's index in `tags()` order, not its
-display position, so grouping cannot re-aim a tap). Categories sort
+display position, so grouping cannot re-aim a tap), and the TAGS PAGE's inline
+list in both shells (`TagsScreen.svelte` / the ExploreScreen overlay, same
+ordinal rule). Categories sort
 alphabetically; the uncategorized bring up the rear under `tags.uncategorized`
 ("No category"), which only appears once a real heading exists. E2E:
 `tag-categories.spec.ts`; core: `a_category_is_set_trimmed_cleared_and_survives_the_file`.
 
-**SHELL DELTA — Android:** the engine already groups the library panel (blocks
-are core-built) once the `.so` is rebuilt, and the format/ABI are in place; the
-Compose `TagPickerSheet` grouping and a management surface for assigning are
-pending the APK catch-up batch.
+**SHELL DELTA — Android:** the engine groups the library panel (blocks are
+core-built) and the Tags page's own list groups too (`Tag1.category`,
+2026-08-24); the Compose `TagPickerSheet` grouping and a management surface for
+ASSIGNING a category are still pending the APK catch-up batch.
 
 ## Ask before destroying anything (both shells)
 
@@ -659,6 +696,21 @@ rots:
 The last two are live Android gaps, not design.
 
 ## Threads / Tags browsers (M:3380–3471)
+
+**The Tags page browses first** (both shells, 2026-08-24): opening Tags from
+the Study hub shows the tags THEMSELVES — the list rendered on the page,
+grouped under category headings exactly the way the core groups the library
+panel (headings once any tag has one, flat until then, uncategorized last),
+each row the name plus its member count, a tap opening the tag's detail card —
+with the organization actions (Rename · Categorize · Merge on the web; Rename ·
+Merge on Android, categorize still owed there) as buttons AFTER the list. The
+row's ordinal is the tag's position in the wire's own order, the same index the
+`tag:i` verb carries, so grouping cannot re-aim a tap (Android routes the tap
+through `onLink("tag:i")`, the router every panel row uses). It opened as a
+card menu whose first card was "Browse tags"; browsing being the basic act, the
+extra tap was the menu (maintainer). Web `shell/TagsScreen.svelte`; Android the
+second `MapOverlay` in `ui/StudyScreen.kt`'s ExploreScreen. E2e:
+`tags-screen.spec.ts`.
 
 List → detail. Threads list: "Threads (N)", each name + "N passage(s)".
 Thread detail: name, notes small + `✎ notes`; per entry: verse link, snapshot
@@ -1008,12 +1060,15 @@ first-run "sharing the gospel" landing, reachable every day after.
 **Settings splits everyday from Advanced.** Everyday, visible: language (a
 DROPDOWN since 2026-08-16, like the theme — a radio column grew a row per
 language), the **Wording** choice (below), theme, the two type faces, the three
-reader sliders (+ web-only verse-per-line), and a **Default style** button
-(`settings.defaultStyle`) that puts size/spacing/margins, both faces and the
-theme back to core::config's defaults (18 / 28 / 1.35 / eb-garamond ×2 /
-system) — style only, never the reading aids or the reader's data. Everything
-else — the analysis tier gates, copy format, bundled set, present-as-new, (web)
-suggested pack / offline download / report, and Backup/Restore — sits behind
+reader sliders (+ web-only verse-per-line), **Page turn mode**
+(`settings.pageTurn`, see §Page-turn mode), the **Sunday service time** picker
+(`settings.sundayService`, see the seating-slots section), a **Default style**
+button (`settings.defaultStyle`) that puts size/spacing/margins, both faces and
+the theme back to core::config's defaults (18 / 28 / 1.35 / eb-garamond ×2 /
+system) — style only, never the reading aids or the reader's data — and
+**Backup/Restore** (moved out of Advanced 2026-08-24; §Backup / restore).
+Everything else — the analysis tier gates, copy format, bundled set,
+present-as-new, (web) suggested pack / offline download / report — sits behind
 ONE collapsed **Advanced** disclosure (`<details class="advanced">` on web, an
 expandable row in `SettingsDialog`/`StudyScreen.kt`). Church and Welcome left
 Settings entirely (Share screen and ≡ respectively).
@@ -1227,7 +1282,22 @@ deliberately `other` — the slot is for the midweek meeting, and a Wednesday
 morning is a weekday morning. The RULE is the core's
 (`plumbline_session_slot`, engine-independent like the theme palette) and the
 shells pass their own LOCAL date and hour, because a slot computed in UTC puts a
-Sunday-evening service in Monday for half the world. `config.slots` is keyed by
+Sunday-evening service in Monday for half the world.
+
+**A reader can SAY when their service is** (2026-08-24): Settings ▸ Sunday
+service time is a real time picker (`<input type="time">` on the web, the
+platform `TimePickerDialog` on Android), stored as `config.sundayService` —
+minutes since local midnight, additive, absent = never set. With it set,
+`sunday-morning` stops meaning "before noon" and means AT CHURCH: from the
+service start until 1.5 hours after (`core::session_slot::slot_for_at`,
+`SERVICE_WINDOW_MIN`), wherever in the day that lands — an afternoon
+congregation's window outranks the noon split — while the hours before the
+service are ordinary reading, so an early Sunday riser resumes Saturday
+night's study. Both shells now resolve the slot to the MINUTE over
+`plumbline_session_slot_at(date, minute, sundayService-or--1)`; the original
+hour endpoint stands for compatibility. Clearing the picker returns to the
+before-noon rule. E2e: `session-slots.spec.ts` "a Sunday service time redraws
+the Sunday seating as its window"; core: `a_service_time_makes_sunday_morning_mean_at_church`. `config.slots` is keyed by
 token and additive; a seating never used falls through to the plain last
 position, which is what every reader has today and has its own test. The web
 restores fire-and-forget (the panes are built before the answer lands) guarded
@@ -1409,6 +1479,13 @@ people singing are not playing.
 **Transposition is per hymn**, stored with the id and reset on open — a singer
 who dropped one hymn a tone has said nothing about the next.
 
+**The index rows do not show the tune name** (both shells, 2026-08-24). The
+hymnological tune names (NEW BRITAIN, NICAEA, CWM RHONDDA…) rendered flush
+right on every list row — meaningful to an organist, disorienting words to
+everyone else (maintainer UAT). They stay in the data and in the hymn's own
+credit line ("John Newton, 1779 · NEW BRITAIN 8.6.8.6"), where the byline gives
+them context.
+
 *Deltas:* none of substance. Both shells draw the same five-item bar from the
 same Material paths (`NavIconHymnal` ↔ the `NAV` table), both use the engine's
 split, and sing mode is a fullscreen overlay hosted above the nav in both
@@ -1493,7 +1570,7 @@ left the data pack. See item 7 of §Word study panel.
 
 ## C ABI surface (crates/ffi) — endpoint ↔ feature map
 
-**108 native fns**, plus 6 wasm-only shims in
+**119 native fns** (`plumbline_session_slot_at` the newest), plus 6 wasm-only shims in
 `crates/ffi/src/wasm.rs` that cbindgen excludes by name. Don't trust a count in
 prose — the guarantee is mechanical: `plumbline-bindgen`'s `verify_surface`
 requires every `plumbline_*` symbol in `include/plumbline.h` to appear in
@@ -1762,6 +1839,11 @@ scroll-verse restore.
 
 ## Backup / restore (both shells)
 
+**An everyday setting, not an Advanced one** (2026-08-24): the Back up /
+Restore rows sit in the visible section of Settings in both shells, after the
+style controls — keeping your own data is a basic act, not a power tool. (They
+began inside the Advanced disclosure with the menu rationalization.)
+
 Settings exports the authored home — `tags/ threads/ weaves/ notes/ memory/
 reading/ plans/` + the config as `.config/plumbline/config.json` + a `plumbline-backup.json`
 marker — as a **zip with a shared layout**, so one archive restores across
@@ -1922,6 +2004,30 @@ concept-study mode, no banner, no tap-to-tag, no sweep-coverage navigator
 paint or mark-swept, no today card or plan chip; the Kotlin binding carries
 the endpoints but nothing calls them. (Decision #5's today card + nav-strip
 chip shipped on the web — Android owes them with the rest of the feature.)
+
+## The bookmarks strip (WEB, grown out of the plan chip)
+
+The row above the canon strip — `shell/PlanChip.svelte`, decision #5's
+nav-strip chip — is a **swipeable pager of bookmark tiles** now (maintainer
+ask, 2026-08-24): the running plan's "Day 12 · Gen 30–31" first (exactly the
+chip it was, plus its flag icon and "+{n} more"), then one tile per stored
+seating in `config.slots` — **Last opened** (`other`), **Sunday morning**,
+**Sunday evening**, **Wednesday evening** — each an icon (history / sun /
+crescent / group, Material paths inline like the NAV table) plus label and
+passage. The pager is CSS scroll-snap, one tile per page at 92% basis so the
+next tile peeks — that peek is what says "swipeable" without a row of dots. A
+tap **toasts which bookmark it was** — "Sunday morning bookmark"
+(`bookmarks.going`), the name alone, no "going to…" sentence (maintainer,
+2026-08-24) — and navigates the active pane, verse included; the destination
+shows itself when the pane lands. Only seatings the
+reader has actually been in exist in `config.slots`, so nothing is invented;
+the whole strip stands down in concept-study mode, as the chip always did.
+E2e: `bookmarks.spec.ts`, plus `plans-today.spec.ts` (the plan tile's own
+behaviours, unchanged — a paused plan takes its TILE down, not the strip).
+
+**SHELL DELTA — Android:** no strip, as there was no plan chip — owed with the
+plans batch. The seating slots it would read are already both-shell
+(`config.slots`).
 
 ## Memorization — spaced repetition (Tier 2 #15)
 

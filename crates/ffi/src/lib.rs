@@ -3847,6 +3847,28 @@ pub unsafe extern "C" fn plumbline_session_slot(date: *const c_char, hour: u32) 
     })
 }
 
+/// [`plumbline_session_slot`] to the minute, honouring a configured Sunday
+/// service time. `minute` is minutes since local midnight (0–1439);
+/// `sunday_service` is the config's `sundayService` value, or **-1 when the
+/// reader never set one**, which keeps the before-noon rule. With a time set,
+/// `"sunday-morning"` runs from the service start until 1.5 hours after it —
+/// see `core::session_slot::slot_for_at`. Engine-independent, never null.
+///
+/// # Safety
+/// `date` is null or valid NUL-terminated UTF-8 for the call.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_session_slot_at(
+    date: *const c_char,
+    minute: u32,
+    sunday_service: i32,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let d = opt_str(date).unwrap_or("");
+        let service = u32::try_from(sunday_service).ok();
+        out_string(session_slot::slot_for_at(d, minute, service).token().to_string())
+    })
+}
+
 /// EVERY user-visible string, for one language, in ONE call:
 /// `{"lang","strings":{id: text, …},"languages":[{"code","endonym"}]}`.
 ///

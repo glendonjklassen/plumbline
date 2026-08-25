@@ -194,6 +194,13 @@ internal interface PlumblineNative : Library {
      *  core so the two shells cannot drift on when a service is. */
     fun plumbline_session_slot(date: String?, hour: Int): Pointer?
 
+    /** [plumbline_session_slot] to the minute, honouring a configured Sunday
+     *  service time: `minute` is minutes since local midnight (0–1439),
+     *  `sundayService` the config's value or -1 when the reader never set one
+     *  (which keeps the before-noon rule). With a time set, `sunday-morning`
+     *  runs from the service start until 1.5 hours after it. */
+    fun plumbline_session_slot_at(date: String?, minute: Int, sundayService: Int): Pointer?
+
     // ── every user-visible string, one language at a time ───────────────────
     /** `{lang, strings:{id: text}, languages:[{code, endonym}]}`. The WHOLE
      *  catalogue in one call — a call per string would be thousands of trips

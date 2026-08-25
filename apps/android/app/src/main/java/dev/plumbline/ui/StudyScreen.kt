@@ -265,8 +265,15 @@ fun StudyScreen(
             now.get(java.util.Calendar.MONTH) + 1,
             now.get(java.util.Calendar.DAY_OF_MONTH),
         )
-        runCatching { StudyEngine.SessionSlot(date, now.get(java.util.Calendar.HOUR_OF_DAY)) }
-            .getOrNull() ?: "other"
+        runCatching {
+            StudyEngine.SessionSlotAt(
+                date,
+                now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE),
+                // The configured Sunday service start, or -1 for "never set",
+                // which keeps the before-noon rule in the core.
+                loadedCfg?.sundayService ?: -1,
+            )
+        }.getOrNull() ?: "other"
     }
     // This seating's own position wins; a seating never used falls through to
     // the plain last position, which is what every reader has today.
@@ -394,6 +401,10 @@ fun StudyScreen(
     // key (a config written before they existed) reads as the shipped reader.
     var verseNumbers by remember { mutableStateOf(loadedCfg?.verseNumbers != false) }
     var addedItalics by remember { mutableStateOf(loadedCfg?.addedItalics != false) }
+    // Page-turn mode (off by default) and the Sunday service start (null =
+    // never set, the before-noon rule) — both persisted to the shared config.
+    var pageTurn by remember { mutableStateOf(loadedCfg?.pageTurn == true) }
+    var sundayService by remember { mutableStateOf(loadedCfg?.sundayService) }
     var history by remember { mutableStateOf(loadedCfg?.history ?: emptyList()) }
     val slots = remember { loadedCfg?.slots ?: emptyMap() }
     // The lifetime counter: seeded once by hand, earned thereafter. -1 is
@@ -444,6 +455,7 @@ fun StudyScreen(
             church = church, presentSharesAsNew = presentSharesAsNew, intro = introChoice,
             akjvOverlay = akjvOverlay,
             verseNumbers = verseNumbers, addedItalics = addedItalics,
+            pageTurn = pageTurn, sundayService = sundayService,
         )
         scope.launch { withContext(Dispatchers.Default) { runCatching { StudyConfig.SaveJson(PlumblineJson.encodeToString(cfg)) } } }
     }
@@ -881,6 +893,7 @@ fun StudyScreen(
                 modifier = Modifier.weight(1f), searchHits = searchHits, fontSizeSp = bodySize.toFloat(),
                 sideMargin = sideMargin.toFloat(), lineSpacing = lineSpacing.toFloat(),
                 verseNumbers = verseNumbers, addedItalics = addedItalics,
+                pageTurn = pageTurn,
                 onWordTap = ::onWord,
                 onVerseLongPress = { verse -> actionVerse = verse },
                 onSwipeChapter = { dir -> val (nb, nc) = step(b, c, dir); setPane(nb, nc) },
@@ -1020,7 +1033,9 @@ fun StudyScreen(
                     onMemorize = { memView = MemorizeView.List; dest = Dest.Memorize },
                     onNotes = { showNotes = true },
                     onThreads = { openLibrary(Library.Threads) },
-                    onTags = { openLibrary(Library.Tags) },
+                    // Through the link router, exactly as a `tag:i` row tap —
+                    // one behavior, one place it is defined.
+                    onOpenTag = { at -> onLink("tag:$at") },
                     onWeaves = { showWeaves = true },
                     onConstellation = { showConstellation = true },
                     onChord = { showChord = true },
@@ -1272,6 +1287,8 @@ fun StudyScreen(
                 copyStyle = copyStyle, onCopyStyle = { copyStyle = it },
                 verseNumbers = verseNumbers, onToggleVerseNumbers = { verseNumbers = !verseNumbers },
                 addedItalics = addedItalics, onToggleAddedItalics = { addedItalics = !addedItalics },
+                pageTurn = pageTurn, onTogglePageTurn = { pageTurn = !pageTurn },
+                sundayService = sundayService, onSundayService = { sundayService = it },
                 bundledOn = bundledOn, onToggleBundled = onToggleBundled,
                 akjvAvailable = akjvAvailable,
                 akjvOverlay = akjvOverlay,
@@ -1967,7 +1984,9 @@ private fun ExploreScreen(
     onMemorize: () -> Unit,
     onNotes: () -> Unit,
     onThreads: () -> Unit,
-    onTags: () -> Unit,
+    /** Open ONE tag's detail card — the ordinal is the tag's position in the
+     *  wire's own order, the same index the `tag:i` verb carries. */
+    onOpenTag: (Int) -> Unit,
     onWeaves: () -> Unit,
     onConstellation: () -> Unit,
     onChord: () -> Unit,
@@ -1988,7 +2007,7 @@ private fun ExploreScreen(
     // so nothing here is a new engine call.
     var notes by remember { mutableIntStateOf(0) }
     var threads by remember { mutableIntStateOf(0) }
-    var tagNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    var tagList by remember { mutableStateOf<List<Tag1>>(emptyList()) }
     var weaves by remember { mutableIntStateOf(0) }
     LaunchedEffect(refreshEpoch) {
         withContext(Dispatchers.Default) {
@@ -1998,14 +2017,15 @@ private fun ExploreScreen(
             threads = runCatching {
                 synchronized(engine) { engine.ThreadsJson() }?.let { parseWire<Threads>(it).threads.size }
             }.getOrNull() ?: 0
-            tagNames = runCatching {
-                synchronized(engine) { engine.TagsJson() }?.let { parseWire<Tags>(it).tags.map { t -> t.name } }
+            tagList = runCatching {
+                synchronized(engine) { engine.TagsJson() }?.let { parseWire<Tags>(it).tags }
             }.getOrNull() ?: emptyList()
             weaves = runCatching {
                 synchronized(engine) { engine.WeavesJson() }?.let { parseWire<WeaveLib>(it).weaves.size }
             }.getOrNull() ?: 0
         }
     }
+    val tagNames = tagList.map { it.name }
 
     MapOverlay(t("nav.study"), palette, onClose, actions = barActions) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -2040,10 +2060,64 @@ private fun ExploreScreen(
                     fontSize = 14.sp,
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 10.dp),
                 )
-                ExploreCard(t("tags.browse"), t("tags.browse.desc"), palette) { showTags = false; onTags() }
-                // An action with nothing to act on is DISABLED rather than
-                // hidden: a menu whose items appear as you acquire data is a
-                // menu you cannot learn. The reason it is off is the description.
+                // BROWSING IS THE PAGE (maintainer, 2026-08-24): the tags render
+                // right here — grouped like the core groups the library panel
+                // (headings the moment ANY tag has a category, flat until then,
+                // the uncategorized last) — and a tap opens the tag's detail
+                // card. The index handed up is the tag's position in the wire's
+                // own order, so grouping can never re-aim a tap.
+                if (tagList.isEmpty()) {
+                    Text(
+                        t("tags.empty"),
+                        color = palette.faded, fontSize = 14.sp,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                    )
+                } else {
+                    val indexed = tagList.withIndex().toList()
+                    val anyCat = tagList.any { !it.category.isNullOrBlank() }
+                    val groups: List<Pair<String?, List<IndexedValue<Tag1>>>> = if (!anyCat) {
+                        listOf(null to indexed)
+                    } else {
+                        val cats = indexed.mapNotNull { it.value.category?.trim()?.takeIf(String::isNotEmpty) }
+                            .distinct().sortedBy { it.lowercase() }
+                        val named = cats.map { c -> (c as String?) to indexed.filter { it.value.category?.trim() == c } }
+                        val un = indexed.filter { it.value.category.isNullOrBlank() }
+                        if (un.isEmpty()) named else named + listOf((t("tags.uncategorized") as String?) to un)
+                    }
+                    for ((heading, rows) in groups) {
+                        if (heading != null) {
+                            Text(
+                                heading.uppercase(),
+                                color = palette.sectionGold, fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp,
+                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 2.dp),
+                            )
+                        }
+                        for ((index, tag) in rows) {
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .clickable { showTags = false; onOpenTag(index) }
+                                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    tag.name, color = palette.gold, fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    Strings.plural("panel.members.one", "panel.members.other", tag.members.size),
+                                    color = palette.faded, fontSize = 12.sp,
+                                )
+                            }
+                            HorizontalDivider(color = palette.rule, modifier = Modifier.padding(horizontal = 20.dp))
+                        }
+                    }
+                }
+                // The organization actions ride AFTER the list — housekeeping,
+                // not the front door. An action with nothing to act on is
+                // DISABLED rather than hidden: a menu whose items appear as you
+                // acquire data is a menu you cannot learn. The reason it is off
+                // is the description.
                 ExploreCard(
                     t("tags.rename"),
                     if (tagNames.size < 1) t("tags.rename.needs") else t("tags.rename.desc"),
@@ -2416,6 +2490,11 @@ private fun SettingsDialog(
     onToggleVerseNumbers: () -> Unit,
     addedItalics: Boolean,
     onToggleAddedItalics: () -> Unit,
+    pageTurn: Boolean,
+    onTogglePageTurn: () -> Unit,
+    /** Sunday service start in minutes since local midnight; null = never set. */
+    sundayService: Int?,
+    onSundayService: (Int?) -> Unit,
     akjvAvailable: Boolean,
     akjvOverlay: Boolean,
     onToggleAkjv: () -> Unit,
@@ -2651,6 +2730,43 @@ private fun SettingsDialog(
                     onValueChangeFinished = { spacingDraft.commit { v -> onLineSpacing(v.toDouble()) } },
                     valueRange = 1.2f..2.0f,
                 )
+                SettingToggle(
+                    t("settings.pageTurn"),
+                    t("settings.pageTurnDesc"),
+                    pageTurn, palette, onTogglePageTurn,
+                )
+                // The Sunday service start — it redraws the Sunday seating as
+                // the window from this time to 1.5h after (core::session_slot).
+                // A real time picker, not a text field; ✕ clears back to the
+                // before-noon rule.
+                run {
+                    val ctx = LocalContext.current
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            val cur = sundayService ?: (10 * 60)
+                            android.app.TimePickerDialog(
+                                ctx,
+                                { _, h, m -> onSundayService(h * 60 + m) },
+                                cur / 60, cur % 60,
+                                android.text.format.DateFormat.is24HourFormat(ctx),
+                            ).show()
+                        }.padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(t("settings.sundayService"), color = palette.ink, fontSize = 15.sp)
+                            Text(t("settings.sundayServiceDesc"), color = palette.faded, fontSize = 12.sp)
+                        }
+                        Text(
+                            sundayService?.let { String.format(java.util.Locale.US, "%d:%02d", it / 60, it % 60) }
+                                ?: t("settings.sundayServiceUnset"),
+                            color = palette.gold,
+                        )
+                        if (sundayService != null) {
+                            TextButton(onClick = { onSundayService(null) }) { Text("✕", color = palette.faded) }
+                        }
+                    }
+                }
                 // One tap back to the shipped style — the escape from a sizing
                 // or theming spiral, at the foot of the knobs it undoes.
                 Row(
@@ -2664,6 +2780,10 @@ private fun SettingsDialog(
                     )
                     TextButton(onClick = onDefaultStyle) { Text(t("settings.defaultStyle")) }
                 }
+                HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
+                // Backup lives with the everyday settings, not behind Advanced:
+                // keeping your own data is a basic act (maintainer, 2026-08-24).
+                BackupRestoreRows(palette)
                 HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
                 // ADVANCED, folded shut (web parity: the <details> disclosure).
                 // Analysis tiers, copy format, data — the rows most readers
@@ -2739,8 +2859,6 @@ private fun SettingsDialog(
                 // The welcome's one home is the ≡ utilities now (it shows for
                 // every reader there, established believers included).
                 SettingToggle(t("settings.bundled"), t("settings.bundledDesc"), bundledOn, palette, onToggleBundled)
-                HorizontalDivider(color = palette.rule, modifier = Modifier.padding(vertical = 8.dp))
-                BackupRestoreRows(palette)
                 } // advanced
             }
         },

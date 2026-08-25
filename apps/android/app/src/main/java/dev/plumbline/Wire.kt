@@ -231,6 +231,8 @@ data class Tags(val tags: List<Tag1> = emptyList())
 data class Tag1(
     val name: String,
     val created: String = "",
+    /** Grouping heading for the tag lists (additive); null when the tag has none. */
+    val category: String? = null,
     val members: List<TagMember> = emptyList(),
 )
 
@@ -486,6 +488,12 @@ data class ConfigState(
     val bibleReadsCredited: Boolean = false,
     // Frozen additive field shared with GTK's config.json — must round-trip.
     val versePerLine: Boolean = false,
+    // Page-turn mode (additive): side gutters that page the text on tap, for a
+    // page-turner remote. Absent → off.
+    val pageTurn: Boolean = false,
+    // Sunday service start, minutes since local midnight (additive). Absent =
+    // never set — the Sunday seating keeps its before-noon rule.
+    val sundayService: Int? = null,
     // The two reader-typography switches (additive). Defaulted TRUE, not false:
     // an absent key is an engine or a config from before they existed, and
     // reading that as "off" would strip a chapter of its numbers.

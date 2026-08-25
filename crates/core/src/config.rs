@@ -122,8 +122,13 @@ pub struct Config {
     /// credits exactly one read however many times the hub is opened
     /// afterwards.
     pub bible_reads_credited: bool,
-    /// Verse-per-line reading mode (each verse starts a fresh line).
+    /// Verse-per-line reading mode (each verse starts a new line).
     pub verse_per_line: bool,
+    /// Page-turn mode: the reader keeps a tap margin on either side of the
+    /// text, and a tap there scrolls most of a screen — page back on the
+    /// left, forward on the right — so a page-turner remote can drive the
+    /// page hands-free.
+    pub page_turn: bool,
     /// Paint the small leading verse numbers. Off is "just the text" — the
     /// chapter reads as prose, the way a printed reader's edition sets it.
     /// A LAYOUT input, not a paint flag: see `plumbline_layout::LayoutConfig`.
@@ -171,6 +176,12 @@ pub struct Config {
     /// The reader's home church — shown in the welcome when a shared link
     /// carried one, and attached to the links this reader shares.
     pub church: Church,
+    /// When the Sunday service starts, in minutes since local midnight.
+    /// Set, it redraws the `sunday-morning` seating as the window from this
+    /// time until 1.5 hours after ([`crate::session_slot::slot_for_at`]);
+    /// unset keeps the original before-noon rule. Never sent anywhere — it
+    /// only decides which bookmark a Sunday open resumes.
+    pub sunday_service: Option<u32>,
     /// Whether a link shared from PRESENT opens for a new believer: that
     /// screen is what you show someone face to face, so the person receiving
     /// it is usually meeting the Bible, not setting up a study tool. On by
@@ -234,6 +245,7 @@ impl Default for Config {
             bible_reads: -1,
             bible_reads_credited: false,
             verse_per_line: false,
+            page_turn: false,
             verse_numbers: true,
             added_italics: true,
             theme: ThemeChoice::default(),
@@ -247,6 +259,7 @@ impl Default for Config {
             human_analysis: false,
             machine_analysis: false,
             church: Church::default(),
+            sunday_service: None,
             present_shares_as_new: true,
             akjv_overlay: false,
             localized_lexicon_off: false,
@@ -289,6 +302,10 @@ struct ConfigWire {
     /// look like a change to anything diffing or syncing it.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     slots: BTreeMap<String, PaneWire>,
+    /// Sunday service start, minutes since local midnight (additive); absent =
+    /// never set, which keeps the before-noon rule for the Sunday seating.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sunday_service: Option<u32>,
     /// Lifetime reads (additive). Absent → never said, which is -1 and NOT the
     /// same as a reader who answered "none".
     #[serde(default = "default_bible_reads", skip_serializing_if = "is_unset_reads")]
@@ -297,6 +314,10 @@ struct ConfigWire {
     bible_reads_credited: bool,
     #[serde(default)]
     verse_per_line: bool,
+    /// Page-turn mode (additive); absent in an older file → off, and off is
+    /// not written, so a reader who never used it keeps their file unchanged.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    page_turn: bool,
     /// The two reader-typography switches (additive). `default_true` rather
     /// than serde's `bool` default: absent in an older file has to mean the
     /// numbers and italics that reader has always had, not their sudden
@@ -486,6 +507,7 @@ impl Config {
                 })
                 .collect(),
             verse_per_line: w.verse_per_line,
+            page_turn: w.page_turn,
             verse_numbers: w.verse_numbers,
             added_italics: w.added_italics,
             theme: ThemeChoice::parse(&w.theme).unwrap_or_default(),
@@ -538,6 +560,9 @@ impl Config {
             // normal mode), so nothing validates it away here.
             concept_study: w.concept_study.map(|s| s.trim().to_string()).unwrap_or_default(),
             gospel_thread: w.gospel_thread.map(|s| s.trim().to_string()).unwrap_or_default(),
+            // A minute outside the day is a corrupt or hand-edited value; the
+            // honest reading is "never set", not a slot pinned to nonsense.
+            sunday_service: w.sunday_service.filter(|m| *m < 24 * 60),
             church: w
                 .church
                 .map(|c| Church {
@@ -584,6 +609,7 @@ impl Config {
                 })
                 .collect(),
             verse_per_line: self.verse_per_line,
+            page_turn: self.page_turn,
             verse_numbers: self.verse_numbers,
             added_italics: self.added_italics,
             theme: self.theme.token().to_string(),
@@ -620,6 +646,7 @@ impl Config {
                 url: self.church.url.clone(),
                 extra: Map::new(),
             }),
+            sunday_service: self.sunday_service,
             extra: Map::new(),
         }
     }
@@ -770,6 +797,9 @@ mod tests {
                 PaneRef { book: "Ps".into(), chapter: 23, verse: Some(4), lang: String::new() },
             )]),
             verse_per_line: true,
+            // ON, so the round-trip covers the written key, not only the
+            // default that is skipped on the wire.
+            page_turn: true,
             // Both OFF here: these default to true, so a round-trip that left
             // them at the default would pass against a wire field that was
             // never written or never read.
@@ -802,6 +832,7 @@ mod tests {
                 info: "Sundays 10am · 12 Long Street".into(),
                 url: "https://example.org".into(),
             },
+            sunday_service: Some(10 * 60),
         };
         save_to(&path, &cfg).unwrap();
 
@@ -1068,6 +1099,26 @@ mod tests {
 }
 "#
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn page_turn_and_sunday_service_round_trip_and_stay_off_the_default_file() {
+        let dir = scratch("pageturn");
+        let path = dir.join("config.json");
+        let cfg = Config { page_turn: true, sunday_service: Some(10 * 60 + 30), ..Config::default() };
+        save_to(&path, &cfg).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("\"pageTurn\": true"));
+        assert!(text.contains("\"sundayService\": 630"));
+        let (back, _) = load_from(&path);
+        assert!(back.page_turn);
+        assert_eq!(back.sunday_service, Some(630));
+
+        // A minute outside the day reads as never-set, not a pinned nonsense
+        // window. (Defaults write neither key — the golden test above holds.)
+        std::fs::write(&path, r#"{"sundayService": 4000}"#).unwrap();
+        assert_eq!(load_from(&path).0.sunday_service, None);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

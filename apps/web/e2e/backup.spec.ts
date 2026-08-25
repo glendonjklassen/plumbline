@@ -83,8 +83,8 @@ test("a backup that cannot be written tells the reader instead of doing nothing"
   await page.evaluate(() => ((window as any).__plumbline.showSettings = true));
   const settings = page.locator('[data-surface="settings"]');
   await expect(settings).toBeVisible();
-  // Backup lives behind the Advanced disclosure now.
-  await settings.locator("details.advanced > summary").click();
+  // Backup sits with the everyday settings — no Advanced disclosure to open
+  // (it moved out 2026-08-24: keeping your own data is a basic act).
   const backUp = settings.getByRole("button", { name: "Back up (.zip)" });
 
   // ── the export refuses: the first await in backup() ──────────────────────

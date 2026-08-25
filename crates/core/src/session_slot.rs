@@ -21,6 +21,11 @@
 //! Wednesday MORNING is deliberately `other`: the slot exists for the midweek
 //! meeting, and a Wednesday morning is a weekday morning like any other.
 //!
+//! A reader can also SAY when their Sunday service starts
+//! ([`crate::config::Config::sunday_service`]). With that set, `sunday-morning`
+//! stops meaning "before noon" and starts meaning AT CHURCH: from the service
+//! start until [`SERVICE_WINDOW_MIN`] after it — see [`slot_for_at`].
+//!
 //! The shells pass their own LOCAL date and hour. The core has no clock and no
 //! timezone, and a slot computed in UTC would put a Sunday-evening service in
 //! Monday for half the world.
@@ -79,9 +84,34 @@ pub fn weekday(date: &str) -> Option<u8> {
 
 /// The slot a local date and hour fall in. `hour` is 0–23 local time.
 pub fn slot_for(date: &str, hour: u32) -> SessionSlot {
+    slot_for_at(date, hour * 60, None)
+}
+
+/// How long a Sunday service window lasts, in minutes: the start time the
+/// reader set, plus an hour and a half.
+pub const SERVICE_WINDOW_MIN: u32 = 90;
+
+/// The slot a local date and minute-of-day fall in, honouring a configured
+/// Sunday service time. `minute` is 0–1439 local; `sunday_service` is the
+/// service start in minutes since local midnight, or `None` when the reader
+/// never set one.
+///
+/// With a service time set, `sunday-morning` means AT CHURCH: from the service
+/// start until [`SERVICE_WINDOW_MIN`] after it, wherever in the day that lands
+/// (an afternoon congregation is still the Sunday service). The rest of Sunday
+/// keeps the noon split — evening from 12:00 — and the hours before the
+/// service are ordinary reading, so Saturday night's study is what an early
+/// Sunday riser resumes.
+pub fn slot_for_at(date: &str, minute: u32, sunday_service: Option<u32>) -> SessionSlot {
+    let hour = minute / 60;
     match weekday(date) {
-        Some(0) if hour < 12 => SessionSlot::SundayMorning,
-        Some(0) => SessionSlot::SundayEvening,
+        Some(0) => match sunday_service {
+            Some(start) if minute >= start && minute < start + SERVICE_WINDOW_MIN => SessionSlot::SundayMorning,
+            Some(_) if hour >= 12 => SessionSlot::SundayEvening,
+            Some(_) => SessionSlot::Other,
+            None if hour < 12 => SessionSlot::SundayMorning,
+            None => SessionSlot::SundayEvening,
+        },
         Some(3) if hour >= 17 => SessionSlot::WednesdayEvening,
         // An unparseable date is the everyday slot, not a panic: a shell with a
         // broken clock should still open a Bible.
@@ -131,6 +161,46 @@ mod tests {
                 assert_eq!(slot_for(date, hour), SessionSlot::Other, "{date} {hour}h");
             }
         }
+    }
+
+    #[test]
+    fn a_service_time_makes_sunday_morning_mean_at_church() {
+        let sunday = "2026-08-16";
+        // Church at 10:30.
+        let at = |m: u32| slot_for_at(sunday, m, Some(10 * 60 + 30));
+        // Before the service: ordinary reading, not the church seating —
+        // Saturday night's study is what an early riser resumes.
+        assert_eq!(at(8 * 60), SessionSlot::Other);
+        assert_eq!(at(10 * 60 + 29), SessionSlot::Other);
+        // The window: start, through 1.5 hours.
+        assert_eq!(at(10 * 60 + 30), SessionSlot::SundayMorning);
+        assert_eq!(at(11 * 60 + 59), SessionSlot::SundayMorning);
+        // The window ends at start + 90 exactly; noon-side minutes after it
+        // fall to the evening slot as before.
+        assert_eq!(at(12 * 60), SessionSlot::SundayEvening, "12:00 is past the 10:30+1.5h window");
+        assert_eq!(at(19 * 60), SessionSlot::SundayEvening);
+    }
+
+    #[test]
+    fn an_afternoon_service_still_wins_its_window() {
+        // A 1pm congregation: the window outranks the noon split.
+        let at = |m: u32| slot_for_at("2026-08-16", m, Some(13 * 60));
+        assert_eq!(at(12 * 60 + 30), SessionSlot::SundayEvening);
+        assert_eq!(at(13 * 60), SessionSlot::SundayMorning);
+        assert_eq!(at(14 * 60 + 29), SessionSlot::SundayMorning);
+        assert_eq!(at(14 * 60 + 30), SessionSlot::SundayEvening);
+    }
+
+    #[test]
+    fn a_service_time_changes_nothing_off_sunday() {
+        assert_eq!(slot_for_at("2026-08-19", 10 * 60 + 45, Some(10 * 60 + 30)), SessionSlot::Other, "a Wednesday");
+        assert_eq!(slot_for_at("2026-08-19", 18 * 60, Some(10 * 60 + 30)), SessionSlot::WednesdayEvening);
+    }
+
+    #[test]
+    fn no_service_time_keeps_the_noon_rule() {
+        assert_eq!(slot_for_at("2026-08-16", 11 * 60, None), SessionSlot::SundayMorning);
+        assert_eq!(slot_for_at("2026-08-16", 12 * 60, None), SessionSlot::SundayEvening);
     }
 
     #[test]

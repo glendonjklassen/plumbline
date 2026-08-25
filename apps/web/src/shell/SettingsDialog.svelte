@@ -54,6 +54,27 @@
     /* no session storage — then nothing was carried across either */
   }
 
+  /** The configured Sunday service start as an `<input type="time">` value —
+   *  "HH:MM", or "" when never set (the before-noon rule stands). */
+  function serviceTimeValue(): string {
+    const m = s.config.sundayService;
+    if (typeof m !== "number") return "";
+    return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  }
+
+  function setServiceTime(e: Event): void {
+    const v = (e.currentTarget as HTMLInputElement).value;
+    if (!v) {
+      // Cleared: back to the before-noon rule. undefined drops the key from
+      // the snapshot, so the file loses it rather than storing a null.
+      s.config.sundayService = undefined;
+    } else {
+      const [h, m] = v.split(":").map(Number);
+      s.config.sundayService = h * 60 + m;
+    }
+    s.saveConfig();
+  }
+
   async function backup(): Promise<void> {
     const name = `plumbline-backup-${nowStamp().slice(0, 10)}.zip`;
     try {
@@ -755,10 +776,43 @@
           }}
         />
       </label>
+      <label class="toggle">
+        <span class="body">
+          <span class="name">{t("settings.pageTurn")}</span>
+          <span class="desc">{t("settings.pageTurnDesc")}</span>
+        </span>
+        <input
+          type="checkbox"
+          checked={!!s.config.pageTurn}
+          onchange={() => {
+            s.config.pageTurn = !s.config.pageTurn;
+            s.saveConfig();
+          }}
+        />
+      </label>
+      <label class="toggle">
+        <span class="body">
+          <span class="name">{t("settings.sundayService")}</span>
+          <span class="desc">{t("settings.sundayServiceDesc")}</span>
+        </span>
+        <input type="time" class="time" value={serviceTimeValue()} onchange={setServiceTime} />
+      </label>
       <div class="row">
         <button class="action" disabled={fontBusy} onclick={() => void defaultStyle()}>{t("settings.defaultStyle")}</button>
       </div>
       <p class="desc-note">{t("settings.defaultStyleDesc")}</p>
+      <hr />
+      <!-- Backup lives with the everyday settings, not behind Advanced: keeping
+           your own data is a basic act, not a power tool (maintainer, 2026-08-24). -->
+      <p class="label">{t("settings.data")}</p>
+      <div class="row">
+        <button class="action" onclick={backup}>{t("settings.backup")}</button>
+        <label class="action">
+          {t("settings.restore")}
+          <input type="file" accept=".zip,application/zip" onchange={restore} hidden />
+        </label>
+      </div>
+      <p class="desc-note">{t("settings.dataDesc")}</p>
       <hr />
       <details class="advanced">
         <summary>{t("settings.advanced")}</summary>
@@ -969,16 +1023,6 @@
           <button class="off-go" onclick={downloadEverything}>{t("settings.offlineGo")}</button>
         {/if}
       </div>
-      <hr />
-      <p class="label">{t("settings.data")}</p>
-      <div class="row">
-        <button class="action" onclick={backup}>{t("settings.backup")}</button>
-        <label class="action">
-          {t("settings.restore")}
-          <input type="file" accept=".zip,application/zip" onchange={restore} hidden />
-        </label>
-      </div>
-      <p class="desc-note">{t("settings.dataDesc")}</p>
       <hr />
       <p class="label">{t("settings.report")}</p>
       <!-- ALWAYS here, whether or not this build is measuring itself: the app
@@ -1376,6 +1420,18 @@
     accent-color: var(--gold, #9e7d38);
     width: 17px;
     height: 17px;
+  }
+  /* The time input is text-shaped, not a 17px checkbox square. */
+  .toggle input.time {
+    width: auto;
+    height: auto;
+    font: inherit;
+    font-size: calc(14px * var(--uiScale, 1));
+    color: var(--ink, #211f1a);
+    background: var(--popup, #f2eee6);
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 6px;
+    padding: 4px 6px;
   }
   hr {
     border: none;
