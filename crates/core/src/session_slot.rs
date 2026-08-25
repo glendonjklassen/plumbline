@@ -166,7 +166,8 @@ mod tests {
     #[test]
     fn a_service_time_makes_sunday_morning_mean_at_church() {
         let sunday = "2026-08-16";
-        let at = |m: u32| slot_for_at(sunday, m, Some(10 * 60 + 30)); // church at 10:30
+        // Church at 10:30.
+        let at = |m: u32| slot_for_at(sunday, m, Some(10 * 60 + 30));
         // Before the service: ordinary reading, not the church seating —
         // Saturday night's study is what an early riser resumes.
         assert_eq!(at(8 * 60), SessionSlot::Other);
