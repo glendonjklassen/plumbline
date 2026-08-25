@@ -71,7 +71,9 @@ test("a Review-due shortcut cold-starts into the drill, and consumes its query",
   // The empty-queue line is the review view's own copy (memorize.nothingDue) —
   // a fresh profile has no cards, so reaching it proves the VIEW, not just the
   // screen. The state check underneath pins where the app thinks it is.
-  await expect(page.getByText("Nothing due — well kept.")).toBeVisible({ timeout: 90_000 });
+  // Exact, because "Nothing due" is also the short form's whole text and the
+  // body's opening words — substring matching would trip strict mode.
+  await expect(page.getByText("Nothing due.", { exact: true })).toBeVisible({ timeout: 90_000 });
   expect(await shellState(page)).toEqual({ screen: "memorize", view: "review", search: "" });
 });
 
