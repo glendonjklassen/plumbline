@@ -132,10 +132,24 @@
         // Every string role, not a hand-picked five: the writer is
         // `applyTheme()`, which sets one custom property per string field, and
         // reproducing its subset here would be a second list to keep in step.
-        if (stored)
+        if (stored) {
           for (var role in stored)
             if (typeof stored[role] === "string")
               document.documentElement.style.setProperty("--" + role, stored[role]);
+          // The status bar too, and BOTH tags (see session.applyTheme) — but
+          // ONLY for a theme the reader chose by hand. For "follow the device"
+          // the media-scoped pair above is already the right pre-script answer
+          // and last session's paper may not be (the phone's scheme can change
+          // between sessions); for an explicit theme the cached paper is right
+          // whatever the device says, and the pair is what is stale — a
+          // dark-mode phone under a light reader theme otherwise boots with
+          // light icons over cream until the engine's palette lands.
+          var choice = localStorage.getItem("plumbline:themeChoice");
+          if (typeof stored.paper === "string" && choice && choice !== "system") {
+            var metas = document.querySelectorAll('meta[name="theme-color"]');
+            for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", stored.paper);
+          }
+        }
       } catch (e) {
         /* storage blocked or unparseable: the defaults above still paint */
       }

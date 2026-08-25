@@ -1544,9 +1544,17 @@ export class Session {
     const root = document.documentElement;
     for (const [k, v] of Object.entries(this.palette))
       if (typeof v === "string") root.style.setProperty(`--${k}`, v);
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", this.palette.paper ?? "#fcf9f4");
+    // EVERY theme-color tag, not the first. index.html carries a light-scoped
+    // and a dark-scoped pair so the chrome is right before any script runs; a
+    // UA takes the first tag whose media MATCHES, so on a dark-mode phone the
+    // SECOND is the live one — and rewriting only the first left it at
+    // Theme::Dark's paper under a light reader theme. Chrome then chose light
+    // status-bar icons for that stale dark value and drew them over the cream
+    // the page paints beneath the (transparent) bar: clock and battery washed
+    // out (maintainer, 2026-08-25). Both carry the resolved paper — the media
+    // split has done its one job, the pre-script paint, by the time this runs.
+    for (const m of document.querySelectorAll('meta[name="theme-color"]'))
+      m.setAttribute("content", this.palette.paper ?? "#fcf9f4");
     // The boot snapshot paints before the engine exists — it needs last
     // session's palette without asking the worker.
     try {

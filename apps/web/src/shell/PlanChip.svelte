@@ -1,12 +1,16 @@
 <script lang="ts">
-  // The nav-strip BOOKMARKS pager, grown out of the plan chip (docs/READING-PLANS.md
+  // The nav-strip BOOKMARKS row, grown out of the plan chip (docs/READING-PLANS.md
   // decision #5; bookmarks per maintainer ask, 2026-08-24). One row above the
-  // canon strip, swipeable between tiles: the running plan's "Day 12 ·
-  // Gen 30–31" first, then every stored seating bookmark — Last opened, Sunday
-  // morning, Sunday evening, Wednesday evening (`config.slots`,
-  // core::session_slot). Each tile carries an icon naming its kind; a tap
-  // toasts which bookmark it is and where it goes, then navigates the active
-  // pane there.
+  // canon strip of round ICON chips: a flag per running plan, then one per
+  // stored seating — Last opened, Sunday morning, Sunday evening, Wednesday
+  // evening (`config.slots`, core::session_slot).
+  //
+  // NO TEXT on the chips (maintainer, 2026-08-25). The words ride each chip's
+  // aria-label/title and the toast a tap raises ("Sunday morning bookmark");
+  // the icon is the whole face. Several are visible at once — centred while
+  // they fit, left-anchored and scrolling the moment they don't, so a chip cut
+  // at the edge is what says "more". (It began as a one-tile-per-page pager
+  // with label text; one at a time hid that there were others.)
   //
   // NOT shown in concept-study mode — any of it: the tracker is suspended
   // there, so a chip inviting schedule reading would promise credit the mode
@@ -38,7 +42,6 @@
     // number moving is what says the day's worth was banked.
     return (held = todayPlans(q));
   });
-  const lead = $derived(plans[0] ?? null);
 
   // Material icon paths (24×24), matching the NAV table's idiom.
   const ICONS: Record<string, string> = {
@@ -54,7 +57,7 @@
     // group — the midweek meeting
     "wednesday-evening":
       "M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z",
-    // flag — the running reading plan
+    // flag — a running reading plan
     plan: "M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z",
   };
 
@@ -72,6 +75,24 @@
     const name = s.q("toc")?.books?.find((b: any) => b.id === book)?.name ?? book;
     return verse && verse > 1 ? `${name} ${chapter}:${verse}` : `${name} ${chapter}`;
   }
+
+  /** One chip per running schedule — where "+{n} more" used to hang off the
+   *  first one — each carrying its own day label and its own first-unread
+   *  target. The chip is icon-only, so the label is what a screen reader
+   *  hears and what a desktop tooltip shows. */
+  const planTiles = $derived(
+    plans.flatMap((p: any, i: number) => {
+      const target = firstUnread(p);
+      if (!target) return [];
+      return [
+        {
+          key: String(p.id ?? i),
+          label: t("plans.chip", { day: p.day, chapters: chapterSpan(remaining(p)) }),
+          target,
+        },
+      ];
+    }),
+  );
 
   const slotTiles = $derived.by(() => {
     const slots = (s.config.slots ?? {}) as Record<string, any>;
@@ -91,113 +112,93 @@
     });
   });
 
-  function goPlan(): void {
-    const target = lead && firstUnread(lead);
-    if (!target) return;
+  function goPlan(tile: (typeof planTiles)[number]): void {
     s.showToast(t("bookmarks.going", { name: t("bookmarks.plan") }));
-    s.navigate(s.activePane, target.book, target.chapter);
+    s.navigate(s.activePane, tile.target.book, tile.target.chapter);
   }
 
   function goSlot(tile: (typeof slotTiles)[number]): void {
-    // The toast names the BOOKMARK, nothing else — the destination is on
-    // screen the moment the pane lands there (maintainer, 2026-08-24: a
-    // "going to…" sentence was noise).
+    // The toast names the BOOKMARK, nothing else — with no words on the chip
+    // it is the confirmation of which one was pressed, and the destination is
+    // on screen the moment the pane lands there.
     s.showToast(t("bookmarks.going", { name: tile.label }));
     s.navigate(s.activePane, tile.book, tile.chapter, tile.verse);
   }
 </script>
 
-{#if (lead || slotTiles.length > 0) && !s.inConceptStudy}
+{#if (planTiles.length > 0 || slotTiles.length > 0) && !s.inConceptStudy}
   <div class="plan-chip-row">
     <div class="tiles">
-      {#if lead}
-        <div class="tile">
-          <button class="plan-chip" onclick={goPlan} title={t("plans.chipGo")}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.plan} /></svg>
-            {t("plans.chip", { day: lead.day, chapters: chapterSpan(remaining(lead)) })}
-          </button>
-          {#if plans.length > 1}
-            <button class="plan-chip more" onclick={() => (s.screen = "plans")}>
-              {t("plans.chipMore", { n: plans.length - 1 })}
-            </button>
-          {/if}
-        </div>
-      {/if}
+      {#each planTiles as p (p.key)}
+        <button class="plan-chip" aria-label={p.label} title={p.label} onclick={() => goPlan(p)}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.plan} /></svg>
+        </button>
+      {/each}
       {#each slotTiles as tile (tile.token)}
-        <div class="tile">
-          <button class="bm-tile" data-slot={tile.token} onclick={() => goSlot(tile)}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS[tile.token]} /></svg>
-            {tile.label} · {tile.passage}
-          </button>
-        </div>
+        <button
+          class="bm-tile"
+          data-slot={tile.token}
+          aria-label="{tile.label} · {tile.passage}"
+          title="{tile.label} · {tile.passage}"
+          onclick={() => goSlot(tile)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS[tile.token]} /></svg>
+        </button>
       {/each}
     </div>
   </div>
 {/if}
 
 <style>
-  /* A quiet pill row just above the canon strip: present, not campaigning —
-     the reading-map philosophy (an invitation, not a debt). */
+  /* A quiet row of round chips just above the canon strip: present, not
+     campaigning — the reading-map philosophy (an invitation, not a debt). */
   .plan-chip-row {
-    padding: 4px 8px;
+    padding: 5px 8px;
     background: var(--paneNavBg, #efeae1);
     border-top: 1px solid var(--rule, #d8cba8);
   }
-  /* The pager: one tile per page, swipe (or trackpad-scroll) between them.
-     92% basis leaves the next tile peeking, which is what says "swipeable"
-     without spending a row of dots. */
   .tiles {
     display: flex;
+    gap: 10px;
     overflow-x: auto;
-    scroll-snap-type: x mandatory;
     scrollbar-width: none;
-    gap: 6px;
+    padding: 0 2px;
   }
   .tiles::-webkit-scrollbar {
     display: none;
   }
-  .tile {
-    flex: 0 0 92%;
-    scroll-snap-align: center;
-    display: flex;
-    justify-content: center;
-    gap: 6px;
-    min-width: 0;
+  /* Centred while they fit, left-anchored the moment they don't: auto margins
+     on the two ends absorb the free space, and under overflow there is none to
+     absorb — which is what keeps the first chip reachable by scrolling. */
+  .tiles > :first-child {
+    margin-left: auto;
   }
-  .tile:only-child {
-    flex-basis: 100%;
+  .tiles > :last-child {
+    margin-right: auto;
   }
   .plan-chip,
   .bm-tile {
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 12px;
+    flex: 0 0 auto;
+    /* The 44px touch floor (app.css), scaled with the chrome. */
+    width: calc(44px * var(--uiScale, 1));
+    height: calc(44px * var(--uiScale, 1));
+    padding: 0;
+    border-radius: 50%;
     border: 1px solid var(--rule, #d8cba8);
-    border-radius: 999px;
     background: var(--paper, #fcf9f4);
     color: var(--gold, #9e7d38);
-    font-size: calc(13px * var(--uiScale, 1));
-    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   .plan-chip svg,
   .bm-tile svg {
-    width: calc(14px * var(--uiScale, 1));
-    height: calc(14px * var(--uiScale, 1));
-    flex: 0 0 auto;
+    width: calc(22px * var(--uiScale, 1));
+    height: calc(22px * var(--uiScale, 1));
     fill: currentColor;
   }
   .plan-chip:hover,
   .bm-tile:hover {
     border-color: var(--gold, #9e7d38);
-  }
-  .plan-chip.more {
-    color: var(--faded, #8a8276);
-    font-weight: 400;
-    flex: 0 0 auto;
   }
 </style>
