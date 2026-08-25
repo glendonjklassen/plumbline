@@ -161,6 +161,18 @@ compounds it) — sizes and line heights up roughly 2 px / 2.5 sp over the body.
 | GLOSS_SAMPLE | 80 | verses sampled for the english gloss (`crates/ffi/src/lib.rs`) |
 | LINK_INSET / YINSET | 14 / 5 px | connector gutter inset / clamp margin (`ConnectorsOverlay.svelte`) |
 
+**The status bar follows the reader's theme** (fixed 2026-08-25). `index.html`
+ships TWO media-scoped `theme-color` tags — the pre-script paint, one per
+device scheme — and `session.applyTheme()` rewrites EVERY one of them to the
+resolved palette's `paper` (the inline boot script does the same from the
+cached palette). It rewrote only the first, the light-scoped tag, and a UA takes
+the first whose media MATCHES: a dark-mode phone under a light reader theme kept
+Theme::Dark's paper in its live tag, Chrome chose light status-bar icons for it
+and drew them over the cream the page paints under its transparent bar — clock
+and battery washed out (a several-release-old report). E2e:
+`theme-color.spec.ts` (dark device, light theme, both tags equal `paper`);
+`manifest.spec.ts` still pins the pre-script pair.
+
 Palette: the one source is `plumbline_core::theme::palette(theme)`, served as
 `plumbline_theme_palette_json` — **eighteen concrete themes** plus follow-system:
 the built-ins (light / dark / night), the named editor presets (Solarized
@@ -2008,18 +2020,21 @@ chip shipped on the web — Android owes them with the rest of the feature.)
 ## The bookmarks strip (WEB, grown out of the plan chip)
 
 The row above the canon strip — `shell/PlanChip.svelte`, decision #5's
-nav-strip chip — is a **swipeable pager of bookmark tiles** now (maintainer
-ask, 2026-08-24): the running plan's "Day 12 · Gen 30–31" first (exactly the
-chip it was, plus its flag icon and "+{n} more"), then one tile per stored
-seating in `config.slots` — **Last opened** (`other`), **Sunday morning**,
-**Sunday evening**, **Wednesday evening** — each an icon (history / sun /
-crescent / group, Material paths inline like the NAV table) plus label and
-passage. The pager is CSS scroll-snap, one tile per page at 92% basis so the
-next tile peeks — that peek is what says "swipeable" without a row of dots. A
-tap **toasts which bookmark it was** — "Sunday morning bookmark"
-(`bookmarks.going`), the name alone, no "going to…" sentence (maintainer,
-2026-08-24) — and navigates the active pane, verse included; the destination
-shows itself when the pane lands. Only seatings the
+nav-strip chip — is a **row of round icon chips** now, one per bookmark
+(maintainer ask, 2026-08-24; icon-only 2026-08-25): a flag per running plan,
+then one per stored seating in `config.slots` — **Last opened** (`other`,
+history icon), **Sunday morning** (sun), **Sunday evening** (crescent),
+**Wednesday evening** (group) — Material paths inline like the NAV table.
+**NO TEXT on the chips**: the words ("Sunday morning · Psalms 23:4", "Day 12 ·
+Gen 30–31") ride each chip's `aria-label`/`title`, and a tap **toasts which
+bookmark it was** — "Sunday morning bookmark" (`bookmarks.going`), the name
+alone, no "going to…" sentence — then navigates the active pane, verse
+included; the destination shows itself when the pane lands. Several chips are
+visible at once, centred while they fit and left-anchored scrolling the moment
+they don't (auto margins on the row's two ends), so a chip cut at the edge is
+what says "more". It began as a one-tile-per-page scroll-snap pager with label
+text, which hid that there was more than one ("you see one at a time",
+maintainer). "+{n} more" is gone: every running plan has its own flag. Only seatings the
 reader has actually been in exist in `config.slots`, so nothing is invented;
 the whole strip stands down in concept-study mode, as the chip always did.
 E2e: `bookmarks.spec.ts`, plus `plans-today.spec.ts` (the plan tile's own

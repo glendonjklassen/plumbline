@@ -30,11 +30,12 @@ test("a running plan rides the reader: the chip goes to today, the navigator lea
     await s.author("planStart", "nt-90", new Date().toISOString());
   });
 
-  // The chip appears with day 1. Its text is the plan's own answer, so pin the
-  // expected target from the same wire the chip reads.
+  // The chip appears with day 1. Its label (aria-label — the chip is icon-only)
+  // is the plan's own answer, so pin the expected target from the same wire
+  // the chip reads.
   const chip = page.locator(".plan-chip-row .plan-chip").first();
   await expect(chip).toBeVisible({ timeout: 10_000 });
-  await expect(chip).toHaveText(/Day 1 · /);
+  await expect(chip).toHaveAttribute("aria-label", /Day 1 · /);
 
   const first = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
@@ -98,7 +99,7 @@ test("the chronological plan is offered, starts, and day 1 begins at Genesis 1",
   // lives on the READ screen, and Plans is a destination that replaces the
   // reader — so go back the way the ‹ does before looking for it.
   await page.evaluate(() => (window as any).__plumbline.goRead());
-  await expect(page.locator(".plan-chip-row .plan-chip").first()).toHaveText(/Day 1 · /);
+  await expect(page.locator(".plan-chip-row .plan-chip").first()).toHaveAttribute("aria-label", /Day 1 · /);
 });
 
 // The UAT round (2026-08-11). Three separate ways the plans surfaces misled a
@@ -139,8 +140,9 @@ test("finishing a chapter advances the chip and its label", async ({ page }) => 
     return plans.running.find((p: any) => p.id === "bible-365").today.chapters[0];
   });
   const chip = page.locator(".plan-chip-row .plan-chip").first();
-  await expect(chip).toContainText(first.display);
-  const labelBefore = await chip.textContent();
+  // Icon-only chip: its label is the aria-label, not its text.
+  await expect(chip).toHaveAttribute("aria-label", new RegExp(first.display.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  const labelBefore = await chip.getAttribute("aria-label");
 
   // Read the chapter the way a phone does: dwell ticks into the core's tracker,
   // whose banked report lands as `readingWrote` — NOT an authoring write. The
@@ -159,7 +161,7 @@ test("finishing a chapter advances the chip and its label", async ({ page }) => 
 
   // The chip now names what is LEFT — a label that never moves all evening is
   // the UAT bug — and sends the reader to the next chapter.
-  await expect(chip).not.toHaveText(labelBefore!);
+  await expect(chip).not.toHaveAttribute("aria-label", labelBefore!);
   const landed = await page.evaluate(async () => {
     const s = (window as any).__plumbline;
     document.querySelector<HTMLButtonElement>(".plan-chip-row .plan-chip")!.click();
@@ -212,7 +214,7 @@ test("reading the day's worth advances the chip to the next day", async ({ page 
   // …and the chip shows DAY 2 — the next portion, ready to be read ahead —
   // rather than disappearing until midnight.
   await expect(chip).toBeVisible();
-  await expect(chip).toHaveText(/Day 2 · /);
+  await expect(chip).toHaveAttribute("aria-label", /Day 2 · /);
 });
 
 // Pause sets a plan aside WHOLE: the chip stands down, the card says when the
@@ -247,7 +249,7 @@ test("a paused plan asks nothing until it is resumed", async ({ page }) => {
   await card.getByRole("button", { name: "Resume" }).click();
   await expect(card.getByRole("button", { name: "Pause" })).toBeVisible();
   await page.evaluate(() => (window as any).__plumbline.goRead());
-  await expect(page.locator(".plan-chip-row .plan-chip").first()).toHaveText(/Day 1 · /);
+  await expect(page.locator(".plan-chip-row .plan-chip").first()).toHaveAttribute("aria-label", /Day 1 · /);
 });
 
 test("no Explore card spills its text past its border, at any text scale", async ({ page }) => {
