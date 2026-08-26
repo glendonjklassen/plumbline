@@ -19,6 +19,7 @@
   import PickDialog from "./PickDialog.svelte";
   import CanonStrip from "./CanonStrip.svelte";
   import PlanChip from "./PlanChip.svelte";
+  import { fade } from "svelte/transition";
   import HistorySheet from "./HistorySheet.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
   import MemorizeHost from "../memorize/MemorizeHost.svelte";
@@ -193,6 +194,9 @@
   // Zero when the bar is `display: none` (desktop widths), which is exactly what
   // a surface wants there.
   let navEl = $state<HTMLElement | null>(null);
+  /** Read once: the toast's fade is off for a reader who has asked for less
+   *  motion (ExploreScreen does the same for its settle). */
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   $effect(() => {
     const el = navEl;
     if (!el) return;
@@ -488,10 +492,13 @@
 <!-- `role="status"`, as the update and storage notices below already have. Every
      confirmation this app gives — "Copied", "Tagged Isaiah 53:5", "Couldn't make
      the backup" — arrives here and nowhere else, and without a live region a
-     screen reader was told none of them: the toast appears, sits for 2.2
-     seconds, and goes, all in silence. -->
+     screen reader was told none of them: the toast appears, sits for a stay
+     sized to its length (Session.showToast), and goes, all in silence.
+     It fades in and out rather than popping — a box that snaps into being and
+     snaps away reads as a glitch — unless the reader has asked for less motion,
+     in which case it is simply there and then not. -->
 {#if s.toast}
-  <div class="toast" role="status">{s.toast}</div>
+  <div class="toast brief" role="status" transition:fade={{ duration: reduceMotion ? 0 : 150 }}>{s.toast}</div>
 {/if}
 
 <!-- Read-aloud is invisible sound: this chip is the only sign it is running,
@@ -910,8 +917,14 @@
     border-left: 1px solid var(--rule, #d8cba8);
   }
   .toast {
-    /* Stated once so the stacked notice below can be expressed in terms of it. */
-    --toastBottom: 22px;
+    /* Stated once so the stacked notice below can be expressed in terms of it.
+       ABOVE the bottom bar on a phone — a snackbar never covers the
+       destinations, which are how the reader leaves whatever is open — above
+       the home indicator held sideways where the bar is gone, and 22px off the
+       edge on a desktop where both are zero. `max`, not a sum: the bar carries
+       the inset inside its measured height (PresentHost says the same). It
+       used to sit a flat 22px up, which on a phone was ON the bar. */
+    --toastBottom: calc(max(var(--bottomNavH, 0px), var(--safeBottom)) + 22px);
     position: fixed;
     bottom: var(--toastBottom);
     left: 50%;
@@ -923,6 +936,18 @@
     border-radius: 8px;
     font-size: calc(14px * var(--uiScale, 1));
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+    /* A sentence wraps inside the screen instead of running edge to edge. */
+    max-width: min(560px, calc(100vw - 24px));
+    box-sizing: border-box;
+  }
+  /* The passing confirmation rides over EVERY surface, Present and the sing
+     screen included (z 60): "Link copied" is raised from inside Present, and at
+     the shell's 50 it landed behind the very screen whose button raised it — a
+     copy that said nothing. Still under the failure bar (70). The sticky
+     notices below keep the shell's level: they are acted on from the reader. */
+  .toast.brief {
+    z-index: 65;
+    text-align: center;
   }
   /* A toast that stays until acted on carries its own buttons. */
   .toast.update,

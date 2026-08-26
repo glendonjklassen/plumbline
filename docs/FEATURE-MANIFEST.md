@@ -2020,24 +2020,32 @@ chip shipped on the web — Android owes them with the rest of the feature.)
 ## The bookmarks strip (WEB, grown out of the plan chip)
 
 The row above the canon strip — `shell/PlanChip.svelte`, decision #5's
-nav-strip chip — is a **row of round icon chips** now, one per bookmark
-(maintainer ask, 2026-08-24; icon-only 2026-08-25): a flag per running plan,
-then one per stored seating in `config.slots` — **Last opened** (`other`,
-history icon), **Sunday morning** (sun), **Sunday evening** (crescent),
-**Wednesday evening** (group) — Material paths inline like the NAV table.
-**NO TEXT on the chips**: the words ("Sunday morning · Psalms 23:4", "Day 12 ·
-Gen 30–31") ride each chip's `aria-label`/`title`, and a tap **toasts which
-bookmark it was** — "Sunday morning bookmark" (`bookmarks.going`), the name
-alone, no "going to…" sentence — then navigates the active pane, verse
-included; the destination shows itself when the pane lands. Several chips are
-visible at once, centred while they fit and left-anchored scrolling the moment
-they don't (auto margins on the row's two ends), so a chip cut at the edge is
-what says "more". It began as a one-tile-per-page scroll-snap pager with label
-text, which hid that there was more than one ("you see one at a time",
-maintainer). "+{n} more" is gone: every running plan has its own flag. Only seatings the
-reader has actually been in exist in `config.slots`, so nothing is invented;
-the whole strip stands down in concept-study mode, as the chip always did.
-E2e: `bookmarks.spec.ts`, plus `plans-today.spec.ts` (the plan tile's own
+nav-strip chip — is a **row of pill chips**, one per bookmark (maintainer ask,
+2026-08-24; icon-only 2026-08-25, passage restored the same day): a flag per
+running plan, then one per stored seating in `config.slots` — **Last opened**
+(`other`, history icon), **Sunday morning** (sun), **Sunday evening**
+(crescent), **Wednesday evening** (group) — Material paths inline like the NAV
+table. **Each face is the icon and the passage**: the icon names the kind, the
+text says where it goes — "Psalms 23:4" beside the sun, "Genesis 30–31" beside
+the flag (what is LEFT of today, `planToday.remaining`). The passage is the
+TOC's own book name, as everywhere else the web names a verse
+(`reader/refname.ts` — there is no abbreviation table in the core or the
+catalogues, and a TypeScript one would be a second copy of 66 names in three
+languages). The kind's NAME stays off the face: "Sunday morning · Psalms 23:4"
+/ "Day 12 · Genesis 30–31" ride each chip's `aria-label`/`title`, and a tap
+**toasts which bookmark it was** — "Sunday morning bookmark"
+(`bookmarks.going`), the name alone, no "going to…" sentence — then navigates
+the active pane, verse included. Several chips are visible at once, centred
+while they fit and left-anchored scrolling the moment they don't (auto margins
+on the row's two ends), so a chip cut at the edge is what says "more". Two
+earlier shapes are history: a one-tile-per-page scroll-snap pager carrying the
+kind's name and the passage, which hid that there was more than one ("you see
+one at a time", maintainer), and a morning of round icon-only chips, which said
+which bookmark but not where — and where is the reason to tap. "+{n} more" is
+gone: every running plan has its own flag. Only seatings the reader has
+actually been in exist in `config.slots`, so nothing is invented; the whole
+strip stands down in concept-study mode, as the chip always did. E2e:
+`bookmarks.spec.ts`, plus `plans-today.spec.ts` (the plan tile's own
 behaviours, unchanged — a paused plan takes its TILE down, not the strip).
 
 **SHELL DELTA — Android:** no strip, as there was no plan chip — owed with the
@@ -2071,6 +2079,32 @@ dispersion language shaded by mastery; activity is a calendar heatmap beside the
 history log. Long-press a verse → Memorize adds a card (or a passage — see
 **Passage memorization**). **Delta owed on both:** a "memorize this tag/thread"
 bulk-enqueue and printable flashcards.
+
+## Toasts — the passing confirmation (both shells)
+
+Every "it happened" this app says — Copied, Tagged Isaiah 53:5 — Love, Marked
+read, Backed up N files as…, the engine's own error sentence — arrives as one
+transient toast and nowhere else; a screen reader hears it through
+`role="status"` (`dialog-focus.spec.ts`). **Android** uses the system `Toast`
+(`LENGTH_SHORT` everywhere but the restart-to-apply notice, `LENGTH_LONG`): the
+OS sizes and queues them, so two in a row show one after the other. **Web**
+(`Session.showToast`, `Shell.svelte .toast.brief`) had to learn the same
+manners (audit, maintainer 2026-08-25 — "sometimes they flash so you can't even
+read them"): **one at a time, and the newest wins its whole stay** — a second
+message replaces the first and the clock restarts (the old code armed a new
+timer without disarming the last, so the PREVIOUS timer cleared the new message
+early — the flash); **the stay is sized to the message** (`toastDuration`:
+1.2 s + 60 ms a character, floored at 2.5 s, capped at 7 s — a flat 2.2 s
+fitted "Copied" and lost the backup's file name); it **fades** 150 ms in and
+out (none under `prefers-reduced-motion`); it sits **above the bottom bar** on a
+phone and above the home indicator held sideways (`max(--bottomNavH,
+--safeBottom) + 22px`, PresentHost's own formula), never on the destinations;
+and it stacks at **z 65**, over Present and the sing screen (60) — "Link
+copied" is raised from inside Present and at the shell's 50 landed behind it —
+under the failure bar (70). The three STICKY notices beside it (update ready,
+read-aloud running, a save that failed) are not toasts: they stay until acted
+on and keep the shell's z-level — but they share `--toastBottom`, so they too
+now clear the bottom bar. E2e: `toast.spec.ts`.
 
 ## Web shell (apps/web)
 

@@ -1,16 +1,21 @@
 <script lang="ts">
   // The nav-strip BOOKMARKS row, grown out of the plan chip (docs/READING-PLANS.md
   // decision #5; bookmarks per maintainer ask, 2026-08-24). One row above the
-  // canon strip of round ICON chips: a flag per running plan, then one per
-  // stored seating — Last opened, Sunday morning, Sunday evening, Wednesday
-  // evening (`config.slots`, core::session_slot).
+  // canon strip of pill chips, each an ICON naming the bookmark's kind beside
+  // the PASSAGE it holds: a flag per running plan ("Genesis 30–31" — what is
+  // left of today), then one per stored seating — Last opened, Sunday morning,
+  // Sunday evening, Wednesday evening (`config.slots`, core::session_slot) —
+  // reading "Psalms 23:4".
   //
-  // NO TEXT on the chips (maintainer, 2026-08-25). The words ride each chip's
-  // aria-label/title and the toast a tap raises ("Sunday morning bookmark");
-  // the icon is the whole face. Several are visible at once — centred while
-  // they fit, left-anchored and scrolling the moment they don't, so a chip cut
-  // at the edge is what says "more". (It began as a one-tile-per-page pager
-  // with label text; one at a time hid that there were others.)
+  // Icon + passage, no more (maintainer, 2026-08-25, second turn). The chips
+  // went icon-only that morning; the reference came back the same day — a row
+  // of four glyphs said WHICH bookmark but not WHERE, and where is the reason
+  // to tap. The kind's NAME stays off the face: it rides the aria-label/title
+  // ("Sunday morning · Psalms 23:4") and the toast a tap raises ("Sunday
+  // morning bookmark"). Several are visible at once — centred while they fit,
+  // left-anchored and scrolling the moment they don't, so a chip cut at the
+  // edge is what says "more". (It began as a one-tile-per-page pager carrying
+  // the kind's name AND the passage; one at a time hid that there were others.)
   //
   // NOT shown in concept-study mode — any of it: the tracker is suspended
   // there, so a chip inviting schedule reading would promise credit the mode
@@ -71,23 +76,29 @@
     { token: "wednesday-evening", key: "bookmarks.wednesdayEvening" },
   ];
 
+  /** "Psalms 23:4" — the TOC's own book name, as everywhere else the web names
+   *  a verse (reader/refname.ts). There is no abbreviation table in the core or
+   *  the catalogues, and one written here would be a second copy of 66 names
+   *  in three languages; the row scrolls when the full names outgrow it. */
   function passageName(book: string, chapter: number, verse?: number | null): string {
     const name = s.q("toc")?.books?.find((b: any) => b.id === book)?.name ?? book;
     return verse && verse > 1 ? `${name} ${chapter}:${verse}` : `${name} ${chapter}`;
   }
 
   /** One chip per running schedule — where "+{n} more" used to hang off the
-   *  first one — each carrying its own day label and its own first-unread
-   *  target. The chip is icon-only, so the label is what a screen reader
-   *  hears and what a desktop tooltip shows. */
+   *  first one — each carrying its own day label, its own first-unread target,
+   *  and on its face what is LEFT of today ("Genesis 30–31"). The label is
+   *  what a screen reader hears and what a desktop tooltip shows. */
   const planTiles = $derived(
     plans.flatMap((p: any, i: number) => {
       const target = firstUnread(p);
       if (!target) return [];
+      const passage = chapterSpan(remaining(p));
       return [
         {
           key: String(p.id ?? i),
-          label: t("plans.chip", { day: p.day, chapters: chapterSpan(remaining(p)) }),
+          label: t("plans.chip", { day: p.day, chapters: passage }),
+          passage,
           target,
         },
       ];
@@ -118,9 +129,9 @@
   }
 
   function goSlot(tile: (typeof slotTiles)[number]): void {
-    // The toast names the BOOKMARK, nothing else — with no words on the chip
-    // it is the confirmation of which one was pressed, and the destination is
-    // on screen the moment the pane lands there.
+    // The toast names the BOOKMARK, nothing else — the kind's name is not on
+    // the chip, so this is the confirmation of which one was pressed; the
+    // destination is on the face and on screen the moment the pane lands.
     s.showToast(t("bookmarks.going", { name: tile.label }));
     s.navigate(s.activePane, tile.book, tile.chapter, tile.verse);
   }
@@ -132,6 +143,7 @@
       {#each planTiles as p (p.key)}
         <button class="plan-chip" aria-label={p.label} title={p.label} onclick={() => goPlan(p)}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.plan} /></svg>
+          <span class="ref">{p.passage}</span>
         </button>
       {/each}
       {#each slotTiles as tile (tile.token)}
@@ -143,6 +155,7 @@
           onclick={() => goSlot(tile)}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS[tile.token]} /></svg>
+          <span class="ref">{tile.passage}</span>
         </button>
       {/each}
     </div>
@@ -150,7 +163,7 @@
 {/if}
 
 <style>
-  /* A quiet row of round chips just above the canon strip: present, not
+  /* A quiet row of pill chips just above the canon strip: present, not
      campaigning — the reading-map philosophy (an invitation, not a debt). */
   .plan-chip-row {
     padding: 5px 8px;
@@ -179,23 +192,33 @@
   .plan-chip,
   .bm-tile {
     flex: 0 0 auto;
-    /* The 44px touch floor (app.css), scaled with the chrome. */
-    width: calc(44px * var(--uiScale, 1));
+    /* The 44px touch floor (app.css), scaled with the chrome; the pill grows
+       sideways with its passage and never wraps it. */
     height: calc(44px * var(--uiScale, 1));
-    padding: 0;
-    border-radius: 50%;
+    min-width: calc(44px * var(--uiScale, 1));
+    padding: 0 calc(14px * var(--uiScale, 1)) 0 calc(11px * var(--uiScale, 1));
+    border-radius: 999px;
     border: 1px solid var(--rule, #d8cba8);
     background: var(--paper, #fcf9f4);
     color: var(--gold, #9e7d38);
     display: inline-flex;
     align-items: center;
-    justify-content: center;
+    gap: calc(6px * var(--uiScale, 1));
+    white-space: nowrap;
   }
   .plan-chip svg,
   .bm-tile svg {
-    width: calc(22px * var(--uiScale, 1));
-    height: calc(22px * var(--uiScale, 1));
+    flex: 0 0 auto;
+    width: calc(20px * var(--uiScale, 1));
+    height: calc(20px * var(--uiScale, 1));
     fill: currentColor;
+  }
+  /* The passage in ink beside the gold glyph: the icon is the accent, the
+     words are what the eye reads. */
+  .ref {
+    color: var(--ink, #211f1a);
+    font-size: calc(13.5px * var(--uiScale, 1));
+    font-variant-numeric: tabular-nums;
   }
   .plan-chip:hover,
   .bm-tile:hover {

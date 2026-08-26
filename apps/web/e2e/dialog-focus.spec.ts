@@ -388,7 +388,7 @@ async function axLive(page: Page): Promise<{ live: string; text: string }[]> {
 //    Expected: ["polite"]  Received: []' (the poll below runs out its 15 s and
 //   reports the last value it saw).
 //
-// The toast clears itself after 2.2 seconds, and a CDP tree dump is not
+// The toast clears itself after a few seconds, and a CDP tree dump is not
 // instant, so the poll RE-SHOWS it on every attempt rather than racing that
 // timer once. Nothing about the assertion is weakened by it: a toast with no
 // role never appears as a live region however many times it is shown.

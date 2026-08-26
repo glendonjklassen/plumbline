@@ -2100,9 +2100,20 @@ export class Session {
     this.saveConfig();
   }
 
+  /** The one transient toast. ONE AT A TIME, AND THE NEWEST WINS ITS WHOLE
+   *  STAY: a second message replaces the first and the clock restarts. This
+   *  used to arm a fresh timer without disarming the last, so a toast raised
+   *  inside the previous one's 2.2 s was cleared by the PREVIOUS timer — a
+   *  "Tagged…" that came 1.5 s after a "Copied" showed for 0.7 s (the flash
+   *  the maintainer reported, 2026-08-25). */
+  #toastTimer: ReturnType<typeof setTimeout> | null = null;
   showToast(msg: string): void {
+    if (this.#toastTimer !== null) clearTimeout(this.#toastTimer);
     this.toast = msg;
-    setTimeout(() => (this.toast = null), 2200);
+    this.#toastTimer = setTimeout(() => {
+      this.toast = null;
+      this.#toastTimer = null;
+    }, toastDuration(msg));
   }
 
   /** Whether this home carries a usable overlay — the toggle hides without it
@@ -2170,6 +2181,16 @@ export class Session {
     this.updateReady = false;
     location.reload();
   }
+}
+
+/** How long a toast stays: long enough to READ, which depends on how much it
+ *  says. A flat 2.2 s fitted "Copied" and lost "Backed up 12 files as
+ *  plumbline-backup-2026-08-25.zip" before the eye reached the name. 60 ms a
+ *  character is a comfortable reading pace over a 1.2 s settle; floored at
+ *  2.5 s (Android's LENGTH_SHORT is 2 s, LENGTH_LONG 3.5 s) and capped at 7 s
+ *  so an engine's error sentence cannot squat on the screen. */
+export function toastDuration(msg: string): number {
+  return Math.min(7000, Math.max(2500, 1200 + 60 * msg.length));
 }
 
 let session: Session | null = null;
