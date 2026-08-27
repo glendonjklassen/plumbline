@@ -115,3 +115,44 @@ test("a desktop's three-pane config reopens folded on what was being read", asyn
   await expect(page.locator(".pane")).toHaveCount(1);
   await expect(page.locator('.pane button[title="Go to… (book · chapter · verse)"]').first()).toContainText("Romans 8");
 });
+
+// FOLDING WHILE RUNNING, which is the case the two tests above do not reach:
+// they RELOAD at the new width, and the boot path has enforced `maxPanes` since
+// it was written. Nothing enforced it when the width changed under a live app,
+// so shutting a foldable kept both panes on a layout that assumes one.
+//
+// The language is the half that stranded the maintainer (2026-08-26): they
+// opened the fold, split, switched the new pane to German, and shut it — and the
+// passage was "basically stuck on German". The chip that sets a pane's language
+// lives on the pane's own strip, and Shell hides `.pane > .nav` under 700px, so
+// the override had no control left to undo it. Folding now hands the pane back
+// to the app language, which is the one a phone can actually reach (Settings).
+//
+// FAILS against the bug it describes: before `#collapseToPhone`, the media-query
+// listener only assigned `s.narrow`, so both assertions below held their
+// pre-fold values. `lang` is planted directly rather than through
+// `setPaneLang`, deliberately — that call downloads an 8 MB German corpus, and
+// what is under test is the shell's response to the fold, not the download.
+test("folding a running app collapses to one pane and hands back its language", async ({ page }) => {
+  await boot(page, FOLD_OPEN);
+  await page.locator('.pane button[title="Split pane"]').first().click();
+  await expect(page.locator(".pane")).toHaveCount(2);
+
+  await page.evaluate(() => {
+    const s = (window as any).__plumbline;
+    s.activePane = 1;
+    s.navigate(1, "Rom", 8);
+    s.panes[1].lang = "de";
+  });
+  await expect(page.locator(".pane")).toHaveCount(2);
+
+  // Shut it. No reload — this is the live resize.
+  await page.setViewportSize(FOLD_SHUT);
+
+  await expect(page.locator(".pane")).toHaveCount(1, { timeout: 30_000 });
+  const state = await page.evaluate(() => {
+    const s = (window as any).__plumbline;
+    return { panes: s.panes.length, active: s.activePane, lang: s.panes[0].lang ?? null, book: s.panes[0].book };
+  });
+  expect(state).toEqual({ panes: 1, active: 0, lang: null, book: "Rom" });
+});

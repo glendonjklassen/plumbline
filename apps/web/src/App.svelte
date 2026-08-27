@@ -191,9 +191,12 @@
       const shared = churchFromQuery(location.search);
       s.startAsNewBeliever = startsAsNewBeliever(location.search);
       if (shared && !s.config.church?.name) {
-        s.config.church = shared;
+        // Through `setChurch`, not by assigning `config.church`: the meeting
+        // time is stored ONCE, in `config.sundayService`, and setChurch is what
+        // knows that. Assigning here dropped it on the floor — the link said
+        // when they meet and the reader ended up with no time at all.
+        s.setChurch(shared);
         s.sharedByChurch = shared;
-        s.saveConfig();
       } else if (shared) {
         s.sharedByChurch = shared; // shown in the welcome, not saved over theirs
       }

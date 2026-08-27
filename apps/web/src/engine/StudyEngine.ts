@@ -41,6 +41,22 @@ export function dayStamp(): string {
   return nowStamp().slice(0, 10) + "T12:00:00Z";
 }
 
+/**
+ * TODAY IN THE READER'S OWN TIMEZONE, as `YYYY-MM-DD`.
+ *
+ * Deliberately NOT `dayStamp()`, and the difference is the whole of the
+ * devotional's pacing rule: `dayStamp` is midday UTC, which is the right key
+ * for a cache but the wrong answer for "has a day passed?". A reader at UTC-7
+ * who presses Done at 6pm is already on the next UTC date, and a UTC comparison
+ * would hand them tomorrow's entry immediately; a reader at UTC+13 would be
+ * held back a day. The seating-slot restore computes the local date the same
+ * way, for the same reason (session.svelte.ts).
+ */
+export function localDay(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export class DisplayList {
   #w: WasmEngine;
   #ptr: number;
@@ -697,6 +713,56 @@ export class StudyEngine {
       (f, i, b) => f(this.#engine, i, b, chapter),
       [id, book],
     );
+  }
+
+  // ── devotionals ───────────────────────────────────────────────────────────
+  /** `{running:[…], catalogue:[…]}` — the reader's booklets with their open
+   *  day, and the catalogue every picker offers.
+   *
+   *  `lang` picks the text (per-entry fallback to English lives in the core, so
+   *  no caller re-implements it). `today` is the reader's LOCAL day and is the
+   *  cache KEY: unlike `plans`, it is passed explicitly rather than stamped
+   *  here, because it is a calendar answer the shell owns and because a key of
+   *  `""` would never re-ask across midnight — and midnight is exactly when
+   *  this answer changes. */
+  devotionals(lang: string, today: string): any {
+    return this.#json("plumbline_engine_devotionals_json", lang || "en", today || localDay());
+  }
+  /** One day of a booklet, open or browsed-back-to. Null for a day it has no
+   *  entry for. */
+  devotionalDay(id: string, day: number, lang: string): any {
+    // `#json` marshals STRINGS; `day` is a plain u32 across the ABI, so it is
+    // closed over rather than passed through the pointer list — the `token()`
+    // shape a few methods up.
+    const raw = this.#call(
+      (i, l) =>
+        this.#w.takeStr(
+          (this.#w.exports.plumbline_engine_devotional_day_json as Function)(this.#engine, i, day, l) as number,
+        ),
+      [id, lang || "en"],
+    );
+    return raw === null ? null : JSON.parse(raw);
+  }
+  /** Start a devotional. Starting one already running keeps its progress. */
+  devotionalStart(id: string, now: string): string | null {
+    return this.#author("plumbline_engine_devotional_start", (f, i, n) => f(this.#engine, i, n), [id, now]);
+  }
+  /** Stop a devotional (removes its run file and its banked days). */
+  devotionalStop(id: string): string | null {
+    return this.#author("plumbline_engine_devotional_stop", (f, i) => f(this.#engine, i), [id]);
+  }
+  /** Bank a day — the Done at the foot of the page. `today` is the reader's
+   *  LOCAL day; it is what holds tomorrow's entry back until tomorrow. */
+  devotionalDone(id: string, day: number, today: string): string | null {
+    return this.#author(
+      "plumbline_engine_devotional_done",
+      (f, i, t) => f(this.#engine, i, day, t),
+      [id, today || localDay()],
+    );
+  }
+  /** Pause (true) or resume (false) a devotional — set aside, kept whole. */
+  devotionalSetPaused(id: string, paused: boolean): string | null {
+    return this.#author("plumbline_engine_devotional_set_paused", (f, i) => f(this.#engine, i, paused ? 1 : 0), [id]);
   }
 }
 

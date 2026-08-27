@@ -163,13 +163,13 @@ test("the tool cards count what is in them, and stay quiet at zero", async ({ pa
 test("Visualizations opens a page of its own, and ‹ returns to the hub", async ({ page }) => {
   await boot(page);
   await openStudy(page);
-  await expect(page.getByRole("button", { name: /^Reading plans/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Devotionals and reading plans/ })).toBeVisible();
 
   await page.getByRole("button", { name: /^Visualizations/ }).click();
 
   // A page: its own bar, and the hub it came from is no longer on screen.
   await expect(page.locator(".bar h2")).toHaveText("Visualizations");
-  await expect(page.getByRole("button", { name: /^Reading plans/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Devotionals and reading plans/ })).toHaveCount(0);
   // Both maps, each with its full description rather than an indented line.
   await expect(page.getByRole("button", { name: /^Constellation/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Weave map/ })).toBeVisible();
@@ -177,7 +177,7 @@ test("Visualizations opens a page of its own, and ‹ returns to the hub", async
   // ‹ goes UP ONE LAYER, to Study — not back to the reader.
   await page.locator(".bar .back").click();
   await expect(page.locator(".bar h2")).toHaveText("Study");
-  await expect(page.getByRole("button", { name: /^Reading plans/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Devotionals and reading plans/ })).toBeVisible();
 
   // And Escape agrees with the ‹: same page, same parent. It used to jump
   // straight to the reader, so the same screen had two back affordances with
@@ -189,7 +189,7 @@ test("Visualizations opens a page of its own, and ‹ returns to the hub", async
   await expect(page.locator(".bar h2")).toHaveText("Visualizations");
   await page.keyboard.press("Escape");
   await expect(page.locator(".bar h2")).toHaveText("Study");
-  await expect(page.getByRole("button", { name: /^Reading plans/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Devotionals and reading plans/ })).toBeVisible();
 });
 
 // Weaves is a DOOR too (2026-08-19): the hub spent two sibling cards — Weaves

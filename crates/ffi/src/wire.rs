@@ -1237,6 +1237,12 @@ pub struct WireConfigState {
     /// The welcome this reader was given, "new" | "curious" (additive).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub intro: Option<String>,
+    /// Whether the bundled devotional has already been offered (additive).
+    /// Absent reads as false, so a config written before devotionals existed
+    /// gets the offer once — and a reader who STOPPED the booklet is not
+    /// offered it again, because by then this is true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub devotional_seeded: Option<bool>,
     /// The reader's chosen language (additive). ABSENT means "follow the
     /// device" — the shell then passes its locale to
     /// `plumbline_i18n_catalog_json` and the core resolves it, so a German
@@ -1284,19 +1290,22 @@ pub struct WirePaneRef {
 pub struct WireChurch {
     #[serde(default)]
     pub name: String,
-    #[serde(default)]
-    pub info: String,
+    /// When the church meets, minutes since local midnight; absent when it
+    /// never said. Replaced a free "when and where" line — see
+    /// `core::config::Church::service`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<u16>,
     #[serde(default)]
     pub url: String,
 }
 
 impl WireChurch {
     pub fn to_core(&self) -> plumbline_core::config::Church {
-        plumbline_core::config::Church { name: self.name.clone(), info: self.info.clone(), url: self.url.clone() }
+        plumbline_core::config::Church { name: self.name.clone(), service: self.service, url: self.url.clone() }
     }
 
     pub fn from_core(c: &plumbline_core::config::Church) -> WireChurch {
-        WireChurch { name: c.name.clone(), info: c.info.clone(), url: c.url.clone() }
+        WireChurch { name: c.name.clone(), service: c.service, url: c.url.clone() }
     }
 }
 
@@ -1384,13 +1393,14 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         present_shares_as_new: Some(cfg.present_shares_as_new),
         akjv_overlay: Some(cfg.akjv_overlay),
         intro: (!cfg.intro.is_empty()).then(|| cfg.intro.clone()),
+        devotional_seeded: cfg.devotional_seeded.then_some(true),
         language: (!cfg.language.is_empty()).then(|| cfg.language.clone()),
         concept_study: (!cfg.concept_study.is_empty()).then(|| cfg.concept_study.clone()),
         gospel_thread: (!cfg.gospel_thread.is_empty()).then(|| cfg.gospel_thread.clone()),
         localized_lexicon_off: Some(cfg.localized_lexicon_off),
         church: (!cfg.church.is_empty()).then(|| WireChurch {
             name: cfg.church.name.clone(),
-            info: cfg.church.info.clone(),
+            service: cfg.church.service,
             url: cfg.church.url.clone(),
         }),
         first_run,
@@ -1467,6 +1477,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         present_shares_as_new: w.present_shares_as_new.unwrap_or(true),
         // Absent = off (core::config::from_wire): the KJV is the text.
         akjv_overlay: w.akjv_overlay.unwrap_or(false),
+        devotional_seeded: w.devotional_seeded.unwrap_or(false),
         intro: match w.intro.as_deref() {
             Some("new") => "new".to_string(),
             Some("curious") => "curious".to_string(),

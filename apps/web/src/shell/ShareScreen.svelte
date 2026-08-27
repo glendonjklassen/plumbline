@@ -40,7 +40,6 @@
   // The reader's home church. Loaded once per visit to the screen; every field
   // saves on change, exactly as Settings did.
   let churchName = $state("");
-  let churchInfo = $state("");
   let churchUrl = $state("");
   let churchLoaded = false;
   $effect(() => {
@@ -48,11 +47,33 @@
     churchLoaded = true;
     const c = s.church;
     churchName = c.name;
-    churchInfo = c.info;
     churchUrl = c.url;
   });
   function saveChurch(): void {
-    s.setChurch(cleanChurch({ name: churchName, info: churchInfo, url: churchUrl }));
+    s.setChurch(cleanChurch({ name: churchName, service: s.config.sundayService ?? null, url: churchUrl }));
+  }
+
+  /** THE SAME VALUE Settings edits — `config.sundayService`, not a second copy
+   *  (maintainer, 2026-08-26). The reader had already given their service time
+   *  there and was being asked to type it again into a free-text line the share
+   *  link then carried as prose. It is one number now: Settings and this field
+   *  write it, the Sunday bookmark reads it, and the link carries it as minutes
+   *  so the recipient's app writes the time their own way. */
+  function serviceTimeValue(): string {
+    const m = s.config.sundayService;
+    if (typeof m !== "number") return "";
+    return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  }
+  function setServiceTime(e: Event): void {
+    const v = (e.currentTarget as HTMLInputElement).value;
+    if (!v) {
+      s.config.sundayService = undefined;
+    } else {
+      const [h, m] = v.split(":").map(Number);
+      s.config.sundayService = h * 60 + m;
+    }
+    s.saveConfig();
+    saveChurch(); // the church carries the time into the link
   }
 </script>
 
@@ -90,14 +111,17 @@
       <h3>{t("settings.church")}</h3>
       <p class="desc">{t("settings.churchDesc")}</p>
       <input class="field" placeholder={t("settings.churchName")} bind:value={churchName} onchange={saveChurch} />
-      <input class="field" placeholder={t("settings.churchInfo")} bind:value={churchInfo} onchange={saveChurch} />
+      <label class="svc">
+        <span>{t("settings.churchService")}</span>
+        <input type="time" value={serviceTimeValue()} onchange={setServiceTime} />
+      </label>
       <input class="field" placeholder={t("settings.churchUrl")} bind:value={churchUrl} onchange={saveChurch} />
       {#if hasChurch(s.church)}
         <!-- The recipient's path to the congregation a shared link named —
              this button was the header's Church chip before Share was a role. -->
         <button
           class="visit"
-          title={churchTitle(s.church, t("shell.churchFallback"))}
+          title={churchTitle(s.church, t("shell.churchFallback"), s.churchMeets(s.church))}
           onclick={() => visitChurch(s.church, s.showToast, t("shell.churchFallback"))}
         >
           {t("shell.church")}
@@ -108,6 +132,24 @@
 </section>
 
 <style>
+  /* The service time reads as a labelled control, not a third text box: it is
+     the one field here that is a number rather than something typed. */
+  .svc {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0;
+    color: var(--ink, #211f1a);
+    font-size: calc(14px * var(--uiScale, 1));
+  }
+  .svc input {
+    font: inherit;
+    color: var(--ink, #211f1a);
+    background: var(--popupPaper, #f2eee6);
+    border: 1px solid var(--rule, #d8cba8);
+    border-radius: 6px;
+    padding: 6px 8px;
+  }
   .screen {
     flex: 1;
     min-width: 0;

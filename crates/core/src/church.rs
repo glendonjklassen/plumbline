@@ -48,8 +48,6 @@ pub const PWA_URL: &str = "https://plumblinebible.org/";
 /// screen, and the length that still scans is finite.
 pub const NAME_MAX: usize = 80;
 /// See [`NAME_MAX`].
-pub const INFO_MAX: usize = 120;
-/// See [`NAME_MAX`].
 pub const URL_MAX: usize = 200;
 
 /// What a shared link says beyond the church itself.
@@ -80,7 +78,13 @@ pub fn clean(c: &Church) -> Church {
     fn cut(v: &str, max: usize) -> String {
         v.trim().chars().take(max).collect()
     }
-    Church { name: cut(&c.name, NAME_MAX), info: cut(&c.info, INFO_MAX), url: cut(&c.url, URL_MAX) }
+    Church {
+        name: cut(&c.name, NAME_MAX),
+        // A minute outside a day is not a truncation problem, it is nonsense —
+        // dropped, so "never said" is what a bad link produces.
+        service: c.service.filter(|m| *m < 24 * 60),
+        url: cut(&c.url, URL_MAX),
+    }
 }
 
 /// What the reader sees on the Church button when there is no site to open:
@@ -103,11 +107,43 @@ pub fn title(c: &Church) -> String {
 /// already in its own language and nothing here should touch it.
 pub fn title_in(lang: crate::i18n::Lang, c: &Church) -> String {
     let c = clean(c);
-    let parts: Vec<String> = [c.name, c.info].into_iter().filter(|s| !s.is_empty()).collect();
+    let parts: Vec<String> = [c.name, c.service.map(|m| service_line(lang, m)).unwrap_or_default()]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect();
     if parts.is_empty() {
         crate::i18n::t(lang, "shell.churchFallback", &[])
     } else {
         parts.join(": ")
+    }
+}
+
+/// "Sundays 10:00 AM" — when the church meets, written the reader's way.
+///
+/// The CLOCK is the part that differs: English-speaking readers expect 10:00 AM
+/// and German and Spanish ones expect 10:00 on a 24-hour clock. The surrounding
+/// words come from the catalogue (`church.meets`), so the whole line localizes
+/// and nothing here is a sentence.
+///
+/// Minutes outside a day never reach this — [`clean`] drops them — but the
+/// arithmetic is total anyway rather than relying on that.
+pub fn service_line(lang: crate::i18n::Lang, minutes: u16) -> String {
+    crate::i18n::t(lang, "church.meets", &[("time", &clock(lang, minutes))])
+}
+
+/// The clock alone, 12-hour for English and 24-hour otherwise.
+pub fn clock(lang: crate::i18n::Lang, minutes: u16) -> String {
+    let m = minutes % (24 * 60);
+    let (h, min) = (m / 60, m % 60);
+    if matches!(lang, crate::i18n::Lang::En) {
+        let suffix = if h < 12 { "AM" } else { "PM" };
+        let h12 = match h % 12 {
+            0 => 12,
+            other => other,
+        };
+        format!("{h12}:{min:02} {suffix}")
+    } else {
+        format!("{h:02}:{min:02}")
     }
 }
 
@@ -142,10 +178,16 @@ pub fn safe_url(url: &str) -> Option<String> {
 pub fn share_url(base: &str, church: &Church, opts: &ShareOpts) -> String {
     let c = clean(church);
     let mut pairs: Vec<(&str, &str)> = Vec::new();
+    let service: String;
     if has(&c) {
         pairs.push(("church", &c.name));
-        if !c.info.is_empty() {
-            pairs.push(("churchInfo", &c.info));
+        // The meeting time travels as a NUMBER (minutes since midnight), so the
+        // recipient's app writes it their way rather than reading someone
+        // else's formatting. Rendered into a String here because `pairs` holds
+        // borrows; kept alive for the call below.
+        if let Some(m) = c.service {
+            service = m.to_string();
+            pairs.push(("churchService", &service));
         }
         if !c.url.is_empty() {
             pairs.push(("churchUrl", &c.url));
@@ -177,7 +219,9 @@ pub fn with_at(link: &str, ref_key: &str) -> String {
 pub fn from_query(search: &str) -> Option<Church> {
     let c = clean(&Church {
         name: query_get(search, "church").unwrap_or_default(),
-        info: query_get(search, "churchInfo").unwrap_or_default(),
+        // A time that is not a number, or not a time, reads as "never said" —
+        // a stranger's query string is not allowed to produce a bad one.
+        service: query_get(search, "churchService").and_then(|v| v.trim().parse::<u16>().ok()),
         url: query_get(search, "churchUrl").unwrap_or_default(),
     });
     has(&c).then_some(c)
@@ -337,8 +381,8 @@ mod tests {
     use super::*;
     use serde_json::Value;
 
-    fn church(name: &str, info: &str, url: &str) -> Church {
-        Church { name: name.into(), info: info.into(), url: url.into() }
+    fn church(name: &str, service: Option<u16>, url: &str) -> Church {
+        Church { name: name.into(), service, url: url.into() }
     }
 
     /// The shared expectation table. `apps/web/e2e/church-parity.spec.ts` reads
@@ -352,7 +396,7 @@ mod tests {
             let name = row["name"].as_str().unwrap();
             let c = church(
                 row["church"]["name"].as_str().unwrap_or(""),
-                row["church"]["info"].as_str().unwrap_or(""),
+                row["church"]["service"].as_u64().map(|m| m as u16),
                 row["church"]["url"].as_str().unwrap_or(""),
             );
             let opts = ShareOpts {
@@ -361,7 +405,7 @@ mod tests {
             };
             let cleaned = clean(&c);
             assert_eq!(cleaned.name, row["cleaned"]["name"].as_str().unwrap(), "cleaned name [{name}]");
-            assert_eq!(cleaned.info, row["cleaned"]["info"].as_str().unwrap(), "cleaned info [{name}]");
+            assert_eq!(cleaned.service.map(u64::from), row["cleaned"]["service"].as_u64(), "cleaned service [{name}]");
             assert_eq!(cleaned.url, row["cleaned"]["url"].as_str().unwrap(), "cleaned url [{name}]");
             assert_eq!(share_url(PWA_URL, &c, &opts), row["url"].as_str().unwrap(), "url [{name}]");
             assert_eq!(title(&c), row["title"].as_str().unwrap(), "title [{name}]");
@@ -373,9 +417,9 @@ mod tests {
 
     #[test]
     fn clean_trims_and_caps() {
-        let c = clean(&church(&"n".repeat(200), &format!("  {}  ", "i".repeat(200)), &"u".repeat(400)));
+        let c = clean(&church(&"n".repeat(200), Some(600), &"u".repeat(400)));
         assert_eq!(c.name.chars().count(), NAME_MAX);
-        assert_eq!(c.info.chars().count(), INFO_MAX);
+        assert_eq!(c.service, Some(600));
         assert_eq!(c.url.chars().count(), URL_MAX);
     }
 
@@ -384,7 +428,7 @@ mod tests {
     /// carried a lone surrogate.
     #[test]
     fn clean_never_splits_a_character() {
-        let c = clean(&church(&"😀".repeat(NAME_MAX + 10), "", ""));
+        let c = clean(&church(&"😀".repeat(NAME_MAX + 10), None, ""));
         assert_eq!(c.name.chars().count(), NAME_MAX);
         assert!(c.name.chars().all(|ch| ch == '😀'), "a character was cut in half");
     }
@@ -393,8 +437,8 @@ mod tests {
     fn share_url_is_plain_when_no_church_is_set() {
         assert_eq!(share_url(PWA_URL, &Church::default(), &ShareOpts::default()), PWA_URL);
         // Whitespace is not a church.
-        assert!(!has(&church("   ", "x", "y")), "a name of spaces is not a name");
-        assert_eq!(share_url(PWA_URL, &church("   ", "x", "y"), &ShareOpts::default()), PWA_URL);
+        assert!(!has(&church("   ", Some(600), "y")), "a name of spaces is not a name");
+        assert_eq!(share_url(PWA_URL, &church("   ", Some(600), "y"), &ShareOpts::default()), PWA_URL);
     }
 
     /// The Android bug this module was written to end: `Uri.appendQueryParameter`
@@ -402,7 +446,7 @@ mod tests {
     /// as a space.
     #[test]
     fn a_literal_plus_survives_the_round_trip() {
-        let c = church("Faith + Hope Chapel", "", "");
+        let c = church("Faith + Hope Chapel", None, "");
         let url = share_url(PWA_URL, &c, &ShareOpts::default());
         assert!(url.contains("church=Faith+%2B+Hope+Chapel"), "{url}");
         let q = url.split_once('?').unwrap().1;
@@ -411,7 +455,7 @@ mod tests {
 
     #[test]
     fn everything_the_link_carries_comes_back_out() {
-        let c = church("Iglesia Bíblica", "Domingos 10:00 — Calle 5", "https://ejemplo.org/a?b=c");
+        let c = church("Iglesia Bíblica", Some(600), "https://ejemplo.org/a?b=c");
         let url = share_url(PWA_URL, &c, &ShareOpts { start_as_new_believer: true, at: Some("Ps 23:1") });
         let q = url.split_once('?').unwrap().1;
         assert_eq!(from_query(q), Some(c));
@@ -432,19 +476,19 @@ mod tests {
 
     #[test]
     fn share_url_replaces_rather_than_duplicates() {
-        let once = share_url(PWA_URL, &church("A", "", ""), &ShareOpts::default());
-        let twice = share_url(&once, &church("B", "", ""), &ShareOpts::default());
+        let once = share_url(PWA_URL, &church("A", None, ""), &ShareOpts::default());
+        let twice = share_url(&once, &church("B", None, ""), &ShareOpts::default());
         assert_eq!(twice, "https://plumblinebible.org/?church=B");
         // …and an unrelated parameter on the base is not thrown away.
         assert_eq!(
-            share_url("https://x/?keep=1", &church("A", "", ""), &ShareOpts::default()),
+            share_url("https://x/?keep=1", &church("A", None, ""), &ShareOpts::default()),
             "https://x/?keep=1&church=A",
         );
     }
 
     #[test]
     fn with_at_leaves_the_rest_of_the_link_alone() {
-        let link = share_url(PWA_URL, &church("Grace", "", ""), &ShareOpts { start_as_new_believer: true, at: None });
+        let link = share_url(PWA_URL, &church("Grace", None, ""), &ShareOpts { start_as_new_believer: true, at: None });
         assert_eq!(with_at(&link, "1John 4:8"), format!("{link}&at=1John+4%3A8"));
         assert_eq!(with_at(&link, "  "), link, "no verse, no change");
         // Setting it twice sets it, rather than appending a second one that
@@ -454,7 +498,7 @@ mod tests {
 
     #[test]
     fn a_fragment_stays_at_the_end() {
-        let out = share_url("https://x/#/John/3", &church("Grace", "", ""), &ShareOpts::default());
+        let out = share_url("https://x/#/John/3", &church("Grace", None, ""), &ShareOpts::default());
         assert_eq!(out, "https://x/?church=Grace#/John/3");
     }
 
@@ -499,7 +543,12 @@ mod tests {
     #[test]
     fn title_falls_back_to_something_a_reader_can_read() {
         assert_eq!(title(&Church::default()), "Your church");
-        assert_eq!(title(&church("Grace", "", "")), "Grace");
-        assert_eq!(title(&church("Grace", "Sundays 10am", "")), "Grace: Sundays 10am");
+        assert_eq!(title(&church("Grace", None, "")), "Grace");
+        assert_eq!(title(&church("Grace", Some(600), "")), "Grace: Meets Sundays at 10:00 AM");
+        // German writes the same minute on a 24-hour clock.
+        assert_eq!(
+            title_in(crate::i18n::Lang::De, &church("Grace", Some(600), "")),
+            "Grace: Trifft sich sonntags um 10:00"
+        );
     }
 }

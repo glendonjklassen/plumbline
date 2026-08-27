@@ -110,7 +110,7 @@ test.describe("an address the host does not have", () => {
     try {
       // Everything a shared link or a printed QR can carry (church.ts) plus a
       // hash of the kind the reader mirrors into the URL.
-      const search = "?at=Ps%2023%3A1&church=Grace%20Chapel&churchInfo=Sundays%2010%20am&start=new";
+      const search = "?at=Ps%2023%3A1&church=Grace%20Chapel&churchService=600&start=new";
       const hash = "#/John/3";
       await page.goto(`${host.base}/an/old/path/${search}${hash}`);
 

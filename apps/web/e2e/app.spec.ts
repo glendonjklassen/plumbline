@@ -116,7 +116,13 @@ test("first-run: sharing the gospel asks for your church, then opens the Romans 
   await expect(page.getByText("Before you share it")).toBeVisible();
   await expect(page.getByText(/links and QR codes you share contain your church/)).toBeVisible();
   await page.getByPlaceholder("Church name").fill("Grace Bible Church");
-  await page.getByPlaceholder(/When and where/).fill("Sundays 10am, 12 Long Street");
+  // The service time, which replaced a free "when and where" line — the same
+  // `config.sundayService` Settings edits, so it is given once.
+  await page.evaluate(() => {
+    const s = (window as any).__plumbline;
+    s.config.sundayService = 10 * 60;
+    s.saveConfig();
+  });
   await page.getByRole("button", { name: "Open the presentation screen" }).click();
   await expect(page.locator(".present .title")).toContainText("Romans Road");
   await expect(page.getByText("For all have sinned")).toBeVisible();
@@ -124,16 +130,16 @@ test("first-run: sharing the gospel asks for your church, then opens the Romans 
   // What they typed is now theirs, and rides along in what they share.
   const church = await page.evaluate(() => (window as any).__plumbline.church);
   expect(church.name).toBe("Grace Bible Church");
-  expect(church.info).toBe("Sundays 10am, 12 Long Street");
+  expect(church.service, "the meeting time rides along as minutes").toBe(10 * 60);
 });
 
 test("a shared link carries the church, and the welcome names them", async ({ page }) => {
   // The whole point of the query string: one QR hands over the Bible AND the
   // people who sent it (2026-07-27).
-  await page.goto("/?church=Grace+Bible+Church&churchInfo=Sundays+10am&churchUrl=https%3A%2F%2Fexample.org");
+  await page.goto("/?church=Grace+Bible+Church&churchService=600&churchUrl=https%3A%2F%2Fexample.org");
   await expect(page.getByText("Shared with you by")).toBeVisible({ timeout: 90_000 });
   await expect(page.getByText("Grace Bible Church")).toBeVisible();
-  await expect(page.getByText("Sundays 10am")).toBeVisible();
+  await expect(page.getByText("Meets Sundays at 10:00 AM")).toBeVisible();
 
   // The address bar is left clean — a bookmark of this is the app, not a
   // link about somebody's church.
@@ -141,7 +147,9 @@ test("a shared link carries the church, and the welcome names them", async ({ pa
 
   // Saved as this reader's own, so THEIR shares carry it onward.
   const church = await page.evaluate(() => (window as any).__plumbline.church);
-  expect(church).toEqual({ name: "Grace Bible Church", info: "Sundays 10am", url: "https://example.org" });
+  // `service` comes back off `config.sundayService`, which the link just set —
+  // there is one stored number, not a second copy on the church.
+  expect(church).toEqual({ name: "Grace Bible Church", service: 600, url: "https://example.org" });
 
   // And it survives a relaunch. (Finish first-run first — the welcome owns
   // the screen until a path is chosen, so a reload before that just shows it
@@ -1194,7 +1202,9 @@ test("the welcome's verses are the corpus text, verbatim and instant", async ({ 
     const groups = [
       ["Ps 12:6", "Ps 12:7"],
       ["Heb 10:24", "Heb 10:25"],
-      ["Ps 119:11"],
+      // Ps 119:11 went with the "Memorize" beat, which the 30-day devotional
+      // replaced on this page (maintainer, 2026-08-26). The verse is still in
+      // the corpus and still on Android's welcome — it is just not quoted here.
       ["Rom 5:8", "John 3:16"],
       ["John 10:28", "1John 5:13"],
       ["Phil 1:6", "1John 1:9"],
@@ -1233,7 +1243,7 @@ test("the share QR encodes the church, not just the app", async ({ page }) => {
   await page.evaluate(() =>
     (window as any).__plumbline.setChurch({
       name: "Grace Bible Church",
-      info: "Sundays 10am, 12 Long Street",
+      service: 600,
       url: "https://example.org",
     }),
   );
@@ -1518,13 +1528,16 @@ test("the welcome points a new believer at the church that shared it", async ({ 
   // "Find a church" used to say "consider reaching out to them" in the
   // abstract, even when the link named the church (feedback 2026-07-27).
   await page.goto(
-    "/?church=Grace+Bible+Church&churchInfo=Sundays+10AM&churchUrl=https%3A%2F%2Fexample.org&start=new",
+    "/?church=Grace+Bible+Church&churchService=600&churchUrl=https%3A%2F%2Fexample.org&start=new",
   );
   await page.getByRole("button", { name: "New believer" }).click({ timeout: 90_000 });
   const findChurch = page.locator(".welcome p", { hasText: "Find a church" });
   await expect(findChurch).toContainText("shared with you by");
   await expect(findChurch).toContainText("Grace Bible Church");
-  await expect(findChurch).toContainText("Sundays 10AM");
+  // The meeting time, written out by the app rather than echoed from the link:
+  // the link carried `churchService=600` and this reader is English, so 600
+  // minutes reads as 10:00 AM (a German reader would see 10:00).
+  await expect(findChurch).toContainText("Meets Sundays at 10:00 AM");
   await expect(findChurch.getByRole("link", { name: /Visit Grace Bible Church/ })).toHaveAttribute(
     "href",
     "https://example.org",

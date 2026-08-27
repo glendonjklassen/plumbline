@@ -80,7 +80,7 @@
     lines.push(`Shared from Plumbline — ${s.presentShareLink}`);
     if (hasChurch(s.church)) {
       lines.push("");
-      lines.push(s.church.info ? `${s.church.name} — ${s.church.info}` : s.church.name);
+      lines.push(s.church.service !== null ? `${s.church.name} — ${s.churchMeets(s.church)}` : s.church.name);
     }
     return lines.join("\n");
   }

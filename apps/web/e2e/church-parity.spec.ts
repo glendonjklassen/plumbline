@@ -29,6 +29,7 @@ import { fileURLToPath } from "node:url";
 import {
   PWA_URL,
   cleanChurch,
+  clockLabel,
   churchTitle,
   safeChurchUrl,
   shareUrl,
@@ -69,7 +70,15 @@ test("the web builds the same share link the core does", () => {
     // the same English string the core's `title` uses — read from the catalogue
     // rather than typed here, or the two could drift and this test would not see
     // it.
-    expect(churchTitle(row.church as Church, EN["shell.churchFallback"]), `title ${where}`).toBe(row.title);
+    // The meeting line is the caller's too, for the same reason, and it is the
+    // half that replaced the old free-text `info`: the clock comes from
+    // church.ts (12-hour for English) and the words from the catalogue, so this
+    // builds it exactly as the shell does rather than hard-coding a sentence.
+    const meets =
+      row.church.service == null
+        ? ""
+        : EN["church.meets"].replace("{time}", clockLabel(row.church.service, "en"));
+    expect(churchTitle(row.church as Church, EN["shell.churchFallback"], meets), `title ${where}`).toBe(row.title);
     // Against the CLEANED url: that is the only form a shell ever holds (a
     // church arrives from the config or a query string, both cleaned).
     expect(safeChurchUrl(row.cleaned.url), `safeUrl ${where}`).toBe(row.safeUrl);

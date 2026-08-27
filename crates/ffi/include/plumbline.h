@@ -1155,6 +1155,76 @@ char *plumbline_panel_guide_blocks_json(void);
 // null.
 char *plumbline_panel_about_blocks_json(void);
 
+// Every running devotional with its open day, plus the catalogue every picker
+// offers, as `{running:[…], catalogue:[…]}`. Never null on a live engine.
+//
+// `lang` selects the text (falling back to English per entry); null reads as
+// English. `today` is the reader's LOCAL `YYYY-MM-DD`; null reads as "no day",
+// which leaves every open entry `available` — the permissive direction, since
+// the cost of a missing date should never be a reader locked out.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_devotionals_json(const struct PlumblineEngine *engine,
+                                        const char *lang,
+                                        const char *today);
+
+// One day of a booklet, whether or not it is the open one — what the reader's
+// page paints when they browse back to day 3. Null for a day the booklet does
+// not have, or an unknown id.
+//
+// # Safety
+// `engine` is a live engine; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_devotional_day_json(const struct PlumblineEngine *engine,
+                                           const char *id,
+                                           uint32_t day,
+                                           const char *lang);
+
+// Start a devotional by its catalogue `id`. Starting one already running is a
+// no-op, NOT a re-seed: a reader who taps Start again from a stale list must
+// not lose 12 days of progress, and there is no class exclusivity here to
+// force a replacement (a reader may run two booklets at once). Null on
+// success, else an owned error string.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_devotional_start(struct PlumblineEngine *engine,
+                                        const char *id,
+                                        const char *now);
+
+// Stop a devotional, removing its run file and its progress. An absent run is
+// a no-op, not an error (the `plan_stop` stance). Null on success, else an
+// owned error string.
+//
+// # Safety
+// `engine` is valid; `id` is null or valid NUL-terminated UTF-8.
+char *plumbline_engine_devotional_stop(struct PlumblineEngine *engine, const char *id);
+
+// Bank day `day` of a running devotional on the reader's LOCAL `today`
+// (`YYYY-MM-DD`) — the Done at the foot of the page, and the only signal that
+// a day was read. Banking a day already banked is a no-op that does NOT
+// re-stamp the date, so a double tap cannot push tomorrow's entry further
+// away. Null on success, else an owned error string.
+//
+// # Safety
+// `engine` is valid; the string args are null or valid NUL-terminated UTF-8.
+char *plumbline_engine_devotional_done(struct PlumblineEngine *engine,
+                                       const char *id,
+                                       uint32_t day,
+                                       const char *today);
+
+// Pause or resume a devotional — set aside, kept whole: its file and its
+// banked days stay put, and it stops asking (no chip) while `paused`. An
+// absent id is an error: pausing one that is not running means the shell's
+// list is stale, and saying so beats a silent no-op (the `plan_set_paused`
+// stance). Null on success, else an owned error string.
+//
+// # Safety
+// `engine` is valid; `id` is null or valid NUL-terminated UTF-8.
+char *plumbline_engine_devotional_set_paused(struct PlumblineEngine *engine,
+                                             const char *id,
+                                             bool paused);
+
 // The reading map's tuning as JSON: `{wordsPerMinute, completeAt, freshDays,
 // staleDays, graceSeconds, tickSeconds, idleSeconds}`. Engine-independent and
 // free — the same object rides on `reading_books_json`, but a shell that only

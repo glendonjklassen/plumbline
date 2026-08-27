@@ -25,7 +25,7 @@
   import { getSession } from "../state/session.svelte";
   import ScreenBar from "../lib/ScreenBar.svelte";
   import { dispatchLink } from "../study/links";
-  import { dayStamp } from "../engine/StudyEngine";
+  import { dayStamp, localDay } from "../engine/StudyEngine";
   import { chapterSpan, firstUnread, remaining, todayPlans } from "./planToday";
   import { lang, plural, t } from "../lib/i18n.svelte";
 
@@ -76,6 +76,15 @@
   const showReal = $derived(ready || waited);
 
   const todays = $derived(todayPlans(plansQ));
+  /** Running devotionals with an entry still on offer today. Retirement is the
+   *  difference from a plan row above: a devotional is one entry a day, so a
+   *  banked day leaves the band until tomorrow rather than rolling straight on
+   *  to the next portion. */
+  const devotionals = $derived(
+    (((s.qStale("devotionals", lang(), localDay())?.running ?? []) as any[]) ?? []).filter(
+      (r) => !r.paused && r.today?.available,
+    ),
+  );
   /** A full plan-day was banked today. The row still shows the NEXT portion —
    *  working ahead is invited, not merely permitted (UAT, 2026-08-18) — and
    *  this line above it is the acknowledgment, because saying nothing to
@@ -170,6 +179,11 @@
   // deliberately carry no count: they are activities rather than collections,
   // and the band above already says what they are asking for today.
   const cards = $derived([
+    // ONE card for devotionals AND reading plans (maintainer, 2026-08-26): they
+    // were two cards onto the same screen, which is a distinction the reader
+    // pays for and the app does not keep. First in the grid, and a DOOR rather
+    // than a shortcut into today's entry — the screen behind it also has to
+    // offer starting a second booklet and stopping this one.
     { id: "plans", count: null as number | null, go: openPlans },
     { id: "memorize", count: null as number | null, go: openMemorize },
     {
@@ -247,6 +261,12 @@
               <span class="row-note">{t("plans.chip", { day: p.day, chapters: chapterSpan(remaining(p)) })}</span>
             </button>
           {/each}
+          {#each devotionals as d (d.id)}
+            <button class="row" onclick={() => s.openDevotional(d.id, d.today.day)}>
+              <span class="row-name">{d.name}</span>
+              <span class="row-note">{t("devotional.dayOf", { day: d.today.day, total: d.daysTotal })}</span>
+            </button>
+          {/each}
           {#if dueCount > 0}
             <button class="row" onclick={openMemorize}>
               <span class="row-name">{t("explore.memorize")}</span>
@@ -259,7 +279,7 @@
               <span class="row-note">{plural("explore.toReview.one", "explore.toReview.other", suggestedCount)}</span>
             </button>
           {/if}
-          {#if todays.length === 0 && dueCount === 0 && suggestedCount === 0}
+          {#if todays.length === 0 && devotionals.length === 0 && dueCount === 0 && suggestedCount === 0}
             <button class="row invite" onclick={openPlans}>
               <span class="row-note">{t("explore.nothingRunning")}</span>
             </button>
