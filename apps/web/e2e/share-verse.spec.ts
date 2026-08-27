@@ -177,7 +177,7 @@ test("a shared verse carries the reader's church to whoever opens it", async ({ 
   await page.evaluate(() =>
     (window as any).__plumbline.setChurch({
       name: "Grace Bible Church",
-      info: "Sundays 10am, 12 Long Street",
+      service: 600,
       url: "https://example.org",
     }),
   );
@@ -191,9 +191,7 @@ test("a shared verse carries the reader's church to whoever opens it", async ({ 
   expect(url.searchParams.get("church"), "the reader's church did not ride the shared verse").toBe(
     "Grace Bible Church",
   );
-  expect(url.searchParams.get("churchInfo"), "when and where they meet was dropped from the link").toBe(
-    "Sundays 10am, 12 Long Street",
-  );
+  expect(url.searchParams.get("churchService"), "when they meet was dropped from the link").toBe("600");
   expect(url.searchParams.get("churchUrl"), "the church's own link was dropped from the link").toBe(
     "https://example.org",
   );
@@ -207,7 +205,7 @@ test("a shared verse carries the reader's church to whoever opens it", async ({ 
     await boot(guest, `/${url.search}`);
     const got = await guest.evaluate(() => (window as any).__plumbline.church);
     expect(got.name, "the church did not ride the link to the person who opened it").toBe("Grace Bible Church");
-    expect(got.info).toBe("Sundays 10am, 12 Long Street");
+    expect(got.service).toBe(600);
     await expect
       .poll(() => where(guest), { message: `the shared link did not open at ${REF}`, timeout: 20_000 })
       .toEqual({ book: "Isa", chapter: 53, verse: 5 });

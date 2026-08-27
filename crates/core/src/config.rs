@@ -79,8 +79,17 @@ pub struct PaneRef {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Church {
     pub name: String,
-    /// One free line — when and where they meet.
-    pub info: String,
+    /// When they meet, as MINUTES SINCE LOCAL MIDNIGHT — the same grain as
+    /// [`Config::sunday_service`], and for this reader's own church it is
+    /// literally that field (the share builder fills it from there). It lives
+    /// on `Church` as well because a church that arrives from someone else's
+    /// link is not this reader's config.
+    ///
+    /// This replaced a free "when and where" line: the reader had already given
+    /// their service time in Settings and was being asked to type it again into
+    /// a text box that no screen could format, localize, or check. A number
+    /// renders as "Sundays 10:00" in every language on its own.
+    pub service: Option<u16>,
     /// Their website, if they have one.
     pub url: String,
 }
@@ -410,8 +419,9 @@ struct ConfigWire {
 struct ChurchWire {
     #[serde(default)]
     name: String,
-    #[serde(default)]
-    info: String,
+    /// Minutes since local midnight; absent when the church never said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    service: Option<u16>,
     #[serde(default)]
     url: String,
     #[serde(flatten)]
@@ -588,7 +598,9 @@ impl Config {
                 .church
                 .map(|c| Church {
                     name: c.name.trim().to_string(),
-                    info: c.info.trim().to_string(),
+                    // Same clamp as `sunday_service`: a stored minute outside a
+                    // day is nonsense, and "never said" beats a bad time.
+                    service: c.service.filter(|m| *m < 24 * 60),
                     url: c.url.trim().to_string(),
                 })
                 .unwrap_or_default(),
@@ -664,7 +676,7 @@ impl Config {
             gospel_thread: (!self.gospel_thread.is_empty()).then(|| self.gospel_thread.clone()),
             church: (!self.church.is_empty()).then(|| ChurchWire {
                 name: self.church.name.clone(),
-                info: self.church.info.clone(),
+                service: self.church.service,
                 url: self.church.url.clone(),
                 extra: Map::new(),
             }),
@@ -855,7 +867,7 @@ mod tests {
             localized_lexicon_off: true,
             church: Church {
                 name: "Grace Bible Church".into(),
-                info: "Sundays 10am · 12 Long Street".into(),
+                service: Some(10 * 60),
                 url: "https://example.org".into(),
             },
             sunday_service: Some(10 * 60),

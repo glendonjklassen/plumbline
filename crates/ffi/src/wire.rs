@@ -1290,19 +1290,22 @@ pub struct WirePaneRef {
 pub struct WireChurch {
     #[serde(default)]
     pub name: String,
-    #[serde(default)]
-    pub info: String,
+    /// When the church meets, minutes since local midnight; absent when it
+    /// never said. Replaced a free "when and where" line — see
+    /// `core::config::Church::service`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<u16>,
     #[serde(default)]
     pub url: String,
 }
 
 impl WireChurch {
     pub fn to_core(&self) -> plumbline_core::config::Church {
-        plumbline_core::config::Church { name: self.name.clone(), info: self.info.clone(), url: self.url.clone() }
+        plumbline_core::config::Church { name: self.name.clone(), service: self.service, url: self.url.clone() }
     }
 
     pub fn from_core(c: &plumbline_core::config::Church) -> WireChurch {
-        WireChurch { name: c.name.clone(), info: c.info.clone(), url: c.url.clone() }
+        WireChurch { name: c.name.clone(), service: c.service, url: c.url.clone() }
     }
 }
 
@@ -1397,7 +1400,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         localized_lexicon_off: Some(cfg.localized_lexicon_off),
         church: (!cfg.church.is_empty()).then(|| WireChurch {
             name: cfg.church.name.clone(),
-            info: cfg.church.info.clone(),
+            service: cfg.church.service,
             url: cfg.church.url.clone(),
         }),
         first_run,

@@ -33,8 +33,11 @@ export const PWA_URL = "https://plumblinebible.org/";
 
 export interface Church {
   name: string;
-  /** One free line — when and where they meet. */
-  info: string;
+  /** When they meet, as MINUTES SINCE LOCAL MIDNIGHT — the same grain as
+   *  `config.sundayService`, which for the reader's OWN church is where the
+   *  number actually lives (there is one stored value, and `shareUrl` is handed
+   *  it). A church arriving from someone else's link carries its own. */
+  service: number | null;
   url: string;
 }
 
@@ -59,7 +62,12 @@ export function cleanChurch(c: Partial<Church> | undefined | null): Church {
     // Capped: these end up in a URL, in a QR, and on a welcome screen, and
     // the length that still scans is finite. Same caps as `church::NAME_MAX`.
     name: cut(c?.name, 80),
-    info: cut(c?.info, 120),
+    // A minute outside a day is nonsense rather than something to truncate:
+    // dropped, so a bad link reads as "never said" (`church::clean`).
+    service:
+      typeof c?.service === "number" && Number.isInteger(c.service) && c.service >= 0 && c.service < 24 * 60
+        ? c.service
+        : null,
     url: cut(c?.url, 200),
   };
 }
@@ -69,7 +77,8 @@ export function churchFromQuery(search: string): Church | null {
   const q = new URLSearchParams(search);
   const c = cleanChurch({
     name: q.get("church") ?? "",
-    info: q.get("churchInfo") ?? "",
+    // A time that is not a number, or not a time, reads as "never said".
+    service: Number.parseInt(q.get("churchService") ?? "", 10),
     url: q.get("churchUrl") ?? "",
   });
   return hasChurch(c) ? c : null;
@@ -94,7 +103,9 @@ export function shareUrl(
   const c = cleanChurch(church);
   if (hasChurch(c)) {
     u.searchParams.set("church", c.name);
-    if (c.info) u.searchParams.set("churchInfo", c.info);
+    // A NUMBER on the wire, so the recipient's app writes the time their way
+    // instead of reading someone else's formatting.
+    if (c.service !== null) u.searchParams.set("churchService", String(c.service));
     if (c.url) u.searchParams.set("churchUrl", c.url);
   }
   if (opts.startAsNewBeliever) u.searchParams.set("start", "new");
@@ -162,9 +173,23 @@ export function safeChurchUrl(url: string | null | undefined): string | null {
  *  e2e/church-parity.spec.ts drives directly in Node — so it has to stay
  *  importable outside a browser, and the catalogue is a reactive Svelte module
  *  that is not. The one string it needed is the caller's to supply. */
-export function churchTitle(church: Church | undefined | null, fallback = ""): string {
+export function churchTitle(church: Church | undefined | null, fallback = "", meets = ""): string {
   const c = cleanChurch(church);
-  return [c.name, c.info].filter(Boolean).join(": ") || fallback;
+  return [c.name, c.service !== null ? meets : ""].filter(Boolean).join(": ") || fallback;
+}
+
+/** "10:00 AM" / "10:00" — the clock the reader's language writes.
+ *
+ *  Twin of `church::clock`. 12-hour for English and 24-hour otherwise, which is
+ *  the half of a meeting time that actually differs between them; the words
+ *  around it come from the catalogue (`church.meets`) and are the caller's to
+ *  supply, for the same reason `churchTitle`'s fallback is. */
+export function clockLabel(minutes: number, lang: string): string {
+  const m = ((minutes % (24 * 60)) + 24 * 60) % (24 * 60);
+  const h = Math.floor(m / 60);
+  const min = String(m % 60).padStart(2, "0");
+  if (lang !== "en") return `${String(h).padStart(2, "0")}:${min}`;
+  return `${h % 12 === 0 ? 12 : h % 12}:${min} ${h < 12 ? "AM" : "PM"}`;
 }
 
 /** Open the church's website, or hand `onNoSite` the label instead — the same

@@ -79,7 +79,7 @@ test("phone: the church rides the Share destination and Welcome the ≡ menu", a
   await page.evaluate(() => localStorage.setItem("plumbline:intro", "new"));
   await boot(page);
   await page.evaluate(() =>
-    (window as any).__plumbline.setChurch({ name: "Grace Chapel", info: "Sundays 10am", url: "" }),
+    (window as any).__plumbline.setChurch({ name: "Grace Chapel", service: 600, url: "" }),
   );
 
   // The ≡ holds UTILITIES: Welcome yes (for every reader), Church no — the

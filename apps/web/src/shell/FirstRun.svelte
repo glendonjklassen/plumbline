@@ -38,10 +38,9 @@
   // plainly why it is collected — it travels in the links they share, and
   // nowhere else.
   let churchName = $state("");
-  let churchInfo = $state("");
   let churchUrl = $state("");
   function saveChurchIfGiven(): void {
-    const c = cleanChurch({ name: churchName, info: churchInfo, url: churchUrl });
+    const c = cleanChurch({ name: churchName, service: s.config.sundayService ?? null, url: churchUrl });
     if (hasChurch(c)) s.setChurch(c);
   }
 
@@ -268,7 +267,7 @@
     <div class="from-church">
       <span class="fc-lead">{t("intro.sharedBy")}</span>
       <span class="fc-name">{s.sharedByChurch.name}</span>
-      {#if s.sharedByChurch.info}<span class="fc-info">{s.sharedByChurch.info}</span>{/if}
+      {#if s.sharedByChurch.service !== null}<span class="fc-info">{s.churchMeets(s.sharedByChurch)}</span>{/if}
       {#if safeChurchUrl(s.sharedByChurch.url)}
         <a class="fc-url" href={safeChurchUrl(s.sharedByChurch.url)} target="_blank" rel="noopener noreferrer">
           {s.sharedByChurch.url}
@@ -319,7 +318,6 @@
 {#snippet churchFields()}
   <p class="ch-why">{t("intro.churchWhy")}</p>
   <input class="ch-field" placeholder={t("settings.churchName")} bind:value={churchName} />
-  <input class="ch-field" placeholder={t("settings.churchInfo")} bind:value={churchInfo} />
   <input class="ch-field" placeholder={t("settings.churchUrl")} bind:value={churchUrl} />
 {/snippet}
 
@@ -376,7 +374,7 @@
           {t("intro.welcome.church")}
           {#if hasChurch(fromChurch)}
             {t("intro.welcome.churchShared", {
-              church: fromChurch.info ? `${fromChurch.name} — ${fromChurch.info}` : fromChurch.name,
+              church: fromChurch.service !== null ? `${fromChurch.name} — ${s.churchMeets(fromChurch)}` : fromChurch.name,
             })}
             {#if safeChurchUrl(fromChurch.url)}
               <a class="ref-link" href={safeChurchUrl(fromChurch.url)} target="_blank" rel="noopener noreferrer">

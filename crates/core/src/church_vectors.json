@@ -6,8 +6,8 @@
     "at": null,
     "cleaned": {
       "name": "",
-      "info": "",
-      "url": ""
+      "url": "",
+      "service": null
     },
     "url": "https://plumblinebible.org/",
     "title": "Your church",
@@ -22,8 +22,8 @@
     "at": null,
     "cleaned": {
       "name": "Grace Bible Church",
-      "info": "",
-      "url": ""
+      "url": "",
+      "service": null
     },
     "url": "https://plumblinebible.org/?church=Grace+Bible+Church",
     "title": "Grace Bible Church",
@@ -33,18 +33,17 @@
     "name": "all three fields",
     "church": {
       "name": "Grace Bible Church",
-      "info": "Sundays 10am, 12 Long Street",
       "url": "https://example.org"
     },
     "startAsNewBeliever": false,
     "at": null,
     "cleaned": {
       "name": "Grace Bible Church",
-      "info": "Sundays 10am, 12 Long Street",
-      "url": "https://example.org"
+      "url": "https://example.org",
+      "service": null
     },
-    "url": "https://plumblinebible.org/?church=Grace+Bible+Church&churchInfo=Sundays+10am%2C+12+Long+Street&churchUrl=https%3A%2F%2Fexample.org",
-    "title": "Grace Bible Church: Sundays 10am, 12 Long Street",
+    "url": "https://plumblinebible.org/?church=Grace+Bible+Church&churchUrl=https%3A%2F%2Fexample.org",
+    "title": "Grace Bible Church",
     "safeUrl": "https://example.org"
   },
   {
@@ -56,8 +55,8 @@
     "at": "Ps 23:1",
     "cleaned": {
       "name": "Grace",
-      "info": "",
-      "url": ""
+      "url": "",
+      "service": null
     },
     "url": "https://plumblinebible.org/?church=Grace&start=new&at=Ps+23%3A1",
     "title": "Grace",
@@ -70,8 +69,8 @@
     "at": "1John 4:8",
     "cleaned": {
       "name": "",
-      "info": "",
-      "url": ""
+      "url": "",
+      "service": null
     },
     "url": "https://plumblinebible.org/?at=1John+4%3A8",
     "title": "Your church",
@@ -80,18 +79,17 @@
   {
     "name": "non-ascii name and info",
     "church": {
-      "name": "Iglesia Bíblica",
-      "info": "Domingos 10:00"
+      "name": "Iglesia Bíblica"
     },
     "startAsNewBeliever": false,
     "at": null,
     "cleaned": {
       "name": "Iglesia Bíblica",
-      "info": "Domingos 10:00",
-      "url": ""
+      "url": "",
+      "service": null
     },
-    "url": "https://plumblinebible.org/?church=Iglesia+B%C3%ADblica&churchInfo=Domingos+10%3A00",
-    "title": "Iglesia Bíblica: Domingos 10:00",
+    "url": "https://plumblinebible.org/?church=Iglesia+B%C3%ADblica",
+    "title": "Iglesia Bíblica",
     "safeUrl": null
   },
   {
@@ -103,8 +101,8 @@
     "at": null,
     "cleaned": {
       "name": "Faith + Hope Chapel",
-      "info": "",
-      "url": ""
+      "url": "",
+      "service": null
     },
     "url": "https://plumblinebible.org/?church=Faith+%2B+Hope+Chapel",
     "title": "Faith + Hope Chapel",
@@ -114,18 +112,18 @@
     "name": "whitespace is not a church",
     "church": {
       "name": "   ",
-      "info": "Sundays",
-      "url": "https://x.org"
+      "url": "https://x.org",
+      "service": 600
     },
     "startAsNewBeliever": false,
     "at": null,
     "cleaned": {
       "name": "",
-      "info": "Sundays",
-      "url": "https://x.org"
+      "url": "https://x.org",
+      "service": 600
     },
     "url": "https://plumblinebible.org/",
-    "title": "Sundays",
+    "title": "Meets Sundays at 10:00 AM",
     "safeUrl": "https://x.org"
   },
   {
@@ -138,8 +136,8 @@
     "at": null,
     "cleaned": {
       "name": "Grace",
-      "info": "",
-      "url": "javascript:alert(1)"
+      "url": "javascript:alert(1)",
+      "service": null
     },
     "url": "https://plumblinebible.org/?church=Grace&churchUrl=javascript%3Aalert%281%29",
     "title": "Grace",
@@ -149,18 +147,17 @@
     "name": "over the caps",
     "church": {
       "name": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
-      "info": "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII",
       "url": "https://x.org/uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu"
     },
     "startAsNewBeliever": false,
     "at": null,
     "cleaned": {
       "name": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
-      "info": "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII",
-      "url": "https://x.org/uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu"
+      "url": "https://x.org/uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu",
+      "service": null
     },
-    "url": "https://plumblinebible.org/?church=NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN&churchInfo=IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII&churchUrl=https%3A%2F%2Fx.org%2Fuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu",
-    "title": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN: IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII",
+    "url": "https://plumblinebible.org/?church=NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN&churchUrl=https%3A%2F%2Fx.org%2Fuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu",
+    "title": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
     "safeUrl": "https://x.org/uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu"
   },
   {
@@ -173,11 +170,46 @@
     "at": null,
     "cleaned": {
       "name": "Grace",
-      "info": "",
-      "url": "https://ejemplo.org/a?b=c&d=e"
+      "url": "https://ejemplo.org/a?b=c&d=e",
+      "service": null
     },
     "url": "https://plumblinebible.org/?church=Grace&churchUrl=https%3A%2F%2Fejemplo.org%2Fa%3Fb%3Dc%26d%3De",
     "title": "Grace",
     "safeUrl": "https://ejemplo.org/a?b=c&d=e"
+  },
+  {
+    "name": "a church that says when it meets",
+    "church": {
+      "name": "Grace Bible Church",
+      "service": 600,
+      "url": "https://grace.example"
+    },
+    "startAsNewBeliever": false,
+    "at": null,
+    "cleaned": {
+      "name": "Grace Bible Church",
+      "url": "https://grace.example",
+      "service": 600
+    },
+    "url": "https://plumblinebible.org/?church=Grace+Bible+Church&churchService=600&churchUrl=https%3A%2F%2Fgrace.example",
+    "title": "Grace Bible Church: Meets Sundays at 10:00 AM",
+    "safeUrl": "https://grace.example"
+  },
+  {
+    "name": "a meeting time outside a day is never said",
+    "church": {
+      "name": "Grace Bible Church",
+      "service": 5000
+    },
+    "startAsNewBeliever": false,
+    "at": null,
+    "cleaned": {
+      "name": "Grace Bible Church",
+      "url": "",
+      "service": null
+    },
+    "url": "https://plumblinebible.org/?church=Grace+Bible+Church",
+    "title": "Grace Bible Church",
+    "safeUrl": null
   }
 ]

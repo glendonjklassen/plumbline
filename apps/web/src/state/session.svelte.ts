@@ -12,7 +12,7 @@ import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FILES } from "../engine/fonts.gener
 import { EngineRpc, type BootInfo } from "../engine/worker-client";
 import { dayStamp, localDay, nowStamp } from "../engine/StudyEngine";
 import { fontStackFor, setReaderFont } from "../reader/measure";
-import { cleanChurch, PWA_URL, shareUrl, type Church } from "../shell/church";
+import { cleanChurch, clockLabel, PWA_URL, shareUrl, type Church } from "../shell/church";
 import { lang, t } from "../lib/i18n.svelte";
 
 export interface PaneState {
@@ -1199,9 +1199,23 @@ export class Session {
     return this.#memoMarks(key, set);
   }
 
-  /** The reader's home church — what their own shared links carry. */
+  /** The reader's home church — what their own shared links carry.
+   *
+   *  The meeting time is read from `config.sundayService` rather than stored a
+   *  second time on the church: there is ONE such number (maintainer,
+   *  2026-08-26), the one Settings and the Share pane both edit and the Sunday
+   *  bookmark already reads. A church that arrives from someone ELSE'S link
+   *  carries its own, which is why `Church` has the field at all. */
   get church(): Church {
-    return cleanChurch(this.config.church);
+    return cleanChurch({ ...this.config.church, service: this.config.sundayService ?? null });
+  }
+
+  /** "Meets Sundays at 10:00 AM" — a church's meeting time, written the
+   *  reader's way. The clock is `church.ts`'s (12-hour for English, 24-hour
+   *  otherwise); the words around it are the catalogue's, kept out of that
+   *  module because it has to stay importable from Node for the parity test. */
+  churchMeets(c: Church | null | undefined): string {
+    return c?.service == null ? "" : t("church.meets", { time: clockLabel(c.service, lang()) });
   }
 
   /** THE link this reader hands over, wherever they share from — the app plus
@@ -1235,7 +1249,15 @@ export class Session {
     return v === "new" || v === "curious" ? v : null;
   }
   setChurch(c: Church): void {
-    this.config.church = cleanChurch(c);
+    const cleaned = cleanChurch(c);
+    // ONE stored number. The church's meeting time IS `config.sundayService` —
+    // the field Settings and the Share pane both edit and the Sunday bookmark
+    // already reads — so it is written THERE rather than kept a second time on
+    // the church, and [[church]] reads it back on the way out. Adopting a
+    // church from someone's link therefore adopts its time too, which is what
+    // adopting the rest of it already did.
+    if (cleaned.service !== null) this.config.sundayService = cleaned.service;
+    this.config.church = { ...cleaned, service: null };
     this.saveConfig();
   }
 
