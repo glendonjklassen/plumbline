@@ -65,10 +65,11 @@ use plumbline_core::strongs::{self, OccurrenceIx, StrongsDict};
 use plumbline_core::tag::{self, LoadedTag, TagTarget};
 use plumbline_core::thread::{self, LoadedThread, ThreadEntry};
 use plumbline_core::weave::{self, Link, LoadedWeave, WeaveKind};
-use plumbline_core::{canon, export, hymnal, i18n, notes, session_slot, theme, usernote, VRef};
+use plumbline_core::{canon, devotional, export, hymnal, i18n, notes, session_slot, theme, usernote, VRef};
 use plumbline_layout::{layout_chapter, DisplayList, LayoutConfig, Measure, MeasureMemo, Memoized};
 use plumbline_rnd::{bridge, burst, concept, morph};
 
+pub mod devotionals;
 pub mod dwell;
 pub mod plans;
 pub mod reading_map;
@@ -223,6 +224,11 @@ pub struct PlumblineEngine {
     /// can come at any point in a session, so the bytes have to still be there
     /// when it does.
     hymnal: OnceLock<hymnal::Hymnal>,
+    /// The devotional catalogue, parsed lazily and on the same terms as the
+    /// hymnal: set only from a NON-EMPTY parse, because `data/devotional.json`
+    /// rides the pack too and a probe that lands before it would otherwise
+    /// cache "no devotionals" for the whole session.
+    devotionals: OnceLock<Vec<devotional::Devotional>>,
     /// The plain-English overlay (the AKJV delta), when the home carries one.
     /// A READING aid: it re-words the reader's view and nothing else — never a
     /// memory card, a Present hand-off, or copied text.
@@ -313,6 +319,7 @@ impl PlumblineEngine {
             akjv: OnceLock::new(),
             akjv_on: std::sync::atomic::AtomicBool::new(false),
             hymnal: OnceLock::new(),
+            devotionals: OnceLock::new(),
             concept: OnceLock::new(),
             leitwort: OnceLock::new(),
             reading_words: OnceLock::new(),
@@ -742,6 +749,27 @@ impl PlumblineEngine {
             Ok(book) if !book.hymns.is_empty() => {
                 let _ = self.hymnal.set(book);
                 self.hymnal.get().expect("just set")
+            }
+            _ => empty(),
+        }
+    }
+
+    /// The devotional catalogue, parsed from the home on first use — never
+    /// cached-empty, the [`Self::hymnal`] stance and for the same reason: the
+    /// file arrives with the pack, and a probe in the gap before it lands must
+    /// not fix "no devotionals" for the session. A reader whose first run opens
+    /// the new-believer booklet is exactly that probe.
+    fn devotionals(&self) -> &[devotional::Devotional] {
+        if let Some(all) = self.devotionals.get() {
+            return all;
+        }
+        static EMPTY: OnceLock<Vec<devotional::Devotional>> = OnceLock::new();
+        let empty = || EMPTY.get_or_init(Vec::new).as_slice();
+        let Some(h) = &self.home else { return empty() };
+        match devotional::load(h.join("data").join("devotional.json")) {
+            Ok(all) if !all.is_empty() => {
+                let _ = self.devotionals.set(all);
+                self.devotionals.get().expect("just set")
             }
             _ => empty(),
         }

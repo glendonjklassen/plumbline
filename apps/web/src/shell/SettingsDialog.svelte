@@ -20,7 +20,7 @@
   // Must stay in step with engine/home.ts's USER_DIRS and the Android shell's
   // BACKUP_DIRS: a dir missing from this restore filter is a dir that exports
   // into the zip and is then silently dropped on the way back in.
-  const BACKUP_DIRS = ["tags/", "threads/", "weaves/", "notes/", "memory/", "reading/", "plans/", ".config/"];
+  const BACKUP_DIRS = ["tags/", "threads/", "weaves/", "notes/", "memory/", "reading/", "plans/", "devotionals/", ".config/"];
 
   // Archives written before the Plumbline rename carry the config under
   // ".config/pure-study/"; the live home reads ".config/plumbline/". Remapped on
@@ -1421,14 +1421,20 @@
     width: 17px;
     height: 17px;
   }
-  /* The time input is text-shaped, not a 17px checkbox square. */
+  /* The time input is text-shaped, not a 17px checkbox square.
+     `--popupPaper`, not `--popup`: the latter is not a palette variable and
+     never was, so this always took the light-cream FALLBACK — invisible
+     near-white-on-cream on every dark theme, which is how it was reported
+     (maintainer, 2026-08-26, on Nord). Every other popup surface in the tree
+     spells it `--popupPaper`; on a light theme the wrong name happened to land
+     on the right colour, which is why it survived this long. */
   .toggle input.time {
     width: auto;
     height: auto;
     font: inherit;
     font-size: calc(14px * var(--uiScale, 1));
     color: var(--ink, #211f1a);
-    background: var(--popup, #f2eee6);
+    background: var(--popupPaper, #f2eee6);
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 6px;
     padding: 4px 6px;

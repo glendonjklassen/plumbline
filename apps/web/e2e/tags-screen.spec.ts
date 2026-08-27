@@ -65,7 +65,7 @@ test("Tags is a page under Study, and ‹ returns to the hub", async ({ page }) 
   await boot(page);
   await openTags(page);
   // A page, not the panel: the hub's cards are gone while it is up.
-  await expect(page.getByRole("button", { name: /^Reading plans/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Devotionals and reading plans/ })).toHaveCount(0);
   // Browsing IS the page: the tags render inline (the stock set seeds some),
   // with the organization actions as buttons after the list.
   await expect(page.locator(".tag-row").first()).toBeVisible({ timeout: 15_000 });

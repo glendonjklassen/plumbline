@@ -18,6 +18,7 @@ pub mod civil;
 pub mod config;
 pub mod corpus;
 pub mod crossref;
+pub mod devotional;
 pub mod export;
 pub mod font;
 pub mod home;

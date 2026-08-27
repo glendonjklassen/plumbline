@@ -1194,7 +1194,9 @@ test("the welcome's verses are the corpus text, verbatim and instant", async ({ 
     const groups = [
       ["Ps 12:6", "Ps 12:7"],
       ["Heb 10:24", "Heb 10:25"],
-      ["Ps 119:11"],
+      // Ps 119:11 went with the "Memorize" beat, which the 30-day devotional
+      // replaced on this page (maintainer, 2026-08-26). The verse is still in
+      // the corpus and still on Android's welcome — it is just not quoted here.
       ["Rom 5:8", "John 3:16"],
       ["John 10:28", "1John 5:13"],
       ["Phil 1:6", "1John 1:9"],

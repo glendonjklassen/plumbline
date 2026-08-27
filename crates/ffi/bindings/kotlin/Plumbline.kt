@@ -278,6 +278,25 @@ internal interface PlumblineNative : Library {
     fun plumbline_engine_concept_study_start(engine: Pointer, tag: String, now: String): Pointer?
     fun plumbline_engine_concept_study_sweep(engine: Pointer, id: String, book: String, chapter: Int): Pointer?
 
+    // ── devotionals ─────────────────────────────────────────────────────────
+    //
+    // Declared for ABI COMPLETENESS, not because a shell here calls them: the
+    // devotional surfaces are the PWA's (maintainer, 2026-08-26 — Android is
+    // stood down). The bindgen guard requires the header and this file to name
+    // the same symbols, and excluding them would say "wasm-only", which they
+    // are not — they are ordinary C exports nobody on this side has wired yet.
+    //
+    // `today` on these is the reader's LOCAL YYYY-MM-DD, never a UTC instant:
+    // it is the whole of the one-entry-a-day rule (core::devotional).
+    fun plumbline_engine_devotionals_json(engine: Pointer, lang: String?, today: String?): Pointer?
+    fun plumbline_engine_devotional_day_json(engine: Pointer, id: String, day: Int, lang: String?): Pointer?
+    fun plumbline_engine_devotional_start(engine: Pointer, id: String, now: String): Pointer?
+    fun plumbline_engine_devotional_stop(engine: Pointer, id: String): Pointer?
+    /** Bank a day — the Done at the foot of the page. */
+    fun plumbline_engine_devotional_done(engine: Pointer, id: String, day: Int, today: String): Pointer?
+    /** Pause (true) or resume (false) a devotional — set aside, kept whole. */
+    fun plumbline_engine_devotional_set_paused(engine: Pointer, id: String, paused: Boolean): Pointer?
+
     // ── static panel content: guide / about ─────────────────────────────────
     fun plumbline_panel_guide_blocks_json(): Pointer?
     fun plumbline_panel_about_blocks_json(): Pointer?

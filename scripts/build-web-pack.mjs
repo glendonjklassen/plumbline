@@ -58,6 +58,12 @@ const STOCK = join(repo, "apps/android/app/src/main/assets/stock");
 // the safe default: it loads, just not on the boot path.
 const STAGE = {
   "data/kjv.jsonl.idxcache": "text",
+  // 36 KB, and the FIRST-RUN PATH depends on it: the new-believer welcome
+  // starts the bundled booklet as it hands over, and `devotional_start` refuses
+  // an id the catalogue does not carry. On `study` that write would race the
+  // download it needs. Never evicted, either — the engine parses it lazily on
+  // an arbitrary later tap, the `bridge/*` rule in home.ts.
+  "data/devotional.json": "text",
   "data/morphology.morphb": "analysis",
   // No runtime reader anywhere in the tree: the only code that opens it is
   // witness.rs's own tests, and the fused bridge does not consume it. Staged out
@@ -126,11 +132,26 @@ const EXTRA_LANGS = REGISTRY.filter((l) => l.code !== BASE_LANG.code && l.corpus
 const LANG_FILES = new Set(EXTRA_LANGS.flatMap((l) => [l.corpus, l.lexicon].filter(Boolean)));
 
 // (srcDir, homeDir, filter, seedOnce) tuples for the home shipped to the browser.
+/** The only file types `data/` may PUBLISH.
+ *
+ *  An allowlist, because this walk used to be a denylist and a denylist ships
+ *  whatever nobody thought to name. `data/` is also where the maintainer's own
+ *  working files land — the devotional arrived from the church as a .docx, and
+ *  that .docx was gzipped into the pack and would have been served from the
+ *  live site (caught by app.spec.ts's prune check, 2026-08-26, which noticed the
+ *  pin naming it). Being in .gitignore stops it reaching git; it does not stop
+ *  this walk, which reads the disk.
+ *
+ *  Adding a genuinely new shipping format means adding it here on purpose,
+ *  which is the point. */
+const DATA_EXTS = new Set(["json", "jsonl", "tsv", "morphb", "akjvb"]);
+
 const SOURCES = [
   [
     join(repo, "data"),
     "data",
     (n) =>
+      DATA_EXTS.has(n.split(".").pop()) &&
       !n.endsWith(".idxcache") &&
       n !== KJV_TEXT &&
       !LANG_FILES.has(n) && // every other language's text + dictionary: emitted with their roles below

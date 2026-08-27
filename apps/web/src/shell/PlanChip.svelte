@@ -2,10 +2,10 @@
   // The nav-strip BOOKMARKS row, grown out of the plan chip (docs/READING-PLANS.md
   // decision #5; bookmarks per maintainer ask, 2026-08-24). One row above the
   // canon strip of pill chips, each an ICON naming the bookmark's kind beside
-  // the PASSAGE it holds: a flag per running plan ("Genesis 30–31" — what is
-  // left of today), then one per stored seating — Last opened, Sunday morning,
-  // Sunday evening, Wednesday evening (`config.slots`, core::session_slot) —
-  // reading "Psalms 23:4".
+  // WHAT IT HOLDS: a flag per running plan ("Genesis 30–31" — what is left of
+  // today), a booklet per running devotional ("Day 4" — today's entry, and
+  // gone once it is read), then one per stored seating — Sunday morning
+  // (`config.slots`, core::session_slot) — reading "Psalms 23:4".
   //
   // Icon + passage, no more (maintainer, 2026-08-25, second turn). The chips
   // went icon-only that morning; the reference came back the same day — a row
@@ -64,20 +64,27 @@
       "M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z",
     // flag — a running reading plan
     plan: "M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z",
+    // auto_stories — a running devotional, the booklet it is
+    devotional:
+      "M19 1l-5 5v11l5-4.5V1zM1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5V6c-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6zm22 13.5V6c-.6-.45-1.25-.75-2-1v13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5v2c1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5v-1.1z",
   };
 
-  /** The seating tiles: Last opened first (the everyday position), then the
-   *  named seatings, in the order a week meets them. Only seatings the reader
-   *  has actually been in exist in `config.slots`, so nothing is invented.
+  /** The seating tiles: the named seatings, in the order a week meets them.
+   *  Only seatings the reader has actually been in exist in `config.slots`, so
+   *  nothing is invented.
    *
-   *  Sunday evening and Wednesday evening are OFF for now (maintainer,
-   *  2026-08-26) — a row of four was more bookmarks than the strip wanted to
-   *  carry. Nothing else changes: `core::session_slot` still recognises both,
-   *  the engine still stores a seating for them, and the two lines below are
-   *  all it takes to bring them back with every reader's position intact. Their
-   *  icons stay in [[ICONS]] for the same reason. */
+   *  Three of the four are OFF for now — Sunday evening and Wednesday evening
+   *  because a row of four was more bookmarks than the strip wanted to carry,
+   *  and LAST OPENED because it was never a bookmark in the first place
+   *  (maintainer, both 2026-08-26): the app already reopens where the reader
+   *  left off, so a chip for it named the place they were already standing and
+   *  changed every time they turned a page. Nothing else changes:
+   *  `core::session_slot` still recognises all three, the engine still stores a
+   *  seating for each, and the three lines below are all it takes to bring any
+   *  of them back with every reader's position intact. Their icons stay in
+   *  [[ICONS]] for the same reason. */
   const SLOT_ORDER: { token: string; key: string }[] = [
-    { token: "other", key: "bookmarks.lastOpened" },
+    // { token: "other", key: "bookmarks.lastOpened" },
     { token: "sunday-morning", key: "bookmarks.sundayMorning" },
     // { token: "sunday-evening", key: "bookmarks.sundayEvening" },
     // { token: "wednesday-evening", key: "bookmarks.wednesdayEvening" },
@@ -112,6 +119,22 @@
     }),
   );
 
+  /** One chip per running devotional with a day still on offer.
+   *
+   *  The retirement rule is the DIFFERENCE from the plan chip above, and it is
+   *  deliberate: a plan chip keeps showing the next portion so a reader can
+   *  work ahead, but a devotional is one entry a day (maintainer, 2026-08-26).
+   *  So the chip goes the moment the day is banked and returns at the next
+   *  local midnight — which is exactly what `today.available` answers, computed
+   *  in the core against the reader's OWN local date. A paused booklet asks
+   *  nothing, and a finished one has no `today` at all. */
+  const devotionalTiles = $derived(
+    (((s.devotionals()?.running ?? []) as any[]) ?? []).flatMap((r: any) => {
+      if (r.paused || !r.today?.available) return [];
+      return [{ key: String(r.id), id: r.id as string, day: r.today.day as number, name: r.name as string }];
+    }),
+  );
+
   const slotTiles = $derived.by(() => {
     const slots = (s.config.slots ?? {}) as Record<string, any>;
     return SLOT_ORDER.flatMap(({ token, key }) => {
@@ -135,6 +158,11 @@
     s.navigate(s.activePane, tile.target.book, tile.target.chapter);
   }
 
+  function goDevotional(tile: (typeof devotionalTiles)[number]): void {
+    s.showToast(t("bookmarks.going", { name: tile.name }));
+    s.openDevotional(tile.id, tile.day);
+  }
+
   function goSlot(tile: (typeof slotTiles)[number]): void {
     // The toast names the BOOKMARK, nothing else — the kind's name is not on
     // the chip, so this is the confirmation of which one was pressed; the
@@ -144,13 +172,25 @@
   }
 </script>
 
-{#if (planTiles.length > 0 || slotTiles.length > 0) && !s.inConceptStudy}
+{#if (planTiles.length > 0 || devotionalTiles.length > 0 || slotTiles.length > 0) && !s.inConceptStudy}
   <div class="plan-chip-row">
     <div class="tiles">
       {#each planTiles as p (p.key)}
         <button class="plan-chip" aria-label={p.label} title={p.label} onclick={() => goPlan(p)}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.plan} /></svg>
           <span class="ref">{p.passage}</span>
+        </button>
+      {/each}
+      {#each devotionalTiles as d (d.key)}
+        <button
+          class="plan-chip"
+          data-devotional={d.id}
+          aria-label="{d.name} · {t('devotional.chip', { day: d.day })}"
+          title="{d.name} · {t('devotional.chip', { day: d.day })}"
+          onclick={() => goDevotional(d)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS.devotional} /></svg>
+          <span class="ref">{t("devotional.chip", { day: d.day })}</span>
         </button>
       {/each}
       {#each slotTiles as tile (tile.token)}

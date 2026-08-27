@@ -197,6 +197,18 @@ pub struct Config {
     /// none. The shells offer it again from the chrome — a reader shouldn't
     /// have to reinstall to read it twice.
     pub intro: String,
+    /// Whether the bundled devotional has already been offered to this reader,
+    /// so the new-believer welcome starts it EXACTLY ONCE.
+    ///
+    /// It exists because the start can legitimately fail the first time: on a
+    /// cold first run the welcome can be finished before the pack's text stage
+    /// has landed, and `devotional_start` refuses a booklet the catalogue does
+    /// not carry yet. The shell therefore retries on a later boot — and the
+    /// retry needs to know the difference between "never managed to start it"
+    /// and "started it, and the reader then stopped it". Without this flag the
+    /// second case looks exactly like the first, and a booklet the reader threw
+    /// away would come back every launch (the `meta:stockSeeded` lesson).
+    pub devotional_seeded: bool,
     /// The reader's language, as a code ([`crate::i18n::Lang::code`]).
     ///
     /// EMPTY MEANS "follow the device", which is not the same as English: a
@@ -264,6 +276,7 @@ impl Default for Config {
             akjv_overlay: false,
             localized_lexicon_off: false,
             intro: String::new(),
+            devotional_seeded: false,
             language: String::new(),
             concept_study: String::new(),
             gospel_thread: String::new(),
@@ -372,6 +385,11 @@ struct ConfigWire {
     /// The welcome this reader was given; absent when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     intro: Option<String>,
+    /// Whether the bundled devotional has been offered; absent reads as false,
+    /// so an existing config does not grow a key just because this build knows
+    /// about devotionals.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    devotional_seeded: Option<bool>,
     /// The reader's chosen language; absent means "follow the device", which
     /// is why this skips rather than writing null — an existing config must
     /// not grow a key just because this build knows about languages.
@@ -542,6 +560,9 @@ impl Config {
             // Absent = off: the KJV is the text, and off is what the reader was
             // getting on every launch before this field was kept.
             akjv_overlay: w.akjv_overlay.unwrap_or(false),
+            // Absent = never offered, which is right for every config written
+            // before devotionals existed: those readers get the offer once.
+            devotional_seeded: w.devotional_seeded.unwrap_or(false),
             intro: match w.intro.as_deref() {
                 Some("new") => "new".to_string(),
                 Some("curious") => "curious".to_string(),
@@ -637,6 +658,7 @@ impl Config {
             localized_lexicon_off: Some(self.localized_lexicon_off),
             akjv_overlay: Some(self.akjv_overlay),
             intro: (!self.intro.is_empty()).then(|| self.intro.clone()),
+            devotional_seeded: self.devotional_seeded.then_some(true),
             language: (!self.language.is_empty()).then(|| self.language.clone()),
             concept_study: (!self.concept_study.is_empty()).then(|| self.concept_study.clone()),
             gospel_thread: (!self.gospel_thread.is_empty()).then(|| self.gospel_thread.clone()),
@@ -823,6 +845,10 @@ mod tests {
             present_shares_as_new: false,
             akjv_overlay: true,
             intro: "curious".to_string(),
+            // TRUE here, because false is the default and skipped on the wire:
+            // a round-trip left at the default would pass against a field that
+            // was never written or never read.
+            devotional_seeded: true,
             language: "de".to_string(),
             concept_study: "run-grace".to_string(),
             gospel_thread: "My Gospel Walk".to_string(),

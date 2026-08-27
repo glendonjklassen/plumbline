@@ -1237,6 +1237,12 @@ pub struct WireConfigState {
     /// The welcome this reader was given, "new" | "curious" (additive).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub intro: Option<String>,
+    /// Whether the bundled devotional has already been offered (additive).
+    /// Absent reads as false, so a config written before devotionals existed
+    /// gets the offer once — and a reader who STOPPED the booklet is not
+    /// offered it again, because by then this is true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub devotional_seeded: Option<bool>,
     /// The reader's chosen language (additive). ABSENT means "follow the
     /// device" — the shell then passes its locale to
     /// `plumbline_i18n_catalog_json` and the core resolves it, so a German
@@ -1384,6 +1390,7 @@ pub fn config_to_wire(cfg: &Config, first_run: bool) -> WireConfigState {
         present_shares_as_new: Some(cfg.present_shares_as_new),
         akjv_overlay: Some(cfg.akjv_overlay),
         intro: (!cfg.intro.is_empty()).then(|| cfg.intro.clone()),
+        devotional_seeded: cfg.devotional_seeded.then_some(true),
         language: (!cfg.language.is_empty()).then(|| cfg.language.clone()),
         concept_study: (!cfg.concept_study.is_empty()).then(|| cfg.concept_study.clone()),
         gospel_thread: (!cfg.gospel_thread.is_empty()).then(|| cfg.gospel_thread.clone()),
@@ -1467,6 +1474,7 @@ pub fn config_from_wire(w: &WireConfigState) -> Config {
         present_shares_as_new: w.present_shares_as_new.unwrap_or(true),
         // Absent = off (core::config::from_wire): the KJV is the text.
         akjv_overlay: w.akjv_overlay.unwrap_or(false),
+        devotional_seeded: w.devotional_seeded.unwrap_or(false),
         intro: match w.intro.as_deref() {
             Some("new") => "new".to_string(),
             Some("curious") => "curious".to_string(),

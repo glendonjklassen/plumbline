@@ -11,6 +11,7 @@
   import ScreenBar from "../lib/ScreenBar.svelte";
   import { dispatchLink } from "../study/links";
   import { lang, t } from "../lib/i18n.svelte";
+  import { localDay } from "../engine/StudyEngine";
 
   const s = getSession();
 
@@ -25,6 +26,24 @@
   // panel unreadable.
   const schedules = $derived(((plans?.running ?? []) as any[]).filter((p) => p.kind !== "conceptStudy"));
   const conceptStudies = $derived(((plans?.running ?? []) as any[]).filter((p) => p.kind === "conceptStudy"));
+
+  /** Devotionals — running and offered. A THIRD kind of thing on this screen
+   *  and so a third section, for the reason the two above are separate: a
+   *  booklet is a month of authored readings, not a calendar of chapters and
+   *  not a sweep. They start and stop exactly like a plan (maintainer,
+   *  2026-08-26), which is why they are here rather than behind their own door.
+   *
+   *  There is no class exclusivity: two booklets at once is a reader's business,
+   *  so every catalogue entry not already running is offered. */
+  const devotionals = $derived.by(() => {
+    void s.studyEpoch; // start/stop/done re-fetches, like the plans read above
+    return s.q("devotionals", lang(), localDay());
+  });
+  const runningDevotionals = $derived(((devotionals?.running ?? []) as any[]) ?? []);
+  const offerableDevotionals = $derived.by(() => {
+    const running = new Set(runningDevotionals.map((r) => r.id));
+    return (((devotionals?.catalogue ?? []) as any[]) ?? []).filter((b) => !running.has(b.id));
+  });
 
   let conceptStudyTag = $state("");
   async function launchConceptStudy(): Promise<void> {
@@ -78,6 +97,51 @@
   <ScreenBar title={t("plans.title")} onBack={close} onMenu={() => (s.menuOpen = true)} />
   <div class="content">
     <div class="inner">
+      <h3 class="sub">{t("devotional.heading")}</h3>
+      {#if runningDevotionals.length === 0}
+        <p class="hint">{t("devotional.empty")}</p>
+      {/if}
+      {#each runningDevotionals as d (d.id)}
+        <div class="plan-card" class:paused={d.paused}>
+          <div class="plan-head">
+            <span class="plan-name">{d.name}</span>
+            <span class="plan-prog">{t("devotional.progress", { done: d.daysDone, total: d.daysTotal })}</span>
+          </div>
+          <p class="plan-started">
+            {t("plans.startedOn", { date: startedOn(d.started) })}{#if d.paused}
+              · {t("plans.pausedBadge")}{/if}
+          </p>
+          {#if d.paused}
+            <!-- No day line: a paused booklet asks nothing, the plan stance. -->
+          {:else if d.today}
+            <button class="plan-today" onclick={() => s.openDevotional(d.id, d.today.day)}>
+              {t("devotional.dayOf", { day: d.today.day, total: d.daysTotal })} · {d.today.title}
+            </button>
+          {:else}
+            <p class="plan-done">{t("devotional.finished")}</p>
+          {/if}
+          <div class="plan-actions">
+            {#if d.today}
+              {#if d.paused}
+                <button onclick={() => s.setDevotionalPaused(d.id, false, d.name)}>{t("plans.resume")}</button>
+              {:else}
+                <button onclick={() => s.setDevotionalPaused(d.id, true, d.name)}>{t("plans.pause")}</button>
+              {/if}
+            {/if}
+            <button class="danger" onclick={() => s.stopDevotional(d.id, d.name)}>{t("plans.stop")}</button>
+          </div>
+        </div>
+      {/each}
+      {#each offerableDevotionals as b (b.id)}
+        <button class="plan-builtin" onclick={() => s.startDevotional({ id: b.id, name: b.name })}>
+          <span class="plan-name">
+            {b.name}
+            {#if !b.translated}<span class="plan-note">{t("devotional.untranslated")}</span>{/if}
+          </span>
+          <span class="plan-add">{t("devotional.start")}</span>
+        </button>
+      {/each}
+
       <h3 class="sub">{t("plans.running")}</h3>
       {#if schedules.length === 0}
         <p class="hint">{t("plans.empty")}</p>
@@ -299,6 +363,13 @@
   }
   .plan-builtin:hover {
     border-color: var(--gold, #9e7d38);
+  }
+  /* "Available in English only" beside a booklet's name — a statement about
+     the content, not a warning, so it sits quiet under the name. */
+  .plan-note {
+    display: block;
+    color: var(--faded, #8a8276);
+    font-size: calc(12.5px * var(--uiScale, 1));
   }
   .plan-builtin .plan-add {
     color: var(--gold, #9e7d38);

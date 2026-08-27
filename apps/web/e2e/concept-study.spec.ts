@@ -190,7 +190,7 @@ test("the Plans screen launches a concept study and re-enters it from its card",
   await boot(page);
 
   await page.evaluate(() => (((window as any).__plumbline as any).screen = "plans"));
-  await page.getByPlaceholder("Tag to gather into (e.g. grace)").fill("faith");
+  await page.getByPlaceholder("Tag to add verses to (e.g. grace)").fill("faith");
   await page.getByRole("button", { name: "Start Concept Study" }).click();
 
   // Launch enters the mode and records the run.

@@ -10,7 +10,7 @@ import { precacheShell } from "../engine/precache";
 import { updateAvailable } from "../engine/update";
 import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FILES } from "../engine/fonts.generated";
 import { EngineRpc, type BootInfo } from "../engine/worker-client";
-import { dayStamp, nowStamp } from "../engine/StudyEngine";
+import { dayStamp, localDay, nowStamp } from "../engine/StudyEngine";
 import { fontStackFor, setReaderFont } from "../reader/measure";
 import { cleanChurch, PWA_URL, shareUrl, type Church } from "../shell/church";
 import { lang, t } from "../lib/i18n.svelte";
@@ -260,8 +260,44 @@ export class Session {
    * its own.
    */
   screen = $state<
-    "read" | "explore" | "memorize" | "plans" | "viz" | "tags" | "weaves" | "preach" | "hymnal" | "share" | "search"
+    | "read"
+    | "explore"
+    | "memorize"
+    | "plans"
+    | "viz"
+    | "tags"
+    | "weaves"
+    | "preach"
+    | "hymnal"
+    | "share"
+    | "search"
+    | "devotional"
   >("read");
+
+  // ── devotionals ─────────────────────────────────────────────────────────────
+
+  /** Which devotional day is open, when `screen === "devotional"`. A FULL PAGE
+   *  and not a study-panel block (maintainer, 2026-08-26): a devotional is a
+   *  place you go to read, like a hymn, not an annotation on the verse you were
+   *  already looking at.
+   *
+   *  `day` is held explicitly rather than always meaning "the open one", so
+   *  browsing back to day 3 is the same screen with a different number — and so
+   *  the page a reader left survives a re-render that lands mid-refetch. */
+  devotionalAt = $state<{ id: string; day: number } | null>(null);
+
+  /** The reader's booklets and the catalogue, keyed by the LOCAL day — the key
+   *  that has to change at midnight, because that is when the answer does. */
+  devotionals(): any {
+    return this.q("devotionals", lang(), localDay());
+  }
+
+  /** Open a devotional day as a full page. */
+  openDevotional(id: string, day: number): void {
+    this.dismissTransient();
+    this.devotionalAt = { id, day };
+    this.screen = "devotional";
+  }
 
   // ── the hymnal ──────────────────────────────────────────────────────────────
 
@@ -1247,6 +1283,13 @@ export class Session {
     }
     this.showFirstRun = !!loaded.firstRun;
 
+    // The new-believer booklet's RETRY. A first run finished before the pack's
+    // text stage landed leaves `devotionalSeeded` false with nothing running,
+    // and this is the boot that fixes it. A no-op for everyone else — including
+    // anyone who started it and then stopped it, because the flag is already
+    // set by then. Fire-and-forget: nothing below waits on it.
+    if (this.config.intro === "new" && !this.config.devotionalSeeded) void this.seedDevotional();
+
     // WHICH SEATING is this? Asked of the engine with the reader's OWN local
     // date and hour, then used to prefer that slot's saved position over the
     // plain last one — so arriving at a Sunday service reopens last Sunday's
@@ -1320,10 +1363,15 @@ export class Session {
       scrollY: 0,
       back: [],
       fwd: [],
-      lang: p.lang || undefined,
+      // A PHONE DROPS THE OVERRIDE. The chip that sets a pane's language lives
+      // on the pane's own strip, and that strip is `display: none` under 700px
+      // (Shell.svelte) — so a pane restored into German on a phone is a pane
+      // whose language the reader cannot reach to change. The app language in
+      // Settings is the phone-width control, and this puts them back on it.
+      lang: this.narrow ? undefined : p.lang || undefined,
       // A restored language pane holds its layout until its engine is open
       // again — see the reopen loop below.
-      langLoading: !!p.lang,
+      langLoading: !this.narrow && !!p.lang,
     }));
     this.activePane = Math.min(Math.max(wasActive - from, 0), this.panes.length - 1);
 
@@ -1355,7 +1403,10 @@ export class Session {
     }
 
     const mq = matchMedia("(max-width: 700px)");
-    mq.addEventListener("change", () => (this.narrow = mq.matches));
+    mq.addEventListener("change", () => {
+      this.narrow = mq.matches;
+      if (mq.matches) this.#collapseToPhone();
+    });
     const wide = matchMedia("(min-width: 1100px)");
     wide.addEventListener("change", () => (this.roomy = wide.matches));
 
@@ -1921,6 +1972,70 @@ export class Session {
     this.showToast(err ?? t("plans.stopped", { name }));
   }
 
+  /** Start the bundled new-believer booklet — EXACTLY ONCE, ever.
+   *
+   *  Called from two places on purpose. The welcome calls it as it hands over,
+   *  which is where it belongs; and boot calls it again for the reader whose
+   *  first run finished before the pack's text stage landed, because the engine
+   *  refuses a booklet its catalogue does not carry yet and that first attempt
+   *  simply fails.
+   *
+   *  `config.devotionalSeeded` is what makes the retry safe. It is set once the
+   *  start SUCCEEDS, and it is the difference between "never managed to start
+   *  it" and "started it, and the reader then stopped it" — without it, a
+   *  booklet someone deliberately threw away would come back on every launch,
+   *  which is the bug `meta:stockSeeded` exists to prevent for the stock set.
+   *
+   *  WHICH booklet comes off the catalogue's own `newBeliever` flag, never an
+   *  id written in here: a second booklet must not be able to become the one a
+   *  new believer is handed by shipping alphabetically earlier. */
+  async seedDevotional(): Promise<void> {
+    if (this.config.devotionalSeeded) return;
+    const wire = await this.rpc.call("devotionals", lang(), localDay()).catch(() => null);
+    const booklet = ((wire?.catalogue ?? []) as any[]).find((b) => b.newBeliever);
+    // No catalogue yet (the pack is still landing) — leave the flag unset so
+    // the next boot tries again.
+    if (!booklet) return;
+    const already = ((wire?.running ?? []) as any[]).some((r) => r.id === booklet.id);
+    if (!already && (await this.author("devotionalStart", booklet.id, nowStamp()))) return;
+    this.config.devotionalSeeded = true;
+    this.flushConfig();
+  }
+
+  /** Start a devotional. No class exclusivity and no confirm: booklets do not
+   *  compete for a slot the way whole-Bible schedules do, and starting one
+   *  already running keeps its banked days (the engine's no-op). */
+  async startDevotional(b: { id: string; name: string }): Promise<void> {
+    const err = await this.author("devotionalStart", b.id, nowStamp());
+    this.showToast(err ?? t("devotional.started", { name: b.name }));
+  }
+
+  /** Pause or resume a devotional. No confirm: nothing is lost either way. */
+  async setDevotionalPaused(id: string, paused: boolean, name: string): Promise<void> {
+    const err = await this.author("devotionalSetPaused", id, paused);
+    this.showToast(err ?? t(paused ? "devotional.pausedToast" : "devotional.resumedToast", { name }));
+  }
+
+  /** Stop a devotional — confirmed, because it removes the record of which days
+   *  were read, and a reader 20 days in cannot get that back. */
+  async stopDevotional(id: string, name: string): Promise<void> {
+    const ok = await this.askConfirm(t("devotional.stopAsk", { name }), t("devotional.stopBody"), t("devotional.stopVerb"));
+    if (!ok) return;
+    if (this.devotionalAt?.id === id) this.goRead();
+    const err = await this.author("devotionalStop", id);
+    this.showToast(err ?? t("devotional.stopped", { name }));
+  }
+
+  /** Bank a day — the Done at the foot of the page, and the ONLY signal that a
+   *  devotional day was read (nothing observable says a reflection was
+   *  reflected on). The local day is what holds tomorrow's entry back. */
+  async markDevotionalDone(id: string, day: number): Promise<string | null> {
+    const err = await this.author("devotionalDone", id, day, localDay());
+    if (!err) this.showToast(t("devotional.doneToast"));
+    else this.showToast(err);
+    return err;
+  }
+
   historyStep(paneIdx: number, dir: -1 | 1): void {
     const pane = this.panes[paneIdx];
     if (!pane) return;
@@ -2121,6 +2236,48 @@ export class Session {
     // who is halfway down a chapter back to verse 1.
     if (to.book === pane.book && to.chapter === pane.chapter) return;
     this.navigate(0, to.book, to.chapter);
+  }
+
+  /** Fold a foldable, and the reader must land somewhere they can steer from.
+   *
+   *  `maxPanes` was only ever enforced where panes are CREATED (`addPane`) and
+   *  where they are RESTORED at boot — never when the width changed under a
+   *  running app. So a foldable opened to two panes and then shut kept both, on
+   *  a layout that assumes one: the connector overlay mounts (its own comment
+   *  says a phone never has one), and the pane strip that would let you close
+   *  the extra pane is hidden at that width.
+   *
+   *  The language is the half that stranded the maintainer (2026-08-26): they
+   *  opened the fold, split a pane, switched it to German, and folded — and the
+   *  passage was "basically stuck on German", because the chip that sets a
+   *  pane's language is ON that hidden strip. A phone's language control is the
+   *  app-wide one in Settings, so collapsing hands the pane back to it rather
+   *  than leaving an override with no way to undo it.
+   *
+   *  The pane KEPT is the active one, not the first — the same choice the boot
+   *  restore makes, and for the same reason: you should still be looking at
+   *  what you were reading. */
+  #collapseToPhone(): void {
+    const keep = this.panes[this.activePane] ?? this.panes[0];
+    if (!keep) return;
+    let changed = false;
+    if (this.panes.length > 1) {
+      this.panes = [keep];
+      this.activePane = 0;
+      changed = true;
+    }
+    if (keep.lang) {
+      keep.lang = undefined;
+      keep.langLoading = false;
+      keep.langError = undefined;
+      // The chapter is about to be laid out in a different text; the geometry
+      // cached for the old one is not this one's (the `setPaneLang` stance).
+      keep.scrollY = 0;
+      changed = true;
+    }
+    if (!changed) return;
+    this.saveConfig();
+    void this.releaseUnusedLangs();
   }
 
   /** How many reading panes fit: one on a phone, two on a foldable or a small
