@@ -112,9 +112,7 @@ struct WireRef {
 }
 
 fn wire_refs(refs: &[devotional::ScriptureRef]) -> Vec<WireRef> {
-    refs.iter()
-        .map(|r| WireRef { book: r.book.clone(), chapter: r.chapter, verse: r.verse, end: r.end })
-        .collect()
+    refs.iter().map(|r| WireRef { book: r.book.clone(), chapter: r.chapter, verse: r.verse, end: r.end }).collect()
 }
 
 fn wire_section(s: &devotional::Section) -> WireSection {

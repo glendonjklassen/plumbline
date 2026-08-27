@@ -196,8 +196,7 @@ pub fn load(path: impl AsRef<Path>) -> Result<Vec<Devotional>, Error> {
 
 /// Parse a catalogue. Refuses a format-tag mismatch (frozen contract).
 pub fn from_str(raw: &str) -> Result<Vec<Devotional>, Error> {
-    let doc: CatalogueDoc =
-        serde_json::from_str(raw).map_err(|e| Error::Parse(format!("devotional: {e}")))?;
+    let doc: CatalogueDoc = serde_json::from_str(raw).map_err(|e| Error::Parse(format!("devotional: {e}")))?;
     if doc.format != FORMAT {
         return Err(Error::Parse(format!("devotional: format {:?}, expected {FORMAT:?}", doc.format)));
     }

@@ -107,8 +107,10 @@ pub fn title(c: &Church) -> String {
 /// already in its own language and nothing here should touch it.
 pub fn title_in(lang: crate::i18n::Lang, c: &Church) -> String {
     let c = clean(c);
-    let parts: Vec<String> =
-        [c.name, c.service.map(|m| service_line(lang, m)).unwrap_or_default()].into_iter().filter(|s| !s.is_empty()).collect();
+    let parts: Vec<String> = [c.name, c.service.map(|m| service_line(lang, m)).unwrap_or_default()]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect();
     if parts.is_empty() {
         crate::i18n::t(lang, "shell.churchFallback", &[])
     } else {
@@ -403,11 +405,7 @@ mod tests {
             };
             let cleaned = clean(&c);
             assert_eq!(cleaned.name, row["cleaned"]["name"].as_str().unwrap(), "cleaned name [{name}]");
-            assert_eq!(
-                cleaned.service.map(u64::from),
-                row["cleaned"]["service"].as_u64(),
-                "cleaned service [{name}]"
-            );
+            assert_eq!(cleaned.service.map(u64::from), row["cleaned"]["service"].as_u64(), "cleaned service [{name}]");
             assert_eq!(cleaned.url, row["cleaned"]["url"].as_str().unwrap(), "cleaned url [{name}]");
             assert_eq!(share_url(PWA_URL, &c, &opts), row["url"].as_str().unwrap(), "url [{name}]");
             assert_eq!(title(&c), row["title"].as_str().unwrap(), "title [{name}]");
