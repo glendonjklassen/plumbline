@@ -44,11 +44,13 @@ import {
   devicePackFiles,
   hasOptional,
   fetchManifest,
+  fetchPackEntries,
   fetchRndPack,
   fetchStage2Pack,
   fetchSuggestedWeaves,
   fetchLangCorpus,
   fetchLangLexicon,
+  isCorpusRole,
   langCorpusEntry,
   packFileUrl,
   setAssetBase,
@@ -465,7 +467,10 @@ async function willAutoLoadRnd(machineOn: boolean, deferRnd: boolean): Promise<b
  *
  *  The new pack applies at the NEXT launch, deliberately. This session's engine
  *  has its text in wasm memory and the reader is mid-verse; swapping the corpus
- *  under them would be worse than waiting. */
+ *  under them would be worse than waiting. Files a release ADDS are the
+ *  exception and are not this function's business: `backgroundLoad` hands those
+ *  to the running home directly, because nothing is being swapped under anyone.
+ */
 async function reconcilePack(): Promise<void> {
   const live = await fetchManifest();
   if (live.version === booted!.packVersion) return; // nothing deployed since
@@ -495,7 +500,10 @@ async function reconcilePack(): Promise<void> {
   booted!.manifest = live;
 
   booted!.trace.push([`reconciled to ${live.version} (${fetched} files)`, Math.round(performance.now() - t0)]);
-  self.postMessage({ type: "packUpdated", version: live.version });
+  // No message out. This function's product is the depot and the pin — what the
+  // RUNNING session needed out of a new release was the stage-1 diff in
+  // `backgroundLoad`, and it has already had it. The `packUpdated` post that
+  // used to be here had no listener on the other side and no prospective one.
 }
 
 async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<void> {
@@ -519,11 +527,51 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
     // which is the point — the alternative was a second mechanism for injecting
     // late files into a running engine.
     if (booted!.staleManifest) {
+      // What the PIN delivered, held before the live manifest replaces it: the
+      // left-hand side of the diff below.
+      const pinned = booted!.manifest;
       try {
         booted!.manifest = await fetchManifest();
         booted!.trace.push(["manifest refreshed (newer build than pin)", 0]);
       } catch {
         /* offline: the pin's manifest is what we have, and it is enough */
+      }
+
+      // A FILE ADDED SINCE THIS DEVICE'S PIN, at stage 1.
+      //
+      // The stage-2 fetch below already picks up study files a newer release
+      // added — that is the v0.39.0 hymnal fix — but it selects on
+      // `stage === "study"`, so a new TEXT-stage file was structurally excluded
+      // and an upgrading install simply never received it. Which is how v0.62.0
+      // shipped `data/devotional.json` to fresh profiles and to nobody else: a
+      // warm boot builds its manifest FROM THE PIN, the pin does not name the
+      // file, stage 1 loads happily without it, and `devotional::load` answers
+      // `Ok(vec![])` for a file that is not there — an empty Plans list with
+      // nothing to start.
+      //
+      // ADDITIONS BY PATH ONLY, never replacements: swapping bytes under a
+      // running engine is exactly what `reconcilePack`'s next-launch rule exists
+      // to avoid. `seedOnce` entries are excluded because they are the stock
+      // study set and the reader's own copies rule; corpus caches are excluded
+      // because only the one this boot chose is ever inflated, and it is 35 MB.
+      const have = new Set(pinned.files.map((f) => f.path));
+      const adds = booted!.manifest.files.filter(
+        (f) => f.stage === "text" && !f.seedOnce && !isCorpusRole(f.role) && !have.has(f.path),
+      );
+      if (adds.length) {
+        try {
+          const tAdd = performance.now();
+          const late = await fetchPackEntries(booted!.manifest.version, adds);
+          booted!.trace.push([
+            `stage1 additions fetch+gunzip (${adds.length})`,
+            Math.round(performance.now() - tAdd),
+          ]);
+          await yieldTask();
+          timedChunk("stage1 additions load", () => booted!.home.addFiles(late));
+        } catch {
+          /* Offline part-way through: nothing was pinned, so `staleManifest` is
+             still true on the next warm boot and this same diff runs again. */
+        }
       }
     }
 

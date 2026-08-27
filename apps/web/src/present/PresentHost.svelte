@@ -58,6 +58,25 @@
     s.presentingThread = thread !== null;
   });
 
+  // CLOSED BY ANY PATH — the ✕, Escape's back-peel, a destination tap from the
+  // menu — this screen starts over. It did not: only `close()` nulled these, and
+  // this component is mounted unconditionally (Shell.svelte) with only its
+  // template gated on `s.showPresent`. So `thread` outlived a back-peel, and
+  // reopening Present resumed a presentation the reader had walked away from.
+  //
+  // Reset the SOURCE, not the projection. `s.presentingThread` is derived from
+  // `thread` by the effect above, so clearing just the flag — adding it to
+  // Session.TRANSIENT, which is the fix that looks obvious — would leave the
+  // stale presentation still painting its cream while the chrome went back to
+  // the dark theme's polarity: light icons on a light surface. The reported
+  // washout, manufactured by the repair.
+  $effect(() => {
+    if (!s.showPresent && thread !== null) {
+      thread = null;
+      focus = null;
+    }
+  });
+
   function close(): void {
     s.showPresent = false;
     thread = null;

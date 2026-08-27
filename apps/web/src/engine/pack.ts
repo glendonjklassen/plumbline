@@ -326,6 +326,20 @@ export function fetchStage2Pack(
   );
 }
 
+/** A NAMED set of entries, whatever stage they came from.
+ *
+ *  Every other fetch here selects by tier, because the tier is the question.
+ *  This one exists for the case where it is not: `backgroundLoad` diffs a
+ *  refreshed manifest against the files the pin actually delivered, and what
+ *  comes out is a list, not a tier. Its only caller. */
+export function fetchPackEntries(
+  version: string,
+  files: PackFile[],
+  onProgress?: (p: PackProgress) => void,
+): Promise<Map<string, Uint8Array>> {
+  return fetchFiles(version, files, onProgress);
+}
+
 /** The machine tier — background after first paint, never on the boot path. */
 export function fetchRndPack(
   manifest: PackManifest,

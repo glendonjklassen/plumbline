@@ -399,30 +399,46 @@ test("the browser chrome follows the reader's colour scheme", async ({ page }) =
   ).toContain(`content="${DARK_PAPER}"`);
 
   // And they resolve the way the spec says: the first tag whose media matches
-  // wins. Checked in a real browser under both schemes, after the app has
-  // applied its palette, so the runtime rewrite cannot quietly invert it.
-  for (const [scheme, want] of [
-    ["light", LIGHT_PAPER],
-    ["dark", DARK_PAPER],
-  ] as const) {
+  // wins. Checked in a real browser under both schemes, AFTER the app has
+  // applied its palette — which is also where the live value legitimately parts
+  // company with the static pair above. That pair is the SPLASH's chrome and
+  // the splash paints `paper`; once the palette lands, `Session.chrome` names
+  // the surface actually under the bar, which is the header's `--paneNavBg`.
+  // The two have the same polarity in all eighteen palettes, so the handoff can
+  // move the tint by a shade and can never flip an icon.
+  //
+  // So the live half is stated against the app's OWN answer rather than a hex:
+  // whatever the running session resolved, that is what the tag the UA reads
+  // has to carry, and the polarity has to be the one the device asked for. A
+  // rewrite that inverted either would fail here.
+  for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto("/");
     await expect
-      .poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue("--paper")), {
-        timeout: 60_000,
-      })
-      .not.toBe("");
-    const resolved = await page.evaluate(() => {
-      for (const m of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
-        const media = m.getAttribute("media");
-        if (!media || matchMedia(media).matches) return m.getAttribute("content");
-      }
-      return null;
-    });
-    expect(
-      resolved,
-      `a ${scheme}-scheme device resolves the theme-color pair to ${resolved}, not the ${scheme} paper ${want}`,
-    ).toBe(want);
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const s = (window as any).__plumbline;
+            if (!s) return null; // the engine has not handed over yet
+            let tag: string | null = null;
+            for (const m of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+              const media = m.getAttribute("media");
+              if (!media || matchMedia(media).matches) {
+                tag = m.getAttribute("content");
+                break;
+              }
+            }
+            return {
+              agrees: (tag ?? "").toLowerCase() === (s.chrome.color as string).toLowerCase(),
+              dark: s.chrome.dark as boolean,
+            };
+          }),
+        {
+          timeout: 60_000,
+          message: `the tag a ${scheme}-scheme UA reads has to be the colour this session resolved, at the polarity this device asked for`,
+        },
+      )
+      .toEqual({ agrees: true, dark: scheme === "dark" });
   }
 });
 

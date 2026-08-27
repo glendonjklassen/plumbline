@@ -25,11 +25,19 @@
   let error = $state<string | null>(null);
   let session = $state<Session | null>(null);
 
-  // The status bar follows what is PAINTED under it, and Present and Sing paint
-  // their own fixed-light paper over it (they are `position: fixed` past
-  // `--safeTop`). `applyChrome` reads both flags, so this re-runs the moment
-  // either opens or closes — the theme alone cannot answer for those two
-  // screens. See Session.applyChrome.
+  // THE ONLY reactive writers of the document's appearance. The pipeline is
+  // state → derived → writer, in that direction and no other: `session.palette`
+  // and `session.chrome` decide, these two paint, and nothing else calls them
+  // except the session's own first paint and its re-assert listeners.
+  //
+  // TWO effects and not one, because they have different inputs. The chrome
+  // moves whenever Present or Sing opens or closes — those two paint their own
+  // fixed-light paper over the status bar — and the palette does not; folding
+  // them together would re-write thirty custom properties and re-stringify the
+  // palette into localStorage every time someone opened a presentation.
+  $effect(() => {
+    session?.applyTheme();
+  });
   $effect(() => {
     session?.applyChrome();
   });
