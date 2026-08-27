@@ -439,8 +439,12 @@ test("a release that ADDS a file reaches the session that discovers it", async (
   // tests boots FRESH, which is the one case that always worked. This test is
   // the upgrade, and it is the shape that was missing.
   //
-  // Mutation-tested 2026-08-02: remove the `arrived` block from reconcilePack
-  // and this goes red with the hymnal still empty after the update.
+  // Mutation-tested 2026-08-02, against the mechanism as it stood then. What
+  // holds it up TODAY is the manifest refresh in `backgroundLoad`'s
+  // `staleManifest` block: without it stage 2 fetches the study files the OLD
+  // manifest listed and the hymnal stays empty. (The `arrived` block the
+  // original note named is long gone from reconcilePack — the comment outlived
+  // the code it described, which is its own small lesson.)
   const origin = await rewritingOrigin();
   try {
     // FIRST VISIT ON THE OLD RELEASE: a pack with no hymnal in it at all.
@@ -498,6 +502,110 @@ test("a release that ADDS a file reaches the session that discovers it", async (
     await page.evaluate(() => ((window as any).__plumbline.screen = "hymnal"));
     await expect(page.locator(".row").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("The hymnal has not finished loading yet.")).toHaveCount(0);
+  } finally {
+    await origin.close();
+  }
+});
+
+// The SAME shape one tier down, and the reason the fix above was not enough.
+//
+// `data/devotional.json` shipped in v0.62.0 at stage 1 (`text`), because the
+// catalogue has to be there before first-run can offer the booklet. The
+// stale-pin repair the test above pins filters on `stage === "study"`, so a
+// text-stage file was structurally excluded from it: fresh profiles got the
+// devotionals and every established reader got "No devotional running. Start one
+// below." with nothing below to start. All four tests in devotional.spec.ts boot
+// FRESH, which is once again the one case that always worked.
+//
+// CAN FAIL: with the stage-1 diff absent there is no path at all that hands a
+// newly-added text file to a running home — warm boot builds its manifest from
+// the pin, the pin does not name the file, and `devotional::load` answers
+// `Ok(vec![])` for a file that is not there, which the ffi never caches as an
+// empty result. So the same-session poll below can only ever time out.
+test("a release that adds a TEXT-stage file reaches the session that discovers it", async ({ page }) => {
+  const OLD = "0lddevotional000";
+  const catalogue = () =>
+    page.evaluate(async () => {
+      const wire = await (window as any).__plumbline.rpc.call("devotionals", "en", "2026-08-26");
+      return ((wire?.catalogue ?? []) as { id: string; name: string }[]).map((b) => b.name);
+    });
+
+  const origin = await rewritingOrigin();
+  try {
+    // FIRST VISIT ON THE OLD RELEASE: a pack with no devotional catalogue in it.
+    origin.mutate((m) => ({
+      ...m,
+      version: OLD,
+      files: (m.files as { path: string }[]).filter((f) => f.path !== "data/devotional.json"),
+    }));
+    await firstVisit(page, origin.url);
+    await expect.poll(catalogue, { timeout: 60_000 }).toEqual([]);
+
+    // Age the pin's build id — the refresh is gated on "my code is newer than my
+    // pin" and one Playwright run only ever has a single build, so the upgrade
+    // is staged here exactly as the hymnal test stages it.
+    await page.evaluate(async () => {
+      const url = new URL("__depot/pack-pin.json", location.href).href;
+      const hit = await caches.match(url, { ignoreVary: true });
+      const pin = await hit!.json();
+      pin.buildId = "an-older-build";
+      const c = await caches.open("plumbline-v1");
+      await c.put(url, new Response(JSON.stringify(pin), { headers: { "content-type": "application/json" } }));
+    });
+
+    // THE UPGRADE: the real manifest, catalogue and all.
+    origin.mutate((m) => m);
+    await page.reload();
+    await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+
+    // Without leaving the page or reloading a second time.
+    await expect.poll(catalogue, { timeout: 90_000 }).not.toEqual([]);
+
+    // And the reader sees it: Plans offers the booklet by name. Taken from the
+    // catalogue rather than written out, so renaming a booklet does not fail a
+    // test about pack delivery.
+    const name = (await catalogue())[0];
+    await page.evaluate(() => ((window as any).__plumbline.screen = "plans"));
+    await expect(page.locator(".plan-builtin", { hasText: name })).toBeVisible({ timeout: 30_000 });
+
+    // THE RECURRENCE GUARD, and the durable half of this test: a release that
+    // adds a file has to leave the device holding a pin that NAMES it and a
+    // depot that really has every file the pin claims. Asserted at the storage
+    // layer, so the next feature delivered this way fails here rather than in
+    // whatever screen happens to read it.
+    //
+    // An entry with no `url` is not a hole: that is how the pin says "this pack
+    // offers the file and this device does not have it", which only ever
+    // happens to optional files — a language nobody installed, the suggested
+    // weaves. The promise is about the ones it names a url for (pin.ts).
+    //
+    // `ignoreVary` because responses come back `Vary: Origin` and a plain
+    // `caches.match` would miss entries stored for a request that carried one.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async (old) => {
+            const hit = await caches.match(new URL("__depot/pack-pin.json", location.href).href, {
+              ignoreVary: true,
+            });
+            if (!hit) return { advanced: false, pinsDevotional: false, missing: ["<no pin>"] };
+            const pin = await hit.json();
+            const files = pin.files as { path: string; url?: string }[];
+            const missing: string[] = [];
+            for (const f of files) {
+              if (!f.url) continue;
+              const at = new URL(f.url, location.href).href;
+              if (!(await caches.match(at, { ignoreVary: true }))) missing.push(f.path);
+            }
+            return {
+              advanced: pin.packVersion !== old,
+              pinsDevotional: files.some((f) => f.path === "data/devotional.json" && !!f.url),
+              missing,
+            };
+          }, OLD),
+        { timeout: 120_000 },
+      )
+      .toEqual({ advanced: true, pinsDevotional: true, missing: [] });
   } finally {
     await origin.close();
   }

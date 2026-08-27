@@ -139,7 +139,61 @@ export class Session {
   engine: Record<string, (...args: unknown[]) => Promise<any>>;
 
   config = $state<any>({});
-  palette = $state<any>({});
+
+  /** The DEVICE's scheme, mirrored into reactive state so the theme can be
+   *  derived from it. `matchMedia` is not reactive, so a derivation reading
+   *  `#systemDark.matches` would never re-run; the constructor's listener is
+   *  this field's only writer. */
+  systemDark = $state(false);
+
+  /** The theme token the palette table ACTUALLY carries — never one it does not.
+   *
+   *  A miss used to paint an EMPTY palette: every `--*` var kept its previous
+   *  value, so the page stayed on the old theme, while the chrome read
+   *  `palette.dark` off `{}` and wrote cream with `color-scheme: light` — a dark
+   *  page under a light bar, which is the washout. And a miss is reachable: the
+   *  boot reconcile copies `plumbline:themeChoice` out of localStorage, which
+   *  anything on this origin can write. So an unknown token resolves to the
+   *  device's scheme, exactly as core's `ThemeChoice::parse` does — including
+   *  the one legacy alias that still has to land somewhere real. */
+  readonly resolvedTheme = $derived.by((): string => {
+    const raw = String(this.config.theme ?? "system");
+    const t = raw === "darcula" ? "one-dark" : raw;
+    const system = this.systemDark ? "dark" : "light";
+    if (t === "system") return system;
+    return Object.hasOwn(this.#palettes, t) ? t : system;
+  });
+
+  /** The resolved palette. DERIVED, and the reason [[applyTheme]] has no say in
+   *  it: that function PAINTS this onto the document, it does not decide it. */
+  readonly palette = $derived.by((): any => this.#palettes[this.resolvedTheme] ?? {});
+
+  /** THE chrome — the colour under the system bar and the icon polarity that
+   *  goes with it, as ONE value, so the two can never be written from different
+   *  answers. Light icons on a light bar is exactly that divergence.
+   *
+   *  It names WHAT IS PAINTED UNDER THE BAR, which is not the reader's paper:
+   *  the header, the ScreenBar and the bottom nav are all `--paneNavBg`, and
+   *  Android paints `palette.paneNavBg` behind its system bars for the same
+   *  reason (StudyScreen.kt). Two surfaces cover the bar instead — Present and
+   *  Sing, both `position: fixed` past `--safeTop`. Sing and a RUNNING
+   *  presentation are deliberately fixed-light (they are handed across in
+   *  daylight); Present's PICKER paints the palette's own `--paper`.
+   *
+   *  EVERY input is read BEFORE the first branch. The old `applyChrome` chose
+   *  with `?:`, so while a presentation was up the palette was never read at
+   *  all and the effect that called it dropped the theme from its dependencies:
+   *  change theme behind Present, close it, and the bar kept the old answer
+   *  until something unrelated moved. */
+  readonly chrome = $derived.by((): { color: string; dark: boolean } => {
+    const present = this.showPresent;
+    const presenting = this.presentingThread;
+    const singing = this.hymnSinging;
+    const pal = this.palette;
+    if (singing || (present && presenting)) return { color: SUNLIT_CHROME, dark: false };
+    if (present) return { color: pal.paper ?? SUNLIT_CHROME, dark: !!pal.dark };
+    return { color: pal.paneNavBg ?? pal.paper ?? SUNLIT_CHROME, dark: !!pal.dark };
+  });
   panes = $state<PaneState[]>([]);
   activePane = $state(0);
   /** The ⛓ toggle: panes on the SAME chapter scroll together (verse-aligned).
@@ -334,10 +388,15 @@ export class Session {
    *  [[applyChrome]] cares: the PICKER is theme-aware (`.present.picking`
    *  restates the palette — "dark mode was jarringly white"), while the
    *  presentation itself keeps the fixed sunlight paper. So `showPresent` alone
-   *  is too coarse to say what is under the status bar. Written by PresentHost,
-   *  which owns the chosen thread; always read with `showPresent`, because the
-   *  back-peel in [[dismissTransient]] can close that screen without the
-   *  component's own `close()` running. */
+   *  is too coarse to say what is under the status bar.
+   *
+   *  PresentHost's effect is its ONLY writer, and deliberately: it is a
+   *  PROJECTION of that component's `thread`, so it is never set from anywhere
+   *  else and it is NOT in [[Session.TRANSIENT]]. A back-peel closes Present
+   *  without the component's own `close()` running, and the surface that has to
+   *  answer for that is `thread` itself — PresentHost resets it when
+   *  `showPresent` goes false, and this flag follows. Two writers here would be
+   *  two owners of the same pixels again. Always read with `showPresent`. */
   presentingThread = $state(false);
 
   /** Back to the text from anywhere — what every screen's ‹ does. */
@@ -643,6 +702,10 @@ export class Session {
   #systemDark = matchMedia("(prefers-color-scheme: dark)");
   /** Palettes per theme, prefetched at boot (applyTheme stays synchronous). */
   #palettes: Record<string, any>;
+  /** The `--*` roles currently written INLINE on `<html>` — this session's, and
+   *  on the first call the pre-paint script's, seeded from the same cache it
+   *  read. [[applyTheme]] clears whatever the next palette does not carry. */
+  #paletteKeysApplied: Set<string> | null = null;
 
   // ── the read-through cache ──────────────────────────────────────────────────
 
@@ -1296,7 +1359,14 @@ export class Session {
     // backup's theme still wins over a stale cache.
     try {
       const cachedTheme = localStorage.getItem("plumbline:themeChoice");
-      if (cachedTheme && cachedTheme !== this.config.theme) {
+      // VALIDATED before it is trusted. This value comes off an origin-wide
+      // store, so it is the one input to the theme that nothing in this app
+      // necessarily wrote — and a token no palette answers to used to be copied
+      // straight into the config and saved, making the damage permanent. Now an
+      // unrecognised one is simply not adopted, and the config keeps whatever
+      // the home said. [[resolvedTheme]] is the second line of that defence.
+      const known = cachedTheme === "system" || (!!cachedTheme && Object.hasOwn(palettes, cachedTheme));
+      if (known && cachedTheme !== this.config.theme) {
         this.config.theme = cachedTheme;
         this.saveConfig();
       }
@@ -1432,10 +1502,16 @@ export class Session {
     const wide = matchMedia("(min-width: 1100px)");
     wide.addEventListener("change", () => (this.roomy = wide.matches));
 
+    // The device's scheme, then every later change of it, UNCONDITIONALLY. The
+    // old listener re-applied only while the theme was "system", so a phone that
+    // flipped to dark under an explicit theme left this answer stale — and
+    // switching back to System afterwards resolved against the stale one.
+    this.systemDark = this.#systemDark.matches;
+    this.#systemDark.addEventListener("change", (e) => (this.systemDark = e.matches));
+    // First paint. Everything after this is the two $effects in App.svelte and
+    // the re-asserts below — there is no third path.
     this.applyTheme();
-    this.#systemDark.addEventListener("change", () => {
-      if (this.config.theme === "system") this.applyTheme();
-    });
+    this.applyChrome();
 
     rpc.onAuthored = () => {
       this.invalidate();
@@ -1529,6 +1605,32 @@ export class Session {
       if (document.visibilityState === "hidden") this.flushSession();
     });
     addEventListener("pagehide", () => this.flushSession());
+
+    // THE MOMENTS A UA CAN HAVE RE-DERIVED THE BAR WITH NOTHING IN OUR DOM
+    // MOVING. `manifest.webmanifest` carries a static, light-only `theme_color`,
+    // and that is what an installed PWA falls back to when the page is re-SHOWN
+    // rather than re-rendered: a bfcache restore, a return to the foreground,
+    // and — the one the reports keep coming from — the activity re-creation a
+    // foldable performs when it is opened or closed. No state of ours changed,
+    // so no $effect re-runs, so nothing puts the tags back: a dark page under a
+    // light bar, and it STAYS there. That is the "persistent washed-out top",
+    // and why the three previous fixes each looked right and then came back
+    // (maintainer, 2026-08-27).
+    //
+    // A LIST on purpose. Every entry is a moment that can be named and tested
+    // (e2e/chrome-reassert.spec.ts); a fourth one gets added here rather than
+    // becoming a fourth mechanism.
+    addEventListener("pageshow", () => this.applyChrome());
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") this.applyChrome();
+    });
+    // Trailing-debounced: a fold sweeps through dozens of intermediate sizes and
+    // only the one it settles at is worth a write.
+    let chromeResize: ReturnType<typeof setTimeout> | undefined;
+    addEventListener("resize", () => {
+      clearTimeout(chromeResize);
+      chromeResize = setTimeout(() => this.applyChrome(), 200);
+    });
   }
 
   /** A save to this device's storage failed. Sticky: the reader has to hear it,
@@ -1633,21 +1735,39 @@ export class Session {
     }
   }
 
-  resolvedTheme(): string {
-    const t = this.config.theme ?? "system";
-    return t === "system" ? (this.#systemDark.matches ? "dark" : "light") : t;
-  }
-
+  /** PAINT the resolved palette onto the document. One of the two writers at
+   *  the end of the pipeline (state → derived → writer); the other is
+   *  [[applyChrome]]. Neither decides anything — see [[palette]].
+   *
+   *  Roles the NEXT palette does not carry are removed rather than left behind.
+   *  An inline `--*` on `<html>` outranks the stylesheet, so a var written once
+   *  and never cleared kept painting under every theme after it — including the
+   *  ones the pre-paint script wrote from last session's cache, which is why the
+   *  first set is seeded from that cache rather than from an empty set. */
   applyTheme(): void {
-    this.palette = this.#palettes[this.resolvedTheme()] ?? {};
     const root = document.documentElement;
-    for (const [k, v] of Object.entries(this.palette))
-      if (typeof v === "string") root.style.setProperty(`--${k}`, v);
-    this.applyChrome();
+    const pal = this.palette;
+    if (!this.#paletteKeysApplied) {
+      this.#paletteKeysApplied = new Set();
+      try {
+        const cached = JSON.parse(localStorage.getItem("plumbline:palette") || "null");
+        for (const k in cached ?? {}) if (typeof cached[k] === "string") this.#paletteKeysApplied.add(k);
+      } catch {
+        /* nothing cached: there is nothing stranded to clear */
+      }
+    }
+    const next = new Set<string>();
+    for (const [k, v] of Object.entries(pal))
+      if (typeof v === "string") {
+        root.style.setProperty(`--${k}`, v);
+        next.add(k);
+      }
+    for (const k of this.#paletteKeysApplied) if (!next.has(k)) root.style.removeProperty(`--${k}`);
+    this.#paletteKeysApplied = next;
     // The boot snapshot paints before the engine exists — it needs last
     // session's palette without asking the worker.
     try {
-      localStorage.setItem("plumbline:palette", JSON.stringify(this.palette));
+      localStorage.setItem("plumbline:palette", JSON.stringify(pal));
       // The theme CHOICE, close-safe. The config save that carries it to the
       // home is debounced and posted to the worker, so a mobile background that
       // freezes the timer and then discards the tab can lose it — the reader
@@ -1691,17 +1811,26 @@ export class Session {
    *  intermittently, because it only happens on those two screens (maintainer,
    *  2026-08-26). This is the half of that report which 09262db did not reach:
    *  that fix made the tags agree with the READER'S THEME, and these two screens
-   *  deliberately do not follow it. */
+   *  deliberately do not follow it.
+   *
+   *  All of that is ONE derivation now — [[chrome]] — because three fixes in a
+   *  row moved WHICH tag was written and never when, or from what. That is the
+   *  answer; this is only the writer. */
   applyChrome(): void {
-    // Reads the flags, so the $effect in App.svelte that calls this re-runs when
-    // any of them moves. Present's PICKER is theme-aware and only its
-    // presentation is sunlight, so that screen takes both — see
-    // [[presentingThread]].
-    const sunlit = (this.showPresent && this.presentingThread) || this.hymnSinging;
-    const paper = sunlit ? SUNLIT_CHROME : (this.palette.paper ?? SUNLIT_CHROME);
-    document.documentElement.style.colorScheme = !sunlit && this.palette.dark ? "dark" : "light";
-    for (const m of document.querySelectorAll('meta[name="theme-color"]'))
-      m.setAttribute("content", paper);
+    // ONE pair, written together. Which colour and which polarity is
+    // [[chrome]]'s question, not this function's — this only puts the answer in
+    // the DOM, and always both halves of it.
+    const { color, dark } = this.chrome;
+    document.documentElement.style.colorScheme = dark ? "dark" : "light";
+    for (const m of document.querySelectorAll('meta[name="theme-color"]')) {
+      // REMOVE then set, even when the value is unchanged. A UA that has
+      // re-derived the bar from the manifest's static `theme_color` (see the
+      // re-assert listeners in the constructor) is holding an answer that did
+      // not come from these tags, and writing the same string back is not a
+      // mutation it has to notice. Taking the attribute away is.
+      m.removeAttribute("content");
+      m.setAttribute("content", color);
+    }
   }
 
   /** Point the DOCUMENT at the chrome face and THIS THREAD's canvas at the

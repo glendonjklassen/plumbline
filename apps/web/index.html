@@ -138,10 +138,23 @@
     <script>
       try {
         var stored = JSON.parse(localStorage.getItem("plumbline:palette") || "null");
+        var choice = localStorage.getItem("plumbline:themeChoice");
+        var explicit = !!choice && choice !== "system";
+        // IS LAST SESSION'S PALETTE STILL THE RIGHT ANSWER? For a theme the
+        // reader chose by hand, always. For "follow the device", only while the
+        // device is still in the scheme it was in — a phone that went dark
+        // overnight would otherwise be repainted light from the cache, and the
+        // media-scoped defaults in the stylesheet above, which cannot be wrong,
+        // would be overridden by an inline var, which now is. The metas were
+        // already gated this way; the vars were not, and that asymmetry is the
+        // one that showed.
+        var useVars =
+          !!stored &&
+          (explicit || !!stored.dark === matchMedia("(prefers-color-scheme: dark)").matches);
         // Every string role, not a hand-picked five: the writer is
         // `applyTheme()`, which sets one custom property per string field, and
         // reproducing its subset here would be a second list to keep in step.
-        if (stored) {
+        if (useVars) {
           for (var role in stored)
             if (typeof stored[role] === "string")
               document.documentElement.style.setProperty("--" + role, stored[role]);
@@ -153,8 +166,14 @@
           // whatever the device says, and the pair is what is stale — a
           // dark-mode phone under a light reader theme otherwise boots with
           // light icons over cream until the engine's palette lands.
-          var choice = localStorage.getItem("plumbline:themeChoice");
-          if (typeof stored.paper === "string" && choice && choice !== "system") {
+          //
+          // `paper`, NOT `paneNavBg`, and on purpose. This is the SPLASH's
+          // chrome, and the splash paints paper edge to edge; the running app's
+          // header does not, so `Session.chrome` hands over to `paneNavBg` the
+          // moment the palette lands. The handoff cannot flip an icon, because
+          // paper and paneNavBg have the same polarity in all eighteen palettes
+          // — only the tint moves, by a shade.
+          if (typeof stored.paper === "string" && explicit) {
             var metas = document.querySelectorAll('meta[name="theme-color"]');
             for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", stored.paper);
             // The UA-drawn controls, on the same terms and for the same reason:

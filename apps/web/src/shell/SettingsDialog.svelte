@@ -273,9 +273,12 @@
     location.reload();
   }
 
+  /** No `applyTheme()` here: the choice IS the input, and App.svelte's writer
+   *  effects paint whatever it resolves to. A second caller would be a second
+   *  owner of the same pixels — which is how the bar and the page came to
+   *  disagree in the first place. */
   function setTheme(theme: string): void {
     s.config.theme = theme;
-    s.applyTheme();
     s.saveConfig();
   }
   function setNum(key: "bodySize" | "sideMargin" | "lineSpacing", v: number): void {
