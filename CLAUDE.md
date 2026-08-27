@@ -11,11 +11,11 @@
 - **Two shells, one product: Android (Compose) and web (PWA).** Android is
   the **UX gold standard** — its layout/menu patterns port to the web, not
   the other way around. A feature added in either shell lands in the other
-  in the same change set when possible; anything that can't goes in
-  [docs/FEATURE-MANIFEST.md](docs/FEATURE-MANIFEST.md) under shell deltas.
-  That manifest is the parity contract — read it before shell work instead
-  of re-surveying the repo. (The GTK and WinUI desktop shells were retired
-  and removed — git history has them; ignore stale references.)
+  in the same change set when possible. There is no written parity contract
+  any more (`docs/` was removed 2026-08-26) — the shells themselves are the
+  record, so survey the one you are porting from. (The GTK and WinUI desktop
+  shells were retired and removed — git history has them; ignore stale
+  references.)
 - Distribution: the PWA (apps/web) for most people; the signed APK on GitHub
   Releases for rooted/sideloading users. No Play Store, no Google account.
 - `../overlay` (Haskell) is the read-only reference implementation — port
@@ -118,9 +118,9 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
 
 - Everything Rust builds and tests natively; the two shipping targets
   cross-build from here — the Android `.so` via `cargo-ndk` (NDK at
-  `/opt/android-ndk`, see [docs/ANDROID-BOOTSTRAP.md](docs/ANDROID-BOOTSTRAP.md))
-  and the web engine via `wasm32-wasip1`. There is no desktop shell to build
-  anymore, so nothing in the tree needs a Windows or GTK toolchain.
+  `/opt/android-ndk`) and the web engine via `wasm32-wasip1`. There is no
+  desktop shell to build anymore, so nothing in the tree needs a Windows or
+  GTK toolchain.
 - Android needs **JDK 21** (`JAVA_HOME=java-21-openjdk`); a newer system JDK is
   too new for AGP and fails the Gradle build.
 
@@ -134,9 +134,10 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
   test green — the engine lives in ONE worker thread, so a long synchronous
   engine call starves every layout/tap RPC queued behind it. Background
   loading must stay chunked with yields (see `engine.worker.ts`).
-- **Mutation-test any regression test you add.** Break the fix, watch the new
-  test fail, restore. Three traps let a test pass against the very bug it
-  describes:
+- **A regression test must be able to FAIL against the bug it describes.** Do
+  not prove that by mutation — breaking the fix, rebuilding and rerunning costs
+  more time than it is worth (maintainer, 2026-08-26). Reason it through
+  instead, and say so in the test's comment. Three traps to reason about:
   - `page.route()` (Playwright interception) **bypasses service workers** — SW
     behaviour must be driven by a real stalling origin, see
     `e2e/network.spec.ts`.
@@ -149,10 +150,9 @@ cargo run --release -p plumbline-hydrate -- copy --from . --to ~/.local/share/pl
     against something the defect does not touch (e.g. the same chapter re-served
     from the turn cache).
 
-  A mutation is also only faithful if the artifact under test was actually
-  rebuilt: `pack:wasm` stages to `public/`, and only `npm run build` copies it
-  into `dist/`, so a skipped build tests the *fixed* engine twice and reports
-  the mutation as survived.
+  And a run only tests what was actually rebuilt: `pack:wasm` stages to
+  `public/`, and only `npm run build` copies it into `dist/`, so a skipped build
+  leaves Playwright testing the engine you packed last time.
 - **A warm boot must make ZERO network requests before text.** The pin
   (`engine/pin.ts`) is a manifest stored in the depot, written only after every
   file it names is verified present — so boot never asks the network anything it

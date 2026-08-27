@@ -815,15 +815,22 @@ fn word_study_shows_personal_note_and_edit_link_in_both_modes() {
     let sb = word_study(&f, false, "John 3:16", 1, &["G2316".to_string()]);
     assert!(uris(&sb).contains(&"editnote:John 3:16".to_string()));
     assert!(sb.iter().any(|b| text_of(b) == "the whole gospel in one verse"));
-    assert!(sb.iter().any(|b| text_of(b).contains("✎ edit")));
+    let row = sb.iter().map(text_of).find(|t| t.contains("edit")).expect("the note row");
+    // ONE pencil on the row, not two. The label IS the glyph and the verb used to
+    // carry a second — "✎   ✎ edit" (maintainer, 2026-08-26). Counting rather
+    // than matching a literal, because the gap between them is three spaces and a
+    // `contains("✎ edit")` would pass again the moment either side changes width.
+    assert_eq!(row.matches('✎').count(), 1, "two pencils on the note row: {row:?}");
+    assert!(row.contains("edit"));
 
-    // With no note, the link says "add".
+    // With no note, the link says "add" — and still just the one pencil.
     let mut g = Fake::default();
     g.displays.insert("John 3:16".into(), "John 3:16".into());
     g.words.insert(("John 3:16".into(), 1), "God".into());
     g.entries.insert("G2316".into(), StrongsView::default());
     let gb = word_study(&g, false, "John 3:16", 1, &["G2316".to_string()]);
-    assert!(gb.iter().any(|b| text_of(b).contains("✎ add")));
+    let add = gb.iter().map(text_of).find(|t| t.contains("add")).expect("the note row");
+    assert_eq!(add.matches('✎').count(), 1, "two pencils on the note row: {add:?}");
 }
 
 #[test]

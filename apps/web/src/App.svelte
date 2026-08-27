@@ -25,6 +25,15 @@
   let error = $state<string | null>(null);
   let session = $state<Session | null>(null);
 
+  // The status bar follows what is PAINTED under it, and Present and Sing paint
+  // their own fixed-light paper over it (they are `position: fixed` past
+  // `--safeTop`). `applyChrome` reads both flags, so this re-runs the moment
+  // either opens or closes — the theme alone cannot answer for those two
+  // screens. See Session.applyChrome.
+  $effect(() => {
+    session?.applyChrome();
+  });
+
   /** A refKey ("Gen 1:7", "1John 3:16") → the core's `go:` verb, split on the
    *  LAST space — the same rule as core `go_uri` and `VRef::parse_ref_key`.
    *

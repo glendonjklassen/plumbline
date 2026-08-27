@@ -118,6 +118,20 @@ function isPinned(key: string): boolean {
  */
 const MARKS_CAP = 16;
 
+/**
+ * The "sunlight" paper Present and Sing are fixed to — the one colour in this
+ * file that is NOT read from the palette, because those two screens are not
+ * themed: they are the ones handed across or held up in daylight, so they are
+ * hard-coded light on purpose.
+ *
+ * Restated here because [[Session.applyChrome]] has to name what is painted
+ * under the status bar and cannot read it out of a stylesheet. The literal lives
+ * in `present/PresentHost.svelte` (`.present`) and `hymnal/HymnalScreen.svelte`
+ * (`.sing-host`); `e2e/theme-color.spec.ts` reads the computed background off
+ * the live element rather than trusting this comment to have kept up.
+ */
+const SUNLIT_CHROME = "#fcf9f4";
+
 export class Session {
   /** The RPC to the engine worker — the only line to the engine. */
   rpc: EngineRpc;
@@ -277,6 +291,18 @@ export class Session {
   hymnSinging = $state(false);
   /** Auto-scroll speed in sing mode, 0 (hold) to 9. */
   hymnScroll = $state(0);
+
+  /** Whether Present has a thread actually up, as opposed to its picker.
+   *
+   *  The two halves of that screen are painted differently and only
+   *  [[applyChrome]] cares: the PICKER is theme-aware (`.present.picking`
+   *  restates the palette — "dark mode was jarringly white"), while the
+   *  presentation itself keeps the fixed sunlight paper. So `showPresent` alone
+   *  is too coarse to say what is under the status bar. Written by PresentHost,
+   *  which owns the chosen thread; always read with `showPresent`, because the
+   *  back-peel in [[dismissTransient]] can close that screen without the
+   *  component's own `close()` running. */
+  presentingThread = $state(false);
 
   /** Back to the text from anywhere — what every screen's ‹ does. */
   goRead(): void {
@@ -1544,17 +1570,7 @@ export class Session {
     const root = document.documentElement;
     for (const [k, v] of Object.entries(this.palette))
       if (typeof v === "string") root.style.setProperty(`--${k}`, v);
-    // EVERY theme-color tag, not the first. index.html carries a light-scoped
-    // and a dark-scoped pair so the chrome is right before any script runs; a
-    // UA takes the first tag whose media MATCHES, so on a dark-mode phone the
-    // SECOND is the live one — and rewriting only the first left it at
-    // Theme::Dark's paper under a light reader theme. Chrome then chose light
-    // status-bar icons for that stale dark value and drew them over the cream
-    // the page paints beneath the (transparent) bar: clock and battery washed
-    // out (maintainer, 2026-08-25). Both carry the resolved paper — the media
-    // split has done its one job, the pre-script paint, by the time this runs.
-    for (const m of document.querySelectorAll('meta[name="theme-color"]'))
-      m.setAttribute("content", this.palette.paper ?? "#fcf9f4");
+    this.applyChrome();
     // The boot snapshot paints before the engine exists — it needs last
     // session's palette without asking the worker.
     try {
@@ -1569,6 +1585,50 @@ export class Session {
     } catch {
       /* storage full/blocked: the snapshot just paints in default light */
     }
+  }
+
+  /** Point the browser/OS chrome at WHATEVER IS PAINTED UNDER IT.
+   *
+   *  Two separate things ride on this, and both are the UA's to draw, not ours:
+   *
+   *  `theme-color` — in an installed PWA the bar is transparent and the page
+   *  paints through it, so the tag no longer colours the bar; it only decides
+   *  whether the clock and battery come out light or dark. EVERY tag, not the
+   *  first: index.html ships a light-scoped and a dark-scoped pair for the
+   *  pre-script paint, and a UA takes the first whose media MATCHES, so on a
+   *  dark-mode phone the SECOND is the live one (2026-08-25).
+   *
+   *  `color-scheme` — the controls the browser draws out of our reach: the
+   *  scrollbars, and Settings' Sunday-service `<input type="time">`, whose clock
+   *  glyph and spinner are UA-drawn and follow this and nothing else. It was
+   *  declared exactly once in the tree, inside index.html's `<noscript>`, which
+   *  (as the comment there says) a scripting browser never parses — so the app
+   *  had never set it, the UA assumed light, and the clock came out near-black
+   *  on a dark theme's `--popup`: invisible, on a control whose icon IS the
+   *  affordance (maintainer, 2026-08-26).
+   *
+   *  And the input is NOT simply the reader's theme. Present and Sing are
+   *  `position: fixed` OVER the status bar — they carry `--safeTop` as their own
+   *  padding for exactly that reason — and both are deliberately fixed-light,
+   *  because they are the screens you hand across or hold up in daylight. So
+   *  while either is open, the cream THEY paint is what sits under the clock,
+   *  and the chrome has to follow them rather than the theme. It did not: on a
+   *  dark theme the tags still named a dark paper, Chrome picked white icons to
+   *  suit it, and drew a white clock and battery onto that cream — washed out,
+   *  intermittently, because it only happens on those two screens (maintainer,
+   *  2026-08-26). This is the half of that report which 09262db did not reach:
+   *  that fix made the tags agree with the READER'S THEME, and these two screens
+   *  deliberately do not follow it. */
+  applyChrome(): void {
+    // Reads the flags, so the $effect in App.svelte that calls this re-runs when
+    // any of them moves. Present's PICKER is theme-aware and only its
+    // presentation is sunlight, so that screen takes both — see
+    // [[presentingThread]].
+    const sunlit = (this.showPresent && this.presentingThread) || this.hymnSinging;
+    const paper = sunlit ? SUNLIT_CHROME : (this.palette.paper ?? SUNLIT_CHROME);
+    document.documentElement.style.colorScheme = !sunlit && this.palette.dark ? "dark" : "light";
+    for (const m of document.querySelectorAll('meta[name="theme-color"]'))
+      m.setAttribute("content", paper);
   }
 
   /** Point the DOCUMENT at the chrome face and THIS THREAD's canvas at the

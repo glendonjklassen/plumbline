@@ -1073,6 +1073,10 @@ fn user_note_block(src: &dyn PanelSource, verse: &str, out: &mut Vec<Block>) {
     let mine = src.user_note(verse);
     out.push(Block::Para {
         runs: vec![
+            // `panel.yourNote` IS the pencil. The verb beside it carried one too,
+            // so the row read "✎   ✎ add" — two pencils side by side (maintainer,
+            // 2026-08-26). The glyph marks the section; the link says what tapping
+            // it does, and only one of them needs to be a picture of a pencil.
             Run::new(s("panel.yourNote"), sz::LABEL, Color::Ink).bold(),
             Run::new("   ", sz::LABEL, Color::Ink),
             Run::new(
