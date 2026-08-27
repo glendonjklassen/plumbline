@@ -235,6 +235,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          # `npm ci` was re-downloading the whole tree every run. The lockfile is
+          # the key, so a run that changes no dependency restores instead of
+          # resolving — and this is the ONE npm job, so nothing else pays for the
+          # cache to exist.
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
       - name: Install web dependencies
         run: npm ci
         working-directory: apps/web

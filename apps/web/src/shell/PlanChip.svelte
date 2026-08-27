@@ -68,12 +68,19 @@
 
   /** The seating tiles: Last opened first (the everyday position), then the
    *  named seatings, in the order a week meets them. Only seatings the reader
-   *  has actually been in exist in `config.slots`, so nothing is invented. */
+   *  has actually been in exist in `config.slots`, so nothing is invented.
+   *
+   *  Sunday evening and Wednesday evening are OFF for now (maintainer,
+   *  2026-08-26) — a row of four was more bookmarks than the strip wanted to
+   *  carry. Nothing else changes: `core::session_slot` still recognises both,
+   *  the engine still stores a seating for them, and the two lines below are
+   *  all it takes to bring them back with every reader's position intact. Their
+   *  icons stay in [[ICONS]] for the same reason. */
   const SLOT_ORDER: { token: string; key: string }[] = [
     { token: "other", key: "bookmarks.lastOpened" },
     { token: "sunday-morning", key: "bookmarks.sundayMorning" },
-    { token: "sunday-evening", key: "bookmarks.sundayEvening" },
-    { token: "wednesday-evening", key: "bookmarks.wednesdayEvening" },
+    // { token: "sunday-evening", key: "bookmarks.sundayEvening" },
+    // { token: "wednesday-evening", key: "bookmarks.wednesdayEvening" },
   ];
 
   /** "Psalms 23:4" — the TOC's own book name, as everywhere else the web names

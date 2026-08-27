@@ -130,7 +130,19 @@ export default defineConfig({
   // of distribution, and app.spec.ts alone holds ~50 of ~230 tests — one
   // worker grinding it serially would stay the long pole regardless.
   fullyParallel: true,
-  workers: process.env.CI ? 3 : 2,
+  // MEASURED, not guessed (2026-08-26). The suite is WAIT-bound, not CPU-bound:
+  // 320 tests summing 425s of test time ran in 216s of wall clock on two
+  // workers, and the machine was ~0.6 of ONE core busy the whole time — the
+  // tests spend their lives awaiting debounces, toasts, stalled origins and
+  // engine round-trips. So worker count buys almost linear wall clock until
+  // something else gives: 2 → 3m36s, 4 → 1m54s (all 320 green), 8 → 1m18s with
+  // reading.spec's recency bloom failing, which is the ceiling and the reason 4
+  // is the number rather than "as many as there are cores".
+  //
+  // Those timings are from a 16-core machine, so CI — 4 vCPUs — will not see the
+  // same ratio. It should still gain: at two workers the bottleneck was not the
+  // CPU, and `retries: 1` already covers the odd contended flake.
+  workers: 4,
   use: {
     baseURL: "http://localhost:4173",
   },

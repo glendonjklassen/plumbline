@@ -50,6 +50,14 @@
     });
   });
 
+  // What is under the STATUS BAR, which is not the same question as "is Present
+  // open": the picker below restates the palette (`.present.picking`) while the
+  // presentation itself keeps the fixed sunlight paper, so only the second one
+  // may pull the chrome off the reader's theme. See Session.applyChrome.
+  $effect(() => {
+    s.presentingThread = thread !== null;
+  });
+
   function close(): void {
     s.showPresent = false;
     thread = null;

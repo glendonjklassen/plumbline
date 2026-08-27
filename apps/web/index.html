@@ -102,6 +102,14 @@
          of them from that file rather than trusting this comment. -->
     <style>
       :root {
+        /* The controls the BROWSER draws, not us — the time input's clock glyph,
+           its spinner, the scrollbars, the native picker popups. Unset, a UA
+           assumes light and paints them near-black on a dark theme's surfaces.
+           `session.applyTheme()` overwrites this with the reader's resolved
+           palette; the media pair here is only what holds until it runs. It was
+           previously declared ONLY inside the noscript below, where a scripting
+           browser never parses it. */
+        color-scheme: light;
         --paper: #fcf9f4;
         --ink: #211f1a;
         --faded: #6c665d;
@@ -111,6 +119,7 @@
       }
       @media (prefers-color-scheme: dark) {
         :root {
+          color-scheme: dark;
           --paper: #1f1b16;
           --ink: #f5f1e8;
           --faded: #9a9385;
@@ -148,6 +157,12 @@
           if (typeof stored.paper === "string" && choice && choice !== "system") {
             var metas = document.querySelectorAll('meta[name="theme-color"]');
             for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", stored.paper);
+            // The UA-drawn controls, on the same terms and for the same reason:
+            // the media pair in the stylesheet above answers for "follow the
+            // device", and last session's flag answers for a theme chosen by
+            // hand (a reader on Night with the phone in light mode is not
+            // served by the query).
+            document.documentElement.style.colorScheme = stored.dark ? "dark" : "light";
           }
         }
       } catch (e) {

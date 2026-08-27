@@ -488,8 +488,10 @@ test("word study opens from a single click and respects the gates", async ({ pag
     if (await page.locator("aside.panel").isVisible().catch(() => false)) break;
   }
   await expect(page.locator("aside.panel")).toBeVisible();
-  // The reader's own-note slot, whose label is now the pencil glyph alone
-  // (exact: the ✎ add/✎ edit links beside it are not exact matches).
+  // The reader's own-note slot, whose label is the pencil glyph alone — and the
+  // ONLY pencil on the row now: the add/edit link beside it carried a second one
+  // until 2026-08-26, so the row read "✎   ✎ add". `exact` keeps this honest if
+  // one ever creeps back into the verb.
   await expect(page.locator("aside.panel").getByText("✎", { exact: true }).first()).toBeVisible();
 });
 

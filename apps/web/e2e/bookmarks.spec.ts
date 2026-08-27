@@ -77,12 +77,15 @@ test("several chips are visible at once, not one page at a time", async ({ page 
     };
   });
   const chips = page.locator(".bm-tile");
-  await expect(chips).toHaveCount(4);
-  // With a passage on every face the four need not all fit a 360px row — that
+  // Two of the four seatings are stood down for now (PlanChip's SLOT_ORDER), so
+  // the stored evening ones render nothing — which is the assertion: a seating
+  // the engine still records is not a chip unless the row asks for it.
+  await expect(chips).toHaveCount(2);
+  // With a passage on every face the chips need not all fit a 360px row — that
   // is what the scroll is for — but MORE THAN ONE must show whole without
   // scrolling (the pager's failing), and the last must be reachable by it.
   await expect(chips.nth(0)).toBeInViewport({ ratio: 1 });
   await expect(chips.nth(1)).toBeInViewport({ ratio: 1 });
-  await chips.nth(3).scrollIntoViewIfNeeded();
-  await expect(chips.nth(3)).toBeInViewport({ ratio: 1 });
+  await chips.last().scrollIntoViewIfNeeded();
+  await expect(chips.last()).toBeInViewport({ ratio: 1 });
 });
