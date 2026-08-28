@@ -54,6 +54,7 @@ pub enum Lang {
     En,
     De,
     Es,
+    Ar,
 }
 
 /// The scripture a language reads.
@@ -121,6 +122,20 @@ pub struct LangSpec {
     /// Its English name, for a reader who narrows the hymnal by typing
     /// "Spanish" rather than "Español". Both shells match either, plus the code.
     pub exonym: &'static str,
+    /// Whether this language is written right to left.
+    ///
+    /// A COLUMN and not a `matches!(self, Lang::Ar)`, for the reason at the top
+    /// of this file: German lived in a dozen sites that each knew a little about
+    /// it, and none of them knew about each other. Direction is read by more
+    /// places than any other fact here — the layout engine mirrors its display
+    /// list, both shells mirror their chrome and flip which way a swipe turns
+    /// the page, and every one of those would otherwise be its own `if code ==
+    /// "ar"` waiting to be missed when a second RTL language arrives.
+    ///
+    /// Declared rather than derived: nothing else in the row implies it. It is a
+    /// property of the SCRIPT, and a language could in principle change script
+    /// without changing anything else here.
+    pub rtl: bool,
     /// The compiled-in catalogue (`i18n/<code>.json`). English is the source;
     /// every other language overrides it key by key.
     catalog: &'static str,
@@ -156,6 +171,7 @@ static SPECS: [LangSpec; Lang::COUNT] = [
         code: "en",
         endonym: "English",
         exonym: "English",
+        rtl: false,
         catalog: include_str!("i18n/en.json"),
         corpus: Some(CorpusSpec { file: "kjv.jsonl", tokenization: crate::canon::TOKENIZATION_VERSION, label: "KJV" }),
         lexicon: Some(LexiconSpec { file: "strongs.json", machine_translated: false }),
@@ -168,6 +184,7 @@ static SPECS: [LangSpec; Lang::COUNT] = [
         code: "de",
         endonym: "Deutsch",
         exonym: "German",
+        rtl: false,
         catalog: include_str!("i18n/de.json"),
         corpus: Some(CorpusSpec { file: "luther1912.jsonl", tokenization: "luther1912-tok1", label: "Luther" }),
         lexicon: Some(LexiconSpec { file: "strongs-de.json", machine_translated: true }),
@@ -180,6 +197,7 @@ static SPECS: [LangSpec; Lang::COUNT] = [
         code: "es",
         endonym: "Español",
         exonym: "Spanish",
+        rtl: false,
         catalog: include_str!("i18n/es.json"),
         corpus: Some(CorpusSpec { file: "rv1909.jsonl", tokenization: "rv1909-tok1", label: "Reina-Valera" }),
         // The renderings are Reina-Valera's own words, derived from the tagged
@@ -194,11 +212,48 @@ static SPECS: [LangSpec; Lang::COUNT] = [
         // agrees with the address on screen and there is nothing to annotate.
         numbering: None,
     },
+    LangSpec {
+        code: "ar",
+        endonym: "العربية",
+        exonym: "Arabic",
+        rtl: true,
+        catalog: include_str!("i18n/ar.json"),
+        corpus: Some(CorpusSpec { file: "svd1865.jsonl", tokenization: "svd1865-tok1", label: "Van Dyck" }),
+        // NO STRONG'S DICTIONARY, and this is the first row to say so.
+        //
+        // Not a gap waiting to be filled by the same script that filled German's
+        // and Spanish's: those derive their `kjv_def` renderings from a TAGGED
+        // corpus, and `svd1865.jsonl` carries no codes. Word alignments for the
+        // Van Dyck do exist (BibleAquifer/ArabicVanDyckBible, CC0) but they are
+        // LLM-generated, which would make Arabic the only corpus here whose
+        // codes are machine-guessed rather than a publisher's own claim about
+        // its own words. Maintainer's call, 2026-08-28: don't ship them.
+        //
+        // The reader sees this as a word study that is absent, not one that is
+        // wrong — every Arabic token's code list is empty, so nothing is
+        // tappable that leads nowhere.
+        lexicon: None,
+        modernization: None,
+        // No numbering table, and NOT for Spanish's reason.
+        //
+        // Reina-Valera agrees with the KJV outright. The Van Dyck disagrees
+        // twice — it prints 31,104 verses, splitting 1 Tim 6:21 and 3 John 14
+        // each into two — and `build-svd.py` merges both back to the KJV
+        // address. But this column annotates a DIFFERENT NUMBER, and in both
+        // cases the number is the same: the printed Van Dyck's 1 Tim 6:21 opens
+        // exactly where the KJV's does. A row here would tell a reader that
+        // their printed Bible calls 6:21 "6:21".
+        //
+        // What is genuinely lost is the other direction — somebody handed "3
+        // John 15" finds a book with 14 verses. That is a reference-PARSING
+        // question, not a display one, and it is two verses in 31,102.
+        numbering: None,
+    },
 ];
 
 impl Lang {
-    pub const COUNT: usize = 3;
-    pub const ALL: [Lang; Lang::COUNT] = [Lang::En, Lang::De, Lang::Es];
+    pub const COUNT: usize = 4;
+    pub const ALL: [Lang; Lang::COUNT] = [Lang::En, Lang::De, Lang::Es, Lang::Ar];
 
     /// This language's row. The one accessor everything else is built on.
     pub fn spec(self) -> &'static LangSpec {
@@ -218,6 +273,11 @@ impl Lang {
     /// This language's English name.
     pub fn exonym(self) -> &'static str {
         self.spec().exonym
+    }
+
+    /// Whether this language is written right to left. See [`LangSpec::rtl`].
+    pub fn is_rtl(self) -> bool {
+        self.spec().rtl
     }
 
     /// The text this language reads, which for a language with none of its own

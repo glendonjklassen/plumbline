@@ -138,7 +138,7 @@ class MainActivity : ComponentActivity() {
                     // `bundledDataMarkerIsBumpedForTheCurrentAssetSet` in
                     // MainActivityTest fails the build if this marker lags the
                     // bundled asset set.
-                    val corpus = File(home, ".data-v6")
+                    val corpus = File(home, ".data-v7")
                     if (!corpus.exists()) {
                         copyAsset("data", File(home, "data"), buf = buf)
                         if ((assets.list("bridge")?.size ?: 0) > 0) {

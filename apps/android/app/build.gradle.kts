@@ -277,6 +277,10 @@ tasks.register<Copy>("syncData") {
             "luther1912.jsonl",
             // The Spanish corpus, Reina-Valera 1909 (data-prep/rv1909/README).
             "rv1909.jsonl",
+            // The Arabic corpus, Smith & Van Dyck 1865 (data-prep/svd/). No
+            // strongs-ar.json beside it: the Van Dyck carries no Strong's tags
+            // and the registry row's `lexicon` is None — see build-svd.py.
+            "svd1865.jsonl",
             "strongs.json",
             // Each language's own Strong's dictionary — that Bible's own
             // renderings under machine-translated definitions, disclosed by
