@@ -44,9 +44,11 @@ test("the chrome is re-asserted at each moment a UA can have re-derived it", asy
     };
   });
 
-  // What the UA does to us, reproduced exactly: the manifest's static, light-only
-  // `theme_color` and a light `color-scheme`, with NOTHING in the app's state
-  // moved. No $effect can re-run — none of their dependencies changed — so only
+  // What the UA does to us, reproduced exactly: a light cream bar and a light
+  // `color-scheme`, with NOTHING in the app's state moved. (This was the
+  // manifest's own `theme_color` until 2026-08-28; the manifest no longer
+  // declares one — see manifest.spec.ts — but a UA re-deriving from ANY source
+  // is the same event from where this page stands.) No $effect can re-run — none of their dependencies changed — so only
   // a listener on the event itself can put this right.
   const derange = () =>
     page.evaluate(() => {
