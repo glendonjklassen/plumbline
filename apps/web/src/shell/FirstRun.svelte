@@ -531,7 +531,7 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
-    text-align: left;
+    text-align: start;
     padding: 14px 16px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 10px;
@@ -550,7 +550,7 @@
   .vq {
     margin: -2px 6px 0;
     padding: 6px 12px;
-    border-left: 2px solid var(--gold, #9e7d38);
+    border-inline-start: 2px solid var(--gold, #9e7d38);
     display: flex;
     flex-direction: column;
     gap: 2px;

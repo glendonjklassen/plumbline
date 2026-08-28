@@ -427,7 +427,7 @@
   }
   .sections th,
   .sections td {
-    text-align: left;
+    text-align: start;
     padding: 3px 8px 3px 0;
     border-bottom: 1px solid color-mix(in srgb, var(--rule, #d8cba8) 55%, transparent);
   }

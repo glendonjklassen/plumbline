@@ -205,7 +205,7 @@
     font-weight: 600;
   }
   .menu > button {
-    text-align: left;
+    text-align: start;
     padding: 5px 9px;
     border-radius: 5px;
     font-size: calc(14.5px * var(--uiScale, 1));

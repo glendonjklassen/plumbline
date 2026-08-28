@@ -1383,7 +1383,7 @@
     padding: 1px 0;
   }
   .diag .ms {
-    text-align: right;
+    text-align: end;
     font-variant-numeric: tabular-nums;
     color: var(--ink, #211f1a);
   }

@@ -579,8 +579,8 @@
        nothing else in the tree would have covered it. The chrome's own
        backgrounds stop at the inset, which is the honest thing to show: the
        strip beside them is not screen the app can use. */
-    padding-left: var(--safeLeft);
-    padding-right: var(--safeRight);
+    padding-inline-start: var(--safeLeft);
+    padding-inline-end: var(--safeRight);
   }
   /* Measured, never seen: out of flow, out of the accessibility tree, and out of
      the way of a tap. `visibility: hidden` and not `display: none` on purpose —
@@ -704,7 +704,7 @@
   .browse {
     display: flex;
     gap: 2px;
-    margin-left: 8px;
+    margin-inline-start: 8px;
   }
   .browse button {
     font-size: calc(16px * var(--uiScale, 1));
@@ -850,7 +850,7 @@
      mounted there. One position serves every caller. */
   .menu {
     position: fixed;
-    right: 8px;
+    inset-inline-end: 8px;
     top: calc(var(--safeTop, 0px) + 52px);
     z-index: 48;
     min-width: 190px;
@@ -865,7 +865,7 @@
     overflow-y: auto;
   }
   .menu button {
-    text-align: left;
+    text-align: start;
     padding: 5px 8px;
     border-radius: 5px;
   }
@@ -928,7 +928,7 @@
     cursor: pointer;
   }
   .panes > :global(.pane + .pane) {
-    border-left: 1px solid var(--rule, #d8cba8);
+    border-inline-start: 1px solid var(--rule, #d8cba8);
   }
   .toast {
     /* Stated once so the stacked notice below can be expressed in terms of it.
@@ -997,7 +997,7 @@
      button uses) as a left edge — enough to read as "wrong" without turning the
      reader's page into a warning banner. */
   .toast.warn {
-    border-left: 4px solid var(--tierResearch, #b04a3a);
+    border-inline-start: 4px solid var(--tierResearch, #b04a3a);
   }
   .toast.warn .upd {
     background: var(--tierResearch, #b04a3a);

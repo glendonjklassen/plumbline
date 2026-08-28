@@ -307,7 +307,7 @@
     font-variant-numeric: tabular-nums;
   }
   .plan-today {
-    text-align: left;
+    text-align: start;
     color: var(--gold, #9e7d38);
     background: none;
     border: none;
@@ -364,7 +364,7 @@
     margin-bottom: 8px;
     padding: 12px 16px;
     border-radius: 10px;
-    text-align: left;
+    text-align: start;
   }
   .plan-builtin:hover {
     border-color: var(--gold, #9e7d38);

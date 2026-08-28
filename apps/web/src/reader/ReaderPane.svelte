@@ -609,10 +609,12 @@
     }
     if (e.pointerType === "touch") {
       if (touchCancelled) return;
-      // A dominant horizontal fling steps the chapter (Compose parity):
-      // left → next, right → previous.
+      // A dominant horizontal fling steps the chapter: a swipe toward the side
+      // the text runs TOWARD goes forward. Left → next in English; in Arabic
+      // the page turns the other way, exactly as its paper does, so a
+      // right-going swipe is the next chapter.
       if (Math.abs(touchDx) > 72 && Math.abs(touchDx) > Math.abs(e.clientY - touchStartY)) {
-        s.stepChapter(paneIdx, touchDx < 0 ? 1 : -1);
+        s.stepChapter(paneIdx, touchDx < 0 !== itemsRtl ? 1 : -1);
         touchDx = 0;
         return;
       }
@@ -656,7 +658,11 @@
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     if (x >= marginX && x <= marginX + columnWidth) return false;
-    const dir = x > marginX + columnWidth ? 1 : -1;
+    // The far side of the column advances. For a right-to-left text that is the
+    // LEFT margin — a reader moving forward through Arabic is moving leftward —
+    // and `settings.pageTurnDesc` says so in each language.
+    const forward = x > marginX + columnWidth ? 1 : -1;
+    const dir = itemsRtl ? -forward : forward;
     pane.pendingScroll = false;
     pane.scrollY = Math.min(Math.max(0, pane.scrollY + dir * 0.85 * cssH), maxScroll());
     return true;
@@ -905,7 +911,7 @@
   .lang-menu {
     position: absolute;
     z-index: 31;
-    right: 8px;
+    inset-inline-end: 8px;
     margin-top: 2px;
     background: var(--popupPaper, #f2eee6);
     border: 1px solid var(--rule, #d8cba8);
@@ -923,7 +929,7 @@
     align-items: baseline;
     padding: 10px 12px;
     border-radius: 6px;
-    text-align: left;
+    text-align: start;
     color: var(--ink, #211f1a);
   }
   .lang-menu button:hover {

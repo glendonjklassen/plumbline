@@ -231,10 +231,10 @@
      on the two ends absorb the free space, and under overflow there is none to
      absorb — which is what keeps the first chip reachable by scrolling. */
   .tiles > :first-child {
-    margin-left: auto;
+    margin-inline-start: auto;
   }
   .tiles > :last-child {
-    margin-right: auto;
+    margin-inline-end: auto;
   }
   .plan-chip,
   .bm-tile {

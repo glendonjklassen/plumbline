@@ -1849,6 +1849,16 @@ pub struct WireLanguage {
     /// The Bible a reader of this language gets, by the name they would know it
     /// by: "KJV", "Luther", "Reina-Valera".
     pub bible: String,
+    /// Whether it is written right to left, for the shell's own chrome — the
+    /// document's `dir`, and which faces the font picker may offer.
+    ///
+    /// THE SECOND PLACE THIS HAD TO GO. `i18n::registry_json` carries the same
+    /// column for the pack BUILD (a Node script reads it through
+    /// `plumbline-hydrate languages`); this is what the running shell reads, and
+    /// adding it to only one of them shipped an Arabic app with `dir="ltr"` —
+    /// the exact shape of the problem the registry exists to end. If a third
+    /// consumer appears, it reads a row; it does not get its own list.
+    pub rtl: bool,
     /// The manifest role its corpus cache is filed under, and the role its own
     /// Strong's dictionary is filed under (absent when it has none).
     ///
@@ -1874,7 +1884,7 @@ pub fn catalog_to_wire(lang: i18n::Lang) -> WireCatalog {
     }
 }
 
-fn language_to_wire(l: i18n::Lang) -> WireLanguage {
+pub(crate) fn language_to_wire(l: i18n::Lang) -> WireLanguage {
     // English's corpus cache and dictionary ARE the base pack, so it has nothing
     // extra to fetch; every other language's text and dictionary are optional
     // downloads (`docs/I18N.md` — nothing is bundled on the web, and an English
@@ -1893,6 +1903,7 @@ fn language_to_wire(l: i18n::Lang) -> WireLanguage {
         endonym: l.endonym().to_string(),
         name: l.exonym().to_string(),
         bible: l.corpus().label.to_string(),
+        rtl: l.is_rtl(),
         corpus_role: l.corpus_role(),
         lexicon_role: (l != i18n::Lang::En && l.spec().lexicon.is_some()).then(|| l.lexicon_role()),
         pack_files,

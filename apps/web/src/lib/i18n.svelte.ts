@@ -117,6 +117,26 @@ export function setCatalog(
     hasLexicon: typeof l.lexiconRole === "string",
     rtl: l.rtl === true,
   }));
+  // THE DOCUMENT'S OWN DIRECTION, set here because this is the one place the
+  // interface language becomes current.
+  //
+  // `dir` is what mirrors the CHROME — every `margin-inline`, the order of a
+  // flex row, which side a scrollbar sits on, which way a native `<select>`
+  // opens. It is deliberately NOT what decides the reader: scripture is a
+  // canvas painted from a display list the engine already mirrored, and it
+  // takes its direction from the open corpus (`DisplayList.rtl`), so an Arabic
+  // reader whose download has not landed gets English chrome around an English
+  // Bible rather than a mirrored shell around a left-to-right text.
+  //
+  // `lang` alongside it, because it was hardcoded `en` in index.html: it is what
+  // a screen reader picks a voice from, and what the browser hyphenates by.
+  try {
+    const el = document.documentElement;
+    el.lang = code;
+    el.dir = choices.find((l) => l.code === code)?.rtl ? "rtl" : "ltr";
+  } catch {
+    /* no document (a test harness importing this): nothing to mirror */
+  }
   try {
     localStorage.setItem(LAST_LANG, code);
   } catch {

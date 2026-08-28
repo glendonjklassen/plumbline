@@ -327,7 +327,7 @@
     padding: 6px 10px;
     border-radius: 8px;
     border: 1px solid var(--rule, #d8cba8);
-    text-align: left;
+    text-align: start;
   }
   .preset:hover {
     background: color-mix(in srgb, var(--gold, #9e7d38) 12%, transparent);
@@ -366,7 +366,7 @@
     color: var(--ink, #211f1a);
   }
   .apply {
-    margin-left: auto;
+    margin-inline-start: auto;
     padding: 8px 16px;
     border-radius: 8px;
     background: var(--gold, #9e7d38);

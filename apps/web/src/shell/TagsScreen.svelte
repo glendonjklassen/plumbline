@@ -203,7 +203,7 @@
     display: flex;
     align-items: baseline;
     gap: 10px;
-    text-align: left;
+    text-align: start;
     padding: 10px 6px;
     border: none;
     border-bottom: 1px solid var(--rule, #d8cba8);

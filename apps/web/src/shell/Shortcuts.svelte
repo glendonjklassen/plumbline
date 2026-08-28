@@ -90,7 +90,7 @@
     white-space: nowrap;
     color: var(--gold, #9e7d38);
     font-weight: 600;
-    padding-right: 14px;
+    padding-inline-end: 14px;
   }
   .close {
     margin-top: 12px;
