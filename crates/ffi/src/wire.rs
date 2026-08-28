@@ -1803,7 +1803,14 @@ pub fn hymn_to_wire(h: &hymnal::Hymn, semis: i32) -> WireHymn {
 
 /// One language's whole catalogue, plus the list a picker needs
 /// (`plumbline_i18n_catalog_json`).
+///
+/// `camelCase` like every other wire type. It went without for as long as every
+/// field here was one word — and then the first two-word field crossed as
+/// `native_intros`, which both shells read as absent and quietly answered "no"
+/// to. Nothing renames under this: `lang`, `strings` and `languages` are their
+/// own camelCase.
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WireCatalog {
     /// The language actually resolved — not necessarily the code asked for, if
     /// that carried a region tag or named a language this build does not ship.
@@ -1813,6 +1820,13 @@ pub struct WireCatalog {
     pub strings: std::collections::BTreeMap<String, String>,
     /// Every language on offer, each labelled in itself.
     pub languages: Vec<WireLanguage>,
+    /// Whether THIS language may be offered the first-run welcome and the
+    /// curious path — see `i18n::Lang::has_native_intros`. Those two screens are
+    /// somebody speaking to a reader about their own life, and a shell must not
+    /// lead anyone into them in a language nobody has written them in. Sent with
+    /// the catalogue rather than asked for separately because first run happens
+    /// before there is an engine to ask.
+    pub native_intros: bool,
 }
 
 #[derive(Serialize)]
@@ -1849,6 +1863,7 @@ pub fn catalog_to_wire(lang: i18n::Lang) -> WireCatalog {
         lang: lang.code().to_string(),
         strings: i18n::resolved(lang),
         languages: i18n::Lang::ALL.iter().map(|l| language_to_wire(*l)).collect(),
+        native_intros: lang.has_native_intros(),
     }
 }
 

@@ -68,6 +68,14 @@ function seed(): { code: string; strings: Record<string, string> } {
 const initial = seed();
 let strings = $state<Record<string, string>>(initial.strings);
 let code = $state<string>(initial.code);
+/** Whether the first-run prose exists in the painted language — the engine's
+ *  answer (`i18n::Lang::has_native_intros`), never derived here.
+ *
+ *  Seeded from the guessed code rather than defaulting to true, so the one frame
+ *  before the boot reply cannot offer a German reader a path into English
+ *  paragraphs. English is the language the prose is written in, so the seed is
+ *  right for it and conservative for everyone else. */
+let nativeIntros = $state<boolean>(initial.code === "en");
 export interface LanguageChoice {
   code: string;
   endonym: string;
@@ -88,10 +96,13 @@ let choices = $state<LanguageChoice[]>([]);
 /** The catalogue the engine resolved, as it came back over the ABI. Replaces
  *  the boot seed wholesale — including the `boot.*` keys, so a language the
  *  seed guessed wrong is corrected everywhere at once. */
-export function setCatalog(cat: { lang?: string; strings?: Record<string, string>; languages?: any[] } | null): void {
+export function setCatalog(
+  cat: { lang?: string; strings?: Record<string, string>; languages?: any[]; nativeIntros?: boolean } | null,
+): void {
   if (!cat?.strings) return;
   strings = cat.strings;
   code = cat.lang ?? "en";
+  nativeIntros = cat.nativeIntros === true;
   choices = (cat.languages ?? []).map((l) => ({
     code: String(l.code),
     endonym: String(l.endonym),
@@ -123,6 +134,20 @@ export function languages(): LanguageChoice[] {
  *  the engine's own registry rather than decided here — see `LanguageChoice`. */
 export function needsPack(code: string): boolean {
   return (choices.find((l) => l.code === code)?.packFiles.length ?? 0) > 0;
+}
+
+/** Whether the first-run welcome and the curious path may be OFFERED in the
+ *  language being painted.
+ *
+ *  Those two screens are somebody speaking to a reader about their own life —
+ *  which idioms land, which questions are the live ones — so they wait for
+ *  someone inside that culture to write them rather than being translated. The
+ *  engine decides (`i18n::Lang::has_native_intros`, derived from whether the
+ *  words are actually in that language's catalogue); this only carries the
+ *  answer. A shell that re-derived it by peeking at `strings` would be a second
+ *  copy of the rule, and the two would disagree the first time one moved. */
+export function hasNativeIntros(): boolean {
+  return nativeIntros;
 }
 
 /** Whether the language being painted has a dictionary of its own. */

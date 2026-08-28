@@ -155,10 +155,22 @@ fun FirstRunOverlay(
     // Material typography, so chrome and body text are the same face.
     val serif = rememberSerifFamily()
 
+    // Whether the two PROSE paths may be offered at all. The welcome and the
+    // curious page are not labels a translator renders — they are somebody
+    // speaking to a reader about their own life — so they wait for someone
+    // inside that culture to write them, and until then the paths that lead to
+    // them are not shown. Web twin: `proseWritten` in FirstRun.svelte.
+    val proseWritten = Strings.hasNativeIntros
+
     // 0 choose · 1 welcome · 2 tiers · 3 curious · 4 church-before-sharing
     var stage by remember {
         mutableStateOf(
-            when (reread) {
+            // A reader given the welcome in English and now reading in German
+            // has an `intro` in their config naming a page that no longer
+            // exists for them. StudyScreen hides the Welcome item in that case;
+            // this is the same rule at the other end, so no route reaches the
+            // prose behind its back.
+            when (if (proseWritten) reread else null) {
                 "curious" -> 3
                 "new" -> 1
                 else -> 0
@@ -219,6 +231,7 @@ fun FirstRunOverlay(
                 when (stage) {
                     0 -> Choose(
                         palette, serif,
+                        proseWritten = proseWritten,
                         onPath = { stage = it },
                         onSharing = { stage = 4 },
                     )
@@ -260,7 +273,13 @@ fun FirstRunOverlay(
 }
 
 @Composable
-private fun Choose(palette: ReaderPalette, serif: FontFamily, onPath: (Int) -> Unit, onSharing: () -> Unit) {
+private fun Choose(
+    palette: ReaderPalette,
+    serif: FontFamily,
+    proseWritten: Boolean,
+    onPath: (Int) -> Unit,
+    onSharing: () -> Unit,
+) {
     Text("✦", color = palette.gold, fontSize = 25.sp)
     Spacer(Modifier.height(8.dp))
     Text(
@@ -277,8 +296,10 @@ private fun Choose(palette: ReaderPalette, serif: FontFamily, onPath: (Int) -> U
     // Curious leads: a stranger to the Bible is the likelier
     // first-time reader of the two, and the path that asks the least of someone
     // should be the one they see first. Web twin: FirstRun.svelte's choose stage.
-    PathCard(palette, t("intro.pathCurious"), t("intro.pathCuriousDesc")) { onPath(3) }
-    PathCard(palette, t("intro.pathNew"), t("intro.pathNewDesc")) { onPath(1) }
+    if (proseWritten) {
+        PathCard(palette, t("intro.pathCurious"), t("intro.pathCuriousDesc")) { onPath(3) }
+        PathCard(palette, t("intro.pathNew"), t("intro.pathNewDesc")) { onPath(1) }
+    }
     PathCard(palette, t("intro.pathSharing"), t("intro.pathSharingDesc"), onSharing)
     PathCard(
         palette, t("intro.pathEstablished"), t("intro.pathEstablishedDesc"),

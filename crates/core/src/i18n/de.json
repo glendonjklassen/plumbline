@@ -168,6 +168,7 @@
   "devotional.empty": "Keine Andacht aktiv. Starten Sie unten eine.",
   "devotional.finished": "Abgeschlossen — alle Tage gelesen.",
   "devotional.heading": "Andachten",
+  "devotional.noneYet": "In dieser Sprache sind noch keine Andachten verfügbar.",
   "devotional.pausedToast": "„{name}“ pausiert. Der Fortschritt bleibt erhalten.",
   "devotional.progress": "{done} / {total} Tage",
   "devotional.resumedToast": "„{name}“ fortgesetzt.",

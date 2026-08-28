@@ -168,6 +168,7 @@
   "devotional.empty": "No hay ningún devocional activo. Empiece uno abajo.",
   "devotional.finished": "Terminado: todos los días leídos.",
   "devotional.heading": "Devocionales",
+  "devotional.noneYet": "Todavía no hay devocionales disponibles en este idioma.",
   "devotional.pausedToast": "«{name}» en pausa. Mantiene su progreso hasta que lo reanude.",
   "devotional.progress": "{done} / {total} días",
   "devotional.resumedToast": "«{name}» reanudado.",

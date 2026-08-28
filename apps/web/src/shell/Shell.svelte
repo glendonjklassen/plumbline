@@ -35,7 +35,7 @@
   import TagWeave from "../study/TagWeave.svelte";
   import ShareScreen from "./ShareScreen.svelte";
   import SearchScreen from "./SearchScreen.svelte";
-  import { t } from "../lib/i18n.svelte";
+  import { hasNativeIntros, t } from "../lib/i18n.svelte";
   import { uiScale } from "../lib/uiScale";
   import { DEFAULT_FONT, FONT_SCALE } from "../engine/fonts.generated";
   import { getSession } from "../state/session.svelte";
@@ -490,7 +490,12 @@
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={() => (s.menuOpen = false)}></div>
   <div class="menu" role="menu" aria-label={t("common.menu")}>
-    <button onclick={go(() => (s.reopenIntro = s.intro ?? "new"))}>{t("shell.welcome")}</button>
+    <!-- Only where the welcome exists in this language. A reader given it in
+         English who now reads in German would otherwise reopen English
+         paragraphs from a German menu — see i18n::Lang::has_native_intros. -->
+    {#if hasNativeIntros()}
+      <button onclick={go(() => (s.reopenIntro = s.intro ?? "new"))}>{t("shell.welcome")}</button>
+    {/if}
     <button onclick={go(() => (s.showHistory = true))}>{t("shell.history")}</button>
     <button onclick={go(() => (s.panel = { kind: "guide" }))}>{t("shell.guideAndAbout")}</button>
     <button onclick={go(() => (s.showShortcuts = true))}>{t("shell.shortcuts")}</button>

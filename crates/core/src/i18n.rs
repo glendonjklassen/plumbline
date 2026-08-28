@@ -233,6 +233,30 @@ impl Lang {
         self.spec().corpus.is_some() && self != Lang::En
     }
 
+    /// Whether this language's OWN catalogue carries the first-run prose —
+    /// written by someone inside the culture, not fallen back to English.
+    ///
+    /// DERIVED, never declared. A boolean on the row would be a second thing to
+    /// keep true: someone writes the German welcome, forgets to flip the flag,
+    /// and German readers still cannot reach the words that are sitting right
+    /// there in `de.json`. Or worse in the other direction — the flag says yes,
+    /// the keys are missing, and the reader is offered a path into English
+    /// paragraphs. Here, writing the prose IS turning the feature on, and there
+    /// is no way to be inconsistent about it.
+    ///
+    /// Read against ENGLISH's key set, because English is the source and defines
+    /// what "all of it" means. All-or-nothing is enforced by a test rather than
+    /// tolerated here: a half-written welcome would render two German paragraphs
+    /// and then three English ones, which is worse than either.
+    pub fn has_native_intros(self) -> bool {
+        if self == Lang::En {
+            return true;
+        }
+        let mine = table(self);
+        let mut wanted = table(Lang::En).keys().filter(|k| is_intro_prose(k)).peekable();
+        wanted.peek().is_some() && wanted.all(|k| mine.contains_key(k))
+    }
+
     /// The web manifest role this language's corpus cache is filed under.
     ///
     /// English's is the distinguished `corpusCache`, and stays so: it is the one
@@ -478,6 +502,29 @@ pub fn catalog(lang: Lang) -> Strings {
 /// so every key is present even where the translation is not.
 pub fn resolved(lang: Lang) -> Strings {
     merged(lang).clone()
+}
+
+/// The FIRST-RUN PROSE: the two welcomes that speak to a reader about their own
+/// life rather than about the app.
+///
+/// Named here because these are the strings that cannot be translated in the
+/// ordinary way. The rest of the catalogue is labels and instructions, and a
+/// competent translator renders them; these two are somebody addressing a new
+/// believer, or someone unsure what they believe, out of a shared world —
+/// which idioms land, which questions are the live ones, what a person in that
+/// place has already heard said badly. Handing them to a translator produces
+/// English thoughts in another language, and handing them to a machine is
+/// worse. They wait for someone inside the culture to write them, and until
+/// then the paths that lead to them are not offered at all.
+///
+/// ONE list, read by three things: [`Lang::has_native_intros`], the
+/// completeness test's exemption, and the all-or-nothing test beside it. A
+/// second copy of these prefixes is a place to forget one.
+pub const INTRO_PROSE: [&str; 2] = ["intro.welcome.", "intro.curious."];
+
+/// Whether `id` is one of the first-run prose strings. See [`INTRO_PROSE`].
+pub fn is_intro_prose(id: &str) -> bool {
+    INTRO_PROSE.iter().any(|p| id.starts_with(p))
 }
 
 /// Keys English has that `lang` does not. Empty for English by definition.
@@ -765,7 +812,6 @@ mod tests {
     /// Nothing else may be on this list. Adding a key here is a decision, not a
     /// convenience, and `every_shipped_string_is_translated` is what makes it
     /// one.
-    const ENGLISH_ONLY: [&str; 2] = ["intro.welcome.", "intro.curious."];
 
     #[test]
     fn every_shipped_string_is_translated() {
@@ -774,13 +820,63 @@ mod tests {
                 continue;
             }
             let gaps: Vec<String> =
-                missing(lang).into_iter().filter(|k| !ENGLISH_ONLY.iter().any(|p| k.starts_with(p))).collect();
+                missing(lang).into_iter().filter(|k| !is_intro_prose(&k)).collect();
             assert!(
                 gaps.is_empty(),
                 "{} is missing {} key(s), and only the welcome prose may be missing: {:?}",
                 lang.code(),
                 gaps.len(),
                 gaps
+            );
+        }
+    }
+
+    #[test]
+    fn english_carries_the_prose_the_gate_is_about() {
+        // Without this the gate guards nothing: delete the prose from en.json and
+        // `has_native_intros` has no keys to require, so every language would
+        // pass and every reader would be offered a path to a blank welcome.
+        let en = catalog(Lang::En);
+        for prefix in INTRO_PROSE {
+            assert!(en.keys().any(|k| k.starts_with(prefix)), "no {prefix}* strings: the gate guards nothing");
+        }
+    }
+
+    #[test]
+    fn the_first_run_prose_is_all_or_nothing_in_every_language() {
+        // A half-written welcome renders two paragraphs in the reader's language
+        // and then three in English, mid-thought. Whoever writes one of these
+        // writes all of them, or the path stays closed.
+        let en = catalog(Lang::En);
+        let all: Vec<&String> = en.keys().filter(|k| is_intro_prose(k)).collect();
+        for lang in Lang::ALL {
+            let mine = catalog(lang);
+            let have = all.iter().filter(|k| mine.contains_key(**k)).count();
+            assert!(
+                have == 0 || have == all.len(),
+                "{} has {have} of {} first-run prose strings — write the rest or none",
+                lang.code(),
+                all.len()
+            );
+        }
+    }
+
+    #[test]
+    fn the_gate_and_the_words_can_never_disagree() {
+        // The contract the shells act on: a language is offered the welcome and
+        // the curious path EXACTLY when a reader taking one would meet no
+        // English paragraph. Stated as an equivalence rather than a snapshot of
+        // which languages qualify today, so writing the German prose turns the
+        // paths on without a test to update.
+        for lang in Lang::ALL {
+            let own = catalog(lang);
+            let fell_back =
+                catalog(Lang::En).keys().filter(|k| is_intro_prose(k)).filter(|k| !own.contains_key(*k)).count();
+            assert_eq!(
+                lang.has_native_intros(),
+                fell_back == 0,
+                "{} is offered the first-run prose with {fell_back} of its paragraphs falling back to English",
+                lang.code()
             );
         }
     }

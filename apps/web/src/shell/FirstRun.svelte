@@ -10,7 +10,7 @@
   import { getSession } from "../state/session.svelte";
   import { modal } from "../lib/modal";
   import { cleanChurch, hasChurch, safeChurchUrl } from "./church";
-  import { t } from "../lib/i18n.svelte";
+  import { hasNativeIntros, t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -21,11 +21,25 @@
   // Re-reading is the same page without the setup: no path is chosen, no
   // settings move, and the button at the bottom just closes it.
   const rereading = $derived(s.reopenIntro !== null);
+  /** Whether the two PROSE paths may be offered at all.
+   *
+   *  The welcome and the curious page are not labels a translator renders —
+   *  they are somebody speaking to a reader about their own life, and they are
+   *  written by someone inside that culture or not written. Until they exist in
+   *  the painted language the paths that lead to them are not shown, because
+   *  the alternative is inviting a reader in and then addressing them in
+   *  English. The engine decides (`i18n::Lang::has_native_intros`); this reads
+   *  the answer. */
+  const proseWritten = $derived(hasNativeIntros());
   /** Whoever's church we know about — the link that brought this reader here,
    *  or the one already saved (so re-reading later still names them). */
   const fromChurch = $derived(hasChurch(s.sharedByChurch) ? s.sharedByChurch : s.church);
   $effect(() => {
-    if (s.reopenIntro) stage = s.reopenIntro === "curious" ? "curious" : "welcome";
+    // A reader given the welcome in English and now reading in German has an
+    // `intro` in their config naming a page that no longer exists for them.
+    // Shell hides the Welcome button in that case; this is the same rule at the
+    // other end, so no route reaches the prose behind its back.
+    if (s.reopenIntro && proseWritten) stage = s.reopenIntro === "curious" ? "curious" : "welcome";
   });
   // Unchecked to begin with: the tiers are opt-in, so this screen ASKS rather
   // than confirming something already decided.
@@ -335,18 +349,23 @@
       <!-- Curious leads: a stranger to the Bible is the likelier
            first-time reader of the two, and the path that asks the least of
            someone should be the one they see first. -->
-      <button class="path" onclick={() => (stage = "curious")}>
-        <span class="name">{t("intro.pathCurious")}</span>
-        <span class="desc">{t("intro.pathCuriousDesc")}</span>
-      </button>
-      <button class="path" onclick={() => (stage = "welcome")}>
-        <span class="name">{t("intro.pathNew")}</span>
-        <span class="desc">{t("intro.pathNewDesc")}</span>
-      </button>
+      {#if proseWritten}
+        <button class="path" onclick={() => (stage = "curious")}>
+          <span class="name">{t("intro.pathCurious")}</span>
+          <span class="desc">{t("intro.pathCuriousDesc")}</span>
+        </button>
+        <button class="path" onclick={() => (stage = "welcome")}>
+          <span class="name">{t("intro.pathNew")}</span>
+          <span class="desc">{t("intro.pathNewDesc")}</span>
+        </button>
+      {/if}
       <!-- A link shared from Present was handed to someone in person, so it
            offers only the two paths it was meant for: the rest is setup for a
-           reader who already has a Bible habit. -->
-      {#if !s.startAsNewBeliever}
+           reader who already has a Bible habit.
+           …unless those two do not exist in this language, in which case that
+           narrowing would leave an empty card. Someone handed a link still gets
+           a Bible; they get the ordinary way in to it. -->
+      {#if !s.startAsNewBeliever || !proseWritten}
       <button class="path" onclick={sharing}>
         <span class="name">{t("intro.pathSharing")}</span>
         <span class="desc">{t("intro.pathSharingDesc")}</span>
