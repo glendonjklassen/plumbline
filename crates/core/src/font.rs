@@ -52,6 +52,15 @@ pub enum Font {
     /// option, and it pairs naturally with the High Contrast theme — though,
     /// as ever, type and colour are independent axes.
     AtkinsonHyperlegible,
+    /// The naskh face that carries Arabic, and the ONLY bundled face that
+    /// contains a single Arabic glyph.
+    ///
+    /// Bundled for everyone and offered to nobody who is not reading Arabic —
+    /// see [`Font::offered_for`]. It is in every other family's CSS fallback
+    /// stack on the web, so a reader on Garamond gets Garamond for English and
+    /// Amiri for Arabic out of one stack and nothing ever renders from a system
+    /// font the engine did not measure with.
+    Amiri,
 }
 
 impl Font {
@@ -63,6 +72,7 @@ impl Font {
             Font::Inter => "inter",
             Font::FiraCode => "fira-code",
             Font::AtkinsonHyperlegible => "atkinson-hyperlegible",
+            Font::Amiri => "amiri",
         }
     }
 
@@ -74,6 +84,7 @@ impl Font {
             "inter" => Some(Font::Inter),
             "fira-code" => Some(Font::FiraCode),
             "atkinson-hyperlegible" => Some(Font::AtkinsonHyperlegible),
+            "amiri" => Some(Font::Amiri),
             _ => None,
         }
     }
@@ -90,13 +101,17 @@ impl Font {
             Font::Inter => "Inter",
             Font::FiraCode => "Fira Code",
             Font::AtkinsonHyperlegible => "Atkinson Hyperlegible",
+            Font::Amiri => "Amiri",
         }
     }
 
     /// Whether this face ships a real italic. False means added words are told
     /// apart by the palette's `added` tone alone — see the module note.
     pub fn has_italic(self) -> bool {
-        !matches!(self, Font::FiraCode)
+        // Amiri ships an italic, and Arabic has no italic tradition to use it
+        // for — the Van Dyck marks no translator-supplied words, so the axis
+        // this exists for is empty in Arabic anyway. Not bundled.
+        !matches!(self, Font::FiraCode | Font::Amiri)
     }
 
     /// Whether this face ships a REAL bold, as separate static files rather
@@ -107,6 +122,28 @@ impl Font {
     /// regular. Shell-informative, like [`Font::has_italic`].
     pub fn static_bold(self) -> bool {
         matches!(self, Font::AtkinsonHyperlegible)
+    }
+
+    /// Whether this face is offered to a reader of `lang`.
+    ///
+    /// THE PICKERS MUST FILTER ON THIS. Amiri is the only bundled face with any
+    /// Arabic in it, so offering an Arabic reader the other five is offering
+    /// five ways to read nothing: per-glyph fallback would render their
+    /// scripture in Amiri regardless, and the only thing their choice would
+    /// actually change is the SIZE — `scale()` is applied from the selected
+    /// token, so picking Inter would render Amiri at 0.87, a ratio calibrated
+    /// to Inter's x-height and meaningless for naskh. The picker would be a
+    /// mislabelled size slider.
+    ///
+    /// And the converse: Amiri has Latin, but it is a naskh face whose Latin is
+    /// not why anyone chose it, so it stays out of the Latin pickers.
+    pub fn offered_for(self, lang: crate::i18n::Lang) -> bool {
+        matches!(self, Font::Amiri) == lang.is_rtl()
+    }
+
+    /// The faces offered to a reader of `lang`, in picker order.
+    pub fn all_for(lang: crate::i18n::Lang) -> Vec<Font> {
+        Font::ALL.into_iter().filter(|f| f.offered_for(lang)).collect()
     }
 
     /// The face's optical size multiplier: what a shell multiplies the reader's
@@ -135,14 +172,20 @@ impl Font {
             // shipped file) — all but Literata's 0.507, so the same half
             // correction lands one point higher.
             Font::AtkinsonHyperlegible => 0.90,
+            // Arabic has no x-height, so the analogue is the body height of the
+            // letters that sit ON the baseline without descending: ه and د,
+            // mean 0.361 em, measured from the shipped file the same way as the
+            // others. Against Garamond's 0.405 that is a full correction of
+            // 1.123, and the same half correction lands here.
+            Font::Amiri => 1.06,
         }
     }
 
     /// Every face, in the order the pickers offer them: the default first, then
     /// the alternatives. One list, so a face added to the enum cannot be
     /// forgotten by a shell — [`tests::every_variant_is_in_all`] holds it.
-    pub const ALL: [Font; 5] =
-        [Font::EbGaramond, Font::Literata, Font::Inter, Font::FiraCode, Font::AtkinsonHyperlegible];
+    pub const ALL: [Font; 6] =
+        [Font::EbGaramond, Font::Literata, Font::Inter, Font::FiraCode, Font::AtkinsonHyperlegible, Font::Amiri];
 }
 
 #[cfg(test)]
@@ -170,10 +213,17 @@ mod tests {
     fn every_variant_is_in_all() {
         // ALL is what both shells enumerate. A variant missing from it is a face
         // the reader can hold in their config and never pick in the UI.
-        for f in [Font::EbGaramond, Font::Literata, Font::Inter, Font::FiraCode, Font::AtkinsonHyperlegible] {
+        for f in [
+            Font::EbGaramond,
+            Font::Literata,
+            Font::Inter,
+            Font::FiraCode,
+            Font::AtkinsonHyperlegible,
+            Font::Amiri,
+        ] {
             assert!(Font::ALL.contains(&f), "{} is missing from Font::ALL", f.name());
         }
-        assert_eq!(Font::ALL.len(), 5);
+        assert_eq!(Font::ALL.len(), 6);
     }
 
     #[test]
@@ -203,13 +253,22 @@ mod tests {
 
     #[test]
     fn scales_are_a_partial_correction_not_an_equalisation() {
-        // Every non-default face is corrected DOWN (all have taller x-heights
-        // than Garamond) but never below the full-equalisation floor —
-        // Garamond's 0.400 x-height over Inter's 0.546 is ~0.73, and a scale at
-        // or under it would mean the slider's number stops meaning anything.
+        // The correction moves a face TOWARD Garamond's apparent size and
+        // stops half way; it never reaches parity, in either direction, because
+        // a full equalisation would render Inter at 13.2px when the slider says
+        // 18 and the setting would stop meaning anything.
+        //
+        // Both directions, and that is new: every Latin face here has a taller
+        // x-height than Garamond and so corrects DOWN, which made "< 1.0" look
+        // like the invariant until Amiri arrived. Arabic has no x-height at all
+        // — the analogue is the baseline body of ه and د, and Amiri's is
+        // SMALLER than Garamond's x-height, so it is the first face corrected
+        // UP. The floor and ceiling are the full-equalisation ratios: Garamond
+        // 0.400 over Inter's 0.546 is ~0.73 below, and over Amiri's 0.361 is
+        // ~1.12 above.
         for f in Font::ALL {
             let s = f.scale();
-            assert!(s > 0.73 && s <= 1.0, "{} scales by {}", f.name(), s);
+            assert!(s > 0.73 && s < 1.13, "{} scales by {}", f.name(), s);
         }
     }
 

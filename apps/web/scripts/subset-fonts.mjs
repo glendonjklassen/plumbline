@@ -143,7 +143,59 @@ const FAMILIES = [
       { src: "AtkinsonHyperlegible-BoldItalic.ttf", style: "italic", weight: "700", chromeOnly: true },
     ],
   },
+  {
+    // The naskh face that carries Arabic — see the note above the token
+    // constants. Its ranges and layout features are its own: the Arabic block
+    // instead of the Latin one, and EVERY layout feature rather than fontTools'
+    // default set, because init/medi/fina/isol are what join cursive script and
+    // subsetting them away would leave every letter in isolated form at a
+    // different advance width than the shaped text.
+    //
+    // `font-weight: 400` and no italic. A static regular declared `400 700`
+    // paints bold text regular — the lesson Atkinson's entry above records — so
+    // this one declares what it is and lets the browser synthesize a bold for
+    // chrome headings. Scripture is never bold, so nothing the engine measures
+    // is affected.
+    token: "amiri",
+    css: "Amiri",
+    fallback: "serif",
+    scale: 1.06,
+    unicodes: ["U+0020-007E", "U+00A0-00FF", "U+0600-06FF", "U+200F", "U+2000-206F", "U+FB50-FDFF", "U+FE70-FEFF"].join(
+      ",",
+    ),
+    layoutFeatures: "*",
+    faces: [{ src: "Amiri-Regular.ttf", style: "normal", weight: "400" }],
+  },
 ];
+
+// THE SCRIPT FALLBACK: a family that is bundled for everyone and offered to
+// nobody who cannot read it.
+//
+// None of the five families above contains a single Arabic glyph, and for this
+// app that is a CORRECTNESS bug rather than an ugly one — the same one the
+// header warns about, at the scale of a whole script. Chapter layout is measured
+// in the engine worker and painted on the main thread; with no Arabic in the
+// selected face, the worker measures whatever system font its OffscreenCanvas
+// falls back to and the main thread paints whatever the document falls back to.
+// Those are not required to be the same font, and when they differ every line of
+// the Van Dyck wraps somewhere it is not drawn.
+//
+// So Amiri is appended to EVERY family's fallback stack and loaded in both
+// contexts unconditionally. Not a sixth token in the picker: the reader's choice
+// is about the voice of the Latin text, and there is nothing to choose between
+// here — it is the difference between rendering Arabic and not. Per-glyph
+// fallback means a reader on EB Garamond gets Garamond for English and Amiri for
+// Arabic out of one stack, which is exactly what a fallback list is for.
+//
+// Amiri because it is the naskh face that Arabic typography actually uses for
+// scripture, and because it positions tashkeel properly — `svd1865.jsonl` is
+// fully vocalized, and most faces either collide the marks or drop them.
+// OFL 1.1, vendored at fonts-src/OFL-Amiri.txt.
+/** The token of the family above — bundled always, offered only where it is
+ *  the only face that can render the text. See `core::font::Font::offered_for`,
+ *  which is the same fact in Rust and the one the pickers actually read. */
+const SCRIPT_FALLBACK_TOKEN = "amiri";
+const SCRIPT_FALLBACK_CSS = "Amiri";
 
 /** The face the app falls back to everywhere — must be a key of FAMILIES. */
 const DEFAULT_TOKEN = "eb-garamond";
@@ -188,9 +240,14 @@ for (const family of FAMILIES) {
     }
     const base = basename(face.src, ".ttf");
     const subTtf = join(outDir, `${base}.subset.tmp.ttf`);
-    execFileSync(SUBSET.cmd, [...SUBSET.pre, src, `--unicodes=${UNICODES}`, `--output-file=${subTtf}`], {
-      stdio: ["ignore", "inherit", "inherit"],
-    });
+    const args = [
+      ...SUBSET.pre,
+      src,
+      `--unicodes=${family.unicodes ?? UNICODES}`,
+      `--output-file=${subTtf}`,
+    ];
+    if (family.layoutFeatures) args.push(`--layout-features=${family.layoutFeatures}`);
+    execFileSync(SUBSET.cmd, args, { stdio: ["ignore", "inherit", "inherit"] });
     // pyftsubset --flavor=woff2 needs python brotli, which is not reliably
     // present; woff2_compress is, and produces the same thing. It writes
     // <name>.woff2 beside its input.
@@ -297,9 +354,34 @@ export const DEFAULT_FONT = ${JSON.stringify(DEFAULT_TOKEN)};
 /** Token → what to render in until the webfont lands, and for any codepoint the
  *  family lacks. A sans must not fall back to a serif: the substitution shows
  *  for one swap, and on a glyph the face is missing it is permanent. */
+ *
+ *  Every other stack opens with "${SCRIPT_FALLBACK_CSS}", which is not a choice and not in the
+ *  picker: none of the selectable faces has a single Arabic glyph, and per-glyph
+ *  fallback is what lets one stack serve Latin in the reader's chosen voice and
+ *  Arabic in a face that can actually shape it. It sits FIRST among the
+ *  fallbacks and after the chosen family, so it only ever answers for codepoints
+ *  the chosen family lacks. */
 export const FONT_FALLBACK: Readonly<Record<string, string>> = {
-${[...byToken].map(([token, e]) => `  "${token}": ${JSON.stringify(e.fallback)},`).join("\n")}
+${[...byToken]
+  .map(
+    ([token, e]) =>
+      `  "${token}": ${JSON.stringify(
+        token === SCRIPT_FALLBACK_TOKEN ? e.fallback : `"${SCRIPT_FALLBACK_CSS}", ${e.fallback}`,
+      )},`,
+  )
+  .join("\n")}
 };
+
+/** The script-fallback face, loaded by the engine worker ALONGSIDE whichever
+ *  family is selected and declared in fonts.css for the document.
+ *
+ *  Unconditional on purpose. It could be loaded only when the open corpus reads
+ *  right to left, but then the worker's font set would depend on which Bible is
+ *  open, and the window where the two contexts disagree is exactly the window
+ *  where a reader switches language. One face, always present in both. */
+export const SCRIPT_FALLBACK_FILES: readonly string[] = ${JSON.stringify(
+  built.filter((f) => f.family.token === SCRIPT_FALLBACK_TOKEN && !f.face.chromeOnly).map((f) => `fonts/${f.name}`),
+)};
 
 /** Token → the face's optical size multiplier, mirroring
  *  \`core::font::Font::scale()\` (which holds the x-height measurements and the
