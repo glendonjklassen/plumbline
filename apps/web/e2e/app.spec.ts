@@ -54,6 +54,41 @@ async function settleBackground(page: Page): Promise<void> {
   );
 }
 
+/// Wait until the device actually HOLDS every file its pin names.
+///
+/// `settleBackground` waits for the work the boot trace narrates; this waits for
+/// the depot to match the claim. They are not the same barrier, and the gap
+/// between them is where a test reads "prune deleted a pinned file" for a file
+/// that had simply not arrived yet.
+///
+/// It grew a second occupant when every language's Bible started shipping: the
+/// other corpora are ~9 MB fetched after the reader is served, and any test that
+/// treats the pin as a description of the disk has to wait for them. Expressed
+/// against the PIN rather than against filenames, so the next language is
+/// covered by having been added.
+async function settleDepot(page: Page): Promise<void> {
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async () => {
+          const hit = await caches.match(new URL("__depot/pack-pin.json", location.href).href, {
+            ignoreVary: true,
+          });
+          if (!hit) return -1;
+          const pin = await hit.json();
+          let missing = 0;
+          for (const f of pin.files ?? []) {
+            if (!f.url) continue;
+            const url = new URL(f.url, location.href).href;
+            if (!(await caches.match(url, { ignoreVary: true }))) missing++;
+          }
+          return missing;
+        }),
+      { timeout: 120_000, message: "the device never finished downloading what its pin names" },
+    )
+    .toBe(0);
+}
+
 test("boots to the reader with the stock set seeded", async ({ page }) => {
   await boot(page);
   await expect(page.locator("canvas").first()).toBeVisible();
@@ -1313,6 +1348,11 @@ test("updating sweeps the versions this build no longer uses", async ({ page }) 
   // and it lost the moment anything slowed them slightly (2026-07-28). Waiting is
   // the fix; the race was never part of what it means to test.
   await settleBackground(page);
+  // And the downloads the trace does not narrate: every language's Bible now
+  // ships, ~9 MB fetched after the reader is served, and the pin names them the
+  // moment the engine opens. Without this the final assertion reports prune for
+  // a file that had not arrived — the exact lie the paragraph above is about.
+  await settleDepot(page);
   // Let the real boot-time sweep finish first, so this test's seeding isn't
   // racing it and the counts below are its own doing.
   await page.evaluate(() => (window as any).__plumbline.sweepCaches());

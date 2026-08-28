@@ -13,7 +13,8 @@
 //   path, bytes, gzBytes — as before
 //   hash      — sha256 of the RAW bytes, 16 hex chars. Per-file, so a release
 //               that changes one weave invalidates one URL instead of all 44.
-//   stage     — "text" | "study" | "analysis": when the loader fetches it.
+//   stage     — "text" | "study" | "analysis" | "corpus" | "optional": when the
+//               loader fetches it.
 //   seedOnce  — the bundled stock study set, seeded into the reader's own files
 //               once, after which their copies rule.
 //   role      — "corpusCache" for the one file the fast open depends on.
@@ -50,9 +51,17 @@ const STOCK = join(repo, "apps/android/app/src/main/assets/stock");
 //              bridge witnesses. Fetched right after the reader hands over.
 //   analysis — the machine tier. Background, and deferred behind an explicit
 //              action on phones.
+//   corpus   — every language's Bible EXCEPT the one stage 1 opens. Downloaded
+//              on every device, in the background, after there is text on
+//              screen. Not `text`, because a reader opens exactly one Bible and
+//              inflating 35 MB of a second before first paint is nonsense; not
+//              `study`, because `fetchStage2Pack` puts everything it selects
+//              into the in-memory home and three corpora there is ~91 MB; not
+//              `optional`, because THE POINT is that nobody has to ask. See the
+//              block above its emit at the bottom of this file.
 //   optional — never fetched unless the reader asks for it: the suggested-weave
-//              bundle, and the German corpus (a reader picking German is the
-//              ask). Both are at the bottom of this file.
+//              bundle and the machine-translated dictionaries. Both are at the
+//              bottom of this file.
 //
 // Anything under data/ or bridge/ not named here defaults to `study`, which is
 // the safe default: it loads, just not on the boot path.
@@ -250,12 +259,23 @@ emit("data", "kjv.jsonl.idxcache", cacheRaw, { stage: "text", role: BASE_LANG.co
 
 // ── every other language's text: the same cache, for the other Bibles ────────
 //
-// OPTIONAL, and that is the whole delivery decision. Android bundles these in
-// the APK, where a couple of MB compressed is nothing; on the web nothing is
-// ever bundled, so the only question is which stage — and an English reader
-// must not download a German Bible to read Genesis. Each is fetched when the
-// reader picks that language (see the loader), and until it lands `corpus_for`
-// in crates/ffi opens the KJV instead, so the app is never without a text.
+// BUNDLED, and that is the whole delivery decision. It used to be `optional`,
+// on the reasoning that an English reader must not download a German Bible to
+// read Genesis — true, and still true, which is why these are their own stage
+// rather than `text`: nothing here is on the path to first paint.
+//
+// What that reasoning missed is the reader it was about. A phone set to Arabic
+// opened this app, in Arabic, and showed them the English KJV — because the
+// Bible in their language was a download nobody had asked for yet, gated behind
+// a Settings screen written in a language they had just been shown the app does
+// not think they read. The interface promised a Bible and the text delivered
+// somebody else's. Three corpora cost 9 MB on the wire, once, in the background,
+// after the reader is already reading; that is the price of never doing that to
+// anyone again.
+//
+// Only ONE is ever inflated into the home — `isOtherCorpus` in the loader skips
+// the rest, and always did, which is why this costs bytes and disk but no memory
+// and no boot time.
 //
 // `role` rather than a filename match, for the corpus cache's reason: the
 // loader has to be able to FIND it. Its own role per language, never
@@ -263,11 +283,13 @@ emit("data", "kjv.jsonl.idxcache", cacheRaw, { stage: "text", role: BASE_LANG.co
 // second file claiming that role would make which text opens depend on manifest
 // order.
 //
-// Each language's dictionary travels the same way: optional, found by its own
-// role, installed with the corpus (one ask covers both). Excluded from the
-// generic data/ walk above so no English reader ever fetches one; conditional on
-// existing because a corpus is built by its own data-prep pipeline and a
-// checkout that has not run it is not broken.
+// The DICTIONARIES do not travel with them and stay `optional`. They are
+// machine-translated, they are the lowest-confidence artifacts in the pack, and
+// unlike a Bible nothing is broken without one: `strongs_for` serves the English
+// definitions. Opt-in is the right posture for generated lexicography.
+// Excluded from the generic data/ walk above so no English reader ever fetches
+// one; conditional on existing because a corpus is built by its own data-prep
+// pipeline and a checkout that has not run it is not broken.
 for (const lang of EXTRA_LANGS) {
   if (lang.lexicon) {
     const lexSrc = join(repo, "data", lang.lexicon);
@@ -286,7 +308,7 @@ for (const lang of EXTRA_LANGS) {
   );
   const raw = readFileSync(tmp);
   rmSync(tmp, { force: true });
-  emit("data", lang.corpusCache, raw, { stage: "optional", role: lang.corpusRole });
+  emit("data", lang.corpusCache, raw, { stage: "corpus", role: lang.corpusRole });
 }
 
 // ── the suggested weaves: one bundle, downloaded only if asked for ───────────
@@ -357,7 +379,7 @@ const mb = (n) => (n / 1048576).toFixed(1);
 const total = files.reduce((s, f) => s + f.bytes, 0);
 const totalGz = files.reduce((s, f) => s + f.gzBytes, 0);
 const byStage = (st) => files.filter((f) => f.stage === st);
-const stageLine = ["text", "study", "analysis", "optional"]
+const stageLine = ["text", "study", "analysis", "corpus", "optional"]
   .map((st) => `${st} ${byStage(st).length}/${mb(byStage(st).reduce((s, f) => s + f.gzBytes, 0))}MB`)
   .join(", ");
 console.log(`pack ${manifest.version}: ${files.length} files, ${mb(total)}MB raw -> ${mb(totalGz)}MB gzipped`);

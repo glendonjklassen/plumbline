@@ -247,7 +247,12 @@ export class EngineRpc {
    *  `locale` is the DEVICE's language, which only decides when the reader has
    *  not chosen one; a worker has no `navigator.languages` worth trusting, and
    *  the setting it is weighed against lives in a config only the worker can
-   *  read, so the two meet there. */
+   *  read, so the two meet there.
+   *
+   *  BOTH are needed and neither is enough. `lang` is empty on the first visit —
+   *  it is written at the end of a boot — so a corpus chosen from it alone opens
+   *  the KJV for a reader whose phone we are about to speak Arabic to. See
+   *  `corpusRoleFor`. */
   boot(
     opts: { deferRnd?: boolean; locale?: string; lang?: string; textFont?: string } = {},
   ): Promise<BootInfo> {

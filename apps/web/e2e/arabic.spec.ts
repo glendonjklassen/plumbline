@@ -64,12 +64,27 @@ async function pick(page: Page, now: Record<string, string>, want: string): Prom
   await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 180_000 });
 }
 
-/** The display list the last frame painted, straight off the paint probe. */
+/** The display list the last frame painted, straight off the paint probe.
+ *
+ *  POLLED, the way reader-perf.spec.ts does it, and not read once: a visible
+ *  canvas means the pane is mounted, not that a frame has been painted into it,
+ *  and `paintProbe.items` is a WeakRef that is only written when a NEW list
+ *  reaches the painter. Read eagerly it returns [] on a machine running four
+ *  browsers at once — which reads exactly like "this device opened the wrong
+ *  Bible", the failure these tests exist to report. */
 async function boxes(page: Page): Promise<Box[]> {
-  return await page.evaluate(() => {
-    const items = (globalThis as any).__plumblinePaint?.items?.deref() ?? [];
-    return items.map((i: any) => ({ x: i.x, y: i.y, w: i.w, text: i.text, kind: i.kind }));
-  });
+  const read = () =>
+    page.evaluate(() => {
+      const items = (globalThis as any).__plumblinePaint?.items?.deref() ?? [];
+      return items.map((i: any) => ({ x: i.x, y: i.y, w: i.w, text: i.text, kind: i.kind }));
+    });
+  await expect
+    .poll(async () => (await read()).length, {
+      timeout: 60_000,
+      message: "no display list ever reached the painter",
+    })
+    .toBeGreaterThan(5);
+  return await read();
 }
 
 test("the Arabic reader runs right to left, in the chrome and in the text", async ({ page }) => {
@@ -110,6 +125,40 @@ test("the Arabic reader runs right to left, in the chrome and in the text", asyn
   expect(num!.x).toBeGreaterThan(line[0].x);
   const rightmost = Math.max(...list.filter((b) => b.y === firstY).map((b) => b.x + b.w));
   expect(num!.x + num!.w).toBeCloseTo(rightmost, 0);
+});
+
+test.describe("an Arabic device, cold", () => {
+  test.use({ locale: "ar-EG" });
+
+  // THE WHOLE FEATURE, from the one angle the tests above cannot see: they all
+  // reach Arabic through the language picker, which means they prove the app
+  // can BE Arabic, not that it arrives that way.
+  //
+  // It did not. An Arabic phone opened this app in fluent Arabic and showed the
+  // reader the English KJV — the Van Dyck was an `optional` download gated on
+  // whether the reader had installed it, and on a first visit nobody has
+  // installed anything. Nothing errored. The chrome was correct. The app simply
+  // told someone, in their own language, that its Bible was in another one.
+  //
+  // Asserted on the SCRIPTURE, because the chrome was already right when this
+  // was broken. See the block in language.spec.ts for the German and Spanish
+  // halves and the three separate regressions this shape catches.
+  test("opens the Van Dyck, in Arabic, with nobody having chosen anything", async ({ page }) => {
+    await reader(page, AR);
+
+    await expect(page.locator("html")).toHaveAttribute("lang", "ar");
+    await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+
+    const words = (await boxes(page)).filter((b) => b.kind === "word");
+    expect(words.length, "no words on the paint probe").toBeGreaterThan(5);
+    expect(
+      words.some((w) => /[\u0600-\u06FF]/.test(w.text)),
+      `an Arabic device is reading ${JSON.stringify(words.slice(0, 8).map((w) => w.text))} — that is not its Bible`,
+    ).toBe(true);
+    // Not "some Arabic is on screen": the chrome is Arabic too. This is the
+    // canvas display list, which only the corpus feeds.
+    expect(words.slice(0, 6).map((w) => w.text).join(" ")).not.toContain("There was a man");
+  });
 });
 
 test("Arabic search finds a word the reader can actually type", async ({ page }) => {

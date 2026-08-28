@@ -51,6 +51,7 @@ import {
   fetchLangCorpus,
   fetchLangLexicon,
   isCorpusRole,
+  otherCorpora,
   langCorpusEntry,
   packFileUrl,
   setAssetBase,
@@ -617,9 +618,78 @@ async function backgroundLoad(machineOn: boolean, deferRnd: boolean): Promise<vo
     } catch {
       /* offline or a stalled manifest — the pin stands, the next launch retries */
     }
+    // THE OTHER BIBLES, last of the pack work and first of nothing: the reader
+    // has had text for a while by now, Strong's is parsed, the chapter is warm.
+    await fetchOtherCorpora();
     if (await willAutoLoadRnd(machineOn, deferRnd)) await loadRndChunked();
   } catch {
     /* offline — the Settings toggle or next boot retries */
+  }
+}
+
+/** Every language's Bible except the one open, into the depot.
+ *
+ *  WHY THIS EXISTS: a phone set to Arabic used to open this app in Arabic and
+ *  show the reader the English KJV — the interface promised a Bible and the text
+ *  delivered somebody else's — because the Arabic corpus was an optional
+ *  download behind a Settings screen. Now every Bible is on the device, so
+ *  picking a language is a switch and not an errand, and a device whose locale
+ *  we already translate for never opens on a text its reader cannot read.
+ *
+ *  INTO THE DEPOT, NEVER THE HOME. These are compressed bytes on disk; only the
+ *  corpus this boot opened is ever inflated (`isOtherCorpus`). Three in the home
+ *  would be ~91 MB — the whole reason this is its own stage and not `study`,
+ *  which `fetchStage2Pack` loads wholesale.
+ *
+ *  LAST, and one file at a time with a yield between. The engine lives in one
+ *  worker thread, so a long synchronous stretch here starves every layout and
+ *  tap RPC queued behind it; `depotBytes` is awaited I/O and the yield gives the
+ *  queue a turn between files. Nothing the reader is waiting for is behind this.
+ *
+ *  UNVERIFIED, deliberately, unlike `reconcilePack`'s downloads: nothing reads
+ *  these bytes until a language switch, and that path opens the engine on them
+ *  and falls back to the KJV if they will not parse. Hashing 9 MB here to catch
+ *  what the open catches anyway would cost every reader time for a failure mode
+ *  that already has a floor.
+ *
+ *  Failure is silent and per-file. Being offline is the normal case, not an
+ *  error, and a device that gets two of three Bibles has two of three Bibles —
+ *  the next launch picks up the third, because `depotHas` skips what is here. */
+async function fetchOtherCorpora(): Promise<void> {
+  const rest = otherCorpora(booted!.manifest, booted!.corpusRole);
+  if (!rest.length) return;
+  const t0 = performance.now();
+  let got = 0;
+  for (const f of rest) {
+    const url = packFileUrl(f, booted!.manifest.version);
+    try {
+      if (!(await depotHas(url))) {
+        await depotBytes(url);
+        got++;
+      }
+    } catch {
+      /* offline, or this one file 404s in a partial deploy: the rest still try */
+    }
+    await yieldTask();
+  }
+  if (!got) return;
+  booted!.trace.push([`other Bibles fetched (${got}/${rest.length})`, Math.round(performance.now() - t0)]);
+  // RE-PIN, and this is not optional bookkeeping — it is what makes the download
+  // survive. Prune is an ALLOWLIST over what the pin names, so 9 MB of Bibles
+  // that no pin mentions is 9 MB the next launch reclaims, and this function
+  // would fetch them again every session forever.
+  //
+  // It is also how an UPGRADING device converges. A pin written before these
+  // were bundled lists no corpus at all, and a warm boot builds its manifest
+  // from the pin — so `corpusRoleFor` would keep answering "this build has no
+  // Arabic text" and keep opening the KJV, on a device that now has the Van Dyck
+  // sitting in the depot. Writing the refreshed manifest here is what lets the
+  // NEXT boot see it. (Not `reconcilePack`'s job: it re-pins only when the pack
+  // VERSION changed, and moving a file between stages changes no bytes.)
+  try {
+    await writePin(booted!.manifest, assetUrl(""), devicePackFiles(booted!.manifest, (f) => hasOptional(booted!.home, f)));
+  } catch {
+    /* the pin stands as it was; the fetch above is idempotent next launch */
   }
 }
 

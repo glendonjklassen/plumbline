@@ -31,7 +31,6 @@ import {
   hasOptional,
   isCorpusRole,
   isOtherCorpus,
-  langOfRole,
   type PackFile,
   fetchManifest,
   fetchPack,
@@ -97,6 +96,11 @@ export interface BootResult {
   trace: [string, number][];
   /** Whether stage 1 came entirely from the depot, with no network request. */
   fromPin: boolean;
+  /** The corpus role this boot inflated — `corpusCache`, or `corpus:<code>`.
+   *  The background pass needs it to know which Bibles are still to fetch, and
+   *  it must be the value stage 1 actually used rather than one recomputed
+   *  later from `plumbline.lang`, which the reader can change under it. */
+  corpusRole: string;
   /** This boot read its manifest from a pin an OLDER build wrote, so that
    *  manifest may not list every file this code expects. `backgroundLoad`
    *  refreshes it before stage 2 when so — and only when so, because a warm
@@ -105,10 +109,14 @@ export interface BootResult {
   staleManifest: boolean;
 }
 
-/** Whether the reader has taken the optional corpus behind `role`. */
-function manifestHasInstalled(role: string, taken: { langsInstalled: Set<string> }): boolean {
-  const code = langOfRole(role);
-  return code === null || taken.langsInstalled.has(code);
+/** Whether this pack carries the corpus behind `role` at all.
+ *
+ *  This used to ask whether the READER had installed it. Every Bible ships now
+ *  (`stage: "corpus"`), so the only remaining way to want a text this build
+ *  cannot supply is a checkout whose data-prep never produced it — and the
+ *  answer to that lives in the manifest, not in the reader's history. */
+function manifestHasCorpus(manifest: PackManifest, role: string): boolean {
+  return manifest.files.some((f) => f.role === role);
 }
 
 export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = ""): Promise<BootResult> {
@@ -179,22 +187,42 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
   // function runs in the engine worker, where there is no `localStorage` at all —
   // reading it here would throw, the catch would swallow it, and every boot would
   // silently fall back to the KJV with the reader's download sitting unused
-  // (e2e/language.spec.ts).
-  const wantCorpus = corpusRoleFor(lang, (role) => manifestHasInstalled(role, taken));
-  const skipOther = (f: PackFile) => isOtherCorpus(f, wantCorpus);
-  trace.push([`corpus loaded (${wantCorpus})`, 1]);
+  // (e2e/language.spec.ts). `locale` is handed in for the same reason and
+  // answers when `lang` is empty, which on a first visit it always is.
+  //
+  // ASKED OF THE MANIFEST, which is why this is a function of one rather than a
+  // value computed here: the pin's manifest and the network's can disagree about
+  // which languages exist (a release that adds one), and the answer has to come
+  // from whichever one this boot actually ends up loading from. Deciding once,
+  // up here, against a manifest not yet read is how a boot would come to skip
+  // every corpus INCLUDING the English one and reach the home with no text.
+  //
+  // The corpus is pulled in by `also` rather than by its stage: stage 1 fetches
+  // `text`, and a second language's Bible is deliberately not on that stage.
+  const corpusFor = (m: PackManifest) => corpusRoleFor(lang, locale, (role) => manifestHasCorpus(m, role));
+  const stage1 = (m: PackManifest) => {
+    const want = corpusFor(m);
+    return {
+      want,
+      also: (f: PackFile) => mine(f) || (f.role !== undefined && f.role === want),
+      skip: (f: PackFile) => isOtherCorpus(f, want),
+    };
+  };
   let pinned = await timed("pin read (depot)", () => readPin(base));
   let manifest: PackManifest | null = null;
   let pack: Map<string, Uint8Array> | null = null;
   let fromPin = false;
+  let wantCorpus = "corpusCache";
 
   if (pinned) {
     const m = manifestFromPin(pinned);
-    const local = await timed("stage1 read (depot, no network)", () => fetchStageLocal(m, "text", mine, skipOther));
+    const { want, also, skip } = stage1(m);
+    const local = await timed("stage1 read (depot, no network)", () => fetchStageLocal(m, "text", also, skip));
     if (local) {
       manifest = m;
       pack = local;
       fromPin = true;
+      wantCorpus = want;
     }
   }
 
@@ -207,14 +235,22 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
     // parses JSONL and never downloads it.
     const live = await timed("manifest (network)", fetchManifest);
     manifest = live;
+    const { want, also, skip } = stage1(live);
+    wantCorpus = want;
     pack = await timed("stage1 fetch+gunzip (text)", () =>
       fetchPack(live, (p) => onPhase({ phase: "download", fraction: p.fraction, detail: p.currentFile }), {
-        also: mine,
-        skip: skipOther,
+        also,
+        skip,
       }),
     );
     pinned = null; // stale: a fresh pin is written below, once the open succeeds
   }
+
+  // AFTER the manifest, not before: the role is now decided against the manifest
+  // this boot actually loaded from. e2e/language.spec.ts reads this line to prove
+  // stage 1 opened the right Bible rather than translating the chrome over the
+  // KJV, so it has to say what was really inflated.
+  trace.push([`corpus loaded (${wantCorpus})`, 1]);
 
   onPhase({ phase: "prepare" });
   const stockPaths = new Set(manifest.files.filter((f) => f.seedOnce).map((f) => f.path));
@@ -294,6 +330,7 @@ export async function boot(onPhase: (p: BootPhase) => void, locale = "", lang = 
     packVersion: manifest.version,
     trace,
     fromPin,
+    corpusRole: wantCorpus,
     staleManifest: fromPin && pinIsFromAnOlderBuild(pinned),
   };
 }

@@ -3150,3 +3150,60 @@ fn the_registry_and_the_wire_describe_the_same_languages() {
         assert_eq!(row["label"], wire["bible"], "{} disagrees about which Bible it reads", lang.code());
     }
 }
+
+/// A LANGUAGE'S BIBLE IS NOT A DOWNLOAD.
+///
+/// `pack_files` is the shell's whole answer to "does picking this language mean
+/// fetching something first" — `needsPack` in the web Settings reads exactly
+/// this and nothing else. While a corpus was listed here, choosing Arabic meant
+/// an errand: the interface switched immediately and the scripture did not, so a
+/// phone set to Arabic opened in Arabic over the English KJV and the reader had
+/// to find a Settings screen to fix it.
+///
+/// Every Bible ships now (`stage: "corpus"`, scripts/build-web-pack.mjs), so the
+/// only honest content of this list is the machine-translated dictionary. This
+/// test fails the moment a corpus cache is put back into it — the regression
+/// would be invisible otherwise, because listing a file the device ALREADY has
+/// costs nothing visible: the download is instant, and the bug is only that the
+/// reader was asked at all.
+#[test]
+fn picking_a_language_downloads_no_scripture() {
+    for lang in plumbline_core::i18n::Lang::ALL {
+        let wire = super::wire::language_to_wire(lang);
+        let cache = lang.corpus().cache_file();
+        assert!(
+            !wire.pack_files.iter().any(|f| f.ends_with(&cache) || f.contains(".idxcache")),
+            "{}'s pack_files names its corpus ({cache}): {:?} — the Bible ships with the app, so picking a \
+             language must not be a download",
+            lang.code(),
+            wire.pack_files,
+        );
+        // The dictionary is the one thing that IS still an ask, and the list is
+        // exactly it — so this cannot pass by `pack_files` being empty for a
+        // language that has one.
+        match lang.spec().lexicon {
+            Some(lex) if lang != plumbline_core::i18n::Lang::En => {
+                assert_eq!(
+                    wire.pack_files,
+                    vec![format!("data/{}", lex.file)],
+                    "{} should offer its dictionary and nothing else",
+                    lang.code()
+                );
+            }
+            _ => assert!(
+                wire.pack_files.is_empty(),
+                "{} has no dictionary to fetch, so nothing should be offered: {:?}",
+                lang.code(),
+                wire.pack_files
+            ),
+        }
+    }
+    // Not a vacuous sweep: at least one language really does still have an ask,
+    // or the loop above would pass on an all-empty registry.
+    assert!(
+        plumbline_core::i18n::Lang::ALL
+            .iter()
+            .any(|l| !super::wire::language_to_wire(*l).pack_files.is_empty()),
+        "no language offers anything — this test would pass no matter what"
+    );
+}

@@ -1869,9 +1869,16 @@ pub struct WireLanguage {
     pub corpus_role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lexicon_role: Option<String>,
-    /// Files this language needs that the base pack does not carry, as home
-    /// paths (`data/…`). Empty for English. This is the whole answer to "is
-    /// there anything to download when the reader picks this language".
+    /// Files this language needs that the device does not already hold, as home
+    /// paths (`data/…`). This is the whole answer to "is there anything to
+    /// download when the reader picks this language".
+    ///
+    /// NOT the corpus. Every language's Bible ships to every device now
+    /// (`stage: "corpus"` in the web pack), so picking a language is a switch
+    /// and not a download — which is the point: a phone set to Arabic used to
+    /// open in Arabic over the English KJV, because the Arabic Bible was an
+    /// errand behind a Settings screen. Only the machine-translated dictionary
+    /// is left here, and only for a language that has one.
     pub pack_files: Vec<String>,
 }
 
@@ -1885,15 +1892,16 @@ pub fn catalog_to_wire(lang: i18n::Lang) -> WireCatalog {
 }
 
 pub(crate) fn language_to_wire(l: i18n::Lang) -> WireLanguage {
-    // English's corpus cache and dictionary ARE the base pack, so it has nothing
-    // extra to fetch; every other language's text and dictionary are optional
-    // downloads (`docs/I18N.md` — nothing is bundled on the web, and an English
-    // reader must not fetch a German Bible to read Genesis).
+    // THE TEXT IS NOT LISTED, and its absence is the decision. Every Bible is on
+    // the device by the time the reader can reach a language picker, so there is
+    // nothing to fetch when they choose one — see `pack_files` above.
+    //
+    // What is left is the machine-translated dictionary, which stays an ask: it
+    // is the lowest-confidence artifact in the pack, and nothing is broken
+    // without one, because `strongs_for` serves the English definitions. English
+    // has neither — its dictionary IS the base pack.
     let mut pack_files = Vec::new();
     if l != i18n::Lang::En {
-        if l.spec().corpus.is_some() {
-            pack_files.push(format!("data/{}", l.corpus().cache_file()));
-        }
         if let Some(lex) = l.spec().lexicon {
             pack_files.push(format!("data/{}", lex.file));
         }
