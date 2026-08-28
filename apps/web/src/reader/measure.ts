@@ -13,6 +13,15 @@ const ctx = (typeof document !== "undefined"
 // under one face can never be served for another.
 const caches = new Map<string, Map<string, number>>();
 
+// Pinned for the reason `reader/paint.ts` pins the same two: this context and
+// that one have to agree, and `direction` defaults to `inherit` — which resolves
+// against a document this OffscreenCanvas does not have. An advance width does
+// not depend on direction today, so this changes no number; it is here so that
+// the measuring context and the painting context are configured alike on the
+// axis where they could silently drift apart.
+ctx.textAlign = "left";
+ctx.direction = "ltr";
+
 // The reader's face is a SETTING (config `textFont`), so it is state rather than
 // a constant — and this module is loaded in BOTH the engine worker (which
 // measures) and the main thread (which paints), each with its own copy. Both

@@ -278,6 +278,18 @@ export function paintChapter(
 
   // ── text ──
   ctx.textBaseline = "top";
+  // "left", NOT the "start" default. `start` means "whichever edge this context
+  // calls the beginning", so on an RTL context it flips x from the left edge of
+  // the box to the right one and every word paints mirrored about its own
+  // origin. The engine has already decided where each box goes — it mirrors the
+  // whole display list for a right-to-left text — so x here is always a LEFT
+  // edge and the canvas must be told to read it that way. Pinned rather than
+  // left at the default because the default's meaning depends on `ctx.direction`
+  // (inherited, and inheritable from the page's `dir`), and the measuring
+  // context lives in the worker while this one lives on the main thread: they
+  // would not have to disagree for long.
+  ctx.textAlign = "left";
+  ctx.direction = "ltr";
   const family = readerFontFamily();
   const bodyFont = `${fontPx}px ${family}`;
   paintProbe.bodyFont = bodyFont;
