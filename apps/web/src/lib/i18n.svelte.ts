@@ -89,6 +89,11 @@ export interface LanguageChoice {
   /** Whether it has a Strong's dictionary of its own (machine-translated), and
    *  therefore whether the "English definitions instead" escape hatch applies. */
   hasLexicon: boolean;
+  /** Whether this language is written right to left. Straight off the registry
+   *  row (`core::i18n::LangSpec::rtl`) — the chrome's business only. Direction
+   *  INSIDE the text is settled in the engine, which mirrors the display list
+   *  and does not consult a shell. */
+  rtl: boolean;
 }
 
 let choices = $state<LanguageChoice[]>([]);
@@ -110,6 +115,7 @@ export function setCatalog(
     bible: String(l.bible ?? ""),
     packFiles: Array.isArray(l.packFiles) ? l.packFiles.map(String) : [],
     hasLexicon: typeof l.lexiconRole === "string",
+    rtl: l.rtl === true,
   }));
   try {
     localStorage.setItem(LAST_LANG, code);
@@ -128,6 +134,11 @@ export function lang(): string {
  *  for German is looking for "Deutsch". Empty until the boot reply lands. */
 export function languages(): LanguageChoice[] {
   return choices;
+}
+
+/** Whether the language currently being painted reads right to left. */
+export function isRtl(): boolean {
+  return choices.find((l) => l.code === code)?.rtl === true;
 }
 
 /** Whether picking this language means fetching its scripture first. Asked of

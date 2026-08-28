@@ -61,7 +61,13 @@ import {
 import { depotBytes, depotDelete, depotHas, depotKeys } from "./depot";
 import { PERF } from "./perf";
 import { measureFor, readerFont, fontExtent, readerFontToken, setReaderFont } from "../reader/measure";
-import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FILES } from "./fonts.generated";
+import {
+  DEFAULT_FONT,
+  FONT_CSS_FAMILY,
+  FONT_FILES,
+  SCRIPT_FALLBACK_FILES,
+  SCRIPT_FALLBACK_TOKEN,
+} from "./fonts.generated";
 import {
   aboutBlocks,
   configLoad,
@@ -768,6 +774,31 @@ async function loadFonts(base: string, token: string): Promise<number> {
   const want = files.italic ? 2 : 1;
   const scope = self as unknown as { fonts?: FontFaceSet };
   if (!scope.fonts) return 0; // very old engines: fall back to platform metrics
+  // THE SCRIPT FALLBACK, always, whichever family was asked for.
+  //
+  // It is in every family's CSS stack (fonts.generated), so the document will
+  // paint Arabic in it. If this worker did not also have it, the worker would
+  // measure Arabic in whatever system font its OffscreenCanvas found and the
+  // page would paint it in Amiri — and the two are not obliged to agree, which
+  // is the measured-here-painted-there split that wraps lines where they are not
+  // drawn. Loaded before the family so it is present for the first layout, and
+  // outside the `fontsLoaded` short-circuit below, which is keyed per family.
+  for (const path of SCRIPT_FALLBACK_FILES) {
+    if (fontsLoaded.has(SCRIPT_FALLBACK_TOKEN)) break;
+    try {
+      const face = new FontFace(FONT_CSS_FAMILY[SCRIPT_FALLBACK_TOKEN], `url(${new URL(path, base).href})`, {
+        style: "normal",
+        // 400 alone: it is a static regular, and claiming 400 700 would have the
+        // browser answer this face for a bold request and paint it regular.
+        weight: "400",
+      });
+      await face.load();
+      scope.fonts.add(face);
+      fontsLoaded.add(SCRIPT_FALLBACK_TOKEN);
+    } catch {
+      /* platform metrics still beat a dead worker */
+    }
+  }
   if (fontsLoaded.has(resolved)) return want;
   let loaded = 0;
   for (const [path, style] of [

@@ -36,7 +36,7 @@ export const DEFAULT_FONT = "eb-garamond";
 
 /** Token → what to render in until the webfont lands, and for any codepoint the
  *  family lacks. A sans must not fall back to a serif: the substitution shows
- *  for one swap, and on a glyph the face is missing it is permanent. */
+ *  for one swap, and on a glyph the face is missing it is permanent.
  *
  *  Every other stack opens with "Amiri", which is not a choice and not in the
  *  picker: none of the selectable faces has a single Arabic glyph, and per-glyph
@@ -52,6 +52,11 @@ export const FONT_FALLBACK: Readonly<Record<string, string>> = {
   "atkinson-hyperlegible": "\"Amiri\", system-ui, sans-serif",
   "amiri": "serif",
 };
+
+/** The token of the face that exists to carry a script none of the others has.
+ *  The pickers offer it to readers of a right-to-left language and to nobody
+ *  else — see `core::font::Font::offered_for`, which is this rule in Rust. */
+export const SCRIPT_FALLBACK_TOKEN = "amiri";
 
 /** The script-fallback face, loaded by the engine worker ALONGSIDE whichever
  *  family is selected and declared in fonts.css for the document.
