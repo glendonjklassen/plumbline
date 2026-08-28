@@ -493,6 +493,12 @@ pub fn registry_json() -> String {
                 "code": s.code,
                 "endonym": s.endonym,
                 "name": s.exonym,
+                // Additive (CLAUDE.md §Frozen contracts). The shells need it
+                // for their own chrome — which way a swipe turns the page, and
+                // the document's `dir` — which is a separate question from the
+                // reader's direction inside the text, where the engine mirrors
+                // the display list and no shell is consulted.
+                "rtl": s.rtl,
                 "corpus": s.corpus.as_ref().map(|c| c.file),
                 "corpusCache": s.corpus.as_ref().map(|c| c.cache_file()),
                 "tokenization": s.corpus.as_ref().map(|c| c.tokenization),
