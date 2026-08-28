@@ -113,6 +113,13 @@ pub fn verse_to_wire(v: &Verse) -> WireVerse {
 pub struct WireDisplayList {
     pub width: f32,
     pub height: f32,
+    /// Whether these boxes are laid out right to left. Additive (CLAUDE.md
+    /// §Frozen contracts). The shell needs it to set its canvas `direction`, so
+    /// that a trailing full stop lands at the visual END of an Arabic word
+    /// rather than leading it — and taking it from the display list is what
+    /// keeps that answer from ever disagreeing with the coordinates it came
+    /// with.
+    pub rtl: bool,
     pub items: Vec<WireItem>,
 }
 
@@ -170,7 +177,7 @@ pub fn display_list_to_wire(dl: &DisplayList) -> WireDisplayList {
             }
         })
         .collect();
-    WireDisplayList { width: dl.width, height: dl.height, items }
+    WireDisplayList { width: dl.width, height: dl.height, rtl: dl.rtl, items }
 }
 
 // ── hit ────────────────────────────────────────────────────────────────────

@@ -135,6 +135,14 @@ pub struct DisplayList {
     pub height: f32,
     /// The column width the layout targeted.
     pub width: f32,
+    /// Whether these boxes were mirrored for a right-to-left text.
+    ///
+    /// Carried OUT rather than left for the shell to work out again. A painter
+    /// has to know it — the platform places a trailing full stop on the side its
+    /// context's direction says, and for Arabic that is the left — and the only
+    /// answer that cannot disagree with these coordinates is the one that came
+    /// with them.
+    pub rtl: bool,
 }
 
 /// What a tap/hover resolved to.
@@ -310,7 +318,7 @@ pub fn layout_chapter<M: Measure>(verses: &[Verse], m: &M, cfg: &LayoutConfig) -
     }
 
     let height = if items.is_empty() { 0.0 } else { pen.y + cfg.line_height };
-    DisplayList { items, height, width: cfg.width }
+    DisplayList { items, height, width: cfg.width, rtl: cfg.rtl }
 }
 
 /// A convenience: does a token carry a superscription flag? (Psalm titles are

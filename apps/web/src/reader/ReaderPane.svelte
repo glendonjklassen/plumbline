@@ -104,6 +104,10 @@
   // every `void items` dependency below, and the text mirror, behave exactly as
   // they did. `e2e/reader-perf.spec.ts` counts both.
   let items = $state.raw<readonly LayoutItem[]>([]);
+  // Straight off the display list the engine returned, not derived from the
+  // pane's language: it is the TEXT that decides, and a reader whose Arabic
+  // download has not landed is looking at the KJV in this pane.
+  let itemsRtl = $state(false);
   let contentH = $state(0);
   /** Which chapter `items` describes — the guard against painting one
    *  chapter's text under another's name. */
@@ -180,6 +184,7 @@
       untrack(() => {
         shownKey = key;
         items = [];
+        itemsRtl = false;
         contentH = 0;
         s.paneVerseGeom[paneIdx] = new Map();
       });
@@ -196,9 +201,10 @@
         verseNumbers,
         lang: pane.lang,
       })
-      .then((raw: { items: LayoutItem[]; height: number } | null) => {
+      .then((raw: { items: LayoutItem[]; height: number; rtl?: boolean } | null) => {
         if (seq !== layoutSeq || !raw) return;
         items = raw.items;
+        itemsRtl = raw.rtl === true;
         contentH = raw.height;
         // Publish verse-number geometry for the connectors overlay + canon pins.
         const geom = new Map<number, { y: number; h: number }>();
@@ -406,6 +412,7 @@
         viewportW: cssW,
         viewportH: cssH,
         addedItalics,
+        rtl: itemsRtl,
       },
       {
         bandVerse: pane.targetVerse,
