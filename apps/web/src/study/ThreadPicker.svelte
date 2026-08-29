@@ -166,7 +166,7 @@
     align-items: center;
     gap: 8px;
     padding: 10px 8px;
-    text-align: left;
+    text-align: start;
     color: var(--ink, #211f1a);
     font-size: calc(15px * var(--uiScale, 1));
     border-radius: 6px;
@@ -175,7 +175,7 @@
     background: var(--paper, #fcf9f4);
   }
   .count {
-    margin-left: auto;
+    margin-inline-start: auto;
     font-size: calc(12px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }

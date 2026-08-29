@@ -76,7 +76,7 @@
     flex-direction: column;
   }
   .list button {
-    text-align: left;
+    text-align: start;
     padding: 5px 8px;
     border-radius: 5px;
   }

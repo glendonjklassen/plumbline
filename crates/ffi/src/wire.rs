@@ -113,6 +113,13 @@ pub fn verse_to_wire(v: &Verse) -> WireVerse {
 pub struct WireDisplayList {
     pub width: f32,
     pub height: f32,
+    /// Whether these boxes are laid out right to left. Additive (CLAUDE.md
+    /// §Frozen contracts). The shell needs it to set its canvas `direction`, so
+    /// that a trailing full stop lands at the visual END of an Arabic word
+    /// rather than leading it — and taking it from the display list is what
+    /// keeps that answer from ever disagreeing with the coordinates it came
+    /// with.
+    pub rtl: bool,
     pub items: Vec<WireItem>,
 }
 
@@ -170,7 +177,7 @@ pub fn display_list_to_wire(dl: &DisplayList) -> WireDisplayList {
             }
         })
         .collect();
-    WireDisplayList { width: dl.width, height: dl.height, items }
+    WireDisplayList { width: dl.width, height: dl.height, rtl: dl.rtl, items }
 }
 
 // ── hit ────────────────────────────────────────────────────────────────────
@@ -1803,7 +1810,14 @@ pub fn hymn_to_wire(h: &hymnal::Hymn, semis: i32) -> WireHymn {
 
 /// One language's whole catalogue, plus the list a picker needs
 /// (`plumbline_i18n_catalog_json`).
+///
+/// `camelCase` like every other wire type. It went without for as long as every
+/// field here was one word — and then the first two-word field crossed as
+/// `native_intros`, which both shells read as absent and quietly answered "no"
+/// to. Nothing renames under this: `lang`, `strings` and `languages` are their
+/// own camelCase.
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WireCatalog {
     /// The language actually resolved — not necessarily the code asked for, if
     /// that carried a region tag or named a language this build does not ship.
@@ -1813,6 +1827,13 @@ pub struct WireCatalog {
     pub strings: std::collections::BTreeMap<String, String>,
     /// Every language on offer, each labelled in itself.
     pub languages: Vec<WireLanguage>,
+    /// Whether THIS language may be offered the first-run welcome and the
+    /// curious path — see `i18n::Lang::has_native_intros`. Those two screens are
+    /// somebody speaking to a reader about their own life, and a shell must not
+    /// lead anyone into them in a language nobody has written them in. Sent with
+    /// the catalogue rather than asked for separately because first run happens
+    /// before there is an engine to ask.
+    pub native_intros: bool,
 }
 
 #[derive(Serialize)]
@@ -1828,6 +1849,16 @@ pub struct WireLanguage {
     /// The Bible a reader of this language gets, by the name they would know it
     /// by: "KJV", "Luther", "Reina-Valera".
     pub bible: String,
+    /// Whether it is written right to left, for the shell's own chrome — the
+    /// document's `dir`, and which faces the font picker may offer.
+    ///
+    /// THE SECOND PLACE THIS HAD TO GO. `i18n::registry_json` carries the same
+    /// column for the pack BUILD (a Node script reads it through
+    /// `plumbline-hydrate languages`); this is what the running shell reads, and
+    /// adding it to only one of them shipped an Arabic app with `dir="ltr"` —
+    /// the exact shape of the problem the registry exists to end. If a third
+    /// consumer appears, it reads a row; it does not get its own list.
+    pub rtl: bool,
     /// The manifest role its corpus cache is filed under, and the role its own
     /// Strong's dictionary is filed under (absent when it has none).
     ///
@@ -1838,9 +1869,16 @@ pub struct WireLanguage {
     pub corpus_role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lexicon_role: Option<String>,
-    /// Files this language needs that the base pack does not carry, as home
-    /// paths (`data/…`). Empty for English. This is the whole answer to "is
-    /// there anything to download when the reader picks this language".
+    /// Files this language needs that the device does not already hold, as home
+    /// paths (`data/…`). This is the whole answer to "is there anything to
+    /// download when the reader picks this language".
+    ///
+    /// NOT the corpus. Every language's Bible ships to every device now
+    /// (`stage: "corpus"` in the web pack), so picking a language is a switch
+    /// and not a download — which is the point: a phone set to Arabic used to
+    /// open in Arabic over the English KJV, because the Arabic Bible was an
+    /// errand behind a Settings screen. Only the machine-translated dictionary
+    /// is left here, and only for a language that has one.
     pub pack_files: Vec<String>,
 }
 
@@ -1849,19 +1887,21 @@ pub fn catalog_to_wire(lang: i18n::Lang) -> WireCatalog {
         lang: lang.code().to_string(),
         strings: i18n::resolved(lang),
         languages: i18n::Lang::ALL.iter().map(|l| language_to_wire(*l)).collect(),
+        native_intros: lang.has_native_intros(),
     }
 }
 
-fn language_to_wire(l: i18n::Lang) -> WireLanguage {
-    // English's corpus cache and dictionary ARE the base pack, so it has nothing
-    // extra to fetch; every other language's text and dictionary are optional
-    // downloads (`docs/I18N.md` — nothing is bundled on the web, and an English
-    // reader must not fetch a German Bible to read Genesis).
+pub(crate) fn language_to_wire(l: i18n::Lang) -> WireLanguage {
+    // THE TEXT IS NOT LISTED, and its absence is the decision. Every Bible is on
+    // the device by the time the reader can reach a language picker, so there is
+    // nothing to fetch when they choose one — see `pack_files` above.
+    //
+    // What is left is the machine-translated dictionary, which stays an ask: it
+    // is the lowest-confidence artifact in the pack, and nothing is broken
+    // without one, because `strongs_for` serves the English definitions. English
+    // has neither — its dictionary IS the base pack.
     let mut pack_files = Vec::new();
     if l != i18n::Lang::En {
-        if l.spec().corpus.is_some() {
-            pack_files.push(format!("data/{}", l.corpus().cache_file()));
-        }
         if let Some(lex) = l.spec().lexicon {
             pack_files.push(format!("data/{}", lex.file));
         }
@@ -1871,6 +1911,7 @@ fn language_to_wire(l: i18n::Lang) -> WireLanguage {
         endonym: l.endonym().to_string(),
         name: l.exonym().to_string(),
         bible: l.corpus().label.to_string(),
+        rtl: l.is_rtl(),
         corpus_role: l.corpus_role(),
         lexicon_role: (l != i18n::Lang::En && l.spec().lexicon.is_some()).then(|| l.lexicon_role()),
         pack_files,

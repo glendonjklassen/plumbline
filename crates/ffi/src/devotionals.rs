@@ -45,9 +45,14 @@ struct WireBooklet {
     days: u32,
     /// Whether the new-believer welcome starts this one (see core::devotional).
     new_believer: bool,
-    /// Whether this booklet has been translated into the reader's language. A
-    /// booklet is still OFFERED without it (reading it in English beats not
-    /// being offered it), so this is for saying so, not for filtering.
+    /// Whether this booklet has been translated into the reader's language.
+    ///
+    /// TRUE for everything in this list now: an untranslated booklet is no
+    /// longer offered at all (see the filter below), so the label this used to
+    /// drive — "Available in English only" — has nothing left to mark. Kept
+    /// because the wire evolves additively and because it is still a true
+    /// statement about the entry; it is also the field a setting that offered
+    /// untranslated booklets on purpose would read.
     translated: bool,
     sections: Vec<WireSection>,
 }
@@ -186,8 +191,20 @@ pub unsafe extern "C" fn plumbline_engine_devotionals_json(
         let runs = e.home.as_ref().map(|h| devotional::load_runs(h).0).unwrap_or_default();
         out_json(&WireDevotionals {
             running: runs.iter().filter_map(|r| running_state(r, catalogue, lang, today)).collect(),
+            // OFFERED ONLY WHERE SOMEONE HAS WRITTEN IT. A booklet is a person
+            // speaking to a reader through a month of their life, so an
+            // untranslated one is that person speaking English at someone who
+            // asked for German — the same reason the first-run welcome is gated
+            // (`i18n::Lang::has_native_intros`). It used to be offered anyway
+            // with a label saying it was English only.
+            //
+            // `running` above is deliberately built from the UNFILTERED
+            // catalogue: a reader who started a booklet and then switched
+            // language is mid-way through it, and taking it off the shelf must
+            // not take it out of their hands.
             catalogue: catalogue
                 .iter()
+                .filter(|d| d.has_lang(lang))
                 .map(|d| WireBooklet {
                     id: d.id.clone(),
                     name: booklet_name(d, lang),

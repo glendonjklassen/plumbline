@@ -5,6 +5,29 @@
 // The rest of the catalogue arrives on the boot reply.
 
 export const BOOT_STRINGS: Record<string, Record<string, string>> = {
+  ar: {
+    "boot.couldNotOpen": "تعذّر فتح النصّ",
+    "boot.details": "تفاصيل تقنية",
+    "boot.dismiss": "إغلاق",
+    "boot.error.corpus": "تعذّر على Plumbline قراءة بيانات الكتاب المقدس على هذا الجهاز. إعادة التحميل تنزّل ما هو ناقص من جديد.",
+    "boot.error.engine": "توقّف محرّك الدراسة قبل أن ينتهي Plumbline من الفتح. إعادة التحميل تشغّله من جديد.",
+    "boot.error.network": "تعذّر على Plumbline إكمال تنزيل ما يحتاج إليه للفتح. تحقّق من الاتصال وحاول مرة أخرى. وبمجرد وجوده على الجهاز يفتح بلا اتصال البتة.",
+    "boot.error.quota": "لا توجد مساحة متبقية على هذا الجهاز لتخزين الكتاب المقدس.",
+    "boot.error.stale": "نسخة Plumbline هذه أقدم من بيانات الكتاب المقدس التي نزّلتها للتو. أعد تحميل الصفحة لاعتماد الإصدار الحالي.",
+    "boot.error.storage": "هذا المتصفّح لا يسمح لـPlumbline بتخزين أي شيء على الجهاز. يجب السماح ببيانات الموقع (ملفات تعريف الارتباط والتخزين) لهذا العنوان. وقد تمنعها النافذة الخاصة أيضًا.",
+    "boot.error.unknown": "تعذّر بدء تشغيل Plumbline. إعادة التحميل تحلّ المشكلة عادةً؛ وإن لم تحلّها، فالتفاصيل أدناه هي ما يحتاج إليه تقرير الخلل.",
+    "boot.error.wasm": "لم يبدأ محرّك Plumbline في هذا المتصفّح. يستحق الأمر إغلاق التبويبات الأخرى وإعادة التحميل؛ وإن تكرّر، فقد يكون المتصفّح أقدم من أن يدعم WebAssembly.",
+    "boot.mishap": "حدث خطأ ما — أعد التحميل",
+    "boot.oneTime": "تنزيل بحجم 3 ميغابايت",
+    "boot.phase.download": "جارٍ جلب بيانات الكتاب المقدس — {percent}%",
+    "boot.phase.open": "جارٍ فتح النصّ…",
+    "boot.phase.prepare": "جارٍ تحضير محرّك الدراسة…",
+    "boot.phase.warm": "جارٍ بناء التحليلات…",
+    "boot.reload": "إعادة التحميل",
+    "boot.retry": "إعادة المحاولة",
+    "boot.startupFailed": "فشل بدء التشغيل: {why}",
+    "boot.tagline": "الكتاب المقدس"
+  },
   de: {
     "boot.couldNotOpen": "Der Korpus konnte nicht geöffnet werden",
     "boot.details": "Technische Details",

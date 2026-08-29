@@ -417,7 +417,7 @@
     flex-wrap: wrap;
     align-items: baseline;
     gap: 4px 10px;
-    text-align: left;
+    text-align: start;
     padding: 12px 14px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 10px;
@@ -449,7 +449,7 @@
     display: flex;
     flex-direction: column;
     gap: 7px;
-    text-align: left;
+    text-align: start;
     padding: 12px 14px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 10px;
@@ -468,7 +468,7 @@
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 10px;
     background: var(--paper, #fcf9f4);
-    text-align: left;
+    text-align: start;
   }
   .reads-n {
     font-size: calc(22px * var(--uiScale, 1));
@@ -526,7 +526,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    text-align: left;
+    text-align: start;
     /* THE TAP FLOOR MUST NOT SQUASH THE TEXT. `min-height: 44px` (app.css,
        every button) REPLACES the automatic minimum size — the thing that
        otherwise stops a grid or flex item from being laid out shorter than its
@@ -556,7 +556,7 @@
        frame; only their counts wait on a query, so they fade in rather than
        snapping. Inline, so nothing moves when they land. */
     animation: settle 0.18s ease-out both;
-    margin-left: 6px;
+    margin-inline-start: 6px;
     font-size: calc(13px * var(--uiScale, 1));
     font-weight: 600;
     color: var(--gold, #9e7d38);

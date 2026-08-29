@@ -127,3 +127,63 @@ test("the intro is reachable from the ≡ menu when no intro was recorded", asyn
     .not.toBeNull();
   expect(await page.evaluate(() => (window as any).__plumbline?.intro ?? null)).toBeNull();
 });
+
+// THE PROSE PATHS WAIT FOR SOMEONE WHO CAN WRITE THEM.
+//
+// "New believer" and "Curious about the Bible" are not screens of labels — they
+// are somebody speaking to a reader about their own life, and which idioms land
+// and which questions are live are things you know by being from a place. So
+// they are written by someone inside that culture or they are not written, and
+// until they exist in a language the paths that lead to them are not offered.
+// The engine decides it (`i18n::Lang::has_native_intros`, derived from whether
+// those keys are actually in that language's own catalogue) and the shell obeys.
+//
+// German is the case in hand: everything else in the app is translated, and
+// these two are not, so a German reader used to be invited into them and then
+// addressed in English.
+//
+// CAN FAIL: before the gate, `de.json` carries none of the `intro.welcome.*` or
+// `intro.curious.*` keys, so `resolved()` laid English underneath them and both
+// cards rendered — with German titles from `intro.pathNew`/`pathCurious`, which
+// ARE translated, leading to English paragraphs. The first assertion below sees
+// two cards where it wants none.
+test.describe("a device with no first-run prose in its language", () => {
+  test.use({ locale: "de-DE" });
+
+  test("is offered the paths that exist and not the two that do not", async ({ page }) => {
+    await page.goto("/");
+    // The established path IS offered — its card is a label and a description,
+    // which translate like everything else.
+    const established = page.getByRole("button", { name: "Erfahrener Gläubiger" });
+    await expect(established).toBeVisible({ timeout: 90_000 });
+
+    // Located by their own German titles, which exist and are translated. The
+    // titles being present in `de.json` while the prose behind them is not is
+    // exactly the trap: a shell that gated on "is this string translated" would
+    // have shown both.
+    await expect(page.getByRole("button", { name: "Neu im Glauben" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Neugierig auf die Bibel" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Das Evangelium weitergeben" })).toBeVisible();
+
+    // ...and the menu offers no way back to a welcome this reader was never
+    // given. Through the established path, which records no `intro` — the case
+    // where the Welcome button used to fall back to the new-believer page.
+    await established.click();
+    await page.getByRole("button", { name: "Start reading" }).or(page.getByRole("button", { name: "Lesen beginnen" })).click();
+    await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+    await page.getByLabel("Menü").or(page.getByLabel("Menu")).click();
+    await expect(page.getByRole("button", { name: "Willkommen" })).toHaveCount(0);
+  });
+});
+
+// The other half, and the one that keeps the gate from being a way to lose the
+// feature: English has the prose, so English is offered all four paths.
+//
+// CAN FAIL: gate the wrong way round (or default `nativeIntros` to false when
+// the catalogue is missing a field) and this goes red while the German test
+// above stays green — which is why both are here.
+test("a language the prose was written in is offered every path", async ({ page }) => {
+  await firstRun(page);
+  for (const name of ["Curious about the Bible", "New believer", "Sharing the gospel", "Established believer"])
+    await expect(page.getByRole("button", { name })).toBeVisible();
+});

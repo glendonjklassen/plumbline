@@ -28,7 +28,7 @@ const manifestPath = join(packRoot, "manifest.json");
 /** The roles the loader understands: two fixed ones, plus a per-language corpus
  *  and dictionary keyed by code (`crates/core/src/i18n.rs` composes them). */
 const ROLE_OK = /^(corpusCache|suggestedWeaves|(corpus|lexicon):[a-z]{2,3})$/;
-const STAGES = new Set(["text", "study", "analysis", "optional"]);
+const STAGES = new Set(["text", "study", "analysis", "corpus", "optional"]);
 const SEED_DIRS = new Set(["threads", "tags", "weaves"]);
 const problems = [];
 const fail = (msg) => problems.push(msg);
@@ -102,21 +102,37 @@ if (roles.length !== 1) {
 //
 // One must NOT claim `corpusCache`: that role is how the loader finds the text
 // to open at boot, and a second file claiming it would make which language
-// opens depend on manifest order. And each must be `optional`, or every English
-// reader downloads a Bible in a language they do not read before they can read
-// Genesis.
+// opens depend on manifest order.
 //
-// Their dictionaries ride the same install, so they carry the same constraint.
+// STAGE, and the two ways it goes wrong are opposite failures:
+//
+//   a Bible on `text`     — every reader waits behind three corpora, ~9 MB, to
+//                           see a word of the one they actually opened;
+//   a Bible on `optional` — a phone set to Arabic opens in Arabic and shows the
+//                           reader the English KJV, because their Bible is a
+//                           download gated behind a Settings screen. This is
+//                           what `corpus` exists to stop, and asserting it here
+//                           is what keeps a future language from regressing to
+//                           it by being added the old way.
+//
+//   a dictionary NOT on `optional`
+//                         — machine-translated lexicography downloaded for
+//                           everyone. It stays an ask; `strongs_for` serves the
+//                           English definitions until the reader makes it.
 for (const [role, entries] of byRole) {
   const code = role.slice(role.indexOf(":") + 1);
-  const kind = role.startsWith("corpus:") ? "corpus" : "lexicon";
+  const corpus = role.startsWith("corpus:");
+  const kind = corpus ? "corpus" : "lexicon";
+  const want = corpus ? "corpus" : "optional";
   if (entries.length > 1) {
     fail(`expected at most one role:"${role}" entry, found ${entries.length}`);
     continue;
   }
-  if (entries[0].stage !== "optional") {
+  if (entries[0].stage !== want) {
     fail(
-      `the ${code} ${kind} is stage ${entries[0].stage}; it must be "optional" — nobody reading another language should download it`,
+      corpus
+        ? `the ${code} corpus is stage ${entries[0].stage}; it must be "corpus" — on "optional" an ${code} device opens the English KJV, on "text" every reader waits for a Bible they did not open`
+        : `the ${code} lexicon is stage ${entries[0].stage}; it must be "optional" — nobody should download machine-translated definitions they did not ask for`,
     );
   }
 }
@@ -155,7 +171,14 @@ for (const p of seen) {
 }
 
 // Every stage must be non-empty: an empty "text" stage means nothing to boot on.
+//
+// EXCEPT `corpus`, which is empty in a legitimate checkout: each non-English
+// Bible is built by its own data-prep pipeline, and the pack builder skips one
+// whose source JSONL is absent. A tree that has only run the KJV pipeline is
+// not broken — and failing here would make every other check in this file
+// unreachable for the person most likely to need them.
 for (const st of STAGES) {
+  if (st === "corpus") continue;
   if (!manifest.files.some((f) => f.stage === st)) fail(`no files in stage "${st}"`);
 }
 

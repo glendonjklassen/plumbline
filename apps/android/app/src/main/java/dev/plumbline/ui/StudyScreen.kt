@@ -111,6 +111,7 @@ import dev.plumbline.ChurchState
 import dev.plumbline.Hit
 import android.widget.Toast
 import dev.plumbline.PaneRef1
+import dev.plumbline.Tag1
 import dev.plumbline.Tags
 import dev.plumbline.Thread1
 import dev.plumbline.Threads
@@ -1757,7 +1758,12 @@ private fun UtilityMenu(
             Icon(Icons.Filled.MoreVert, contentDescription = t("common.menu"), tint = palette.ink)
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text(t("shell.welcome")) }, onClick = { onWelcome(); menu = false })
+            // Only where the welcome exists in this language: a reader given it
+            // in English who now reads in German would otherwise reopen English
+            // paragraphs from a German menu. See i18n::Lang::has_native_intros.
+            if (Strings.hasNativeIntros) {
+                DropdownMenuItem(text = { Text(t("shell.welcome")) }, onClick = { onWelcome(); menu = false })
+            }
             DropdownMenuItem(text = { Text(t("shell.history")) }, onClick = { onHistory(); menu = false })
             DropdownMenuItem(text = { Text(t("shell.guideAndAbout")) }, onClick = { onGuide(); menu = false })
             DropdownMenuItem(text = { Text(t("shell.settings")) }, onClick = { onSettings(); menu = false })

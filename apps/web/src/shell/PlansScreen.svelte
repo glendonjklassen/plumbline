@@ -98,8 +98,13 @@
   <div class="content">
     <div class="inner">
       <h3 class="sub">{t("devotional.heading")}</h3>
+      <!-- "Start one below" is only true when there IS one below. An
+           untranslated booklet is no longer offered at all (crates/ffi's
+           devotionals.rs), so a language nobody has written one in reaches this
+           section with an empty shelf, and the old line sent the reader looking
+           for a button that was not there. -->
       {#if runningDevotionals.length === 0}
-        <p class="hint">{t("devotional.empty")}</p>
+        <p class="hint">{t(offerableDevotionals.length === 0 ? "devotional.noneYet" : "devotional.empty")}</p>
       {/if}
       {#each runningDevotionals as d (d.id)}
         <div class="plan-card" class:paused={d.paused}>
@@ -302,7 +307,7 @@
     font-variant-numeric: tabular-nums;
   }
   .plan-today {
-    text-align: left;
+    text-align: start;
     color: var(--gold, #9e7d38);
     background: none;
     border: none;
@@ -359,7 +364,7 @@
     margin-bottom: 8px;
     padding: 12px 16px;
     border-radius: 10px;
-    text-align: left;
+    text-align: start;
   }
   .plan-builtin:hover {
     border-color: var(--gold, #9e7d38);

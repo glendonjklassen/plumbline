@@ -369,7 +369,7 @@
     align-items: baseline;
     gap: 12px;
     width: 100%;
-    text-align: left;
+    text-align: start;
     padding: 10px 12px;
     border-bottom: 1px solid var(--rule, #d8cba8);
   }
@@ -378,7 +378,7 @@
   }
   .num {
     min-width: 3ch;
-    text-align: right;
+    text-align: end;
     color: var(--faded, #8a8276);
     font-size: calc(14px * var(--uiScale, 1));
   }
@@ -424,7 +424,7 @@
   }
   .sn {
     min-width: 2ch;
-    text-align: right;
+    text-align: end;
     color: var(--faded, #8a8276);
     font-size: calc(14px * var(--uiScale, 1));
   }
@@ -432,8 +432,8 @@
     min-width: 0;
   }
   .refrain .slines {
-    border-left: 2px solid var(--rule, #d8cba8);
-    padding-left: 10px;
+    border-inline-start: 2px solid var(--rule, #d8cba8);
+    padding-inline-start: 10px;
   }
   .rlabel {
     margin: 0 0 2px;
@@ -461,7 +461,7 @@
   .chord {
     position: absolute;
     bottom: 1.05em;
-    left: 0;
+    inset-inline-start: 0;
     font-family: ui-sans-serif, system-ui, sans-serif;
     font-size: calc(12.5px * var(--uiScale, 1));
     font-weight: 600;
@@ -522,8 +522,8 @@
     margin-bottom: 1.4em;
   }
   .srefrain {
-    padding-left: 12px;
-    border-left: 2px solid #d8cba8;
+    padding-inline-start: 12px;
+    border-inline-start: 2px solid #d8cba8;
   }
   .sline {
     margin: 0;

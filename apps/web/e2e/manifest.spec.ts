@@ -254,7 +254,6 @@ test("the webmanifest parses and declares a complete, permanent identity", async
     "display",
     "orientation",
     "background_color",
-    "theme_color",
     "icons",
   ] as const) {
     expect(json[key], `the webmanifest has no \`${key}\``).toBeTruthy();
@@ -293,7 +292,28 @@ test("the webmanifest parses and declares a complete, permanent identity", async
     );
   }
   expect(json.background_color, "the splash background is the reader's paper").toBe(LIGHT_PAPER);
-  expect(json.theme_color).toBe(LIGHT_PAPER);
+
+  // NO `theme_color`, and its absence is a fix, not an omission (2026-08-28).
+  //
+  // The manifest is the ONE surface the running page can never write to. On
+  // Android an installed PWA is a WebAPK, and the manifest's theme_color is
+  // baked into it at install time; when a foldable's open/close re-creates the
+  // activity, Chrome can fall back to that baked value and STOP consulting the
+  // page's meta tags at all — a full reload with correct tags in the DOM still
+  // shows a cream bar over a dark page, and it stays until the reader
+  // uninstalls (which "fixes" it only because reinstalling re-mints the WebAPK).
+  // Every in-page re-assert (session.svelte.ts, chrome-reassert.spec.ts) is
+  // helpless against it, because the UA is no longer reading what they write.
+  //
+  // A static manifest cannot name a colour that is right in both polarities, so
+  // the only correct fallback is NO fallback: with nothing baked in, the page's
+  // media-scoped meta pair — which is right for every theme, and re-asserted at
+  // every moment a UA can re-derive — is the only claim there is.
+  expect(
+    json.theme_color,
+    "theme_color is back in the manifest — a foldable's activity re-creation falls back to this baked, " +
+      "light-only value over the page's meta tags and sticks there until reinstall (Pixel Fold, 2026-08-28)",
+  ).toBeUndefined();
 });
 
 test("every icon the manifest declares exists at exactly the size it claims", async ({ page }) => {

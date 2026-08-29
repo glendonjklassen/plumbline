@@ -1607,15 +1607,21 @@ export class Session {
     addEventListener("pagehide", () => this.flushSession());
 
     // THE MOMENTS A UA CAN HAVE RE-DERIVED THE BAR WITH NOTHING IN OUR DOM
-    // MOVING. `manifest.webmanifest` carries a static, light-only `theme_color`,
-    // and that is what an installed PWA falls back to when the page is re-SHOWN
-    // rather than re-rendered: a bfcache restore, a return to the foreground,
-    // and — the one the reports keep coming from — the activity re-creation a
-    // foldable performs when it is opened or closed. No state of ours changed,
-    // so no $effect re-runs, so nothing puts the tags back: a dark page under a
-    // light bar, and it STAYS there. That is the "persistent washed-out top",
-    // and why the three previous fixes each looked right and then came back
-    // (maintainer, 2026-08-27).
+    // MOVING: a bfcache restore, a return to the foreground, and the activity
+    // re-creation a foldable performs when it is opened or closed. No state of
+    // ours changed, so no $effect re-runs, so nothing puts the tags back: a
+    // dark page under a light bar, and it STAYS there. That is the "persistent
+    // washed-out top", and why the three previous fixes each looked right and
+    // then came back (maintainer, 2026-08-27).
+    //
+    // AND THE MOMENT THESE CANNOT REACH (maintainer, 2026-08-28, Pixel Fold):
+    // when the fold's re-creation RELOADS the page and the bar is still wrong —
+    // sticky until reinstall — the UA has stopped consulting the DOM entirely
+    // and is on the theme colour baked into the WebAPK at install time. No
+    // listener helps, because writing tags nobody reads is not a fix. That half
+    // lives in the MANIFEST: it no longer declares a `theme_color` at all, so
+    // there is no baked, light-only answer to fall back to and these tags are
+    // the only claim in existence (see e2e/manifest.spec.ts).
     //
     // A LIST on purpose. Every entry is a moment that can be named and tested
     // (e2e/chrome-reassert.spec.ts); a fourth one gets added here rather than
@@ -1824,10 +1830,10 @@ export class Session {
     document.documentElement.style.colorScheme = dark ? "dark" : "light";
     for (const m of document.querySelectorAll('meta[name="theme-color"]')) {
       // REMOVE then set, even when the value is unchanged. A UA that has
-      // re-derived the bar from the manifest's static `theme_color` (see the
-      // re-assert listeners in the constructor) is holding an answer that did
-      // not come from these tags, and writing the same string back is not a
-      // mutation it has to notice. Taking the attribute away is.
+      // re-derived the bar on its own (see the re-assert listeners in the
+      // constructor) is holding an answer that did not come from these tags,
+      // and writing the same string back is not a mutation it has to notice.
+      // Taking the attribute away is.
       m.removeAttribute("content");
       m.setAttribute("content", color);
     }

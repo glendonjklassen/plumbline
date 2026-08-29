@@ -83,7 +83,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    text-align: left;
+    text-align: start;
     padding: 16px 18px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 10px;

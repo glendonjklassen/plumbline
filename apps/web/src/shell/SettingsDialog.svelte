@@ -2,7 +2,7 @@
   // One Settings dialog (Android IA): analysis switches, theme, text size /
   // margin / line-spacing sliders, copy format, bundled stock set.
   import { getSession } from "../state/session.svelte";
-  import { DEFAULT_FONT, FONT_CSS_FAMILY } from "../engine/fonts.generated";
+  import { DEFAULT_FONT, FONT_CSS_FAMILY, SCRIPT_FALLBACK_TOKEN } from "../engine/fonts.generated";
   import { fontStackFor } from "../reader/measure";
   import { modal } from "../lib/modal";
   import { completeOffline, surveyOffline, type OfflineSurvey } from "../engine/offline";
@@ -11,7 +11,7 @@
   import { zipRead, zipWrite } from "../engine/zip";
   import { idbApply } from "../engine/idb";
   import { nowStamp } from "../engine/StudyEngine";
-  import { deviceLocale, fill, hasOwnLexicon, languages, needsPack, plural, t } from "../lib/i18n.svelte";
+  import { deviceLocale, fill, hasOwnLexicon, isRtl, languages, needsPack, plural, t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -594,7 +594,22 @@
   // face can never be offered that has no files behind it. The LABEL is the
   // typeface's own name (core::font::Font::name): a proper noun, so it is not in
   // the i18n catalogue and does not change with the language.
-  const fonts = Object.keys(FONT_CSS_FAMILY);
+  //
+  // FILTERED BY SCRIPT, which is the one thing the registry cannot express as a
+  // plain list. Amiri is the only bundled face with any Arabic in it, so it is
+  // the only one offered to a reader of a right-to-left language — and it is
+  // offered to nobody else, because its Latin is not why it is here.
+  //
+  // Not cosmetic. Per-glyph fallback would render Arabic scripture in Amiri
+  // whatever the reader picked, so the only thing the other five would actually
+  // change is the SIZE: `FONT_SCALE` is read off the SELECTED token, so an
+  // Arabic reader who picked Inter would get Amiri at 0.87 — a ratio calibrated
+  // to Inter's x-height and meaningless for naskh. The picker would be a
+  // mislabelled size slider. `core::font::Font::offered_for` is the same rule in
+  // Rust and the reason this one is safe to state here.
+  const fonts = $derived(
+    Object.keys(FONT_CSS_FAMILY).filter((tok) => (tok === SCRIPT_FALLBACK_TOKEN) === isRtl()),
+  );
   const fontName = (token: string): string => FONT_CSS_FAMILY[token] ?? token;
 
   let fontBusy = $state(false);
@@ -1368,7 +1383,7 @@
     padding: 1px 0;
   }
   .diag .ms {
-    text-align: right;
+    text-align: end;
     font-variant-numeric: tabular-nums;
     color: var(--ink, #211f1a);
   }

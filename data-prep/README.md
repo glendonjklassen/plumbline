@@ -241,6 +241,49 @@ python3 data-prep/rv1909/build-rv1909.py spa-rv1909.usfx.xml
 python3 data-prep/rv1909/check-rv1909.py spa-rv1909.usfx.xml
 ```
 
+## The Arabic Bible (`data/svd1865.jsonl`)
+
+`data-prep/svd/build-svd.py` turns eBible.org's USFM edition of the 1865 Smith &
+Van Dyck (`arb-vd`, public domain) into `data/svd1865.jsonl`, stamped
+`svd1865-tok1`.
+
+The Arabic Bible with the KJV's standing, and then some: Masoretic Old
+Testament, Textus Receptus New Testament, and since 2008 the shared pulpit text
+of the Orthodox, Catholic and Evangelical churches in Egypt at once.
+
+What it gives that the other two corpora did not: full vocalization (every word
+carries its tashkeel), real paragraph divisions (15% of verses open one, against
+the KJV's own 10% — Reina-Valera's source had one per chapter and the build
+refused them), and the 120 psalm superscriptions, folded into verse 1 and
+flagged the way `kjv.jsonl` folds them.
+
+What it does not give: Strong's tags, and none are invented. Word alignments for
+this text exist (BibleAquifer/ArabicVanDyckBible, CC0) but are LLM-generated, and
+Arabic would have been the only corpus here whose codes were machine-guessed
+rather than a publisher's claim about its own words. `ar`'s registry row carries
+`lexicon: None`. No translator-supplied-word markup either — the KJV's italics
+have no Van Dyck counterpart.
+
+Two verses are MERGED rather than carried. The SVD prints 31,104 verses to the
+KJV's 31,102, and both extras are splits: its 1 Tim 6:22 is the KJV's 6:21b, its
+3 John 15 the KJV's 14b. No text moves either way, and every refKey in this app
+is frozen, so the build folds them back to the KJV address. There is no
+`numbering` row for it — that column annotates a DIFFERING number, and in both
+cases the number is the same.
+
+`check-svd.py` is the proof and takes the source as an optional argument; with
+it, every verse's letters AND MARKS are checked against the source. It earned
+that: it caught verse text riding on `\p` lines (50 verses losing a clause),
+`\s1` section headings being absorbed into the verse above them, superscriptions
+that run to two `\d` lines, and one stray combining mark that is a typo in the
+1865 text itself.
+
+```sh
+curl -LO https://ebible.org/Scriptures/arb-vd_usfm.zip
+python3 data-prep/svd/build-svd.py arb-vd_usfm.zip
+python3 data-prep/svd/check-svd.py arb-vd_usfm.zip
+```
+
 ## Localized Strong's dictionaries (`data/strongs-<code>.json`)
 
 Two scripts in `data-prep/strongs-lang/`, both taking a language code and reading

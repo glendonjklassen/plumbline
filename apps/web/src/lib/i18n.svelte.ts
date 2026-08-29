@@ -68,6 +68,14 @@ function seed(): { code: string; strings: Record<string, string> } {
 const initial = seed();
 let strings = $state<Record<string, string>>(initial.strings);
 let code = $state<string>(initial.code);
+/** Whether the first-run prose exists in the painted language — the engine's
+ *  answer (`i18n::Lang::has_native_intros`), never derived here.
+ *
+ *  Seeded from the guessed code rather than defaulting to true, so the one frame
+ *  before the boot reply cannot offer a German reader a path into English
+ *  paragraphs. English is the language the prose is written in, so the seed is
+ *  right for it and conservative for everyone else. */
+let nativeIntros = $state<boolean>(initial.code === "en");
 export interface LanguageChoice {
   code: string;
   endonym: string;
@@ -81,6 +89,11 @@ export interface LanguageChoice {
   /** Whether it has a Strong's dictionary of its own (machine-translated), and
    *  therefore whether the "English definitions instead" escape hatch applies. */
   hasLexicon: boolean;
+  /** Whether this language is written right to left. Straight off the registry
+   *  row (`core::i18n::LangSpec::rtl`) — the chrome's business only. Direction
+   *  INSIDE the text is settled in the engine, which mirrors the display list
+   *  and does not consult a shell. */
+  rtl: boolean;
 }
 
 let choices = $state<LanguageChoice[]>([]);
@@ -88,10 +101,13 @@ let choices = $state<LanguageChoice[]>([]);
 /** The catalogue the engine resolved, as it came back over the ABI. Replaces
  *  the boot seed wholesale — including the `boot.*` keys, so a language the
  *  seed guessed wrong is corrected everywhere at once. */
-export function setCatalog(cat: { lang?: string; strings?: Record<string, string>; languages?: any[] } | null): void {
+export function setCatalog(
+  cat: { lang?: string; strings?: Record<string, string>; languages?: any[]; nativeIntros?: boolean } | null,
+): void {
   if (!cat?.strings) return;
   strings = cat.strings;
   code = cat.lang ?? "en";
+  nativeIntros = cat.nativeIntros === true;
   choices = (cat.languages ?? []).map((l) => ({
     code: String(l.code),
     endonym: String(l.endonym),
@@ -99,7 +115,28 @@ export function setCatalog(cat: { lang?: string; strings?: Record<string, string
     bible: String(l.bible ?? ""),
     packFiles: Array.isArray(l.packFiles) ? l.packFiles.map(String) : [],
     hasLexicon: typeof l.lexiconRole === "string",
+    rtl: l.rtl === true,
   }));
+  // THE DOCUMENT'S OWN DIRECTION, set here because this is the one place the
+  // interface language becomes current.
+  //
+  // `dir` is what mirrors the CHROME — every `margin-inline`, the order of a
+  // flex row, which side a scrollbar sits on, which way a native `<select>`
+  // opens. It is deliberately NOT what decides the reader: scripture is a
+  // canvas painted from a display list the engine already mirrored, and it
+  // takes its direction from the open corpus (`DisplayList.rtl`), so an Arabic
+  // reader whose download has not landed gets English chrome around an English
+  // Bible rather than a mirrored shell around a left-to-right text.
+  //
+  // `lang` alongside it, because it was hardcoded `en` in index.html: it is what
+  // a screen reader picks a voice from, and what the browser hyphenates by.
+  try {
+    const el = document.documentElement;
+    el.lang = code;
+    el.dir = choices.find((l) => l.code === code)?.rtl ? "rtl" : "ltr";
+  } catch {
+    /* no document (a test harness importing this): nothing to mirror */
+  }
   try {
     localStorage.setItem(LAST_LANG, code);
   } catch {
@@ -119,10 +156,29 @@ export function languages(): LanguageChoice[] {
   return choices;
 }
 
+/** Whether the language currently being painted reads right to left. */
+export function isRtl(): boolean {
+  return choices.find((l) => l.code === code)?.rtl === true;
+}
+
 /** Whether picking this language means fetching its scripture first. Asked of
  *  the engine's own registry rather than decided here — see `LanguageChoice`. */
 export function needsPack(code: string): boolean {
   return (choices.find((l) => l.code === code)?.packFiles.length ?? 0) > 0;
+}
+
+/** Whether the first-run welcome and the curious path may be OFFERED in the
+ *  language being painted.
+ *
+ *  Those two screens are somebody speaking to a reader about their own life —
+ *  which idioms land, which questions are the live ones — so they wait for
+ *  someone inside that culture to write them rather than being translated. The
+ *  engine decides (`i18n::Lang::has_native_intros`, derived from whether the
+ *  words are actually in that language's catalogue); this only carries the
+ *  answer. A shell that re-derived it by peeking at `strings` would be a second
+ *  copy of the rule, and the two would disagree the first time one moved. */
+export function hasNativeIntros(): boolean {
+  return nativeIntros;
 }
 
 /** Whether the language being painted has a dictionary of its own. */

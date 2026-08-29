@@ -865,6 +865,9 @@ impl From<PlumblineLayoutConfig> for LayoutConfig {
             para_spacing: c.para_spacing,
             verse_break: c.verse_break != 0,
             verse_numbers: c.verse_numbers != 0,
+            // Overwritten by the caller from the open corpus's language; the
+            // ABI carries no direction. See `plumbline_engine_layout_chapter`.
+            rtl: false,
         }
     }
 }
@@ -1563,7 +1566,23 @@ pub unsafe extern "C" fn plumbline_engine_layout_chapter(
         // and the web's `measureCalls()` diagnostic stays honest, because a memo
         // hit never reaches the callback that increments it.
         let m = Memoized::new(&engine.measure_memo, font_identity(&cfg), &shell);
-        let dl = layout_chapter(verses, &m, &cfg.into());
+        // DIRECTION IS DERIVED FROM THE OPEN TEXT, not taken from the shell.
+        //
+        // It could have been a field on `PlumblineLayoutConfig`, and that would
+        // be an ABI break for a fact neither shell is in a position to know
+        // better than the engine: the corpus's own tokenization stamp names its
+        // language, and the language's row says which way it reads. A shell
+        // that passed direction could disagree with the text it is showing —
+        // which is exactly what happens to a reader whose Arabic download has
+        // not landed yet and who is therefore looking at the KJV.
+        //
+        // Not part of `font_identity`, deliberately: the memo caches WIDTHS,
+        // and a word is the same width whichever way the line runs. The mirror
+        // happens after every measurement is in.
+        let mut layout = LayoutConfig::from(cfg);
+        layout.rtl = plumbline_core::i18n::Lang::for_tokenization(engine.corpus.tokenization_version())
+            .is_some_and(|l| l.is_rtl());
+        let dl = layout_chapter(verses, &m, &layout);
         Box::into_raw(Box::new(PlumblineDisplayList { inner: dl }))
     })
 }

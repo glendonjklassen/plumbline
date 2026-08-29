@@ -32,15 +32,32 @@ data class WireCatalog(
     val lang: String = "en",
     val strings: Map<String, String> = emptyMap(),
     val languages: List<WireLanguage> = emptyList(),
+    val nativeIntros: Boolean = true,
 )
 
 object Strings {
     private var table by mutableStateOf<Map<String, String>>(emptyMap())
     private var code by mutableStateOf("en")
     private var choices by mutableStateOf<List<WireLanguage>>(emptyList())
+    private var intros by mutableStateOf(true)
 
     /** The language being painted, as a code. */
     val lang: String get() = code
+
+    /** Whether the first-run welcome and the curious path may be OFFERED in the
+     *  language being painted.
+     *
+     *  Those two screens are somebody speaking to a reader about their own life
+     *  — which idioms land, which questions are the live ones — so they are
+     *  written by someone inside that culture or they are not written, and a
+     *  reader is never led into them in a language nobody has written them in.
+     *  The engine decides (`i18n::Lang::has_native_intros`); this carries the
+     *  answer. Web twin: `hasNativeIntros()` in lib/i18n.svelte.ts.
+     *
+     *  Defaults TRUE because the default painted language is English, which is
+     *  the language the prose is written in; the engine's answer replaces it
+     *  before anything renders (`load()` runs in onCreate). */
+    val hasNativeIntros: Boolean get() = intros
 
     /** Every language this build ships, each labelled in ITSELF — a reader
      *  looking for German is looking for "Deutsch", and they are looking for it
@@ -72,6 +89,7 @@ object Strings {
         table = cat.strings
         code = cat.lang
         choices = cat.languages
+        intros = cat.nativeIntros
     }
 
     /**

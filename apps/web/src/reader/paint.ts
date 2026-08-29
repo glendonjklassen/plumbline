@@ -71,6 +71,10 @@ export interface PaintOpts {
    *  A PAINT decision only — the engine measures every word upright either
    *  way, so turning italics off cannot invalidate a cached layout. */
   addedItalics?: boolean;
+  /** Whether this display list was laid out right to left — straight off the
+   *  engine's `DisplayList.rtl`, never worked out here. See the `direction`
+   *  note in the text section below for what it changes. */
+  rtl?: boolean;
 }
 
 /** Verse number of an item (verseNumber items carry it; words via refKey). */
@@ -278,6 +282,28 @@ export function paintChapter(
 
   // ── text ──
   ctx.textBaseline = "top";
+  // TWO SETTINGS THAT LOOK REDUNDANT AND ARE NOT. Measured in chromium rather
+  // than reasoned about, because the first guess here was wrong.
+  //
+  // textAlign "left", NOT the "start" default. `start` means "whichever edge
+  // this context calls the beginning", so under direction:rtl it flips x from
+  // the left edge of the box to the right one — measured: origin 200 puts ink at
+  // 50..195 instead of 203..348. The engine has already decided where every box
+  // goes (it mirrors the whole display list for a right-to-left text), so x here
+  // is always a LEFT edge and the canvas must read it that way. With "left"
+  // pinned, x IS the left edge under both directions.
+  //
+  // direction follows the TEXT, and it is not cosmetic. It decides which side a
+  // bidi-neutral character lands on, which is every full stop, comma and
+  // guillemet in the Van Dyck. Measured on "والأرض." — under ltr the period sits
+  // at the RIGHT of the word, which in an Arabic line reads as a full stop
+  // leading the sentence; under rtl it sits at the left, where it belongs. The
+  // opening guillemet of a quotation is the same fact mirrored.
+  //
+  // Advance widths do NOT depend on it (153px either way, measured), which is
+  // what keeps the engine worker's memo valid across a language switch.
+  ctx.textAlign = "left";
+  ctx.direction = o.rtl ? "rtl" : "ltr";
   const family = readerFontFamily();
   const bodyFont = `${fontPx}px ${family}`;
   paintProbe.bodyFont = bodyFont;

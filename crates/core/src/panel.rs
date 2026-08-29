@@ -1683,7 +1683,11 @@ pub fn guide_blocks_in(lang: i18n::Lang) -> Vec<Block> {
     out.push(Block::para(vec![Run::new(i18n::t(lang, "guide.lede", &[]), sz::BODY, Color::Faded)]));
 
     guide_section(&mut out, lang, "guide.read.title", &["guide.read.p1", "guide.read.p2", "guide.read.p3"]);
-    guide_step(&mut out, lang, "guide.plain.title", &["guide.plain.p1"]);
+    // "If the older English is hard going" — the Modernized wording setting,
+    // which only exists for a language with a modernization. See `about_body`.
+    if lang.spec().modernization.is_some() {
+        guide_step(&mut out, lang, "guide.plain.title", &["guide.plain.p1"]);
+    }
     guide_step(&mut out, lang, "guide.map.title", &["guide.map.p1", "guide.map.p2", "guide.map.p3", "guide.map.p4"]);
 
     guide_section(&mut out, lang, "guide.gospel.title", &["guide.gospel.p1"]);
@@ -1714,7 +1718,17 @@ pub fn guide_blocks_in(lang: i18n::Lang) -> Vec<Block> {
 fn about_body(out: &mut Vec<Block>, lang: i18n::Lang) {
     out.push(Block::para(vec![Run::new(i18n::t(lang, "about.heading", &[]), sz::TITLE, Color::Ink).bold()]));
     out.push(Block::para(vec![Run::new(i18n::t(lang, "about.lede", &[]), sz::BODY, Color::Ink)]));
-    guide_section(out, lang, "about.text.title", &["about.text.p1", "about.text.p2"]);
+    // The second paragraph is entirely about the modernization toggle, so it is
+    // only true for a language that HAS one. English is the only one so far;
+    // German and Spanish readers have been reading a paragraph about an
+    // American revision of an English Bible that their copy cannot show them,
+    // and Arabic is what made that obvious. Gated on the row, so a modernized
+    // Reina-Valera would turn it back on and nothing here would change.
+    if lang.spec().modernization.is_some() {
+        guide_section(out, lang, "about.text.title", &["about.text.p1", "about.text.p2"]);
+    } else {
+        guide_section(out, lang, "about.text.title", &["about.text.p1"]);
+    }
     guide_section(out, lang, "about.provenance.title", &["about.provenance.p1"]);
     guide_section(out, lang, "about.covenant.title", &["about.covenant.p1"]);
 }

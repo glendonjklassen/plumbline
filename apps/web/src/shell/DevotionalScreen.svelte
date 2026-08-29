@@ -219,7 +219,7 @@
   .passage {
     margin: 0 0 16px;
     padding: 10px 12px;
-    border-left: 3px solid var(--gold, #9e7d38);
+    border-inline-start: 3px solid var(--gold, #9e7d38);
     background: var(--paneNavBg, #efeae1);
     border-radius: 0 6px 6px 0;
   }
@@ -244,7 +244,7 @@
     line-height: 1.55;
   }
   .n {
-    margin-right: 3px;
+    margin-inline-end: 3px;
     color: var(--faded, #8a8276);
     font-size: 0.72em;
     vertical-align: super;
@@ -320,7 +320,7 @@
     border-color: var(--gold, #9e7d38);
   }
   .steps {
-    margin-left: auto;
+    margin-inline-start: auto;
     display: flex;
     gap: 8px;
   }

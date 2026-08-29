@@ -13,6 +13,20 @@ const ctx = (typeof document !== "undefined"
 // under one face can never be served for another.
 const caches = new Map<string, Map<string, number>>();
 
+// MEASUREMENT IS DIRECTION-INDEPENDENT, and that is measured rather than
+// assumed: the same Arabic run measures 153px in chromium under direction "ltr"
+// and "rtl" alike. So this context is pinned to one setting and the painting
+// context (reader/paint.ts) is free to follow the text's own direction without
+// the two disagreeing about a width.
+//
+// That asymmetry is the point. `direction` changes which side a bidi-neutral
+// character LANDS on — a trailing full stop belongs at the left of an Arabic
+// word — which is a paint concern and nothing to do with how wide the run is.
+// Pinned rather than left at the default because `direction` defaults to
+// `inherit`, and this OffscreenCanvas has no document to inherit from.
+ctx.textAlign = "left";
+ctx.direction = "ltr";
+
 // The reader's face is a SETTING (config `textFont`), so it is state rather than
 // a constant — and this module is loaded in BOTH the engine worker (which
 // measures) and the main thread (which paints), each with its own copy. Both

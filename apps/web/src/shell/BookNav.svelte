@@ -518,7 +518,7 @@
     border-bottom: 1px solid var(--rule, #d8cba8);
   }
   .tilemenu button {
-    text-align: left;
+    text-align: start;
     padding: 9px 10px;
     border-radius: 6px;
     font-size: calc(14.5px * var(--uiScale, 1));

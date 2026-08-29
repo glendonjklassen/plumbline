@@ -109,6 +109,41 @@ async function firstVisit(page: Page, url: string): Promise<void> {
   await page.waitForTimeout(1_500);
 }
 
+/// Wait until the device actually HOLDS every file its pin names.
+///
+/// `settleBackground` waits for the work the boot trace narrates; this waits for
+/// the depot to match the claim. They are not the same barrier, and the gap
+/// between them is where a test reads "prune deleted a pinned file" for a file
+/// that had simply not arrived yet.
+///
+/// It grew a second occupant when every language's Bible started shipping: the
+/// other corpora are ~9 MB fetched after the reader is served, and any test that
+/// treats the pin as a description of the disk has to wait for them. Expressed
+/// against the PIN rather than against filenames, so the next language is
+/// covered by having been added.
+async function settleDepot(page: Page): Promise<void> {
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async () => {
+          const hit = await caches.match(new URL("__depot/pack-pin.json", location.href).href, {
+            ignoreVary: true,
+          });
+          if (!hit) return -1;
+          const pin = await hit.json();
+          let missing = 0;
+          for (const f of pin.files ?? []) {
+            if (!f.url) continue;
+            const url = new URL(f.url, location.href).href;
+            if (!(await caches.match(url, { ignoreVary: true }))) missing++;
+          }
+          return missing;
+        }),
+      { timeout: 120_000, message: "the device never finished downloading what its pin names" },
+    )
+    .toBe(0);
+}
+
 test("a stalled network cannot hang the boot (service-worker timebox)", async ({ page }) => {
   const origin = await stallableOrigin();
   try {
@@ -312,6 +347,12 @@ test("a data update re-pins without re-downloading what did not change", async (
   const origin = await rewritingOrigin();
   try {
     await firstVisit(page, origin.url);
+    // FULLY PROVISIONED FIRST. The question below is "does a version bump with
+    // no content change download anything", and it can only be asked of a device
+    // that already finished downloading. Every language's Bible ships now and
+    // arrives after the reader is served, so without this the second visit picks
+    // up the tail of the FIRST visit's work and reports it as a re-download.
+    await settleDepot(page);
     const before = await page.evaluate(async () => {
       const hit = await caches.match(new URL("__depot/pack-pin.json", location.href).href, {
         ignoreVary: true,

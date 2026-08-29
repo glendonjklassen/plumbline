@@ -16,6 +16,7 @@ export const FONT_FILES: Readonly<Record<string, FontFiles>> = {
   "inter": { normal: "fonts/Inter-8366ba8a.woff2", italic: "fonts/Inter-Italic-46b982a6.woff2" },
   "fira-code": { normal: "fonts/FiraCode-909ef859.woff2" },
   "atkinson-hyperlegible": { normal: "fonts/AtkinsonHyperlegible-Regular-4327a45b.woff2", italic: "fonts/AtkinsonHyperlegible-Italic-e0777042.woff2" },
+  "amiri": { normal: "fonts/Amiri-Regular-cf168c16.woff2" },
 };
 
 /** Token → the family name the @font-face rules declare (what a `ctx.font`
@@ -26,6 +27,7 @@ export const FONT_CSS_FAMILY: Readonly<Record<string, string>> = {
   "inter": "Inter",
   "fira-code": "Fira Code",
   "atkinson-hyperlegible": "Atkinson Hyperlegible",
+  "amiri": "Amiri",
 };
 
 /** The face every axis falls back to — the shipped default, and the answer for
@@ -34,14 +36,36 @@ export const DEFAULT_FONT = "eb-garamond";
 
 /** Token → what to render in until the webfont lands, and for any codepoint the
  *  family lacks. A sans must not fall back to a serif: the substitution shows
- *  for one swap, and on a glyph the face is missing it is permanent. */
+ *  for one swap, and on a glyph the face is missing it is permanent.
+ *
+ *  Every other stack opens with "Amiri", which is not a choice and not in the
+ *  picker: none of the selectable faces has a single Arabic glyph, and per-glyph
+ *  fallback is what lets one stack serve Latin in the reader's chosen voice and
+ *  Arabic in a face that can actually shape it. It sits FIRST among the
+ *  fallbacks and after the chosen family, so it only ever answers for codepoints
+ *  the chosen family lacks. */
 export const FONT_FALLBACK: Readonly<Record<string, string>> = {
-  "eb-garamond": "Georgia, serif",
-  "literata": "Georgia, serif",
-  "inter": "system-ui, sans-serif",
-  "fira-code": "ui-monospace, monospace",
-  "atkinson-hyperlegible": "system-ui, sans-serif",
+  "eb-garamond": "\"Amiri\", Georgia, serif",
+  "literata": "\"Amiri\", Georgia, serif",
+  "inter": "\"Amiri\", system-ui, sans-serif",
+  "fira-code": "\"Amiri\", ui-monospace, monospace",
+  "atkinson-hyperlegible": "\"Amiri\", system-ui, sans-serif",
+  "amiri": "serif",
 };
+
+/** The token of the face that exists to carry a script none of the others has.
+ *  The pickers offer it to readers of a right-to-left language and to nobody
+ *  else — see `core::font::Font::offered_for`, which is this rule in Rust. */
+export const SCRIPT_FALLBACK_TOKEN = "amiri";
+
+/** The script-fallback face, loaded by the engine worker ALONGSIDE whichever
+ *  family is selected and declared in fonts.css for the document.
+ *
+ *  Unconditional on purpose. It could be loaded only when the open corpus reads
+ *  right to left, but then the worker's font set would depend on which Bible is
+ *  open, and the window where the two contexts disagree is exactly the window
+ *  where a reader switches language. One face, always present in both. */
+export const SCRIPT_FALLBACK_FILES: readonly string[] = ["fonts/Amiri-Regular-cf168c16.woff2"];
 
 /** Token → the face's optical size multiplier, mirroring
  *  `core::font::Font::scale()` (which holds the x-height measurements and the
@@ -54,6 +78,7 @@ export const FONT_SCALE: Readonly<Record<string, number>> = {
   "inter": 0.87,
   "fira-code": 0.88,
   "atkinson-hyperlegible": 0.9,
+  "amiri": 1.06,
 };
 
 /** EVERY built font file — FONT_FILES plus the chrome-only static bolds that
@@ -73,4 +98,5 @@ export const FONT_ALL_FILES: readonly string[] = [
   "fonts/AtkinsonHyperlegible-Italic-e0777042.woff2",
   "fonts/AtkinsonHyperlegible-Bold-d14a069b.woff2",
   "fonts/AtkinsonHyperlegible-BoldItalic-26c11fe2.woff2",
+  "fonts/Amiri-Regular-cf168c16.woff2",
 ];

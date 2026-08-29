@@ -178,7 +178,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    text-align: left;
+    text-align: start;
     padding: 6px 8px;
     border-radius: 6px;
   }
@@ -195,7 +195,7 @@
     color: var(--tierResearch, #b04a3a);
   }
   .count {
-    margin-left: auto;
+    margin-inline-start: auto;
     font-size: calc(12px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
   }

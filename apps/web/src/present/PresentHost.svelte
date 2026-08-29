@@ -411,7 +411,7 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
-    text-align: left;
+    text-align: start;
   }
   .entry .ref {
     font-weight: 700;

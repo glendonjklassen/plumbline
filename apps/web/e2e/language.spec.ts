@@ -114,6 +114,73 @@ test.describe("a German device", () => {
   });
 });
 
+// ── the scripture follows the device, not just the chrome ────────────────────
+//
+// THE BUG THIS EXISTS FOR: a phone set to Arabic opened this app in Arabic — the
+// splash, the chooser, the menus, all of it — and then showed the reader the
+// English KJV. Every Bible but English was an `optional` download, and the gate
+// on it asked whether the READER had installed one. On a first visit nobody has
+// installed anything, so the answer was no, and the app that had just proved it
+// knew what language they read handed them somebody else's scripture and a
+// Settings screen to go fix it in.
+//
+// It failed silently in both halves: no error, no empty state, and the chrome
+// was right, which is what made it look like a finished feature.
+//
+// WHAT WOULD MAKE THIS RED, and each is a different regression:
+//   - a corpus back on `stage: "optional"` (check-web-pack.mjs also guards it);
+//   - `corpusRoleFor` reading the install marker again instead of the manifest;
+//   - `corpusRoleFor` losing its `locale` arm — `plumbline.lang` is written at
+//     the END of a boot, so it is EMPTY here and the device is the only source
+//     of an answer. That arm is invisible to every other test in this file,
+//     because they all reach the reader through a picker or a second launch.
+//
+// Read from the corpus, not from the chrome: the interface was ALREADY right
+// when this was broken, so any assertion about a label would have passed.
+const SCRIPTURE: Record<string, RegExp> = {
+  // John 3:1, which is where the first-run path lands. Arabic asserts the
+  // script itself; the two Latin ones assert words that differ from the KJV's,
+  // since a script test cannot tell German from English.
+  ar: /[\u0600-\u06FF]/,
+  de: /^(Es|war|aber|ein|Mensch)$/,
+  es: /^(HABÍA|Había|hombre|fariseos)$/,
+};
+
+for (const [code, endonym, cat] of [
+  ["de", "Deutsch", DE],
+  ["es", "Español", ES],
+] as const) {
+  test.describe(`a ${endonym} device, cold`, () => {
+    test.use({ locale: code === "de" ? "de-DE" : "es-ES" });
+
+    test("opens its own Bible without the reader visiting Settings", async ({ page }) => {
+      await reader(page, cat);
+
+      // POLLED: a visible canvas means the pane is mounted, not that a frame has
+      // been painted into it, and the probe's `items` is a WeakRef written only
+      // when a new list reaches the painter. Read eagerly it comes back empty
+      // under parallel workers — which looks identical to the bug.
+      const read = (): Promise<string[]> =>
+        page.evaluate(() =>
+          ((globalThis as any).__plumblinePaint?.items?.deref() ?? [])
+            .filter((i: any) => i.kind === "word")
+            .map((i: any) => String(i.text)),
+        );
+      await expect
+        .poll(async () => (await read()).length, { timeout: 60_000, message: "no words ever reached the painter" })
+        .toBeGreaterThan(5);
+      const words = await read();
+      expect(
+        words.some((w) => SCRIPTURE[code].test(w)),
+        `the ${code} device is reading ${JSON.stringify(words.slice(0, 8))} — that is not its Bible`,
+      ).toBe(true);
+      // And specifically NOT the KJV, so the check above cannot pass on a word
+      // the two translations happen to share.
+      expect(words.slice(0, 6).join(" ")).not.toContain("There was a man");
+    });
+  });
+}
+
 test.describe("an English device", () => {
   test.use({ locale: "en-US" });
 
@@ -198,7 +265,10 @@ test.describe("a Spanish reader", () => {
    * MUTATION: in pack.ts, make `corpusRoleFor` return "corpusCache" always. Red
    * here (Spanish John 3:16 comes back in English) and red in the German half.
    */
-  test("picking Español downloads the Reina-Valera and reads it", async ({ page }) => {
+  // Named for what it now is: the Reina-Valera is already on the device by the
+  // time a reader reaches this picker, so choosing Spanish is a switch. It was
+  // "downloads the Reina-Valera" while a Bible was an errand.
+  test("picking Español switches to the Reina-Valera and reads it", async ({ page }) => {
     await reader(page, EN);
     await pick(page, EN, "Español");
     await expect(destinations(page)).toContainText(ES["nav.sing"]);
@@ -417,27 +487,81 @@ test.describe("a German reader's chapter turn", () => {
   });
 });
 
-// MUTATION: build-web-pack.mjs — give the German corpus `stage: "text"`. Red
-// here (and check-web-pack.mjs refuses the pack outright, which is the real
-// guard; this is the behavioural half).
+// ── what an English reader pays for the other Bibles ─────────────────────────
+//
+// This block used to assert that another language's scripture was NEVER
+// fetched. That was the right rule while a Bible was an optional download and
+// is the wrong one now: every Bible ships, so that a device we translate the
+// interface for is never handed somebody else's scripture (see the cold-device
+// tests above). What survived the change is the part that was always the real
+// point — NOT ON THE BOOT PATH. An English reader must not wait behind a Bible
+// they did not open.
+//
+// So the rule is now about ORDER, not existence, and it is split in two because
+// the two halves fail differently: a corpus arriving too early costs every
+// reader time to first word; a dictionary arriving at all is 1.5 MB of
+// machine-translated definitions nobody asked for.
+const OTHER_BIBLES = ["luther1912", "rv1909", "svd1865"];
+const OTHER_DICTIONARIES = ["strongs-de", "strongs-es"];
+
 test.describe("an English reader", () => {
   test.use({ locale: "en-US" });
 
-  test("never downloads another language's Bible", async ({ page }) => {
-    // EVERY other corpus, not just German's. The check was a substring match on
-    // "luther1912" and would have gone on passing while Spanish downloaded for
-    // every English reader — which is the whole failure it exists to catch, one
-    // language later. The names come from the engine's own registry, so the next
-    // language is covered by having been added.
-    const others = ["luther1912", "rv1909", "strongs-de", "strongs-es"];
-    const asked: string[] = [];
+  // MUTATION: build-web-pack.mjs — give the German corpus `stage: "text"`. Red
+  // here, because stage 1 would then fetch it before the canvas paints (and
+  // check-web-pack.mjs refuses the pack outright, which is the real guard; this
+  // is the behavioural half).
+  test("waits for text before fetching anyone else's Bible", async ({ page }) => {
+    // EVERY other corpus, not just German's. The check was once a substring
+    // match on "luther1912" and would have gone on passing while Spanish
+    // downloaded on the boot path — the whole failure it exists to catch, one
+    // language later.
+    const early: string[] = [];
+    let painted = false;
     page.on("request", (r) => {
-      if (others.some((n) => r.url().includes(n))) asked.push(r.url());
+      if (!painted && OTHER_BIBLES.some((n) => r.url().includes(n))) early.push(r.url());
     });
     await reader(page, EN);
-    // Past first text, and past the idle work that sweeps caches and checks for
-    // updates — the sweep is the other thing that could pull an optional file.
-    await page.waitForTimeout(2500);
-    expect(asked, `an English reader fetched another language's data: ${asked.join(", ")}`).toEqual([]);
+    painted = true;
+    expect(
+      early,
+      `these were fetched before the reader had a word on screen: ${early.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  // The other half, and it is not implied by the one above: these are `optional`
+  // and stay so. Nothing is broken without them — `strongs_for` serves the
+  // English definitions — and they are the lowest-confidence artifacts in the
+  // pack, so they remain the one thing a reader has to ask for.
+  test("never downloads another language's dictionary", async ({ page }) => {
+    const asked: string[] = [];
+    page.on("request", (r) => {
+      if (OTHER_DICTIONARIES.some((n) => r.url().includes(n))) asked.push(r.url());
+    });
+    await reader(page, EN);
+    // Well past first text and past the background pass that DOES fetch the
+    // Bibles — measured at ~6.6 s on this machine, so a window that closes
+    // before that would prove nothing about the dictionaries either.
+    await page.waitForTimeout(12_000);
+    expect(asked, `an English reader fetched machine-translated definitions: ${asked.join(", ")}`).toEqual([]);
+  });
+
+  // THE POSITIVE HALF, and without it the two above are satisfied by a build
+  // that simply never fetches anything: "not before text" and "not ever" are
+  // the same observation if the background pass is dead. This is what makes a
+  // later language switch a switch rather than a download, and what puts the
+  // reader's own Bible on a device that has only ever been online once.
+  test("puts every other Bible on the device in the background", async ({ page }) => {
+    const got = new Set<string>();
+    page.on("request", (r) => {
+      for (const n of OTHER_BIBLES) if (r.url().includes(n)) got.add(n);
+    });
+    await reader(page, EN);
+    await expect
+      .poll(() => got.size, {
+        timeout: 90_000,
+        message: "the other Bibles never arrived — a language switch would be a download, and offline it would fail",
+      })
+      .toBe(OTHER_BIBLES.length);
   });
 });

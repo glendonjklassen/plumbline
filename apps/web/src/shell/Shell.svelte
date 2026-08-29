@@ -35,7 +35,7 @@
   import TagWeave from "../study/TagWeave.svelte";
   import ShareScreen from "./ShareScreen.svelte";
   import SearchScreen from "./SearchScreen.svelte";
-  import { t } from "../lib/i18n.svelte";
+  import { hasNativeIntros, t } from "../lib/i18n.svelte";
   import { uiScale } from "../lib/uiScale";
   import { DEFAULT_FONT, FONT_SCALE } from "../engine/fonts.generated";
   import { getSession } from "../state/session.svelte";
@@ -490,7 +490,12 @@
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div class="backdrop" onclick={() => (s.menuOpen = false)}></div>
   <div class="menu" role="menu" aria-label={t("common.menu")}>
-    <button onclick={go(() => (s.reopenIntro = s.intro ?? "new"))}>{t("shell.welcome")}</button>
+    <!-- Only where the welcome exists in this language. A reader given it in
+         English who now reads in German would otherwise reopen English
+         paragraphs from a German menu — see i18n::Lang::has_native_intros. -->
+    {#if hasNativeIntros()}
+      <button onclick={go(() => (s.reopenIntro = s.intro ?? "new"))}>{t("shell.welcome")}</button>
+    {/if}
     <button onclick={go(() => (s.showHistory = true))}>{t("shell.history")}</button>
     <button onclick={go(() => (s.panel = { kind: "guide" }))}>{t("shell.guideAndAbout")}</button>
     <button onclick={go(() => (s.showShortcuts = true))}>{t("shell.shortcuts")}</button>
@@ -574,8 +579,8 @@
        nothing else in the tree would have covered it. The chrome's own
        backgrounds stop at the inset, which is the honest thing to show: the
        strip beside them is not screen the app can use. */
-    padding-left: var(--safeLeft);
-    padding-right: var(--safeRight);
+    padding-inline-start: var(--safeLeft);
+    padding-inline-end: var(--safeRight);
   }
   /* Measured, never seen: out of flow, out of the accessibility tree, and out of
      the way of a tap. `visibility: hidden` and not `display: none` on purpose —
@@ -699,7 +704,7 @@
   .browse {
     display: flex;
     gap: 2px;
-    margin-left: 8px;
+    margin-inline-start: 8px;
   }
   .browse button {
     font-size: calc(16px * var(--uiScale, 1));
@@ -845,7 +850,7 @@
      mounted there. One position serves every caller. */
   .menu {
     position: fixed;
-    right: 8px;
+    inset-inline-end: 8px;
     top: calc(var(--safeTop, 0px) + 52px);
     z-index: 48;
     min-width: 190px;
@@ -860,7 +865,7 @@
     overflow-y: auto;
   }
   .menu button {
-    text-align: left;
+    text-align: start;
     padding: 5px 8px;
     border-radius: 5px;
   }
@@ -923,7 +928,7 @@
     cursor: pointer;
   }
   .panes > :global(.pane + .pane) {
-    border-left: 1px solid var(--rule, #d8cba8);
+    border-inline-start: 1px solid var(--rule, #d8cba8);
   }
   .toast {
     /* Stated once so the stacked notice below can be expressed in terms of it.
@@ -992,7 +997,7 @@
      button uses) as a left edge — enough to read as "wrong" without turning the
      reader's page into a warning banner. */
   .toast.warn {
-    border-left: 4px solid var(--tierResearch, #b04a3a);
+    border-inline-start: 4px solid var(--tierResearch, #b04a3a);
   }
   .toast.warn .upd {
     background: var(--tierResearch, #b04a3a);

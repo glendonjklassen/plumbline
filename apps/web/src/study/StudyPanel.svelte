@@ -197,7 +197,7 @@
     display: flex;
     flex-direction: column;
     background: var(--popupPaper, #f2eee6);
-    border-left: 1px solid var(--rule, #d8cba8);
+    border-inline-start: 1px solid var(--rule, #d8cba8);
     /* 380px at the reader's text scale, but never more than 40% of the window.
        The cap is what makes the sidebar usable on a FOLDABLE: unfolded, a Pixel
        Fold is ~840 CSS px, where an unscaled 380 already takes 45% and a reader
@@ -266,7 +266,7 @@
     font-weight: 600;
   }
   .akjv-was {
-    margin-left: 8px;
+    margin-inline-start: 8px;
     color: var(--faded, #8a8276);
   }
   @keyframes loadpulse {
@@ -315,7 +315,7 @@
   .nb-del {
     font-size: calc(12px * var(--uiScale, 1));
     color: var(--faded, #8a8276);
-    margin-left: auto;
+    margin-inline-start: auto;
   }
   .nb-del:hover {
     color: var(--tierResearch, #b04a3a);
@@ -377,7 +377,7 @@
       max-height: 88dvh;
       height: 62dvh;
       z-index: 20;
-      border-left: none;
+      border-inline-start: none;
       border-top: 1px solid var(--rule, #d8cba8);
       border-radius: 14px 14px 0 0;
       box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);

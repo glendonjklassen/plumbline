@@ -232,7 +232,11 @@ impl SearchIxBuilder {
     fn fold(&mut self, i: usize, v: &Verse) {
         let mut lemmas_here: HashSet<&str> = HashSet::new();
         for t in &v.tokens {
-            let w = t.word.to_lowercase();
+            // `fold_word`, not `to_lowercase`: an Arabic key must lose its
+            // vowelling here or no reader will ever type the key that is in the
+            // index. It is a no-op on Latin, so the KJV's index — and the
+            // `.idxcache` the web manifest hashes — is unchanged.
+            let w = fold_word(&t.word);
             // Clone the key only on first sight of a distinct word (~13k)
             // rather than per token (~1.6M).
             match self.word.get_mut(&w) {
@@ -736,8 +740,66 @@ fn intersect_asc(xs: &[usize], ys: &[usize]) -> Vec<usize> {
 /// Lowercase and strip punctuation the tokenizer would never leave inside a
 /// word, so a query matches the index however typed or quoted. Ported from
 /// `normalizeWord`.
+/// An Arabic diacritic or the tatweel — dropped before a word is indexed or
+/// looked up.
+///
+/// SPELLED OUT AS RANGES because `char::is_alphanumeric` will not do it. Every
+/// one of these marks carries the Unicode `Other_Alphabetic` property, so
+/// `is_alphanumeric` answers TRUE for a bare fatha and the existing filter
+/// keeps the whole vowelling. (Python's `isalpha` is category-only and answers
+/// false, which makes this an easy thing to check wrong.) `plumbline-core` is
+/// dependency-light pure Rust that has to build for wasm, so there is no
+/// character-category table to consult — and the corpus is Arabic, so a stated
+/// range is both enough and honest about its scope.
+fn is_arabic_mark(c: char) -> bool {
+    matches!(c,
+        '\u{0610}'..='\u{061A}'    // Quranic honorifics
+        | '\u{064B}'..='\u{065F}'  // tashkeel: fathatan … wavy hamza below
+        | '\u{0640}'               // tatweel, a justification stretch and not a letter
+        | '\u{0670}'               // superscript alef
+        | '\u{06D6}'..='\u{06ED}'  // Quranic annotation marks
+    )
+}
+
+/// The letters an Arabic reader will not distinguish when they type.
+///
+/// The Van Dyck writes ٱ (alef wasla) throughout and nobody has that key; آ أ إ
+/// are the same alef under different hamza; ى and ي, ة and ه are routinely
+/// typed for one another. This is the normalization every Arabic search does —
+/// Lucene's `ArabicNormalizationFilter` is the same list, plus the wasla, which
+/// it omits and this text needs more than any of the others.
+fn fold_arabic(c: char) -> char {
+    match c {
+        '\u{0622}' | '\u{0623}' | '\u{0625}' | '\u{0671}' => '\u{0627}', // آ أ إ ٱ → ا
+        '\u{0649}' => '\u{064A}',                                        // ى → ي
+        '\u{0629}' => '\u{0647}',                                        // ة → ه
+        c => c,
+    }
+}
+
+/// Case and script folding, applied to a word BEFORE it becomes an index key
+/// and again to every query term.
+///
+/// BOTH SIDES OR NEITHER. The index is keyed by this and [`normalize_word`]
+/// starts from it, because folding only the query is worse than folding
+/// nothing: the reader's typed word loses its tashkeel, every key in the index
+/// still has it, and Arabic search returns nothing at all rather than too much.
+///
+/// A NO-OP ON EVERY LATIN WORD, which is what makes it safe to put on the
+/// indexing path. `is_arabic_mark` and `fold_arabic` cannot fire on a codepoint
+/// outside the Arabic block, so English, German and Spanish keys come out of
+/// this exactly as `to_lowercase` left them — and their `.idxcache` files,
+/// which the web manifest hashes, stay byte-identical.
+pub fn fold_word(w: &str) -> String {
+    let lower = w.to_lowercase();
+    if lower.is_ascii() {
+        return lower;
+    }
+    lower.chars().filter(|&c| !is_arabic_mark(c)).map(fold_arabic).collect()
+}
+
 pub fn normalize_word(w: &str) -> String {
-    w.to_lowercase().chars().filter(|&c| c.is_alphanumeric() || c == '\'' || c == '\u{2019}' || c == '-').collect()
+    fold_word(w).chars().filter(|&c| c.is_alphanumeric() || c == '\'' || c == '\u{2019}' || c == '-').collect()
 }
 
 /// A light inflectional stemmer over the 1769 English vocabulary — just enough
@@ -1096,6 +1158,55 @@ mod tests {
         // l/s/z doubles are preserved
         assert_eq!(stem_word("bless"), "bless");
         assert_eq!(levenshtein("beginning", "begining"), 1);
+    }
+
+    /// The Arabic reader can find the word they are looking at.
+    ///
+    /// FAILS AGAINST THE BUG IT DESCRIBES without touching a shell: before
+    /// `fold_word`, `normalize_word` kept every mark — `char::is_alphanumeric`
+    /// is TRUE for a fatha, because the tashkeel carry `Other_Alphabetic` — so
+    /// "ٱلْبَدْءِ" normalized to itself and the "البدء" a reader can actually
+    /// type matched nothing. Each assertion below is one keystroke a real
+    /// keyboard produces against one spelling the Van Dyck prints.
+    #[test]
+    fn arabic_folds_to_what_a_reader_can_type() {
+        // Gen 1:1 "the beginning", vowelled, opening on an alef wasla nobody
+        // has a key for.
+        assert_eq!(normalize_word("ٱلْبَدْءِ"), "البدء");
+        // The four alefs collapse onto the bare one.
+        for spelling in ["إبراهيم", "أبراهيم", "آبراهيم", "ٱبراهيم"] {
+            assert_eq!(normalize_word(spelling), "ابراهيم", "{spelling}");
+        }
+        // Alef maqsura → ya, ta marbuta → ha.
+        assert_eq!(normalize_word("موسى"), "موسي");
+        assert_eq!(normalize_word("كلمة"), "كلمه");
+        // The tatweel is a typographic stretch, not a letter.
+        assert_eq!(normalize_word("رحـــمة"), "رحمه");
+        // The INDEX side folds identically, which is the half that makes the
+        // query side worth anything.
+        assert_eq!(fold_word("ٱلْبَدْءِ"), "البدء");
+    }
+
+    /// Folding is invisible outside Arabic — the property that lets it sit on
+    /// the indexing path.
+    ///
+    /// The `.idxcache` is the biggest file the web pack ships and the manifest
+    /// hashes it, so a fold that perturbed one English key would re-mint every
+    /// pack URL and re-download the whole corpus on a release that changed no
+    /// data (CLAUDE.md §Data pack). Checked over the vocabulary of all three
+    /// Latin catalogues rather than a handful of words.
+    #[test]
+    fn folding_leaves_latin_keys_exactly_as_lowercasing_did() {
+        for lang in crate::i18n::Lang::ALL {
+            if lang.is_rtl() {
+                continue;
+            }
+            for value in crate::i18n::resolved(lang).values() {
+                for word in value.split_whitespace() {
+                    assert_eq!(fold_word(word), word.to_lowercase(), "{lang:?} {word:?}");
+                }
+            }
+        }
     }
 
     /// A suffix that *looks* verbal but leaves nothing keepable behind must

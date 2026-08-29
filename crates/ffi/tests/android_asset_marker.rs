@@ -48,10 +48,13 @@ const EXPECTED_ASSETS: &[&str] = &[
     "strongs-de.json",
     "strongs-es.json",
     "strongs.json",
+    // The v7 addition: the Arabic corpus. No dictionary beside it — the Van
+    // Dyck is untagged and `ar`'s registry row carries `lexicon: None`.
+    "svd1865.jsonl",
 ];
 
 /// The marker the CURRENT asset set is paired with.
-const EXPECTED_MARKER: &str = ".data-v6";
+const EXPECTED_MARKER: &str = ".data-v7";
 
 #[test]
 fn bundled_data_marker_is_bumped_for_the_current_asset_set() {

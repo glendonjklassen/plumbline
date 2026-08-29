@@ -234,6 +234,14 @@ fun ReaderPane(
     val paints = remember(fontPx) {
         fun p(tf: Typeface) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = tf; textSize = fontPx
+            // LEFT, and pinned rather than assumed. `x` from the display list is
+            // always a left edge — the engine mirrors the whole list for a
+            // right-to-left text (crates/layout), so direction is settled before
+            // any of this — and Align.RIGHT or CENTER would make drawText read
+            // the same number as a different edge and paint every word offset
+            // from its own hit box. The default is already LEFT; saying so keeps
+            // a future themed Paint from quietly changing where words land.
+            textAlign = Paint.Align.LEFT
         }
         Triple(p(typefaces.regular), p(typefaces.italic), p(typefaces.bold))
     }

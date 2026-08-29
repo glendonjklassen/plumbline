@@ -54,6 +54,7 @@ pub enum Lang {
     En,
     De,
     Es,
+    Ar,
 }
 
 /// The scripture a language reads.
@@ -121,6 +122,20 @@ pub struct LangSpec {
     /// Its English name, for a reader who narrows the hymnal by typing
     /// "Spanish" rather than "Español". Both shells match either, plus the code.
     pub exonym: &'static str,
+    /// Whether this language is written right to left.
+    ///
+    /// A COLUMN and not a `matches!(self, Lang::Ar)`, for the reason at the top
+    /// of this file: German lived in a dozen sites that each knew a little about
+    /// it, and none of them knew about each other. Direction is read by more
+    /// places than any other fact here — the layout engine mirrors its display
+    /// list, both shells mirror their chrome and flip which way a swipe turns
+    /// the page, and every one of those would otherwise be its own `if code ==
+    /// "ar"` waiting to be missed when a second RTL language arrives.
+    ///
+    /// Declared rather than derived: nothing else in the row implies it. It is a
+    /// property of the SCRIPT, and a language could in principle change script
+    /// without changing anything else here.
+    pub rtl: bool,
     /// The compiled-in catalogue (`i18n/<code>.json`). English is the source;
     /// every other language overrides it key by key.
     catalog: &'static str,
@@ -156,6 +171,7 @@ static SPECS: [LangSpec; Lang::COUNT] = [
         code: "en",
         endonym: "English",
         exonym: "English",
+        rtl: false,
         catalog: include_str!("i18n/en.json"),
         corpus: Some(CorpusSpec { file: "kjv.jsonl", tokenization: crate::canon::TOKENIZATION_VERSION, label: "KJV" }),
         lexicon: Some(LexiconSpec { file: "strongs.json", machine_translated: false }),
@@ -168,6 +184,7 @@ static SPECS: [LangSpec; Lang::COUNT] = [
         code: "de",
         endonym: "Deutsch",
         exonym: "German",
+        rtl: false,
         catalog: include_str!("i18n/de.json"),
         corpus: Some(CorpusSpec { file: "luther1912.jsonl", tokenization: "luther1912-tok1", label: "Luther" }),
         lexicon: Some(LexiconSpec { file: "strongs-de.json", machine_translated: true }),
@@ -180,6 +197,7 @@ static SPECS: [LangSpec; Lang::COUNT] = [
         code: "es",
         endonym: "Español",
         exonym: "Spanish",
+        rtl: false,
         catalog: include_str!("i18n/es.json"),
         corpus: Some(CorpusSpec { file: "rv1909.jsonl", tokenization: "rv1909-tok1", label: "Reina-Valera" }),
         // The renderings are Reina-Valera's own words, derived from the tagged
@@ -194,11 +212,48 @@ static SPECS: [LangSpec; Lang::COUNT] = [
         // agrees with the address on screen and there is nothing to annotate.
         numbering: None,
     },
+    LangSpec {
+        code: "ar",
+        endonym: "العربية",
+        exonym: "Arabic",
+        rtl: true,
+        catalog: include_str!("i18n/ar.json"),
+        corpus: Some(CorpusSpec { file: "svd1865.jsonl", tokenization: "svd1865-tok1", label: "Van Dyck" }),
+        // NO STRONG'S DICTIONARY, and this is the first row to say so.
+        //
+        // Not a gap waiting to be filled by the same script that filled German's
+        // and Spanish's: those derive their `kjv_def` renderings from a TAGGED
+        // corpus, and `svd1865.jsonl` carries no codes. Word alignments for the
+        // Van Dyck do exist (BibleAquifer/ArabicVanDyckBible, CC0) but they are
+        // LLM-generated, which would make Arabic the only corpus here whose
+        // codes are machine-guessed rather than a publisher's own claim about
+        // its own words. Maintainer's call, 2026-08-28: don't ship them.
+        //
+        // The reader sees this as a word study that is absent, not one that is
+        // wrong — every Arabic token's code list is empty, so nothing is
+        // tappable that leads nowhere.
+        lexicon: None,
+        modernization: None,
+        // No numbering table, and NOT for Spanish's reason.
+        //
+        // Reina-Valera agrees with the KJV outright. The Van Dyck disagrees
+        // twice — it prints 31,104 verses, splitting 1 Tim 6:21 and 3 John 14
+        // each into two — and `build-svd.py` merges both back to the KJV
+        // address. But this column annotates a DIFFERENT NUMBER, and in both
+        // cases the number is the same: the printed Van Dyck's 1 Tim 6:21 opens
+        // exactly where the KJV's does. A row here would tell a reader that
+        // their printed Bible calls 6:21 "6:21".
+        //
+        // What is genuinely lost is the other direction — somebody handed "3
+        // John 15" finds a book with 14 verses. That is a reference-PARSING
+        // question, not a display one, and it is two verses in 31,102.
+        numbering: None,
+    },
 ];
 
 impl Lang {
-    pub const COUNT: usize = 3;
-    pub const ALL: [Lang; Lang::COUNT] = [Lang::En, Lang::De, Lang::Es];
+    pub const COUNT: usize = 4;
+    pub const ALL: [Lang; Lang::COUNT] = [Lang::En, Lang::De, Lang::Es, Lang::Ar];
 
     /// This language's row. The one accessor everything else is built on.
     pub fn spec(self) -> &'static LangSpec {
@@ -220,6 +275,11 @@ impl Lang {
         self.spec().exonym
     }
 
+    /// Whether this language is written right to left. See [`LangSpec::rtl`].
+    pub fn is_rtl(self) -> bool {
+        self.spec().rtl
+    }
+
     /// The text this language reads, which for a language with none of its own
     /// is English's. Every caller that opens or names a corpus goes through
     /// here, so "what does a Spanish reader read" has exactly one answer.
@@ -231,6 +291,30 @@ impl Lang {
     /// the question behind every "is this the KJV" gate in the panel.
     pub fn has_own_corpus(self) -> bool {
         self.spec().corpus.is_some() && self != Lang::En
+    }
+
+    /// Whether this language's OWN catalogue carries the first-run prose —
+    /// written by someone inside the culture, not fallen back to English.
+    ///
+    /// DERIVED, never declared. A boolean on the row would be a second thing to
+    /// keep true: someone writes the German welcome, forgets to flip the flag,
+    /// and German readers still cannot reach the words that are sitting right
+    /// there in `de.json`. Or worse in the other direction — the flag says yes,
+    /// the keys are missing, and the reader is offered a path into English
+    /// paragraphs. Here, writing the prose IS turning the feature on, and there
+    /// is no way to be inconsistent about it.
+    ///
+    /// Read against ENGLISH's key set, because English is the source and defines
+    /// what "all of it" means. All-or-nothing is enforced by a test rather than
+    /// tolerated here: a half-written welcome would render two German paragraphs
+    /// and then three English ones, which is worse than either.
+    pub fn has_native_intros(self) -> bool {
+        if self == Lang::En {
+            return true;
+        }
+        let mine = table(self);
+        let mut wanted = table(Lang::En).keys().filter(|k| is_intro_prose(k)).peekable();
+        wanted.peek().is_some() && wanted.all(|k| mine.contains_key(k))
     }
 
     /// The web manifest role this language's corpus cache is filed under.
@@ -409,6 +493,12 @@ pub fn registry_json() -> String {
                 "code": s.code,
                 "endonym": s.endonym,
                 "name": s.exonym,
+                // Additive (CLAUDE.md §Frozen contracts). The shells need it
+                // for their own chrome — which way a swipe turns the page, and
+                // the document's `dir` — which is a separate question from the
+                // reader's direction inside the text, where the engine mirrors
+                // the display list and no shell is consulted.
+                "rtl": s.rtl,
                 "corpus": s.corpus.as_ref().map(|c| c.file),
                 "corpusCache": s.corpus.as_ref().map(|c| c.cache_file()),
                 "tokenization": s.corpus.as_ref().map(|c| c.tokenization),
@@ -478,6 +568,29 @@ pub fn catalog(lang: Lang) -> Strings {
 /// so every key is present even where the translation is not.
 pub fn resolved(lang: Lang) -> Strings {
     merged(lang).clone()
+}
+
+/// The FIRST-RUN PROSE: the two welcomes that speak to a reader about their own
+/// life rather than about the app.
+///
+/// Named here because these are the strings that cannot be translated in the
+/// ordinary way. The rest of the catalogue is labels and instructions, and a
+/// competent translator renders them; these two are somebody addressing a new
+/// believer, or someone unsure what they believe, out of a shared world —
+/// which idioms land, which questions are the live ones, what a person in that
+/// place has already heard said badly. Handing them to a translator produces
+/// English thoughts in another language, and handing them to a machine is
+/// worse. They wait for someone inside the culture to write them, and until
+/// then the paths that lead to them are not offered at all.
+///
+/// ONE list, read by three things: [`Lang::has_native_intros`], the
+/// completeness test's exemption, and the all-or-nothing test beside it. A
+/// second copy of these prefixes is a place to forget one.
+pub const INTRO_PROSE: [&str; 2] = ["intro.welcome.", "intro.curious."];
+
+/// Whether `id` is one of the first-run prose strings. See [`INTRO_PROSE`].
+pub fn is_intro_prose(id: &str) -> bool {
+    INTRO_PROSE.iter().any(|p| id.starts_with(p))
 }
 
 /// Keys English has that `lang` does not. Empty for English by definition.
@@ -765,7 +878,6 @@ mod tests {
     /// Nothing else may be on this list. Adding a key here is a decision, not a
     /// convenience, and `every_shipped_string_is_translated` is what makes it
     /// one.
-    const ENGLISH_ONLY: [&str; 2] = ["intro.welcome.", "intro.curious."];
 
     #[test]
     fn every_shipped_string_is_translated() {
@@ -773,14 +885,63 @@ mod tests {
             if lang == Lang::En {
                 continue;
             }
-            let gaps: Vec<String> =
-                missing(lang).into_iter().filter(|k| !ENGLISH_ONLY.iter().any(|p| k.starts_with(p))).collect();
+            let gaps: Vec<String> = missing(lang).into_iter().filter(|k| !is_intro_prose(k)).collect();
             assert!(
                 gaps.is_empty(),
                 "{} is missing {} key(s), and only the welcome prose may be missing: {:?}",
                 lang.code(),
                 gaps.len(),
                 gaps
+            );
+        }
+    }
+
+    #[test]
+    fn english_carries_the_prose_the_gate_is_about() {
+        // Without this the gate guards nothing: delete the prose from en.json and
+        // `has_native_intros` has no keys to require, so every language would
+        // pass and every reader would be offered a path to a blank welcome.
+        let en = catalog(Lang::En);
+        for prefix in INTRO_PROSE {
+            assert!(en.keys().any(|k| k.starts_with(prefix)), "no {prefix}* strings: the gate guards nothing");
+        }
+    }
+
+    #[test]
+    fn the_first_run_prose_is_all_or_nothing_in_every_language() {
+        // A half-written welcome renders two paragraphs in the reader's language
+        // and then three in English, mid-thought. Whoever writes one of these
+        // writes all of them, or the path stays closed.
+        let en = catalog(Lang::En);
+        let all: Vec<&String> = en.keys().filter(|k| is_intro_prose(k)).collect();
+        for lang in Lang::ALL {
+            let mine = catalog(lang);
+            let have = all.iter().filter(|k| mine.contains_key(**k)).count();
+            assert!(
+                have == 0 || have == all.len(),
+                "{} has {have} of {} first-run prose strings — write the rest or none",
+                lang.code(),
+                all.len()
+            );
+        }
+    }
+
+    #[test]
+    fn the_gate_and_the_words_can_never_disagree() {
+        // The contract the shells act on: a language is offered the welcome and
+        // the curious path EXACTLY when a reader taking one would meet no
+        // English paragraph. Stated as an equivalence rather than a snapshot of
+        // which languages qualify today, so writing the German prose turns the
+        // paths on without a test to update.
+        for lang in Lang::ALL {
+            let own = catalog(lang);
+            let fell_back =
+                catalog(Lang::En).keys().filter(|k| is_intro_prose(k)).filter(|k| !own.contains_key(*k)).count();
+            assert_eq!(
+                lang.has_native_intros(),
+                fell_back == 0,
+                "{} is offered the first-run prose with {fell_back} of its paragraphs falling back to English",
+                lang.code()
             );
         }
     }

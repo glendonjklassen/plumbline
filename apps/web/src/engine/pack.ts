@@ -22,7 +22,15 @@ export type PackStage =
   | "study"
   /** The machine tier — background, and deferred behind an action on phones. */
   | "analysis"
-  /** Never fetched unless the reader asks: today the suggested-weave bundle. */
+  /** Every language's Bible except the one this boot opens. On EVERY device,
+   *  downloaded in the background once there is text on screen, so that picking
+   *  a language is a switch and not a download — and so that a phone whose
+   *  locale we translate the interface into is never shown somebody else's
+   *  scripture. Only the opened one is ever inflated into the home
+   *  ([isOtherCorpus]); the rest sit in the depot as compressed bytes. */
+  | "corpus"
+  /** Never fetched unless the reader asks: the suggested-weave bundle and the
+   *  machine-translated dictionaries. */
   | "optional";
 
 export interface PackFile {
@@ -388,8 +396,16 @@ export function fetchRndPack(
  *  stays free of a `home.ts` import — they already point the other way. */
 export function hasOptional(home: { suggestedInstalled: boolean; langsInstalled: Set<string> }, f: PackFile): boolean {
   if (f.role === "suggestedWeaves") return home.suggestedInstalled;
-  // The lexicon rides with the corpus: one install, one answer, so both roles
-  // ask the same question of the same language code.
+  // NOT the corpora. A Bible is not something a reader opts into any more — it
+  // is `stage: "corpus"` and ships to every device — so answering "has the
+  // reader installed it?" about one would be answering a question nobody asks.
+  // `devicePackFiles` takes it on its stage; stage 1 takes the opened one by
+  // role. Saying false here rather than deleting the branch, because the
+  // `langsInstalled` set still carries codes written by the old install flow on
+  // devices upgrading into this build, and a stale marker must not start meaning
+  // something new.
+  if (isCorpusRole(f.role)) return false;
+  // The dictionary is still an ask, and still keyed by language code.
   const code = langOfRole(f.role);
   return code !== null && home.langsInstalled.has(code);
 }
@@ -428,16 +444,44 @@ export function isCorpusRole(role: string | undefined): boolean {
  * and is written on every boot and on every language switch, so it is the one
  * answer available this early.
  *
- * BOTH STAY IN THE PIN AND THE DEPOT. This decides what to inflate, never what
- * to keep: switching back to English has to work with no network, and prune
- * keeps exactly what the pin names. Skipping the load is not the same as
- * dropping the file.
+ * AND BY THE DEVICE'S LOCALE WHEN THAT KEY IS EMPTY, which is the case on the
+ * visit that matters most: the first one. `plumbline.lang` is written at the END
+ * of a boot, so on a genuinely cold start there is no last session to remember
+ * and this used to fall straight through to the KJV — the interface would read
+ * the device locale, resolve to Arabic, and paint an Arabic app over English
+ * scripture, on the one visit where nobody has had a chance to correct it.
+ *
+ * These two arguments in this order ARE `i18n::resolve(chosen, device)` in
+ * crates/core, deliberately: the chosen language wins, the device answers when
+ * nothing was chosen. That rule decides the interface, and it now decides the
+ * text, because a rule implemented twice is a rule that disagrees with itself
+ * once — and the shape of that disagreement is exactly an app whose chrome and
+ * whose scripture are in different languages.
+ *
+ * ALL OF THEM STAY IN THE PIN AND THE DEPOT. This decides what to inflate,
+ * never what to keep: switching back to English has to work with no network,
+ * and prune keeps exactly what the pin names. Skipping the load is not the same
+ * as dropping the file.
+ *
+ * `has` ASKS THE MANIFEST, not the reader's install history. It used to ask
+ * whether this device had taken the optional download, which was the right
+ * question while a Bible was an optional download and is the wrong one now that
+ * every Bible ships: asking it today would answer "no" for a language whose
+ * corpus is sitting in the depot, and the reader would get the KJV under a
+ * translated interface — the exact failure the bundling was for. What is left
+ * to ask is whether this BUILD carries that language's text at all, which is a
+ * real question: a checkout that has not run the Spanish data-prep produces a
+ * pack without it.
  *
  * Every way of being wrong lands on the KJV, which is what a boot does today: a
- * missing key, a stale key, a language whose corpus was never downloaded.
+ * missing key, a stale key, a language this build has no corpus for.
  */
-export function corpusRoleFor(lang: string | null, has: (role: string) => boolean): string {
-  const wants = (lang ?? "").split(/[-_]/)[0].toLowerCase();
+export function corpusRoleFor(lang: string | null, locale: string | null, has: (role: string) => boolean): string {
+  const base = (s: string | null) => (s ?? "").split(/[-_]/)[0].toLowerCase();
+  // The stored answer first, the hardware second — and a stored answer of
+  // "en" must WIN over an Arabic device, or a reader who chose English would
+  // be overruled by their own phone on every launch.
+  const wants = base(lang) || base(locale);
   // BY CONVENTION, not by a table: `crates/core/src/i18n.rs` files every
   // non-English corpus under `corpus:<code>` and this composes the same string.
   // The alternative — a map from language to role — is the thing that had to be
@@ -449,6 +493,22 @@ export function corpusRoleFor(lang: string | null, has: (role: string) => boolea
 /** Whether this pack file is a corpus cache the reader is NOT reading. */
 export function isOtherCorpus(f: PackFile, want: string): boolean {
   return isCorpusRole(f.role) && f.role !== want;
+}
+
+/** The Bibles this device should hold but is not reading — what the background
+ *  pass downloads into the depot after there is text on screen.
+ *
+ *  DEPOT ONLY, and that distinction is the whole design: these are bytes on
+ *  disk, never files in the in-memory home. Inflating them is what
+ *  [isOtherCorpus] exists to prevent, and three corpora in the home is ~91 MB.
+ *
+ *  Ordered by size, smallest first, so a reader on a slow connection who closes
+ *  the tab has completed the most Bibles rather than the fewest — and so that a
+ *  partial run leaves whole files rather than a stalled big one. */
+export function otherCorpora(manifest: PackManifest, want: string): PackFile[] {
+  return manifest.files
+    .filter((f) => f.stage === "corpus" && isOtherCorpus(f, want))
+    .sort((a, b) => a.gzBytes - b.gzBytes);
 }
 
 export function devicePackFiles(manifest: PackManifest, has: (f: PackFile) => boolean): PackFile[] {

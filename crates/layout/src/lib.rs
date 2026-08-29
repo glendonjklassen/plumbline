@@ -60,6 +60,13 @@ pub struct LayoutConfig {
     /// its gap: the text would flow around an invisible marker, which is worse
     /// than the number it was hiding.
     pub verse_numbers: bool,
+    /// Lay the line out right to left, for a script that reads that way.
+    ///
+    /// Set from the reading language's registry row (`i18n::Lang::is_rtl`) and
+    /// not from the shell's own idea of direction: a German reader whose Luther
+    /// download has not landed is reading the KJV, and it is the TEXT that
+    /// decides which way its lines run.
+    pub rtl: bool,
 }
 
 impl Default for LayoutConfig {
@@ -73,6 +80,7 @@ impl Default for LayoutConfig {
             para_spacing: 8.0,
             verse_break: false,
             verse_numbers: true,
+            rtl: false,
         }
     }
 }
@@ -127,6 +135,14 @@ pub struct DisplayList {
     pub height: f32,
     /// The column width the layout targeted.
     pub width: f32,
+    /// Whether these boxes were mirrored for a right-to-left text.
+    ///
+    /// Carried OUT rather than left for the shell to work out again. A painter
+    /// has to know it — the platform places a trailing full stop on the side its
+    /// context's direction says, and for Arabic that is the left — and the only
+    /// answer that cannot disagree with these coordinates is the one that came
+    /// with them.
+    pub rtl: bool,
 }
 
 /// What a tap/hover resolved to.
@@ -269,8 +285,40 @@ pub fn layout_chapter<M: Measure>(verses: &[Verse], m: &M, cfg: &LayoutConfig) -
         }
     }
 
+    // RIGHT-TO-LEFT IS ONE MIRROR OVER THE FINISHED LIST, and it is worth
+    // saying why that is the whole of it rather than a rewritten line-breaker.
+    //
+    // The greedy fill above is a pure width computation: it asks the shell for
+    // each word's advance and packs words until the next one will not fit.
+    // Widths do not depend on direction, so the SET of words on each line and
+    // the point at which each line breaks are already correct for Arabic.
+    // Only the origin each box was assigned is wrong, and `width - x - w`
+    // reflects every box about the column's centre line. Word order comes out
+    // right to left, the ragged edge lands on the line-END side, and the
+    // paragraph indent set at `para_indent` indents from the right for free.
+    //
+    // HIT-TESTING NEEDS NO CHANGE AT ALL — `PlacedItem::contains` is pure
+    // geometry and the boxes mirror along with the text, so a tap lands on the
+    // word under the finger without anything downstream knowing about
+    // direction.
+    //
+    // This is enough because the corpus is enough: `data/svd1865.jsonl` has no
+    // Latin letters and no digits in any of its 31,102 verses (`check-svd.py`
+    // compares every one against the source), so there is no bidirectional run
+    // for the Unicode Bidirectional Algorithm to resolve. A verse number is its
+    // own box the shell draws separately, and a multi-digit one renders left to
+    // right inside itself because the platform shapes that string on its own.
+    // The day a corpus arrives with a Latin quotation inside an Arabic verse,
+    // this becomes wrong and needs UAX #9 — a mirror would reverse that run's
+    // word order — and it will be visible the moment it happens.
+    if cfg.rtl {
+        for it in &mut items {
+            it.x = cfg.width - it.x - it.w;
+        }
+    }
+
     let height = if items.is_empty() { 0.0 } else { pen.y + cfg.line_height };
-    DisplayList { items, height, width: cfg.width }
+    DisplayList { items, height, width: cfg.width, rtl: cfg.rtl }
 }
 
 /// A convenience: does a token carry a superscription flag? (Psalm titles are
@@ -304,6 +352,72 @@ mod tests {
         r#"{"b":"Gen","c":2,"t":[["","Thus","",[],8],["","the","",[],0],["","heavens",".",["H8064"],0]],"v":1}"#,
     );
 
+    /// The Arabic corpus's own first verse, at its real addresses.
+    const ARABIC: &str = concat!(
+        r#"{"format":"x","tokenization":"svd1865-tok1","verses":1}"#,
+        "\n",
+        r#"{"b":"Gen","c":1,"t":[["","فِي","",[],8],["","ٱلْبَدْءِ","",[],0],["","خَلَقَ","",[],0],["","ٱللهُ","",[],0],["","ٱلسَّمَاوَاتِ","",[],0],["","وَٱلْأَرْضَ",".",[],0]],"v":1}"#,
+    );
+
+    /// Right-to-left is the same layout, reflected.
+    ///
+    /// WHAT WOULD FAIL WITHOUT THE MIRROR: every assertion here. The reader
+    /// would get Arabic packed from the left edge rightwards, which puts the
+    /// first word of the verse where an Arabic reader looks for the last —
+    /// legible words in the wrong order, the failure that is easiest to ship
+    /// because each individual word still renders perfectly.
+    ///
+    /// The three properties are checked separately on purpose, because a mirror
+    /// that got any one of them wrong would still look plausible in a
+    /// screenshot.
+    #[test]
+    fn rtl_mirrors_the_line_without_relaying_it_out() {
+        let c = corpus::from_str(ARABIC).unwrap();
+        let verses = c.chapter_verses("Gen", 1);
+        let m = Mono { char_w: 10.0 };
+        // Narrow enough to force several lines, so this tests wrapping and not
+        // just one row of boxes.
+        let ltr = LayoutConfig { width: 220.0, verse_numbers: true, ..Default::default() };
+        let rtl = LayoutConfig { rtl: true, ..ltr };
+
+        let a = layout_chapter(verses, &m, &ltr);
+        let b = layout_chapter(verses, &m, &rtl);
+
+        // 1. THE LINE BREAKS ARE THE SAME. Widths do not depend on direction,
+        //    so the same words share a line in both — this is the claim that
+        //    lets the greedy fill stay untouched.
+        assert!(a.items.len() > 6, "the sample must wrap for this test to mean anything");
+        assert_eq!(a.height, b.height);
+        let ys: Vec<f32> = a.items.iter().map(|i| i.y).collect();
+        let ys_rtl: Vec<f32> = b.items.iter().map(|i| i.y).collect();
+        assert_eq!(ys, ys_rtl, "a word changed line when the direction flipped");
+
+        // 2. EVERY BOX IS REFLECTED, and stays inside the column.
+        for (l, r) in a.items.iter().zip(&b.items) {
+            assert_eq!(r.text, l.text, "the mirror reordered the item list");
+            assert_eq!(r.x, ltr.width - l.x - l.w);
+            assert!(r.x >= -0.01 && r.x + r.w <= ltr.width + 0.01, "{:?} left the column", r.text);
+        }
+
+        // 3. THE LINE BEGINS AT THE RIGHT EDGE, which is the thing a reader
+        //    would notice and no coordinate assertion above actually states.
+        //    The verse number leads, exactly as it leads on the left in
+        //    English, with the verse's first word inboard of it.
+        let first = b.items.iter().find(|i| i.text == "فِي").unwrap();
+        let last = b.items.iter().find(|i| i.text.starts_with("وَٱلْأَرْضَ")).unwrap();
+        assert!(first.x > last.x, "the verse reads left to right");
+        let num = b.items.iter().find(|i| matches!(i.kind, ItemKind::VerseNumber(1))).unwrap();
+        assert_eq!(num.x + num.w, ltr.width, "the verse number does not sit at the right edge");
+        assert!(num.x > first.x, "the verse number is not outboard of the first word");
+        let rightmost_word =
+            b.items.iter().filter(|i| i.y == first.y && i.word().is_some()).fold(f32::MIN, |acc, i| acc.max(i.x));
+        assert_eq!(first.x, rightmost_word, "the verse's first word is not the rightmost word on its line");
+
+        // 4. HIT-TESTING FOLLOWS THE BOXES with no direction logic of its own.
+        let hit = b.hit_test(first.x + 1.0, first.y + 1.0).expect("no word under the first word's box");
+        assert_eq!(hit.token_index, 0);
+    }
+
     #[test]
     fn lays_out_and_hit_tests() {
         let c = corpus::from_str(SAMPLE).unwrap();
@@ -318,6 +432,7 @@ mod tests {
             para_spacing: 8.0,
             verse_break: false,
             verse_numbers: true,
+            rtl: false,
         };
         let dl = layout_chapter(verses, &m, &cfg);
 
@@ -409,6 +524,7 @@ mod para_tests {
             para_spacing: 8.0,
             verse_break: false,
             verse_numbers: true,
+            rtl: false,
         };
         let dl = layout_chapter(c.chapter_verses("Gen", 1), &Mono, &cfg);
 
@@ -447,6 +563,7 @@ mod para_tests {
             para_spacing: 8.0,
             verse_break: false,
             verse_numbers: true,
+            rtl: false,
         };
         let dl = layout_chapter(c.chapter_verses("Gen", 1), &Mono, &cfg);
         let num2 = dl.items.iter().find(|it| matches!(it.kind, ItemKind::VerseNumber(2))).unwrap();
@@ -477,6 +594,7 @@ mod para_tests {
             para_spacing: 8.0,
             verse_break: false,
             verse_numbers: true,
+            rtl: false,
         };
         let off = LayoutConfig { verse_numbers: false, ..base };
 

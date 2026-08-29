@@ -87,7 +87,7 @@
     gap: 4px;
   }
   .list button {
-    text-align: left;
+    text-align: start;
     padding: 10px 12px;
     border: 1px solid var(--rule, #d8cba8);
     border-radius: 8px;

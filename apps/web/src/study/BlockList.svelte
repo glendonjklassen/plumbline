@@ -153,7 +153,7 @@
     text-transform: lowercase;
   }
   h3 .mark {
-    margin-left: 6px;
+    margin-inline-start: 6px;
     font-size: calc(12px * var(--uiScale, 1));
   }
   p {
@@ -161,14 +161,14 @@
     line-height: 1.45;
   }
   p.indent {
-    padding-left: 14px;
+    padding-inline-start: 14px;
   }
   p.gap {
     margin-top: 10px;
   }
   .link {
     display: inline;
-    text-align: left;
+    text-align: start;
     padding: 0;
     text-decoration: none;
     cursor: pointer;
@@ -187,7 +187,7 @@
   }
   .drag-grip {
     display: inline-block;
-    margin-right: 6px;
+    margin-inline-end: 6px;
     color: var(--faded, #8a8276);
     font-size: calc(12px * var(--uiScale, 1));
     cursor: grab;
