@@ -359,6 +359,50 @@ mod tests {
         r#"{"b":"Gen","c":1,"t":[["","فِي","",[],8],["","ٱلْبَدْءِ","",[],0],["","خَلَقَ","",[],0],["","ٱللهُ","",[],0],["","ٱلسَّمَاوَاتِ","",[],0],["","وَٱلْأَرْضَ",".",[],0]],"v":1}"#,
     );
 
+    /// The CUV corpus's own first verse: per-character tokens, the full stop
+    /// glued into the last token's `post` (`build-cuv.py`).
+    const CHINESE: &str = concat!(
+        r#"{"format":"x","tokenization":"cuv1919t-tok1","verses":1}"#,
+        "\n",
+        r#"{"b":"Gen","c":1,"t":[["","起","",[],0],["","初","",[],0],["","神","",[],0],["","創","",[],0],["","造","",[],0],["","天","",[],0],["","地","。",[],0]],"v":1}"#,
+    );
+
+    /// A Han corpus is laid out by the same greedy fill with `space_width`
+    /// zeroed — the FFI derives that from the open corpus's tokenization
+    /// stamp, exactly as it derives `rtl`. This pins the two properties that
+    /// make per-character tokenization sufficient for Chinese: characters set
+    /// SNUG (each box starts where the last ended — a visible gap between
+    /// every pair of characters is the failure a spaced-script default would
+    /// ship), and a narrow column breaks between any two characters, because
+    /// break opportunities ARE token boundaries here. Kinsoku rides in the
+    /// tokens: the glued 。 is inside its character's box and can never open
+    /// a line.
+    #[test]
+    fn cjk_sets_snug_and_breaks_between_any_two_characters() {
+        let c = corpus::from_str(CHINESE).unwrap();
+        let verses = c.chapter_verses("Gen", 1);
+        let m = Mono { char_w: 10.0 };
+
+        let wide = LayoutConfig { width: 10_000.0, space_width: 0.0, verse_numbers: false, ..Default::default() };
+        let dl = layout_chapter(verses, &m, &wide);
+        assert_eq!(dl.items.len(), 7);
+        for pair in dl.items.windows(2) {
+            assert_eq!(pair[1].x, pair[0].x + pair[0].w, "a gap opened before {:?}", pair[1].text);
+        }
+
+        // 45px column, 10px characters: four fit, the fifth wraps — a break
+        // inside what a spaced script would call a word. The last token is
+        // "地。" (20px), so the second line holds three boxes.
+        let narrow = LayoutConfig { width: 45.0, space_width: 0.0, verse_numbers: false, ..Default::default() };
+        let dl = layout_chapter(verses, &m, &narrow);
+        let first_y = dl.items[0].y;
+        let first_line: Vec<&PlacedItem> = dl.items.iter().filter(|it| it.y == first_y).collect();
+        assert_eq!(first_line.len(), 4, "expected four characters on the first line");
+        let second = &dl.items[4];
+        assert_eq!(second.x, 0.0, "the wrapped character must open its line at the margin");
+        assert!(second.y > first_y);
+    }
+
     /// Right-to-left is the same layout, reflected.
     ///
     /// WHAT WOULD FAIL WITHOUT THE MIRROR: every assertion here. The reader

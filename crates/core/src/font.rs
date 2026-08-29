@@ -71,6 +71,12 @@ pub enum Font {
     /// read, if either is ever added — the script is the unit here, not the
     /// language, which is the whole reason [`Font::script`] exists.
     NotoSerifDevanagari,
+    /// The Han face, serving BOTH Chinese rows — traditional and simplified
+    /// are repertoires of one script, and the shipped subset covers both
+    /// corpora and both catalogues (asserted by the subsetter). The TC cut is
+    /// deliberate: the 1919 和合本 is a traditional-character text first, and
+    /// its glyph forms are the tradition the simplified edition descends from.
+    NotoSerifTC,
 }
 
 impl Font {
@@ -85,6 +91,7 @@ impl Font {
             Font::Amiri => "amiri",
             Font::NotoSerifGurmukhi => "noto-serif-gurmukhi",
             Font::NotoSerifDevanagari => "noto-serif-devanagari",
+            Font::NotoSerifTC => "noto-serif-tc",
         }
     }
 
@@ -99,6 +106,7 @@ impl Font {
             "amiri" => Some(Font::Amiri),
             "noto-serif-gurmukhi" => Some(Font::NotoSerifGurmukhi),
             "noto-serif-devanagari" => Some(Font::NotoSerifDevanagari),
+            "noto-serif-tc" => Some(Font::NotoSerifTC),
             _ => None,
         }
     }
@@ -118,6 +126,7 @@ impl Font {
             Font::Amiri => "Amiri",
             Font::NotoSerifGurmukhi => "Noto Serif Gurmukhi",
             Font::NotoSerifDevanagari => "Noto Serif Devanagari",
+            Font::NotoSerifTC => "Noto Serif TC",
         }
     }
 
@@ -130,7 +139,12 @@ impl Font {
         //
         // Same for the two Indic faces, and for the same reason twice over:
         // neither ships an italic, and neither corpus marks a supplied word.
-        !matches!(self, Font::FiraCode | Font::Amiri | Font::NotoSerifGurmukhi | Font::NotoSerifDevanagari)
+        // Han has no italic tradition at all — emphasis in Chinese setting is
+        // a different face or an emphasis mark, never a slant.
+        !matches!(
+            self,
+            Font::FiraCode | Font::Amiri | Font::NotoSerifGurmukhi | Font::NotoSerifDevanagari | Font::NotoSerifTC
+        )
     }
 
     /// Whether this face ships a REAL bold, as separate static files rather
@@ -158,6 +172,7 @@ impl Font {
             Font::Amiri => Script::Arabic,
             Font::NotoSerifGurmukhi => Script::Gurmukhi,
             Font::NotoSerifDevanagari => Script::Devanagari,
+            Font::NotoSerifTC => Script::Han,
         }
     }
 
@@ -235,13 +250,24 @@ impl Font {
             // script anyone selects it for, and for Gurmukhi it disagrees with
             // the letters by a sixth of an em.
             Font::NotoSerifGurmukhi | Font::NotoSerifDevanagari => 0.82,
+            // Han is where the half-correction method runs out: an ideograph
+            // fills its em box (glyph extents ~0.88 em in the shipped file),
+            // but that box is not an x-height analogue — there are no
+            // ascenders adding apparent size above it, the strokes fill it
+            // uniformly, and mixed CJK/Latin setting conventionally puts the
+            // two at EQUAL point size. Treating 0.88 as the body and halving
+            // toward Garamond would paint the CUV at 0.73 and it reads far
+            // too small next to any Latin text on screen. A light trim from
+            // parity keeps the dense serif ideographs from reading heavier
+            // than Garamond at the same slider position.
+            Font::NotoSerifTC => 0.95,
         }
     }
 
     /// Every face, in the order the pickers offer them: the default first, then
     /// the alternatives. One list, so a face added to the enum cannot be
     /// forgotten by a shell — [`tests::every_variant_is_in_all`] holds it.
-    pub const ALL: [Font; 8] = [
+    pub const ALL: [Font; 9] = [
         Font::EbGaramond,
         Font::Literata,
         Font::Inter,
@@ -250,6 +276,7 @@ impl Font {
         Font::Amiri,
         Font::NotoSerifGurmukhi,
         Font::NotoSerifDevanagari,
+        Font::NotoSerifTC,
     ];
 }
 
@@ -287,10 +314,11 @@ mod tests {
             Font::Amiri,
             Font::NotoSerifGurmukhi,
             Font::NotoSerifDevanagari,
+            Font::NotoSerifTC,
         ] {
             assert!(Font::ALL.contains(&f), "{} is missing from Font::ALL", f.name());
         }
-        assert_eq!(Font::ALL.len(), 8);
+        assert_eq!(Font::ALL.len(), 9);
     }
 
     /// EVERY LANGUAGE MUST BE OFFERED A FACE, and this is the test the `is_rtl`
@@ -342,7 +370,7 @@ mod tests {
     /// can pick differently.
     #[test]
     fn each_non_latin_script_has_exactly_one_face() {
-        for script in [Script::Arabic, Script::Gurmukhi, Script::Devanagari] {
+        for script in [Script::Arabic, Script::Gurmukhi, Script::Devanagari, Script::Han] {
             let n = Font::ALL.iter().filter(|f| f.script() == script).count();
             assert_eq!(n, 1, "{script:?} has {n} faces");
         }
@@ -404,7 +432,7 @@ mod tests {
         // Pinned rather than assumed: a shell asks this before it styles added
         // words, and a wrong answer either loses the KJV's italics or asks a
         // font for a face it does not have.
-        for f in [Font::FiraCode, Font::Amiri, Font::NotoSerifGurmukhi, Font::NotoSerifDevanagari] {
+        for f in [Font::FiraCode, Font::Amiri, Font::NotoSerifGurmukhi, Font::NotoSerifDevanagari, Font::NotoSerifTC] {
             assert!(!f.has_italic(), "{} ships no italic", f.name());
         }
         for f in [Font::EbGaramond, Font::Literata, Font::Inter, Font::AtkinsonHyperlegible] {

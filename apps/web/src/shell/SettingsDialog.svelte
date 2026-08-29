@@ -2,6 +2,7 @@
   // One Settings dialog (Android IA): analysis switches, theme, text size /
   // margin / line-spacing sliders, copy format, bundled stock set.
   import { getSession } from "../state/session.svelte";
+  import { shippedBase } from "../lib/locale";
   import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_SCRIPT } from "../engine/fonts.generated";
   import { fontStackFor } from "../reader/measure";
   import { modal } from "../lib/modal";
@@ -244,7 +245,7 @@
     // sees: German overlay, English splash, German app. Three languages in one
     // gesture, and the reason the transition read as broken.
     try {
-      localStorage.setItem("plumbline.lang", code || (navigator.languages?.[0] ?? "en").split("-")[0]);
+      localStorage.setItem("plumbline.lang", code || shippedBase(navigator.languages?.[0] ?? "en") || "en");
     } catch {
       // A private window costs one frame of the old language. Not worth failing.
     }

@@ -1,7 +1,7 @@
 # TODO — languages
 
-Order: **Punjabi → Hindi → French → Chinese → the rest.** Every one has a qualifying text
-today.
+Order: **Punjabi → Hindi → French → Chinese → the rest.** The first four are
+in; every remaining candidate has a qualifying text today.
 
 ## The rule
 
@@ -21,40 +21,32 @@ they all use it.
 **Punjabi and Hindi are in.** `data/pan-fbi.jsonl` and `data/hin-fbi.jsonl`,
 built by `data-prep/indic/build-indic.py`, proved by `check-indic.py`, both at
 KJV addresses with all twenty TR discriminators present. Rows in
-`crates/core/src/i18n.rs`, 868 catalogue keys each, Noto Serif Gurmukhi and
+`crates/core/src/i18n.rs`, full catalogues, Noto Serif Gurmukhi and
 Noto Serif Devanagari bundled, `apps/web/e2e/indic.spec.ts` green.
 
-The Punjabi text is **not** the 1945 one this file used to name. See §1.
+**French is in.** `data/ost1996.jsonl` — the Ostervald, 1996 revision, from
+`open-bibles/fra-ostervald.osis.xml` as planned, all twenty discriminators
+present (Acts 8:37 carries the source's own `cour`-for-`cœur` typo, shipped
+as-is). The cheap-row prediction held for fonts and layout and not for
+addressing: the source prints French/Hebrew numbering (91 chapters differ —
+psalm titles as verse 1, Job recut), so `build-ostervald.py` is the first
+script here to move a text onto KJV addresses itself, and French is the first
+row since German to fill `numbering` (1,263 annotated addresses;
+`check-ostervald.py` proves every book's letter stream identical to the
+source's). `apps/web/e2e/french.spec.ts` green.
 
-## Verified
-
-`\v` markers counted in the downloaded USFM. KJV Acts: **40 verses in ch8, 1007 in the book.**
-
-| Language | Text | Licence | Acts ch8 | Acts total | 8:37 |
-|---|---|---|---|---|---|
-| Punjabi | **`FreeBiblesIndia/Punjabi_Bible` — SHIPPED** | CC-BY-SA 4.0 | 40 | 1007 | ✅ |
-| Punjabi | Pavitr Bible 1945 — `tfbf/Bible-Punjabi-Pavitr-Bible-1945` | PD / CC-BY-SA (conflict) | 40 | 1007 | ⚠ spliced |
-| Hindi | **`FreeBiblesIndia/Hindi_Bible` — SHIPPED** | CC-BY-SA 4.0 | 40 | 1007 | ✅ |
-| Tamil | `FreeBiblesIndia/Tamil_Bible` | CC-BY-SA 4.0 | 40 | 1007 | ✅ |
-| Gujarati | `FreeBiblesIndia/Gujarati_Bible` | CC-BY-SA 4.0 | 40 | 1007 | ✅ |
-| Urdu-Devanagari | `FreeBiblesIndia/Urdu_Devanagari_Bible` | CC-BY-SA 4.0 | 40 | 1007 | ✅ |
-| Malayalam | `FreeBiblesIndia/Malayalam_Bible` | CC-BY-SA 4.0 | 40 | **1004** | ✅ |
-| Malayalam | Sathyavedapusthakam 1910 — `tfbf/…-1910` | PD | 40 | **1005** | ✅ |
-| French | Ostervald — `open-bibles/fra-ostervald.osis.xml` | PD | — | — | ✅ |
-| Chinese | CUV 1919 — `open-bibles/chi-cuv{,-simp}.usfx.xml` | PD | — | — | ✅ |
-
-**1 John 5:6–8 is renumbered in every Indian-language text found**, the two
-shipped ones included: the KJV's 5:6b sits at 5:7, the Comma Johanneum is
-absent, 5:8 realigns. Counts still match the KJV everywhere, so it is a content
-misalignment at one address rather than a structural one — a note or weave
-anchored at `1John 5:7` shows the Comma in English and "the Spirit is truth"
-here. `NumberingSpec` is the wrong shape for it (nothing is renumbered) and both
-registry rows say so.
-
-Two splits, in both texts and in opposite directions: 3 John 15 is the tail of
-the KJV's v14 and is appended; Rev 12:18 is the **head** of 13:1 and is
-prepended. At Rev 13:1a they read "he stood" where the TR has "I stood" — the
-one critical reading that shows through the twenty discriminators.
+**Chinese is in, both editions.** `data/cuv1919t.jsonl` + `data/cuv1919s.jsonl`
+— the 1919 和合本 from the two open-bibles USFX files, one build script,
+proved parallel token-for-token. The layout cost §4 predicted collapsed once
+the corpora tokenized PER CHARACTER: break opportunities are token boundaries
+again, punctuation glued into pre/post is the kinsoku rule, and the one engine
+change was the FFI zeroing `space_width` for a Han corpus the way it derives
+`rtl`. Search splits a Han query into per-character words, which turns the
+existing phrase tier into the substring search a Chinese reader expects.
+`Script::Han`, one face (Noto Serif TC, subset to the corpora + catalogues,
+~1 MB), two rows `zht`/`zhs` with locale routing for `zh-*` tags, printed
+ranged verses (併於上節) shipped verbatim with a 22-row numbering table.
+`apps/web/e2e/cjk.spec.ts` green.
 
 ## 0. The checker — done for these two
 
@@ -74,62 +66,6 @@ shape and the script takes a language code.
 
 A textual finding counts only if a script produced it from a local file.
 
-## 1. Punjabi — done, and not the text this file named
-
-- **Shipped:** `FreeBiblesIndia/Punjabi_Bible`, CC-BY-SA 4.0. Uniform apparatus
-  in every book, all five of the publisher's checking stages complete.
-- **`tfbf/Bible-Punjabi-Pavitr-Bible-1945` was rejected on the evidence.** Eight
-  whole books of it are a different modern translation spliced in — Titus, John,
-  James, 1 Peter, 1–2 Thessalonians, 2 Peter, 1 Corinthians, 1,772 verses — plus
-  ~217 scattered verses elsewhere. **Acts 8:37 is one of the splices**, so the
-  verse the text was accepted for is the one verse in it that cannot be
-  attributed to it. Its own `STATUS.md` says the files "are not ready to be used
-  in a real project".
-  The tell is punctuation: the 1945 keyboarding types the danda as an ASCII `|`
-  in 19,306 verses and the spliced material uses a real `।` U+0964. Every other
-  check passes on that file, which is why `check-indic.py` now carries the test
-  as a standing claim — **a sentence terminator over 1% of a corpus's must be
-  used by 90% of its books.** The next Indian-language corpus offered here is
-  likely to have been assembled the same way.
-- The PD-vs-CC-BY-SA conflict in that repo is moot now; the shipped text's
-  licence is unambiguous.
-- **Gurmukhi is not normalised**, and the checker asserts it: NFC decomposes the
-  precomposed nukta letters, so "normalising" rewrites letters.
-
-## 2. Hindi — done
-
-- **Shipped:** `FreeBiblesIndia/Hindi_Bible`, CC-BY-SA 4.0, the traditional
-  पवित्र बाइबल with modernised spelling.
-- Devanagari also buys Marathi and Urdu-Devanagari later: the font, the search
-  rules and `Script::Devanagari` are all per-script, not per-language, so a
-  second Devanagari language is a registry row and a catalogue.
-
-## 3. French
-
-- **Text:** `open-bibles/fra-ostervald.osis.xml`, public domain.
-- **OSIS XML**, not USFX like `spa-rv1909.usfx.xml` — different parse.
-- Gate: Acts 8:37 present — *"Et Philippe lui dit: Si tu crois de tout ton cœur, cela t'est
-  permis."* Ostervald is the French TR line, the Geneva/Olivétan tradition.
-- Not Louis Segond; Segond is eclectic and critical-leaning.
-- Latin script: no shaping, no new font, no layout work. Cheapest row on the list.
-
-## 4. Chinese — Traditional and Simplified
-
-- **Text:** CUV 1919 (和合本) — `open-bibles/chi-cuv.usfx.xml`, `chi-cuv-simp.usfx.xml`,
-  public domain. 1919 clears the US 95-year term outright; corroborated by `getbible/v2`
-  (`cut`, `cus`, `chiunl`).
-- **USFX, the same format as `spa-rv1909.usfx.xml`** — `build-rv1909.py` is the template.
-- **Take the 1919 text, not a modern edition of it.** The Revised CUV (2010) is in
-  copyright, and modern re-punctuated or character-converted editions can carry a fresh
-  claim on the derivative. The About screen names the text, so this is a truthfulness
-  problem before it is a legal one.
-- One translation reaches Mandarin and Cantonese readers both.
-- **Layout work is the cost of this row.** No spaces, so break opportunities stop being the
-  same list as tokens: line breaks fall between almost any two characters (kinsoku rules),
-  while Strong's attachment and tapping want multi-character words. Prototype against
-  `crates/layout` before committing. Also needs word segmentation and a CJK font subset —
-  1–2 MB, bounded by the CUV's character set.
-
 ## 5. Other Languages
 
 - **Tamil, Gujarati, Urdu-Devanagari** — pass with a complete Acts under CC-BY-SA 4.0.
@@ -146,14 +82,18 @@ A textual finding counts only if a script produced it from a local file.
 convention. `core::i18n::Script` and `core::font::Font::script` are what the
 font picker and `readerFace` compare; direction is derived from the script.
 Adding a Devanagari language (Marathi, Urdu-Devanagari, Nepali) costs a row and
-a catalogue and no font work. Tamil, Gujarati, Malayalam and Chinese are each a
-new script, a new face and a new `Script` variant. French adds nothing.
+a catalogue and no font work — and Chinese proved the pattern from the other
+side: traditional and simplified are two ROWS on one `Script::Han`, one face.
+Tamil, Gujarati and Malayalam are each a new script, a new face and a new
+`Script` variant.
 
-**The Arabic release did not de-risk the Indic scripts as much as expected.**
-What ported was the subsetting and the bundle-for-everyone fallback. What did
-not: `rtl` was standing in for "script" everywhere, because Arabic was the only
-language where the two questions had one answer. Chinese will need the same
-audit — its problem is line-breaking and segmentation, not shaping.
+**Chinese's audit found exactly one `rtl`-style conflation left**, and it was
+not in layout: the locale base-tag strip (`de-CH` → `de`) lived in three web
+mirrors and the engine, and every one of them sent `zh-TW` to a nonexistent
+`zh` row. `shippedBase` / `Lang::shipped` now route the zh tags; the layout
+crate itself needed nothing — per-character tokens made break opportunities
+token boundaries again, and the only engine change was the FFI deriving
+`space_width = 0` from the corpus the way it derives `rtl`.
 
 **Grapheme clusters — audited, and two were real.** `blank_out` masked on
 `is_alphanumeric` and passed everything else through, so a masked Devanagari
@@ -165,16 +105,16 @@ Underscore counts still run one per codepoint rather than per cluster, which
 overstates a masked word's length; exact needs UAX #29 and a dependency this
 crate does not take.
 
-**No Strong's tags exist for any of these texts.** Punjabi and Hindi ship
-reader-only, as Arabic does — `lexicon: None` on both rows. Every language here
-ships reader-only:
-reading, search, notes, tags, weaves, memorization, plans and the reading map all work, and
-every word tap answers `study.noStrongs`. Word-level Greek alignment for Indian languages
-does exist — `tfbf/irv_ugnt_alignment`, CC-BY-SA — but it is aligned to the IRV, a different
-text. Unresolved for French too. The Arabic row set the precedent for refusing
-machine-guessed codes.
+**No Strong's tags exist for any of these texts.** Arabic, Punjabi, Hindi,
+French and both Chinese rows all ship reader-only — `lexicon: None` — and
+every language here would too: reading, search, notes, tags, weaves,
+memorization, plans and the reading map all work, and every word tap answers
+`study.noStrongs`. Word-level Greek alignment for Indian languages does exist
+— `tfbf/irv_ugnt_alignment`, CC-BY-SA — but it is aligned to the IRV, a
+different text. The Arabic row set the precedent for refusing machine-guessed
+codes.
 
-**i18n catalogue, 868 keys per language.** `every_shipped_string_is_translated`
+**i18n catalogue, ~875 keys per language.** `every_shipped_string_is_translated`
 blocks a partial catalogue, so it is all-or-nothing. Book names come free: the
 `\h` field of each USFM file is the publisher's own name for the book, though
 the long forms ("ਕੁਰਿੰਥੀਆਂ ਨੂੰ ਪਹਿਲੀ ਪੱਤ੍ਰੀ") need shortening to what a picker

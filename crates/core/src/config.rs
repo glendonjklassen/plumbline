@@ -1188,8 +1188,9 @@ mod tests {
 
         // One it does NOT ship reads as "follow the device": the reader chose a
         // language once, and the honest answer to not having it is their
-        // system's, not ours overruling them.
-        std::fs::write(&path, r#"{"language":"fr"}"#).unwrap();
+        // system's, not ours overruling them. (This example was "fr" until
+        // French shipped.)
+        std::fs::write(&path, r#"{"language":"it"}"#).unwrap();
         assert_eq!(load_from(&path).0.language, "");
         std::fs::write(&path, "{}").unwrap();
         assert_eq!(load_from(&path).0.language, "");

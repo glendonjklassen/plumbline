@@ -342,6 +342,109 @@ python3 data-prep/indic/build-indic.py pa pa.zip && python3 data-prep/indic/chec
 python3 data-prep/indic/build-indic.py hi hi.zip && python3 data-prep/indic/check-indic.py hi hi.zip
 ```
 
+## The French Bible (`data/ost1996.jsonl`)
+
+`data-prep/ostervald/build-ostervald.py` turns `fra-ostervald.osis.xml` (the
+seven1m/open-bibles rendering of the J.F. Ostervald translation, **1996
+revision** — the OSIS header says `ostv1996` and the About screen says 1996
+too) into `data/ost1996.jsonl`, stamped `ost1996-tok1`. Public domain per the
+open-bibles catalogue. Ostervald is the French TR line — the Geneva/Olivétan
+tradition — where Louis Segond is eclectic and was rejected; Acts 8:37 and the
+other nineteen discriminators all carry text.
+
+**This is the first corpus since Luther whose source does not sit at KJV
+addresses** — and Luther arrived pre-aligned by the Unbound editors, so it is
+the first this pipeline aligns itself. The source prints French/Hebrew-style
+numbering: 31,172 verses, 91 chapters breaking differently (psalm titles
+numbered as verse 1, Job 38–41 recut, a dozen boundary shifts from Numbers to
+Revelation). The build walks the KJV's addresses while consuming the source's
+verses in canon order, which lands everything with only three primitive kinds
+of directive — 62 psalms' title verses folded into verse 1 as `FLAG_TITLE`
+(five span two verses), six merges (including Rev 12:18, *"Et je me tins
+debout"*, the TR's "I stood", prepended into 13:1 exactly as `build-indic.py`
+does), and three splits at asserted sentence boundaries (Luke 10:41, Acts
+19:40, 2 Cor 13:12). What a printed Ostervald calls each of the 1,263 moved
+addresses lands in `crates/core/src/versification/ostervald-numbering.tsv`,
+which the French row's `NumberingSpec` annotates from.
+
+Points a later maintainer should not rediscover:
+
+- **Elision lives in `pre`** — "l'homme" is `l'` + `homme`, off a closed
+  thirteen-prefix list, so the search index holds the word a reader types.
+  `check-ostervald.py` therefore *allows* letters in `pre` (exactly the
+  whitelist) where every other checker forbids them.
+- **The letter-stream proof is per book and alignment-independent**: every
+  directive preserves source order, so each book's letters, concatenated, must
+  equal the source's — no letter lost, invented or reordered, however the
+  addresses moved.
+- **The source has its own typos and they ship** ("de tout ton cour" at the
+  gate verse itself, œ lost); shipping the source's letters is the policy, as
+  it was for the Indic texts.
+
+```sh
+curl -LO https://raw.githubusercontent.com/seven1m/open-bibles/master/bibles/fra-ostervald.osis.xml
+python3 data-prep/ostervald/build-ostervald.py fra-ostervald.osis.xml
+python3 data-prep/ostervald/check-ostervald.py fra-ostervald.osis.xml
+```
+
+## The Chinese Bibles (`data/cuv1919t.jsonl`, `data/cuv1919s.jsonl`)
+
+`data-prep/cuv/build-cuv.py` turns the seven1m/open-bibles USFX editions of
+the 1919 Chinese Union Version (和合本) — `chi-cuv.usfx.xml` traditional,
+`chi-cuv-simp.usfx.xml` simplified — into two corpora, stamped `cuv1919t-tok1`
+and `cuv1919s-tok1`. One script for both editions, for `build-indic.py`'s
+reason, and `check-cuv.py` additionally proves the two **parallel
+token-for-token** (same addresses, same token counts, same flags — every verse
+letter-count-identical across editions). Public domain: 1919 clears the US
+95-year term outright; the Revised CUV (2010) is in copyright and is *not*
+this text, which is why the About screen names the year.
+
+**The corpora tokenize one character per token**, and that is the load-bearing
+decision of the whole Chinese row:
+
+- **Search**: `run_search`'s query splitter breaks a Han run into
+  per-character words, so the existing phrase tier — consecutive-token
+  confirmation — becomes exact substring search, which is what a Chinese
+  reader expects. Dictionary segmentation was rejected: a reader's word
+  boundaries and a segmenter's disagree (transliterated names worst), and
+  every disagreement is a search that finds nothing.
+- **Layout**: break opportunities become exactly token boundaries, so the
+  greedy breaker in `crates/layout` needed no intra-token work — and gluing
+  punctuation into `pre`/`post` *is* the kinsoku rule (a closing 。」 can
+  never open a line; an opening 「 can never end one). The FFI zeroes
+  `space_width` for a Han corpus the same way it derives `rtl`: from the open
+  corpus's tokenization stamp, with no ABI change.
+
+The remap is small — the CUV nearly sits at KJV addresses already: John 7:53
+split back out of the head of 8:1, 1 Chr 22 shifted one verse (the printed
+21:31 is the KJV's 22:1), 3 John 15 merged as always. The printed CUV combines
+ranged verses and prints **併於上節** ("combined with the previous verse") at
+the second number — 69 such placeholder verses ship verbatim, because they are
+what the printed page shows, and the build constructs the same placeholder at
+the two range tails the file left unemitted (Deut 13:18, Ps 116:19 — both
+interleave their clauses inside the merged verse, so no honest cut exists).
+All 22 disagreeing addresses land in
+`crates/core/src/versification/cuv-numbering.tsv`, shared by both rows.
+
+One transformation touches letters, and only in the simplified edition: two
+2013 规范字 codepoints in CJK Extension B (𫈟, 𫗪 — twelve occurrences) that
+Source Han Serif and virtually every other font lack ship as their
+traditional forms 蔯/餵 instead — the convention simplified text uses for an
+unencodable rare form, counted exactly so upstream drift is loud, and
+`check-cuv.py` proves the whole corpus sits in the renderable repertoire.
+
+The face is derived, not declared: `apps/web/scripts/subset-fonts.mjs`
+subsets Source Han Serif TC (fetched sha256-pinned, 24 MB, gitignored) to the
+exact codepoints of the two corpora and two catalogues — ~1.0 MB of woff2 —
+and a scripture codepoint the font lacks fails the build.
+
+```sh
+curl -LO https://raw.githubusercontent.com/seven1m/open-bibles/master/bibles/chi-cuv.usfx.xml
+curl -LO https://raw.githubusercontent.com/seven1m/open-bibles/master/bibles/chi-cuv-simp.usfx.xml
+python3 data-prep/cuv/build-cuv.py t chi-cuv.usfx.xml && python3 data-prep/cuv/check-cuv.py t chi-cuv.usfx.xml
+python3 data-prep/cuv/build-cuv.py s chi-cuv-simp.usfx.xml && python3 data-prep/cuv/check-cuv.py s chi-cuv-simp.usfx.xml
+```
+
 ## Localized Strong's dictionaries (`data/strongs-<code>.json`)
 
 Two scripts in `data-prep/strongs-lang/`, both taking a language code and reading

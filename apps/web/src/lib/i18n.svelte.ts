@@ -17,6 +17,7 @@
 // copy while the braces name the argument that went missing.
 
 import { BOOT_STRINGS } from "./i18n.generated";
+import { shippedBase } from "./locale";
 import { DEFAULT_FONT, FONT_SCRIPT, SCRIPT_FACE } from "../engine/fonts.generated";
 
 /** Where the resolved code is remembered between visits — see `seed()`. */
@@ -39,9 +40,11 @@ export function deviceLocale(): string {
   return navigator.languages?.[0] || navigator.language || "en";
 }
 
-/** The base tag of a locale, if this build ships that language. */
+/** The shipped code of a locale, if this build ships that language —
+ *  `shippedBase` handles the Chinese routing (`zh-TW` → `zht`), so the splash
+ *  can speak Chinese before the engine has said anything. */
 function shipped(tag: string | null | undefined): string | null {
-  const base = (tag ?? "").split(/[-_]/)[0].toLowerCase();
+  const base = shippedBase(tag);
   return base && BOOT_STRINGS[base] ? base : null;
 }
 

@@ -75,3 +75,8 @@ apps/web/public/plumbline_ffi.wasm
 # command away whenever it is wanted.
 HYMNAL-REVIEW.md
 __pycache__/
+
+# The Han face's 24 MB upstream source — fetched (sha256-pinned) by
+# apps/web/scripts/subset-fonts.mjs, never committed; only the built
+# public/fonts/*.woff2 ships. The other fonts-src TTFs are small and stay.
+apps/web/fonts-src/NotoSerifCJKtc-Regular.otf

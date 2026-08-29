@@ -6,8 +6,8 @@
   flat sentences — no metaphors, rhetorical questions, or clever asides
   ("Choose a tag to rename", never "Which tag would you like to file?"). The
   test: would the string look normal in a mainstream app's settings screen?
-  Applies to every user-visible string in `crates/core/src/i18n/` (all three
-  languages) and any hardcoded shell copy.
+  Applies to every user-visible string in `crates/core/src/i18n/` (every
+  language) and any hardcoded shell copy.
 - **Two shells, one product: Android (Compose) and web (PWA).** Android is
   the **UX gold standard** — its layout/menu patterns port to the web, not
   the other way around. A feature added in either shell lands in the other

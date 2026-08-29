@@ -105,6 +105,37 @@ mod tests {
     }
 
     #[test]
+    fn the_french_and_chinese_tables_load_at_their_produced_sizes() {
+        // 1,263 is what `build-ostervald.py` derived (psalm titles shift 983
+        // addresses on their own); 22 is `build-cuv.py`'s, dominated by the
+        // 1 Chronicles 22 boundary. The same silent-shrink failure mode as
+        // the Luther test above.
+        assert!(
+            printed_map(Lang::Fr).len() > 1200,
+            "the Ostervald table has only {} entries",
+            printed_map(Lang::Fr).len()
+        );
+        assert_eq!(printed_map(Lang::Zht).len(), 22, "the CUV table changed size");
+        // One tradition, one table: both Chinese rows must annotate alike.
+        assert_eq!(printed_map(Lang::Zht), printed_map(Lang::Zhs));
+    }
+
+    #[test]
+    fn the_new_classic_disagreements_are_named() {
+        // French: the fish is 2:1 ("Jonas 2:1" begins the psalm chapter a
+        // French reader knows), and a title psalm's body shifts by one.
+        assert_eq!(printed_map(Lang::Fr).get("Jonah 1:17").copied(), Some((2, 1)));
+        assert_eq!(printed_map(Lang::Fr).get("Ps 3:1").copied(), Some((3, 2)));
+        // Chinese: the Pericope's opener is printed inside 8:1, and KJV
+        // 1 Chr 22:1 sits at the end of the printed 21.
+        assert_eq!(printed_map(Lang::Zht).get("John 7:53").copied(), Some((8, 1)));
+        assert_eq!(printed_map(Lang::Zhs).get("1Chr 22:1").copied(), Some((21, 31)));
+        // And where the traditions agree, nothing is said — in any of them.
+        assert_eq!(printed_as(Lang::Fr, &VRef::new("John", 3, 16)), None);
+        assert_eq!(printed_as(Lang::Zht, &VRef::new("John", 3, 16)), None);
+    }
+
+    #[test]
     fn a_language_whose_tradition_agrees_has_no_table_and_that_is_not_a_gap() {
         // Reina-Valera follows the KJV's breaks, so Spanish carries no numbering
         // row — and the absence has to behave like agreement rather than like a

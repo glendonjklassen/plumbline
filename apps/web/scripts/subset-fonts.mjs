@@ -219,6 +219,51 @@ const FAMILIES = [
     layoutFeatures: "*",
     faces: [{ src: "NotoSerifDevanagari.ttf", style: "normal" }],
   },
+  {
+    // Han, for both Chinese Bibles — one face, one script, two corpora
+    // (`core::i18n::Script::Han`; traditional and simplified are repertoires,
+    // not scripts). The TC cut of Source Han Serif: the 1919 和合本 is a
+    // traditional-character text first, and TC glyph forms are the tradition
+    // the simplified edition descends from.
+    //
+    // THE CHARSET IS DERIVED, NOT DECLARED. Whole-block ranges are the wrong
+    // shape here — the URO is 21k characters and the CUV uses 4.2k — so
+    // `cjkFiles` names the shipped corpora and the two Chinese catalogues, and
+    // the subset is their exact codepoints: every character the engine can be
+    // asked to measure, nothing else (~1.0 MB of woff2 against 24 MB of
+    // source). Strictness is split: a corpus codepoint the font lacks FAILS
+    // the build (--no-ignore-missing-unicodes — tofu in scripture is a
+    // shipping bug, and the two 规范字 the face lacks are already carried as
+    // traditional forms by `build-cuv.py`); catalogue characters below U+2E80
+    // that are not punctuation (the chrome's ✕ ▸ dingbats) are left out and
+    // fall back per glyph, exactly as Garamond falls back for Hebrew.
+    //
+    // `layoutFeatures: ""` drops GSUB/GPOS outright: horizontal Han has no
+    // shaping, no kerning and no ligatures, so the tables would be dead
+    // weight in a file every reader downloads — the opposite call from the
+    // Indic faces, for the same measured-width reason.
+    //
+    // THE SOURCE IS FETCHED, NOT COMMITTED. The upstream OTF is 24 MB — the
+    // data-prep convention for inputs that size is curl-at-build-time, and
+    // only the built artifact is committed (public/fonts/*.woff2). The
+    // download is sha256-pinned and lands in fonts-src/ (gitignored).
+    token: "noto-serif-tc",
+    script: "han",
+    css: "Noto Serif TC",
+    fallback: "serif",
+    scale: 0.95,
+    layoutFeatures: "",
+    cjkFiles: {
+      strict: ["data/cuv1919t.jsonl", "data/cuv1919s.jsonl"],
+      lenient: ["crates/core/src/i18n/zht.json", "crates/core/src/i18n/zhs.json"],
+    },
+    extraSubsetArgs: ["--no-hinting", "--drop-tables+=vhea,vmtx", "--no-ignore-missing-unicodes"],
+    download: {
+      url: "https://github.com/notofonts/noto-cjk/raw/main/Serif/OTF/TraditionalChinese/NotoSerifCJKtc-Regular.otf",
+      sha256: "234301038e76e7c35c43113785024700c4e4fe7bdce1d1fbbc42fca7e6683798",
+    },
+    faces: [{ src: "NotoSerifCJKtc-Regular.otf", out: "NotoSerifTC", style: "normal", weight: "400" }],
+  },
 ];
 
 // THE SCRIPT FALLBACK: a family that is bundled for everyone and offered to
@@ -293,15 +338,60 @@ for (const n of readdirSync(outDir)) {
   if (n.endsWith(".woff2")) rmSync(join(outDir, n));
 }
 
+const repo = join(web, "../..");
+
+/** The exact codepoints a CJK family must carry, derived from the shipped
+ *  files rather than declared as blocks — see the noto-serif-tc entry. Strict
+ *  files contribute every codepoint (scripture: a miss must fail the build);
+ *  lenient files contribute only CJK-ish and punctuation codepoints, leaving
+ *  chrome dingbats to per-glyph fallback. Returns a pyftsubset
+ *  `--unicodes-file` payload. */
+function deriveCjkUnicodes(cjkFiles) {
+  const cps = new Set();
+  for (let cp = 0x20; cp < 0x7f; cp++) cps.add(cp);
+  for (const rel of cjkFiles.strict) {
+    for (const ch of readFileSync(join(repo, rel), "utf8")) {
+      const cp = ch.codePointAt(0);
+      if (cp >= 0x20) cps.add(cp);
+    }
+  }
+  for (const rel of cjkFiles.lenient) {
+    for (const ch of readFileSync(join(repo, rel), "utf8")) {
+      const cp = ch.codePointAt(0);
+      if (cp >= 0x2e80 || (cp >= 0x2000 && cp <= 0x206f) || (cp >= 0xa0 && cp <= 0xff)) cps.add(cp);
+    }
+  }
+  return [...cps]
+    .sort((a, b) => a - b)
+    .map((cp) => cp.toString(16).toUpperCase().padStart(4, "0"))
+    .join("\n");
+}
+
+/** Fetch a family's pinned source into fonts-src when it is not already
+ *  there — the 24 MB inputs follow the data-prep convention (curl at build
+ *  time, never committed) and the hash makes the fetch reproducible. */
+function ensureDownloaded(family, src) {
+  if (existsSync(src)) return;
+  console.log(`fetching ${family.download.url}`);
+  execFileSync("curl", ["-sfLo", src, family.download.url], { stdio: ["ignore", "inherit", "inherit"] });
+  const got = createHash("sha256").update(readFileSync(src)).digest("hex");
+  if (got !== family.download.sha256) {
+    rmSync(src, { force: true });
+    console.error(`${src}: sha256 ${got}, pinned ${family.download.sha256}`);
+    process.exit(2);
+  }
+}
+
 const built = [];
 for (const family of FAMILIES) {
   for (const face of family.faces) {
     const src = join(srcDir, face.src);
+    if (!existsSync(src) && family.download) ensureDownloaded(family, src);
     if (!existsSync(src)) {
       console.error(`missing ${src}`);
       process.exit(2);
     }
-    const base = basename(face.src, ".ttf");
+    const base = face.out ?? basename(face.src, ".ttf");
     const subTtf = join(outDir, `${base}.subset.tmp.ttf`);
     // Instancing runs BEFORE the subset: `--unicodes` does not touch `fvar`,
     // so pinning afterwards would leave the dropped axis's deltas in the
@@ -317,14 +407,19 @@ for (const family of FAMILIES) {
       );
       input = pinnedTmp;
     }
-    const args = [
-      ...SUBSET.pre,
-      input,
-      `--unicodes=${family.unicodes ?? UNICODES}`,
-      `--output-file=${subTtf}`,
-    ];
-    if (family.layoutFeatures) args.push(`--layout-features=${family.layoutFeatures}`);
+    const args = [...SUBSET.pre, input, `--output-file=${subTtf}`];
+    let unicodesTmp = null;
+    if (family.cjkFiles) {
+      unicodesTmp = join(outDir, `${base}.unicodes.tmp.txt`);
+      writeFileSync(unicodesTmp, deriveCjkUnicodes(family.cjkFiles));
+      args.push(`--unicodes-file=${unicodesTmp}`);
+    } else {
+      args.push(`--unicodes=${family.unicodes ?? UNICODES}`);
+    }
+    if (family.layoutFeatures != null) args.push(`--layout-features=${family.layoutFeatures}`);
+    if (family.extraSubsetArgs) args.push(...family.extraSubsetArgs);
     execFileSync(SUBSET.cmd, args, { stdio: ["ignore", "inherit", "inherit"] });
+    if (unicodesTmp) rmSync(unicodesTmp, { force: true });
     // pyftsubset --flavor=woff2 needs python brotli, which is not reliably
     // present; woff2_compress is, and produces the same thing. It writes
     // <name>.woff2 beside its input.

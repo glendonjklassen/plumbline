@@ -374,7 +374,14 @@ pub fn run_search_scoped(
         return Some(form_search_scoped(corpus, ix, &fq, range));
     }
 
-    let qws: Vec<String> = q.split_whitespace().map(normalize_word).filter(|w| !w.is_empty()).collect();
+    // A run of Han characters splits into per-character query words, because
+    // the Han corpora tokenize per character (`build-cuv.py`) — so "耶穌" is a
+    // two-word query and the PHRASE tier's consecutive-token confirmation
+    // becomes exact substring search, which is what a Chinese reader expects
+    // of search. Chinese is written without spaces, so nothing else could
+    // split the query. A no-op on every other script.
+    let qws: Vec<String> =
+        q.split_whitespace().map(normalize_word).flat_map(|w| split_han(&w)).filter(|w| !w.is_empty()).collect();
     if qws.is_empty() {
         return None;
     }
@@ -664,7 +671,19 @@ fn multi_word<'a>(
 
     let mut rows = Rows::new(corpus, scope);
     rows.push_all(text_idxs, false, Why::Plain);
-    let needle = qws.join(" ");
+    // Two adjacent Han query words came from an unspaced run — a note that
+    // matches them says "耶穌", never "耶 穌" — so the needle joins them the
+    // way the writer typed them. Spaced scripts keep their space.
+    let mut needle = String::new();
+    for w in qws {
+        if !needle.is_empty() {
+            let snug = needle.chars().last().is_some_and(is_han) && w.chars().next().is_some_and(is_han);
+            if !snug {
+                needle.push(' ');
+            }
+        }
+        needle.push_str(w);
+    }
     rows.push_all(note_idxs(corpus, notes, ix, &needle), true, Why::Plain);
     (label, rows)
 }
@@ -952,6 +971,42 @@ fn fold_arabic(c: char) -> char {
 /// Devanagari or Gurmukhi codepoint in it — so English, German and Spanish keys
 /// come out of this exactly as `to_lowercase` left them, and their `.idxcache`
 /// files, which the web manifest hashes, stay byte-identical.
+/// Whether this character is a Han ideograph — the letters of the two Chinese
+/// corpora, which tokenize one character per token (`build-cuv.py`).
+///
+/// The Unified Ideographs block, Extension A, the compatibility block and the
+/// supplementary-plane extensions; the shipped corpora sit inside the first
+/// (asserted by `check-cuv.py`'s renderable-repertoire claim), the margin is
+/// for a query pasted from elsewhere.
+pub(crate) fn is_han(c: char) -> bool {
+    matches!(c as u32, 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x3FFFF)
+}
+
+/// Break a query word at the Han boundary: each Han character becomes a word
+/// of its own, non-Han runs stay whole. `"耶穌"` → `["耶", "穌"]`;
+/// `"David"` → `["David"]`; a no-op vec for any word without a Han character.
+fn split_han(w: &str) -> Vec<String> {
+    if !w.chars().any(is_han) {
+        return vec![w.to_string()];
+    }
+    let mut out: Vec<String> = Vec::new();
+    let mut run = String::new();
+    for c in w.chars() {
+        if is_han(c) {
+            if !run.is_empty() {
+                out.push(std::mem::take(&mut run));
+            }
+            out.push(c.to_string());
+        } else {
+            run.push(c);
+        }
+    }
+    if !run.is_empty() {
+        out.push(run);
+    }
+    out
+}
+
 pub fn fold_word(w: &str) -> String {
     let lower = w.to_lowercase();
     if lower.is_ascii() {

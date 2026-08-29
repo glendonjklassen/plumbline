@@ -45,6 +45,9 @@ module id `engKJV2006eb` itself no longer resolves there (checked 2026-07-29).
 | `data/svd1865.jsonl` | Smith & Van Dyck 1865 at KJV addresses, tokenized (`svd1865-tok1`), fully vocalized; two split verses merged back to the KJV address | eBible.org USFM edition `arb-vd`; built by `data-prep/svd/build-svd.py`, proved by `check-svd.py` | public domain (the 1865 text; eBible's `copr.htm` and catalogue both say so) |
 | `data/pan-fbi.jsonl` | ਪਵਿੱਤਰ ਬਾਈਬਲ (Punjabi) at KJV addresses, tokenized (`pan-fbi-tok1`); two split verses merged back to the KJV address | [FreeBiblesIndia/Punjabi_Bible](https://github.com/FreeBiblesIndia/Punjabi_Bible), original work available at <http://freebiblesindia.in>; built by `data-prep/indic/build-indic.py`, proved by `check-indic.py`. **Modified**: the text is tokenized into the frozen `kjv.jsonl` shape, its two split verses are merged to the KJV address, and the publisher's footnotes, section headings and book introductions are not carried. | **CC BY-SA 4.0** — attribution above, share-alike carries to the tokenized corpus |
 | `data/hin-fbi.jsonl` | पवित्र बाइबल (Hindi) at KJV addresses, tokenized (`hin-fbi-tok1`); two split verses merged back to the KJV address | [FreeBiblesIndia/Hindi_Bible](https://github.com/FreeBiblesIndia/Hindi_Bible), original work available at <http://freebiblesindia.in>; built by `data-prep/indic/build-indic.py`, proved by `check-indic.py`. **Modified**: as above, and the source's inline cross-reference apparatus (`\bdit`, 2,513 spans) is dropped with the footnotes. | **CC BY-SA 4.0** — attribution above, share-alike carries to the tokenized corpus |
+| `data/ost1996.jsonl` | La Bible Ostervald, 1996 revision, moved onto KJV addresses, tokenized (`ost1996-tok1`); 62 psalm superscriptions folded into verse 1 as title tokens, six merges, three splits, and the 1,263 addresses whose printed French number differs recorded in `crates/core/src/versification/ostervald-numbering.tsv` | [seven1m/open-bibles](https://github.com/seven1m/open-bibles) OSIS edition (`fra-ostervald.osis.xml`); built by `data-prep/ostervald/build-ostervald.py`, proved by `check-ostervald.py` (every book's letter stream identical to the source's) | public domain (per the open-bibles catalogue; the edition is the 1996 revision and the app says so) |
+| `data/cuv1919t.jsonl` | 和合本 1919 (Chinese Union Version, traditional) at KJV addresses, tokenized one character per token (`cuv1919t-tok1`); John 7:53 split back out of 8:1, 1 Chr 22 realigned, 3 John 15 merged; the printed edition's 69 ranged-verse placeholders (併於上節) carried verbatim, two constructed at range tails, all 22 differing printed numbers in `crates/core/src/versification/cuv-numbering.tsv` | [seven1m/open-bibles](https://github.com/seven1m/open-bibles) USFX edition (`chi-cuv.usfx.xml`); built by `data-prep/cuv/build-cuv.py`, proved by `check-cuv.py` | public domain (the 1919 text — the 2010 Revised CUV is in copyright and is not this text) |
+| `data/cuv1919s.jsonl` | 和合本 1919, simplified-character edition, as above (`cuv1919s-tok1`); proved parallel to the traditional edition token-for-token. **Modified**: two 2013 规范字 codepoints in CJK Extension B that virtually no font carries (𫈟, 𫗪; twelve occurrences) ship as their traditional forms 蔯/餵 | as above (`chi-cuv-simp.usfx.xml`); same build and check scripts | public domain (the 1919 text) |
 
 ## Morphology
 
@@ -105,12 +108,16 @@ offers four more faces, all bundled the same way and all OFL: **Literata**
 (Nikita Prokopov et al.), and **Atkinson Hyperlegible** (Braille Institute of
 America — the low-vision face).
 
-Three further faces are bundled for everyone and offered to nobody who cannot
+Four further faces are bundled for everyone and offered to nobody who cannot
 read them, because none of the seven above contains a single glyph of their
 scripts: **Amiri** (Khaled Hosny — the naskh face that carries the Van Dyck,
 and the one that positions its tashkeel properly), **Noto Serif Gurmukhi** and
-**Noto Serif Devanagari** (Google, for ਪਵਿੱਤਰ ਬਾਈਬਲ and पवित्र बाइबल). All
-three are OFL, and each licence travels with its source at
-`apps/web/fonts-src/OFL-*.txt`. Which face a reader is offered follows the
-SCRIPT of their language and not its direction — `core::font::Font::offered_for`
-is the one rule, and `core::i18n::Script` is what it reads.
+**Noto Serif Devanagari** (Google, for ਪਵਿੱਤਰ ਬਾਈਬਲ and पवित्र बाइबल), and
+**Noto Serif TC** (Google/Adobe — Source Han Serif's traditional cut, carrying
+both editions of the 和合本; subset to the exact characters of the two corpora
+and two catalogues, ~1 MB, by `apps/web/scripts/subset-fonts.mjs`, which
+fetches the 24 MB upstream OTF sha256-pinned rather than committing it). All
+four are OFL, and each licence travels at `apps/web/fonts-src/OFL-*.txt`.
+Which face a reader is offered follows the SCRIPT of their language and not
+its direction — `core::font::Font::offered_for` is the one rule, and
+`core::i18n::Script` is what it reads.

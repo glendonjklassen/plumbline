@@ -106,8 +106,15 @@
 }
 @font-face {
   font-family: "Noto Serif Devanagari";
-  src: url("./fonts/NotoSerifDevanagari-0579b021.woff2") format("woff2");
+  src: url("./fonts/NotoSerifDevanagari-27c0afd2.woff2") format("woff2");
   font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Noto Serif TC";
+  src: url("./fonts/NotoSerifTC-e9e0c620.woff2") format("woff2");
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
