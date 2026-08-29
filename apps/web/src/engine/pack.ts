@@ -10,6 +10,7 @@
 
 import { depotBytes, depotDelete, depotGet, depotPut } from "./depot";
 import { PERF } from "./perf";
+import { shippedBase } from "../lib/locale";
 
 /** When the loader fetches a file. The manifest carries this per entry — it is
  *  NOT re-derived from filenames here, which is how four places ended up able to
@@ -477,11 +478,13 @@ export function isCorpusRole(role: string | undefined): boolean {
  * missing key, a stale key, a language this build has no corpus for.
  */
 export function corpusRoleFor(lang: string | null, locale: string | null, has: (role: string) => boolean): string {
-  const base = (s: string | null) => (s ?? "").split(/[-_]/)[0].toLowerCase();
   // The stored answer first, the hardware second — and a stored answer of
   // "en" must WIN over an Arabic device, or a reader who chose English would
-  // be overruled by their own phone on every launch.
-  const wants = base(lang) || base(locale);
+  // be overruled by their own phone on every launch. `shippedBase` rather
+  // than a bare base-tag strip, because a Chinese device says `zh-TW` and
+  // the corpus roles say `zht`/`zhs` — a strip to `zh` misses every role and
+  // boots the KJV under a Chinese interface.
+  const wants = shippedBase(lang) || shippedBase(locale);
   // BY CONVENTION, not by a table: `crates/core/src/i18n.rs` files every
   // non-English corpus under `corpus:<code>` and this composes the same string.
   // The alternative — a map from language to role — is the thing that had to be

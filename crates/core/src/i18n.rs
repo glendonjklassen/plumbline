@@ -57,6 +57,9 @@ pub enum Lang {
     Ar,
     Pa,
     Hi,
+    Fr,
+    Zht,
+    Zhs,
 }
 
 /// The writing system a language is set in.
@@ -81,6 +84,12 @@ pub enum Script {
     Arabic,
     Gurmukhi,
     Devanagari,
+    /// Chinese characters — ONE script serving both Chinese rows. Traditional
+    /// and simplified are two repertoires of the same script, not two scripts:
+    /// one face covers both corpora (`each_non_latin_script_has_exactly_one_face`
+    /// holds), and what differs between the rows is the corpus and catalogue,
+    /// exactly as two Devanagari languages would share `Devanagari`.
+    Han,
 }
 
 impl Script {
@@ -102,6 +111,7 @@ impl Script {
             Script::Arabic => "arabic",
             Script::Gurmukhi => "gurmukhi",
             Script::Devanagari => "devanagari",
+            Script::Han => "han",
         }
     }
 }
@@ -336,11 +346,79 @@ static SPECS: [LangSpec; Lang::COUNT] = [
         // column. See Punjabi.
         numbering: None,
     },
+    LangSpec {
+        code: "fr",
+        endonym: "Français",
+        exonym: "French",
+        script: Script::Latin,
+        catalog: include_str!("i18n/fr.json"),
+        corpus: Some(CorpusSpec { file: "ost1996.jsonl", tokenization: "ost1996-tok1", label: "Ostervald" }),
+        // No Strong's dictionary, for Arabic's reason: the Ostervald source
+        // carries no codes, and machine-guessing them was already refused once.
+        lexicon: None,
+        modernization: None,
+        // The FIRST row since German to fill this column, and it earns it: the
+        // source prints French/Hebrew-style numbering (91 chapters break
+        // differently — psalm titles numbered as verse 1, Job 38-41 recut,
+        // a dozen chapter boundaries elsewhere), and `build-ostervald.py`
+        // moves the text onto KJV addresses the way the Unbound editors moved
+        // Luther. The 1,263 addresses whose printed French number differs are
+        // what this table annotates.
+        numbering: Some(NumberingSpec {
+            table: include_str!("versification/ostervald-numbering.tsv"),
+            label: "Ostervald",
+        }),
+    },
+    // CHINESE IS TWO ROWS, ONE SCRIPT. Traditional and simplified are two
+    // character repertoires of one language reading one translation (the 1919
+    // 和合本, built twice by `build-cuv.py` from the two open-bibles editions,
+    // proven parallel token-for-token by `check-cuv.py`). They are two rows
+    // because a row is "a catalogue plus a corpus" and both differ; they share
+    // `Script::Han` because a script is a font question and one face sets
+    // both. The codes are `zht`/`zhs` rather than BCP-47's `zh-Hant`/`zh-Hans`
+    // — `shipped()` strips region tags after the first `-`, and the manifest
+    // role grammar (`corpus:<code>`) takes two or three lowercase letters —
+    // and `shipped()` routes real-world browser tags (`zh-TW`, `zh-Hans-CN`,
+    // bare `zh`) onto the right row.
+    //
+    // The corpora tokenize PER CHARACTER — see `build-cuv.py`'s header for why
+    // that is a product decision (search's Han query splitter makes the phrase
+    // tier exact substring search; break opportunities become token
+    // boundaries, so kinsoku is carried by pre/post and `crates/layout` needs
+    // no intra-token breaking). The printed CUV's ranged-verse convention
+    // ships as-is: 71 addresses read 併於上節/并于上节 exactly as the printed
+    // page does, and the numbering table says what the page calls them.
+    LangSpec {
+        code: "zht",
+        endonym: "中文（繁體）",
+        exonym: "Chinese (Traditional)",
+        script: Script::Han,
+        catalog: include_str!("i18n/zht.json"),
+        corpus: Some(CorpusSpec { file: "cuv1919t.jsonl", tokenization: "cuv1919t-tok1", label: "和合本" }),
+        // No tagged corpus, so no dictionary and none invented — see Arabic.
+        lexicon: None,
+        modernization: None,
+        numbering: Some(NumberingSpec { table: include_str!("versification/cuv-numbering.tsv"), label: "和合本" }),
+    },
+    LangSpec {
+        code: "zhs",
+        endonym: "中文（简体）",
+        exonym: "Chinese (Simplified)",
+        script: Script::Han,
+        catalog: include_str!("i18n/zhs.json"),
+        corpus: Some(CorpusSpec { file: "cuv1919s.jsonl", tokenization: "cuv1919s-tok1", label: "和合本" }),
+        lexicon: None,
+        modernization: None,
+        // The same table as traditional — one tradition, one set of printed
+        // numbers, asserted identical across the editions by `check-cuv.py`.
+        numbering: Some(NumberingSpec { table: include_str!("versification/cuv-numbering.tsv"), label: "和合本" }),
+    },
 ];
 
 impl Lang {
-    pub const COUNT: usize = 6;
-    pub const ALL: [Lang; Lang::COUNT] = [Lang::En, Lang::De, Lang::Es, Lang::Ar, Lang::Pa, Lang::Hi];
+    pub const COUNT: usize = 9;
+    pub const ALL: [Lang; Lang::COUNT] =
+        [Lang::En, Lang::De, Lang::Es, Lang::Ar, Lang::Pa, Lang::Hi, Lang::Fr, Lang::Zht, Lang::Zhs];
 
     /// This language's row. The one accessor everything else is built on.
     pub fn spec(self) -> &'static LangSpec {
@@ -449,7 +527,25 @@ impl Lang {
     /// to tell "this reader asked for a language we do not have" apart from
     /// "this reader asked for English".
     pub fn shipped(code: &str) -> Option<Lang> {
-        let base = code.split(['-', '_']).next().unwrap_or("").to_ascii_lowercase();
+        let lower = code.to_ascii_lowercase();
+        let mut tags = lower.split(['-', '_']);
+        let base = tags.next().unwrap_or("");
+        // Chinese is the one language whose subtags choose BETWEEN shipped
+        // rows rather than narrowing one: a browser says `zh-TW` or
+        // `zh-Hans-CN`, never `zht`. Script tag first, else the traditional-
+        // script regions, else simplified — the mainland default is also what
+        // a bare `zh` overwhelmingly means.
+        if base == "zh" {
+            let rest: Vec<&str> = tags.collect();
+            let traditional = if rest.contains(&"hant") {
+                true
+            } else if rest.contains(&"hans") {
+                false
+            } else {
+                rest.iter().any(|t| matches!(*t, "tw" | "hk" | "mo"))
+            };
+            return Some(if traditional { Lang::Zht } else { Lang::Zhs });
+        }
         Lang::ALL.into_iter().find(|l| l.code() == base)
     }
 
@@ -796,9 +892,32 @@ mod tests {
         assert_eq!(Lang::En.code(), "en");
         assert_eq!(Lang::De.code(), "de");
         assert_eq!(Lang::Es.code(), "es");
+        assert_eq!(Lang::Fr.code(), "fr");
+        assert_eq!(Lang::Zht.code(), "zht");
+        assert_eq!(Lang::Zhs.code(), "zhs");
         assert_eq!(Lang::De.corpus().file, "luther1912.jsonl");
         assert_eq!(Lang::Es.corpus().file, "rv1909.jsonl");
+        assert_eq!(Lang::Fr.corpus().file, "ost1996.jsonl");
+        assert_eq!(Lang::Zht.corpus().file, "cuv1919t.jsonl");
+        assert_eq!(Lang::Zhs.corpus().file, "cuv1919s.jsonl");
         assert_eq!(Lang::ALL.len(), SPECS.len());
+    }
+
+    /// Chinese locale tags choose BETWEEN two shipped rows, so the routing is
+    /// pinned: script subtag first, then the traditional-script regions, then
+    /// the mainland default — and a bare `zh` is simplified.
+    #[test]
+    fn chinese_locales_land_on_the_right_row() {
+        for tag in ["zh-TW", "zh-HK", "zh-MO", "zh-Hant", "zh-Hant-TW", "zht"] {
+            assert_eq!(Lang::shipped(tag), Some(Lang::Zht), "{tag}");
+        }
+        for tag in ["zh", "zh-CN", "zh-SG", "zh-Hans", "zh-Hans-CN", "zhs"] {
+            assert_eq!(Lang::shipped(tag), Some(Lang::Zhs), "{tag}");
+        }
+        // The script subtag outranks a region that disagrees with it.
+        assert_eq!(Lang::shipped("zh-Hans-HK"), Some(Lang::Zhs));
+        // And the special case does not leak: French still resolves by base.
+        assert_eq!(Lang::shipped("fr-CA"), Some(Lang::Fr));
     }
 
     /// A half-filled row is the failure this registry exists to prevent: adding
@@ -873,8 +992,10 @@ mod tests {
         assert_eq!(Lang::parse("de_AT"), Lang::De);
         assert_eq!(Lang::parse("DE"), Lang::De);
         assert_eq!(Lang::parse("en-GB"), Lang::En);
+        assert_eq!(Lang::parse("fr-CA"), Lang::Fr);
         // An unsupported language is English, not an error and not empty.
-        assert_eq!(Lang::parse("fr"), Lang::En);
+        // (The example was "fr" until French shipped.)
+        assert_eq!(Lang::parse("it"), Lang::En);
         assert_eq!(Lang::parse(""), Lang::En);
         for lang in Lang::ALL {
             assert_eq!(Lang::parse(lang.code()), lang);
@@ -889,9 +1010,14 @@ mod tests {
         // A choice was made, and the hardware does not get to overrule it.
         assert_eq!(resolve("en", "de-DE"), Lang::En);
         assert_eq!(resolve("de", "en-US"), Lang::De);
-        // A language this build does not ship, in either slot, is not an error.
-        assert_eq!(resolve("fr", "de-DE"), Lang::De);
-        assert_eq!(resolve("", "fr-FR"), Lang::En);
+        // A French or Chinese phone opens in its own language now.
+        assert_eq!(resolve("", "fr-FR"), Lang::Fr);
+        assert_eq!(resolve("", "zh-TW"), Lang::Zht);
+        assert_eq!(resolve("", "zh-CN"), Lang::Zhs);
+        // A language this build does not ship, in either slot, is not an
+        // error. (The example was "fr" until French shipped.)
+        assert_eq!(resolve("it", "de-DE"), Lang::De);
+        assert_eq!(resolve("", "it-IT"), Lang::En);
         assert_eq!(resolve("", ""), Lang::En);
     }
 

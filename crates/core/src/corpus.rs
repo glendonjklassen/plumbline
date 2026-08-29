@@ -96,9 +96,35 @@ impl Verse {
 }
 
 /// Render a run of tokens space-separated (each token keeps its own
-/// punctuation). Ported from `renderTokens`.
+/// punctuation). Ported from `renderTokens` — with one script-driven
+/// exception: no space is inserted where BOTH boundary characters are CJK,
+/// because Chinese is written unspaced and the Han corpora tokenize one
+/// character per token. Decided from the characters rather than from a
+/// language handle, so `body()`, copy, share and TTS need no plumbing — and
+/// it is a byte-for-byte no-op on every corpus without a CJK character.
 pub fn render_tokens<'a, I: IntoIterator<Item = &'a Token>>(tokens: I) -> String {
-    tokens.into_iter().map(Token::render).collect::<Vec<_>>().join(" ")
+    let mut out = String::new();
+    let mut first = true;
+    for t in tokens {
+        let piece = t.render();
+        if !first {
+            let snug = out.chars().last().is_some_and(is_cjk_snug) && piece.chars().next().is_some_and(is_cjk_snug);
+            if !snug {
+                out.push(' ');
+            }
+        }
+        out.push_str(&piece);
+        first = false;
+    }
+    out
+}
+
+/// A character that sets snug against a CJK neighbour: a Han ideograph or a
+/// CJK punctuation mark (the 、。「」 block and the full-width forms). The
+/// ellipsis counts because the CUV writes it — and it can only suppress a
+/// space when the OTHER side is CJK too, so French "…" keeps its spacing.
+fn is_cjk_snug(c: char) -> bool {
+    crate::search::is_han(c) || matches!(c as u32, 0x3000..=0x303F | 0xFF00..=0xFFEF) || c == '\u{2026}'
 }
 
 /// One chapter's storage: its position in canonical verse order, and either

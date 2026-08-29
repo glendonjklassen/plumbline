@@ -18,7 +18,8 @@ export const FONT_FILES: Readonly<Record<string, FontFiles>> = {
   "atkinson-hyperlegible": { normal: "fonts/AtkinsonHyperlegible-Regular-4327a45b.woff2", italic: "fonts/AtkinsonHyperlegible-Italic-e0777042.woff2" },
   "amiri": { normal: "fonts/Amiri-Regular-cf168c16.woff2" },
   "noto-serif-gurmukhi": { normal: "fonts/NotoSerifGurmukhi-7331db85.woff2" },
-  "noto-serif-devanagari": { normal: "fonts/NotoSerifDevanagari-0579b021.woff2" },
+  "noto-serif-devanagari": { normal: "fonts/NotoSerifDevanagari-27c0afd2.woff2" },
+  "noto-serif-tc": { normal: "fonts/NotoSerifTC-e9e0c620.woff2" },
 };
 
 /** Token → the family name the @font-face rules declare (what a `ctx.font`
@@ -32,6 +33,7 @@ export const FONT_CSS_FAMILY: Readonly<Record<string, string>> = {
   "amiri": "Amiri",
   "noto-serif-gurmukhi": "Noto Serif Gurmukhi",
   "noto-serif-devanagari": "Noto Serif Devanagari",
+  "noto-serif-tc": "Noto Serif TC",
 };
 
 /** The face every axis falls back to — the shipped default, and the answer for
@@ -42,21 +44,22 @@ export const DEFAULT_FONT = "eb-garamond";
  *  family lacks. A sans must not fall back to a serif: the substitution shows
  *  for one swap, and on a glyph the face is missing it is permanent.
  *
- *  Every Latin stack opens with "Amiri", "Noto Serif Gurmukhi", "Noto Serif Devanagari" — not a choice, and not
+ *  Every Latin stack opens with "Amiri", "Noto Serif Gurmukhi", "Noto Serif Devanagari", "Noto Serif TC" — not a choice, and not
  *  in the picker: no selectable Latin face has a single Arabic, Gurmukhi or
  *  Devanagari glyph, and per-glyph fallback is what lets one stack serve Latin
  *  in the reader's chosen voice and each other script in a face that can
  *  actually shape it. They sit FIRST among the fallbacks and after the chosen
  *  family, so they only ever answer for codepoints the chosen family lacks. */
 export const FONT_FALLBACK: Readonly<Record<string, string>> = {
-  "eb-garamond": "\"Amiri\", \"Noto Serif Gurmukhi\", \"Noto Serif Devanagari\", Georgia, serif",
-  "literata": "\"Amiri\", \"Noto Serif Gurmukhi\", \"Noto Serif Devanagari\", Georgia, serif",
-  "inter": "\"Amiri\", \"Noto Serif Gurmukhi\", \"Noto Serif Devanagari\", system-ui, sans-serif",
-  "fira-code": "\"Amiri\", \"Noto Serif Gurmukhi\", \"Noto Serif Devanagari\", ui-monospace, monospace",
-  "atkinson-hyperlegible": "\"Amiri\", \"Noto Serif Gurmukhi\", \"Noto Serif Devanagari\", system-ui, sans-serif",
+  "eb-garamond": "\"Amiri\", \"Noto Serif Gurmukhi\", \"Noto Serif Devanagari\", \"Noto Serif TC\", Georgia, serif",
+  "literata": "\"Amiri\", \"Noto Serif Gurmukhi\", \"Noto Serif Devanagari\", \"Noto Serif TC\", Georgia, serif",
+  "inter": "\"Amiri\", \"Noto Serif Gurmukhi\", \"Noto Serif Devanagari\", \"Noto Serif TC\", system-ui, sans-serif",
+  "fira-code": "\"Amiri\", \"Noto Serif Gurmukhi\", \"Noto Serif Devanagari\", \"Noto Serif TC\", ui-monospace, monospace",
+  "atkinson-hyperlegible": "\"Amiri\", \"Noto Serif Gurmukhi\", \"Noto Serif Devanagari\", \"Noto Serif TC\", system-ui, sans-serif",
   "amiri": "serif",
   "noto-serif-gurmukhi": "serif",
   "noto-serif-devanagari": "serif",
+  "noto-serif-tc": "serif",
 };
 
 /** Token → the script that face can set, mirroring `core::font::Font::script`.
@@ -71,6 +74,7 @@ export const FONT_SCRIPT: Readonly<Record<string, string>> = {
   "amiri": "arabic",
   "noto-serif-gurmukhi": "gurmukhi",
   "noto-serif-devanagari": "devanagari",
+  "noto-serif-tc": "han",
 };
 
 /** Script → the one face that sets it.
@@ -84,6 +88,7 @@ export const SCRIPT_FACE: Readonly<Record<string, string>> = {
   "arabic": "amiri",
   "gurmukhi": "noto-serif-gurmukhi",
   "devanagari": "noto-serif-devanagari",
+  "han": "noto-serif-tc",
 };
 
 /** The script-fallback face, loaded by the engine worker ALONGSIDE whichever
@@ -93,14 +98,15 @@ export const SCRIPT_FACE: Readonly<Record<string, string>> = {
  *  needs them, but then the worker's font set would depend on which Bible is
  *  open, and the window where the two contexts disagree is exactly the window
  *  where a reader switches language. The same faces, always present in both. */
-export const SCRIPT_FALLBACK_FILES: readonly string[] = ["fonts/Amiri-Regular-cf168c16.woff2","fonts/NotoSerifGurmukhi-7331db85.woff2","fonts/NotoSerifDevanagari-0579b021.woff2"];
+export const SCRIPT_FALLBACK_FILES: readonly string[] = ["fonts/Amiri-Regular-cf168c16.woff2","fonts/NotoSerifGurmukhi-7331db85.woff2","fonts/NotoSerifDevanagari-27c0afd2.woff2","fonts/NotoSerifTC-e9e0c620.woff2"];
 
 /** The same files, keyed by the token whose FontFace they build — the worker
  *  needs the family name to construct each one, and there is more than one now. */
 export const SCRIPT_FALLBACK_BY_TOKEN: Readonly<Record<string, readonly string[]>> = {
   "amiri": ["fonts/Amiri-Regular-cf168c16.woff2"],
   "noto-serif-gurmukhi": ["fonts/NotoSerifGurmukhi-7331db85.woff2"],
-  "noto-serif-devanagari": ["fonts/NotoSerifDevanagari-0579b021.woff2"],
+  "noto-serif-devanagari": ["fonts/NotoSerifDevanagari-27c0afd2.woff2"],
+  "noto-serif-tc": ["fonts/NotoSerifTC-e9e0c620.woff2"],
 };
 
 /** Token → the face's optical size multiplier, mirroring
@@ -117,6 +123,7 @@ export const FONT_SCALE: Readonly<Record<string, number>> = {
   "amiri": 1.06,
   "noto-serif-gurmukhi": 0.82,
   "noto-serif-devanagari": 0.82,
+  "noto-serif-tc": 0.95,
 };
 
 /** EVERY built font file — FONT_FILES plus the chrome-only static bolds that
@@ -138,5 +145,6 @@ export const FONT_ALL_FILES: readonly string[] = [
   "fonts/AtkinsonHyperlegible-BoldItalic-26c11fe2.woff2",
   "fonts/Amiri-Regular-cf168c16.woff2",
   "fonts/NotoSerifGurmukhi-7331db85.woff2",
-  "fonts/NotoSerifDevanagari-0579b021.woff2",
+  "fonts/NotoSerifDevanagari-27c0afd2.woff2",
+  "fonts/NotoSerifTC-e9e0c620.woff2",
 ];

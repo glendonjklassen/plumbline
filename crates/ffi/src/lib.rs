@@ -1580,8 +1580,18 @@ pub unsafe extern "C" fn plumbline_engine_layout_chapter(
         // and a word is the same width whichever way the line runs. The mirror
         // happens after every measurement is in.
         let mut layout = LayoutConfig::from(cfg);
-        layout.rtl = plumbline_core::i18n::Lang::for_tokenization(engine.corpus.tokenization_version())
-            .is_some_and(|l| l.is_rtl());
+        let text_lang = plumbline_core::i18n::Lang::for_tokenization(engine.corpus.tokenization_version());
+        layout.rtl = text_lang.is_some_and(|l| l.is_rtl());
+        // AND SO IS THE INTER-TOKEN GAP, for the same reason and by the same
+        // route. The shell measures a space in the reader's font and passes
+        // its width, which is right for every spaced script — but Chinese is
+        // written unspaced and its corpora tokenize one character per token
+        // (`build-cuv.py`), so the space the shell measured must not be laid
+        // between them. Zeroed here rather than shipped as an ABI field: the
+        // corpus knows its script, the shell doesn't need to.
+        if text_lang.is_some_and(|l| l.script() == plumbline_core::i18n::Script::Han) {
+            layout.space_width = 0.0;
+        }
         let dl = layout_chapter(verses, &m, &layout);
         Box::into_raw(Box::new(PlumblineDisplayList { inner: dl }))
     })

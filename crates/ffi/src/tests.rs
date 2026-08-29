@@ -2677,7 +2677,18 @@ fn the_catalogue_crosses_the_abi_whole_and_falls_back_to_english() {
 
         // A region tag is still that language; anything unknown is English
         // rather than an error, so an unsupported locale gets a working app.
-        for (asked, want) in [("de-CH", "de"), ("de_AT", "de"), ("en-GB", "en"), ("fr", "en"), ("", "en")] {
+        // ("it" was "fr" until French shipped; the zh tags pin the routing
+        // between the two Chinese rows across the ABI.)
+        for (asked, want) in [
+            ("de-CH", "de"),
+            ("de_AT", "de"),
+            ("en-GB", "en"),
+            ("fr-CA", "fr"),
+            ("zh-TW", "zht"),
+            ("zh-CN", "zhs"),
+            ("it", "en"),
+            ("", "en"),
+        ] {
             let cs = CString::new(asked).unwrap();
             let got: Value =
                 serde_json::from_str(&take(plumbline_i18n_catalog_json(cs.as_ptr(), ptr::null())).unwrap()).unwrap();
