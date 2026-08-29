@@ -284,6 +284,64 @@ python3 data-prep/svd/build-svd.py arb-vd_usfm.zip
 python3 data-prep/svd/check-svd.py arb-vd_usfm.zip
 ```
 
+## The Punjabi and Hindi Bibles (`data/pan-fbi.jsonl`, `data/hin-fbi.jsonl`)
+
+`data-prep/indic/build-indic.py` turns Free Bibles India's USFM editions into
+`data/pan-fbi.jsonl` and `data/hin-fbi.jsonl`, stamped `pan-fbi-tok1` and
+`hin-fbi-tok1`. **One script for two languages** — unlike the three corpora
+above, which each have their own — because these are the same publisher's export
+in the same conventions, down to the markers used and the two verse splits. Two
+files here would be one file and a copy of it, and the copy is where they drift.
+
+Both are the traditional Protestant Bible of their language, ਪਵਿੱਤਰ ਬਾਈਬਲ and
+पवित्र बाइबल, with modernised spelling and an editorial apparatus the build
+discards. Both sit at KJV addresses: 66 books, 1,189 chapters, and 31,102 of
+their 31,104 verses at the same address as `data/kjv.jsonl`. Both are Textus
+Receptus — `check-indic.py` proves twenty readings a critical text omits or
+brackets, Acts 8:37 among them. Neither carries Strong's tags, so both registry
+rows are `lexicon: None`, as Arabic's is.
+
+**The Punjabi text is not the obvious one, and that is the interesting part.**
+The obvious candidate was `tfbf/Bible-Punjabi-Pavitr-Bible-1945`, a volunteer
+digitisation of a 1945 print that is public domain outright. It was rejected on
+the evidence: eight whole books of it — Titus, John, James, 1 Peter, 1–2
+Thessalonians, 2 Peter, 1 Corinthians, 1,772 verses — are a different modern
+translation spliced in, plus ~217 scattered verses elsewhere. **Acts 8:37 is one
+of the splices.** The tell is punctuation: the 1945 keyboarding types the danda
+as an ASCII `|` in 19,306 verses, the spliced material uses a real `।` U+0964,
+and no book uses both. Its own `STATUS.md` says the files "are not ready to be
+used in a real project".
+
+Every other check passes on that file — 66 books, KJV addresses, all twenty TR
+readings present, tokens that reassemble — so `check-indic.py` carries the test
+that caught it as a standing claim: **a sentence terminator accounting for more
+than 1% of the corpus's terminators must be used by at least 90% of its books.**
+On the 1945 file `।` is 11.9% of the terminators and appears in 18 of 66 books.
+The next Indian-language corpus offered to this app is likely to have been
+assembled the same way.
+
+Two more things worth writing down:
+
+- **The text is never normalised.** The Punjabi source repo warns in capitals
+  that Unicode normalisation must not be applied to Gurmukhi: the precomposed
+  nukta letters are on Unicode's composition exclusion list, so NFC *decomposes*
+  them and "normalising" silently rewrites letters. Devanagari is on the same
+  list. Both files are already stable under NFC and NFD — measured, not assumed
+  — so passing them through unchanged costs nothing, and the check asserts it so
+  the one line a later maintainer might add by habit fails the build.
+- **The two splits merge in opposite directions.** 3 John 15 is the tail of the
+  KJV's v14 and is appended; Rev 12:18 is the *head* of the KJV's 13:1 and is
+  prepended. `build-svd.py` never had to say this because both of its merges ran
+  the same way. A build that appended both keeps every word, passes the letter
+  comparison, and prints Revelation 13:1 with its first clause last.
+
+```sh
+curl -sLo pa.zip https://github.com/FreeBiblesIndia/Punjabi_Bible/archive/refs/heads/master.zip
+curl -sLo hi.zip https://github.com/FreeBiblesIndia/Hindi_Bible/archive/refs/heads/master.zip
+python3 data-prep/indic/build-indic.py pa pa.zip && python3 data-prep/indic/check-indic.py pa pa.zip
+python3 data-prep/indic/build-indic.py hi hi.zip && python3 data-prep/indic/check-indic.py hi hi.zip
+```
+
 ## Localized Strong's dictionaries (`data/strongs-<code>.json`)
 
 Two scripts in `data-prep/strongs-lang/`, both taking a language code and reading
