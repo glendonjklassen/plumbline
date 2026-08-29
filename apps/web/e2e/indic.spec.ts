@@ -140,59 +140,55 @@ for (const lang of [
   });
 }
 
-test("the English picker names every language twice, so it can be handed over", async ({ page }) => {
+test("every picker names each language twice, in the reader's own words", async ({ page }) => {
   // THE APP IS BUILT TO BE HANDED OVER, and the endonym alone only serves the
-  // person who already reads it. Someone offering their phone to a Hindi
+  // person who already reads it: someone offering their phone to a Hindi
   // speaker was looking at six scripts they cannot read with no way to tell
-  // which row was the one.
+  // which row was the one. So the endonym leads — the row belongs to the person
+  // being offered it — and the reader's own name for the language follows in
+  // brackets.
   //
-  // The rows ARE SPELLED OUT here, which is the one place in this file where
-  // repeating the registry is the point — `each_variant_reaches_its_own_row` in
-  // core::i18n makes the same trade. A test that rebuilt the label from the
-  // same two fields the code reads would pass on any format, including the
-  // endonym alone.
+  // THE ROWS ARE SPELLED OUT, which is the one place in this file where
+  // repeating the catalogue is the point — `each_variant_reaches_its_own_row`
+  // in core::i18n makes the same trade. A test that rebuilt the label from the
+  // same two lookups the code makes would pass on any format, including the
+  // endonym alone, which is the state this replaced.
   await reader(page, EN);
-  const dialog = await settings(page, EN);
-  const options = await dialog
-    .getByLabel(EN["settings.language"], { exact: true })
-    .locator("option")
-    .allTextContents();
+  const options = async (lang: Record<string, string>) =>
+    (await settings(page, lang))
+      .getByLabel(lang["settings.language"], { exact: true })
+      .locator("option")
+      .allTextContents();
 
+  const en = await options(EN);
   for (const want of [
-    "German (Deutsch)",
-    "Spanish (Español)",
-    "Arabic (العربية)",
-    "Punjabi (ਪੰਜਾਬੀ)",
-    "Hindi (हिन्दी)",
+    "Deutsch (German)",
+    "Español (Spanish)",
+    "العربية (Arabic)",
+    "ਪੰਜਾਬੀ (Punjabi)",
+    "हिन्दी (Hindi)",
   ]) {
-    expect(options, `the picker does not offer "${want}"`).toContain(want);
+    expect(en, `the English picker does not offer "${want}"`).toContain(want);
   }
-  // English is one word in both columns and gets no bracket: "English
-  // (English)" is noise, and the dedupe is the only reason this is not a
-  // straight template.
-  expect(options).toContain("English");
-  expect(options.join(" ")).not.toContain("English (English)");
-});
+  // The reader's OWN language takes no bracket — "English (English)" is noise.
+  // Not a special case for English: it is the same comparison that silences
+  // "Deutsch (Deutsch)" in German and "हिन्दी (हिन्दी)" in Hindi below.
+  expect(en).toContain("English");
+  expect(en.join(" ")).not.toContain("English (English)");
+  await page.keyboard.press("Escape");
 
-test("a non-English picker has no English in it", async ({ page }) => {
-  // The bracket is English-only, and that is a fact about the DATA rather than
-  // a choice: `exonym` on the registry row is the language's English name, so
-  // there is nothing to put in front of the bracket for a Hindi reader. They
-  // get the endonyms alone, which is what every reader got before.
-  //
-  // This is the assertion that keeps the rule from being written as "always
-  // bracket", which would put "Punjabi" in Latin script in front of a reader
-  // who does not read it.
-  await reader(page, EN);
+  // AND IT IS NOT AN ENGLISH FEATURE. The bracket is a catalogue lookup
+  // (`lang.<code>`), not the registry's `exonym` — that column is the English
+  // name and could only ever have served an English reader.
   await pick(page, EN, "hi");
-  const dialog = await settings(page, HI);
-  const options = await dialog
-    .getByLabel(HI["settings.language"], { exact: true })
-    .locator("option")
-    .allTextContents();
-  expect(options).toContain("हिन्दी");
-  expect(options).toContain("ਪੰਜਾਬੀ");
-  expect(options.join(" "), "an English name leaked into a Hindi picker").not.toContain("Punjabi");
+  const hi = await options(HI);
+  for (const want of ["English (अंग्रेज़ी)", "Deutsch (जर्मन)", "ਪੰਜਾਬੀ (पंजाबी)", "العربية (अरबी)"]) {
+    expect(hi, `the Hindi picker does not offer "${want}"`).toContain(want);
+  }
+  expect(hi).toContain("हिन्दी");
+  expect(hi.join(" "), "the Hindi reader's own row is bracketed").not.toContain("हिन्दी (हिन्दी)");
+  // The English NAME must not leak into a picker whose reader does not read it.
+  expect(hi.join(" "), "an English name leaked into a Hindi picker").not.toContain("Punjabi");
 });
 
 test("no painted word begins inside a grapheme cluster", async ({ page }) => {

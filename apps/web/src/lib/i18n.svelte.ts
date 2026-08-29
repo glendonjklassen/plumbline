@@ -170,28 +170,35 @@ export function languages(): LanguageChoice[] {
   return choices;
 }
 
-/** How a language is named in a picker: its English name, with its own name
- *  after it — "Punjabi (ਪੰਜਾਬੀ)".
+/** How a language is named in a picker: its own name, then the reader's name
+ *  for it — "ਪੰਜਾਬੀ (Punjabi)" to an English reader, "English (Englisch)" to a
+ *  German one.
  *
- *  EITHER ALONE SERVES ONE PERSON AND FAILS THE OTHER. The endonym alone is
- *  right for a reader looking for their own language and useless to someone
- *  handing their phone to a Hindi speaker — six scripts they cannot read and no
- *  way to tell which row is the one. The English name alone is the reverse. The
- *  app is built to be handed over, so it shows both, and the bracket is the
- *  endonym because it is the half that confirms rather than the half that is
- *  scanned.
+ *  EITHER HALF ALONE SERVES ONE PERSON AND FAILS THE OTHER. The endonym alone
+ *  is right for someone looking for their own language and useless to someone
+ *  handing their phone to a Hindi speaker — six scripts they cannot read, and
+ *  no way to tell which row is the one. The reader's own name alone is the
+ *  reverse: it puts "Punjabi" in Latin letters in front of the person who is
+ *  being handed the phone. This app is built to be handed over, so it shows
+ *  both, and the ENDONYM LEADS because the row belongs to the person being
+ *  offered it; the bracket is the reader's note to themselves.
  *
- *  ENGLISH ONLY, and that is a fact about the data rather than a choice:
- *  `exonym` on the registry row is the language's ENGLISH name, so there is
- *  nothing to put in front of the bracket for a German reader with the same
- *  problem — they get the endonym alone, which is what every reader got before.
- *  A `LangSpec` carrying names per language would serve them too.
+ *  IN EVERY LANGUAGE, which is what makes the bracket a catalogue lookup rather
+ *  than the registry's `exonym`. That column is the language's ENGLISH name —
+ *  it is what the hymnal finder matches on — so it can only ever have served an
+ *  English reader. `lang.<code>` is in all six catalogues, so a German reader
+ *  gets "Englisch" where an Arabic one gets "الإنجليزية".
  *
- *  No bracket when the two are the same word: "English (English)" is noise.
+ *  No bracket when the two are the same word. That is not a special case for
+ *  English: it is what silences the reader's OWN language in every catalogue —
+ *  "Deutsch (Deutsch)" in German, "हिन्दी (हिन्दी)" in Hindi. It also covers a
+ *  name a language happens to share with its endonym, which is why it compares
+ *  the strings rather than the codes.
  */
 export function languageLabel(l: LanguageChoice): string {
-  if (code !== "en" || !l.name || l.name === l.endonym) return l.endonym;
-  return `${l.name} (${l.endonym})`;
+  const mine = t(`lang.${l.code}`);
+  if (!mine || mine === `lang.${l.code}` || mine === l.endonym) return l.endonym;
+  return `${l.endonym} (${mine})`;
 }
 
 /** Whether the language currently being painted reads right to left. */
