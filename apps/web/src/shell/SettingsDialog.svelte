@@ -11,7 +11,7 @@
   import { zipRead, zipWrite } from "../engine/zip";
   import { idbApply } from "../engine/idb";
   import { nowStamp } from "../engine/StudyEngine";
-  import { deviceLocale, fill, hasOwnLexicon, isRtl, languages, needsPack, plural, t } from "../lib/i18n.svelte";
+  import { deviceLocale, fill, hasOwnBible, hasOwnLexicon, isRtl, languages, plural, readerFace, t } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -250,10 +250,23 @@
     // beyond the bar, because the alternative is an error about a download they
     // did not explicitly start.
     //
-    // WHICH LANGUAGES NEED ONE is the engine's answer, not this file's: the
-    // catalogue's language list carries `packFiles`, empty for a language whose
-    // text is already in the base pack. This was `if (code === "de")`.
-    if (needsPack(code)) {
+    // WHICH LANGUAGES HAVE ONE is the engine's answer, not this file's: the
+    // catalogue's language list carries the corpus role. This was
+    // `if (code === "de")` once, and then — worse — `if (needsPack(code))`,
+    // which read the DOWNLOAD list: when the Bibles started shipping with the
+    // app, that list emptied for a language with no dictionary, Arabic skipped
+    // this block entirely, and the reload below raced the background download
+    // of the very text being switched to. A phone that lost the race booted
+    // from a pin that had never heard of the Van Dyck and opened the Arabic
+    // interface over the English KJV (maintainer's own, v0.63.0 launch day).
+    //
+    // So the question here is not "is there something to download" — usually
+    // there is not, the background pass has long finished — it is "is that
+    // Bible REALLY on this device, right now, before I reload into it". The
+    // state call answers from the depot; the install is a no-op wait when the
+    // bytes already landed, a short download when they are mid-flight, and the
+    // full fetch on the upgrade path where the old pin hides the language.
+    if (hasOwnBible(code)) {
       const state = await s.rpc.langPackState(code).catch(() => null);
       if (state?.available && !state.installed) {
         switching = { ...switching!, fraction: 0 };
@@ -607,6 +620,12 @@
   // to Inter's x-height and meaningless for naskh. The picker would be a
   // mislabelled size slider. `core::font::Font::offered_for` is the same rule in
   // Rust and the reason this one is safe to state here.
+  // The faces this LANGUAGE can be read in. When that is exactly one, the two
+  // pickers below are not rendered at all — a dropdown holding a single row is
+  // a control that cannot do anything, and offering it reads as broken rather
+  // than restrained (maintainer, 2026-08-28). The app adopts the lone face
+  // itself: `readerFace` in lib/i18n.svelte.ts resolves every applied token to
+  // the script face under an RTL language, so nothing here needs choosing.
   const fonts = $derived(
     Object.keys(FONT_CSS_FAMILY).filter((tok) => (tok === SCRIPT_FALLBACK_TOKEN) === isRtl()),
   );
@@ -729,30 +748,32 @@
           <option value={token}>{t(`settings.${themeLabel[token]}`)}</option>
         {/each}
       </select>
-      <hr />
-      <p class="label">{t("settings.textFont")}</p>
-      <select
-        class="dropdown"
-        aria-label={t("settings.textFont")}
-        disabled={fontBusy}
-        value={s.config.textFont ?? DEFAULT_FONT}
-        onchange={(e) => setTextFont((e.currentTarget as HTMLSelectElement).value)}
-      >
-        {#each fonts as token (token)}
-          <option value={token} style:font-family={fontStackFor(token)}>{fontName(token)}</option>
-        {/each}
-      </select>
-      <p class="label">{t("settings.chromeFont")}</p>
-      <select
-        class="dropdown"
-        aria-label={t("settings.chromeFont")}
-        value={s.config.chromeFont ?? DEFAULT_FONT}
-        onchange={(e) => s.setChromeFont((e.currentTarget as HTMLSelectElement).value)}
-      >
-        {#each fonts as token (token)}
-          <option value={token} style:font-family={fontStackFor(token)}>{fontName(token)}</option>
-        {/each}
-      </select>
+      {#if fonts.length > 1}
+        <hr />
+        <p class="label">{t("settings.textFont")}</p>
+        <select
+          class="dropdown"
+          aria-label={t("settings.textFont")}
+          disabled={fontBusy}
+          value={readerFace(s.config.textFont ?? DEFAULT_FONT)}
+          onchange={(e) => setTextFont((e.currentTarget as HTMLSelectElement).value)}
+        >
+          {#each fonts as token (token)}
+            <option value={token} style:font-family={fontStackFor(token)}>{fontName(token)}</option>
+          {/each}
+        </select>
+        <p class="label">{t("settings.chromeFont")}</p>
+        <select
+          class="dropdown"
+          aria-label={t("settings.chromeFont")}
+          value={readerFace(s.config.chromeFont ?? DEFAULT_FONT)}
+          onchange={(e) => s.setChromeFont((e.currentTarget as HTMLSelectElement).value)}
+        >
+          {#each fonts as token (token)}
+            <option value={token} style:font-family={fontStackFor(token)}>{fontName(token)}</option>
+          {/each}
+        </select>
+      {/if}
       <hr />
       <p class="label">{t("settings.textSize")}</p>
       <p class="aa" style:font-size="{Number(s.config.bodySize ?? 20)}px">Aa</p>

@@ -17,6 +17,7 @@
 // copy while the braces name the argument that went missing.
 
 import { BOOT_STRINGS } from "./i18n.generated";
+import { DEFAULT_FONT, SCRIPT_FALLBACK_TOKEN } from "../engine/fonts.generated";
 
 /** Where the resolved code is remembered between visits — see `seed()`. */
 const LAST_LANG = "plumbline.lang";
@@ -89,6 +90,11 @@ export interface LanguageChoice {
   /** Whether it has a Strong's dictionary of its own (machine-translated), and
    *  therefore whether the "English definitions instead" escape hatch applies. */
   hasLexicon: boolean;
+  /** The manifest role its scripture is filed under — `corpusCache` for the
+   *  base pack's own text, `corpus:<code>` for a Bible of its own. Settings
+   *  reads it to know whether picking this language must first make sure that
+   *  Bible is really on the device (see `hasOwnBible`). */
+  corpusRole: string;
   /** Whether this language is written right to left. Straight off the registry
    *  row (`core::i18n::LangSpec::rtl`) — the chrome's business only. Direction
    *  INSIDE the text is settled in the engine, which mirrors the display list
@@ -115,6 +121,7 @@ export function setCatalog(
     bible: String(l.bible ?? ""),
     packFiles: Array.isArray(l.packFiles) ? l.packFiles.map(String) : [],
     hasLexicon: typeof l.lexiconRole === "string",
+    corpusRole: String(l.corpusRole ?? "corpusCache"),
     rtl: l.rtl === true,
   }));
   // THE DOCUMENT'S OWN DIRECTION, set here because this is the one place the
@@ -161,10 +168,40 @@ export function isRtl(): boolean {
   return choices.find((l) => l.code === code)?.rtl === true;
 }
 
-/** Whether picking this language means fetching its scripture first. Asked of
- *  the engine's own registry rather than decided here — see `LanguageChoice`. */
-export function needsPack(code: string): boolean {
-  return (choices.find((l) => l.code === code)?.packFiles.length ?? 0) > 0;
+/** The face a token RESOLVES TO under the current language.
+ *
+ *  An RTL reader gets the script face whatever the config says, and this is the
+ *  one rule that says so. The config keeps the reader's own (Latin) choice
+ *  untouched — switching back restores it — but every APPLICATION of a token
+ *  goes through here, because the alternative was measured and shipped briefly:
+ *  scripture painted in Amiri through the fallback stack at a Latin face's
+ *  optical scale, smaller than every other face renders, with the picker hidden
+ *  and therefore no way for the reader to correct it. Settings hides the font
+ *  choice when only one face can render the language (there is nothing to
+ *  choose), and hiding the choice is only honest if the app makes it. */
+export function readerFace(token: string): string {
+  // Symmetric on purpose. The RTL half is the headline; the LTR half is the
+  // cleanup after it: a config can legitimately HOLD the script token (an
+  // earlier build's one-entry picker let a reader select it), and applied
+  // face-value in English that renders the KJV in naskh Latin while the picker
+  // — whose list has no such row — shows a BLANK selection (maintainer's
+  // phone, 2026-08-28). An off-list token resolves to the language's default;
+  // the config itself is never rewritten.
+  if (isRtl()) return SCRIPT_FALLBACK_TOKEN;
+  return token === SCRIPT_FALLBACK_TOKEN ? DEFAULT_FONT : token;
+}
+
+/** Whether this language reads a Bible of its own rather than the base pack's.
+ *
+ *  This — not `packFiles` — is what gates the ensure-before-reload in Settings.
+ *  The two parted ways when the Bibles started shipping with the app:
+ *  `packFiles` now lists only the opt-in dictionary, so Arabic (which has none)
+ *  came back empty, the switch skipped the ensure, and the reload raced the
+ *  background download of the very text it was switching to. Asked of the
+ *  engine's registry rather than decided here, for `LanguageChoice`'s reason. */
+export function hasOwnBible(code: string): boolean {
+  const role = choices.find((l) => l.code === code)?.corpusRole;
+  return role !== undefined && role !== "corpusCache";
 }
 
 /** Whether the first-run welcome and the curious path may be OFFERED in the

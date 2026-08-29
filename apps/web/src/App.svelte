@@ -8,7 +8,7 @@
   // fast — honest progress beats a decoy, so the work goes into making the wait
   // short rather than disguising it.
   import { bootErrorCopy } from "./engine/bootError";
-  import { deviceLocale, lastLang, setCatalog, t } from "./lib/i18n.svelte";
+  import { deviceLocale, lastLang, setCatalog, t, readerFace } from "./lib/i18n.svelte";
   import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_FILES } from "./engine/fonts.generated";
   import { EngineRpc, type WorkerProgress } from "./engine/worker-client";
   import { churchFromQuery, hasChurch, launchDestination, sharedAtRef, startsAsNewBeliever } from "./shell/church";
@@ -190,7 +190,14 @@
       // HERE — before the shell mounts, so nothing has been painted in the
       // wrong one.
       s.applyFonts();
-      if ((s.config.textFont ?? DEFAULT_FONT) !== hinted) {
+      // Compared through `readerFace`: the catalogue has arrived by here, so an
+      // Arabic session knows its face is the script one regardless of the
+      // config — and a boot hinted with last ENGLISH session's Latin face (the
+      // reload that follows a language switch) is exactly the wrong guess this
+      // correction exists for. Without the resolve on this side, config ===
+      // hint and the mismatch is invisible: the engine measures Arabic at a
+      // Latin face's optical scale for the whole session.
+      if (readerFace(s.config.textFont ?? DEFAULT_FONT) !== hinted) {
         await s.setTextFont(s.config.textFont ?? DEFAULT_FONT);
       }
       // A shared link can carry the sender's church. Save it as this reader's
