@@ -3761,7 +3761,7 @@ pub unsafe extern "C" fn plumbline_engine_copy_text(
         let (Some(vref), Some(kind)) = (VRef::parse_ref_key(rk), export::parse_kind(kind)) else {
             return ptr::null_mut();
         };
-        match export::copy_text(&e.corpus, &vref, kind) {
+        match export::copy_text(&e.corpus, &vref, kind, i18n::active()) {
             Some(s) => out_string(s),
             None => ptr::null_mut(),
         }

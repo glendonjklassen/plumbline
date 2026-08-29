@@ -66,8 +66,7 @@ import {
   DEFAULT_FONT,
   FONT_CSS_FAMILY,
   FONT_FILES,
-  SCRIPT_FALLBACK_FILES,
-  SCRIPT_FALLBACK_TOKEN,
+  SCRIPT_FALLBACK_BY_TOKEN,
 } from "./fonts.generated";
 import {
   aboutBlocks,
@@ -849,32 +848,53 @@ async function loadFonts(base: string, token: string): Promise<number> {
   const files = FONT_FILES[resolved];
   const want = files.italic ? 2 : 1;
   const scope = self as unknown as { fonts?: FontFaceSet };
-  if (!scope.fonts) return 0; // very old engines: fall back to platform metrics
-  // THE SCRIPT FALLBACK, always, whichever family was asked for.
+  const fonts = scope.fonts;
+  if (!fonts) return 0; // very old engines: fall back to platform metrics
+  // THE SCRIPT FALLBACKS, always, whichever family was asked for.
   //
-  // It is in every family's CSS stack (fonts.generated), so the document will
-  // paint Arabic in it. If this worker did not also have it, the worker would
-  // measure Arabic in whatever system font its OffscreenCanvas found and the
-  // page would paint it in Amiri — and the two are not obliged to agree, which
-  // is the measured-here-painted-there split that wraps lines where they are not
-  // drawn. Loaded before the family so it is present for the first layout, and
-  // outside the `fontsLoaded` short-circuit below, which is keyed per family.
-  for (const path of SCRIPT_FALLBACK_FILES) {
-    if (fontsLoaded.has(SCRIPT_FALLBACK_TOKEN)) break;
-    try {
-      const face = new FontFace(FONT_CSS_FAMILY[SCRIPT_FALLBACK_TOKEN], `url(${new URL(path, base).href})`, {
-        style: "normal",
-        // 400 alone: it is a static regular, and claiming 400 700 would have the
-        // browser answer this face for a bold request and paint it regular.
-        weight: "400",
-      });
-      await face.load();
-      scope.fonts.add(face);
-      fontsLoaded.add(SCRIPT_FALLBACK_TOKEN);
-    } catch {
-      /* platform metrics still beat a dead worker */
-    }
-  }
+  // Each is in every Latin family's CSS stack (fonts.generated), so the document
+  // will paint Arabic, Gurmukhi and Devanagari in them. If this worker did not
+  // also have them, it would measure that text in whatever system font its
+  // OffscreenCanvas found while the page painted it in the real face — and the
+  // two are not obliged to agree, which is the measured-here-painted-there split
+  // that wraps lines where they are not drawn. Loaded before the family so they
+  // are present for the first layout, and outside the `fontsLoaded`
+  // short-circuit below, which is keyed per family.
+  //
+  // STILL UNCONDITIONAL, now that there are three of them and they cost 287 KB
+  // rather than 106. The cheap-looking narrowing — load only the script the
+  // reader's own language needs — is wrong, and the reason is the pane strip:
+  // `pane.textLanguage` lets a German reader open the Van Dyck or the Hindi
+  // Bible in the second pane, so the script this worker is asked to MEASURE is
+  // not a function of the language it is painting the chrome in. Narrowing it
+  // safely means loading per corpus at layout time, which is a protocol change,
+  // not a smaller constant.
+  //
+  // AWAITED IN PARALLEL. They were loaded one after another when there was one
+  // of them and the loop read the same either way; three serial `await`s on a
+  // slow link are three round trips before the first line can be measured.
+  await Promise.all(
+    Object.entries(SCRIPT_FALLBACK_BY_TOKEN)
+      .filter(([token]) => !fontsLoaded.has(token))
+      .map(async ([token, paths]) => {
+        for (const path of paths) {
+          try {
+            const face = new FontFace(FONT_CSS_FAMILY[token], `url(${new URL(path, base).href})`, {
+              style: "normal",
+              // 400 alone: these are static regulars (or variable faces the CSS
+              // declares at 400), and claiming 400 700 would have the browser
+              // answer one for a bold request and paint it regular.
+              weight: "400",
+            });
+            await face.load();
+            fonts.add(face);
+            fontsLoaded.add(token);
+          } catch {
+            /* platform metrics still beat a dead worker */
+          }
+        }
+      }),
+  );
   if (fontsLoaded.has(resolved)) return want;
   let loaded = 0;
   for (const [path, style] of [
@@ -891,7 +911,7 @@ async function loadFonts(base: string, token: string): Promise<number> {
         weight: "400 700",
       });
       await face.load();
-      scope.fonts.add(face);
+      fonts.add(face);
       loaded++;
     } catch {
       /* platform metrics still beat a dead worker */

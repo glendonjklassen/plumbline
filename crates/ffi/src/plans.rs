@@ -165,7 +165,19 @@ fn running_state(
                     .map(|(b, c)| WireDayChapter {
                         book: b.clone(),
                         chapter: *c,
-                        display: format!("{} {}", canon::display_name(b), c),
+                        // LOCALIZED, and it was not. `canon::display_name` is
+                        // the FROZEN ENGLISH table — the one `refKey` is built
+                        // from — so a Hindi reader's plan card read "John 3"
+                        // while every other reference on the same screen read
+                        // "यूहन्ना 3". `ref.chapter` is the catalogue template
+                        // the rest of the app names a chapter with, and it is a
+                        // template rather than a separator because the next
+                        // language may not put the book first at all.
+                        display: i18n::t(
+                            i18n::active(),
+                            "ref.chapter",
+                            &[("book", &i18n::book_name(i18n::active(), b)), ("chapter", &c.to_string())],
+                        ),
                         read: chapter_read(store, b, *c),
                     })
                     .collect(),

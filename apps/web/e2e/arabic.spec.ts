@@ -55,7 +55,8 @@ async function pick(page: Page, now: Record<string, string>, want: string): Prom
   const dialog = page.locator('[data-surface="settings"]');
   await expect(dialog).toBeVisible();
   await page.evaluate(() => ((globalThis as any).__beforeSwitch = true));
-  await dialog.getByLabel(now["settings.language"], { exact: true }).selectOption({ label: want });
+  // By VALUE, not label — see the same helper in language.spec.ts.
+  await dialog.getByLabel(now["settings.language"], { exact: true }).selectOption(want);
   await page.waitForFunction(
     () => !(globalThis as any).__beforeSwitch && !!(globalThis as any).__plumbline,
     undefined,
@@ -89,7 +90,7 @@ async function boxes(page: Page): Promise<Box[]> {
 
 test("the Arabic reader runs right to left, in the chrome and in the text", async ({ page }) => {
   await reader(page, EN);
-  await pick(page, EN, "العربية");
+  await pick(page, EN, "ar");
 
   // 1. THE DOCUMENT MIRRORS. `dir` is what flips every logical margin, the
   //    order of a flex row, and which side the menus open on.
@@ -163,7 +164,7 @@ test.describe("an Arabic device, cold", () => {
 
 test("Arabic search finds a word the reader can actually type", async ({ page }) => {
   await reader(page, EN);
-  await pick(page, EN, "العربية");
+  await pick(page, EN, "ar");
 
   // The Van Dyck prints "ٱلْبَدْءِ" — an alef wasla nobody has a key for, under
   // full vowelling nobody types. A reader searches for "البدء".
@@ -212,7 +213,7 @@ test("a language one face can render gets that face, not a font menu", async ({ 
   expect(enFonts, "a naskh face is offered to an English reader").not.toContain("Amiri");
   await page.keyboard.press("Escape");
 
-  await pick(page, EN, "العربية");
+  await pick(page, EN, "ar");
   await page.getByLabel(AR["common.menu"]).click();
   await page.locator(".menu").getByRole("button", { name: AR["shell.settings"] }).click();
   dialog = page.locator('[data-surface="settings"]');
@@ -243,7 +244,7 @@ test("a language one face can render gets that face, not a font menu", async ({ 
   // nothing at all — the value was a token the filtered list doesn't carry
   // (maintainer's phone, 2026-08-28). `readerFace` resolves off-list tokens to
   // the language's default, and the select binds to the RESOLVED face.
-  await pick(page, AR, "English");
+  await pick(page, AR, "en");
   await page.getByLabel(EN["common.menu"]).click();
   await page.locator(".menu").getByRole("button", { name: EN["shell.settings"] }).click();
   dialog = page.locator('[data-surface="settings"]');

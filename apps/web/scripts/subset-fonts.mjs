@@ -90,6 +90,7 @@ const UNICODES = [
 const FAMILIES = [
   {
     token: "eb-garamond",
+    script: "latin",
     css: "EB Garamond",
     fallback: "Georgia, serif",
     scale: 1.0,
@@ -100,6 +101,7 @@ const FAMILIES = [
   },
   {
     token: "literata",
+    script: "latin",
     css: "Literata",
     fallback: "Georgia, serif",
     scale: 0.89,
@@ -110,6 +112,7 @@ const FAMILIES = [
   },
   {
     token: "inter",
+    script: "latin",
     css: "Inter",
     fallback: "system-ui, sans-serif",
     scale: 0.87,
@@ -120,6 +123,7 @@ const FAMILIES = [
   },
   {
     token: "fira-code",
+    script: "latin",
     css: "Fira Code",
     fallback: "ui-monospace, monospace",
     scale: 0.88,
@@ -133,6 +137,7 @@ const FAMILIES = [
     // which is never bold, so FONT_FILES (its load list) skips them while
     // fonts.css (the document's paint list) declares all four.
     token: "atkinson-hyperlegible",
+    script: "latin",
     css: "Atkinson Hyperlegible",
     fallback: "system-ui, sans-serif",
     scale: 0.9,
@@ -157,6 +162,7 @@ const FAMILIES = [
     // chrome headings. Scripture is never bold, so nothing the engine measures
     // is affected.
     token: "amiri",
+    script: "arabic",
     css: "Amiri",
     fallback: "serif",
     scale: 1.06,
@@ -165,6 +171,53 @@ const FAMILIES = [
     ),
     layoutFeatures: "*",
     faces: [{ src: "Amiri-Regular.ttf", style: "normal", weight: "400" }],
+  },
+  {
+    // Gurmukhi, for the Punjabi Bible. `layoutFeatures: "*"` for the same
+    // reason Amiri needs it and more so: an Indic script is SHAPED, not just
+    // laid out. `nukt` composes the base and its dot into one glyph, `half`
+    // and `blwf` make the subjoined forms a conjunct is drawn with, `pres`
+    // and `abvs` place the matras. Subsetting those away leaves every
+    // conjunct as a row of separate letters at a different total advance than
+    // the shaped text — the measure-and-paint disagreement in the header, at
+    // the scale of most words in the language.
+    //
+    // The unicode range is the Gurmukhi block plus Latin: the app's chrome is
+    // painted in the reader's face too, and the chrome carries version
+    // numbers, "KJV", and the Latin font names in the picker.
+    token: "noto-serif-gurmukhi",
+    script: "gurmukhi",
+    css: "Noto Serif Gurmukhi",
+    fallback: "serif",
+    scale: 0.82,
+    unicodes: ["U+0020-007E", "U+00A0-00FF", "U+0964-0965", "U+0A00-0A7F", "U+2000-206F"].join(","),
+    layoutFeatures: "*",
+    faces: [{ src: "NotoSerifGurmukhi.ttf", style: "normal" }],
+  },
+  {
+    // Devanagari, for the Hindi Bible — and the face Marathi or
+    // Urdu-Devanagari would read too, which is why `core::font::Font::script`
+    // is the column and the language is not.
+    //
+    // U+0964-0965 is the danda and double danda, which BOTH Indic corpora end
+    // their sentences with and which live outside either script's own block.
+    // A missing danda is a missing glyph on 27,354 Punjabi and 31,541 Hindi
+    // verses, measured in one context and painted from a fallback in the other.
+    token: "noto-serif-devanagari",
+    script: "devanagari",
+    css: "Noto Serif Devanagari",
+    fallback: "serif",
+    scale: 0.82,
+    // The ONLY family here with a second variation axis, and nothing reads it:
+    // the CSS never sets `font-stretch`, so every width but the default is
+    // dead weight in a file the engine worker downloads before it can lay out
+    // a line. Pinned rather than subsetted away, because `--unicodes` does not
+    // touch `fvar` — 237 KB of woff2 against 130 KB, on a face every reader
+    // fetches whether or not they read Hindi.
+    pinAxes: { wdth: 100 },
+    unicodes: ["U+0020-007E", "U+00A0-00FF", "U+0900-097F", "U+0964-0965", "U+200C-200D", "U+2000-206F"].join(","),
+    layoutFeatures: "*",
+    faces: [{ src: "NotoSerifDevanagari.ttf", style: "normal" }],
   },
 ];
 
@@ -191,11 +244,17 @@ const FAMILIES = [
 // scripture, and because it positions tashkeel properly — `svd1865.jsonl` is
 // fully vocalized, and most faces either collide the marks or drop them.
 // OFL 1.1, vendored at fonts-src/OFL-Amiri.txt.
-/** The token of the family above — bundled always, offered only where it is
- *  the only face that can render the text. See `core::font::Font::offered_for`,
- *  which is the same fact in Rust and the one the pickers actually read. */
-const SCRIPT_FALLBACK_TOKEN = "amiri";
-const SCRIPT_FALLBACK_CSS = "Amiri";
+/** The families that exist to carry a script none of the Latin faces has —
+ *  bundled always, each offered only to readers of its own script. See
+ *  `core::font::Font::offered_for`, which is the same fact in Rust and the one
+ *  the pickers actually read.
+ *
+ *  A LIST, and it was a single token while Arabic was the only one. Two more
+ *  scripts arrived at once and every consumer of the singular form was written
+ *  as `token === SCRIPT_FALLBACK_TOKEN`, which is exactly the shape that
+ *  answers "wrong" for the second member. */
+const SCRIPT_FALLBACK_TOKENS = FAMILIES.filter((f) => f.script !== "latin").map((f) => f.token);
+const SCRIPT_FALLBACK_CSS = FAMILIES.filter((f) => f.script !== "latin").map((f) => `"${f.css}"`).join(", ");
 
 /** The face the app falls back to everywhere — must be a key of FAMILIES. */
 const DEFAULT_TOKEN = "eb-garamond";
@@ -220,6 +279,10 @@ const SUBSET = (() => {
   }
 })();
 
+/** Pin a variable font's axes to fixed values, dropping the rest of the design
+ *  space. Only used where an axis is present and unread — see `pinAxes`. */
+const INSTANCER = ["-m", "fontTools.varLib.instancer"];
+
 mkdirSync(outDir, { recursive: true });
 
 // Clear previously generated faces so an old hash cannot linger and be served.
@@ -240,9 +303,23 @@ for (const family of FAMILIES) {
     }
     const base = basename(face.src, ".ttf");
     const subTtf = join(outDir, `${base}.subset.tmp.ttf`);
+    // Instancing runs BEFORE the subset: `--unicodes` does not touch `fvar`,
+    // so pinning afterwards would leave the dropped axis's deltas in the
+    // glyphs the subset kept.
+    let input = src;
+    let pinnedTmp = null;
+    if (family.pinAxes) {
+      pinnedTmp = join(outDir, `${base}.pinned.tmp.ttf`);
+      execFileSync(
+        "python3",
+        [...INSTANCER, src, ...Object.entries(family.pinAxes).map(([a, v]) => `${a}=${v}`), "-o", pinnedTmp, "-q"],
+        { stdio: ["ignore", "inherit", "inherit"] },
+      );
+      input = pinnedTmp;
+    }
     const args = [
       ...SUBSET.pre,
-      src,
+      input,
       `--unicodes=${family.unicodes ?? UNICODES}`,
       `--output-file=${subTtf}`,
     ];
@@ -263,6 +340,7 @@ for (const family of FAMILIES) {
     writeFileSync(join(outDir, name), bytes);
     rmSync(subTtf, { force: true });
     rmSync(woff2Tmp, { force: true });
+    if (pinnedTmp) rmSync(pinnedTmp, { force: true });
     built.push({ family, face, style: face.style, name, bytes: bytes.length, from: readFileSync(src).length });
   }
 }
@@ -309,7 +387,13 @@ const byToken = new Map();
 for (const f of built) {
   const e =
     byToken.get(f.family.token) ??
-    { css: f.family.css, fallback: f.family.fallback, scale: f.family.scale ?? 1, files: {} };
+    {
+      css: f.family.css,
+      fallback: f.family.fallback,
+      scale: f.family.scale ?? 1,
+      script: f.family.script,
+      files: {},
+    };
   // FONT_FILES is the engine worker's MEASUREMENT load list; scripture is
   // never bold, so a chromeOnly face (Atkinson's static 700s) is declared in
   // fonts.css above but deliberately absent here.
@@ -355,38 +439,65 @@ export const DEFAULT_FONT = ${JSON.stringify(DEFAULT_TOKEN)};
  *  family lacks. A sans must not fall back to a serif: the substitution shows
  *  for one swap, and on a glyph the face is missing it is permanent.
  *
- *  Every other stack opens with "${SCRIPT_FALLBACK_CSS}", which is not a choice and not in the
- *  picker: none of the selectable faces has a single Arabic glyph, and per-glyph
- *  fallback is what lets one stack serve Latin in the reader's chosen voice and
- *  Arabic in a face that can actually shape it. It sits FIRST among the
- *  fallbacks and after the chosen family, so it only ever answers for codepoints
- *  the chosen family lacks. */
+ *  Every Latin stack opens with ${SCRIPT_FALLBACK_CSS} — not a choice, and not
+ *  in the picker: no selectable Latin face has a single Arabic, Gurmukhi or
+ *  Devanagari glyph, and per-glyph fallback is what lets one stack serve Latin
+ *  in the reader's chosen voice and each other script in a face that can
+ *  actually shape it. They sit FIRST among the fallbacks and after the chosen
+ *  family, so they only ever answer for codepoints the chosen family lacks. */
 export const FONT_FALLBACK: Readonly<Record<string, string>> = {
 ${[...byToken]
   .map(
     ([token, e]) =>
       `  "${token}": ${JSON.stringify(
-        token === SCRIPT_FALLBACK_TOKEN ? e.fallback : `"${SCRIPT_FALLBACK_CSS}", ${e.fallback}`,
+        e.script !== "latin" ? e.fallback : `${SCRIPT_FALLBACK_CSS}, ${e.fallback}`,
       )},`,
   )
   .join("\n")}
 };
 
-/** The token of the face that exists to carry a script none of the others has.
- *  The pickers offer it to readers of a right-to-left language and to nobody
- *  else — see \`core::font::Font::offered_for\`, which is this rule in Rust. */
-export const SCRIPT_FALLBACK_TOKEN = ${JSON.stringify(SCRIPT_FALLBACK_TOKEN)};
+/** Token → the script that face can set, mirroring \`core::font::Font::script\`.
+ *  The pickers show a face only where it matches the reader's language — see
+ *  \`core::font::Font::offered_for\`, which is this rule in Rust. */
+export const FONT_SCRIPT: Readonly<Record<string, string>> = {
+${[...byToken].map(([token, e]) => `  "${token}": ${JSON.stringify(e.script)},`).join("\n")}
+};
+
+/** Script → the one face that sets it.
+ *
+ *  Latin maps to the shipped default and every other script to its single face
+ *  — \`core::font\`'s \`each_non_latin_script_has_exactly_one_face\` is what
+ *  makes that a table rather than a list, and Latin is the one script with more
+ *  than one face, which is exactly why it is the one entry written by hand. */
+export const SCRIPT_FACE: Readonly<Record<string, string>> = {
+  latin: ${JSON.stringify(DEFAULT_TOKEN)},
+${[...byToken]
+  .filter(([, e]) => e.script !== "latin")
+  .map(([token, e]) => `  ${JSON.stringify(e.script)}: ${JSON.stringify(token)},`)
+  .join("\n")}
+};
 
 /** The script-fallback face, loaded by the engine worker ALONGSIDE whichever
  *  family is selected and declared in fonts.css for the document.
  *
- *  Unconditional on purpose. It could be loaded only when the open corpus reads
- *  right to left, but then the worker's font set would depend on which Bible is
+ *  Unconditional on purpose. They could be loaded only when the open corpus
+ *  needs them, but then the worker's font set would depend on which Bible is
  *  open, and the window where the two contexts disagree is exactly the window
- *  where a reader switches language. One face, always present in both. */
+ *  where a reader switches language. The same faces, always present in both. */
 export const SCRIPT_FALLBACK_FILES: readonly string[] = ${JSON.stringify(
-  built.filter((f) => f.family.token === SCRIPT_FALLBACK_TOKEN && !f.face.chromeOnly).map((f) => `fonts/${f.name}`),
+  built.filter((f) => f.family.script !== "latin" && !f.face.chromeOnly).map((f) => `fonts/${f.name}`),
 )};
+
+/** The same files, keyed by the token whose FontFace they build — the worker
+ *  needs the family name to construct each one, and there is more than one now. */
+export const SCRIPT_FALLBACK_BY_TOKEN: Readonly<Record<string, readonly string[]>> = {
+${SCRIPT_FALLBACK_TOKENS.map(
+  (t) =>
+    `  ${JSON.stringify(t)}: ${JSON.stringify(
+      built.filter((f) => f.family.token === t && !f.face.chromeOnly).map((f) => `fonts/${f.name}`),
+    )},`,
+).join("\n")}
+};
 
 /** Token → the face's optical size multiplier, mirroring
  *  \`core::font::Font::scale()\` (which holds the x-height measurements and the

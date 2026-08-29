@@ -487,6 +487,29 @@ fn plans_and_concept_study_via_abi() {
         assert_eq!(run["today"]["day"], 1);
         assert_eq!(run["today"]["chapters"][0]["book"], "John");
         assert_eq!(run["today"]["chapters"][0]["chapter"], 3);
+        // THE CARD IS NAMED IN THE READER'S LANGUAGE, and it was not.
+        //
+        // `book` above is the OSIS id and stays English forever — it is
+        // storage. `display` is the only part a reader sees, and it was built
+        // with `canon::display_name`, the frozen English table, so a German
+        // reader's plan card read "John 3" while the passage navigator, the
+        // search results and every reference on the same screen read
+        // "Johannes 3". Nothing errored and English never noticed.
+        //
+        // Asserted against `VRef::chapter_display_in`, which is what the rest
+        // of the app names a chapter with, rather than against a spelled
+        // "Johannes 3" — the separator is a catalogue template and the point is
+        // that this agrees with everything else, not that it matches a string.
+        let de = plumbline_core::i18n::Lang::De;
+        let want = plumbline_core::reference::VRef::new("John", 3, 1).chapter_display_in(de);
+        assert_eq!(run["today"]["chapters"][0]["display"], "John 3", "English reads as it always did");
+        let before = plumbline_core::i18n::active();
+        plumbline_core::i18n::set_active(de);
+        let v_de: Value = serde_json::from_str(&take(plumbline_engine_plans_json(e, now.as_ptr())).unwrap()).unwrap();
+        plumbline_core::i18n::set_active(before);
+        let run_de = v_de["running"].as_array().unwrap().iter().find(|p| p["id"] == "chronological").unwrap();
+        assert_eq!(run_de["today"]["chapters"][0]["display"], want);
+        assert_eq!(run_de["today"]["chapters"][0]["book"], "John", "the OSIS id is storage and does not localize");
         // Stopped again so the running-count assertions below stay exact.
         assert!(plumbline_engine_plan_stop(e, c("chronological").as_ptr()).is_null());
 

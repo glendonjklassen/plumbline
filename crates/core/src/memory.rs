@@ -473,8 +473,27 @@ fn hide_fraction(i: usize) -> f64 {
     ((h >> 11) & 0xffff) as f64 / 65535.0
 }
 
+/// One `_` per letter, punctuation kept — and COMBINING MARKS DROPPED, which
+/// is the part that is not obvious.
+///
+/// `is_alphanumeric` is the letter test, and it answers FALSE for a virama and
+/// TRUE for a tashkeel mark, so a mask built on it alone gets both scripts wrong
+/// in opposite directions: a blanked "परमेश्वर" came out as `_____्__`, with the
+/// virama hanging off an underscore, and a blanked "ٱلْبَدْءِ" kept every one of
+/// its vowel marks. Either is a rendering artefact — a mark with no letter under
+/// it draws on a dotted circle — and both leak the shape of the word the drill
+/// is asking the reader to remember.
+///
+/// Dropping them also brings the count of underscores nearer the number of
+/// SHAPES on screen, which is what a length hint is for: प र म े श ् व र is
+/// eight chars, five clusters, and six underscores here. Not exact — that needs
+/// UAX #29 segmentation and a dependency this crate does not take — but far
+/// closer than one underscore per codepoint.
 fn mask_word(w: &str) -> String {
-    w.chars().map(|c| if c.is_alphanumeric() { '_' } else { c }).collect()
+    w.chars()
+        .filter(|&c| !crate::search::is_combining_mark(c))
+        .map(|c| if c.is_alphanumeric() { '_' } else { c })
+        .collect()
 }
 
 /// The result of scoring a typed recall against the verse.
@@ -736,6 +755,28 @@ mod tests {
     fn first_letters_prompt() {
         assert_eq!(first_letters("For God so loved the world,"), "F G s l t w,");
         assert_eq!(first_letters("(the LORD)"), "(t L)");
+    }
+
+    /// A blanked word in a marked script hides the whole word.
+    ///
+    /// FAILS AGAINST THE BUG IT DESCRIBES: `mask_word` maps on
+    /// `is_alphanumeric` and passes everything else through, so before the
+    /// filter a masked "परमेश्वर" was `_____्__` — the virama still there,
+    /// drawn on a dotted circle, and the reader shown where the conjuncts fall
+    /// in the word they are being asked to recall. Arabic had the same leak
+    /// with its tashkeel and had shipped with it.
+    #[test]
+    fn a_blanked_word_keeps_no_mark_of_the_word_it_hid() {
+        for word in ["परमेश्वर", "ਪਰਮੇਸ਼ੁਰ", "ٱلْبَدْءِ", "अर्थात्"]
+        {
+            let masked = blank_out(word, MAX_BLANK_LEVEL);
+            assert!(
+                masked.chars().all(|c| c == '_' || c.is_ascii_punctuation()),
+                "{word} masked to {masked:?}, which still carries the word's marks"
+            );
+        }
+        // And the Latin behaviour is untouched, including its punctuation.
+        assert_eq!(blank_out("(the LORD)", MAX_BLANK_LEVEL), "(___ ____)");
     }
 
     #[test]

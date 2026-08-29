@@ -751,7 +751,7 @@ fn intersect_asc(xs: &[usize], ys: &[usize]) -> Vec<usize> {
 /// dependency-light pure Rust that has to build for wasm, so there is no
 /// character-category table to consult — and the corpus is Arabic, so a stated
 /// range is both enough and honest about its scope.
-fn is_arabic_mark(c: char) -> bool {
+pub(crate) fn is_arabic_mark(c: char) -> bool {
     matches!(c,
         '\u{0610}'..='\u{061A}'    // Quranic honorifics
         | '\u{064B}'..='\u{065F}'  // tashkeel: fathatan … wavy hamza below
@@ -759,6 +759,167 @@ fn is_arabic_mark(c: char) -> bool {
         | '\u{0670}'               // superscript alef
         | '\u{06D6}'..='\u{06ED}'  // Quranic annotation marks
     )
+}
+
+/// A GURMUKHI OR DEVANAGARI COMBINING MARK, and the reason it needs naming.
+///
+/// The mirror image of [`is_arabic_mark`], and the same trap read the other
+/// way. There, every mark carries `Other_Alphabetic`, so `normalize_word`'s
+/// `is_alphanumeric` filter KEPT a vowelling it should have dropped. Here the
+/// VIRAMA — the halant that binds a conjunct, U+094D and U+0A4D — carries
+/// neither `Alphabetic` nor `Other_Alphabetic`, so the same filter reads it as
+/// punctuation and DELETES IT: परमेश्वर indexed as परमेशवर, ਪਰਮੇਸ਼ੁਰ as
+/// ਪਰਮੇਸੁਰ, अन्त and अनत folded onto one key.
+///
+/// It is applied to both sides, so nothing goes missing from a search — which
+/// is exactly why it would never have been noticed. It is still wrong: the
+/// virama is part of the word, it is what a keyboard produces for every
+/// conjunct in the language, and collapsing it merges words a reader means to
+/// tell apart.
+///
+/// The dependent vowel signs are named here too. They are already `Alphabetic`
+/// and survive the filter on their own, but stating the whole mark range rather
+/// than the one codepoint that misbehaves is what keeps the next Indic script
+/// from rediscovering this: Bengali, Odia and Tamil all have a virama, and none
+/// of them is alphanumeric either.
+///
+/// THE RANGES ARE NOT THE SAME SHAPE IN THE TWO SCRIPTS, and that cost a
+/// debugging round: Devanagari's marks run from U+093A so its nukta at U+093C
+/// falls inside, while Gurmukhi's matras start at U+0A3E and its nukta at
+/// U+0A3C sits two codepoints BELOW them. A range copied across from
+/// Devanagari's shape keeps every Hindi nukta and deletes every Punjabi one —
+/// including the ਸ਼ of ਪਰਮੇਸ਼ੁਰ, 61% of them.
+pub(crate) fn is_indic_mark(c: char) -> bool {
+    matches!(c,
+        '\u{0900}'..='\u{0903}'   // Devanagari: candrabindu, anusvara, visarga
+        | '\u{093A}'..='\u{094F}' // Devanagari: the nukta, matras and the virama
+        | '\u{0951}'..='\u{0957}' // Devanagari: accents and extra matras
+        | '\u{0962}'..='\u{0963}' // Devanagari: vocalic-l matras
+        | '\u{0A01}'..='\u{0A03}' // Gurmukhi: adak bindi, bindi, visarga
+        | '\u{0A3C}'..='\u{0A4D}' // Gurmukhi: the nukta, matras, udaat, the virama
+        | '\u{0A70}'..='\u{0A71}' // Gurmukhi: tippi and addak
+        | '\u{0A75}'              // Gurmukhi: yakash
+    )
+}
+
+/// A mark that belongs to the letter before it rather than standing on its own.
+///
+/// The union of the two script predicates, for callers outside search that need
+/// the same question answered — [`crate::memory::blank_out`] is the one, and it
+/// needs it for a reason worth stating: masking is `is_alphanumeric` too, so
+/// every mark these two name comes through a mask VERBATIM. A blanked Hindi
+/// word kept its viramas and a blanked Arabic one kept its tashkeel, hanging
+/// off an underscore.
+pub(crate) fn is_combining_mark(c: char) -> bool {
+    is_arabic_mark(c) || is_indic_mark(c)
+}
+
+/// The nukta — the subscript dot, U+093C in Devanagari and U+0A3C in Gurmukhi.
+///
+/// Named separately from [`is_indic_mark`] because the two rules pull opposite
+/// ways: every mark in that range is KEPT, and this one is sometimes dropped.
+/// See [`fold_indic`] for when.
+fn is_indic_nukta(c: char) -> bool {
+    matches!(c, '\u{093C}' | '\u{0A3C}')
+}
+
+/// A precomposed nukta letter, as its base and its nukta.
+///
+/// Unicode encodes ਸ਼ and ज़ twice: as a base plus U+0A3C/U+093C, and as single
+/// codepoints (U+0A36, U+095B). Both corpora use the DECOMPOSED form
+/// exclusively — `check-indic.py` proves NFD is a no-op over each — but a
+/// reader's keyboard is not bound by that, and a query typed as U+0A36 must
+/// find a word indexed as U+0A38 U+0A3C or Punjabi search fails on its
+/// commonest letter.
+///
+/// The obvious fix, running the text through NFD, is the ONE THING THAT MUST
+/// NOT HAPPEN HERE: these codepoints are on Unicode's composition exclusion
+/// list, the Punjabi source repo warns in capitals against normalising
+/// Gurmukhi, and `build-indic.py` ships the bytes untouched. So the six
+/// Gurmukhi and eleven Devanagari mappings are spelled out, applied to search
+/// keys only, and the corpus on disk is never touched.
+fn indic_decompose(c: char) -> Option<(char, char)> {
+    let base = match c {
+        // Devanagari
+        '\u{0929}' => '\u{0928}', // ऩ
+        '\u{0931}' => '\u{0930}', // ऱ
+        '\u{0934}' => '\u{0933}', // ऴ
+        '\u{0958}' => '\u{0915}', // क़
+        '\u{0959}' => '\u{0916}', // ख़
+        '\u{095A}' => '\u{0917}', // ग़
+        '\u{095B}' => '\u{091C}', // ज़
+        '\u{095C}' => '\u{0921}', // ड़
+        '\u{095D}' => '\u{0922}', // ढ़
+        '\u{095E}' => '\u{092B}', // फ़
+        '\u{095F}' => '\u{092F}', // य़
+        // Gurmukhi
+        '\u{0A33}' => '\u{0A32}', // ਲ਼
+        '\u{0A36}' => '\u{0A38}', // ਸ਼
+        '\u{0A59}' => '\u{0A16}', // ਖ਼
+        '\u{0A5A}' => '\u{0A17}', // ਗ਼
+        '\u{0A5B}' => '\u{0A1C}', // ਜ਼
+        '\u{0A5E}' => '\u{0A2B}', // ਫ਼
+        _ => return None,
+    };
+    Some((base, if c < '\u{0A00}' { '\u{093C}' } else { '\u{0A3C}' }))
+}
+
+/// The letters whose nukta a reader will not reliably type — and, just as
+/// important, the ones whose nukta they always will.
+///
+/// THE DISTINCTION IS MEASURED, NOT ASSUMED, and getting it wrong in the
+/// generous direction is what a first pass at this does. "Drop the nukta from
+/// both sides, the way Arabic drops its tashkeel" looks like the same fix and
+/// is not, because the nukta does two unrelated jobs:
+///
+///   - On क ख ग ज फ य and ਖ ਗ ਜ ਫ it writes the PERSO-ARABIC sounds of
+///     borrowed words — ज़रूर, ਫ਼ਿਲਿਪੁੱਸ. Layouts differ on whether the dot is
+///     reachable and readers habitually leave it off, so folding it is Arabic's
+///     alef fold in another script: either spelling finds the word.
+///   - On ड ढ and ਸ ਲ it writes NATIVE LETTERS. ड़ and ढ़ are the Hindi
+///     retroflex flaps of बड़ा and पढ़ना; ਸ਼ is Punjabi sha, the letter in
+///     ਪਰਮੇਸ਼ੁਰ and ਵਿਸ਼ਵਾਸ. Nobody types ड for ड़.
+///
+/// Counted over the two shipped corpora: ड़ and ढ़ are 96.9% of Hindi's 15,899
+/// nuktas, and ਸ਼ alone is 61.4% of Punjabi's 31,312. A blanket fold would
+/// therefore merge ਸ with ਸ਼ and ड with ड़ through the whole Bible — never a
+/// missed hit, since it applies to both sides, and never a distinction the
+/// reader could make either.
+fn nukta_is_optional(base: char) -> bool {
+    matches!(
+        base,
+        '\u{0915}' | '\u{0916}' | '\u{0917}' | '\u{091C}' | '\u{092B}' | '\u{092F}' // क ख ग ज फ य
+        | '\u{0A16}' | '\u{0A17}' | '\u{0A1C}' | '\u{0A2B}' // ਖ ਗ ਜ ਫ
+    )
+}
+
+/// One pass over a Devanagari or Gurmukhi word: precomposed letters split, and
+/// the optional nuktas dropped. See [`nukta_is_optional`] and
+/// [`indic_decompose`].
+///
+/// A string pass rather than a `char` map, because whether a nukta survives
+/// depends on the letter BEFORE it.
+fn fold_indic(w: &str) -> String {
+    let mut out = String::with_capacity(w.len());
+    let mut prev: Option<char> = None;
+    for c in w.chars() {
+        if let Some((base, nukta)) = indic_decompose(c) {
+            out.push(base);
+            if !nukta_is_optional(base) {
+                out.push(nukta);
+            }
+            prev = Some(base);
+            continue;
+        }
+        // A nukta after a base that does not need one is dropped; `prev` stays
+        // the base, so a doubled nukta drops too.
+        if is_indic_nukta(c) && prev.is_some_and(nukta_is_optional) {
+            continue;
+        }
+        out.push(c);
+        prev = Some(c);
+    }
+    out
 }
 
 /// The letters an Arabic reader will not distinguish when they type.
@@ -786,20 +947,36 @@ fn fold_arabic(c: char) -> char {
 /// still has it, and Arabic search returns nothing at all rather than too much.
 ///
 /// A NO-OP ON EVERY LATIN WORD, which is what makes it safe to put on the
-/// indexing path. `is_arabic_mark` and `fold_arabic` cannot fire on a codepoint
-/// outside the Arabic block, so English, German and Spanish keys come out of
-/// this exactly as `to_lowercase` left them — and their `.idxcache` files,
-/// which the web manifest hashes, stay byte-identical.
+/// indexing path. `is_arabic_mark` and `fold_arabic` cannot fire outside the
+/// Arabic block, and `fold_indic` is not entered at all unless the word has a
+/// Devanagari or Gurmukhi codepoint in it — so English, German and Spanish keys
+/// come out of this exactly as `to_lowercase` left them, and their `.idxcache`
+/// files, which the web manifest hashes, stay byte-identical.
 pub fn fold_word(w: &str) -> String {
     let lower = w.to_lowercase();
     if lower.is_ascii() {
         return lower;
     }
-    lower.chars().filter(|&c| !is_arabic_mark(c)).map(fold_arabic).collect()
+    let folded: String = lower.chars().filter(|&c| !is_arabic_mark(c)).map(fold_arabic).collect();
+    // The Indic pass is skipped outright for anything that has no Indic
+    // codepoint in it, which is every Latin and Arabic word in the app.
+    if folded.chars().any(|c| ('\u{0900}'..='\u{0A7F}').contains(&c)) {
+        return fold_indic(&folded);
+    }
+    folded
 }
 
+/// Lowercase and fold, then strip the punctuation a tokenizer would never leave
+/// inside a word.
+///
+/// `is_indic_mark` is an EXCEPTION TO THE FILTER, not another fold: those marks
+/// are kept, because `is_alphanumeric` is false for a virama and this filter
+/// would otherwise delete the join out of every conjunct in both Indic corpora.
 pub fn normalize_word(w: &str) -> String {
-    fold_word(w).chars().filter(|&c| c.is_alphanumeric() || c == '\'' || c == '\u{2019}' || c == '-').collect()
+    fold_word(w)
+        .chars()
+        .filter(|&c| c.is_alphanumeric() || is_indic_mark(c) || c == '\'' || c == '\u{2019}' || c == '-')
+        .collect()
 }
 
 /// A light inflectional stemmer over the 1769 English vocabulary — just enough
@@ -1187,18 +1364,24 @@ mod tests {
         assert_eq!(fold_word("ٱلْبَدْءِ"), "البدء");
     }
 
-    /// Folding is invisible outside Arabic — the property that lets it sit on
-    /// the indexing path.
+    /// Folding is invisible on LATIN — the property that lets it sit on the
+    /// indexing path.
     ///
     /// The `.idxcache` is the biggest file the web pack ships and the manifest
     /// hashes it, so a fold that perturbed one English key would re-mint every
     /// pack URL and re-download the whole corpus on a release that changed no
-    /// data (CLAUDE.md §Data pack). Checked over the vocabulary of all three
-    /// Latin catalogues rather than a handful of words.
+    /// data (CLAUDE.md §Data pack). Checked over the vocabulary of every Latin
+    /// catalogue rather than a handful of words.
+    ///
+    /// THE SKIP IS ON SCRIPT, not on direction, and it used to be on direction
+    /// because Arabic was the only script that folded. Punjabi and Hindi read
+    /// left to right and fold their nukta, so an `is_rtl()` skip would have run
+    /// this over two catalogues it was never about and failed on a fold working
+    /// exactly as intended.
     #[test]
     fn folding_leaves_latin_keys_exactly_as_lowercasing_did() {
         for lang in crate::i18n::Lang::ALL {
-            if lang.is_rtl() {
+            if lang.script() != crate::i18n::Script::Latin {
                 continue;
             }
             for value in crate::i18n::resolved(lang).values() {
@@ -1207,6 +1390,55 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The Punjabi and Hindi reader can find the word they are looking at.
+    ///
+    /// THREE FIXES, and two of them pull against each other — which is why the
+    /// obvious one-line version of this ("strip the marks, like Arabic") is
+    /// wrong in both directions at once.
+    ///
+    ///   - Drop `is_indic_mark` from `normalize_word`'s filter and every
+    ///     conjunct loses its join, because `char::is_alphanumeric` is FALSE for
+    ///     a virama: परमेश्वर indexed as परमेशवर. It applies to both sides so no
+    ///     search breaks — it just quietly merges अन्त with अनत.
+    ///   - Fold EVERY nukta and ਸ਼ becomes ਸ, ड़ becomes ड. Those are 61% and
+    ///     97% of the nuktas in the two corpora and they are native letters, not
+    ///     optional dots (`nukta_is_optional`).
+    ///   - Fold NO nukta and ज़रूर stops matching the जरूर a reader types,
+    ///     because most layouts do not give them that dot.
+    ///
+    /// The words are the corpora's own: ਪਰਮੇਸ਼ੁਰ and परमेश्वर are the commonest
+    /// nouns in either Bible, and ਫ਼ਿਲਿਪੁੱਸ is Philip in Acts 8:37.
+    #[test]
+    fn indic_keeps_its_letters_and_forgives_only_the_optional_dot() {
+        // The virama survives: these are the words as printed.
+        assert_eq!(normalize_word("परमेश्वर"), "परमेश्वर");
+        assert_eq!(normalize_word("अर्थात्"), "अर्थात्", "a word may END in a virama");
+        assert_ne!(normalize_word("अन्त"), normalize_word("अनत"), "a virama tells two words apart");
+
+        // The NATIVE nukta survives. ਸ਼ is not ਸ and ड़ is not ड.
+        assert_eq!(normalize_word("ਪਰਮੇਸ਼ੁਰ"), "ਪਰਮੇਸ਼ੁਰ");
+        assert_ne!(fold_word("ਵਿਸ਼ਵਾਸ"), fold_word("ਵਿਸਵਾਸ"));
+        assert_ne!(fold_word("बड़ा"), fold_word("बडा"));
+
+        // The BORROWED nukta folds, on the index side and the query side alike.
+        assert_eq!(fold_word("ज़रूर"), fold_word("जरूर"));
+        assert_eq!(normalize_word("ਫ਼ਿਲਿਪੁੱਸ"), normalize_word("ਫਿਲਿਪੁੱਸ"));
+
+        // A precomposed letter finds the decomposed one the corpus is written
+        // in — the reason `indic_decompose` exists. Both directions, because
+        // the query may be typed either way.
+        assert_eq!(fold_word("\u{0A36}ਬਦ"), fold_word("\u{0A38}\u{0A3C}ਬਦ"), "precomposed ਸ਼");
+        assert_eq!(fold_word("ब\u{095C}ा"), fold_word("ब\u{0921}\u{093C}ा"), "precomposed ड़");
+        assert_eq!(fold_word("\u{095B}रूर"), fold_word("जरूर"), "precomposed ज़ still folds");
+
+        // The hyphen inside a reduplication is not punctuation to peel — it is
+        // how both languages write "चलते-चलते", and `build-indic.py` keeps it in
+        // the word for the same reason.
+        assert_eq!(normalize_word("चलते-चलते"), "चलते-चलते");
+        // A zero-width joiner is neither letter nor mark and comes out.
+        assert_eq!(normalize_word("क\u{200D}ख"), "कख");
     }
 
     /// A suffix that *looks* verbal but leaves nothing keepable behind must

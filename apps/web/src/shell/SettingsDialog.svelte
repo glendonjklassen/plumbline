@@ -2,7 +2,7 @@
   // One Settings dialog (Android IA): analysis switches, theme, text size /
   // margin / line-spacing sliders, copy format, bundled stock set.
   import { getSession } from "../state/session.svelte";
-  import { DEFAULT_FONT, FONT_CSS_FAMILY, SCRIPT_FALLBACK_TOKEN } from "../engine/fonts.generated";
+  import { DEFAULT_FONT, FONT_CSS_FAMILY, FONT_SCRIPT } from "../engine/fonts.generated";
   import { fontStackFor } from "../reader/measure";
   import { modal } from "../lib/modal";
   import { completeOffline, surveyOffline, type OfflineSurvey } from "../engine/offline";
@@ -11,7 +11,18 @@
   import { zipRead, zipWrite } from "../engine/zip";
   import { idbApply } from "../engine/idb";
   import { nowStamp } from "../engine/StudyEngine";
-  import { deviceLocale, fill, hasOwnBible, hasOwnLexicon, isRtl, languages, plural, readerFace, t } from "../lib/i18n.svelte";
+  import {
+    deviceLocale,
+    fill,
+    hasOwnBible,
+    hasOwnLexicon,
+    languageLabel,
+    languages,
+    plural,
+    readerFace,
+    script,
+    t,
+  } from "../lib/i18n.svelte";
 
   const s = getSession();
 
@@ -627,7 +638,7 @@
   // itself: `readerFace` in lib/i18n.svelte.ts resolves every applied token to
   // the script face under an RTL language, so nothing here needs choosing.
   const fonts = $derived(
-    Object.keys(FONT_CSS_FAMILY).filter((tok) => (tok === SCRIPT_FALLBACK_TOKEN) === isRtl()),
+    Object.keys(FONT_CSS_FAMILY).filter((tok) => FONT_SCRIPT[tok] === script()),
   );
   const fontName = (token: string): string => FONT_CSS_FAMILY[token] ?? token;
 
@@ -679,7 +690,7 @@
       >
         <option value="">{t("settings.languageDevice")}</option>
         {#each languages() as l (l.code)}
-          <option value={l.code}>{l.endonym}</option>
+          <option value={l.code}>{languageLabel(l)}</option>
         {/each}
       </select>
       {#if hasOwnLexicon()}

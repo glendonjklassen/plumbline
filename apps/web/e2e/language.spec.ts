@@ -72,9 +72,12 @@ async function pick(page: Page, now: Record<string, string>, want: string): Prom
   // A property on `window` cannot survive a new document, so its disappearance is
   // the one unambiguous "this is the page after the reload".
   await page.evaluate(() => ((globalThis as any).__beforeSwitch = true));
-  // A dropdown since 2026-08-16 (it was a radio column); the option labels are
-  // still the endonyms.
-  await dialog.getByLabel(now["settings.language"], { exact: true }).selectOption({ label: want });
+  // A dropdown since 2026-08-16 (it was a radio column). Selected by VALUE —
+  // the option's language code — and not by label, because the label is
+  // "German (Deutsch)" for an English reader and "Deutsch" for a German one
+  // (`languageLabel`), so a test that spells it breaks on a copy change and
+  // says nothing useful when it does.
+  await dialog.getByLabel(now["settings.language"], { exact: true }).selectOption(want);
   await page.waitForFunction(
     () => !(globalThis as any).__beforeSwitch && !!(globalThis as any).__plumbline,
     undefined,
@@ -107,7 +110,7 @@ test.describe("a German device", () => {
   // device. Red here; the test above stays green, which is why there are two.
   test("a reader who picks English keeps it, device notwithstanding", async ({ page }) => {
     await reader(page, DE);
-    await pick(page, DE, "English");
+    await pick(page, DE, "en");
 
     await expect(destinations(page)).toContainText(EN["nav.sing"]);
     await expect(destinations(page)).not.toContainText(DE["nav.sing"]);
@@ -190,7 +193,7 @@ test.describe("an English device", () => {
     await reader(page, EN);
     await expect(destinations(page)).toContainText(EN["nav.sing"]);
 
-    await pick(page, EN, "Deutsch");
+    await pick(page, EN, "de");
     await expect(destinations(page)).toContainText(DE["nav.sing"]);
 
     // BOOK NAMES are the other half, and the half that would have been missed:
@@ -270,7 +273,7 @@ test.describe("a Spanish reader", () => {
   // "downloads the Reina-Valera" while a Bible was an errand.
   test("picking Español switches to the Reina-Valera and reads it", async ({ page }) => {
     await reader(page, EN);
-    await pick(page, EN, "Español");
+    await pick(page, EN, "es");
     await expect(destinations(page)).toContainText(ES["nav.sing"]);
 
     // Book names come from canon.rs through the engine, not the catalogue, so
@@ -336,7 +339,7 @@ test.describe("a German reader's boot", () => {
     const english = await traced(page, "home evict after open");
     expect(english, "no eviction figure in the boot trace").not.toBeNull();
 
-    await pick(page, EN, "Deutsch");
+    await pick(page, EN, "de");
     const german = await traced(page, "home evict after open");
     expect(german, "no eviction figure after the switch").not.toBeNull();
 
@@ -395,7 +398,7 @@ test.describe("the guide", () => {
    */
   test("opens in the reader's language", async ({ page }) => {
     await reader(page, EN);
-    await pick(page, EN, "Deutsch");
+    await pick(page, EN, "de");
 
     await page.getByLabel(DE["common.menu"]).click();
     await page.locator(".menu").getByRole("button", { name: DE["shell.guideAndAbout"] }).click();
@@ -473,7 +476,7 @@ test.describe("a German reader's chapter turn", () => {
    */
   test("does not redo work per word", { tag: "@perf" }, async ({ page }) => {
     await reader(page, EN);
-    await pick(page, EN, "Deutsch");
+    await pick(page, EN, "de");
     // Past the background load, so the cold measurement is not queued behind it.
     await page.waitForTimeout(6000);
     const [cold, transport] = await layoutCostAndFloor(page, "Ps", 119, 902);

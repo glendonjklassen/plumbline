@@ -699,7 +699,7 @@ test("switching to a language a stale pin has never heard of still opens its Bib
     await page.locator(".menu").getByRole("button", { name: EN["shell.settings"] }).click();
     const dialog = page.locator('[data-surface="settings"]');
     await expect(dialog).toBeVisible();
-    await dialog.getByLabel(EN["settings.language"], { exact: true }).selectOption({ label: "العربية" });
+    await dialog.getByLabel(EN["settings.language"], { exact: true }).selectOption("ar");
 
     // Across the reload: the scripture — not the chrome, which was correct even
     // while this was broken — must be the Van Dyck.

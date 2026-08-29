@@ -26,6 +26,7 @@
 //! property of the FACE, so it belongs here rather than being rediscovered by
 //! each shell.
 
+use crate::i18n::Script;
 use serde::{Deserialize, Serialize};
 
 /// A face the reader can choose, for either type axis.
@@ -61,6 +62,15 @@ pub enum Font {
     /// Amiri for Arabic out of one stack and nothing ever renders from a system
     /// font the engine did not measure with.
     Amiri,
+    /// The Gurmukhi face, and the only bundled face with a Gurmukhi glyph.
+    /// Serif because this is a Bible: Gurmukhi has no serif tradition of its
+    /// own, and Noto Serif Gurmukhi is the closest thing to the weight and
+    /// finish of a printed ਪਵਿੱਤਰ ਬਾਈਬਲ.
+    NotoSerifGurmukhi,
+    /// The Devanagari face. Also the face Marathi and Urdu-Devanagari would
+    /// read, if either is ever added — the script is the unit here, not the
+    /// language, which is the whole reason [`Font::script`] exists.
+    NotoSerifDevanagari,
 }
 
 impl Font {
@@ -73,6 +83,8 @@ impl Font {
             Font::FiraCode => "fira-code",
             Font::AtkinsonHyperlegible => "atkinson-hyperlegible",
             Font::Amiri => "amiri",
+            Font::NotoSerifGurmukhi => "noto-serif-gurmukhi",
+            Font::NotoSerifDevanagari => "noto-serif-devanagari",
         }
     }
 
@@ -85,6 +97,8 @@ impl Font {
             "fira-code" => Some(Font::FiraCode),
             "atkinson-hyperlegible" => Some(Font::AtkinsonHyperlegible),
             "amiri" => Some(Font::Amiri),
+            "noto-serif-gurmukhi" => Some(Font::NotoSerifGurmukhi),
+            "noto-serif-devanagari" => Some(Font::NotoSerifDevanagari),
             _ => None,
         }
     }
@@ -102,6 +116,8 @@ impl Font {
             Font::FiraCode => "Fira Code",
             Font::AtkinsonHyperlegible => "Atkinson Hyperlegible",
             Font::Amiri => "Amiri",
+            Font::NotoSerifGurmukhi => "Noto Serif Gurmukhi",
+            Font::NotoSerifDevanagari => "Noto Serif Devanagari",
         }
     }
 
@@ -111,7 +127,10 @@ impl Font {
         // Amiri ships an italic, and Arabic has no italic tradition to use it
         // for — the Van Dyck marks no translator-supplied words, so the axis
         // this exists for is empty in Arabic anyway. Not bundled.
-        !matches!(self, Font::FiraCode | Font::Amiri)
+        //
+        // Same for the two Indic faces, and for the same reason twice over:
+        // neither ships an italic, and neither corpus marks a supplied word.
+        !matches!(self, Font::FiraCode | Font::Amiri | Font::NotoSerifGurmukhi | Font::NotoSerifDevanagari)
     }
 
     /// Whether this face ships a REAL bold, as separate static files rather
@@ -122,6 +141,24 @@ impl Font {
     /// regular. Shell-informative, like [`Font::has_italic`].
     pub fn static_bold(self) -> bool {
         matches!(self, Font::AtkinsonHyperlegible)
+    }
+
+    /// The script this face can set. The five original families are Latin;
+    /// each of the other three exists because no Latin face has a glyph of its
+    /// script.
+    ///
+    /// A COLUMN, like [`crate::i18n::LangSpec::script`], and the two are read
+    /// together by [`Font::offered_for`]. Adding a script means adding a face
+    /// and a row, not editing a condition.
+    pub fn script(self) -> Script {
+        match self {
+            Font::EbGaramond | Font::Literata | Font::Inter | Font::FiraCode | Font::AtkinsonHyperlegible => {
+                Script::Latin
+            }
+            Font::Amiri => Script::Arabic,
+            Font::NotoSerifGurmukhi => Script::Gurmukhi,
+            Font::NotoSerifDevanagari => Script::Devanagari,
+        }
     }
 
     /// Whether this face is offered to a reader of `lang`.
@@ -137,8 +174,14 @@ impl Font {
     ///
     /// And the converse: Amiri has Latin, but it is a naskh face whose Latin is
     /// not why anyone chose it, so it stays out of the Latin pickers.
+    ///
+    /// THIS USED TO ASK `is_rtl()`, and it was right for exactly as long as
+    /// Arabic was the only non-Latin language: "reads right to left" and
+    /// "cannot be set in a Latin face" had the same answer. Gurmukhi and
+    /// Devanagari are left to right and no Latin face has a glyph of either, so
+    /// direction was never the question — the script was.
     pub fn offered_for(self, lang: crate::i18n::Lang) -> bool {
-        matches!(self, Font::Amiri) == lang.is_rtl()
+        self.script() == lang.script()
     }
 
     /// The faces offered to a reader of `lang`, in picker order.
@@ -178,14 +221,36 @@ impl Font {
             // others. Against Garamond's 0.405 that is a full correction of
             // 1.123, and the same half correction lands here.
             Font::Amiri => 1.06,
+            // Devanagari and Gurmukhi have no x-height either. The analogue is
+            // the BODY OF A BASE CONSONANT — baseline to headstroke, where the
+            // matras attach — measured from the shipped files the same way as
+            // Amiri's: क स न प and ਕ ਸ ਨ ਪ, 0.623 and 0.622 em, within a
+            // thousandth of each other, which is why one number serves both.
+            // Against Garamond's 0.400 that is a full correction of 0.64, the
+            // largest on this list in either direction, and the same half
+            // correction lands here.
+            //
+            // NOT the OS/2 sxHeight these two files carry (0.623 and 0.536):
+            // that field measures a Noto face's LATIN subset, which is not the
+            // script anyone selects it for, and for Gurmukhi it disagrees with
+            // the letters by a sixth of an em.
+            Font::NotoSerifGurmukhi | Font::NotoSerifDevanagari => 0.82,
         }
     }
 
     /// Every face, in the order the pickers offer them: the default first, then
     /// the alternatives. One list, so a face added to the enum cannot be
     /// forgotten by a shell — [`tests::every_variant_is_in_all`] holds it.
-    pub const ALL: [Font; 6] =
-        [Font::EbGaramond, Font::Literata, Font::Inter, Font::FiraCode, Font::AtkinsonHyperlegible, Font::Amiri];
+    pub const ALL: [Font; 8] = [
+        Font::EbGaramond,
+        Font::Literata,
+        Font::Inter,
+        Font::FiraCode,
+        Font::AtkinsonHyperlegible,
+        Font::Amiri,
+        Font::NotoSerifGurmukhi,
+        Font::NotoSerifDevanagari,
+    ];
 }
 
 #[cfg(test)]
@@ -213,12 +278,74 @@ mod tests {
     fn every_variant_is_in_all() {
         // ALL is what both shells enumerate. A variant missing from it is a face
         // the reader can hold in their config and never pick in the UI.
-        for f in
-            [Font::EbGaramond, Font::Literata, Font::Inter, Font::FiraCode, Font::AtkinsonHyperlegible, Font::Amiri]
-        {
+        for f in [
+            Font::EbGaramond,
+            Font::Literata,
+            Font::Inter,
+            Font::FiraCode,
+            Font::AtkinsonHyperlegible,
+            Font::Amiri,
+            Font::NotoSerifGurmukhi,
+            Font::NotoSerifDevanagari,
+        ] {
             assert!(Font::ALL.contains(&f), "{} is missing from Font::ALL", f.name());
         }
-        assert_eq!(Font::ALL.len(), 6);
+        assert_eq!(Font::ALL.len(), 8);
+    }
+
+    /// EVERY LANGUAGE MUST BE OFFERED A FACE, and this is the test the `is_rtl`
+    /// version of `offered_for` would have failed.
+    ///
+    /// A reader whose picker is empty has no way to set a size that means
+    /// anything and no way to change the voice of their text; worse, the shells
+    /// fall back to the default token, so a Punjabi reader would be measured
+    /// with Garamond and painted with whatever the system found for Gurmukhi —
+    /// the two contexts disagreeing, which is the wrapping bug the subsetter's
+    /// header is about.
+    #[test]
+    fn every_shipped_language_has_at_least_one_face() {
+        for lang in crate::i18n::Lang::ALL {
+            let offered = Font::all_for(lang);
+            assert!(!offered.is_empty(), "{} is offered no face at all", lang.code());
+            for f in &offered {
+                assert_eq!(f.script(), lang.script(), "{} is offered {}", lang.code(), f.name());
+            }
+        }
+    }
+
+    /// And the converse: no face is offered to a language it cannot set.
+    ///
+    /// Stated over the whole cross product rather than as a list of which
+    /// languages get which faces, so a language added tomorrow is covered by
+    /// the test written today.
+    #[test]
+    fn a_face_is_offered_exactly_where_it_can_set_the_text() {
+        for f in Font::ALL {
+            for lang in crate::i18n::Lang::ALL {
+                assert_eq!(f.offered_for(lang), f.script() == lang.script(), "{} for {}", f.name(), lang.code());
+            }
+        }
+        // The concrete anchor, because the rule above is satisfied by a broken
+        // `script()` that answers the same wrong thing on both sides.
+        assert!(Font::NotoSerifGurmukhi.offered_for(crate::i18n::Lang::Pa));
+        assert!(!Font::NotoSerifGurmukhi.offered_for(crate::i18n::Lang::Hi));
+        assert!(!Font::EbGaramond.offered_for(crate::i18n::Lang::Pa));
+        assert!(!Font::Amiri.offered_for(crate::i18n::Lang::Hi));
+    }
+
+    /// Exactly one face per non-Latin script, and it is not a tidiness rule.
+    ///
+    /// The web bundles the script faces UNCONDITIONALLY — they sit in every
+    /// family's CSS fallback stack so the engine worker and the document agree
+    /// on what renders a codepoint no Latin face has. Two faces for one script
+    /// means two answers to "which one is in the stack", and the two contexts
+    /// can pick differently.
+    #[test]
+    fn each_non_latin_script_has_exactly_one_face() {
+        for script in [Script::Arabic, Script::Gurmukhi, Script::Devanagari] {
+            let n = Font::ALL.iter().filter(|f| f.script() == script).count();
+            assert_eq!(n, 1, "{script:?} has {n} faces");
+        }
     }
 
     #[test]
@@ -261,18 +388,25 @@ mod tests {
         // UP. The floor and ceiling are the full-equalisation ratios: Garamond
         // 0.400 over Inter's 0.546 is ~0.73 below, and over Amiri's 0.361 is
         // ~1.12 above.
+        //
+        // The floor moved when the Indic faces arrived: Garamond's 0.400 over
+        // their 0.622 base-consonant body is ~0.64, the largest full correction
+        // on this list in either direction, and the half of it (0.82) has to sit
+        // strictly above it.
         for f in Font::ALL {
             let s = f.scale();
-            assert!(s > 0.73 && s < 1.13, "{} scales by {}", f.name(), s);
+            assert!(s > 0.64 && s < 1.13, "{} scales by {}", f.name(), s);
         }
     }
 
     #[test]
-    fn only_fira_code_lacks_an_italic() {
+    fn only_the_latin_reading_faces_carry_an_italic() {
         // Pinned rather than assumed: a shell asks this before it styles added
         // words, and a wrong answer either loses the KJV's italics or asks a
         // font for a face it does not have.
-        assert!(!Font::FiraCode.has_italic());
+        for f in [Font::FiraCode, Font::Amiri, Font::NotoSerifGurmukhi, Font::NotoSerifDevanagari] {
+            assert!(!f.has_italic(), "{} ships no italic", f.name());
+        }
         for f in [Font::EbGaramond, Font::Literata, Font::Inter, Font::AtkinsonHyperlegible] {
             assert!(f.has_italic(), "{} should have an italic", f.name());
         }
@@ -284,7 +418,14 @@ mod tests {
         // its own file. A shell that gets this wrong either paints bold text
         // regular (static declared as a range) or ships a file it never uses.
         assert!(Font::AtkinsonHyperlegible.static_bold());
-        for f in [Font::EbGaramond, Font::Literata, Font::Inter, Font::FiraCode] {
+        for f in [
+            Font::EbGaramond,
+            Font::Literata,
+            Font::Inter,
+            Font::FiraCode,
+            Font::NotoSerifGurmukhi,
+            Font::NotoSerifDevanagari,
+        ] {
             assert!(!f.static_bold(), "{} is a variable family", f.name());
         }
     }
