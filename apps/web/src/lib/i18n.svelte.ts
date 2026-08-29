@@ -17,7 +17,7 @@
 // copy while the braces name the argument that went missing.
 
 import { BOOT_STRINGS } from "./i18n.generated";
-import { DEFAULT_FONT, SCRIPT_FALLBACK_TOKEN } from "../engine/fonts.generated";
+import { DEFAULT_FONT, FONT_SCRIPT, SCRIPT_FACE } from "../engine/fonts.generated";
 
 /** Where the resolved code is remembered between visits — see `seed()`. */
 const LAST_LANG = "plumbline.lang";
@@ -96,10 +96,16 @@ export interface LanguageChoice {
    *  Bible is really on the device (see `hasOwnBible`). */
   corpusRole: string;
   /** Whether this language is written right to left. Straight off the registry
-   *  row (`core::i18n::LangSpec::rtl`) — the chrome's business only. Direction
+   *  row (`core::i18n::Script::is_rtl`) — the chrome's business only. Direction
    *  INSIDE the text is settled in the engine, which mirrors the display list
    *  and does not consult a shell. */
   rtl: boolean;
+  /** The writing system, as `core::i18n::Script`'s token. WHICH FACES CAN SET
+   *  THIS LANGUAGE, and a separate question from `rtl` — which is what it was
+   *  being asked as while Arabic was the only non-Latin script and the two had
+   *  the same answer. Gurmukhi and Devanagari read left to right and no Latin
+   *  face has a glyph of either. */
+  script: string;
 }
 
 let choices = $state<LanguageChoice[]>([]);
@@ -123,6 +129,7 @@ export function setCatalog(
     hasLexicon: typeof l.lexiconRole === "string",
     corpusRole: String(l.corpusRole ?? "corpusCache"),
     rtl: l.rtl === true,
+    script: String(l.script ?? "latin"),
   }));
   // THE DOCUMENT'S OWN DIRECTION, set here because this is the one place the
   // interface language becomes current.
@@ -168,27 +175,41 @@ export function isRtl(): boolean {
   return choices.find((l) => l.code === code)?.rtl === true;
 }
 
+/** The writing system the language currently being painted is set in. Latin
+ *  until the boot reply lands, which is what the splash is drawn in anyway. */
+export function script(): string {
+  return choices.find((l) => l.code === code)?.script ?? "latin";
+}
+
 /** The face a token RESOLVES TO under the current language.
  *
- *  An RTL reader gets the script face whatever the config says, and this is the
- *  one rule that says so. The config keeps the reader's own (Latin) choice
- *  untouched — switching back restores it — but every APPLICATION of a token
- *  goes through here, because the alternative was measured and shipped briefly:
- *  scripture painted in Amiri through the fallback stack at a Latin face's
- *  optical scale, smaller than every other face renders, with the picker hidden
- *  and therefore no way for the reader to correct it. Settings hides the font
- *  choice when only one face can render the language (there is nothing to
- *  choose), and hiding the choice is only honest if the app makes it. */
+ *  A reader of a non-Latin script gets that script's face whatever the config
+ *  says, and this is the one rule that says so. The config keeps the reader's
+ *  own (Latin) choice untouched — switching back restores it — but every
+ *  APPLICATION of a token goes through here, because the alternative was
+ *  measured and shipped briefly: scripture painted in Amiri through the
+ *  fallback stack at a Latin face's optical scale, smaller than every other
+ *  face renders, with the picker hidden and therefore no way for the reader to
+ *  correct it. Settings hides the font choice when only one face can set the
+ *  language (there is nothing to choose), and hiding the choice is only honest
+ *  if the app makes it.
+ *
+ *  ONE COMPARISON AGAINST THE READER'S SCRIPT, where it used to be `isRtl()`
+ *  against one token. That form has no answer for a third script: a Punjabi
+ *  reader is not RTL, so the old rule handed them EB Garamond, which has no
+ *  Gurmukhi in it at all. */
 export function readerFace(token: string): string {
-  // Symmetric on purpose. The RTL half is the headline; the LTR half is the
-  // cleanup after it: a config can legitimately HOLD the script token (an
-  // earlier build's one-entry picker let a reader select it), and applied
+  // Symmetric on purpose. Forcing the script face is the headline; the other
+  // half is the cleanup after it: a config can legitimately HOLD a script token
+  // (an earlier build's one-entry picker let a reader select it), and applied
   // face-value in English that renders the KJV in naskh Latin while the picker
-  // — whose list has no such row — shows a BLANK selection (maintainer's
-  // phone, 2026-08-28). An off-list token resolves to the language's default;
-  // the config itself is never rewritten.
-  if (isRtl()) return SCRIPT_FALLBACK_TOKEN;
-  return token === SCRIPT_FALLBACK_TOKEN ? DEFAULT_FONT : token;
+  // — whose list has no such row — shows a BLANK selection (maintainer's phone,
+  // 2026-08-28). An off-script token resolves to the script's own face, or to
+  // the default where that script is Latin; the config itself is never
+  // rewritten.
+  const want = script();
+  if (FONT_SCRIPT[token] === want) return token;
+  return SCRIPT_FACE[want] ?? DEFAULT_FONT;
 }
 
 /** Whether this language reads a Bible of its own rather than the base pack's.

@@ -55,6 +55,55 @@ pub enum Lang {
     De,
     Es,
     Ar,
+    Pa,
+    Hi,
+}
+
+/// The writing system a language is set in.
+///
+/// A COLUMN, and it replaces the `rtl` boolean that used to sit in its place.
+/// That boolean was declared rather than derived on the argument that nothing
+/// else in the row implied it — "it is a property of the SCRIPT, and a language
+/// could in principle change script without changing anything else here". The
+/// script is now in the row, so the second half of that sentence is no longer
+/// true and the first half is the reason this exists: direction FOLLOWS from
+/// the script, and two facts that must agree are better as one fact.
+///
+/// What forced it was not direction at all. [`crate::font::Font::offered_for`]
+/// asked `is_rtl()` to answer "which faces can render this language", because
+/// while Arabic was the only non-Latin language the two questions had the same
+/// answer. Gurmukhi and Devanagari are left to right and no Latin face has a
+/// glyph of either, so a reader would have been offered five faces that render
+/// their Bible in a sixth.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Script {
+    Latin,
+    Arabic,
+    Gurmukhi,
+    Devanagari,
+}
+
+impl Script {
+    /// Whether this script is written right to left.
+    ///
+    /// Read by more places than anything else here — the layout engine mirrors
+    /// its display list, both shells mirror their chrome and flip which way a
+    /// swipe turns the page — and every one of those would otherwise be its own
+    /// `if code == "ar"` waiting to be missed.
+    pub fn is_rtl(self) -> bool {
+        matches!(self, Script::Arabic)
+    }
+
+    /// The token that crosses the wire, for a shell that needs to name a script
+    /// (the web's font CSS does).
+    pub fn token(self) -> &'static str {
+        match self {
+            Script::Latin => "latin",
+            Script::Arabic => "arabic",
+            Script::Gurmukhi => "gurmukhi",
+            Script::Devanagari => "devanagari",
+        }
+    }
 }
 
 /// The scripture a language reads.
@@ -122,20 +171,9 @@ pub struct LangSpec {
     /// Its English name, for a reader who narrows the hymnal by typing
     /// "Spanish" rather than "Español". Both shells match either, plus the code.
     pub exonym: &'static str,
-    /// Whether this language is written right to left.
-    ///
-    /// A COLUMN and not a `matches!(self, Lang::Ar)`, for the reason at the top
-    /// of this file: German lived in a dozen sites that each knew a little about
-    /// it, and none of them knew about each other. Direction is read by more
-    /// places than any other fact here — the layout engine mirrors its display
-    /// list, both shells mirror their chrome and flip which way a swipe turns
-    /// the page, and every one of those would otherwise be its own `if code ==
-    /// "ar"` waiting to be missed when a second RTL language arrives.
-    ///
-    /// Declared rather than derived: nothing else in the row implies it. It is a
-    /// property of the SCRIPT, and a language could in principle change script
-    /// without changing anything else here.
-    pub rtl: bool,
+    /// The writing system this language is set in — see [`Script`], which is
+    /// also where the direction comes from and why it is not its own column.
+    pub script: Script,
     /// The compiled-in catalogue (`i18n/<code>.json`). English is the source;
     /// every other language overrides it key by key.
     catalog: &'static str,
@@ -171,7 +209,7 @@ static SPECS: [LangSpec; Lang::COUNT] = [
         code: "en",
         endonym: "English",
         exonym: "English",
-        rtl: false,
+        script: Script::Latin,
         catalog: include_str!("i18n/en.json"),
         corpus: Some(CorpusSpec { file: "kjv.jsonl", tokenization: crate::canon::TOKENIZATION_VERSION, label: "KJV" }),
         lexicon: Some(LexiconSpec { file: "strongs.json", machine_translated: false }),
@@ -184,7 +222,7 @@ static SPECS: [LangSpec; Lang::COUNT] = [
         code: "de",
         endonym: "Deutsch",
         exonym: "German",
-        rtl: false,
+        script: Script::Latin,
         catalog: include_str!("i18n/de.json"),
         corpus: Some(CorpusSpec { file: "luther1912.jsonl", tokenization: "luther1912-tok1", label: "Luther" }),
         lexicon: Some(LexiconSpec { file: "strongs-de.json", machine_translated: true }),
@@ -197,7 +235,7 @@ static SPECS: [LangSpec; Lang::COUNT] = [
         code: "es",
         endonym: "Español",
         exonym: "Spanish",
-        rtl: false,
+        script: Script::Latin,
         catalog: include_str!("i18n/es.json"),
         corpus: Some(CorpusSpec { file: "rv1909.jsonl", tokenization: "rv1909-tok1", label: "Reina-Valera" }),
         // The renderings are Reina-Valera's own words, derived from the tagged
@@ -216,7 +254,7 @@ static SPECS: [LangSpec; Lang::COUNT] = [
         code: "ar",
         endonym: "العربية",
         exonym: "Arabic",
-        rtl: true,
+        script: Script::Arabic,
         catalog: include_str!("i18n/ar.json"),
         corpus: Some(CorpusSpec { file: "svd1865.jsonl", tokenization: "svd1865-tok1", label: "Van Dyck" }),
         // NO STRONG'S DICTIONARY, and this is the first row to say so.
@@ -249,11 +287,60 @@ static SPECS: [LangSpec; Lang::COUNT] = [
         // question, not a display one, and it is two verses in 31,102.
         numbering: None,
     },
+    LangSpec {
+        code: "pa",
+        endonym: "ਪੰਜਾਬੀ",
+        exonym: "Punjabi",
+        script: Script::Gurmukhi,
+        catalog: include_str!("i18n/pa.json"),
+        corpus: Some(CorpusSpec {
+            file: "pan-fbi.jsonl", tokenization: "pan-fbi-tok1", label: "ਪਵਿੱਤਰ ਬਾਈਬਲ"
+        }),
+        // No Strong's dictionary, for Arabic's reason: `pan-fbi.jsonl` carries
+        // no codes, and `build-strongs.py` derives its renderings from a TAGGED
+        // corpus. A word study in Punjabi is honestly absent rather than
+        // machine-guessed.
+        lexicon: None,
+        modernization: None,
+        // No numbering table, and — like Arabic — NOT for Spanish's reason.
+        //
+        // This text prints 31,104 verses to the KJV's 31,102, splitting 3 John
+        // 14 and Rev 13:1, and `build-indic.py` merges both back. But this
+        // column annotates a DIFFERENT NUMBER, and in both cases the number is
+        // the same: a row here would tell a reader their Bible calls 13:1
+        // "13:1".
+        //
+        // What IS different is 1 John 5:6-8, and no column here can say it. The
+        // KJV's 5:6b sits at 5:7, the Comma Johanneum is absent, and 5:8
+        // realigns — so the address 1 John 5:7 holds different words in this
+        // corpus than in the KJV while carrying the same number. That is what
+        // this Bible prints, it is true of every Indian-language Protestant
+        // Bible found, and `NumberingSpec` is the wrong shape for it: nothing
+        // is renumbered, the text under one number differs.
+        numbering: None,
+    },
+    LangSpec {
+        code: "hi",
+        endonym: "हिन्दी",
+        exonym: "Hindi",
+        script: Script::Devanagari,
+        catalog: include_str!("i18n/hi.json"),
+        corpus: Some(CorpusSpec {
+            file: "hin-fbi.jsonl", tokenization: "hin-fbi-tok1", label: "पवित्र बाइबल"
+        }),
+        // See Punjabi above: no tagged corpus, so no dictionary and none
+        // invented.
+        lexicon: None,
+        modernization: None,
+        // Same two splits, same 1 John 5 divergence, same reason for an empty
+        // column. See Punjabi.
+        numbering: None,
+    },
 ];
 
 impl Lang {
-    pub const COUNT: usize = 4;
-    pub const ALL: [Lang; Lang::COUNT] = [Lang::En, Lang::De, Lang::Es, Lang::Ar];
+    pub const COUNT: usize = 6;
+    pub const ALL: [Lang; Lang::COUNT] = [Lang::En, Lang::De, Lang::Es, Lang::Ar, Lang::Pa, Lang::Hi];
 
     /// This language's row. The one accessor everything else is built on.
     pub fn spec(self) -> &'static LangSpec {
@@ -275,9 +362,15 @@ impl Lang {
         self.spec().exonym
     }
 
-    /// Whether this language is written right to left. See [`LangSpec::rtl`].
+    /// The writing system this language is set in. See [`Script`].
+    pub fn script(self) -> Script {
+        self.spec().script
+    }
+
+    /// Whether this language is written right to left. DERIVED from the script,
+    /// which is the only thing that decides it — see [`Script`].
     pub fn is_rtl(self) -> bool {
-        self.spec().rtl
+        self.spec().script.is_rtl()
     }
 
     /// The text this language reads, which for a language with none of its own
@@ -498,7 +591,15 @@ pub fn registry_json() -> String {
                 // the document's `dir` — which is a separate question from the
                 // reader's direction inside the text, where the engine mirrors
                 // the display list and no shell is consulted.
-                "rtl": s.rtl,
+                //
+                // Still a field of its own rather than left for a shell to
+                // derive from `script`: it is the question the shells actually
+                // ask, and re-deriving it there would put the Arabic-is-RTL rule
+                // in a second place.
+                "rtl": s.script.is_rtl(),
+                // Which faces can render this language. The web's font picker
+                // reads it, for the reason `Font::offered_for` exists.
+                "script": s.script.token(),
                 "corpus": s.corpus.as_ref().map(|c| c.file),
                 "corpusCache": s.corpus.as_ref().map(|c| c.cache_file()),
                 "tokenization": s.corpus.as_ref().map(|c| c.tokenization),

@@ -42,6 +42,9 @@ module id `engKJV2006eb` itself no longer resolves there (checked 2026-07-29).
 | `data/strongs-de.json` | German Strong's dictionary: machine-translated definitions + Luther renderings derived from the tagged corpus | translation of `data/strongs.json` by `data-prep/strongs-lang/translate.py` (Claude, Batch API; labelled as machine-translated in the app) + renderings computed by `build-strongs.py` | **CC-BY-SA** — a derivative of openscriptures/strongs, share-alike carries over |
 | `data/rv1909.jsonl` (text + Strong's tags) | Reina-Valera 1909 at KJV addresses, tokenized (`rv1909-tok1`), with the source's own inline Strong's tags on each phrase's head word | eBible.org USFX edition via [seven1m/open-bibles](https://github.com/seven1m/open-bibles) (`spa-rv1909.usfx.xml`); built by `data-prep/rv1909/build-rv1909.py`, proved by `check-rv1909.py` | public domain (the 1909 revision; the 1960 is not) |
 | `data/strongs-es.json` | Spanish Strong's dictionary: machine-translated definitions + Reina-Valera renderings derived from the tagged corpus | translation of `data/strongs.json` by a Claude Sonnet subagent fleet, 2026-08-16 (same prompt and validation as `data-prep/strongs-lang/translate.py`, which remains the reproducible path; labelled as machine-translated in the app) + renderings computed by `build-strongs.py` from `data/rv1909.jsonl` | **CC-BY-SA** — a derivative of openscriptures/strongs, share-alike carries over |
+| `data/svd1865.jsonl` | Smith & Van Dyck 1865 at KJV addresses, tokenized (`svd1865-tok1`), fully vocalized; two split verses merged back to the KJV address | eBible.org USFM edition `arb-vd`; built by `data-prep/svd/build-svd.py`, proved by `check-svd.py` | public domain (the 1865 text; eBible's `copr.htm` and catalogue both say so) |
+| `data/pan-fbi.jsonl` | ਪਵਿੱਤਰ ਬਾਈਬਲ (Punjabi) at KJV addresses, tokenized (`pan-fbi-tok1`); two split verses merged back to the KJV address | [FreeBiblesIndia/Punjabi_Bible](https://github.com/FreeBiblesIndia/Punjabi_Bible), original work available at <http://freebiblesindia.in>; built by `data-prep/indic/build-indic.py`, proved by `check-indic.py`. **Modified**: the text is tokenized into the frozen `kjv.jsonl` shape, its two split verses are merged to the KJV address, and the publisher's footnotes, section headings and book introductions are not carried. | **CC BY-SA 4.0** — attribution above, share-alike carries to the tokenized corpus |
+| `data/hin-fbi.jsonl` | पवित्र बाइबल (Hindi) at KJV addresses, tokenized (`hin-fbi-tok1`); two split verses merged back to the KJV address | [FreeBiblesIndia/Hindi_Bible](https://github.com/FreeBiblesIndia/Hindi_Bible), original work available at <http://freebiblesindia.in>; built by `data-prep/indic/build-indic.py`, proved by `check-indic.py`. **Modified**: as above, and the source's inline cross-reference apparatus (`\bdit`, 2,513 spans) is dropped with the footnotes. | **CC BY-SA 4.0** — attribution above, share-alike carries to the tokenized corpus |
 
 ## Morphology
 
@@ -101,3 +104,13 @@ offers four more faces, all bundled the same way and all OFL: **Literata**
 (Type Together, for Google Fonts), **Inter** (Rasmus Andersson), **Fira Code**
 (Nikita Prokopov et al.), and **Atkinson Hyperlegible** (Braille Institute of
 America — the low-vision face).
+
+Three further faces are bundled for everyone and offered to nobody who cannot
+read them, because none of the seven above contains a single glyph of their
+scripts: **Amiri** (Khaled Hosny — the naskh face that carries the Van Dyck,
+and the one that positions its tashkeel properly), **Noto Serif Gurmukhi** and
+**Noto Serif Devanagari** (Google, for ਪਵਿੱਤਰ ਬਾਈਬਲ and पवित्र बाइबल). All
+three are OFL, and each licence travels with its source at
+`apps/web/fonts-src/OFL-*.txt`. Which face a reader is offered follows the
+SCRIPT of their language and not its direction — `core::font::Font::offered_for`
+is the one rule, and `core::i18n::Script` is what it reads.

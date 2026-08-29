@@ -1859,6 +1859,17 @@ pub struct WireLanguage {
     /// the exact shape of the problem the registry exists to end. If a third
     /// consumer appears, it reads a row; it does not get its own list.
     pub rtl: bool,
+    /// The writing system, as `core::i18n::Script`'s token — "latin",
+    /// "arabic", "gurmukhi", "devanagari".
+    ///
+    /// WHICH FACES CAN SET THIS LANGUAGE, which is what `rtl` above was being
+    /// asked while Arabic was the only non-Latin script and the two questions
+    /// had one answer. They part at Gurmukhi: Punjabi reads left to right and
+    /// no Latin face has a glyph of it, so an `rtl`-shaped font picker hands a
+    /// Punjabi reader EB Garamond and their Bible renders from whatever the
+    /// system happens to have. Both columns ship, because `dir` really is a
+    /// direction question and the picker really is a script one.
+    pub script: String,
     /// The manifest role its corpus cache is filed under, and the role its own
     /// Strong's dictionary is filed under (absent when it has none).
     ///
@@ -1912,6 +1923,7 @@ pub(crate) fn language_to_wire(l: i18n::Lang) -> WireLanguage {
         name: l.exonym().to_string(),
         bible: l.corpus().label.to_string(),
         rtl: l.is_rtl(),
+        script: l.script().token().to_string(),
         corpus_role: l.corpus_role(),
         lexicon_role: (l != i18n::Lang::En && l.spec().lexicon.is_some()).then(|| l.lexicon_role()),
         pack_files,

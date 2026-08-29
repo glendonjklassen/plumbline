@@ -97,3 +97,17 @@
   font-style: normal;
   font-display: swap;
 }
+@font-face {
+  font-family: "Noto Serif Gurmukhi";
+  src: url("./fonts/NotoSerifGurmukhi-7331db85.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Noto Serif Devanagari";
+  src: url("./fonts/NotoSerifDevanagari-0579b021.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
