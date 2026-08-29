@@ -1113,6 +1113,61 @@ mod tests {
         set_active(before);
     }
 
+    /// NOTHING OUTSIDE THIS MODULE NAMES A BOOK FROM `canon`.
+    ///
+    /// `canon::display_name` is the FROZEN ENGLISH table `refKey` is built
+    /// from. It is the right answer for storage and never the right answer for
+    /// a reader, and the two look identical in an English test run — which is
+    /// how two sites shipped with it: the reading plan's "Today: John 3" card,
+    /// and the header on a copied chapter, six lines under two calls that got
+    /// it right.
+    ///
+    /// A source scan rather than a behavioural test, because the failure is a
+    /// call that should not exist rather than an output that is wrong. The one
+    /// legitimate caller is `book_name` itself, which is the fallback FOR this
+    /// table, plus `canon`'s own definition and tests.
+    #[test]
+    fn only_book_name_reads_the_frozen_english_book_table() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut offenders: Vec<String> = Vec::new();
+        let mut scanned = 0usize;
+        let mut stack = vec![root.join("crates")];
+        while let Some(dir) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                    continue;
+                }
+                if p.extension().is_none_or(|x| x != "rs") {
+                    continue;
+                }
+                // canon.rs defines it; this file is its one legitimate caller.
+                let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+                if name == "canon.rs" || name == "i18n.rs" {
+                    continue;
+                }
+                let Ok(src) = std::fs::read_to_string(&p) else { continue };
+                scanned += 1;
+                for (n, line) in src.lines().enumerate() {
+                    let code = line.split("//").next().unwrap_or("");
+                    if code.contains("display_name(") {
+                        offenders.push(format!("{}:{}", p.strip_prefix(&root).unwrap_or(&p).display(), n + 1));
+                    }
+                }
+            }
+        }
+        // NOT VACUOUS. A walk that found nothing — a moved crate root, a
+        // sandbox with no source — would pass this test silently and go on
+        // passing it forever.
+        assert!(scanned > 20, "the scan only reached {scanned} files; it is not looking at the crates");
+        assert!(
+            offenders.is_empty(),
+            "these name a book from the frozen English table instead of `i18n::book_name`: {offenders:?}"
+        );
+    }
+
     #[test]
     fn book_names_localize_and_fall_back_to_the_canon_table() {
         assert_eq!(book_name(Lang::En, "Ezek"), "Ezekiel");

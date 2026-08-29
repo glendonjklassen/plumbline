@@ -72,16 +72,24 @@ fn verse_text(v: &Verse) -> String {
 
 /// Produce the clipboard text for `vref` (its chapter, for the `Chapter*` kinds)
 /// in the requested shape. `None` when the verse/chapter isn't in the corpus.
-pub fn copy_text(corpus: &Corpus, vref: &VRef, kind: CopyKind) -> Option<String> {
+/// `lang` IS A PARAMETER, not `i18n::active()` read inside.
+///
+/// This function renders text for one reader, so the language is an input to
+/// it — the same reason [`VRef::display_in`] exists beside `VRef::display`. It
+/// was a hidden global read, and the cost showed up the moment a test wanted to
+/// check the German shape: `set_active` is process-wide, the test binary runs
+/// in parallel, and one test switching the language broke two others that were
+/// asserting English in another thread.
+pub fn copy_text(corpus: &Corpus, vref: &VRef, kind: CopyKind, lang: crate::i18n::Lang) -> Option<String> {
     match kind {
         CopyKind::Verse | CopyKind::VerseRef | CopyKind::VerseMarkdown => {
             let v = corpus.verse(vref)?;
             let text = verse_text(v);
             Some(match kind {
                 CopyKind::Verse => text,
-                CopyKind::VerseRef => format!("{text} — {} ({EDITION})", vref.display()),
+                CopyKind::VerseRef => format!("{text} — {} ({EDITION})", vref.display_in(lang)),
                 CopyKind::VerseMarkdown => {
-                    format!("> {text}\n>\n> — *{}* ({EDITION})", vref.display())
+                    format!("> {text}\n>\n> — *{}* ({EDITION})", vref.display_in(lang))
                 }
                 _ => unreachable!(),
             })
@@ -91,7 +99,13 @@ pub fn copy_text(corpus: &Corpus, vref: &VRef, kind: CopyKind) -> Option<String>
             if verses.is_empty() {
                 return None;
             }
-            let chapter_ref = format!("{} {}", crate::canon::display_name(&vref.book), vref.chapter);
+            // The SAME bug as the plan card's, and worse for sitting six lines
+            // under two `vref.display_in(lang)` calls that get it right: copying a
+            // VERSE gave a Hindi reader "यूहन्ना 3:16" and copying the CHAPTER
+            // it is in gave them "John 3". `canon::display_name` is the frozen
+            // English table that `refKey` is built from, and it is never what
+            // reaches a reader.
+            let chapter_ref = vref.chapter_display_in(lang);
             let mut out = String::new();
             for v in verses {
                 let title = v.title();
@@ -147,28 +161,61 @@ mod tests {
     fn verse_shapes() {
         let c = from_str(SAMPLE).unwrap();
         let v = VRef::new("John", 3, 16);
-        assert_eq!(copy_text(&c, &v, CopyKind::Verse).unwrap(), "For God so loved");
-        assert_eq!(copy_text(&c, &v, CopyKind::VerseRef).unwrap(), "For God so loved — John 3:16 (KJV)");
-        assert_eq!(copy_text(&c, &v, CopyKind::VerseMarkdown).unwrap(), "> For God so loved\n>\n> — *John 3:16* (KJV)");
+        let en = crate::i18n::Lang::En;
+        assert_eq!(copy_text(&c, &v, CopyKind::Verse, en).unwrap(), "For God so loved");
+        assert_eq!(copy_text(&c, &v, CopyKind::VerseRef, en).unwrap(), "For God so loved — John 3:16 (KJV)");
+        assert_eq!(
+            copy_text(&c, &v, CopyKind::VerseMarkdown, en).unwrap(),
+            "> For God so loved\n>\n> — *John 3:16* (KJV)"
+        );
     }
 
     #[test]
     fn chapter_shapes() {
         let c = from_str(SAMPLE).unwrap();
         let v = VRef::new("John", 3, 16);
-        let plain = copy_text(&c, &v, CopyKind::Chapter).unwrap();
+        let en = crate::i18n::Lang::En;
+        let plain = copy_text(&c, &v, CopyKind::Chapter, en).unwrap();
         assert!(plain.starts_with("16 For God so loved\n17 For God sent\n18 He that believeth"));
         assert!(plain.ends_with("— John 3 (KJV)"));
-        let md = copy_text(&c, &v, CopyKind::ChapterMarkdown).unwrap();
+        let md = copy_text(&c, &v, CopyKind::ChapterMarkdown, en).unwrap();
         assert!(md.starts_with("> **16** For God so loved"));
         assert!(md.ends_with("> — *John 3* (KJV)"));
+    }
+
+    /// A CHAPTER HEADER IS NAMED IN THE READER'S LANGUAGE, like the verse
+    /// headers six lines above it in the same function.
+    ///
+    /// FAILS AGAINST THE BUG IT DESCRIBES: `chapter_ref` was built with
+    /// `canon::display_name`, the frozen ENGLISH table that `refKey` is made
+    /// from, so a German reader who copied John 3:16 got "Johannes 3,16" and
+    /// the same reader copying the chapter around it got "John 3". Both
+    /// assertions below pass in English, which is why this went unnoticed —
+    /// the language has to be switched to see it.
+    ///
+    /// It takes `lang` rather than switching the process global, which is what
+    /// made this testable at all — see `copy_text`.
+    #[test]
+    fn a_copied_chapter_is_named_in_the_readers_language() {
+        let c = from_str(SAMPLE).unwrap();
+        let v = VRef::new("John", 3, 16);
+        let de = crate::i18n::Lang::De;
+        let plain = copy_text(&c, &v, CopyKind::Chapter, de).unwrap();
+        // The same book name the VERSE forms use, and the German separator with
+        // it — `ref.chapter` is a catalogue template, not a space.
+        assert!(plain.ends_with(&format!("— {} (KJV)", v.chapter_display_in(de))), "{plain}");
+        assert!(!plain.contains("John 3"), "the English book name survived: {plain}");
+        // And the verse forms agree with it, which is the half that was already
+        // right and the reason the mismatch was visible on one screen.
+        let one = copy_text(&c, &v, CopyKind::VerseRef, de).unwrap();
+        assert!(one.contains("Johannes"), "{one}");
     }
 
     #[test]
     fn unknown_verse_is_none() {
         let c = from_str(SAMPLE).unwrap();
-        assert!(copy_text(&c, &VRef::new("John", 99, 1), CopyKind::Verse).is_none());
-        assert!(copy_text(&c, &VRef::new("John", 99, 1), CopyKind::Chapter).is_none());
+        assert!(copy_text(&c, &VRef::new("John", 99, 1), CopyKind::Verse, crate::i18n::Lang::En).is_none());
+        assert!(copy_text(&c, &VRef::new("John", 99, 1), CopyKind::Chapter, crate::i18n::Lang::En).is_none());
     }
 
     #[test]
