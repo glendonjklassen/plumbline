@@ -885,8 +885,7 @@ mod tests {
             if lang == Lang::En {
                 continue;
             }
-            let gaps: Vec<String> =
-                missing(lang).into_iter().filter(|k| !is_intro_prose(&k)).collect();
+            let gaps: Vec<String> = missing(lang).into_iter().filter(|k| !is_intro_prose(k)).collect();
             assert!(
                 gaps.is_empty(),
                 "{} is missing {} key(s), and only the welcome prose may be missing: {:?}",

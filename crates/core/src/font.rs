@@ -213,14 +213,9 @@ mod tests {
     fn every_variant_is_in_all() {
         // ALL is what both shells enumerate. A variant missing from it is a face
         // the reader can hold in their config and never pick in the UI.
-        for f in [
-            Font::EbGaramond,
-            Font::Literata,
-            Font::Inter,
-            Font::FiraCode,
-            Font::AtkinsonHyperlegible,
-            Font::Amiri,
-        ] {
+        for f in
+            [Font::EbGaramond, Font::Literata, Font::Inter, Font::FiraCode, Font::AtkinsonHyperlegible, Font::Amiri]
+        {
             assert!(Font::ALL.contains(&f), "{} is missing from Font::ALL", f.name());
         }
         assert_eq!(Font::ALL.len(), 6);

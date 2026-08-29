@@ -3141,7 +3141,14 @@ fn the_registry_and_the_wire_describe_the_same_languages() {
         let row = rows.iter().find(|r| r["code"] == lang.code()).expect("language missing from the registry");
         let wire = serde_json::to_value(super::wire::language_to_wire(lang)).unwrap();
         for key in ["code", "endonym", "rtl"] {
-            assert_eq!(row[key], wire[key], "{} disagrees about {key}: registry {} vs wire {}", lang.code(), row[key], wire[key]);
+            assert_eq!(
+                row[key],
+                wire[key],
+                "{} disagrees about {key}: registry {} vs wire {}",
+                lang.code(),
+                row[key],
+                wire[key]
+            );
         }
         // The names differ by design — the registry calls the English name
         // `name`, the wire splits `name`/`bible` — so those are compared by the
@@ -3201,9 +3208,7 @@ fn picking_a_language_downloads_no_scripture() {
     // Not a vacuous sweep: at least one language really does still have an ask,
     // or the loop above would pass on an all-empty registry.
     assert!(
-        plumbline_core::i18n::Lang::ALL
-            .iter()
-            .any(|l| !super::wire::language_to_wire(*l).pack_files.is_empty()),
+        plumbline_core::i18n::Lang::ALL.iter().any(|l| !super::wire::language_to_wire(*l).pack_files.is_empty()),
         "no language offers anything — this test would pass no matter what"
     );
 }
