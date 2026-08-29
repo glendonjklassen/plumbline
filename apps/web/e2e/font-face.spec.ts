@@ -126,6 +126,22 @@ test("switching the scripture face re-lays the chapter, at the face's optical si
     })
     .not.toBe(before.lastY);
 
+  // POLLED, not read once. The probe reports the LAST paint, and a frame can
+  // land between the lastY poll above and a one-shot read here that pairs the
+  // new face with a list the new face has not re-laid yet — "new glyphs over
+  // old rects", transiently, while relayouts queue behind the background
+  // Bible downloads on a loaded machine (CI caught exactly this at 44 px,
+  // 2026-08-29). The poll cannot mask the defects this test exists for: a
+  // scale applied on one thread only, or a stale turn-cache serving the old
+  // face's geometry, disagree PERMANENTLY — the poll times out red on both
+  // mutations above, same as the one-shot read did.
+  await expect
+    .poll(async () => agreement((await snap(page))!), {
+      message: "measured and painted widths disagree after the switch",
+      timeout: 20_000,
+    })
+    .toBeLessThan(AGREE_TOL);
+
   const after = (await snap(page))!;
   // size × 0.88 (FONT_SCALE["fira-code"]) — the painted px carries the optical
   // scale; config.bodySize still says what the reader set.
@@ -134,9 +150,6 @@ test("switching the scripture face re-lays the chapter, at the face's optical si
     await defaultPx(page),
     "the optical scale must never be written back into the stored size",
   ).toBe(size);
-  expect(agreement(after), "measured and painted widths disagree after the switch").toBeLessThan(
-    AGREE_TOL,
-  );
 });
 
 // The face is a config setting, and settings survive a reload. (It once looked

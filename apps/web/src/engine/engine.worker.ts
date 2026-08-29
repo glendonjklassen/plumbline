@@ -487,7 +487,18 @@ async function reconcilePack(): Promise<void> {
   // installed it. The same call decides what gets pinned below, so the sweep
   // and the pin can never disagree about which files should be here.
   const mine = devicePackFiles(live, (f) => hasOptional(booted!.home, f));
-  for (const f of mine) {
+  // NOT THE OTHER BIBLES. They are in `mine` — the pin claims their URLs, prune
+  // keeps them — but they must not gate this sweep: they are ~9 MB against the
+  // base pack's ~200 KB of typical drift, and `fetchOtherCorpora` (which runs
+  // right after this, against the manifest this function just updated) is their
+  // download path. Fetched here too, a slow or offline device would strand its
+  // pin on the OLD release until all three Bibles landed — the exact
+  // "stopped re-pinning for good" failure the optional bundle already taught
+  // this function about, one stage over (caught by CI, 2026-08-28: the
+  // completeness gate below timed a test out waiting on corpora that the
+  // background pass would have fetched anyway).
+  const gating = mine.filter((f) => f.stage !== "corpus");
+  for (const f of gating) {
     const url = packFileUrl(f, live.version);
     if (await depotHas(url)) continue; // unchanged: same hash, same URL, already here
     await depotBytes(url);
@@ -498,9 +509,13 @@ async function reconcilePack(): Promise<void> {
     fetched++;
   }
   // Verify before committing. Cheap — a metadata lookup per file, no bodies read.
-  for (const f of mine) {
+  for (const f of gating) {
     if (!(await depotHas(packFileUrl(f, live.version)))) return; // incomplete: keep the old pin
   }
+  // `mine`, not `gating`: the pin CLAIMS the corpora — URLs are content-addressed
+  // and deterministic, so a claim for bytes still on their way names exactly
+  // where those bytes will land, prune's keep-set covers them mid-download, and
+  // nothing has to re-pin when they arrive.
   await writePin(live, assetUrl(""), mine);
 
   // From here the session speaks about the pack it actually has.
@@ -674,23 +689,14 @@ async function fetchOtherCorpora(): Promise<void> {
   }
   if (!got) return;
   booted!.trace.push([`other Bibles fetched (${got}/${rest.length})`, Math.round(performance.now() - t0)]);
-  // RE-PIN, and this is not optional bookkeeping — it is what makes the download
-  // survive. Prune is an ALLOWLIST over what the pin names, so 9 MB of Bibles
-  // that no pin mentions is 9 MB the next launch reclaims, and this function
-  // would fetch them again every session forever.
-  //
-  // It is also how an UPGRADING device converges. A pin written before these
-  // were bundled lists no corpus at all, and a warm boot builds its manifest
-  // from the pin — so `corpusRoleFor` would keep answering "this build has no
-  // Arabic text" and keep opening the KJV, on a device that now has the Van Dyck
-  // sitting in the depot. Writing the refreshed manifest here is what lets the
-  // NEXT boot see it. (Not `reconcilePack`'s job: it re-pins only when the pack
-  // VERSION changed, and moving a file between stages changes no bytes.)
-  try {
-    await writePin(booted!.manifest, assetUrl(""), devicePackFiles(booted!.manifest, (f) => hasOptional(booted!.home, f)));
-  } catch {
-    /* the pin stands as it was; the fetch above is idempotent next launch */
-  }
+  // NO RE-PIN, and its absence is load-bearing. Every pin writer — the boot's
+  // cold path, `reconcilePack`, `installLangPack` — claims the corpora's URLs
+  // UP FRONT, before the bytes exist: the URLs are content-addressed and
+  // deterministic, so a claim names exactly where these downloads land, and
+  // prune's keep-set covers them from the first pin on. A re-pin here therefore
+  // adds nothing — and the one this function briefly had was a hazard: it wrote
+  // `booted!.manifest` back over whatever `reconcilePack` had just pinned, and
+  // on an unlucky interleave that is a NEWER pin clobbered by an older manifest.
 }
 
 /** Reclaim everything the device no longer needs.
@@ -1256,10 +1262,41 @@ self.onmessage = async (ev: MessageEvent) => {
         break;
       }
       case "langPackState": {
-        const entry = langCorpusEntry(booted!.manifest, m.code as string);
+        // THROUGH THE STALE-PIN WINDOW. A warm boot's manifest IS the pin, and
+        // on the first launch after an upgrade the pin describes the release
+        // BEFORE this one — a release that had never heard of the language the
+        // reader is right now picking. Answering "not available" from that
+        // manifest is how a phone switched to Arabic within a minute of
+        // updating got the Arabic interface over the English KJV (maintainer's
+        // own device, v0.63.0 launch day): the switch skipped the ensure, the
+        // reload booted from the old pin, and the corpus role resolved to
+        // nothing. One 5 KB manifest fetch closes the window; offline keeps the
+        // old answer, which is the truth about what this device can do offline.
+        let entry = langCorpusEntry(booted!.manifest, m.code as string);
+        if (!entry) {
+          try {
+            booted!.manifest = await fetchManifest();
+            entry = langCorpusEntry(booted!.manifest, m.code as string);
+          } catch {
+            /* offline: the pin's manifest is what this device has */
+          }
+        }
+        // `installed` is A CLAIM ABOUT THE DEPOT, not about the reader's
+        // history. The old answer — the `langsInstalled` opt-in marker — was
+        // right while a Bible was an optional download and is a lie now that
+        // every Bible ships in the background: a corpus can be sitting in the
+        // depot with no marker (the background pass put it there), or still be
+        // MID-FLIGHT with the marker about to matter. What the switch flow
+        // needs to know is "can the reload that follows actually open this
+        // text", and only the depot answers that. The marker still gates the
+        // DICTIONARY, which really is opt-in — so a language whose lexicon has
+        // not been taken still reports uninstalled, and the install (which
+        // fetches both and sets the marker) still runs once.
+        const bytesHere = !!entry && (await depotHas(packFileUrl(entry, booted!.manifest.version)));
+        const lex = booted!.manifest.files.find((f) => f.role === `lexicon:${m.code as string}`);
         reply({
           available: !!entry,
-          installed: booted!.home.langsInstalled.has(m.code as string),
+          installed: bytesHere && (!lex || booted!.home.langsInstalled.has(m.code as string)),
           gzBytes: entry?.gzBytes ?? 0,
         });
         break;
@@ -1337,7 +1374,19 @@ self.onmessage = async (ev: MessageEvent) => {
       }
       case "installLangPack": {
         const code = m.code as string;
-        const entry = langCorpusEntry(booted!.manifest, code);
+        let entry = langCorpusEntry(booted!.manifest, code);
+        // The stale-pin window again — see `langPackState`. The state call has
+        // usually already refreshed the manifest, but this op must hold on its
+        // own: Settings is not the only conceivable caller, and a race between
+        // the two RPCs must not resurrect the old answer.
+        if (!entry) {
+          try {
+            booted!.manifest = await fetchManifest();
+            entry = langCorpusEntry(booted!.manifest, code);
+          } catch {
+            /* offline: fail below with the honest message */
+          }
+        }
         const cache = await fetchLangCorpus(booted!.manifest, code, (p) =>
           self.postMessage({ type: "langPackProgress", fraction: p.fraction }),
         );

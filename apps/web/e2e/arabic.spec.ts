@@ -195,7 +195,7 @@ test("Arabic search finds a word the reader can actually type", async ({ page })
   ).toBeVisible({ timeout: 60_000 });
 });
 
-test("the scripture font picker offers only a face that has Arabic in it", async ({ page }) => {
+test("a language one face can render gets that face, not a font menu", async ({ page }) => {
   await reader(page, EN);
 
   // English first: the five Latin faces, and NOT the naskh one.
@@ -207,6 +207,7 @@ test("the scripture font picker offers only a face that has Arabic in it", async
     .getByLabel(EN["settings.textFont"], { exact: true })
     .locator("option")
     .allTextContents();
+  expect(enFonts.length, "an English reader has a real choice to make").toBeGreaterThan(1);
   expect(enFonts).toContain("EB Garamond");
   expect(enFonts, "a naskh face is offered to an English reader").not.toContain("Amiri");
   await page.keyboard.press("Escape");
@@ -216,12 +217,41 @@ test("the scripture font picker offers only a face that has Arabic in it", async
   await page.locator(".menu").getByRole("button", { name: AR["shell.settings"] }).click();
   dialog = page.locator('[data-surface="settings"]');
   await expect(dialog).toBeVisible();
-  const arFonts = await dialog
-    .getByLabel(AR["settings.textFont"], { exact: true })
-    .locator("option")
+  // NO pickers at all. Only one face can render Arabic, and a dropdown holding
+  // a single row is a control that cannot do anything — it reads as broken,
+  // not restrained (maintainer, 2026-08-28). Both axes go: scripture face and
+  // chrome face are equally choiceless here.
+  await expect(dialog.getByLabel(AR["settings.textFont"], { exact: true })).toHaveCount(0);
+  await expect(dialog.getByLabel(AR["settings.chromeFont"], { exact: true })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  // Hiding the choice is only honest if the app makes it: the face actually
+  // painting the scripture must BE Amiri — resolved by `readerFace`, not left
+  // to CSS fallback, which renders Amiri glyphs at the LATIN face's optical
+  // scale so the text comes out smaller than any face is calibrated to.
+  // `bodyFont` is what the last frame really set on the canvas.
+  await expect
+    .poll(async () => page.evaluate(() => (globalThis as any).__plumblinePaint?.bodyFont ?? ""), {
+      timeout: 30_000,
+      message: "no frame painted after the switch",
+    })
+    .toContain("Amiri");
+
+  // And the round trip: back in English the pickers return with a NON-BLANK
+  // selection. A config that holds the script token (an earlier build's
+  // one-row picker allowed selecting it) used to leave the select showing
+  // nothing at all — the value was a token the filtered list doesn't carry
+  // (maintainer's phone, 2026-08-28). `readerFace` resolves off-list tokens to
+  // the language's default, and the select binds to the RESOLVED face.
+  await pick(page, AR, "English");
+  await page.getByLabel(EN["common.menu"]).click();
+  await page.locator(".menu").getByRole("button", { name: EN["shell.settings"] }).click();
+  dialog = page.locator('[data-surface="settings"]');
+  await expect(dialog).toBeVisible();
+  const selected = await dialog
+    .getByLabel(EN["settings.textFont"], { exact: true })
+    .locator("option:checked")
     .allTextContents();
-  // Offering the other five would offer five ways to read nothing: fallback
-  // renders the scripture in Amiri regardless, so the only thing the choice
-  // would change is the SIZE, via the selected token's optical scale.
-  expect(arFonts).toEqual(["Amiri"]);
+  expect(selected.length, "the English font select shows a BLANK selection").toBe(1);
+  expect(selected[0].trim().length).toBeGreaterThan(0);
 });

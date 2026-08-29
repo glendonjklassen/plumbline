@@ -13,7 +13,7 @@ import { EngineRpc, type BootInfo } from "../engine/worker-client";
 import { dayStamp, localDay, nowStamp } from "../engine/StudyEngine";
 import { fontStackFor, setReaderFont } from "../reader/measure";
 import { cleanChurch, clockLabel, PWA_URL, shareUrl, type Church } from "../shell/church";
-import { lang, t } from "../lib/i18n.svelte";
+import { lang, t, readerFace } from "../lib/i18n.svelte";
 
 export interface PaneState {
   book: string;
@@ -1847,17 +1847,23 @@ export class Session {
    *  Type and colour are independent axes: this is the twin of [[applyTheme]]
    *  and neither one consults the other. */
   applyFonts(): void {
-    const chrome = this.config.chromeFont ?? DEFAULT_FONT;
+    // THROUGH `readerFace`, both of them: an RTL language reads its script face
+    // whatever the config holds — see lib/i18n.svelte.ts. The config is not
+    // rewritten, so the reader's own choice survives a round trip through
+    // Arabic; only what is APPLIED (and hinted to the next boot) is resolved.
+    const chrome = readerFace(this.config.chromeFont ?? DEFAULT_FONT);
+    const text = readerFace(this.config.textFont ?? DEFAULT_FONT);
     document.documentElement.style.setProperty("--chrome-font", fontStackFor(chrome));
-    setReaderFont(this.config.textFont ?? DEFAULT_FONT);
+    setReaderFont(text);
     try {
       // The boot snapshot paints chrome before the engine exists, for the same
       // reason the palette is cached here; and the NEXT boot guesses the
       // scripture face from this, so the worker can start downloading it
       // alongside the pack instead of after the config arrives (App.svelte
-      // `hintedTextFont`).
+      // `hintedTextFont`). The RESOLVED face, so an Arabic session's next boot
+      // measures with the face it will actually read.
       localStorage.setItem("plumbline:chromeFont", chrome);
-      localStorage.setItem("plumbline:textFont", this.config.textFont ?? DEFAULT_FONT);
+      localStorage.setItem("plumbline:textFont", text);
     } catch {
       /* storage full/blocked: the snapshot paints in the default face */
     }
@@ -1869,16 +1875,19 @@ export class Session {
   async setTextFont(token: string): Promise<void> {
     this.config.textFont = token;
     this.saveConfig();
-    setReaderFont(token);
+    // The face APPLIED is the resolved one (see applyFonts): the config carries
+    // the choice, both threads carry what the current language reads.
+    const face = readerFace(token);
+    setReaderFont(face);
     // ORDER MATTERS, as in `setAkjvOverlay`: both sides first, relayout after.
     // `document.fonts.load` is what makes the main thread's canvas paint the
     // real face rather than the fallback it would otherwise have cached.
-    const family = FONT_CSS_FAMILY[token] ?? FONT_CSS_FAMILY[DEFAULT_FONT];
+    const family = FONT_CSS_FAMILY[face] ?? FONT_CSS_FAMILY[DEFAULT_FONT];
     await Promise.all([
-      this.rpc.setTextFont(token),
+      this.rpc.setTextFont(face),
       document.fonts.load(`18px "${family}"`),
       document.fonts.load(`bold 18px "${family}"`),
-      FONT_FILES[token]?.italic ? document.fonts.load(`italic 18px "${family}"`) : Promise.resolve(),
+      FONT_FILES[face]?.italic ? document.fonts.load(`italic 18px "${family}"`) : Promise.resolve(),
     ]);
     this.layoutEpoch++;
     this.invalidate();

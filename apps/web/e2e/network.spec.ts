@@ -11,6 +11,7 @@
 
 import { expect, test, type Page } from "@playwright/test";
 import http from "node:http";
+import { readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 
 // 127.0.0.1 BY NUMBER, both here and in `npm run preview`'s --host: this
@@ -647,6 +648,122 @@ test("a release that adds a TEXT-stage file reaches the session that discovers i
         { timeout: 120_000 },
       )
       .toEqual({ advanced: true, pinsDevotional: true, missing: [] });
+  } finally {
+    await origin.close();
+  }
+});
+
+
+// ── the upgrade window: a pin that has never heard of the language ───────────
+//
+// THE MAINTAINER'S OWN PHONE, v0.63.0 launch day. Update lands, reader opens
+// Settings, picks العربية within a minute — and gets the Arabic interface over
+// the English KJV. The reload after the switch booted from the PIN, the pin
+// described the release before Arabic existed, and `corpusRoleFor` answered
+// honestly about a manifest with no `corpus:ar` in it: corpusCache. Nothing
+// errored, which is this bug family's signature.
+//
+// Two fixes hold this door shut, and the test drives through both:
+//   - `langPackState` / `installLangPack` refresh the manifest when the asked
+//     language is missing from it (the stale-pin window), and answer
+//     `installed` from the DEPOT, not the legacy opt-in marker;
+//   - Settings gates the ensure on `hasOwnBible` (the corpus role), not on
+//     `packFiles` — the download list emptied when the Bibles started shipping
+//     with the app, which is exactly how Arabic skipped the ensure.
+//
+// CAN FAIL: with either regressed — the gate back on `packFiles`, or the state
+// answered from the stale manifest — the switch skips (or refuses) the install,
+// the reload boots from the old pin, and the paint probe reads Latin scripture.
+test("switching to a language a stale pin has never heard of still opens its Bible", async ({ page }) => {
+  const EN: Record<string, string> = JSON.parse(
+    readFileSync(new URL("../../../crates/core/src/i18n/en.json", import.meta.url), "utf8"),
+  );
+  const origin = await rewritingOrigin();
+  try {
+    // The "previous release": the same pack with every trace of the Arabic
+    // corpus removed from the manifest. The pin this visit writes is the pin a
+    // v0.62.1 device carries into the upgrade.
+    origin.mutate((m) => ({
+      ...m,
+      version: "0lderre1ease0000",
+      files: (m.files as { role?: string }[]).filter((f) => f.role !== "corpus:ar"),
+    }));
+    await firstVisit(page, origin.url);
+
+    // "The update deploys": the origin now serves the real manifest. The
+    // running session still holds the old one.
+    origin.mutate(null);
+
+    // The reader switches, through the real picker.
+    await page.getByLabel(EN["common.menu"]).click();
+    await page.locator(".menu").getByRole("button", { name: EN["shell.settings"] }).click();
+    const dialog = page.locator('[data-surface="settings"]');
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel(EN["settings.language"], { exact: true }).selectOption({ label: "العربية" });
+
+    // Across the reload: the scripture — not the chrome, which was correct even
+    // while this was broken — must be the Van Dyck.
+    await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 120_000 });
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() => {
+            const items = (globalThis as any).__plumblinePaint?.items?.deref() ?? [];
+            const words = items.filter((i: any) => i.kind === "word").map((i: any) => String(i.text));
+            if (!words.length) return "no frame yet";
+            return /[\u0600-\u06FF]/.test(words.join("")) ? "arabic" : `latin: ${words.slice(0, 5).join(" ")}`;
+          }),
+        { timeout: 120_000, message: "the switch never produced Arabic scripture" },
+      )
+      .toBe("arabic");
+  } finally {
+    await origin.close();
+  }
+});
+
+// ── the pin advances while the other Bibles are still on their way ───────────
+//
+// What CI caught on the v0.63.0 tag run (2026-08-28): bundling put the corpora
+// into `devicePackFiles`, reconcilePack's completeness gate suddenly had ~9 MB
+// of scripture in it, and on a slow machine the pin could not advance until all
+// three Bibles were down and hash-verified — the deploy test timed out twice
+// waiting. Worse than slow: OFFLINE mid-corpora would strand the pin on the old
+// release for good, the exact failure the optional bundle taught that gate
+// about one stage over.
+//
+// Deterministic where CI was load-dependent: the other Bibles are BLOCKED
+// outright, so the old code cannot pass by being fast — its gate sees absent
+// corpora and refuses to re-pin, and the poll times out. The fixed gate skips
+// the corpus stage (fetchOtherCorpora is their path), so the pin advances with
+// the Bibles still missing.
+test("an update re-pins even while the other Bibles are still on their way", async ({ page }) => {
+  const origin = await rewritingOrigin();
+  // Playwright routing reaches a dedicated worker's fetches (the engine
+  // worker's depot downloads) — it is SERVICE workers it cannot see, and the
+  // depot deliberately bypasses those anyway.
+  await page.route(/(luther1912|rv1909|svd1865)/, (r) => r.abort());
+  try {
+    await firstVisit(page, origin.url);
+
+    origin.mutate((m) => ({ ...m, version: "st1lln0b1bles000" }));
+    await page.reload();
+    await expect(page.locator(".pane canvas").first()).toBeVisible({ timeout: 90_000 });
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(async () => {
+            const hit = await caches.match(new URL("__depot/pack-pin.json", location.href).href, {
+              ignoreVary: true,
+            });
+            return hit ? ((await hit.json()).packVersion as string) : null;
+          }),
+        {
+          timeout: 90_000,
+          message: "the pin is waiting on Bibles this device cannot fetch — the reader is stranded on the old release",
+        },
+      )
+      .toBe("st1lln0b1bles000");
   } finally {
     await origin.close();
   }
