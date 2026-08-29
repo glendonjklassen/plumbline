@@ -16,6 +16,7 @@
     fill,
     hasOwnBible,
     hasOwnLexicon,
+    languageLabel,
     languages,
     plural,
     readerFace,
@@ -689,7 +690,7 @@
       >
         <option value="">{t("settings.languageDevice")}</option>
         {#each languages() as l (l.code)}
-          <option value={l.code}>{l.endonym}</option>
+          <option value={l.code}>{languageLabel(l)}</option>
         {/each}
       </select>
       {#if hasOwnLexicon()}

@@ -59,7 +59,8 @@ async function pick(page: Page, now: Record<string, string>, want: string): Prom
   const dialog = page.locator('[data-surface="settings"]');
   await expect(dialog).toBeVisible();
   await page.evaluate(() => ((globalThis as any).__beforeSwitch = true));
-  await dialog.getByLabel(now["settings.language"], { exact: true }).selectOption({ label: want });
+  // By VALUE, not label — see the same helper in language.spec.ts.
+  await dialog.getByLabel(now["settings.language"], { exact: true }).selectOption(want);
   await page.waitForFunction(() => !(globalThis as any).__beforeSwitch && !!(globalThis as any).__plumbline, undefined, {
     timeout: 180_000,
   });
@@ -94,7 +95,7 @@ for (const lang of [
 ]) {
   test(`${lang.code}: its own Bible, in a face that can set it, running left to right`, async ({ page }) => {
     await reader(page, EN);
-    await pick(page, EN, lang.endonym);
+    await pick(page, EN, lang.code);
 
     // 1. NOT MIRRORED. The converse of the Arabic test, and it is a real risk
     //    rather than a formality: the change that taught this app about scripts
@@ -139,6 +140,61 @@ for (const lang of [
   });
 }
 
+test("the English picker names every language twice, so it can be handed over", async ({ page }) => {
+  // THE APP IS BUILT TO BE HANDED OVER, and the endonym alone only serves the
+  // person who already reads it. Someone offering their phone to a Hindi
+  // speaker was looking at six scripts they cannot read with no way to tell
+  // which row was the one.
+  //
+  // The rows ARE SPELLED OUT here, which is the one place in this file where
+  // repeating the registry is the point — `each_variant_reaches_its_own_row` in
+  // core::i18n makes the same trade. A test that rebuilt the label from the
+  // same two fields the code reads would pass on any format, including the
+  // endonym alone.
+  await reader(page, EN);
+  const dialog = await settings(page, EN);
+  const options = await dialog
+    .getByLabel(EN["settings.language"], { exact: true })
+    .locator("option")
+    .allTextContents();
+
+  for (const want of [
+    "German (Deutsch)",
+    "Spanish (Español)",
+    "Arabic (العربية)",
+    "Punjabi (ਪੰਜਾਬੀ)",
+    "Hindi (हिन्दी)",
+  ]) {
+    expect(options, `the picker does not offer "${want}"`).toContain(want);
+  }
+  // English is one word in both columns and gets no bracket: "English
+  // (English)" is noise, and the dedupe is the only reason this is not a
+  // straight template.
+  expect(options).toContain("English");
+  expect(options.join(" ")).not.toContain("English (English)");
+});
+
+test("a non-English picker has no English in it", async ({ page }) => {
+  // The bracket is English-only, and that is a fact about the DATA rather than
+  // a choice: `exonym` on the registry row is the language's English name, so
+  // there is nothing to put in front of the bracket for a Hindi reader. They
+  // get the endonyms alone, which is what every reader got before.
+  //
+  // This is the assertion that keeps the rule from being written as "always
+  // bracket", which would put "Punjabi" in Latin script in front of a reader
+  // who does not read it.
+  await reader(page, EN);
+  await pick(page, EN, "hi");
+  const dialog = await settings(page, HI);
+  const options = await dialog
+    .getByLabel(HI["settings.language"], { exact: true })
+    .locator("option")
+    .allTextContents();
+  expect(options).toContain("हिन्दी");
+  expect(options).toContain("ਪੰਜਾਬੀ");
+  expect(options.join(" "), "an English name leaked into a Hindi picker").not.toContain("Punjabi");
+});
+
 test("no painted word begins inside a grapheme cluster", async ({ page }) => {
   // The tokenizer splits on whitespace and peels punctuation off each end, and
   // in these scripts "punctuation" is a category test that a virama fails and a
@@ -150,7 +206,7 @@ test("no painted word begins inside a grapheme cluster", async ({ page }) => {
   // what actually reached the painter, which is the other end of the same
   // pipeline — layout and the wire layer are between them.
   await reader(page, EN);
-  await pick(page, EN, "हिन्दी");
+  await pick(page, EN, "hi");
   const words = (await boxes(page)).filter((b) => b.kind === "word");
   expect(words.length).toBeGreaterThan(3);
   const orphans = words.filter((w) => /^[ऀ-ःऺ-ॏ॑-ॗॢॣ]/.test(w.text));
@@ -159,7 +215,7 @@ test("no painted word begins inside a grapheme cluster", async ({ page }) => {
 
 test("Punjabi search finds a word spelled without the dot a reader cannot type", async ({ page }) => {
   await reader(page, EN);
-  await pick(page, EN, "ਪੰਜਾਬੀ");
+  await pick(page, EN, "pa");
 
   // ਫ਼ਿਲਿਪੁੱਸ — Philip, and the ਫ਼ is ਫ plus a nukta. Layouts differ on whether
   // that dot is reachable at all, so a reader types ਫਿਲਿਪੁੱਸ.
