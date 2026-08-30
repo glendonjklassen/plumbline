@@ -100,7 +100,11 @@
   function openWordStudy(refKey: string, tokenIndex: number, lang?: string): void {
     // The pane's own text: a word tapped in the German column is studied in
     // German, with that language's own Strong's dictionary.
-    s.panel = { kind: "wordStudy", refKey, tokenIndex, lang };
+    //
+    // CANDIDATE (word-first study): a tap opens the word-usage card — evidence
+    // first, the Strong's cards behind its footer links. The engine resolves
+    // the word from the token, so the tap needs no extra round trip.
+    s.panel = { kind: "wordUsage", word: "", refKey, tokenIndex, scope: "all", page: 0, lang };
   }
 
   // ── search: a DESTINATION (manifest §Search) ──

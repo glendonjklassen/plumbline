@@ -71,8 +71,11 @@ test("a concept study tags on tap, suspends the tracker, and its tag outlives th
   await expect(confirm).toBeVisible({ timeout: 10_000 });
   await confirm.click();
 
-  // The study panel never opened (a tap that fell through to word study would).
-  expect((await st(page)).panelKind).not.toBe("wordStudy");
+  // The study panel never opened. Asserted as "no panel at all" rather than
+  // "not word study": a tap that fell through opens whatever the tap answer is
+  // that release (kind "wordUsage" since the word-first candidate), and a
+  // not-that-one-kind check would sleep through the regression.
+  expect((await st(page)).panelKind).toBeNull();
 
   // (1) The tag now holds the tapped verse — the gather worked.
   await expect

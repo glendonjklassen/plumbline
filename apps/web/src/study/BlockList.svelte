@@ -14,6 +14,8 @@
     bold: boolean;
     italic: boolean;
     uri?: string;
+    /** Pinned to the row's end — action icons across from a header or stat. */
+    end?: boolean;
   }
   interface Block {
     kind: "section" | "para" | "rule";
@@ -92,6 +94,7 @@
       <p
         class:indent={b.indent}
         class:gap={b.topGap}
+        class:has-trail={(b.runs ?? []).some((r) => r.end)}
         class:drag-row={b.drag !== undefined && !!onDrag}
         class:dragging={b.drag !== undefined && dragging === b.drag}
         class:drag-over={b.drag !== undefined && dragOver === b.drag}
@@ -109,6 +112,7 @@
           {#if r.uri}
             <button
               class="link"
+              class:trail-start={r.end && !(b.runs ?? [])[j - 1]?.end}
               style:font-size="calc({r.size}px * var(--uiScale, 1))"
               style:color={color(r.color)}
               style:font-weight={r.bold ? 600 : 400}
@@ -117,6 +121,7 @@
             >
           {:else}
             <span
+              class:trail-start={r.end && !(b.runs ?? [])[j - 1]?.end}
               style:font-size="calc({r.size}px * var(--uiScale, 1))"
               style:color={color(r.color)}
               style:font-weight={r.bold ? 600 : 400}
@@ -159,6 +164,21 @@
   p {
     margin: 2px 0;
     line-height: 1.45;
+  }
+  /* A row with end-pinned runs lays out as a flex line: the leading runs keep
+     their order, the first `end` run takes the auto margin, and the trailing
+     group spaces itself with the row gap. Only such rows become flex — an
+     ordinary paragraph must keep INLINE flow, or multi-run verse text would
+     break at every style boundary. `margin-inline-start` keeps it right in
+     RTL. */
+  p.has-trail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 0.6em;
+  }
+  p.has-trail .trail-start {
+    margin-inline-start: auto;
   }
   p.indent {
     padding-inline-start: 14px;

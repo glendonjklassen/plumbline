@@ -85,8 +85,11 @@ test("the picker offers the three new languages, endonym first", async ({ page }
   const rows = await dialog.getByLabel(EN["settings.language"], { exact: true }).locator("option").allTextContents();
   for (const want of [
     "Français (French)",
-    "中文（繁體） (Chinese (Traditional))",
-    "中文（简体） (Chinese (Simplified))",
+    // "Traditional/Simplified Chinese", not "Chinese (Traditional/Simplified)":
+    // the endonym already carries fullwidth brackets, and the old exonym nested
+    // a second pair inside the picker's own (maintainer, 2026-08-30).
+    "中文（繁體） (Traditional Chinese)",
+    "中文（简体） (Simplified Chinese)",
   ]) {
     expect(rows, `the English picker does not offer "${want}"`).toContain(want);
   }

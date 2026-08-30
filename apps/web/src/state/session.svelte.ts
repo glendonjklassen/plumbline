@@ -51,11 +51,25 @@ export type PanelView =
   // concordance opened from THAT study still lists German verses. Absent = the
   // reader's own text, which is every study opened from an ordinary pane.
   | { kind: "wordStudy"; refKey: string; tokenIndex: number; lang?: string }
+  // The word-usage card (word-first study candidate): opened from a tap with
+  // refKey+tokenIndex (the engine resolves the word), or from a wusage: link
+  // with the word alone. `code` set = the original-word lens (lusage: links).
+  // `scope` is a SearchScope token; `page` counts from 0.
+  | {
+      kind: "wordUsage";
+      word: string;
+      code?: string;
+      refKey?: string;
+      tokenIndex?: number;
+      scope: string;
+      page: number;
+      lang?: string;
+    }
   | { kind: "codeStudy"; code: string; word: string | null; lang?: string }
   | { kind: "concordance"; code: string; lang?: string }
   | { kind: "renderingConcordance"; code: string; rendering: string; lang?: string }
   | { kind: "threads" }
-  | { kind: "thread"; index: number }
+  | { kind: "thread"; index: number; edit?: boolean }
   | { kind: "tags" }
   | { kind: "tag"; index: number }
   | { kind: "weaves" }

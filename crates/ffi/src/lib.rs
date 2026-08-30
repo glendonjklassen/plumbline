@@ -529,6 +529,14 @@ impl PlumblineEngine {
         }
     }
 
+    fn search_ix_ready(&self) -> Option<&SearchIx> {
+        if self.deferring() {
+            self.search_ix.get()
+        } else {
+            Some(self.search_ix())
+        }
+    }
+
     fn xref_ix_ready(&self) -> Option<&XRefIx> {
         if self.deferring() {
             self.xref_ix.get()
@@ -2966,6 +2974,101 @@ pub unsafe extern "C" fn plumbline_engine_gloss(engine: *const PlumblineEngine, 
 /// (matches the shells' prior cap).
 const PANEL_OCC_CAP: usize = 300;
 
+/// A verse's text as `(text, hit)` segments for the word-usage card:
+/// concatenated, the segments are the verse verbatim (tokens joined with a
+/// single space, pre/post punctuation in place); `hit` picks the tokens the
+/// card emphasizes, and nothing that is not scripture appears in any segment.
+fn verse_segs(v: &corpus::Verse, hit: &dyn Fn(&corpus::Token) -> bool) -> Vec<(String, bool)> {
+    let mut segs: Vec<(String, bool)> = Vec::new();
+    let mut plain = String::new();
+    for (i, t) in v.tokens.iter().enumerate() {
+        if i > 0 {
+            plain.push(' ');
+        }
+        plain.push_str(&t.pre);
+        if hit(t) {
+            if !plain.is_empty() {
+                segs.push((std::mem::take(&mut plain), false));
+            }
+            segs.push((t.word.clone(), true));
+        } else {
+            plain.push_str(&t.word);
+        }
+        plain.push_str(&t.post);
+    }
+    if !plain.is_empty() {
+        segs.push((plain, false));
+    }
+    segs
+}
+
+/// Build a usage view over ascending verse indices: whole-corpus distribution
+/// and testament split, then the scope filter and the requested page of
+/// verbatim lines. Shared by the surface-word and original-word lenses, which
+/// differ only in their postings and their `hit` predicate.
+fn usage_over(
+    corpus: &Corpus,
+    all: &[usize],
+    scope: &str,
+    page: u32,
+    headword: String,
+    hit: &dyn Fn(&corpus::Token) -> bool,
+) -> panel::WordUsageView {
+    // Distribution + testament split over the whole corpus, canon order.
+    let ot_end = search::SearchScope::OldTestament.resolve(corpus).map_or(0, |r| r.end);
+    let mut books = Vec::new();
+    let (mut ot, mut nt) = (0u32, 0u32);
+    for id in canon::book_ids() {
+        let Some(r) = corpus.book_range(id) else { continue };
+        let lo = all.partition_point(|&i| i < r.start);
+        let hi = all.partition_point(|&i| i < r.end);
+        let n = (hi - lo) as u32;
+        if n == 0 {
+            continue;
+        }
+        if r.start < ot_end {
+            ot += n;
+        } else {
+            nt += n;
+        }
+        books.push((id.to_string(), i18n::book_name(i18n::active(), id), n));
+    }
+
+    // Scope, then page, over the ascending postings.
+    let scope = search::SearchScope::parse(scope).unwrap_or(search::SearchScope::All);
+    let in_scope = match scope.resolve(corpus) {
+        None => all,
+        Some(r) => {
+            let lo = all.partition_point(|&i| i < r.start);
+            let hi = all.partition_point(|&i| i < r.end);
+            &all[lo..hi]
+        }
+    };
+    let pages = in_scope.len().div_ceil(panel::USAGE_PAGE_LINES).max(1) as u32;
+    let page = page.min(pages - 1);
+    let start = page as usize * panel::USAGE_PAGE_LINES;
+    let lines = in_scope[start..(start + panel::USAGE_PAGE_LINES).min(in_scope.len())]
+        .iter()
+        .filter_map(|&vi| {
+            let v = corpus.verse_at(vi)?;
+            let vref = VRef::new(v.book.clone(), v.chapter, v.verse);
+            Some(panel::WordLineView { refkey: vref.ref_key(), display: vref.display(), segs: verse_segs(v, hit) })
+        })
+        .collect();
+
+    panel::WordUsageView {
+        word: headword,
+        total: all.len() as u32,
+        in_scope: in_scope.len() as u32,
+        ot,
+        nt,
+        books,
+        lines,
+        page,
+        pages,
+    }
+}
+
 impl PanelSource for PlumblineEngine {
     /// Whether the open text is the KJV — the same question `new` asks before it
     /// wires morphology and the overlay, and for the same reason.
@@ -3045,6 +3148,18 @@ impl PanelSource for PlumblineEngine {
             total: all.len() as u32,
             verses: all.iter().take(PANEL_OCC_CAP).map(|v| (v.ref_key(), v.display())).collect(),
         }
+    }
+    fn word_usage(&self, word: &str, scope: &str, page: u32) -> Option<panel::WordUsageView> {
+        let ix = self.search_ix_ready()?;
+        let folded = search::fold_word(word);
+        let all = ix.word_verses(&folded);
+        let key = folded.clone();
+        Some(usage_over(&self.corpus, all, scope, page, folded, &move |t| search::fold_word(&t.word) == key))
+    }
+    fn code_usage(&self, code: &str, scope: &str, page: u32) -> Option<panel::WordUsageView> {
+        let ix = self.search_ix_ready()?;
+        let all = ix.lemma_verses(code);
+        Some(usage_over(&self.corpus, all, scope, page, code.to_string(), &|t| t.strongs.iter().any(|s| s == code)))
     }
     fn bridge_partners(&self, code: &str) -> Vec<panel::BridgePartnerView> {
         self.bridge_ready()
@@ -3461,7 +3576,7 @@ pub unsafe extern "C" fn plumbline_engine_thread_blocks_json(
     index: u32,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || match engine.as_ref() {
-        Some(e) => out_json(&wire::blocks_to_wire(panel::thread_detail(e, index as usize))),
+        Some(e) => out_json(&wire::blocks_to_wire(panel::thread_detail(e, index as usize, false))),
         None => ptr::null_mut(),
     })
 }

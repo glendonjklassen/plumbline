@@ -34,6 +34,18 @@
       // takes exactly the path it always did.
       case "wordStudy":
         return s.qIn(p.lang, "wordStudyBlocks", p.refKey, p.tokenIndex, s.gates)?.blocks;
+      case "wordUsage":
+        return s.qIn(
+          p.lang,
+          "wordUsageBlocks",
+          p.word,
+          p.code ?? "",
+          p.refKey ?? "",
+          p.tokenIndex ?? 0,
+          p.scope,
+          p.page,
+          s.gates,
+        )?.blocks;
       case "codeStudy":
         return s.qIn(p.lang, "codeStudyBlocks", p.code, p.word, s.gates)?.blocks;
       case "concordance":
@@ -43,7 +55,7 @@
       case "threads":
         return s.q("threadsBlocks")?.blocks;
       case "thread":
-        return s.q("threadBlocks", p.index)?.blocks;
+        return s.q("threadBlocks", p.index, p.edit ?? false)?.blocks;
       case "tags":
         return s.q("tagsBlocks")?.blocks;
       case "tag":
@@ -69,8 +81,12 @@
   // the original has to be read before the lexicon detail, not after it.
   const akjvWord = $derived.by(() => {
     const p = s.panel;
-    if (!s.config.akjvOverlay || p?.kind !== "wordStudy") return null;
-    return s.q("akjvToken", p.refKey, p.tokenIndex);
+    if (!s.config.akjvOverlay) return null;
+    if (p?.kind === "wordStudy") return s.q("akjvToken", p.refKey, p.tokenIndex);
+    // The usage card opened from a tap knows its token too; word-only
+    // (a wusage: link) has no tapped token to explain.
+    if (p?.kind === "wordUsage" && p.refKey != null) return s.q("akjvToken", p.refKey, p.tokenIndex ?? 0);
+    return null;
   });
 
   function onLink(uri: string, ev: MouseEvent): void {
@@ -102,7 +118,7 @@
   // taken the download.
   const rndOffer = $derived.by(() => {
     const k = s.panel?.kind;
-    if (!(k === "wordStudy" || k === "codeStudy" || k === "concordance")) return false;
+    if (!(k === "wordStudy" || k === "wordUsage" || k === "codeStudy" || k === "concordance")) return false;
     if (!(s.gates & 2) || s.rndState === "ready") return false;
     // Only the ask. A load already under way says nothing and shows nothing.
     return s.rndDeferred && s.rndState !== "loading";

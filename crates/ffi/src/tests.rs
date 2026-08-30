@@ -2100,6 +2100,9 @@ fn link_verb(l: &crate::wire::WirePanelLink) -> &'static str {
         L::Occurrences { .. } => "occurrences",
         L::Rendering { .. } => "rendering",
         L::CodeStudy { .. } => "codeStudy",
+        L::WordUsage { .. } => "wordUsage",
+        L::CodeUsage { .. } => "codeUsage",
+        L::ThreadEditMode { .. } => "threadEditMode",
         L::Thread { .. } => "thread",
         L::Tag { .. } => "tag",
         L::Weave { .. } => "weave",
@@ -2134,6 +2137,9 @@ fn wire_panel_link_keys_are_golden() {
         ("occ:G25", "occurrences", &["code", "verb"]),
         ("rend:G25:loved", "rendering", &["code", "rendering", "verb"]),
         ("code:G25:loved", "codeStudy", &["code", "verb", "word"]),
+        ("wusage:0:loved:book:Gen", "wordUsage", &["page", "scope", "verb", "word"]),
+        ("lusage:0:G25:loved:book:Gen", "codeUsage", &["code", "page", "scope", "verb", "word"]),
+        ("threadedit:0:1", "threadEditMode", &["edit", "index", "verb"]),
         ("thread:0", "thread", &["index", "verb"]),
         ("tag:0", "tag", &["index", "verb"]),
         ("weave:0", "weave", &["index", "verb"]),
@@ -3245,4 +3251,55 @@ fn picking_a_language_downloads_no_scripture() {
         plumbline_core::i18n::Lang::ALL.iter().any(|l| !super::wire::language_to_wire(*l).pack_files.is_empty()),
         "no language offers anything — this test would pass no matter what"
     );
+}
+
+/// The word-usage view over a REAL engine: exact postings, canon counts,
+/// verbatim segments. This drives the same `PanelSource::word_usage` the
+/// wasm-only `plumbline_engine_word_usage_blocks_json` endpoint serves — the
+/// endpoint itself is cfg-gated to wasm32, so this is its native twin.
+#[test]
+fn word_usage_reads_the_real_index() {
+    unsafe {
+        let e = open();
+        let eng = &*e;
+        let u = panel::PanelSource::word_usage(eng, "God", "all", 0).expect("the index builds on demand natively");
+        assert_eq!(u.total, 1);
+        assert_eq!(u.in_scope, 1);
+        assert_eq!((u.ot, u.nt), (0, 1));
+        assert_eq!(u.books.len(), 1);
+        assert_eq!(u.books[0].0, "John");
+        assert_eq!(u.books[0].2, 1);
+        assert_eq!(u.pages, 1);
+
+        // Concatenated, the segments ARE the verse; the hit is the word alone.
+        let line = &u.lines[0];
+        assert_eq!(line.refkey, "John 3:16");
+        let joined: String = line.segs.iter().map(|(t, _)| t.as_str()).collect();
+        assert_eq!(joined, "For God so loved the world.");
+        let hits: Vec<&str> = line.segs.iter().filter(|(_, h)| *h).map(|(t, _)| t.as_str()).collect();
+        assert_eq!(hits, ["God"]);
+
+        // The lookup folds like the index: a lowercase query finds the word.
+        let folded = panel::PanelSource::word_usage(eng, "god", "all", 0).unwrap();
+        assert_eq!(folded.total, 1);
+
+        // A scope with no occurrences narrows to nothing rather than lying —
+        // this corpus has no OT, so `ot` is the empty range.
+        let ot = panel::PanelSource::word_usage(eng, "God", "ot", 0).unwrap();
+        assert_eq!(ot.in_scope, 0);
+        assert!(ot.lines.is_empty());
+
+        // The original-word lens over the same engine: G25's occurrences, the
+        // hit being whatever surface word carries the tag — "loved" here.
+        let lens = panel::PanelSource::code_usage(eng, "G25", "all", 0).unwrap();
+        assert_eq!(lens.total, 1);
+        let line = &lens.lines[0];
+        assert_eq!(line.refkey, "John 3:16");
+        let joined: String = line.segs.iter().map(|(t, _)| t.as_str()).collect();
+        assert_eq!(joined, "For God so loved the world.");
+        let hits: Vec<&str> = line.segs.iter().filter(|(_, h)| *h).map(|(t, _)| t.as_str()).collect();
+        assert_eq!(hits, ["loved"]);
+
+        plumbline_engine_free(e);
+    }
 }
