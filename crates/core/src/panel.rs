@@ -57,11 +57,13 @@ pub struct Run {
     pub bold: bool,
     pub italic: bool,
     pub uri: Option<String>,
+    /// Right-aligned within its row (start-aligned in RTL) — see [`Run::end`].
+    pub end: bool,
 }
 
 impl Run {
     pub fn new(text: impl Into<String>, size: f32, color: Color) -> Run {
-        Run { text: text.into(), size, color, bold: false, italic: false, uri: None }
+        Run { text: text.into(), size, color, bold: false, italic: false, uri: None, end: false }
     }
     pub fn bold(mut self) -> Run {
         self.bold = true;
@@ -73,6 +75,13 @@ impl Run {
     }
     pub fn link(mut self, uri: impl Into<String>) -> Run {
         self.uri = Some(uri.into());
+        self
+    }
+    /// Pin this run (and the ones after it so marked) to the END of the row —
+    /// action icons sit right-aligned across from the header or stat they act
+    /// on, instead of trailing it inline.
+    pub fn end(mut self) -> Run {
+        self.end = true;
         self
     }
 }
@@ -128,13 +137,6 @@ fn sp(id: &str, n: usize) -> String {
 impl Block {
     fn para(runs: Vec<Run>) -> Block {
         Block::Para { runs, indent: false, top_gap: false, drag: None }
-    }
-    /// Mark a Para as a drag-reorder row (no-op on other kinds).
-    fn dragged(self, id: String) -> Block {
-        match self {
-            Block::Para { runs, indent, top_gap, .. } => Block::Para { runs, indent, top_gap, drag: Some(id) },
-            other => other,
-        }
     }
     fn section(title: impl Into<String>) -> Block {
         Block::Section { title: title.into(), mark: None }
@@ -204,6 +206,41 @@ pub struct RenderingRefsView {
 pub struct OccurrencesView {
     pub total: u32,
     pub verses: Vec<(String, String)>,
+}
+
+/// A surface word's usage across the open corpus (the word-usage card): totals,
+/// per-book counts, and one page of in-context occurrence lines. Word-keyed,
+/// not code-keyed, so it answers in every language — tagged or not.
+#[derive(Debug, Clone, Default)]
+pub struct WordUsageView {
+    /// The folded headword the counts describe.
+    pub word: String,
+    /// Occurrences in the whole corpus.
+    pub total: u32,
+    /// Occurrences inside the requested scope (equals `total` when unscoped).
+    pub in_scope: u32,
+    pub ot: u32,
+    pub nt: u32,
+    /// `(book id, localized label, count)` in CANON ORDER — the card never
+    /// ranks passages or books by anything but the canon.
+    pub books: Vec<(String, String, u32)>,
+    /// The requested page of occurrence lines, canon order.
+    pub lines: Vec<WordLineView>,
+    /// The page actually served (clamped) and how many pages the scope holds.
+    pub page: u32,
+    pub pages: u32,
+}
+
+/// One occurrence line: the verse, verbatim, split into segments so the shell
+/// can emphasize the studied word without any non-scripture text between the
+/// segments.
+#[derive(Debug, Clone)]
+pub struct WordLineView {
+    pub refkey: String,
+    pub display: String,
+    /// `(text, hit)` — concatenated, the segments are the verse text exactly;
+    /// `hit` marks the studied word's own tokens.
+    pub segs: Vec<(String, bool)>,
 }
 
 /// An OT↔NT bridge partner: the code, its humanized witness sources, and the
@@ -411,6 +448,23 @@ pub trait PanelSource {
     /// A code's full concordance (capped by the source).
     fn occurrences(&self, code: &str) -> OccurrencesView;
 
+    /// A surface word's usage: totals, distribution, one page of lines.
+    /// `scope` as [`crate::search::SearchScope::token`] spells it. `None`
+    /// means the answer is not ready yet (the search index is still warming
+    /// and the shell will re-ask) — a source with no word index at all also
+    /// answers `None`, and the card shows its loading line either way.
+    fn word_usage(&self, _word: &str, _scope: &str, _page: u32) -> Option<WordUsageView> {
+        None
+    }
+
+    /// The usage card's original-word lens: the same view shape, but the
+    /// occurrences are every verse tagged with `code`, and the emphasized
+    /// tokens are the ones carrying it — whatever the surface rendering. Same
+    /// `None` semantics as [`PanelSource::word_usage`].
+    fn code_usage(&self, _code: &str, _scope: &str, _page: u32) -> Option<WordUsageView> {
+        None
+    }
+
     fn bridge_partners(&self, code: &str) -> Vec<BridgePartnerView>;
     /// The symbolic concept engine's view of a code: its community (same-root
     /// members), concentrating books, testament split, and leitwort. `None`
@@ -485,6 +539,28 @@ pub enum PanelLink {
     CodeStudy {
         code: String,
         word: String,
+    },
+    /// `wusage:PAGE:WORD:SCOPE` — the word-usage card (word-first study).
+    /// PAGE and WORD are colon-free; SCOPE is the trailing remainder because a
+    /// scope token (`book:Gen`) carries colons of its own.
+    WordUsage {
+        word: String,
+        scope: String,
+        page: u32,
+    },
+    /// `lusage:PAGE:CODE:WORD:SCOPE` — the usage card in its original-word
+    /// lens: `code`'s occurrences, with `word` kept so the surface chip can
+    /// switch back. Same trailing-SCOPE layout as `wusage:`.
+    CodeUsage {
+        code: String,
+        word: String,
+        scope: String,
+        page: u32,
+    },
+    /// `threadedit:I:0|1` — leave/enter the thread detail's edit mode.
+    ThreadEditMode {
+        index: usize,
+        edit: bool,
     },
     /// `thread:I` / `tag:I` / `weave:I` — open a detail / compare view.
     Thread {
@@ -599,6 +675,37 @@ pub fn parse_link(uri: &str) -> Option<PanelLink> {
         "code" => {
             let (code, word) = rest.split_once(':').unwrap_or((rest, ""));
             PanelLink::CodeStudy { code: code.to_string(), word: word.to_string() }
+        }
+        "wusage" => {
+            let (page, rest) = rest.split_once(':')?;
+            let (word, scope) = rest.split_once(':').unwrap_or((rest, "all"));
+            if word.is_empty() {
+                return None;
+            }
+            PanelLink::WordUsage { word: word.to_string(), scope: scope.to_string(), page: page.parse().ok()? }
+        }
+        "lusage" => {
+            let (page, rest) = rest.split_once(':')?;
+            let (code, rest) = rest.split_once(':')?;
+            let (word, scope) = rest.split_once(':').unwrap_or((rest, "all"));
+            if code.is_empty() {
+                return None;
+            }
+            PanelLink::CodeUsage {
+                code: code.to_string(),
+                word: word.to_string(),
+                scope: scope.to_string(),
+                page: page.parse().ok()?,
+            }
+        }
+        "threadedit" => {
+            let (i, mode) = rest.split_once(':')?;
+            let edit = match mode {
+                "0" => false,
+                "1" => true,
+                _ => return None,
+            };
+            PanelLink::ThreadEditMode { index: i.parse().ok()?, edit }
         }
         "thread" => PanelLink::Thread { index: rest.parse().ok()? },
         "tag" => PanelLink::Tag { index: rest.parse().ok()? },
@@ -1137,6 +1244,242 @@ pub fn code_study_card_gated(src: &dyn PanelSource, gates: Gates, code: &str, wo
 
 // ── concordance ───────────────────────────────────────────────────────────────
 
+// ── the word-usage card (word-first study candidate) ──────────────────────────
+
+/// Occurrence lines per page of the usage card.
+pub const USAGE_PAGE_LINES: usize = 20;
+
+/// TODO(i18n): the usage card's few labels ship hardcoded English while the
+/// language push owns the catalogues — `every_shipped_string_is_translated` is
+/// all-or-nothing, so a key added here would block every language until each
+/// catalogue carries it. Swap these for catalogue keys before the card ships.
+fn wusage_uri(word: &str, scope: &str, page: u32) -> String {
+    format!("wusage:{page}:{word}:{scope}")
+}
+
+fn lusage_uri(code: &str, word: &str, scope: &str, page: u32) -> String {
+    format!("lusage:{page}:{code}:{word}:{scope}")
+}
+
+/// What the usage card is asked to show.
+pub struct UsageQuery<'a> {
+    /// The surface word (the tapped token's own form).
+    pub word: &'a str,
+    /// The original-word lens: `Some(code)` switches the evidence to every
+    /// occurrence of that Strong's-tagged original word, whatever the surface
+    /// rendering; `None` follows the surface word itself.
+    pub lens: Option<&'a str>,
+    /// A [`crate::search::SearchScope::token`] string; empty means `all`.
+    pub scope: &'a str,
+    pub page: u32,
+    /// The tapped `(verse, token)` when the card opened from a tap — brings
+    /// the verse head, the reader's notes and the verse extras with it.
+    pub origin: Option<(&'a str, u32)>,
+    /// The tapped token's codes (or the word's, via the rendering lens): the
+    /// lens chips and the dictionary footer.
+    pub codes: &'a [String],
+}
+
+/// The word-usage card — the word-first study candidate. Keyed by SURFACE
+/// WORD, not Strong's code, so it answers in every language, tagged or not;
+/// the original word behind the tap is one chip away (the lens), and the
+/// dictionary is reachable at the bottom, after the evidence. Its rules:
+/// occurrence lines are scripture verbatim (labels sit on their own rows,
+/// never inside the text), and nothing is ranked — books and lines run in
+/// canon order only.
+pub fn word_usage_card(src: &dyn PanelSource, gates: Gates, q: &UsageQuery) -> Vec<Block> {
+    let mut out = Vec::new();
+    let scope = if q.scope.is_empty() { "all" } else { q.scope };
+
+    if let Some((verse, token)) = q.origin {
+        let display = src.verse_display(verse).unwrap_or_else(|| verse.to_string());
+        let mut head = vec![Run::new(&display, sz::BODY, Color::Ink).bold()];
+        if let Some(printed) = VRef::parse_ref_key(verse).and_then(|v| versification::printed_note(i18n::active(), &v))
+        {
+            head.push(Run::new("  ", sz::BODY, Color::Ink));
+            head.push(Run::new(printed, sz::FINE, Color::Faded));
+        }
+        out.push(Block::para(head));
+        if src.is_kjv_text() && gates.human {
+            if let Some(g) = src.morph_gloss(verse, token) {
+                out.push(Block::para(vec![Run::new(g, sz::NOTE, Color::Morph).italic()]));
+            }
+        }
+    }
+    if !q.word.is_empty() {
+        out.push(Block::para(vec![Run::new(q.word, sz::WORD, Color::Ink)]));
+    }
+
+    // The word lens: the surface word and, where the token is tagged, the
+    // original word(s) behind it — labelled by LEMMA, not code. Switching the
+    // lens re-reads the same card over that word's occurrences, so "everywhere
+    // this Greek word appears" gets the same in-context treatment as the
+    // English word, and the varying renderings show themselves in the lines.
+    if !q.codes.is_empty() {
+        let mut runs = Vec::new();
+        runs.push(if q.lens.is_none() {
+            Run::new(q.word, sz::LABEL, Color::Ink).bold()
+        } else {
+            Run::new(q.word, sz::LABEL, Color::Gold).link(wusage_uri(q.word, scope, 0))
+        });
+        for code in q.codes {
+            let lemma = src.strongs(code).and_then(|e| e.lemma).unwrap_or_else(|| code.clone());
+            runs.push(Run::new("  ·  ", sz::LABEL, Color::Faded));
+            runs.push(if q.lens == Some(code.as_str()) {
+                Run::new(lemma, sz::LABEL, Color::Ink).bold()
+            } else {
+                Run::new(lemma, sz::LABEL, Color::Gold).link(lusage_uri(code, q.word, scope, 0))
+            });
+        }
+        out.push(Block::para(runs));
+        // In the lens, name the original word properly: lemma large, then the
+        // transliteration for a reader who does not read the script.
+        if let Some(code) = q.lens {
+            if let Some(e) = src.strongs(code) {
+                if let Some(l) = &e.lemma {
+                    out.push(Block::para(vec![Run::new(l, sz::LEMMA, Color::Ink)]));
+                }
+                if let Some(x) = &e.xlit {
+                    out.push(Block::para(vec![Run::new(x, sz::SMALL, Color::Ink).italic()]));
+                }
+            }
+        }
+    }
+
+    // Notes: a section with a plus, then anything the reader has written —
+    // their words before the evidence (the old row read "✎  add"; maintainer,
+    // 2026-08-30).
+    if let Some((verse, _)) = q.origin {
+        out.push(Block::Para {
+            runs: vec![
+                Run::new(s("panel.notesHeader"), sz::LABEL, Color::Ink).bold(),
+                Run::new("＋", sz::LABEL, Color::Gold).link(format!("editnote:{verse}")).end(),
+            ],
+            indent: false,
+            top_gap: true,
+            drag: None,
+        });
+        if let Some(text) = src.user_note(verse) {
+            if !text.is_empty() {
+                out.push(Block::para(vec![Run::new(text, sz::NOTE, Color::Ink)]));
+            }
+        }
+    }
+
+    let view = match q.lens {
+        None => src.word_usage(q.word, scope, q.page),
+        Some(code) => src.code_usage(code, scope, q.page),
+    };
+    match view {
+        None => out.push(Block::para(vec![Run::new(s("panel.loading"), sz::BODY, Color::Faded).italic()])),
+        Some(u) => usage_body(&u, q, scope, &mut out),
+    }
+
+    // The dictionary is the footer, not the front door.
+    if !q.codes.is_empty() {
+        out.push(Block::Rule);
+        let mut runs = vec![Run::new(s("panel.strongs"), sz::CAPTION, Color::Faded)];
+        for code in q.codes {
+            runs.push(Run::new("   ", sz::CAPTION, Color::Ink));
+            runs.push(Run::new(code, sz::CAPTION, Color::Gold).link(format!("code:{code}:{}", q.word)));
+        }
+        out.push(Block::para(runs));
+    }
+    if let Some((verse, _)) = q.origin {
+        verse_extras(src, verse, gates, &mut out);
+    }
+    out
+}
+
+/// The uri that re-opens the card in its CURRENT lens at another scope/page.
+fn usage_uri(q: &UsageQuery, scope: &str, page: u32) -> String {
+    match q.lens {
+        Some(code) => lusage_uri(code, q.word, scope, page),
+        None => wusage_uri(q.word, scope, page),
+    }
+}
+
+/// The usage evidence itself: count, scope chips, distribution, lines, paging.
+fn usage_body(u: &WordUsageView, q: &UsageQuery, scope: &str, out: &mut Vec<Block>) {
+    out.push(Block::para(vec![Run::new(sp("panel.usageOccurrences", u.total as usize), sz::SMALL, Color::Gold)]));
+
+    // Scope chips, spelled the way the search screen spells the same scopes.
+    // The active one is inert ink; the rest re-open at page 0.
+    let mut chips: Vec<(String, String)> = vec![
+        (s("search.scopeAll"), "all".to_string()),
+        (s("search.scopeOT"), "ot".to_string()),
+        (s("search.scopeNT"), "nt".to_string()),
+    ];
+    if let Some(id) = scope.strip_prefix("book:") {
+        let label =
+            u.books.iter().find(|(b, _, _)| b == id).map(|(_, l, _)| l.clone()).unwrap_or_else(|| id.to_string());
+        chips.push((label, scope.to_string()));
+    }
+    let mut runs = Vec::new();
+    for (i, (label, tok)) in chips.iter().enumerate() {
+        if i > 0 {
+            runs.push(Run::new("  ·  ", sz::SMALL, Color::Faded));
+        }
+        runs.push(if tok == scope {
+            Run::new(label, sz::SMALL, Color::Ink).bold()
+        } else {
+            Run::new(label, sz::SMALL, Color::Gold).link(usage_uri(q, tok, 0))
+        });
+    }
+    out.push(Block::para(runs));
+
+    // Distribution — canon order, counts as plain numbers. Book names link to
+    // that book's scope: the reader chooses where to look, nothing is ranked.
+    if u.books.len() > 1 {
+        out.push(Block::section(s("panel.byBook")));
+        let mut runs = Vec::new();
+        for (i, (id, label, n)) in u.books.iter().enumerate() {
+            if i > 0 {
+                runs.push(Run::new("  ·  ", sz::LIST, Color::Faded));
+            }
+            runs.push(Run::new(label, sz::LIST, Color::Gold).link(usage_uri(q, &format!("book:{id}"), 0)));
+            runs.push(Run::new(format!(" {n}"), sz::LIST, Color::Faded));
+        }
+        out.push(Block::para(runs));
+        if u.ot > 0 && u.nt > 0 {
+            out.push(Block::para(vec![Run::new(
+                format!("{} {} · {} {}", s("search.scopeOT"), u.ot, s("search.scopeNT"), u.nt),
+                sz::SMALL,
+                Color::Faded,
+            )]));
+        }
+    }
+
+    // The lines: reference on its own row, then the verse verbatim — the
+    // studied word's own tokens emphasized, no other text among the segments.
+    out.push(Block::Rule);
+    if u.lines.is_empty() {
+        out.push(Block::para(vec![Run::new(s("panel.usageEmpty"), sz::BODY, Color::Faded).italic()]));
+    }
+    for line in &u.lines {
+        out.push(Block::para(vec![go(&line.refkey, &line.display, sz::LIST)]));
+        let mut runs = Vec::with_capacity(line.segs.len());
+        for (text, hit) in &line.segs {
+            let r = Run::new(text, sz::LIST, Color::Ink);
+            runs.push(if *hit { r.bold() } else { r });
+        }
+        out.push(Block::Para { runs, indent: true, top_gap: false, drag: None });
+    }
+    if u.pages > 1 {
+        let mut runs = Vec::new();
+        if u.page > 0 {
+            runs.push(Run::new("‹", sz::BODY, Color::Gold).link(usage_uri(q, scope, u.page - 1)));
+            runs.push(Run::new("   ", sz::BODY, Color::Ink));
+        }
+        runs.push(Run::new(format!("{} / {}", u.page + 1, u.pages), sz::SMALL, Color::Faded));
+        if u.page + 1 < u.pages {
+            runs.push(Run::new("   ", sz::BODY, Color::Ink));
+            runs.push(Run::new("›", sz::BODY, Color::Gold).link(usage_uri(q, scope, u.page + 1)));
+        }
+        out.push(Block::Para { runs, indent: false, top_gap: true, drag: None });
+    }
+}
+
 /// The full concordance for a code: header + every occurrence verse (capped).
 pub fn concordance(src: &dyn PanelSource, code: &str) -> Vec<Block> {
     let mut out = Vec::new();
@@ -1233,49 +1576,61 @@ pub fn threads_list(src: &dyn PanelSource) -> Vec<Block> {
     out
 }
 
-pub fn thread_detail(src: &dyn PanelSource, index: usize) -> Vec<Block> {
+/// One thread, with its entries in order. `edit` swaps the read view's clean
+/// rows for a per-entry control row — ↑ ↓ ＋(note) ✕, sized to be hit on a
+/// phone. Reordering by DRAG is gone (maintainer, 2026-08-30: it is a poor
+/// gesture in a PWA and the old inline links were too small); edit mode is the
+/// one reorder path now, entered from the header's `edit` chip.
+pub fn thread_detail(src: &dyn PanelSource, index: usize, edit: bool) -> Vec<Block> {
     let threads = src.threads();
     let Some(t) = threads.get(index) else { return threads_list(src) };
-    let mut out = vec![
-        Block::para(vec![Run::new(&t.name, sz::TITLE, Color::Ink).bold()]),
-        Block::para(vec![
-            Run::new(sp("panel.passages", t.entries.len()), sz::SMALL, Color::Faded),
-            Run::new("   ", sz::SMALL, Color::Ink),
-            Run::new(s("panel.notes"), sz::CAPTION, Color::Faded).link(format!("editthreadnotes:{index}")),
-            Run::new("   ", sz::SMALL, Color::Ink),
-            Run::new(s("panel.deleteThread"), sz::CAPTION, Color::Faded).link(format!("deletethread:{index}")),
-        ]),
-    ];
+    // The name row carries ONE action, right-aligned across from it: the
+    // pencil that enters edit mode (lit while the mode is on). Everything else
+    // an owner might do — rename notes, delete, reorder — waits inside.
+    let pencil = if edit {
+        Run::new("✎", sz::TITLE, Color::Gold).bold().link(format!("threadedit:{index}:0")).end()
+    } else {
+        Run::new("✎", sz::TITLE, Color::Faded).link(format!("threadedit:{index}:1")).end()
+    };
+    let mut out = vec![Block::para(vec![Run::new(&t.name, sz::TITLE, Color::Ink).bold(), pencil])];
+    // The stat row; in edit mode the delete icon sits across from it (the
+    // shell still confirms before anything is destroyed).
+    let mut stats = vec![Run::new(sp("panel.passages", t.entries.len()), sz::SMALL, Color::Faded)];
+    if edit {
+        stats.push(Run::new("🗑", sz::TITLE, Color::Faded).link(format!("deletethread:{index}")).end());
+    }
+    out.push(Block::para(stats));
+    // Thread notes: the text reads in both modes; edit mode adds the same
+    // "Notes ＋" header the word card uses.
+    if edit {
+        out.push(Block::para(vec![
+            Run::new(s("panel.notesHeader"), sz::LABEL, Color::Ink).bold(),
+            Run::new("＋", sz::LABEL, Color::Gold).link(format!("editthreadnotes:{index}")).end(),
+        ]));
+    }
     if !t.notes.is_empty() {
         out.push(Block::para(vec![Run::new(&t.notes, sz::NOTE, Color::Faded)]));
     }
     let last = t.entries.len().saturating_sub(1);
     for (e, en) in t.entries.iter().enumerate() {
         out.push(Block::Rule);
-        // The row's own controls: note · move · remove. The arrows are OMITTED
-        // at the ends rather than shown disabled — there is no room on a phone
-        // for a control that cannot do anything, and the list's shape already
-        // says which end you are at.
-        let mut row = vec![
-            go(&en.verse, &en.display, sz::LIST),
-            Run::new("   ", sz::LIST, Color::Ink),
-            Run::new(s("panel.note"), sz::CAPTION, Color::Faded).link(format!("editentrynote:{index}:{e}")),
-        ];
-        if e > 0 {
-            row.push(Run::new("   ", sz::LIST, Color::Ink));
-            row.push(Run::new(s("panel.moveUp"), sz::CAPTION, Color::Faded).link(format!("moveentry:{index}:{e}:-1")));
+        // The reference row; in edit mode its controls sit right-aligned on
+        // the same row — ↑ ↓ ＋(note) ✕ — glyphs only, at a size a thumb can
+        // land on. Arrows are OMITTED at the ends rather than shown disabled:
+        // the list's shape already says which end you are at. ✕ is last, and
+        // the shell confirms it.
+        let mut row = vec![go(&en.verse, &en.display, sz::LIST)];
+        if edit {
+            if e > 0 {
+                row.push(Run::new("↑", sz::LEMMA, Color::Gold).link(format!("moveentry:{index}:{e}:-1")).end());
+            }
+            if e < last {
+                row.push(Run::new("↓", sz::LEMMA, Color::Gold).link(format!("moveentry:{index}:{e}:1")).end());
+            }
+            row.push(Run::new("＋", sz::LEMMA, Color::Gold).link(format!("editentrynote:{index}:{e}")).end());
+            row.push(Run::new("✕", sz::LEMMA, Color::Faded).link(format!("removeentry:{index}:{e}")).end());
         }
-        if e < last {
-            row.push(Run::new("   ", sz::LIST, Color::Ink));
-            row.push(Run::new(s("panel.moveDown"), sz::CAPTION, Color::Faded).link(format!("moveentry:{index}:{e}:1")));
-        }
-        row.push(Run::new("   ", sz::LIST, Color::Ink));
-        row.push(Run::new(s("panel.removeEntry"), sz::CAPTION, Color::Faded).link(format!("removeentry:{index}:{e}")));
-        // The entry's header row is the DRAG HANDLE for reordering — a thread's
-        // order is the argument it makes, and dragging is how a road gets
-        // rearranged in one gesture (UAT, 2026-08-18). The ↑/↓ links above
-        // remain the touch and assistive path.
-        out.push(Block::para(row).dragged(format!("{index}:{e}")));
+        out.push(Block::para(row));
         let joined = en.text.join(" ");
         let snap = if joined.chars().count() > 70 {
             format!("{}…", joined.chars().take(70).collect::<String>().trim_end())

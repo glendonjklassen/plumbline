@@ -35,6 +35,8 @@ struct Fake {
     tokens: HashMap<String, VerseTokensView>,
     bodies: HashMap<String, String>,
     search: Option<SearchView>,
+    word_usage: Option<WordUsageView>,
+    code_usage: Option<WordUsageView>,
 }
 
 impl PanelSource for Fake {
@@ -49,6 +51,12 @@ impl PanelSource for Fake {
     }
     fn occurrence_count(&self, code: &str) -> usize {
         self.occ_count.get(code).copied().unwrap_or(0)
+    }
+    fn word_usage(&self, _word: &str, _scope: &str, _page: u32) -> Option<WordUsageView> {
+        self.word_usage.clone()
+    }
+    fn code_usage(&self, _code: &str, _scope: &str, _page: u32) -> Option<WordUsageView> {
+        self.code_usage.clone()
     }
     fn strongs(&self, code: &str) -> Option<StrongsView> {
         self.entries.get(code).cloned()
@@ -568,12 +576,20 @@ fn threads_list_and_detail() {
         threads: vec![ThreadView {
             name: "Grace".into(),
             notes: "on unmerited favour".into(),
-            entries: vec![ThreadEntryView {
-                verse: "John 1:14".into(),
-                display: "John 1:14".into(),
-                text: vec!["full".into(), "of".into(), "grace".into()],
-                note: Some("the Word".into()),
-            }],
+            entries: vec![
+                ThreadEntryView {
+                    verse: "John 1:14".into(),
+                    display: "John 1:14".into(),
+                    text: vec!["full".into(), "of".into(), "grace".into()],
+                    note: Some("the Word".into()),
+                },
+                ThreadEntryView {
+                    verse: "Eph 2:8".into(),
+                    display: "Ephesians 2:8".into(),
+                    text: vec!["by".into(), "grace".into()],
+                    note: None,
+                },
+            ],
         }],
         ..Default::default()
     };
@@ -581,17 +597,64 @@ fn threads_list_and_detail() {
     assert_eq!(text_of(&list[0]), "Threads (1)");
     assert!(uris(&list).contains(&"thread:0".to_string()));
 
-    let detail = thread_detail(&f, 0);
-    assert_eq!(text_of(&detail[0]), "Grace");
+    // The read view: clean rows — content, navigation, and ONE action: the
+    // edit pencil, an icon pinned to the end of the name row. No drag (dropped
+    // as the reorder gesture, 2026-08-30), no management links, no word
+    // buttons.
+    let detail = thread_detail(&f, 0, false);
+    assert!(text_of(&detail[0]).starts_with("Grace"));
     let u = uris(&detail);
-    assert!(u.contains(&"editthreadnotes:0".to_string()));
-    assert!(u.contains(&"editentrynote:0:0".to_string()));
     assert!(u.contains(&"go:John:1:14".to_string()));
+    assert!(u.contains(&"threadedit:0:1".to_string()), "{u:?}");
+    assert!(!u.iter().any(|x| {
+        x.starts_with("moveentry:")
+            || x.starts_with("removeentry:")
+            || x.starts_with("editentrynote:")
+            || x.starts_with("editthreadnotes:")
+            || x.starts_with("deletethread:")
+    }));
+    assert!(detail.iter().all(|b| !matches!(b, Block::Para { drag: Some(_), .. })));
     assert!(detail.iter().any(|b| text_of(b) == "“full of grace”"));
     assert!(detail.iter().any(|b| text_of(b) == "— the Word"));
+    let pencil = detail
+        .iter()
+        .find_map(|b| match b {
+            Block::Para { runs, .. } => runs.iter().find(|r| r.text == "✎"),
+            _ => None,
+        })
+        .expect("the edit pencil");
+    assert!(pencil.end);
+    assert_eq!(pencil.uri.as_deref(), Some("threadedit:0:1"));
+
+    // Edit mode: management moves here — delete across from the stat, the
+    // Notes ＋ header, and per-entry ↑ ↓ ＋ ✕ pinned to the end of the
+    // reference row (arrows omitted at the ends). The pencil, lit, leads out.
+    let editing = thread_detail(&f, 0, true);
+    let u = uris(&editing);
+    assert!(u.contains(&"editthreadnotes:0".to_string()));
+    assert!(u.contains(&"deletethread:0".to_string()));
+    assert!(u.contains(&"editentrynote:0:0".to_string()));
+    assert!(u.contains(&"removeentry:0:1".to_string()));
+    assert!(u.contains(&"moveentry:0:0:1".to_string()));
+    assert!(u.contains(&"moveentry:0:1:-1".to_string()));
+    assert!(!u.contains(&"moveentry:0:0:-1".to_string()));
+    assert!(!u.contains(&"moveentry:0:1:1".to_string()));
+    assert!(u.contains(&"threadedit:0:0".to_string()));
+    assert!(editing.iter().all(|b| !matches!(b, Block::Para { drag: Some(_), .. })));
+    // The first entry's reference row carries its controls as end-pinned
+    // glyphs, in order: ↓ (no ↑ at the top), note ＋, then ✕.
+    let entry_row = editing
+        .iter()
+        .find_map(|b| match b {
+            Block::Para { runs, .. } if runs.first().is_some_and(|r| r.text == "John 1:14") => Some(runs.clone()),
+            _ => None,
+        })
+        .expect("the first entry's reference row");
+    let trail: Vec<&str> = entry_row.iter().filter(|r| r.end).map(|r| r.text.as_str()).collect();
+    assert_eq!(trail, ["↓", "＋", "✕"]);
 
     // An out-of-range index falls back to the list.
-    assert_eq!(text_of(&thread_detail(&f, 9)[0]), "Threads (1)");
+    assert_eq!(text_of(&thread_detail(&f, 9, false)[0]), "Threads (1)");
 }
 
 #[test]
@@ -975,4 +1038,206 @@ fn no_list_producer_answers_with_nothing() {
     ] {
         assert!(!blocks.is_empty(), "the {what} panel is empty with an empty source");
     }
+}
+
+// ── the word-usage card (word-first study candidate) ──────────────────────────
+
+fn usage_view() -> WordUsageView {
+    WordUsageView {
+        word: "mercy".into(),
+        total: 3,
+        in_scope: 3,
+        ot: 2,
+        nt: 1,
+        books: vec![("Gen".into(), "Genesis".into(), 2), ("Matt".into(), "Matthew".into(), 1)],
+        lines: vec![WordLineView {
+            refkey: "Gen 1:1".into(),
+            display: "Genesis 1:1".into(),
+            segs: vec![("In the beginning ".into(), false), ("mercy".into(), true), (" endured.".into(), false)],
+        }],
+        page: 1,
+        pages: 3,
+    }
+}
+
+/// Every `(text, uri, bold)` in the card's paragraphs, flattened.
+fn flat_runs(blocks: &[Block]) -> Vec<(String, Option<String>, bool)> {
+    let mut out = Vec::new();
+    for b in blocks {
+        if let Block::Para { runs, .. } = b {
+            for r in runs {
+                out.push((r.text.clone(), r.uri.clone(), r.bold));
+            }
+        }
+    }
+    out
+}
+
+fn usage_query<'a>(word: &'a str, scope: &'a str, page: u32, codes: &'a [String]) -> UsageQuery<'a> {
+    UsageQuery { word, lens: None, scope, page, origin: None, codes }
+}
+
+#[test]
+fn wusage_link_round_trips() {
+    assert_eq!(
+        parse_link("wusage:2:mercy:book:Gen"),
+        Some(PanelLink::WordUsage { word: "mercy".into(), scope: "book:Gen".into(), page: 2 })
+    );
+    // Scope omitted → "all".
+    assert_eq!(
+        parse_link("wusage:0:mercy"),
+        Some(PanelLink::WordUsage { word: "mercy".into(), scope: "all".into(), page: 0 })
+    );
+    assert_eq!(parse_link("wusage:0::ot"), None); // word missing
+    assert_eq!(parse_link("wusage:x:mercy:all"), None); // page not a number
+
+    // The lens verb: page, code, word, then the scope remainder.
+    assert_eq!(
+        parse_link("lusage:1:H2617:mercy:book:Gen"),
+        Some(PanelLink::CodeUsage { code: "H2617".into(), word: "mercy".into(), scope: "book:Gen".into(), page: 1 })
+    );
+    assert_eq!(parse_link("lusage:0::mercy:all"), None); // code missing
+
+    // The thread edit-mode toggle.
+    assert_eq!(parse_link("threadedit:3:1"), Some(PanelLink::ThreadEditMode { index: 3, edit: true }));
+    assert_eq!(parse_link("threadedit:3:0"), Some(PanelLink::ThreadEditMode { index: 3, edit: false }));
+    assert_eq!(parse_link("threadedit:3:2"), None);
+
+    // What the producer bakes parses back unchanged.
+    assert_eq!(
+        parse_link(&wusage_uri("mercy", "book:Gen", 1)),
+        Some(PanelLink::WordUsage { word: "mercy".into(), scope: "book:Gen".into(), page: 1 })
+    );
+    assert_eq!(
+        parse_link(&lusage_uri("H2617", "mercy", "ot", 2)),
+        Some(PanelLink::CodeUsage { code: "H2617".into(), word: "mercy".into(), scope: "ot".into(), page: 2 })
+    );
+}
+
+#[test]
+fn word_usage_card_waits_politely() {
+    // A source with no word index (or one still warming) answers None; the
+    // card carries the loading line rather than a false "0 occurrences".
+    let f = Fake::default();
+    let blocks = word_usage_card(&f, Gates::from_bits(0), &usage_query("mercy", "all", 0, &[]));
+    let texts: Vec<String> = flat_runs(&blocks).into_iter().map(|(t, _, _)| t).collect();
+    assert!(texts.iter().any(|t| t.contains("loading")), "{texts:?}");
+}
+
+#[test]
+fn word_usage_card_lays_out_the_evidence() {
+    let codes = vec!["H2617".to_string()];
+    let f = Fake { word_usage: Some(usage_view()), ..Default::default() };
+    let blocks = word_usage_card(&f, Gates::from_bits(0), &usage_query("mercy", "all", 1, &codes));
+    let runs = flat_runs(&blocks);
+    let uri_of = |text: &str| runs.iter().find(|(t, _, _)| t == text).and_then(|(_, u, _)| u.clone());
+
+    // Scope chips, spelled like the search screen's: the active one is inert;
+    // the others re-open at page 0.
+    assert_eq!(uri_of("Everywhere"), None);
+    assert_eq!(uri_of("Old Testament"), Some("wusage:0:mercy:ot".into()));
+    assert_eq!(uri_of("New Testament"), Some("wusage:0:mercy:nt".into()));
+
+    // Distribution: book chips in the order the view gave them — canon order.
+    // The producer must never reorder these into a by-count ranking (the
+    // card's no-ranking rule): sorting by count here would swap Genesis after
+    // a higher-count book and this positional check would see it.
+    let gen = runs.iter().position(|(t, _, _)| t == "Genesis").expect("Genesis chip");
+    let matt = runs.iter().position(|(t, _, _)| t == "Matthew").expect("Matthew chip");
+    assert!(gen < matt);
+    assert_eq!(uri_of("Genesis"), Some("wusage:0:mercy:book:Gen".into()));
+
+    // Paging from page 1 of 3: both arrows, scope carried.
+    assert_eq!(uri_of("‹"), Some("wusage:0:mercy:all".into()));
+    assert_eq!(uri_of("›"), Some("wusage:2:mercy:all".into()));
+
+    // The code shows twice, correctly: as the lens chip (labelled by the code
+    // here — this Fake has no dictionary entry to supply a lemma) and as the
+    // dictionary footer, through the existing code: verb.
+    let h_uris: Vec<String> = runs.iter().filter(|(t, _, _)| t == "H2617").filter_map(|(_, u, _)| u.clone()).collect();
+    assert!(h_uris.contains(&"lusage:0:H2617:mercy:all".to_string()), "{h_uris:?}");
+    assert!(h_uris.contains(&"code:H2617:mercy".to_string()), "{h_uris:?}");
+}
+
+#[test]
+fn word_usage_card_lens_switches_to_the_original_word() {
+    // A tagged word offers the original word as a chip, LABELLED BY LEMMA;
+    // switching the lens re-links every scope/page verb through lusage:, so
+    // the reader stays in the original word wherever they scope to.
+    let codes = vec!["H2617".to_string()];
+    let mut f = Fake { code_usage: Some(usage_view()), ..Default::default() };
+    f.entries.insert(
+        "H2617".into(),
+        StrongsView { lemma: Some("חֶסֶד".into()), xlit: Some("chesed".into()), ..Default::default() },
+    );
+
+    let q = UsageQuery { word: "mercy", lens: Some("H2617"), scope: "all", page: 1, origin: None, codes: &codes };
+    let blocks = word_usage_card(&f, Gates::from_bits(0), &q);
+    let runs = flat_runs(&blocks);
+    // First LINKED run with this text — the headline repeats the word inertly.
+    let uri_of = |text: &str| runs.iter().filter(|(t, _, _)| t == text).find_map(|(_, u, _)| u.clone());
+
+    // The surface chip leads back; the lemma chip is the active (inert) one,
+    // and the original word is named in full for a reader without the script.
+    assert_eq!(uri_of("mercy"), Some("wusage:0:mercy:all".into()));
+    assert!(runs.iter().any(|(t, u, bold)| t == "חֶסֶד" && u.is_none() && *bold));
+    assert!(runs.iter().any(|(t, _, _)| t == "chesed"));
+
+    // Scope chips and paging carry the lens.
+    assert_eq!(uri_of("Old Testament"), Some("lusage:0:H2617:mercy:ot".into()));
+    assert_eq!(uri_of("›"), Some("lusage:2:H2617:mercy:all".into()));
+}
+
+#[test]
+fn word_usage_card_notes_are_a_section_with_a_plus() {
+    // The reader's note slot: a "Notes" header with a ＋, then what they wrote
+    // (the old row read "✎  add" — maintainer, 2026-08-30).
+    let f = Fake {
+        word_usage: Some(usage_view()),
+        displays: HashMap::from([("Gen 1:1".to_string(), "Genesis 1:1".to_string())]),
+        user_notes: HashMap::from([("Gen 1:1".to_string(), "steadfast love".to_string())]),
+        ..Default::default()
+    };
+    let q = UsageQuery { word: "mercy", lens: None, scope: "all", page: 0, origin: Some(("Gen 1:1", 2)), codes: &[] };
+    let blocks = word_usage_card(&f, Gates::from_bits(0), &q);
+    let runs = flat_runs(&blocks);
+    assert!(runs.iter().any(|(t, u, bold)| t == "Notes" && u.is_none() && *bold));
+    assert!(runs.iter().any(|(t, u, _)| t == "＋" && u.as_deref() == Some("editnote:Gen 1:1")));
+    assert!(runs.iter().any(|(t, _, _)| t == "steadfast love"));
+    // And no stray pencil: the glyph row this replaced is gone.
+    assert!(!runs.iter().any(|(t, _, _)| t.contains('✎')));
+    // The ＋ is pinned to the row's end, across from the header.
+    let plus = blocks
+        .iter()
+        .find_map(|b| match b {
+            Block::Para { runs, .. } => runs.iter().find(|r| r.text == "＋"),
+            _ => None,
+        })
+        .expect("the notes ＋");
+    assert!(plus.end);
+}
+
+#[test]
+fn occurrence_lines_are_scripture_verbatim() {
+    // No app words among the verses (the card's rule): the verse row must be
+    // the segs' text EXACTLY — concatenated, it IS the verse — with the
+    // studied word's tokens as the only emphasized runs.
+    //
+    // This fails against the bug it describes by construction rather than by
+    // mutation (CLAUDE.md, UI testing): a producer that decorates the verse
+    // row — a label, an ellipsis, a separator run — changes the concatenation
+    // asserted below, and one that emphasizes anything else flips a `bold`.
+    let f = Fake { word_usage: Some(usage_view()), ..Default::default() };
+    let blocks = word_usage_card(&f, Gates::from_bits(0), &usage_query("mercy", "all", 1, &[]));
+    let line = blocks
+        .iter()
+        .find_map(|b| match b {
+            Block::Para { runs, indent: true, .. } => Some(runs.clone()),
+            _ => None,
+        })
+        .expect("an indented verse row");
+    let joined: String = line.iter().map(|r| r.text.as_str()).collect();
+    assert_eq!(joined, "In the beginning mercy endured.");
+    let bolded: Vec<&str> = line.iter().filter(|r| r.bold).map(|r| r.text.as_str()).collect();
+    assert_eq!(bolded, vec!["mercy"]);
 }

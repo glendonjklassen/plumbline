@@ -399,6 +399,38 @@ export class StudyEngine {
     );
     return s === null ? null : JSON.parse(s);
   }
+  /** The word-usage card (word-first study candidate): totals, distribution
+   *  and one page of in-context occurrence lines. Pass either a non-empty
+   *  `word` (following a wusage: link) or `refKey` + `tokenIndex` (a tap);
+   *  a non-empty `code` opens the original-word lens (lusage: links);
+   *  `scope` is a SearchScope token ("all", "ot", "nt", "book:Gen", …). */
+  wordUsageBlocks(
+    word: string,
+    code: string,
+    refKey: string,
+    tokenIndex: number,
+    scope: string,
+    page: number,
+    gates: number,
+  ): any {
+    const s = this.#call(
+      (w, c, r, sc) =>
+        this.#w.takeStr(
+          (this.#w.exports.plumbline_engine_word_usage_blocks_json as Function)(
+            this.#engine,
+            w,
+            c,
+            r,
+            tokenIndex,
+            sc,
+            page,
+            gates,
+          ) as number,
+        ),
+      [word, code, refKey, scope],
+    );
+    return s === null ? null : JSON.parse(s);
+  }
   /** Code study card with per-tier gates (see wordStudyBlocks). */
   codeStudyBlocks(code: string, word: string | null, gates: number): any {
     const s = this.#call(
@@ -419,8 +451,11 @@ export class StudyEngine {
   threadsBlocks(): any {
     return this.#json("plumbline_engine_threads_blocks_json");
   }
-  threadBlocks(index: number): any {
-    const s = this.#w.takeStr((this.#w.exports.plumbline_engine_thread_blocks_json as Function)(this.#engine, index) as number);
+  /** Thread detail; `edit` renders the per-entry reorder/remove/note controls. */
+  threadBlocks(index: number, edit?: boolean): any {
+    const s = this.#w.takeStr(
+      (this.#w.exports.plumbline_engine_thread_blocks2_json as Function)(this.#engine, index, edit ? 1 : 0) as number,
+    );
     return s === null ? null : JSON.parse(s);
   }
   tagsBlocks(): any {

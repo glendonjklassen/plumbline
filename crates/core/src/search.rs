@@ -109,7 +109,10 @@ impl SearchScope {
     /// "no filter" (`All`); an unknown book or chapter resolves to the EMPTY
     /// range — a scope the corpus can't locate must not quietly widen to
     /// everything.
-    fn resolve(&self, corpus: &Corpus) -> Option<std::ops::Range<usize>> {
+    ///
+    /// Public because the word-usage card scopes its occurrence list with the
+    /// same vocabulary the search box uses — one resolver, not two answers.
+    pub fn resolve(&self, corpus: &Corpus) -> Option<std::ops::Range<usize>> {
         match self {
             SearchScope::All => None,
             // Matthew opens the New Testament, and every corpus this app ships
@@ -312,6 +315,21 @@ impl SearchIx {
     /// Number of distinct indexed words (for a headless `--check`).
     pub fn distinct_words(&self) -> usize {
         self.word.len()
+    }
+
+    /// Every verse (ascending canonical index) containing `folded` — the exact
+    /// postings behind the exact-match search tier. The key must already be
+    /// [`fold_word`]ed; an unindexed word answers empty. This is the word-usage
+    /// card's spine: the one public "all occurrences of a surface word" answer,
+    /// so the card needs no index of its own.
+    pub fn word_verses(&self, folded: &str) -> &[usize] {
+        self.word_idxs(folded)
+    }
+
+    /// Every verse (ascending) tagged with Strong's `code` — the usage card's
+    /// original-word lens, from the same table the code query tier answers.
+    pub fn lemma_verses(&self, code: &str) -> &[usize] {
+        self.lemma_idxs(code)
     }
 
     fn word_idxs(&self, w: &str) -> &[usize] {
@@ -1390,6 +1408,17 @@ mod tests {
         // l/s/z doubles are preserved
         assert_eq!(stem_word("bless"), "bless");
         assert_eq!(levenshtein("beginning", "begining"), 1);
+    }
+
+    /// The word-usage card's spine: the exact tier's postings, public.
+    #[test]
+    fn word_verses_exposes_the_exact_postings() {
+        let c = corpus::from_str(SAMPLE).unwrap();
+        let ix = ix_of(&c);
+        // "God" occurs in Gen 1:1–3 and John 3:16 — folded key, ascending,
+        // verse-deduped.
+        assert_eq!(ix.word_verses("god"), &[0, 1, 2, 4]);
+        assert_eq!(ix.word_verses("nonesuch"), &[] as &[usize]);
     }
 
     /// The Arabic reader can find the word they are looking at.

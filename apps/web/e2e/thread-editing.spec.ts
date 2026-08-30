@@ -162,6 +162,9 @@ test("verses in a thread can be rearranged", async ({ page }) => {
   // dispatcher directly; clicking the rendered control is both possible and a
   // truer test.
   await openThread(page, "Romans Road");
+  // The reorder controls live behind the header's edit pencil now (drag is
+  // gone, and the always-visible inline links with it — 2026-08-30).
+  await page.locator("aside.panel button.link", { hasText: "✎" }).first().click();
   await page.locator("aside.panel button.link", { hasText: "↓" }).first().click();
 
   await expect.poll(async () => (await order(page, "Romans Road"))[0], { timeout: 20_000 }).toBe(before[1]);
@@ -177,6 +180,8 @@ test("a verse can be removed, and the thread survives", async ({ page }) => {
   const before = await order(page, "Romans Road");
 
   await openThread(page, "Romans Road");
+  // ✕ lives behind the edit pencil too.
+  await page.locator("aside.panel button.link", { hasText: "✎" }).first().click();
   // Removing ASKS FIRST, because it cannot be undone — the rule `deletethread:`
   // already follows. The dialog names the passage, and its button names the act
   // rather than saying OK, so this clicks the verb.

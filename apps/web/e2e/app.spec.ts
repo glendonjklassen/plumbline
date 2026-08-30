@@ -531,11 +531,10 @@ test("word study opens from a single click and respects the gates", async ({ pag
     if (await page.locator("aside.panel").isVisible().catch(() => false)) break;
   }
   await expect(page.locator("aside.panel")).toBeVisible();
-  // The reader's own-note slot, whose label is the pencil glyph alone — and the
-  // ONLY pencil on the row now: the add/edit link beside it carried a second one
-  // until 2026-08-26, so the row read "✎   ✎ add". `exact` keeps this honest if
-  // one ever creeps back into the verb.
-  await expect(page.locator("aside.panel").getByText("✎", { exact: true }).first()).toBeVisible();
+  // The reader's own-note slot on the usage card: a "Notes" header with a ＋
+  // to add or edit (the pencil-glyph row it replaced is gone — 2026-08-30).
+  await expect(page.locator("aside.panel").getByText("Notes", { exact: true }).first()).toBeVisible();
+  await expect(page.locator("aside.panel").getByText("＋", { exact: true }).first()).toBeVisible();
 });
 
 test("live search shows results, and Escape steps back out", async ({ page }) => {

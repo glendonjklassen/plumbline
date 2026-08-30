@@ -391,7 +391,7 @@ static SPECS: [LangSpec; Lang::COUNT] = [
     LangSpec {
         code: "zht",
         endonym: "中文（繁體）",
-        exonym: "Chinese (Traditional)",
+        exonym: "Traditional Chinese",
         script: Script::Han,
         catalog: include_str!("i18n/zht.json"),
         corpus: Some(CorpusSpec { file: "cuv1919t.jsonl", tokenization: "cuv1919t-tok1", label: "和合本" }),
@@ -403,7 +403,7 @@ static SPECS: [LangSpec; Lang::COUNT] = [
     LangSpec {
         code: "zhs",
         endonym: "中文（简体）",
-        exonym: "Chinese (Simplified)",
+        exonym: "Simplified Chinese",
         script: Script::Han,
         catalog: include_str!("i18n/zhs.json"),
         corpus: Some(CorpusSpec { file: "cuv1919s.jsonl", tokenization: "cuv1919s-tok1", label: "和合本" }),

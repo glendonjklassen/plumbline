@@ -52,6 +52,8 @@ fn generate_c_header(crate_dir: &str) {
                 "plumbline_engine_warm_step",
                 "plumbline_engine_load_rnd_step",
                 "plumbline_engine_defer_builds",
+                "plumbline_engine_word_usage_blocks_json",
+                "plumbline_engine_thread_blocks2_json",
             ]
             .iter()
             .map(|s| s.to_string())

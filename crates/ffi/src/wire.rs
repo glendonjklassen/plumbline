@@ -1036,6 +1036,10 @@ pub struct WireRun {
     pub italic: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uri: Option<String>,
+    /// Pinned to the row's end (additive: absent means false, so older
+    /// decoders and goldens see the same shape they always did).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub end: bool,
 }
 
 /// The camelCase token for a colour role (the shell maps it to its palette).
@@ -1056,7 +1060,15 @@ fn color_token(c: Color) -> &'static str {
 }
 
 fn run_to_wire(r: Run) -> WireRun {
-    WireRun { text: r.text, size: r.size, color: color_token(r.color), bold: r.bold, italic: r.italic, uri: r.uri }
+    WireRun {
+        text: r.text,
+        size: r.size,
+        color: color_token(r.color),
+        bold: r.bold,
+        italic: r.italic,
+        uri: r.uri,
+        end: r.end,
+    }
 }
 
 /// A parsed panel link (`plumbline_core::panel::parse_link`) — the one verb
@@ -1070,6 +1082,9 @@ pub enum WirePanelLink {
     Occurrences { code: String },
     Rendering { code: String, rendering: String },
     CodeStudy { code: String, word: String },
+    WordUsage { word: String, scope: String, page: u32 },
+    CodeUsage { code: String, word: String, scope: String, page: u32 },
+    ThreadEditMode { index: usize, edit: bool },
     Thread { index: usize },
     Tag { index: usize },
     Weave { index: usize },
@@ -1099,6 +1114,9 @@ pub fn link_to_wire(l: PanelLink) -> WirePanelLink {
         PanelLink::Occurrences { code } => WirePanelLink::Occurrences { code },
         PanelLink::Rendering { code, rendering } => WirePanelLink::Rendering { code, rendering },
         PanelLink::CodeStudy { code, word } => WirePanelLink::CodeStudy { code, word },
+        PanelLink::WordUsage { word, scope, page } => WirePanelLink::WordUsage { word, scope, page },
+        PanelLink::CodeUsage { code, word, scope, page } => WirePanelLink::CodeUsage { code, word, scope, page },
+        PanelLink::ThreadEditMode { index, edit } => WirePanelLink::ThreadEditMode { index, edit },
         PanelLink::Thread { index } => WirePanelLink::Thread { index },
         PanelLink::Tag { index } => WirePanelLink::Tag { index },
         PanelLink::Weave { index } => WirePanelLink::Weave { index },
@@ -1894,10 +1912,16 @@ pub struct WireLanguage {
 }
 
 pub fn catalog_to_wire(lang: i18n::Lang) -> WireCatalog {
+    // ISO-639 code order, not registry order. Rows land in the registry in the
+    // order languages shipped, which put French below the Indic rows and read
+    // as a jumble in the picker (maintainer, 2026-08-30); the code is the one
+    // ordering that needs no judgment about language families.
+    let mut all: Vec<i18n::Lang> = i18n::Lang::ALL.to_vec();
+    all.sort_by_key(|l| l.code());
     WireCatalog {
         lang: lang.code().to_string(),
         strings: i18n::resolved(lang),
-        languages: i18n::Lang::ALL.iter().map(|l| language_to_wire(*l)).collect(),
+        languages: all.into_iter().map(language_to_wire).collect(),
         native_intros: lang.has_native_intros(),
     }
 }

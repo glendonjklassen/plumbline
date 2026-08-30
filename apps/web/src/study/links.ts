@@ -53,6 +53,29 @@ export async function dispatchLink(s: Session, uri: string, ev?: MouseEvent): Pr
     case "codeStudy":
       s.panel = { kind: "codeStudy", code: link.code, word: link.word ?? null, lang: panelLang(s) };
       break;
+    case "wordUsage":
+    case "codeUsage": {
+      // wusage:/lusage: links are baked only inside the word's own usage card
+      // (lens chips, scope chips, distribution books, paging), so the current
+      // card's origin — the tapped verse whose head, note and extras it
+      // carries — survives the re-open. A producer that ever bakes one of
+      // these links to a DIFFERENT word must clear the origin here instead.
+      const cur = s.panel?.kind === "wordUsage" ? s.panel : undefined;
+      s.panel = {
+        kind: "wordUsage",
+        word: link.word,
+        code: link.verb === "codeUsage" ? link.code : undefined,
+        refKey: cur?.refKey,
+        tokenIndex: cur?.tokenIndex,
+        scope: link.scope,
+        page: link.page,
+        lang: panelLang(s),
+      };
+      break;
+    }
+    case "threadEditMode":
+      s.panel = { kind: "thread", index: link.index, edit: link.edit };
+      break;
     case "thread":
       s.panel = { kind: "thread", index: link.index };
       break;

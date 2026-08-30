@@ -130,6 +130,99 @@ pub unsafe extern "C" fn plumbline_engine_load_rnd_step(engine: *const Plumbline
     })
 }
 
+/// The word-usage card (the word-first study candidate) as a typed block list
+/// (`{blocks:[…]}`). Pass EITHER a non-empty `word` (following a `wusage:`
+/// link) or `ref_key` + `token_index` (a tap — the word and its Strong's codes
+/// then come from the token itself). A non-empty `code` opens the card in its
+/// original-word lens (`lusage:` links): that code's occurrences instead of
+/// the surface word's. `scope` is a
+/// [`SearchScope::token`](plumbline_core::search::SearchScope::token) string
+/// (`all`, `ot`, `nt`, `book:Gen`, …); null or empty means `all`. While the
+/// search index is still warming the card carries its loading line and the
+/// shell re-asks on `warmReady`, like every other panel.
+///
+/// Web-only while the candidate bakes, hence wasm-only — and therefore on the
+/// plumbline-bindgen exclude list, not in the C header or the Kotlin binding.
+///
+/// # Safety
+/// `engine` is a live engine or null; `word`, `code`, `ref_key`, `scope` are
+/// null or valid NUL-terminated UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_word_usage_blocks_json(
+    engine: *const PlumblineEngine,
+    word: *const c_char,
+    code: *const c_char,
+    ref_key: *const c_char,
+    token_index: u32,
+    scope: *const c_char,
+    page: u32,
+    gates: u32,
+) -> *mut c_char {
+    guard(std::ptr::null_mut(), || {
+        let Some(e) = (unsafe { engine.as_ref() }) else {
+            return std::ptr::null_mut();
+        };
+        let scope = unsafe { crate::opt_str(scope) }.filter(|s| !s.is_empty()).unwrap_or("all");
+        let lens = unsafe { crate::opt_str(code) }.filter(|c| !c.is_empty());
+        let refkey = unsafe { crate::opt_str(ref_key) }.filter(|r| !r.is_empty());
+        let mut word = unsafe { crate::opt_str(word) }.unwrap_or("").to_string();
+        let origin = refkey.map(|r| (r, token_index));
+        let mut codes: Vec<String> = Vec::new();
+        if let Some((r, t)) = origin {
+            if let Some(tok) = plumbline_core::VRef::parse_ref_key(r)
+                .and_then(|v| e.corpus.verse(&v))
+                .and_then(|verse| verse.tokens.get(t as usize))
+            {
+                if word.is_empty() {
+                    word = tok.word.clone();
+                }
+                codes = tok.strongs.clone();
+            }
+        }
+        if codes.is_empty() && !word.is_empty() {
+            codes = plumbline_core::panel::PanelSource::word_codes(e, &word);
+        }
+        // A lens code the chips did not offer still renders (a stale link):
+        // make sure it is in the chip row so the reader can see what they are
+        // looking at and switch back.
+        if let Some(c) = lens {
+            if !codes.iter().any(|k| k == c) {
+                codes.push(c.to_string());
+            }
+        }
+        let q = plumbline_core::panel::UsageQuery { word: &word, lens, scope, page, origin, codes: &codes };
+        crate::out_json(&crate::wire::blocks_to_wire(plumbline_core::panel::word_usage_card(
+            e,
+            plumbline_core::panel::Gates::from_bits(gates),
+            &q,
+        )))
+    })
+}
+
+/// One thread's detail as blocks, with the edit flag: `edit != 0` renders the
+/// per-entry reorder/remove/note controls (the PWA's replacement for drag).
+/// The native `plumbline_engine_thread_blocks_json` keeps its shape and serves the
+/// read view; this variant is web-only, hence wasm-only and excluded from the
+/// C header / Kotlin binding.
+///
+/// # Safety
+/// `engine` is a live engine or null.
+#[no_mangle]
+pub unsafe extern "C" fn plumbline_engine_thread_blocks2_json(
+    engine: *const PlumblineEngine,
+    index: u32,
+    edit: u32,
+) -> *mut c_char {
+    guard(std::ptr::null_mut(), || match unsafe { engine.as_ref() } {
+        Some(e) => crate::out_json(&crate::wire::blocks_to_wire(plumbline_core::panel::thread_detail(
+            e,
+            index as usize,
+            edit != 0,
+        ))),
+        None => std::ptr::null_mut(),
+    })
+}
+
 /// Allocate `len` bytes the shell will fill with a NUL-terminated UTF-8
 /// argument. Null when `len` is 0. Release with [`plumbline_web_free`].
 #[no_mangle]

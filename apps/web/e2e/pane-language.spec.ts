@@ -114,10 +114,12 @@ test("word study on a pane comes from that pane's own text", async ({ page }) =>
   const box = (await canvas.boundingBox())!;
   for (const x of [0.3, 0.35, 0.4, 0.45, 0.5, 0.55]) {
     await canvas.click({ position: { x: box.width * x, y: 46 } });
-    if (await page.evaluate(() => (window as any).__plumbline.panel?.kind === "wordStudy")) break;
+    if (await page.evaluate(() => (window as any).__plumbline.panel?.kind === "wordUsage")) break;
   }
   const view = await page.evaluate(() => (window as any).__plumbline.panel);
-  expect(view?.kind, "a tap on a word opens its study").toBe("wordStudy");
+  // The tap answer is the word-usage card (the word-first candidate); the
+  // language-carrying seam this test pins is the same either way.
+  expect(view?.kind, "a tap on a word opens its study").toBe("wordUsage");
   expect(view?.lang, "and the study belongs to the pane's own text").toBe("de");
 
   // ── 2. the panel asks that language ──
