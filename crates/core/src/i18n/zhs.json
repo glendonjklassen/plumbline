@@ -647,7 +647,7 @@
   "settings.copyVerse": "仅经文内容",
   "settings.copyVerseRef": "经文及引用",
   "settings.data": "您的研经数据——笔记、标签、经文串、串珠、背诵进度",
-  "settings.dataDesc": "同一份zip文件可在安卓和网页版中还原。同名项目会被替换，其余内容保持不变。",
+  "settings.dataDesc": "同一份zip文件可在任何设备上还原。同名项目会被替换，其余内容保持不变。",
   "settings.defaultStyle": "默认样式",
   "settings.defaultStyleDesc": "将字号、间距、页边距、字体和主题重置为默认值。",
   "settings.done": "完成",

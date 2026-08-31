@@ -607,7 +607,7 @@
   "settings.copyVerse": "Verse text only",
   "settings.copyVerseRef": "Verse with reference",
   "settings.data": "Your study data — notes, tags, threads, weaves, memorization",
-  "settings.dataDesc": "The same zip restores on Android and the web. Same-name items are replaced; everything else is kept.",
+  "settings.dataDesc": "The same zip restores on any device. Same-name items are replaced; everything else is kept.",
   "settings.defaultStyle": "Default style",
   "settings.defaultStyleDesc": "Reset size, spacing, margins, fonts and theme to their defaults.",
   "settings.done": "Done",

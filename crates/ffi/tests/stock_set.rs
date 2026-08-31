@@ -1,16 +1,15 @@
 //! The shipped stock study set has to be loadable by the build that ships it.
 //!
-//! `apps/android/app/src/main/assets/stock/{tags,threads,weaves}` is the one
-//! source of truth for the bundled study aids (CLAUDE.md §Layout): Android
-//! copies it out of its APK assets on first launch, and
-//! `scripts/build-web-pack.mjs` packs the same directory into the web data pack
-//! with `seedOnce`. Nothing validated it. A stock file with a typo in a refKey,
-//! a stale tokenization stamp, or a format tag the core does not recognise would
-//! ship in both shells and fail at SEED time — on a reader's device, on first
-//! launch, where the only symptom is a study aid that quietly is not there.
+//! `stock/{tags,threads,weaves}` is the one source of truth for the bundled
+//! study aids (CLAUDE.md §Layout): `scripts/build-web-pack.mjs` packs the
+//! directory into the web data pack with `seedOnce`. Nothing validated it. A
+//! stock file with a typo in a refKey, a stale tokenization stamp, or a format
+//! tag the core does not recognise would ship and fail at SEED time — on a
+//! reader's device, on first launch, where the only symptom is a study aid
+//! that quietly is not there.
 //!
 //! These tests parse every shipped file through the core's own `Deserialize`
-//! impls, which is what the shells do, so "it is valid JSON" is not enough to
+//! impls, which is what the shell does, so "it is valid JSON" is not enough to
 //! pass: the format tag, the tokenization stamp and every refKey have to be
 //! right.
 //!
@@ -28,7 +27,7 @@ use plumbline_core::canon::{book_by_id, TOKENIZATION_VERSION};
 use plumbline_core::reference::VRef;
 
 fn stock() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/android/app/src/main/assets/stock")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../stock")
 }
 
 /// Every `*.json` under `dir`, recursively (weaves has a `suggested/` subtree).
@@ -122,7 +121,7 @@ fn every_stock_weave_loads() {
 
 #[test]
 fn a_stock_file_lands_where_its_shell_will_look_for_it() {
-    // The filename is not decoration: both shells seed by copying the file, and
+    // The filename is not decoration: the shell seeds by copying the file, and
     // the core then finds a tag again by slugging its NAME. A stock file whose
     // name does not slug to its filename is seeded once and then invisible to
     // every later save, which would silently fork it in two.

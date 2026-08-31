@@ -1,10 +1,10 @@
-# `plumbline-ffi` — the one C ABI the native shells consume
+# `plumbline-ffi` — the one C ABI over the core
 
-This crate is the single, flat **C ABI** over `plumbline-core` + `plumbline-layout`
-(decision #1: native-per-platform over a shared Rust core). Every shell —
-GTK4/Linux today, WinUI/C# and Compose/Kotlin later — binds to *these* functions
-and reimplements no study logic. The GTK desktop app links the core crates
-directly and skips this boundary; Windows and Android cross it.
+A single, flat **C ABI** over `plumbline-core` + `plumbline-layout`. The web
+shell binds it compiled to `wasm32-wasip1` and reimplements no study logic. (The
+GTK/WinUI desktop shells were retired 2026-07-25 and the Compose/Kotlin one
+2026-08-30; the ABI is what survived them, and is what a future native shell
+would bind.)
 
 ## Shape
 
@@ -13,13 +13,12 @@ directly and skips this boundary; Windows and Android cross it.
   structs; only the `plumbline_*` functions touch them.
 - **Primitives** for scalars (chapter numbers, coordinates).
 - **JSON** (NUL-terminated UTF-8) for every structured return value — the lowest
-  common denominator across C#, Kotlin, Swift and JS, tiny and additively
-  evolvable, and the same shape a future sync SaaS will speak. Schemas live in
-  [`src/wire.rs`](src/wire.rs) and are the frozen contract.
+  common denominator across languages, tiny and additively evolvable. Schemas
+  live in [`src/wire.rs`](src/wire.rs) and are the frozen contract.
 - **Layout stays in Rust**: `plumbline_engine_layout_chapter` takes a
-  `PlumblineMeasureFn` callback, so the shared greedy line-breaker measures text with
-  each platform's own engine (Pango / DirectWrite / Android) while the per-word
-  hit-region bookkeeping is written once.
+  `PlumblineMeasureFn` callback, so the shared greedy line-breaker measures text
+  with the platform's own engine (canvas `measureText` on the web) while the
+  per-word hit-region bookkeeping is written once.
 
 ## Memory & safety contract
 
@@ -72,51 +71,28 @@ Token flag bits are exported as `PLUMBLINE_FLAG_ADDED/DIVINE/TITLE/PARA`.
 
 ## Bindings
 
-Regenerate the committed artifacts from the Rust source (host-only tools, behind
-a feature so a plain build/cross-build never pulls them):
+Regenerate the committed C header from the Rust source (a host-only tool, behind
+a feature so a plain build/cross-build never pulls it):
 
 ```sh
 cargo run -p plumbline-ffi --features bindgen --bin plumbline-bindgen
 ```
 
-- **C** — [`include/plumbline.h`](include/plumbline.h) (cbindgen). See
-  [`bindings/c/smoke.c`](bindings/c/smoke.c) for a full consumer.
-- **C# / WinUI** — [`bindings/csharp/PureStudyNative.g.cs`](bindings/csharp/PureStudyNative.g.cs)
-  (csbindgen, generated) + [`PureStudy.cs`](bindings/csharp/PureStudy.cs) (the
-  idiomatic hand-written wrapper). Runnable demo in
-  [`bindings/csharp/demo/`](bindings/csharp/demo/):
-  `dotnet run --project crates/ffi/bindings/csharp/demo -- ../overlay`.
-- **Kotlin / Android** — [`bindings/kotlin/Plumbline.kt`](bindings/kotlin/Plumbline.kt),
-  a JNA wrapper over the same C ABI (scaffold; builds inside the Gradle app once
-  the `.so` is produced — see below).
+[`include/plumbline.h`](include/plumbline.h) (cbindgen) is the ABI's reference;
+[`bindings/c/smoke.c`](bindings/c/smoke.c) is a full consumer. The wasm-only
+exports in [`src/wasm.rs`](src/wasm.rs) are excluded from it by name — cbindgen
+does not evaluate `cfg`.
 
 ## Building the native library
 
 ```sh
 cargo build -p plumbline-ffi --release                                 # host .so/.a
-cargo build -p plumbline-ffi --release --target x86_64-pc-windows-gnu  # Windows .dll (mingw)
+cargo build -p plumbline-ffi --release --target wasm32-wasip1          # the web engine
 ```
-
-**ARM-Windows** builds natively: on an ARM64 Windows box the default toolchain
-is `stable-aarch64-pc-windows-msvc`, and a plain
-`cargo build -p plumbline-ffi --release` links the ARM64 `.dll` — verified, tests
-green and the C# demo running against it. The only prerequisite is the VS
-Build Tools **“C++ ARM64/ARM64EC build tools”** component (the SDK alone isn't
-enough — without it rustc falls back to whatever `link.exe` is on PATH).
-Cross-compiling the same `.dll` *from Linux* instead needs **llvm-mingw**
-(`aarch64-w64-mingw32-clang`) for the `aarch64-pc-windows-gnullvm` target.
-
-**Android** is blocked on a one-time toolchain install (the Rust cross
-*targets* are already added):
-
-- Android `.so`: needs the **Android NDK** + `cargo install cargo-ndk`. Without
-  it, `cargo build --target aarch64-linux-android` compiles but fails at link
-  (falls back to the host `ld`). Then:
-  `cargo ndk -t arm64-v8a -o app/src/main/jniLibs build -p plumbline-ffi --release`.
 
 ## Tests
 
 `cargo test -p plumbline-ffi` drives the whole ABI from Rust exactly as a foreign
 caller would (open-from-bytes → layout via a C callback → hit-test → Strong's →
-search → free). The `smoke.c` and C# demo exercise the same surface against the
-real 31,102-verse corpus through actual C and .NET consumers.
+search → free). `smoke.c` exercises the same surface against the real
+31,102-verse corpus through an actual C consumer.

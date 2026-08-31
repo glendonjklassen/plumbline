@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Assemble the web shell's data pack: gzip the read-only home files (data/ +
-// bridge/) plus the bundled stock study set (the same assets/stock tree the
-// Android app seeds — threads / tags / weaves) into apps/web/public/pack/
-// with a manifest the loader fetches first. Stock entries are marked so the
-// loader can seed them ONCE (edits/deletions stick, Android parity). The
-// reader's other personal data (memory/) is never packed.
+// bridge/) plus the bundled stock study set (stock/ — threads / tags /
+// weaves) into apps/web/public/pack/ with a manifest the loader fetches
+// first. Stock entries are marked so the loader can seed them ONCE
+// (edits/deletions stick). The reader's other personal data (memory/) is
+// never packed.
 //
 //   node scripts/build-web-pack.mjs
 //
@@ -36,7 +36,7 @@ import { gzipSync } from "node:zlib";
 
 const repo = dirname(dirname(fileURLToPath(import.meta.url)));
 const outRoot = join(repo, "apps/web/public/pack");
-const STOCK = join(repo, "apps/android/app/src/main/assets/stock");
+const STOCK = join(repo, "stock");
 
 // ── the stage table: THE spec ────────────────────────────────────────────────
 //
@@ -313,19 +313,17 @@ for (const lang of EXTRA_LANGS) {
 
 // ── the suggested weaves: one bundle, downloaded only if asked for ───────────
 //
-// These 194 files ship inside the APK and, until now, did not reach the web at
-// all: the SOURCES walk above is non-recursive, so `weaves/suggested/` was
-// silently skipped and the two shells disagreed about what the stock set even
-// contains. They are here now, as an OPTIONAL download — the reader asks, in
-// Settings — because 422 KB of machine-suggested links is not something to put
-// on the boot path of a phone that may never open the weave library.
+// These 194 files are part of the stock set but did not reach the web at
+// first: the SOURCES walk above is non-recursive, so `weaves/suggested/` was
+// silently skipped. They are here as an OPTIONAL download — the reader asks,
+// in Settings — because 422 KB of machine-suggested links is not something to
+// put on the boot path of a phone that may never open the weave library.
 //
 // ONE bundle rather than 194 pack entries, which is not merely tidier: gzipped
 // individually they are 784 KB (small files compress badly and each carries its
 // own dictionary), and as a single object they are 110 KB — seven times smaller,
 // and one request instead of 194. The loader splits it back into
-// `weaves/suggested/<name>` in the home, which is the shape the engine reads and
-// the same shape Android's asset copy produces.
+// `weaves/suggested/<name>` in the home, which is the shape the engine reads.
 const suggestedDir = join(STOCK, "weaves", "suggested");
 if (existsSync(suggestedDir)) {
   const bundle = {};

@@ -2275,9 +2275,9 @@ fn repo_tree(rel: &str, exts: &[&str]) -> Vec<(String, String)> {
 }
 
 /// `NAME → value` for every line beginning with `prefix` and assigning a decimal
-/// with `=`: Rust `pub const PLUMBLINE_FLAG_ADDED: u32 = 1;`, Kotlin `const val
-/// ADDED = 1`, TS `export const FLAG_ADDED = 1;`. The value is read after the
-/// LAST `=` so Rust's `: u32` cannot be mistaken for it.
+/// with `=`: Rust `pub const PLUMBLINE_FLAG_ADDED: u32 = 1;`, TS `export const
+/// FLAG_ADDED = 1;`. The value is read after the LAST `=` so Rust's `: u32`
+/// cannot be mistaken for it.
 fn assigned_flags(src: &str, prefix: &str) -> std::collections::BTreeMap<String, u32> {
     let mut out = std::collections::BTreeMap::new();
     for line in src.lines() {
@@ -2307,25 +2307,13 @@ fn header_flags(src: &str) -> std::collections::BTreeMap<String, u32> {
     out
 }
 
-/// The body of Kotlin's `object PlumblineFlags { … }` — the Android shell's
-/// mirror is read from that block alone, not from every `const val` in the file.
-fn kotlin_flags_object(src: &str) -> &str {
-    let at = src.find("object PlumblineFlags {").expect(
-        "StudyEngine.kt no longer declares `object PlumblineFlags` — that object is the \
-         Android shell's mirror of the header's flag bits; if it moved, move this guard",
-    );
-    let body = &src[at..];
-    let end = body.find("\n}").expect("unterminated `object PlumblineFlags`");
-    &body[..end]
-}
-
 /// Every place a shell bit-tests `flags` against something that is NOT one of the
 /// named mirrors `mirrored` accepts, as `line: operand`.
 ///
 /// `flags & FLAG_RERENDERED` is the contract; `flags & 16` is the bug this file
 /// exists to stop coming back — and so is `flags & MY_OWN_BIT`, because a
 /// privately named 16 answers to nothing either. `op` is the shell language's
-/// bitwise-and (`&` in TS, the `and` infix in Kotlin).
+/// bitwise-and (`&` in TS).
 ///
 /// Deliberately narrow in SHAPE: it recognises `flags <op> [(] <operand>`, which
 /// is the shape both shells write and the shape a re-hardcode takes — the
@@ -2334,8 +2322,8 @@ fn kotlin_flags_object(src: &str) -> &str {
 /// beside a bitwise-and on a line mentioning flags — false-positives on ordinary
 /// masking (`(n >> 16) & 255`), and a guard that cries wolf gets deleted.
 fn unchecked_flag_tests(src: &str, op: &str, mirrored: &dyn Fn(&str) -> bool) -> Vec<String> {
-    // A word operator (`and`) must be followed by space, or `flags android` and
-    // friends would parse as a bit test.
+    // A word operator must be followed by space, or `flags andSomething` would
+    // parse as a bit test.
     let word_op = op.ends_with(|c: char| c.is_ascii_alphanumeric());
     let mut out = Vec::new();
     for (i, line) in src.lines().enumerate() {
@@ -2421,93 +2409,68 @@ fn flag_bits_are_exported_with_their_assertion() {
     );
 }
 
-/// Half two: each shell's flag constants mirror the header exactly, and no paint
+/// Half two: the shell's flag constants mirror the header exactly, and no paint
 /// site tests a bare number. A shell that re-hardcodes 16 fails here.
 #[test]
-fn flag_bits_are_mirrored_by_both_shells() {
+fn flag_bits_are_mirrored_by_the_shell() {
     let header = header_flags(&repo_file("crates/ffi/include/plumbline.h"));
     assert!(!header.is_empty(), "the generated header exports no flag bits at all");
 
-    let paint = repo_file("apps/web/src/reader/paint.ts");
-    let study_engine = repo_file("apps/android/app/src/main/java/dev/plumbline/StudyEngine.kt");
-
-    let web = assigned_flags(&paint, "export const FLAG_");
-    let android = assigned_flags(kotlin_flags_object(&study_engine), "const val ");
-
-    for (shell, path, mirror) in [
-        ("web", "apps/web/src/reader/paint.ts", &web),
-        ("Android", "apps/android/app/src/main/java/dev/plumbline/StudyEngine.kt", &android),
-    ] {
-        assert!(
-            !mirror.is_empty(),
-            "no flag-bit constants found in {path} — the {shell} shell's mirror moved, so this \
-             guard is checking nothing; point it at the new home"
+    const PAINT: &str = "apps/web/src/reader/paint.ts";
+    let web = assigned_flags(&repo_file(PAINT), "export const FLAG_");
+    assert!(
+        !web.is_empty(),
+        "no flag-bit constants found in {PAINT} — the shell's mirror moved, so this guard is \
+         checking nothing; point it at the new home"
+    );
+    for (name, value) in &web {
+        assert_eq!(
+            header.get(name),
+            Some(value),
+            "the shell declares flag bit {name} = {value}, and the C header exports {:?} under \
+             that name. A shell's number must mirror an exported #define: add `pub const \
+             PLUMBLINE_FLAG_{name}` to crates/ffi/src/lib.rs with its `const _: () = assert!(… \
+             == core)` and regenerate the header, or the value in {PAINT} answers to nothing",
+            header.get(name)
         );
-        for (name, value) in mirror {
-            assert_eq!(
-                header.get(name),
-                Some(value),
-                "the {shell} shell declares flag bit {name} = {value}, and the C header exports \
-                 {:?} under that name. A shell's number must mirror an exported #define: add \
-                 `pub const PLUMBLINE_FLAG_{name}` to crates/ffi/src/lib.rs with its \
-                 `const _: () = assert!(… == core)` and regenerate the header, or the value in \
-                 {path} answers to nothing",
-                header.get(name)
-            );
-        }
     }
 
-    // The other half, over the whole of each shell's SOURCE TREE: every place a
-    // shell bit-tests `flags`, the operand is one of the mirror constants just
-    // checked against the header. Two things follow, and together they are the
-    // mechanism this item was about. A bare `flags & 16` fails — that is the
-    // literal coming back. So does `flags & SOME_LOCAL_BIT`, because a privately
-    // named 16 answers to nothing either; the only operands that pass are names
-    // the loop above pinned to an exported #define.
+    // The other half, over the whole SOURCE TREE: every place the shell
+    // bit-tests `flags`, the operand is one of the mirror constants just checked
+    // against the header. A bare `flags & 16` fails — that is the literal coming
+    // back — and so does `flags & SOME_LOCAL_BIT`, because a privately named 16
+    // answers to nothing either.
     //
     // Tree-wide rather than file-named: the recurrence is a NEW paint site, and
     // it will not be in the one file that tests flags today.
-    for (shell, root, exts, op, prefix, mirror, anchor) in [
-        ("web", "apps/web/src", &["ts", "svelte"][..], "&", "FLAG_", &web, "reader/paint.ts"),
-        (
-            "Android",
-            "apps/android/app/src/main/java",
-            &["kt"][..],
-            "and",
-            "PlumblineFlags.",
-            &android,
-            "ui/ReaderPane.kt",
-        ),
-    ] {
-        let files = repo_tree(root, exts);
-        assert!(
-            files.len() > 5,
-            "only {} source files under {root} — the {shell} shell's tree moved, so this guard is \
-             walking almost nothing",
-            files.len()
-        );
-        // The site that paints the AKJV mark must be inside the walk, or the
-        // guard could pass by looking in the wrong place.
-        assert!(
-            files.iter().any(|(p, _)| p.ends_with(anchor)),
-            "{anchor} is not under {root} any more — the {shell} shell's flag-testing paint site \
-             moved out of the walked tree; point this guard at its new root"
-        );
-        let mirrored = |operand: &str| operand.strip_prefix(prefix).is_some_and(|n| mirror.contains_key(n));
-        let unchecked: Vec<String> = files
-            .iter()
-            .flat_map(|(path, src)| {
-                unchecked_flag_tests(src, op, &mirrored).into_iter().map(move |hit| format!("{path}:{hit}"))
-            })
-            .collect();
-        assert!(
-            unchecked.is_empty(),
-            "the {shell} shell bit-tests `flags` against something that is not a mirror of an \
-             exported #define — write `{prefix}<NAME>` for a bit that crates/ffi/src/lib.rs \
-             exports and the header defines, or the value is hardcoded where nothing can check \
-             it: {unchecked:?}"
-        );
-    }
+    const ROOT: &str = "apps/web/src";
+    let files = repo_tree(ROOT, &["ts", "svelte"]);
+    assert!(
+        files.len() > 5,
+        "only {} source files under {ROOT} — the shell's tree moved, so this guard is walking \
+         almost nothing",
+        files.len()
+    );
+    // The site that paints the AKJV mark must be inside the walk, or the guard
+    // could pass by looking in the wrong place.
+    assert!(
+        files.iter().any(|(p, _)| p.ends_with("reader/paint.ts")),
+        "reader/paint.ts is not under {ROOT} any more — the flag-testing paint site moved out \
+         of the walked tree; point this guard at its new root"
+    );
+    let mirrored = |operand: &str| operand.strip_prefix("FLAG_").is_some_and(|n| web.contains_key(n));
+    let unchecked: Vec<String> = files
+        .iter()
+        .flat_map(|(path, src)| {
+            unchecked_flag_tests(src, "&", &mirrored).into_iter().map(move |hit| format!("{path}:{hit}"))
+        })
+        .collect();
+    assert!(
+        unchecked.is_empty(),
+        "the shell bit-tests `flags` against something that is not a mirror of an exported \
+         #define — write `FLAG_<NAME>` for a bit that crates/ffi/src/lib.rs exports and the \
+         header defines, or the value is hardcoded where nothing can check it: {unchecked:?}"
+    );
 }
 
 #[test]

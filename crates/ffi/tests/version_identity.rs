@@ -1,19 +1,19 @@
 //! One release, one version number.
 //!
-//! Three things name the build a reader sees. `plumbline_version()` hands the
-//! shells `CARGO_PKG_VERSION` — the workspace version, shown under About as
-//! `engine ` + that number — while Android's `versionName` and the web shell's
-//! `PLUMBLINE_VERSION` are both derived from the release tag. They have drifted
-//! twice: the manifests sat at 0.1.0 through every 0.x release, so About read
-//! `engine 0.1.0` on a 0.3.x APK; and the release workflow stripped the tag's
-//! leading `v` for Android but not for the web, so one release called itself
-//! "v1.0.0" in the PWA and "1.0.0" on the phone.
+//! Two things name the build a reader sees. `plumbline_version()` hands the
+//! shell `CARGO_PKG_VERSION` — the workspace version, shown under About as
+//! `engine ` + that number — while the web shell's `PLUMBLINE_VERSION` is
+//! derived from the release tag. They have drifted twice: the manifests sat at
+//! 0.1.0 through every 0.x release, so About read `engine 0.1.0` on a 0.3.x
+//! build; and the release workflow once stripped the tag's leading `v` for one
+//! consumer and not another, so one release called itself both "v1.0.0" and
+//! "1.0.0".
 //!
 //! These tests pin what a build can check with no tag in hand: the manifests
-//! agree with the engine, and the workflow derives ONE displayed version that
-//! both shells read. The other half — tag vs. manifests — is unknowable here,
-//! so the workflow's `version` job asserts it at release time and the last two
-//! tests pin that guard's wiring against quiet removal.
+//! agree with the engine, and the workflow derives ONE displayed version. The
+//! other half — tag vs. manifests — is unknowable here, so the workflow's
+//! `version` job asserts it at release time and the last two tests pin that
+//! guard's wiring against quiet removal.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -95,27 +95,23 @@ fn the_web_package_version_matches_the_engine() {
 }
 
 #[test]
-fn both_shells_display_one_derived_version() {
+fn the_shell_displays_one_derived_version() {
     let yml = read(".github/workflows/release.yml");
 
     // Every consumer of a displayed version reads the one job output. This is
     // the exact bug: `PLUMBLINE_VERSION: ${{ github.ref_name }}` kept the tag's
-    // `v` while Android's own derivation dropped it.
-    for (key, want) in [
-        ("PLUMBLINE_VERSION:", "needs.version.outputs.name"),
-        ("-PplumblineVersionName=", "needs.version.outputs.name"),
-        ("-PplumblineVersionCode=", "needs.version.outputs.code"),
-    ] {
-        let uses: Vec<&str> = yml.lines().filter(|l| l.contains(key)).collect();
-        assert!(!uses.is_empty(), "release.yml no longer sets {key} at all");
-        for line in uses {
-            assert!(
-                line.contains(want),
-                "release.yml feeds {key} from something other than {want}, so the shells \
-                 can disagree about the same release again: {}",
-                line.trim()
-            );
-        }
+    // `v` while a second derivation dropped it.
+    let key = "PLUMBLINE_VERSION:";
+    let want = "needs.version.outputs.name";
+    let uses: Vec<&str> = yml.lines().filter(|l| l.contains(key)).collect();
+    assert!(!uses.is_empty(), "release.yml no longer sets {key} at all");
+    for line in uses {
+        assert!(
+            line.contains(want),
+            "release.yml feeds {key} from something other than {want}, so a future second \
+             consumer can disagree about the same release again: {}",
+            line.trim()
+        );
     }
 
     // ...and there is exactly one place that turns the tag into that string.
@@ -125,7 +121,7 @@ fn both_shells_display_one_derived_version() {
         strips.len(),
         1,
         "the tag's leading 'v' is stripped in {} places in release.yml — derive the \
-         displayed version once, in the `version` job, or the shells drift: {strips:?}",
+         displayed version once, in the `version` job: {strips:?}",
         strips.len()
     );
 

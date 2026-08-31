@@ -1,26 +1,21 @@
-//! Regenerate the committed C header from the `plumbline-ffi` C ABI, and verify the
-//! hand-written Kotlin binding covers the same surface.
+//! Regenerate the committed C header from the `plumbline-ffi` C ABI.
 //!
 //! ```sh
 //! cargo run -p plumbline-ffi --features bindgen --bin plumbline-bindgen
 //! ```
 //!
-//! Emits, relative to the crate root:
-//!   * `include/plumbline.h` — C header (cbindgen), the ABI's reference.
+//! Emits `include/plumbline.h` relative to the crate root — the ABI's
+//! reference. The web shell's TS binding drives the same surface compiled to
+//! wasm.
 //!
-//! Kotlin/Android binds this surface via JNA (`bindings/kotlin/Plumbline.kt`,
-//! hand-written); the web shell's TS binding drives the same surface compiled
-//! to wasm.
-//!
-//! This is a developer tool, kept out of the cdylib so a plain build /
-//! cross-compile never pulls host-only generators.
+//! A developer tool, kept out of the cdylib so a plain build never pulls
+//! host-only generators.
 
 use std::path::Path;
 
 fn main() {
     let crate_dir = env!("CARGO_MANIFEST_DIR");
     generate_c_header(crate_dir);
-    verify_surface(crate_dir);
     println!("bindings regenerated.");
 }
 
@@ -70,41 +65,4 @@ fn generate_c_header(crate_dir: &str) {
         .expect("cbindgen: generate C header")
         .write_to_file(&out);
     println!("wrote {}", out.display());
-}
-
-/// Every `plumbline_*` symbol in the C header must appear in the Kotlin JNA
-/// interface and vice versa — the Kotlin binding is hand-written, so a fn
-/// added to the ABI would otherwise vanish silently on Android.
-fn verify_surface(crate_dir: &str) {
-    let names = |text: &str| -> std::collections::BTreeSet<String> {
-        let mut out = std::collections::BTreeSet::new();
-        let bytes = text.as_bytes();
-        let mut i = 0;
-        while let Some(off) = text[i..].find("plumbline_") {
-            let start = i + off;
-            let mut end = start;
-            while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
-                end += 1;
-            }
-            // A function name is followed by '(' (decl or import site).
-            if bytes.get(end) == Some(&b'(') {
-                out.insert(text[start..end].to_string());
-            }
-            i = end;
-        }
-        out
-    };
-    let header =
-        std::fs::read_to_string(Path::new(crate_dir).join("include/plumbline.h")).expect("read generated header");
-    let kotlin = std::fs::read_to_string(Path::new(crate_dir).join("bindings/kotlin/Plumbline.kt"))
-        .expect("read Kotlin binding");
-    let h: std::collections::BTreeSet<_> = names(&header);
-    let k: std::collections::BTreeSet<_> = names(&kotlin);
-    let missing_kt: Vec<_> = h.difference(&k).collect();
-    let missing_h: Vec<_> = k.difference(&h).collect();
-    assert!(
-        missing_kt.is_empty() && missing_h.is_empty(),
-        "binding surface drift — missing from Kotlin: {missing_kt:?}; missing from header: {missing_h:?}"
-    );
-    println!("surface check: {} functions in both bindings.", h.len());
 }

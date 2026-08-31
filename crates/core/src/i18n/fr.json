@@ -647,7 +647,7 @@
   "settings.copyVerse": "Texte du verset seul",
   "settings.copyVerseRef": "Verset avec référence",
   "settings.data": "Vos données d'étude — notes, étiquettes, fils, tissages, mémorisation",
-  "settings.dataDesc": "La même archive zip se restaure sous Android et sur le web. Les éléments de même nom sont remplacés ; tout le reste est conservé.",
+  "settings.dataDesc": "La même archive zip se restaure sur n’importe quel appareil. Les éléments de même nom sont remplacés ; tout le reste est conservé.",
   "settings.defaultStyle": "Style par défaut",
   "settings.defaultStyleDesc": "Réinitialise la taille, l'espacement, les marges, les polices et le thème à leurs valeurs par défaut.",
   "settings.done": "Terminé",

@@ -24,8 +24,8 @@ SOFTWARE.
 
 The data is licensed separately
 
-The MIT license above covers the code: the Rust crates, the Android shell, the
-web shell, and the build and data-prep scripts.
+The MIT license above covers the code: the Rust crates, the web shell, and the
+build and data-prep scripts.
 
 The text and the lexical data are other people's work, redistributed here under
 their own terms. Those terms travel with the files; nothing above changes them.
@@ -44,15 +44,13 @@ their own terms. Those terms travel with the files; nothing above changes them.
             TIPNR proper-name identities (CC-BY 4.0).
 
   fonts     EB Garamond, under the SIL Open Font License. OFL.txt ships beside
-            the fonts in both shells — apps/web/public/fonts/ and
-            apps/android/app/src/main/assets/fonts/.
+            the fonts in apps/web/public/fonts/.
 
 The files built from those sources inherit whatever they were derived from —
 data/kjv.jsonl.idxcache, data/akjv.akjvb, data/source-priors.json,
-data/quotation-pairs.json, data/text-witness.json, and the packed forms the two
-shells load. Both shells bundle copies of the data (under
-apps/android/app/src/main/assets/ and apps/web/public/pack/); the same terms
-follow the copies.
+data/quotation-pairs.json, data/text-witness.json, and the packed forms the
+shell loads. The shell bundles copies of the data (under
+apps/web/public/pack/); the same terms follow the copies.
 
 Everything else is MIT, as above: the code, the authored study set (threads,
 tags, weaves), and data/concept-vectors.vec (+ .meta, .freq), which is trained

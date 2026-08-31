@@ -647,7 +647,7 @@
   "settings.copyVerse": "Nur der Verstext",
   "settings.copyVerseRef": "Vers mit Angabe",
   "settings.data": "Ihre Studiendaten — Notizen, Schlagwörter, Fäden, Verknüpfungen, Auswendiggelerntes",
-  "settings.dataDesc": "Dieselbe Zip-Datei lässt sich unter Android und im Web wiederherstellen. Gleichnamige Einträge werden ersetzt, alles andere bleibt erhalten.",
+  "settings.dataDesc": "Dieselbe Zip-Datei lässt sich auf jedem Gerät wiederherstellen. Gleichnamige Einträge werden ersetzt, alles andere bleibt erhalten.",
   "settings.defaultStyle": "Standardgestaltung",
   "settings.defaultStyleDesc": "Setzt Größe, Abstände, Ränder, Schriften und Darstellung auf den Auslieferungszustand zurück.",
   "settings.done": "Fertig",

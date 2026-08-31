@@ -647,7 +647,7 @@
   "settings.copyVerse": "僅經文內容",
   "settings.copyVerseRef": "經文含出處",
   "settings.data": "您的研經資料——筆記、標籤、經文串、串珠、背經進度",
-  "settings.dataDesc": "同一份 zip 檔可在 Android 與網頁版還原。同名項目會被取代，其餘項目則會保留。",
+  "settings.dataDesc": "同一份 zip 檔可在任何裝置上還原。同名項目會被取代，其餘項目則會保留。",
   "settings.defaultStyle": "預設樣式",
   "settings.defaultStyleDesc": "將大小、間距、邊界、字型與佈景主題重設為預設值。",
   "settings.done": "完成",
